@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream, statSync } from "node:fs"
-import { copyFile, mkdir, rm, stat } from "node:fs/promises"
+import { copyFile, mkdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Transform } from "node:stream"
@@ -27,6 +27,7 @@ export interface DriveStoragePort {
   createUploadInstruction(input: { readonly key: string; readonly contentType?: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction>
   createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }>
   headObject(key: string): Promise<DriveStorageObjectInfo | null>
+  putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void>
   copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void>
   getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
   deleteObject(key: string): Promise<void>
@@ -108,6 +109,13 @@ export class LocalDriveStorage implements DriveStoragePort {
   async deleteObject(key: string): Promise<void> {
     await rm(this.pathForKey(key), { force: true })
     this.contentTypes.delete(key)
+  }
+
+  async putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void> {
+    const objectPath = this.pathForKey(input.key)
+    await mkdir(path.dirname(objectPath), { recursive: true })
+    await writeFile(objectPath, input.body)
+    this.contentTypes.set(input.key, input.contentType ?? null)
   }
 
   async copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void> {
@@ -273,6 +281,22 @@ export class CosDriveStorage implements DriveStoragePort {
     await new Promise<void>((resolve, reject) => {
       const client = this.getClient()
       client.cos.deleteObject({ Bucket: client.bucket, Region: client.region, Key: key }, (error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+
+  async putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const client = this.getClient()
+      client.cos.putObject({
+        Bucket: client.bucket,
+        Region: client.region,
+        Key: input.key,
+        Body: input.body,
+        ContentType: input.contentType ?? undefined,
+      }, (error) => {
         if (error) reject(error)
         else resolve()
       })

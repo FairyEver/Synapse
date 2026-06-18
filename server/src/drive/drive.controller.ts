@@ -6,6 +6,7 @@ import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
+import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination } from "../common/pagination"
@@ -67,9 +68,16 @@ const reorganizationApplySchema = z.object({
 const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
+const driveFileTextUpdateSchema = z.object({
+  contentType: z.literal("text"),
+  text: z.string(),
+  baseVersionId: z.string().min(1),
+}).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
+  accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]).optional(),
+  editorEmails: z.array(z.string().trim().min(1).max(320)).max(100).optional(),
 }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
@@ -282,6 +290,16 @@ export class DriveUserController {
       childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
     })
   }
+
+  @Patch("/browser/owner/items/:itemId/content")
+  updateOwnerItemContent(
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
+    return this.drive.updateOwnerFileText(request.user!.id, itemId, parsed, driveAuditContext(request))
+  }
 }
 
 @UseGuards(AdminAuthGuard)
@@ -351,6 +369,7 @@ export class DrivePublicController {
   constructor(
     private readonly drive: DriveService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
+    @Optional() private readonly dashboardAuth?: AdminAuthService,
   ) {}
 
   @Get("/api/drive/browser/shares/:shareId")
@@ -425,6 +444,42 @@ export class DrivePublicController {
     })
   }
 
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/content")
+  updateShareRootContent(
+    @Param("shareId") shareId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
+    return this.drive.updateShareFileText({
+      actorUserId: request.user!.id,
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parsed,
+      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/content")
+  updateShareItemContent(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
+    return this.drive.updateShareFileText({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parsed,
+      auditContext: driveAuditContext(request),
+    })
+  }
+
   private async unlockShareBrowserResponse(input: {
     readonly shareId: string
     readonly itemId?: string
@@ -446,6 +501,7 @@ export class DrivePublicController {
       itemId: input.itemId,
       password,
       cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
+      actorUserId: await this.resolveOptionalUserId(input.request),
       childrenPage: input.childrenPage,
     })
   }
@@ -528,8 +584,17 @@ export class DrivePublicController {
       itemId: input.itemId,
       password: undefined,
       cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
+      actorUserId: await this.resolveOptionalUserId(input.request),
       childrenPage: input.childrenPage,
     })
+  }
+
+  private async resolveOptionalUserId(request: Request): Promise<string | null> {
+    if (!this.dashboardAuth) return null
+    const session = typeof request.cookies?.synapse_admin === "string"
+      ? await this.dashboardAuth.verifyDashboardSession(request.cookies.synapse_admin)
+      : null
+    return session?.role === "user" ? session.id : null
   }
 
   @Get("/share/:shareId/download")
@@ -684,6 +749,8 @@ function parseAccessSettings(body: unknown): DriveAccessSettingsInput {
   return {
     passwordEnabled: parsed.passwordEnabled ?? DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
     expiresIn: parsed.expiresIn ?? DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
+    accessMode: parsed.accessMode ?? DRIVE_DEFAULT_ACCESS_SETTINGS.accessMode,
+    editorEmails: parsed.editorEmails ?? DRIVE_DEFAULT_ACCESS_SETTINGS.editorEmails,
   }
 }
 

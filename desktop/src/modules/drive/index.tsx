@@ -18,6 +18,7 @@ import {
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
   type DrivePublicLinksPageInput,
+  type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
   type DriveUploadPrepareResult,
@@ -124,16 +125,18 @@ type DriveAccessSettingsTarget = {
   readonly item: DriveItemDto
 }
 
-type DriveAccessResultState = Pick<DriveShareDto, "url" | "urlWithPassword" | "passwordEnabled" | "password" | "expiresAt">
 type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
   readonly url: DriveShareDto["url"]
   readonly urlWithPassword: DriveShareDto["urlWithPassword"]
   readonly passwordEnabled: DriveShareDto["passwordEnabled"]
   readonly password: DriveShareDto["password"]
   readonly expiresAt: DriveShareDto["expiresAt"]
+  readonly accessMode: DriveShareDto["accessMode"]
+  readonly editorEmails: DriveShareDto["editorEmails"]
 }
 
 type DriveAccessExpiresInOption = DriveAccessSettingsInput["expiresIn"]
+type DriveShareAccessModeOption = DriveShareAccessMode
 
 type DriveStatusBadge = {
   readonly key: string
@@ -154,6 +157,18 @@ const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; read
   { label: "1 年", value: "1y" },
   { label: "永久", value: "forever" },
 ]
+const DRIVE_SHARE_ACCESS_MODE_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveShareAccessModeOption }> = [
+  { label: "可阅读", value: "link_read" },
+  { label: "链接可编辑", value: "link_edit" },
+  { label: "指定用户可编辑", value: "specified_users_edit" },
+]
+
+function createDefaultDriveAccessSettings(): DriveAccessSettingsInput {
+  return {
+    ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    editorEmails: [...(DRIVE_DEFAULT_ACCESS_SETTINGS.editorEmails ?? [])],
+  }
+}
 
 function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
@@ -448,6 +463,8 @@ function DriveModule() {
         passwordEnabled: share.passwordEnabled,
         password: share.password,
         expiresAt: share.expiresAt,
+        accessMode: share.accessMode,
+        editorEmails: share.editorEmails,
       })
       afterCreate = async () => {
         await copySharedUrlAfterShare(getDriveAccessUrl(share))
@@ -1540,13 +1557,38 @@ function DriveAccessSettingsDialog({
   readonly onCancel: () => void
   readonly onConfirm: (settings: DriveAccessSettingsInput) => Promise<void>
 }) {
-  const [settings, setSettings] = useState<DriveAccessSettingsInput>(DRIVE_DEFAULT_ACCESS_SETTINGS)
+  const [settings, setSettings] = useState<DriveAccessSettingsInput>(() => createDefaultDriveAccessSettings())
+  const [editorEmailInput, setEditorEmailInput] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (target) setSettings(DRIVE_DEFAULT_ACCESS_SETTINGS)
+    if (!target) return
+    setSettings(createDefaultDriveAccessSettings())
+    setEditorEmailInput("")
+    setError(null)
   }, [target])
 
   const title = "分享设置"
+  const accessMode = settings.accessMode ?? "link_read"
+  const editorEmails = settings.editorEmails ?? []
+  const addEditorEmail = () => {
+    const email = normalizeDriveEditorEmailForUi(editorEmailInput)
+    if (!email) {
+      setError("邮箱无效")
+      return
+    }
+    if (editorEmails.includes(email)) {
+      setEditorEmailInput("")
+      setError(null)
+      return
+    }
+    setSettings((current) => ({
+      ...current,
+      editorEmails: [...(current.editorEmails ?? []), email],
+    }))
+    setEditorEmailInput("")
+    setError(null)
+  }
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => {
@@ -1555,10 +1597,19 @@ function DriveAccessSettingsDialog({
       {target ? (
         <FormDialog
           title={title}
-          contentClassName="sm:max-w-sm"
+          contentClassName="sm:max-w-lg"
           onSubmit={(event) => {
             event.preventDefault()
-            void onConfirm(settings)
+            const nextSettings = {
+              ...settings,
+              accessMode,
+              editorEmails: accessMode === "specified_users_edit" ? editorEmails : [],
+            }
+            if (nextSettings.accessMode === "specified_users_edit" && nextSettings.editorEmails.length === 0) {
+              setError("请添加可编辑用户")
+              return
+            }
+            void onConfirm(nextSettings)
           }}
           footer={(
             <>
@@ -1568,6 +1619,78 @@ function DriveAccessSettingsDialog({
           )}
         >
           <div className="grid gap-5">
+            <div className="grid gap-2.5">
+              <Label>权限</Label>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                value={accessMode}
+                onValueChange={(value) => {
+                  if (!value) return
+                  setSettings((current) => ({
+                    ...current,
+                    accessMode: value as DriveShareAccessModeOption,
+                    editorEmails: value === "specified_users_edit" ? current.editorEmails ?? [] : [],
+                  }))
+                  setError(null)
+                }}
+              >
+                {DRIVE_SHARE_ACCESS_MODE_OPTIONS.map((option) => (
+                  <ToggleGroupItem
+                    key={option.value}
+                    className="h-8 flex-1"
+                    type="button"
+                    value={option.value}
+                  >
+                    {option.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+            {accessMode === "specified_users_edit" ? (
+              <div className="grid gap-2.5">
+                <Label htmlFor="drive-share-editor-email">可编辑用户</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="drive-share-editor-email"
+                    value={editorEmailInput}
+                    onChange={(event) => setEditorEmailInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return
+                      event.preventDefault()
+                      addEditorEmail()
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addEditorEmail}>添加</Button>
+                </div>
+                {editorEmails.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {editorEmails.map((email) => (
+                      <Badge key={email} variant="secondary" className="gap-1">
+                        <span>{email}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="h-5 px-1"
+                          aria-label={`移除 ${email}`}
+                          onClick={() => {
+                            setSettings((current) => ({
+                              ...current,
+                              editorEmails: (current.editorEmails ?? []).filter((item) => item !== email),
+                            }))
+                          }}
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <label className="flex min-h-8 items-center justify-between gap-4" htmlFor="drive-access-password-enabled">
               <span className="text-sm font-medium leading-none">需要密码</span>
               <Switch
@@ -1605,6 +1728,7 @@ function DriveAccessSettingsDialog({
                 ))}
               </ToggleGroup>
             </div>
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
         </FormDialog>
       ) : null}
@@ -1966,7 +2090,7 @@ function DriveShareSuccessDialog({
               </Button>
             </div>
           </div>
-          <dl className="grid overflow-hidden rounded-lg border text-sm sm:grid-cols-2">
+          <dl className="grid overflow-hidden rounded-lg border text-sm sm:grid-cols-3">
             <div className="min-w-0 border-b p-3 sm:border-r sm:border-b-0">
               <dt className="font-medium">密码</dt>
               <dd className="mt-1 flex min-h-7 items-center justify-between gap-2 text-muted-foreground" title={formatDriveAccessPassword(share)}>
@@ -1985,10 +2109,16 @@ function DriveShareSuccessDialog({
                 ) : null}
               </dd>
             </div>
-            <div className="min-w-0 p-3">
+            <div className="min-w-0 border-b p-3 sm:border-r sm:border-b-0">
               <dt className="font-medium">到期</dt>
               <dd className="mt-1 flex min-h-7 items-center truncate text-muted-foreground tabular-nums" title={formatDriveAccessExpiresAt(share.expiresAt)}>
                 <span className="truncate">{formatDriveAccessExpiresAt(share.expiresAt)}</span>
+              </dd>
+            </div>
+            <div className="min-w-0 p-3">
+              <dt className="font-medium">权限</dt>
+              <dd className="mt-1 flex min-h-7 items-center truncate text-muted-foreground" title={formatDriveShareAccessSummary(share)}>
+                <span className="truncate">{formatDriveShareAccessSummary(share)}</span>
               </dd>
             </div>
           </dl>
@@ -2031,6 +2161,7 @@ function DriveShareList({
               <div className="grid gap-1.5">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                   <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
+                  <Badge variant="outline">{formatDriveShareAccessSummary(item)}</Badge>
                   <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
@@ -2418,6 +2549,12 @@ function getDriveAccessUrl(item: { readonly url: string; readonly urlWithPasswor
   return item.urlWithPassword || item.url
 }
 
+function normalizeDriveEditorEmailForUi(value: string): string | null {
+  const email = value.trim().toLowerCase()
+  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) return null
+  return email
+}
+
 async function findDriveShareListItem(shareId: string): Promise<DriveShareListItemDto | null> {
   let offset = 0
   for (;;) {
@@ -2441,6 +2578,8 @@ function driveShareSuccessFromListItem(item: DriveItemDto, share: DriveShareList
     passwordEnabled: share.passwordEnabled,
     password: share.password,
     expiresAt: share.expiresAt,
+    accessMode: share.accessMode,
+    editorEmails: share.editorEmails,
   }
 }
 
@@ -2546,6 +2685,15 @@ function formatDriveAccessExpiresAt(value: string | null): string {
 function formatDriveAccessPassword(item: { readonly passwordEnabled?: boolean; readonly password?: string | null }): string {
   if (!item.passwordEnabled) return "无"
   return item.password || "无"
+}
+
+function formatDriveShareAccessSummary(item: {
+  readonly accessMode?: DriveShareAccessMode
+  readonly editorEmails?: readonly string[]
+}): string {
+  if (item.accessMode === "link_edit") return "链接可编辑"
+  if (item.accessMode === "specified_users_edit") return `${item.editorEmails?.length ?? 0} 人可编辑`
+  return "可阅读"
 }
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {

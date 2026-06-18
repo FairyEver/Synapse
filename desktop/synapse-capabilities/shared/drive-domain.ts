@@ -43,6 +43,7 @@ export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries
 const stringField = (description: string) => ({ type: "string", description })
 const optionalParentId = stringField("Parent folder item id. Omit or pass null to use the Drive root directory.")
 const driveAccessExpiresInValues = ["3d", "7d", "30d", "1y", "forever"]
+const driveShareAccessModeValues = ["link_read", "link_edit", "specified_users_edit"]
 const pageInputProperties = {
   offset: { type: "number", description: "Optional pagination offset. Defaults to 0." },
   limit: { type: "number", description: "Optional pagination page size." },
@@ -50,6 +51,8 @@ const pageInputProperties = {
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
   expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Public access expiration. Defaults to 3d." },
+  accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets logged-in link holders edit supported text files; specified_users_edit lets only listed emails edit." },
+  editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
 
 export function buildDriveTools(): McpToolDefinition[] {
@@ -271,7 +274,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Shares let others browse, render previewable HTML, or download files and folders.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. accessMode controls read/edit permission without changing the existing share link.",
       inputSchema: {
         type: "object",
         properties: {

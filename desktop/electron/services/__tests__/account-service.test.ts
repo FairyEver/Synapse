@@ -1202,6 +1202,8 @@ describe("AccountService", () => {
       passwordEnabled: true,
       password: "SharePw1",
       expiresAt: "2026-06-16T00:00:00.000Z",
+      accessMode: "link_read",
+      editorEmails: [],
       createdAt: "2026-06-09T00:00:00.000Z",
     }
     const share = {
@@ -1216,6 +1218,8 @@ describe("AccountService", () => {
       passwordEnabled: true,
       password: "ListPw1",
       expiresAt: "2026-06-16T00:00:00.000Z",
+      accessMode: "link_read",
+      editorEmails: [],
       createdAt: "2026-06-09T00:00:00.000Z",
     }
     const expectedShareResult = {
@@ -1270,6 +1274,7 @@ describe("AccountService", () => {
         imageUrl: null,
         visitUrl: `${expectedPublicAppUrl}/drive/items/item-1/render`,
       },
+      edit: null,
       canDownload: true,
       canZip: false,
     }

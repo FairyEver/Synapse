@@ -673,6 +673,7 @@ function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrow
     breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
     children: [],
     preview: basePreview(),
+    edit: null,
     canDownload: true,
     canZip: false,
     ...input,

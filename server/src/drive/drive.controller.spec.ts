@@ -382,6 +382,8 @@ describe("DriveController", () => {
       passwordEnabled: false,
       password: null,
       expiresAt: null,
+      accessMode: "link_read",
+      editorEmails: [],
       createdAt: "2026-06-09T00:00:00.000Z",
     }
     const moduleRef = await Test.createTestingModule({
@@ -407,6 +409,8 @@ describe("DriveController", () => {
       expect(drive.createShare).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: false,
         expiresIn: "3d",
+        accessMode: "link_read",
+        editorEmails: [],
       }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
@@ -909,6 +913,7 @@ function createBrowserSnapshot(): DriveBrowserSnapshotDto {
       imageUrl: null,
       visitUrl: null,
     },
+    edit: null,
     canDownload: true,
     canZip: false,
   }

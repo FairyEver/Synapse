@@ -468,11 +468,15 @@ describe("accountIpcModule", () => {
       itemId: "item-1",
       passwordEnabled: false,
       expiresIn: "30d",
+      accessMode: "specified_users_edit",
+      editorEmails: ["writer@example.com"],
     })
 
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: false,
       expiresIn: "30d",
+      accessMode: "specified_users_edit",
+      editorEmails: ["writer@example.com"],
     })
   })
 
@@ -517,10 +521,12 @@ describe("accountIpcModule", () => {
       itemId: "share-1",
       passwordEnabled: false,
       expiresIn: "3d",
+      accessMode: "link_edit",
     })).toEqual({
       itemId: "share-1",
       passwordEnabled: false,
       expiresIn: "3d",
+      accessMode: "link_edit",
     })
     expect(() => accountIpcModule.methods.shareDriveItem.request?.parse({
       itemId: "share-1",
@@ -548,6 +554,8 @@ describe("accountIpcModule", () => {
       passwordEnabled: true,
       password: "AbC234xy",
       expiresAt: "2026-06-16T00:00:00.000Z",
+      accessMode: "link_read",
+      editorEmails: [],
       createdAt: "2026-06-09T00:00:00.000Z",
       }],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },

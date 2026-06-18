@@ -20,6 +20,7 @@ const storageMock: DriveStoragePort = {
     expiresAt: new Date("2026-06-07T12:05:00.000Z"),
   })),
   headObject: vi.fn(async () => ({ key: "drive/item-file", size: 11n, etag: "etag" })),
+  putObject: vi.fn(async () => undefined),
   copyObject: vi.fn(async () => undefined),
   getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
   deleteObject: vi.fn(async () => undefined),
@@ -1939,6 +1940,7 @@ function createPrismaMemory() {
   const usages = new Map<string, any>()
   const sessions = new Map<string, any>()
   const shares = new Map<string, any>()
+  const shareEditors = new Map<string, any>()
   const versions = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
@@ -1948,11 +1950,19 @@ function createPrismaMemory() {
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
   })
   const withShareIncludes = (share: any, include: any) => {
-    if (!include?.item) return share
-    const item = items.get(share.itemId)
+    if (!include?.item && !include?.editors) return share
+    const item = include?.item ? items.get(share.itemId) : null
     return {
       ...share,
-      item: include.item.select ? selectFields(item, include.item.select) : withShares(item),
+      ...(include?.item ? { item: include.item.select ? selectFields(item, include.item.select) : withShares(item) } : {}),
+      ...(include?.editors
+        ? {
+          editors: [...shareEditors.values()]
+            .filter((editor) => editor.driveShareId === share.id)
+            .sort((left, right) => left.email.localeCompare(right.email))
+            .map((editor) => include.editors.select ? selectFields(editor, include.editors.select) : editor),
+        }
+        : {}),
     }
   }
 
@@ -1964,6 +1974,7 @@ function createPrismaMemory() {
           [usages, cloneMap(usages)],
           [sessions, cloneMap(sessions)],
           [shares, cloneMap(shares)],
+          [shareEditors, cloneMap(shareEditors)],
           [versions, cloneMap(versions)],
         ] as const
         try {
@@ -2157,6 +2168,7 @@ function createPrismaMemory() {
           throw uniqueConstraintError(["itemId", "userId"])
         }
         if ([...shares.values()].some((share) => share.shareId === data.shareId)) throw uniqueConstraintError(["shareId"])
+        const { editors, ...shareData } = data
         const share = {
           id: id("share"),
           enabled,
@@ -2167,10 +2179,15 @@ function createPrismaMemory() {
           accessSettingsAppliedAt: null,
           disabledAt: null,
           createdAt: now(),
-          ...data,
+          accessMode: "link_read",
+          ...shareData,
         }
         shares.set(share.id, share)
-        return share
+        for (const editor of editors?.create ?? []) {
+          const entry = { id: id("share-editor"), driveShareId: share.id, email: editor.email, createdAt: now() }
+          shareEditors.set(entry.id, entry)
+        }
+        return withShareIncludes(share, { editors: true })
       },
       findFirst: async ({ where, include }: any) => {
         const share = [...shares.values()].find((item) => matchesWhere(item, where))
@@ -2182,17 +2199,34 @@ function createPrismaMemory() {
         if (select) return found.map((share) => selectFields(share, select))
         return found.map((share) => withShareIncludes(share, include))
       },
-      update: async ({ where, data }: any) => {
+      update: async ({ where, data, include }: any) => {
         const share = shares.get(where.id)
         if (!share) throw new Error("share not found")
-        Object.assign(share, data)
-        return share
+        const { editors, ...shareData } = data
+        Object.assign(share, shareData)
+        for (const editor of editors?.create ?? []) {
+          const entry = { id: id("share-editor"), driveShareId: share.id, email: editor.email, createdAt: now() }
+          shareEditors.set(entry.id, entry)
+        }
+        return withShareIncludes(share, include)
       },
       updateMany: async ({ where, data }: any) => {
         let count = 0
         for (const share of shares.values()) {
           if (matchesWhere(share, where)) {
             Object.assign(share, data)
+            count += 1
+          }
+        }
+        return { count }
+      },
+    },
+    driveShareEditor: {
+      deleteMany: async ({ where }: any) => {
+        let count = 0
+        for (const [editorId, editor] of shareEditors) {
+          if (matchesWhere(editor, where)) {
+            shareEditors.delete(editorId)
             count += 1
           }
         }

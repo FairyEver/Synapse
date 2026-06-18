@@ -12,19 +12,26 @@ export type DriveShareItemType = "file" | "folder"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
 export type DriveAccessExpiresIn = "3d" | "7d" | "30d" | "1y" | "forever"
+export type DriveShareAccessMode = "link_read" | "link_edit" | "specified_users_edit"
 export type DriveBrowserAccessContext = "owner" | "share"
 export type DriveBrowserSurface = "standalone" | "console"
 export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdown" | "download-only"
+export type DriveBrowserEditKind = "text" | "replace" | "none"
+export type DriveBrowserEditUnavailableReason = "unsupported" | "truncated" | "login_required" | "permission_denied" | "quota"
 export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
   readonly expiresIn: DriveAccessExpiresIn
+  readonly accessMode?: DriveShareAccessMode
+  readonly editorEmails?: readonly string[]
 }
 
 export const DRIVE_DEFAULT_ACCESS_SETTINGS: DriveAccessSettingsInput = {
   passwordEnabled: true,
   expiresIn: "3d",
+  accessMode: "link_read",
+  editorEmails: [],
 }
 
 export interface DriveItemDto {
@@ -115,6 +122,8 @@ export interface DriveShareDto {
   readonly passwordEnabled: boolean
   readonly password: string | null
   readonly expiresAt: string | null
+  readonly accessMode: DriveShareAccessMode
+  readonly editorEmails: readonly string[]
   readonly createdAt: string
 }
 
@@ -130,6 +139,8 @@ export interface DriveShareListItemDto {
   readonly passwordEnabled: boolean
   readonly password: string | null
   readonly expiresAt: string | null
+  readonly accessMode: DriveShareAccessMode
+  readonly editorEmails: readonly string[]
   readonly createdAt: string
 }
 
@@ -261,6 +272,25 @@ export interface DriveBrowserPreviewDto {
   readonly visitUrl: string | null
 }
 
+export interface DriveBrowserEditDto {
+  readonly canEdit: boolean
+  readonly editorKind: DriveBrowserEditKind
+  readonly currentVersionId: string | null
+  readonly maxInlineEditBytes: string
+  readonly reason: DriveBrowserEditUnavailableReason | null
+}
+
+export interface DriveFileTextUpdateInput {
+  readonly contentType: "text"
+  readonly text: string
+  readonly baseVersionId: string
+}
+
+export interface DriveFileContentUpdateResult {
+  readonly item: DriveItemDto
+  readonly version: DriveFileVersionDto
+}
+
 export interface DriveBrowserChildrenPageDto {
   readonly offset: number
   readonly limit: number
@@ -288,6 +318,7 @@ export interface DriveBrowserSnapshotDto {
   readonly children: readonly DriveBrowserItemDto[]
   readonly childrenPage?: DriveBrowserChildrenPageDto
   readonly preview: DriveBrowserPreviewDto | null
+  readonly edit: DriveBrowserEditDto | null
   readonly canDownload: boolean
   readonly canZip: boolean
 }

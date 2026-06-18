@@ -314,7 +314,7 @@ describe("preload bridge", () => {
     await bridge.account.restoreDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
     await bridge.account.deleteDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
     await bridge.account.updateDriveFileVersionPin({ itemId: "item-1", versionId: "version-1", isPinned: true })
-    await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d" })
+    await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" })
     await bridge.account.listDriveShares()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
@@ -376,7 +376,7 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:share",
-      { itemId: "item-1", passwordEnabled: true, expiresIn: "7d" },
+      { itemId: "item-1", passwordEnabled: true, expiresIn: "7d", accessMode: "link_edit" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:shares:list",

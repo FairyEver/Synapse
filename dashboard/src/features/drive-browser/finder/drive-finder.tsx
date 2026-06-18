@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DriveRendererShell } from '../renderers/drive-renderer-shell'
+import type { DriveRendererEditContext } from '../renderers/drive-renderer-shell'
 import {
   findDriveRendererOption,
   getDriveRendererOptions,
@@ -28,12 +29,14 @@ export function DriveFinder({
   onLoadMoreChildren,
   loadingMoreChildren = false,
   loadMoreChildrenError = null,
+  editContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly mode: 'console' | 'share' | 'standalone'
   readonly onLoadMoreChildren?: () => void
   readonly loadingMoreChildren?: boolean
   readonly loadMoreChildrenError?: string | null
+  readonly editContext?: DriveRendererEditContext
 }) {
   const fileSelected = snapshot.current.type === 'file'
   const rendererOptions = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
@@ -63,6 +66,7 @@ export function DriveFinder({
                 snapshot={snapshot}
                 rendererId={selectedRenderer?.id ?? null}
                 onRendererChange={setRendererId}
+                editContext={editContext}
               />
             </div>
           </div>

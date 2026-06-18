@@ -4,6 +4,7 @@ import type {
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
   DriveBrowserSurface,
+  DriveFileContentUpdateResult,
 } from '@synapse/shared'
 import { driveBrowserApi } from '@/lib/api'
 
@@ -39,6 +40,10 @@ export type DriveBrowserState =
       loadMoreChildren?: () => void
       loadingMoreChildren: boolean
       loadMoreChildrenError: string | null
+      reload: () => Promise<DriveBrowserSnapshotDto>
+      reloading: boolean
+      saveText: (input: { readonly text: string; readonly baseVersionId: string }) => Promise<DriveFileContentUpdateResult>
+      savingText: boolean
     }
 
 type DriveBrowserLoadOptions = {
@@ -98,6 +103,35 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
 
   const querySnapshot = toDriveBrowserSnapshot(query.data)
   const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
+  const reloadMutation = useMutation({
+    mutationFn: async () => requireDriveBrowserSnapshot(await loadDriveBrowser(input)),
+    onSuccess: (nextSnapshot) => {
+      if (input.context === 'share') {
+        setUnlockedSnapshot(nextSnapshot)
+      } else {
+        setPagedSnapshot(nextSnapshot)
+      }
+    },
+  })
+  const saveTextMutation = useMutation({
+    mutationFn: async (variables: {
+      readonly snapshot: DriveBrowserSnapshotDto
+      readonly text: string
+      readonly baseVersionId: string
+    }) => {
+      const result = await saveDriveBrowserText(input, variables.snapshot, {
+        text: variables.text,
+        baseVersionId: variables.baseVersionId,
+      })
+      const nextSnapshot = requireDriveBrowserSnapshot(await loadDriveBrowser(input))
+      if (input.context === 'share') {
+        setUnlockedSnapshot(nextSnapshot)
+      } else {
+        setPagedSnapshot(nextSnapshot)
+      }
+      return result
+    },
+  })
   if (snapshot) {
     return {
       status: 'ready',
@@ -107,6 +141,10 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         : undefined,
       loadingMoreChildren: loadMoreMutation.isPending,
       loadMoreChildrenError: loadMoreMutation.error ? getErrorMessage(loadMoreMutation.error) : null,
+      reload: () => reloadMutation.mutateAsync(),
+      reloading: reloadMutation.isPending,
+      saveText: (variables) => saveTextMutation.mutateAsync({ snapshot, ...variables }),
+      savingText: saveTextMutation.isPending,
     }
   }
   if (query.isLoading) return { status: 'loading' }
@@ -121,6 +159,30 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     }
   }
   return { status: 'loading' }
+}
+
+async function saveDriveBrowserText(
+  input: DriveBrowserInput,
+  snapshot: DriveBrowserSnapshotDto,
+  variables: { readonly text: string; readonly baseVersionId: string }
+) {
+  const body = {
+    contentType: 'text' as const,
+    text: variables.text,
+    baseVersionId: variables.baseVersionId,
+  }
+  if (input.context === 'owner') {
+    return driveBrowserApi.updateOwnerText(snapshot.current.id, body)
+  }
+  if (input.context === 'share') {
+    const rootItemId = snapshot.breadcrumbs[0]?.id ?? snapshot.current.id
+    return driveBrowserApi.updateShareText(
+      input.shareId,
+      snapshot.current.id === rootItemId ? null : snapshot.current.id,
+      body
+    )
+  }
+  throw new Error('当前文件不支持保存。')
 }
 
 export function toDriveBrowserQueryKey(input: DriveBrowserInput) {
