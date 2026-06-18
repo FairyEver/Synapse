@@ -1928,6 +1928,42 @@ describe("DriveService", () => {
     }
   })
 
+  it("admin delete can trash and hide public asset backing files without deleting storage", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "logo.png",
+      size: "11",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    await markAsPublicAssetBacking(prisma, prepared.item.id)
+    vi.mocked(storage.deleteObject).mockClear()
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).resolves.toMatchObject({
+      lifecycleStatus: "trashed",
+      storageStatus: "active",
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(11n)
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).resolves.toMatchObject({
+      lifecycleStatus: "hidden",
+      storageStatus: "active",
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(0n)
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
+
   it("admin restore brings hidden files back and charges quota again", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

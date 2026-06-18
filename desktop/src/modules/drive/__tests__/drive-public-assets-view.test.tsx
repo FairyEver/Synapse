@@ -4,7 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { DrivePublicAssetDto, DrivePublicAssetListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
 
 import { DrivePublicAssetsView } from "../drive-public-assets-view"
 
@@ -159,6 +159,17 @@ describe("DrivePublicAssetsView", () => {
     })
     expect(mocks.toast).toHaveBeenCalledWith("上传完成 2 个，失败 1 个")
     expect(uploadResultTexts()).toEqual(["a.png 已上传", "b.jpg 上传失败", "c.webp 已上传"])
+  })
+
+  it("uses the shared public asset image MIME list for file pickers", async () => {
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    const expectedAccept = Array.from(new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))).join(",")
+    const inputs = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')]
+
+    expect(inputs).toHaveLength(2)
+    expect(inputs.map((input) => input.accept)).toEqual([expectedAccept, expectedAccept])
   })
 
   it("renames, replaces, trashes after confirmation, restores, and hides assets after confirmation", async () => {

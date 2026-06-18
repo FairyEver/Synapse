@@ -102,7 +102,7 @@ export class DriveLifecycleService {
   }
 
   async hideTrashedItem(input: DriveLifecycleInput): Promise<{ readonly ok: true }> {
-    const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.trashed)
+    const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.trashed, input.allowPublicAsset)
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
     const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, DRIVE_ITEM_LIFECYCLE_STATUS.trashed))
     const itemIds = items.map((item) => item.id)

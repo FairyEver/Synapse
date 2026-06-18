@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react"
 import { FileText, LoaderCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
-import type { DrivePublicAssetDto, DrivePublicAssetListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
 
 import { FormDialog } from "@/components/form-dialog"
 import { ModuleContentPanel } from "@/components/module-page"
@@ -50,7 +50,7 @@ import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from
 
 const DRIVE_PUBLIC_ASSET_PAGE_SIZE = 50
 const DRIVE_PUBLIC_ASSET_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
-const DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/gif"
+const DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT = Array.from(new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))).join(",")
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 

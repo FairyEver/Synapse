@@ -1470,11 +1470,11 @@ export class DriveService implements OnApplicationBootstrap {
     const item = await this.prisma.driveItem.findFirst({ where: { id: itemId } })
     if (!item) throw new NotFoundException("文件不存在。")
     if (item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.trashed) {
-      await this.getLifecycleService().hideTrashedItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress })
+      await this.getLifecycleService().hideTrashedItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress, allowPublicAsset: true })
       return { ok: true }
     }
     if (item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden) return { ok: true }
-    await this.getLifecycleService().trashItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress })
+    await this.getLifecycleService().trashItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress, allowPublicAsset: true })
     return { ok: true }
   }
 
