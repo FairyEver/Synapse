@@ -106,9 +106,10 @@ export function GitModule() {
             )}
           </TabsContent>
           <TabsContent value="environment" className="m-0 h-full data-[state=inactive]:hidden">
-            <div className="h-full bg-surface p-4">
+            <div className="h-full bg-surface">
               <GitEnvironmentPanel
                 environment={environment}
+                repositorySummaries={repositoriesState.summaries}
                 loading={environmentLoading}
                 error={environmentError}
                 onRefresh={refreshEnvironment}

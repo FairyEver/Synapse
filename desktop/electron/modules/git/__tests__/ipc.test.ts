@@ -33,6 +33,38 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local", extra: true }).success).toBe(false)
   })
 
+  it("returns extended Git environment diagnostics", () => {
+    const responseSchema = gitIpcModule.methods.checkEnvironment.response
+    expect(responseSchema).toBeDefined()
+    if (!responseSchema) throw new Error("Missing checkEnvironment response schema.")
+
+    expect(responseSchema.safeParse({
+      checkedAt: "2026-06-18T10:00:00.000Z",
+      platform: "darwin",
+      homeDir: "/Users/writer",
+      gitAvailable: true,
+      gitVersion: "git version 2.50.0",
+      gitPath: "/usr/bin/git",
+      processPath: "/usr/bin",
+      shellPath: "/opt/homebrew/bin:/usr/bin",
+      effectivePath: "/usr/bin:/opt/homebrew/bin",
+      processGitPath: "/usr/bin/git",
+      shellGitPath: "/opt/homebrew/bin/git",
+      effectiveGitPath: "/usr/bin/git",
+      sshAvailable: true,
+      userName: "Writer",
+      userEmail: "writer@example.com",
+      userNameSource: "file:/Users/writer/.gitconfig",
+      userEmailSource: "file:/Users/writer/.gitconfig",
+      commonSshKeyExists: true,
+      sshPublicKeyPath: "/Users/writer/.ssh/id_ed25519.pub",
+      sshPublicKeyType: "ssh-ed25519",
+      sshPublicKeyComment: "writer@example.com",
+      sshPublicKeyFingerprint: "SHA256:test",
+      installHint: null,
+    }).success).toBe(true)
+  })
+
   it("lists repositories through the registry service", async () => {
     const registry = {
       list: vi.fn().mockResolvedValue([

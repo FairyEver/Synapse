@@ -27,13 +27,28 @@ const fileChangeSchema = z.object({
 })
 
 const environmentStateSchema = z.object({
+  checkedAt: z.string(),
+  platform: z.string(),
+  homeDir: z.string(),
   gitAvailable: z.boolean(),
   gitVersion: z.string().nullable(),
   gitPath: z.string().nullable(),
+  processPath: z.string(),
+  shellPath: z.string().nullable(),
+  effectivePath: z.string(),
+  processGitPath: z.string().nullable(),
+  shellGitPath: z.string().nullable(),
+  effectiveGitPath: z.string().nullable(),
   sshAvailable: z.boolean(),
   userName: z.string().nullable(),
   userEmail: z.string().nullable(),
+  userNameSource: z.string().nullable(),
+  userEmailSource: z.string().nullable(),
   commonSshKeyExists: z.boolean(),
+  sshPublicKeyPath: z.string().nullable(),
+  sshPublicKeyType: z.string().nullable(),
+  sshPublicKeyComment: z.string().nullable(),
+  sshPublicKeyFingerprint: z.string().nullable(),
   installHint: z.string().nullable(),
 })
 

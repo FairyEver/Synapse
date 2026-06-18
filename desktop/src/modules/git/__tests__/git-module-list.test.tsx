@@ -81,22 +81,48 @@ function summary(
   }
 }
 
+function gitEnvironment(overrides: Record<string, unknown> = {}) {
+  return {
+    checkedAt: "2026-06-18T10:00:00.000Z",
+    platform: "darwin",
+    homeDir: "/Users/writer",
+    gitAvailable: true,
+    gitVersion: "git version 2.50.0",
+    gitPath: "/usr/bin/git",
+    processPath: "/usr/bin",
+    shellPath: "/opt/homebrew/bin:/usr/bin",
+    effectivePath: "/usr/bin:/opt/homebrew/bin",
+    processGitPath: "/usr/bin/git",
+    shellGitPath: "/opt/homebrew/bin/git",
+    effectiveGitPath: "/usr/bin/git",
+    sshAvailable: true,
+    userName: "Writer",
+    userEmail: "writer@example.com",
+    userNameSource: "file:/Users/writer/.gitconfig",
+    userEmailSource: "file:/Users/writer/.gitconfig",
+    commonSshKeyExists: true,
+    sshPublicKeyPath: "/Users/writer/.ssh/id_ed25519.pub",
+    sshPublicKeyType: "ssh-ed25519",
+    sshPublicKeyComment: "writer@example.com",
+    sshPublicKeyFingerprint: "SHA256:abc",
+    installHint: null,
+    ...overrides,
+  }
+}
+
 describe("GitModule repository list", () => {
   const roots: Root[] = []
 
   beforeEach(() => {
     vi.clearAllMocks()
     document.body.innerHTML = ""
-    bridge.git.checkEnvironment.mockResolvedValue({
-      gitAvailable: true,
-      gitVersion: "git version 2.50.0",
-      gitPath: null,
-      sshAvailable: true,
-      userName: "Writer",
-      userEmail: "writer@example.com",
-      commonSshKeyExists: true,
-      installHint: null,
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
     })
+    bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment())
     bridge.git.listRepositories.mockResolvedValue([])
     bridge.git.listRepositorySummaries.mockResolvedValue([])
     bridge.git.configureIdentity.mockResolvedValue(undefined)
@@ -143,6 +169,41 @@ describe("GitModule repository list", () => {
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).not.toContain("克隆仓库")
   })
 
+  it("shows environment diagnostics and repository issues", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, {
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      }),
+      summary({ id: "repo-2", name: "Missing", localPath: "/work/missing", addedAt: "now", lastOpenedAt: null }, { pathExists: false }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButton("环境"))
+
+    expect(document.body.textContent).toContain("git version 2.50.0")
+    expect(document.body.textContent).toContain("/usr/bin/git")
+    expect(document.body.textContent).toContain("/Users/writer/.gitconfig")
+    expect(document.body.textContent).toContain("/Users/writer/.ssh/id_ed25519.pub")
+    expect(document.body.textContent).toContain("Docs：1 个改动。")
+    expect(document.body.textContent).toContain("Missing：目录不可访问。")
+    expect(document.body.textContent).toContain("/work/docs")
+  })
+
+  it("copies visible Git diagnostics", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, { ahead: 1 }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButton("环境"))
+    await click(findButton("复制诊断信息"))
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("Git 环境诊断"))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("writer@example.com"))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("/work/docs"))
+    expect(document.body.textContent).toContain("已复制诊断信息。")
+  })
+
   it("opens clone dialog and submits clone request", async () => {
     bridge.git.cloneRepository.mockResolvedValue({
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
@@ -164,26 +225,24 @@ describe("GitModule repository list", () => {
 
   it("configures missing Git identity after confirmation", async () => {
     bridge.git.checkEnvironment
-      .mockResolvedValueOnce({
-        gitAvailable: true,
-        gitVersion: "git version 2.50.0",
-        gitPath: null,
-        sshAvailable: true,
+      .mockResolvedValueOnce(gitEnvironment({
         userName: null,
         userEmail: null,
         commonSshKeyExists: false,
-        installHint: null,
-      })
-      .mockResolvedValueOnce({
-        gitAvailable: true,
-        gitVersion: "git version 2.50.0",
-        gitPath: null,
-        sshAvailable: true,
+        sshPublicKeyPath: null,
+        sshPublicKeyType: null,
+        sshPublicKeyComment: null,
+        sshPublicKeyFingerprint: null,
+      }))
+      .mockResolvedValueOnce(gitEnvironment({
         userName: "Writer",
         userEmail: "writer@example.com",
         commonSshKeyExists: false,
-        installHint: null,
-      })
+        sshPublicKeyPath: null,
+        sshPublicKeyType: null,
+        sshPublicKeyComment: null,
+        sshPublicKeyFingerprint: null,
+      }))
     await renderGitModule(roots)
 
     await click(findButton("环境"))

@@ -1549,14 +1549,16 @@ export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryReg
 export const gitEnvironmentServiceDescriptor: ServiceDescriptor<GitEnvironmentService> = {
   id: "git.environment-service",
   criticality: "degraded",
-  dependsOn: ["git.command-runner"],
+  dependsOn: ["git.command-runner", "core.process-environment"],
   create(ctx) {
+    const processEnvironment = ctx.registry.get<ProcessEnvironmentService>("core.process-environment")
     return createGitEnvironmentService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       homeDir: os.homedir(),
       pathExists,
       readFile: (filePath) => readFile(filePath, "utf8"),
       platform: process.platform,
+      shellEnvironment: processEnvironment.shell,
     })
   },
 }

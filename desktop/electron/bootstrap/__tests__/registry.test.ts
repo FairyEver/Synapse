@@ -139,7 +139,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
-    expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner"])
+    expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.clone-service")?.dependsOn).toEqual(["git.command-runner", "git.repository-registry"])
     expect(byId.get("git.status-service")?.dependsOn).toEqual(["git.command-runner"])
     expect(byId.get("git.commit-service")?.dependsOn).toEqual(["git.command-runner"])

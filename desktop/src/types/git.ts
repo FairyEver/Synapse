@@ -82,13 +82,28 @@ export type SynapseGitCommitDetail = SynapseGitCommitSummary & {
 }
 
 export type SynapseGitEnvironmentState = {
+  readonly checkedAt: string
+  readonly platform: string
+  readonly homeDir: string
   readonly gitAvailable: boolean
   readonly gitVersion: string | null
   readonly gitPath: string | null
+  readonly processPath: string
+  readonly shellPath: string | null
+  readonly effectivePath: string
+  readonly processGitPath: string | null
+  readonly shellGitPath: string | null
+  readonly effectiveGitPath: string | null
   readonly sshAvailable: boolean
   readonly userName: string | null
   readonly userEmail: string | null
+  readonly userNameSource: string | null
+  readonly userEmailSource: string | null
   readonly commonSshKeyExists: boolean
+  readonly sshPublicKeyPath: string | null
+  readonly sshPublicKeyType: string | null
+  readonly sshPublicKeyComment: string | null
+  readonly sshPublicKeyFingerprint: string | null
   readonly installHint: string | null
 }
 

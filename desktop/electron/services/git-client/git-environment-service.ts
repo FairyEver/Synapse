@@ -1,4 +1,6 @@
 import path from "node:path"
+import { createHash } from "node:crypto"
+import type { ShellEnvironmentSnapshot } from "../../runtime/process"
 import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
 import type { GitClientCommandRunner } from "./git-command-runner"
 
@@ -10,6 +12,8 @@ type EnvironmentDeps = {
   readonly pathExists: (filePath: string) => Promise<boolean>
   readonly readFile: (filePath: string) => Promise<string>
   readonly platform: Platform
+  readonly shellEnvironment: ShellEnvironmentSnapshot
+  readonly now?: () => Date
 }
 
 function installHint(platform: Platform): string {
@@ -26,6 +30,25 @@ async function readConfig(
   try {
     const result = await commandRunner.run({ cwd: homeDir, args: ["config", "--global", key] })
     return result.stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+async function readConfigSource(
+  commandRunner: Pick<GitClientCommandRunner, "run">,
+  homeDir: string,
+  key: string,
+): Promise<string | null> {
+  try {
+    const result = await commandRunner.run({ cwd: homeDir, args: ["config", "--global", "--show-origin", "--get", key] })
+    const line = result.stdout.trim()
+    if (!line) return null
+    const tabIndex = line.indexOf("\t")
+    if (tabIndex > 0) return line.slice(0, tabIndex).trim() || null
+    const spaceIndex = line.indexOf(" ")
+    if (spaceIndex > 0) return line.slice(0, spaceIndex).trim() || null
+    return "global"
   } catch {
     return null
   }
@@ -61,9 +84,89 @@ async function findCommonSshPublicKey(
   return null
 }
 
+type SshPublicKeyDetails = {
+  readonly path: string | null
+  readonly type: string | null
+  readonly comment: string | null
+  readonly fingerprint: string | null
+}
+
+function getEmptySshPublicKeyDetails(): SshPublicKeyDetails {
+  return {
+    path: null,
+    type: null,
+    comment: null,
+    fingerprint: null,
+  }
+}
+
+function parseSshPublicKeyDetails(key: SynapseGitSshPublicKey | null): SshPublicKeyDetails {
+  if (!key) return getEmptySshPublicKeyDetails()
+  const fields = key.content.trim().split(/\s+/)
+  const type = fields[0] || null
+  const encodedKey = fields[1] || null
+  const comment = fields.slice(2).join(" ") || null
+  let fingerprint: string | null = null
+
+  if (encodedKey) {
+    try {
+      const digest = createHash("sha256")
+        .update(Buffer.from(encodedKey, "base64"))
+        .digest("base64")
+        .replace(/=+$/u, "")
+      fingerprint = `SHA256:${digest}`
+    } catch {
+      fingerprint = null
+    }
+  }
+
+  return {
+    path: key.path,
+    type,
+    comment,
+    fingerprint,
+  }
+}
+
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
+  const now = deps.now ?? (() => new Date())
+
+  async function getPublicKeyDetails(): Promise<SshPublicKeyDetails> {
+    try {
+      return parseSshPublicKeyDetails(await findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile))
+    } catch {
+      return getEmptySshPublicKeyDetails()
+    }
+  }
+
+  function baseState(): Pick<
+    SynapseGitEnvironmentState,
+    | "checkedAt"
+    | "platform"
+    | "homeDir"
+    | "processPath"
+    | "shellPath"
+    | "effectivePath"
+    | "processGitPath"
+    | "shellGitPath"
+    | "effectiveGitPath"
+  > {
+    return {
+      checkedAt: now().toISOString(),
+      platform: deps.platform,
+      homeDir: deps.homeDir,
+      processPath: deps.shellEnvironment.processPath,
+      shellPath: deps.shellEnvironment.shellPath,
+      effectivePath: deps.shellEnvironment.effectivePath,
+      processGitPath: deps.shellEnvironment.processGitPath,
+      shellGitPath: deps.shellEnvironment.shellGitPath,
+      effectiveGitPath: deps.shellEnvironment.effectiveGitPath,
+    }
+  }
+
   return {
     async check(): Promise<SynapseGitEnvironmentState> {
+      const publicKey = await getPublicKeyDetails()
       try {
         const gitVersionResult = await deps.commandRunner.run({ cwd: deps.homeDir, args: ["--version"] })
         let sshAvailable = false
@@ -73,26 +176,42 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
         } catch {
           sshAvailable = false
         }
+        const userName = await readConfig(deps.commandRunner, deps.homeDir, "user.name")
+        const userEmail = await readConfig(deps.commandRunner, deps.homeDir, "user.email")
 
         return {
+          ...baseState(),
           gitAvailable: true,
           gitVersion: gitVersionResult.stdout.trim() || null,
-          gitPath: null,
+          gitPath: deps.shellEnvironment.effectiveGitPath,
           sshAvailable,
-          userName: await readConfig(deps.commandRunner, deps.homeDir, "user.name"),
-          userEmail: await readConfig(deps.commandRunner, deps.homeDir, "user.email"),
-          commonSshKeyExists: await hasCommonSshKey(deps.homeDir, deps.pathExists),
+          userName,
+          userEmail,
+          userNameSource: userName ? await readConfigSource(deps.commandRunner, deps.homeDir, "user.name") : null,
+          userEmailSource: userEmail ? await readConfigSource(deps.commandRunner, deps.homeDir, "user.email") : null,
+          commonSshKeyExists: publicKey.path !== null,
+          sshPublicKeyPath: publicKey.path,
+          sshPublicKeyType: publicKey.type,
+          sshPublicKeyComment: publicKey.comment,
+          sshPublicKeyFingerprint: publicKey.fingerprint,
           installHint: null,
         }
       } catch {
         return {
+          ...baseState(),
           gitAvailable: false,
           gitVersion: null,
-          gitPath: null,
+          gitPath: deps.shellEnvironment.effectiveGitPath,
           sshAvailable: false,
           userName: null,
           userEmail: null,
-          commonSshKeyExists: await hasCommonSshKey(deps.homeDir, deps.pathExists),
+          userNameSource: null,
+          userEmailSource: null,
+          commonSshKeyExists: publicKey.path !== null,
+          sshPublicKeyPath: publicKey.path,
+          sshPublicKeyType: publicKey.type,
+          sshPublicKeyComment: publicKey.comment,
+          sshPublicKeyFingerprint: publicKey.fingerprint,
           installHint: installHint(deps.platform),
         }
       }
