@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -53,7 +53,7 @@ describe("LocalDriveStorage", () => {
 
     await storage.acceptUpload(token, Readable.from(["hello"]))
 
-    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
   })
 
@@ -69,7 +69,7 @@ describe("LocalDriveStorage", () => {
     stream.headers = { "content-length": "9" }
 
     await expect(storage.acceptUpload(token, stream)).rejects.toBeInstanceOf(DriveUploadTooLargeError)
-    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).rejects.toThrow()
+    await expect(storage.headObject("drive/item-1")).resolves.toBeNull()
   })
 
   it("stops chunked local uploads after they exceed the expected size", async () => {
@@ -82,7 +82,7 @@ describe("LocalDriveStorage", () => {
     if (!token) throw new Error("missing upload token")
 
     await expect(storage.acceptUpload(token, Readable.from(["hello", "world"]))).rejects.toBeInstanceOf(DriveUploadTooLargeError)
-    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).rejects.toThrow()
+    await expect(storage.headObject("drive/item-1")).resolves.toBeNull()
   })
 
   it("keeps local upload tokens reusable after failed writes", async () => {
@@ -97,7 +97,7 @@ describe("LocalDriveStorage", () => {
     await expect(storage.acceptUpload(token, Readable.from(["hello", "world"]))).rejects.toBeInstanceOf(DriveUploadTooLargeError)
     await storage.acceptUpload(token, Readable.from(["hello"]))
 
-    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
   })
 
   it("consumes local upload tokens after successful writes", async () => {
@@ -112,7 +112,7 @@ describe("LocalDriveStorage", () => {
     await storage.acceptUpload(token, Readable.from(["hello"]))
 
     await expect(storage.acceptUpload(token, Readable.from(["again"]))).rejects.toThrow("Drive storage token expired.")
-    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
   })
 
   it("copies and streams local drive objects", async () => {
@@ -130,6 +130,31 @@ describe("LocalDriveStorage", () => {
     expect(object.size).toBe(14n)
     expect(object.contentType).toBe("text/html")
     await expect(streamToText(object.stream)).resolves.toBe("<h1>Hello</h1>")
+  })
+
+  it("copies item objects into nested version keys without filesystem path collisions", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").at(-1)
+    if (!token) throw new Error("missing upload token")
+
+    await storage.acceptUpload(token, Readable.from("hello"))
+    await storage.copyObject({ fromKey: "drive/item-1", toKey: "drive/item-1/versions/version-1", contentType: "text/plain" })
+
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1/versions/version-1" })).stream)).resolves.toBe("hello")
+  })
+
+  it("continues reading legacy local objects stored directly by key path", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await mkdir(path.join(root, "drive"), { recursive: true })
+    await writeFile(path.join(root, "drive/item-legacy"), "legacy")
+
+    await expect(storage.headObject("drive/item-legacy")).resolves.toMatchObject({ key: "drive/item-legacy", size: 6n })
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-legacy" })).stream)).resolves.toBe("legacy")
   })
 
   it("allows local download tokens to be resolved multiple times before expiry", async () => {

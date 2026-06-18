@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
+import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { ApiError } from '@/lib/api'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 
@@ -168,9 +169,8 @@ export function DriveCodeRenderer({
 }
 
 function buildLoginUrl(): string {
-  if (typeof window === 'undefined') return '/sign-in'
-  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  return `/sign-in?redirect=${encodeURIComponent(redirect)}`
+  if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
+  return buildDashboardSignInUrl(window.location)
 }
 
 function downloadLocalVersion(name: string, value: string): void {

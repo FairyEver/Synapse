@@ -1,11 +1,18 @@
 const dashboardRedirectOrigin = 'https://synapse.local'
 const dashboardBasePath = '/console'
 const legacyDashboardBasePath = '/dashboard'
+const rootPublicRedirectPathPrefixes = ['/share/']
 
 type DashboardRedirectLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
 
 export function buildDashboardRedirectPath(location: DashboardRedirectLocation) {
   return `${location.pathname}${location.search}${location.hash}`
+}
+
+export function buildDashboardSignInUrl(location: DashboardRedirectLocation | undefined) {
+  if (!location) return `${dashboardBasePath}/sign-in`
+  const redirect = buildDashboardRedirectPath(location)
+  return `${dashboardBasePath}/sign-in?redirect=${encodeURIComponent(redirect)}`
 }
 
 function stripDashboardBasePath(pathname: string) {
@@ -33,4 +40,11 @@ export function normalizeDashboardRedirect(value: string | undefined) {
   } catch {
     return undefined
   }
+}
+
+export function isRootPublicDashboardRedirect(value: string | undefined) {
+  const normalized = normalizeDashboardRedirect(value)
+  if (!normalized) return false
+  const pathname = normalized.split(/[?#]/, 1)[0] || '/'
+  return rootPublicRedirectPathPrefixes.some((prefix) => pathname.startsWith(prefix))
 }

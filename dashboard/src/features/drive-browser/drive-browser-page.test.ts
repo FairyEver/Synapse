@@ -189,6 +189,25 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('min-h-svh')
   })
 
+  it('links shared read-only code previews through the console sign-in route', () => {
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: { ...baseCurrent(), browserUrl: '/share/shr_public' },
+      edit: { canEdit: false, reason: 'login_required', currentVersionId: null },
+    })
+
+    const html = renderToStaticMarkup(
+      createElement(DriveRendererContent, {
+        snapshot,
+        selected: { id: 'code', label: '代码', container: 'full' },
+        body: true,
+      })
+    )
+
+    expect(html).toContain('登录后编辑')
+    expect(html).toContain('href="/console/sign-in"')
+  })
+
   it('uses a fullscreen host without reader container classes in standalone renderer mode', () => {
     const snapshot = createSnapshot({
       context: 'owner',

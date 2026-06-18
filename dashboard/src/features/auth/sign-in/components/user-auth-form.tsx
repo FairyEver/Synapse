@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi } from '@/lib/api'
+import { isRootPublicDashboardRedirect } from '@/lib/dashboard-redirect'
 import { resolveDashboardRedirectForRole } from '@/lib/dashboard-role'
 import { cn } from '@/lib/utils'
 import { PasswordInput } from '@/components/password-input'
@@ -51,8 +52,13 @@ export function UserAuthForm({
       const session = await dashboardApi.login(data)
       auth.setUser(session)
       toast.success(`欢迎回来，${session.email}`)
+      const nextPath = resolveDashboardRedirectForRole(session.role, redirectTo)
+      if (isRootPublicDashboardRedirect(nextPath)) {
+        window.location.assign(nextPath)
+        return
+      }
       await navigate({
-        to: resolveDashboardRedirectForRole(session.role, redirectTo),
+        to: nextPath,
         replace: true,
       })
     } catch (err: unknown) {

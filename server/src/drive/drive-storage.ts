@@ -96,37 +96,39 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async headObject(key: string): Promise<DriveStorageObjectInfo | null> {
-    try {
-      const objectPath = this.pathForKey(key)
-      const info = await stat(objectPath)
-      return { key, size: BigInt(info.size) }
-    } catch (error) {
-      if (error instanceof Error && "code" in error && (error as { readonly code?: string }).code === "ENOENT") return null
-      throw error
+    for (const objectPath of this.candidatePathsForKey(key)) {
+      try {
+        const info = await stat(objectPath)
+        return { key, size: BigInt(info.size) }
+      } catch (error) {
+        if (isMissingLocalDriveObjectError(error)) continue
+        throw error
+      }
     }
+    return null
   }
 
   async deleteObject(key: string): Promise<void> {
-    await rm(this.pathForKey(key), { force: true })
+    await Promise.all(this.candidatePathsForKey(key).map((objectPath) => rm(objectPath, { force: true })))
     this.contentTypes.delete(key)
   }
 
   async putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void> {
-    const objectPath = this.pathForKey(input.key)
+    const objectPath = this.objectPathForKey(input.key)
     await mkdir(path.dirname(objectPath), { recursive: true })
     await writeFile(objectPath, input.body)
     this.contentTypes.set(input.key, input.contentType ?? null)
   }
 
   async copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void> {
-    const targetPath = this.pathForKey(input.toKey)
+    const targetPath = this.objectPathForKey(input.toKey)
     await mkdir(path.dirname(targetPath), { recursive: true })
-    await copyFile(this.pathForKey(input.fromKey), targetPath)
+    await copyFile(await this.requirePathForKey(input.fromKey), targetPath)
     this.contentTypes.set(input.toKey, input.contentType ?? this.contentTypes.get(input.fromKey) ?? null)
   }
 
   async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
-    const objectPath = this.pathForKey(input.key)
+    const objectPath = await this.requirePathForKey(input.key)
     const info = await stat(objectPath)
     return {
       stream: createReadStream(objectPath),
@@ -141,7 +143,7 @@ export class LocalDriveStorage implements DriveStoragePort {
     if (entry.expectedSize !== undefined && contentLength !== undefined && contentLength > entry.expectedSize) {
       throw new DriveUploadTooLargeError()
     }
-    const objectPath = this.pathForKey(entry.key)
+    const objectPath = this.objectPathForKey(entry.key)
     await mkdir(path.dirname(objectPath), { recursive: true })
     try {
       if (entry.expectedSize === undefined) {
@@ -159,7 +161,7 @@ export class LocalDriveStorage implements DriveStoragePort {
 
   resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string; readonly key: string } {
     const entry = this.readToken(this.downloadTokens, token)
-    const objectPath = this.pathForKey(entry.key)
+    const objectPath = this.firstExistingPathForKeySync(entry.key)
     try {
       statSync(objectPath)
     } catch (error) {
@@ -191,14 +193,57 @@ export class LocalDriveStorage implements DriveStoragePort {
     }
   }
 
-  private pathForKey(key: string): string {
-    const objectPath = path.resolve(this.root, key)
+  private objectPathForKey(key: string): string {
+    const encodedKey = Buffer.from(key, "utf8").toString("base64url")
+    return this.resolveUnderRoot(path.join(".objects", encodedKey))
+  }
+
+  private legacyPathForKey(key: string): string {
+    return this.resolveUnderRoot(key)
+  }
+
+  private candidatePathsForKey(key: string): readonly string[] {
+    return [this.objectPathForKey(key), this.legacyPathForKey(key)]
+  }
+
+  private async requirePathForKey(key: string): Promise<string> {
+    for (const objectPath of this.candidatePathsForKey(key)) {
+      try {
+        await stat(objectPath)
+        return objectPath
+      } catch (error) {
+        if (isMissingLocalDriveObjectError(error)) continue
+        throw error
+      }
+    }
+    return this.legacyPathForKey(key)
+  }
+
+  private firstExistingPathForKeySync(key: string): string {
+    for (const objectPath of this.candidatePathsForKey(key)) {
+      try {
+        statSync(objectPath)
+        return objectPath
+      } catch (error) {
+        if (isMissingLocalDriveObjectError(error)) continue
+        throw error
+      }
+    }
+    return this.legacyPathForKey(key)
+  }
+
+  private resolveUnderRoot(relativePath: string): string {
+    const objectPath = path.resolve(this.root, relativePath)
     const rootPath = path.resolve(this.root)
     if (objectPath !== rootPath && !objectPath.startsWith(`${rootPath}${path.sep}`)) {
       throw new Error("Invalid drive storage key.")
     }
     return objectPath
   }
+}
+
+function isMissingLocalDriveObjectError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && (error as { readonly code?: unknown }).code === "ENOENT"
 }
 
 function attachLocalDriveStorageKey(error: unknown, key: string): void {

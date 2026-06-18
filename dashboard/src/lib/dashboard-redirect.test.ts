@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildDashboardRedirectPath, normalizeDashboardRedirect } from './dashboard-redirect'
+import {
+  buildDashboardRedirectPath,
+  buildDashboardSignInUrl,
+  isRootPublicDashboardRedirect,
+  normalizeDashboardRedirect,
+} from './dashboard-redirect'
 
 describe('buildDashboardRedirectPath', () => {
   it('keeps search and hash from the current location', () => {
@@ -9,6 +14,16 @@ describe('buildDashboardRedirectPath', () => {
       search: '?session=install_123',
       hash: '#retry',
     })).toBe('/console/content-store/install?session=install_123#retry')
+  })
+})
+
+describe('buildDashboardSignInUrl', () => {
+  it('uses the console auth route and preserves the current public path', () => {
+    expect(buildDashboardSignInUrl({
+      pathname: '/share/shr_public',
+      search: '?view=code',
+      hash: '#line-1',
+    })).toBe('/console/sign-in?redirect=%2Fshare%2Fshr_public%3Fview%3Dcode%23line-1')
   })
 })
 
@@ -33,5 +48,18 @@ describe('normalizeDashboardRedirect', () => {
 
   it('rejects external redirects', () => {
     expect(normalizeDashboardRedirect('https://example.com/dashboard/users')).toBeUndefined()
+  })
+})
+
+describe('isRootPublicDashboardRedirect', () => {
+  it('recognizes share redirects that must leave the console router', () => {
+    expect(isRootPublicDashboardRedirect('/share/shr_public')).toBe(true)
+    expect(isRootPublicDashboardRedirect('/share/shr_public/items/file')).toBe(true)
+    expect(isRootPublicDashboardRedirect('/console/share/shr_public')).toBe(true)
+  })
+
+  it('keeps console-owned routes inside the router', () => {
+    expect(isRootPublicDashboardRedirect('/settings')).toBe(false)
+    expect(isRootPublicDashboardRedirect('/console/settings')).toBe(false)
   })
 })
