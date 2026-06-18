@@ -27,6 +27,7 @@ describe("drive browser helpers", () => {
   it("classifies markdown files by extension and mime type", () => {
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "notes.md", mimeType: null })).toBe("markdown")
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "guide.markdown", mimeType: null })).toBe("markdown")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "component.mdx", mimeType: null })).toBe("markdown")
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "upload.bin", mimeType: "text/markdown" })).toBe("markdown")
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "legacy.bin", mimeType: "text/x-markdown" })).toBe("markdown")
   })
