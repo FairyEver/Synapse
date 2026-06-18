@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
@@ -29,6 +29,29 @@ import {
   shouldRenderDriveSingleFileReader,
 } from './shared/drive-view-model'
 import { getDriveFinderBreadcrumbs } from './finder/drive-finder-breadcrumbs'
+
+vi.mock('@mdxeditor/editor', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+
+  return {
+    MDXEditor: ({ markdown, readOnly }: { readonly markdown: string; readonly readOnly?: boolean }) =>
+      React.createElement('textarea', {
+        'data-mdxeditor': 'true',
+        readOnly,
+        value: markdown,
+      }),
+    codeBlockPlugin: () => null,
+    codeMirrorPlugin: () => null,
+    headingsPlugin: () => null,
+    linkDialogPlugin: () => null,
+    linkPlugin: () => null,
+    listsPlugin: () => null,
+    markdownShortcutPlugin: () => null,
+    quotePlugin: () => null,
+    tablePlugin: () => null,
+    thematicBreakPlugin: () => null,
+  }
+})
 
 describe('drive browser view model', () => {
   it('formats drive file metadata from shared helpers', () => {
@@ -348,6 +371,30 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-finder="split"')
     expect(html).not.toContain('data-drive-renderer-region="true"')
     expect(html).not.toContain('暂无同级文件')
+  })
+
+  it('uses MDXeditor for markdown files when no initial renderer is provided', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('data-mdxeditor="true"')
+    expect(html).toContain('# Notes')
+    expect(html).not.toContain('data-drive-code-renderer="true"')
   })
 
   it('renders markdown outline links when preview contains headings', () => {
