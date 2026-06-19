@@ -139,6 +139,18 @@ describe('device utilities', () => {
     ])
   })
 
+  it('can keep missing admin live events out of a paginated page', () => {
+    const current = [device('user-1', 'client-a')]
+
+    const updated = upsertDeviceLiveEvent(
+      current,
+      event('client-b', { userId: 'user-2' }),
+      { scope: 'admin', insertMissing: false }
+    )
+
+    expect(updated).toBe(current)
+  })
+
   it('keeps live-updated admin rows aligned with the active table sorting', () => {
     const current = [
       device('user-1', 'client-a', {

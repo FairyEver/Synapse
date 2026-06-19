@@ -17,6 +17,7 @@ export const deviceStatusVariants: Record<
 
 type DeviceScope = {
   scope: 'admin' | 'user'
+  insertMissing?: boolean
 }
 
 export type DeviceTableSorting = readonly {
@@ -39,6 +40,7 @@ export function upsertDeviceLiveEvent(
 
   const index = devices.findIndex((device) => getDeviceKey(device, options) === eventKey)
   if (index === -1) {
+    if (options.insertMissing === false) return devices as DashboardDeviceRow[]
     return sortDevicesByObservedAt([
       ...devices,
       deviceFromLiveEvent(event, options),

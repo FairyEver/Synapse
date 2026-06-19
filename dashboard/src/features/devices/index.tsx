@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, type DashboardDeviceRow } from '@/lib/api'
@@ -26,6 +26,7 @@ export default function DevicesPage() {
     { id: 'lastSeenAt', desc: true },
   ])
   const [devices, setDevices] = useState<DashboardDeviceRow[]>([])
+  const devicesRef = useRef<DashboardDeviceRow[]>([])
   const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, error, isError, isLoading, refetch } = useQuery({
@@ -36,6 +37,7 @@ export default function DevicesPage() {
   useEffect(() => {
     if (data?.data) {
       setDevices(data.data)
+      devicesRef.current = data.data
     }
   }, [data])
 
@@ -43,10 +45,17 @@ export default function DevicesPage() {
     return adminApi.subscribeLiveClients(
       (event) => {
         if (!event.client.userId) return
-        setDevices((current) => {
-          const nextDevices = upsertDeviceLiveEvent(current, event, { scope: 'admin' })
-          return sortDevicesByTableSorting(nextDevices, sorting)
+        const nextDevices = upsertDeviceLiveEvent(devicesRef.current, event, {
+          scope: 'admin',
+          insertMissing: false,
         })
+        if (nextDevices === devicesRef.current) {
+          void queryClient.invalidateQueries({ queryKey: ['admin-devices'] })
+          return
+        }
+        const sortedDevices = sortDevicesByTableSorting(nextDevices, sorting)
+        devicesRef.current = sortedDevices
+        setDevices(sortedDevices)
       },
       () => {
         void queryClient.invalidateQueries({ queryKey: ['admin-devices'] })
