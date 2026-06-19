@@ -379,6 +379,7 @@ export class AdminService {
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
+    const now = new Date()
     const [data, total] = await this.prisma.$transaction([
       this.prisma.invitation.findMany({
         ...toPrismaArgs(page),
@@ -396,7 +397,15 @@ export class AdminService {
       }),
       this.prisma.invitation.count(),
     ])
-    return { data, total, page: page.page, pageSize: page.pageSize }
+    return {
+      data: data.map((invitation) => ({
+        ...invitation,
+        status: resolveAdminInvitationStatus(invitation, now),
+      })),
+      total,
+      page: page.page,
+      pageSize: page.pageSize,
+    }
   }
 
   private async recordServiceManagedAuditSafely(input: AuditRecordInput): Promise<void> {
@@ -432,4 +441,12 @@ function toAdminTeamListRow(team: AdminTeamRecord) {
     ...row,
     memberCount: _count.memberships,
   }
+}
+
+function resolveAdminInvitationStatus(
+  invitation: { readonly expiresAt: Date; readonly usedAt: Date | null },
+  now: Date,
+) {
+  if (invitation.usedAt) return "used"
+  return invitation.expiresAt.getTime() <= now.getTime() ? "expired" : "pending"
 }

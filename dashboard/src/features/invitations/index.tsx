@@ -184,11 +184,8 @@ export default function InvitationsPage() {
         <DataTableColumnHeader column={column} title='状态' />
       ),
       cell: ({ row }) => {
-        if (row.original.usedAt) return <Badge variant='default'>已使用</Badge>
-        if (new Date(row.original.expiresAt) < new Date()) {
-          return <Badge variant='secondary'>已过期</Badge>
-        }
-        return <Badge variant='outline'>有效</Badge>
+        const status = getInvitationStatusView(row.original.status)
+        return <Badge variant={status.variant}>{status.label}</Badge>
       },
       enableSorting: false,
     },
@@ -352,4 +349,10 @@ export default function InvitationsPage() {
       />
     </>
   )
+}
+
+function getInvitationStatusView(status: AdminInvitationRow['status']) {
+  if (status === 'used') return { label: '已使用', variant: 'default' as const }
+  if (status === 'expired') return { label: '已过期', variant: 'secondary' as const }
+  return { label: '有效', variant: 'outline' as const }
 }

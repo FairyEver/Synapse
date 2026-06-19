@@ -40,6 +40,7 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 
 afterEach(() => {
+  vi.useRealTimers()
   if (root) {
     act(() => {
       root?.unmount()
@@ -58,6 +59,7 @@ describe('InvitationsPage delete confirmation', () => {
       data: [{
         id: 'inv-1',
         type: 'team_join',
+        status: 'pending',
         expiresAt: '2026-06-15T00:00:00.000Z',
         usedAt: null,
         createdByAdmin: { email: 'admin@example.com' },
@@ -82,6 +84,35 @@ describe('InvitationsPage delete confirmation', () => {
 
     expect(mockedAdminApi.deleteInvitation).toHaveBeenCalled()
     expect(mockedAdminApi.deleteInvitation.mock.calls[0]?.[0]).toBe('inv-1')
+  })
+
+  it('renders the server invitation status instead of local time', async () => {
+    mockedAdminApi.listInvitations.mockResolvedValue({
+      data: [{
+        id: 'inv-1',
+        type: 'team_join',
+        status: 'pending',
+        expiresAt: '2000-01-01T00:00:00.000Z',
+        usedAt: null,
+        createdByAdmin: { email: 'admin@example.com' },
+        createdByUser: null,
+        team: { name: 'Core Team' },
+        acceptedByUser: null,
+        createdAt: '2026-06-14T00:00:00.000Z',
+      }],
+      total: 1,
+    })
+
+    renderPage()
+    await waitFor(() => {
+      if (!document.body.textContent?.includes('有效')) {
+        throw new Error('pending status not rendered')
+      }
+      return true
+    })
+
+    expect(document.body.textContent).toContain('有效')
+    expect(document.body.textContent).not.toContain('已过期')
   })
 })
 

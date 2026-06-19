@@ -75,6 +75,24 @@ function createPrismaMock(counts: {
   return prisma
 }
 
+function createInvitationRow(overrides: {
+  readonly id?: string
+  readonly expiresAt?: Date
+  readonly usedAt?: Date | null
+} = {}) {
+  return {
+    id: overrides.id ?? "invite-1",
+    type: "team_join",
+    expiresAt: overrides.expiresAt ?? new Date("2026-06-15T12:01:00.000Z"),
+    usedAt: overrides.usedAt ?? null,
+    acceptedByUser: null,
+    createdByAdmin: { email: "admin@example.com" },
+    createdByUser: null,
+    createdAt: new Date("2026-06-15T10:00:00.000Z"),
+    team: { name: "Core Team" },
+  }
+}
+
 describe("AdminService", () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -456,6 +474,44 @@ describe("AdminService", () => {
     expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("tokenHash")
     expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("inviteUrl")
     expect(prisma.invitation.count).toHaveBeenCalledWith()
+  })
+
+  it("returns invitation status using server time", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"))
+    const prisma = {
+      $transaction: vi.fn().mockResolvedValue([
+        [
+          createInvitationRow({
+            id: "pending",
+            expiresAt: new Date("2026-06-15T12:01:00.000Z"),
+          }),
+          createInvitationRow({
+            id: "expired",
+            expiresAt: new Date("2026-06-15T11:59:00.000Z"),
+          }),
+          createInvitationRow({
+            id: "used",
+            expiresAt: new Date("2026-06-15T11:59:00.000Z"),
+            usedAt: new Date("2026-06-15T11:00:00.000Z"),
+          }),
+        ],
+        3,
+      ]),
+      invitation: {
+        count: vi.fn(),
+        findMany: vi.fn(),
+      },
+    }
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    const result = await service.listInvitations()
+
+    expect(result.data).toEqual([
+      expect.objectContaining({ id: "pending", status: "pending" }),
+      expect.objectContaining({ id: "expired", status: "expired" }),
+      expect.objectContaining({ id: "used", status: "used" }),
+    ])
   })
 
   it("creates admin team invitations and records an audit log", async () => {
