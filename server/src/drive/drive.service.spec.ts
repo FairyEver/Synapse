@@ -870,6 +870,10 @@ describe("DriveService", () => {
     expect(share.url).toMatch(/^https:\/\/synapse\.test\/share\/shr_/u)
     await service.disableShare("user-1", share.id)
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+
+    const publicShare = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
+    await service.disableShare("user-1", publicShare.shareId)
+    await expect(service.resolvePublicShareAccess({ shareId: publicShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it("creates password-protected share links by default", async () => {

@@ -295,11 +295,11 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_disable",
-      description: "Disable a Synapse Drive share link by share record id.",
+      description: "Disable a Synapse Drive share link by record id or public shareId.",
       inputSchema: {
         type: "object",
         properties: {
-          shareId: stringField("Drive share record id returned by drive_share_create or item activeShareId."),
+          shareId: stringField("Drive share record id, item activeShareId, or public shareId such as shr_...."),
         },
         required: ["shareId"],
       },

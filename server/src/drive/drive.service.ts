@@ -1019,8 +1019,13 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async disableShare(userId: string, shareId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
+    const share = await this.prisma.driveShare.findFirst({
+      where: { userId, enabled: true, OR: [{ id: shareId }, { shareId }] },
+      select: { id: true, shareId: true },
+    })
+    if (!share) throw new NotFoundException("分享不存在。")
     const result = await this.prisma.driveShare.updateMany({
-      where: { id: shareId, userId, enabled: true },
+      where: { id: share.id, userId, enabled: true },
       data: { enabled: false, disabledAt: new Date() },
     })
     if (result.count === 0) throw new NotFoundException("分享不存在。")
@@ -1028,8 +1033,8 @@ export class DriveService implements OnApplicationBootstrap {
       userId,
       action: "drive.share.disable",
       targetType: "drive.share",
-      targetId: shareId,
-      detail: { userId, shareRecordId: shareId, disabledCount: result.count },
+      targetId: share.id,
+      detail: { userId, shareRecordId: share.id, shareId: share.shareId, requestedShareId: shareId, disabledCount: result.count },
       ipAddress: auditContext.ipAddress,
     })
     return { ok: true }
