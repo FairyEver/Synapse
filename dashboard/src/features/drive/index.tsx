@@ -157,38 +157,45 @@ export default function DriveAdminPage() {
       },
       {
         id: 'actions',
-        cell: ({ row }) => (
-          <div className='flex justify-end gap-2'>
-            {row.original.type === 'file' && row.original.storageStatus === 'active' ? (
-              <Button asChild variant='ghost' className='h-8 w-8 p-0'>
-                <a href={adminApi.downloadDriveItemUrl(row.original.id)}>
-                  <Download data-icon='inline-start' />
-                  <span className='sr-only'>下载</span>
-                </a>
-              </Button>
-            ) : null}
-            {row.original.lifecycleStatus !== 'active' ? (
-              <Button
-                variant='ghost'
-                className='h-8 w-8 p-0'
-                disabled={restoreMutation.isPending}
-                onClick={() => restoreMutation.mutate(row.original.id)}
-              >
-                <RotateCcw data-icon='inline-start' />
-                <span className='sr-only'>恢复</span>
-              </Button>
-            ) : null}
-            <Button
-              variant='ghost'
-              className='h-8 w-8 p-0'
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteTarget(row.original)}
-            >
-              <Trash2 data-icon='inline-start' />
-              <span className='sr-only'>删除</span>
-            </Button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const item = row.original
+          const canDelete = canDeleteAdminDriveItem(item)
+
+          return (
+            <div className='flex justify-end gap-2'>
+              {item.type === 'file' && item.storageStatus === 'active' ? (
+                <Button asChild variant='ghost' className='h-8 w-8 p-0'>
+                  <a href={adminApi.downloadDriveItemUrl(item.id)}>
+                    <Download data-icon='inline-start' />
+                    <span className='sr-only'>下载</span>
+                  </a>
+                </Button>
+              ) : null}
+              {item.lifecycleStatus !== 'active' ? (
+                <Button
+                  variant='ghost'
+                  className='h-8 w-8 p-0'
+                  disabled={restoreMutation.isPending}
+                  onClick={() => restoreMutation.mutate(item.id)}
+                >
+                  <RotateCcw data-icon='inline-start' />
+                  <span className='sr-only'>恢复</span>
+                </Button>
+              ) : null}
+              {canDelete ? (
+                <Button
+                  variant='ghost'
+                  className='h-8 w-8 p-0'
+                  disabled={deleteMutation.isPending}
+                  onClick={() => setDeleteTarget(item)}
+                >
+                  <Trash2 data-icon='inline-start' />
+                  <span className='sr-only'>删除</span>
+                </Button>
+              ) : null}
+            </div>
+          )
+        },
         enableSorting: false,
         enableHiding: false,
       },
@@ -363,6 +370,14 @@ export function driveStatusLabel(status: AdminDriveItemRow['storageStatus']) {
     failed: '失败',
   }
   return labels[status]
+}
+
+export function canDeleteAdminDriveItem(item: AdminDriveItemRow) {
+  return (
+    item.lifecycleStatus === 'active' &&
+    item.storageStatus !== 'delete_pending' &&
+    !item.storageDeletePending
+  )
 }
 
 export function formatDriveBytes(value: string) {

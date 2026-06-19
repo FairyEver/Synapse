@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { driveItemTypeLabel, driveStatusLabel, formatDriveBytes } from '.'
+import type { AdminDriveItemRow } from '@/lib/api'
+import {
+  canDeleteAdminDriveItem,
+  driveItemTypeLabel,
+  driveStatusLabel,
+  formatDriveBytes,
+} from '.'
 
 describe('drive admin format helpers', () => {
   it('formats item type and status labels', () => {
@@ -14,4 +20,44 @@ describe('drive admin format helpers', () => {
     expect(formatDriveBytes('2048')).toBe('2.0 KB')
     expect(formatDriveBytes('bad')).toBe('-')
   })
+
+  it('only allows useful delete actions', () => {
+    expect(canDeleteAdminDriveItem(createDriveItem())).toBe(true)
+    expect(canDeleteAdminDriveItem(createDriveItem({
+      storageStatus: 'delete_pending',
+      storageDeletePending: true,
+      lifecycleStatus: 'deleted',
+    }))).toBe(false)
+    expect(canDeleteAdminDriveItem(createDriveItem({
+      storageStatus: 'delete_pending',
+      storageDeletePending: false,
+    }))).toBe(false)
+    expect(canDeleteAdminDriveItem(createDriveItem({
+      storageStatus: 'failed',
+      storageDeletePending: true,
+    }))).toBe(false)
+  })
 })
+
+function createDriveItem(
+  overrides: Partial<AdminDriveItemRow> = {}
+): AdminDriveItemRow {
+  return {
+    id: 'item-1',
+    parentId: null,
+    type: 'file',
+    name: 'report.pdf',
+    size: '1024',
+    mimeType: 'application/pdf',
+    storageStatus: 'active',
+    shared: false,
+    activeShareId: null,
+    createdAt: '2026-06-15T00:00:00.000Z',
+    updatedAt: '2026-06-15T00:00:00.000Z',
+    userId: 'user-1',
+    userEmail: 'admin@example.com',
+    storageDeletePending: false,
+    lifecycleStatus: 'active',
+    ...overrides,
+  }
+}
