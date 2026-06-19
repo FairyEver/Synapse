@@ -335,7 +335,7 @@ export class AutomationService {
       ...traceMetadata,
       boundary: "automation-event-trigger",
     })
-    const items = await this.deps.items.list()
+    const items = await this.listEventCandidateItems(event, traceMetadata.webhookPublicId)
     const acceptedRunPromises: Array<Promise<AutomationRun | null>> = []
     let matchedCount = 0
     for (const item of items) {
@@ -399,6 +399,16 @@ export class AutomationService {
       boundary: "automation-event-trigger",
     })
     return acceptedRuns
+  }
+
+  private listEventCandidateItems(
+    event: AutomationTriggerEvent,
+    webhookPublicId: string | undefined,
+  ): Promise<AutomationItem[]> {
+    if (event.source === "webhook" && webhookPublicId) {
+      return this.deps.items.listWebhookTriggerCandidates(webhookPublicId)
+    }
+    return this.deps.items.list()
   }
 
   async stopRun(runId: string): Promise<{

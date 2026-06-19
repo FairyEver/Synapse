@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("../../log-store", () => ({
@@ -644,6 +645,63 @@ describe("AutomationService", () => {
       durationMs: expect.any(Number),
       boundary: "automation-event-trigger",
     })
+  })
+
+  it("prefilters live webhook deliveries to matching webhook automations", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    const target = await harness.service.automationCreate({
+      name: "Target webhook automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.webhook", config: { webhookPublicId: "wh_target" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+    await harness.service.automationCreate({
+      name: "Other webhook automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.webhook", config: { webhookPublicId: "wh_other" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+    await harness.service.automationCreate(createAutomationInput())
+    const listSpy = vi.spyOn(harness.itemStore, "list")
+    await harness.service.start()
+    listSpy.mockClear()
+
+    try {
+      const runs = await harness.service.acceptEvent({
+        source: "webhook",
+        type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+        payload: {
+          deliveryId: "delivery-1",
+          webhook: { publicId: "wh_target" },
+        },
+        receivedAt: "2026-06-03T00:00:00.000Z",
+      })
+
+      expect(listSpy).not.toHaveBeenCalled()
+      expect(runs).toEqual([
+        expect.objectContaining({
+          automationId: target.id,
+          status: "success",
+          triggeredBy: "trigger",
+        }),
+      ])
+      expect(logger.info).toHaveBeenCalledWith("Automation event processing complete.", {
+        source: "automation",
+        eventSource: "webhook",
+        eventType: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+        receivedAt: "2026-06-03T00:00:00.000Z",
+        deliveryId: "delivery-1",
+        webhookPublicId: "wh_target",
+        checkedCount: 1,
+        matchedCount: 1,
+        acceptedCount: 1,
+        durationMs: expect.any(Number),
+        boundary: "automation-event-trigger",
+      })
+    } finally {
+      await harness.service.stop()
+    }
   })
 
   it("ignores events that trigger runtime rejects", async () => {

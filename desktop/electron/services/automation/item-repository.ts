@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { DataNamespace } from "../../runtime/data-repo"
+import type { DataChangeEvent, DataNamespace } from "../../runtime/data-repo"
 import type { AutomationTriggerRegistry } from "./trigger-registry"
 import type {
   AutomationCreateInput,
@@ -29,12 +29,16 @@ export class AutomationItemRepository {
   private readonly now: () => Date
   private readonly idFactory: () => string
   private readonly itemQueues = new Map<string, Promise<void>>()
+  private readonly itemCache = new Map<string, AutomationItem>()
+  private readonly webhookTriggerIndex = new Map<string, Set<string>>()
+  private indexHydrated = false
 
   constructor(deps: AutomationItemRepositoryDeps) {
     this.items = deps.items
     this.triggers = deps.triggers
     this.now = deps.now ?? (() => new Date())
     this.idFactory = deps.idFactory ?? (() => `automation:${randomUUID()}`)
+    this.items.onChange((change) => this.applyItemChange(change))
   }
 
   async create(input: AutomationCreateInput): Promise<AutomationItem> {
@@ -105,8 +109,21 @@ export class AutomationItemRepository {
     return this.items.get(id)
   }
 
-  list(): Promise<AutomationItem[]> {
-    return this.items.list()
+  async list(): Promise<AutomationItem[]> {
+    const items = await this.items.list()
+    this.rebuildIndexes(items)
+    return items
+  }
+
+  async listWebhookTriggerCandidates(webhookPublicId: string): Promise<AutomationItem[]> {
+    if (!this.indexHydrated) {
+      await this.list()
+    }
+    const ids = this.webhookTriggerIndex.get(webhookPublicId)
+    if (!ids) return []
+    return [...ids]
+      .map((id) => this.itemCache.get(id))
+      .filter((item): item is AutomationItem => Boolean(item))
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
@@ -189,6 +206,57 @@ export class AutomationItemRepository {
     }
   }
 
+  private rebuildIndexes(items: readonly AutomationItem[]): void {
+    this.itemCache.clear()
+    this.webhookTriggerIndex.clear()
+    for (const item of items) {
+      this.indexItem(item)
+    }
+    this.indexHydrated = true
+  }
+
+  private applyItemChange(change: DataChangeEvent<AutomationItem>): void {
+    if (change.kind === "clear") {
+      this.itemCache.clear()
+      this.webhookTriggerIndex.clear()
+      this.indexHydrated = true
+      return
+    }
+    if (change.kind === "replace") {
+      this.itemCache.clear()
+      this.webhookTriggerIndex.clear()
+      this.indexHydrated = false
+      return
+    }
+    if (change.previous) {
+      this.unindexItem(change.previous)
+    }
+    if (change.kind === "upsert" && change.value) {
+      this.indexItem(change.value)
+    }
+  }
+
+  private indexItem(item: AutomationItem): void {
+    this.itemCache.set(item.id, item)
+    const webhookPublicId = webhookPublicIdForItem(item)
+    if (!webhookPublicId) return
+    const ids = this.webhookTriggerIndex.get(webhookPublicId) ?? new Set<string>()
+    ids.add(item.id)
+    this.webhookTriggerIndex.set(webhookPublicId, ids)
+  }
+
+  private unindexItem(item: AutomationItem): void {
+    this.itemCache.delete(item.id)
+    const webhookPublicId = webhookPublicIdForItem(item)
+    if (!webhookPublicId) return
+    const ids = this.webhookTriggerIndex.get(webhookPublicId)
+    if (!ids) return
+    ids.delete(item.id)
+    if (ids.size === 0) {
+      this.webhookTriggerIndex.delete(webhookPublicId)
+    }
+  }
+
   private normalizeTrigger(trigger: AutomationTriggerRef): AutomationTriggerRef {
     return this.triggers.normalize(trigger)
   }
@@ -230,6 +298,18 @@ function validateItem(item: AutomationItem): void {
   }
   if (!item.trigger.type.trim()) throw new Error("trigger type is required")
   if (!item.executor.type.trim()) throw new Error("executor type is required")
+}
+
+function webhookPublicIdForItem(item: AutomationItem): string | null {
+  if (!item.enabled || item.trigger.type !== "builtin.webhook") return null
+  const config = item.trigger.config
+  if (!isRecord(config)) return null
+  const webhookPublicId = config.webhookPublicId
+  return typeof webhookPublicId === "string" && webhookPublicId.trim() ? webhookPublicId : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function definedPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {
