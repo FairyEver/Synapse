@@ -4,6 +4,10 @@ import type { DrivePublicAssetDto, DriveTrashListPageDto } from "@synapse/shared
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
+import {
+  DRIVE_LOCAL_UPLOAD_MAX_FILES,
+  DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
+} from "../../../src/lib/drive-local-upload-limits"
 
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
@@ -807,6 +811,78 @@ describe("createDriveCapabilityDispatcher", () => {
         error: "Folder upload completed with failed files.",
       }),
     }))
+  })
+
+  it("rejects MCP folder uploads that exceed the local upload file limit before preparing sessions", async () => {
+    const accountService = createAccountService()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem: {
+        stat: vi.fn(async () => ({
+          isFile: () => true,
+          isDirectory: () => true,
+          size: 1,
+        })),
+        createReadStream: vi.fn(),
+        readdir: vi.fn(async () => Array.from(
+          { length: DRIVE_LOCAL_UPLOAD_MAX_FILES + 1 },
+          (_, index) => ({
+            name: `file-${index}.txt`,
+            isDirectory: () => false,
+            isFile: () => true,
+          }),
+        )),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/large-folder",
+    }, { source: "mcp-stdio" })).rejects.toThrow(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件`)
+
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+  })
+
+  it("rejects MCP folder uploads that exceed the local upload depth limit before preparing sessions", async () => {
+    const accountService = createAccountService()
+    const nestedNames = Array.from(
+      { length: DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH + 1 },
+      (_, index) => `level-${index}`,
+    )
+    const fileSystem = {
+      stat: vi.fn(async () => ({
+        isFile: () => true,
+        isDirectory: () => true,
+        size: 1,
+      })),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(async (directoryPath: string) => {
+        const depth = directoryPath.split("/").filter((part) => part.startsWith("level-")).length
+        if (depth < nestedNames.length) {
+          return [{
+            name: nestedNames[depth],
+            isDirectory: () => true,
+            isFile: () => false,
+          }]
+        }
+        return [{
+          name: "too-deep.txt",
+          isDirectory: () => false,
+          isFile: () => true,
+        }]
+      }),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/deep-folder",
+    }, { source: "mcp-stdio" })).rejects.toThrow(`文件夹层级最多 ${DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH} 层`)
+
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
   })
 
   it("creates shares with the default access settings when omitted", async () => {

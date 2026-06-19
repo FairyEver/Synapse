@@ -33,6 +33,12 @@ import type {
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
+import {
+  DRIVE_LOCAL_UPLOAD_MAX_FILES,
+  DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
+  createDriveLocalUploadTooDeepError,
+  createDriveLocalUploadTooManyFilesError,
+} from "../../src/lib/drive-local-upload-limits"
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
@@ -562,21 +568,29 @@ async function putPreparedUploadFromPath(
 async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Promise<LocalFileEntry[]> {
   const result: LocalFileEntry[] = []
 
-  async function walk(directoryPath: string, relativePrefix: string): Promise<void> {
+  async function walk(directoryPath: string, relativePrefix: string, depth: number): Promise<void> {
+    if (depth > DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH) {
+      throw createDriveLocalUploadTooDeepError()
+    }
+
     const entries = await fileSystem.readdir(directoryPath, { withFileTypes: true })
     for (const entry of entries) {
       const absolutePath = path.join(directoryPath, entry.name)
       const relativePath = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
       if (entry.isDirectory()) {
-        await walk(absolutePath, relativePath)
+        await walk(absolutePath, relativePath, depth + 1)
       } else if (entry.isFile()) {
+        if (result.length >= DRIVE_LOCAL_UPLOAD_MAX_FILES) {
+          throw createDriveLocalUploadTooManyFilesError()
+        }
+
         const fileStat = await fileSystem.stat(absolutePath)
         result.push({ absolutePath, relativePath, size: String(fileStat.size), sizeBytes: fileStat.size })
       }
     }
   }
 
-  await walk(rootPath, "")
+  await walk(rootPath, "", 0)
   return result
 }
 
