@@ -117,6 +117,8 @@ type DriveReorganizationPlan = {
   readonly skipped: readonly { readonly itemId: string; readonly reason: string }[]
 }
 
+type DriveReorganizationFolderMove = Pick<DriveReorganizationPlannedMoveDto, "itemId" | "name" | "targetParentId">
+
 type DrivePublicAccessResult<T> =
   | { readonly status: "ok"; readonly value: T; readonly cookie?: string }
   | { readonly status: "password_required" }
@@ -1606,6 +1608,7 @@ export class DriveService implements OnApplicationBootstrap {
     const planned: DriveReorganizationPlannedMoveDto[] = []
     const skipped: Array<{ readonly itemId: string; readonly reason: string }> = []
     const movedFolders: string[] = []
+    const plannedFolderMoves: DriveReorganizationFolderMove[] = []
 
     for (const move of input.moves) {
       const item = await this.requireOwnedItem(userId, move.itemId)
@@ -1620,6 +1623,7 @@ export class DriveService implements OnApplicationBootstrap {
         await this.assertNoFolderCycle(item.id, targetParentId)
         await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, targetParentId)
         movedFolders.push(item.id)
+        plannedFolderMoves.push({ itemId: item.id, name: item.name, targetParentId })
       }
       planned.push({
         itemId: item.id,
@@ -1631,6 +1635,7 @@ export class DriveService implements OnApplicationBootstrap {
     }
 
     await this.assertNoRelatedFoldersInReorganization(movedFolders)
+    this.assertNoDuplicateFolderMovesInPlan(plannedFolderMoves)
     return { planned, skipped }
   }
 
@@ -1639,6 +1644,7 @@ export class DriveService implements OnApplicationBootstrap {
     plan: DriveReorganizationPlan,
   ): Promise<DriveReorganizationPlannedMoveDto[]> {
     const movedFolders: string[] = []
+    const plannedFolderMoves: DriveReorganizationFolderMove[] = []
     for (const move of plan.moves) {
       const item = await this.requireOwnedItem(userId, move.itemId)
       if (item.parentId !== move.fromParentId || item.updatedAt.toISOString() !== move.updatedAt || item.name !== move.name) {
@@ -1650,10 +1656,22 @@ export class DriveService implements OnApplicationBootstrap {
         await this.assertNoFolderCycle(item.id, move.targetParentId)
         await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, move.targetParentId)
         movedFolders.push(item.id)
+        plannedFolderMoves.push({ itemId: item.id, name: item.name, targetParentId: move.targetParentId })
       }
     }
     await this.assertNoRelatedFoldersInReorganization(movedFolders)
+    this.assertNoDuplicateFolderMovesInPlan(plannedFolderMoves)
     return [...plan.moves]
+  }
+
+  private assertNoDuplicateFolderMovesInPlan(moves: readonly DriveReorganizationFolderMove[]): void {
+    const seenTargets = new Map<string, string>()
+    for (const move of moves) {
+      const key = `${move.targetParentId ?? "root"}\u0000${move.name}`
+      const existingItemId = seenTargets.get(key)
+      if (existingItemId && existingItemId !== move.itemId) throw new BadRequestException("目标位置已有同名文件夹。")
+      seenTargets.set(key, move.itemId)
+    }
   }
 
   private async assertNoDuplicateFolderAtTarget(
