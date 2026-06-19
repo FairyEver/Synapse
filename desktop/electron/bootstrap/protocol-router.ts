@@ -113,12 +113,18 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
     return authCallbackCount
   }
 
+  function shouldCreateMainWindowBeforeStart(): boolean {
+    if (pendingUrls.length === 0) return true
+    return pendingUrls.some((url) => !parseContentStoreInstallProtocolUrl(url))
+  }
+
   return {
     drain,
     enqueue(url: string): void {
       pendingUrls.push(url)
       if (started) void drain()
     },
+    shouldCreateMainWindowBeforeStart,
     async start(
       prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void> = async () => undefined,
     ): Promise<number> {

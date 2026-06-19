@@ -27,6 +27,7 @@ type InitializeReadyAppDeps = {
   setAllowAppQuit: (value: boolean) => void
   setProcessLevelCleanup?: (cleanup: (() => Promise<void>) | undefined) => void
   setWindowManager: (windowManager: WindowManager) => void
+  shouldCreateMainWindowBeforeProtocolHandling?: () => boolean
   startProtocolHandling: (
     prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void>,
   ) => Promise<number>
@@ -105,11 +106,13 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
 
   const windowManager = registry.get<WindowManager>("core.window-manager")
   deps.setWindowManager(windowManager)
-  createMainWindow({
-    state: deps.mainWindowState,
-    windowManager,
-    isAppQuitting: deps.isAppQuitting,
-  })
+  if (deps.shouldCreateMainWindowBeforeProtocolHandling?.() !== false) {
+    createMainWindow({
+      state: deps.mainWindowState,
+      windowManager,
+      isAppQuitting: deps.isAppQuitting,
+    })
+  }
   attachActivateHandler(() => {
     deps.focusOrCreateMainWindow()
     void accountService.retryOfflineNow()

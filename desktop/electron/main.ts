@@ -80,6 +80,7 @@ if (!gotSingleInstanceLock) {
       setWindowManager: (manager) => {
         windowManager = manager
       },
+      shouldCreateMainWindowBeforeProtocolHandling: protocolRouter.shouldCreateMainWindowBeforeStart,
       startProtocolHandling: protocolRouter.start,
     }))
     .catch((error) => {

@@ -138,6 +138,27 @@ describe("createProtocolUrlRouter", () => {
     expect(logger.warn).toHaveBeenCalledWith("Failed to handle account auth callback.", { error })
     expect(focusMainWindow).toHaveBeenCalledTimes(1)
   })
+
+  it("allows valid cold-start install URLs to skip the normal main window", () => {
+    const createRouter = (initialUrls: string[]) => createProtocolUrlRouter({
+      focusMainWindow: vi.fn(),
+      handleAuthCallback: vi.fn(async () => undefined),
+      logger: createLogger(),
+      openInstallWindow: vi.fn(async () => undefined),
+    }, initialUrls)
+
+    expect(
+      createRouter(["synapse://content-install?session=session-1"]).shouldCreateMainWindowBeforeStart(),
+    ).toBe(false)
+    expect(createRouter([
+      "synapse://content-install?session=session-1",
+      "synapse://content-install?session=session-2",
+    ]).shouldCreateMainWindowBeforeStart()).toBe(false)
+    expect(createRouter([]).shouldCreateMainWindowBeforeStart()).toBe(true)
+    expect(createRouter(["synapse://auth/desktop/callback?code=auth-code"]).shouldCreateMainWindowBeforeStart()).toBe(true)
+    expect(createRouter(["synapse://content-install?session="]).shouldCreateMainWindowBeforeStart()).toBe(true)
+    expect(createRouter(["synapse://unknown"]).shouldCreateMainWindowBeforeStart()).toBe(true)
+  })
 })
 
 describe("shouldFocusMainForSecondInstance", () => {
