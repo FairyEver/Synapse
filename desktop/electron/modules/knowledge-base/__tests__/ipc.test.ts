@@ -102,10 +102,14 @@ describe("knowledgeBaseIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     guardedFetchMock.createGuardedFetchUrl.mockClear()
+    electronMock.dialog.showOpenDialog.mockReset()
+    sourceManagerWindowServiceMock.open.mockReset()
+    sourceManagerWindowServiceMock.trackMutation.mockReset()
     electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(electronMock.focusedWindow)
     electronMock.BrowserWindow.getAllWindows.mockReturnValue([])
     electronMock.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["/tmp/source.md"] })
     sourceManagerWindowServiceMock.open.mockResolvedValue(undefined)
+    sourceManagerWindowServiceMock.trackMutation.mockImplementation((run: () => Promise<unknown>) => run())
   })
 
   it("creates a managed knowledge base through guarded write permission", async () => {
@@ -801,6 +805,38 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "/tmp/export",
       context: { source: "knowledgeBase.exportRawEntries.write" },
     })
+  })
+
+  it("tracks raw export as a source manager operation", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/export"] })
+    const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness } = createHarness({ service: { exportRawEntries } })
+
+    await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+    })
+
+    expect(sourceManagerWindowServiceMock.trackMutation).toHaveBeenCalledTimes(1)
+    expect(exportRawEntries).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: "/tmp/export",
+    })
+  })
+
+  it("blocks raw export while storage migration blocks source manager operations", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/export"] })
+    sourceManagerWindowServiceMock.trackMutation.mockRejectedValueOnce(new Error("知识库存储迁移正在进行。"))
+    const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness } = createHarness({ service: { exportRawEntries } })
+
+    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+    })).rejects.toThrow("知识库存储迁移正在进行")
+
+    expect(exportRawEntries).not.toHaveBeenCalled()
   })
 
   it("returns an empty export result when directory selection is canceled", async () => {

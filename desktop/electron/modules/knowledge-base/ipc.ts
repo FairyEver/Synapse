@@ -693,7 +693,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:export-raw-entries",
       request: exportRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
-      handler: async (ctx, request: { projectId: string; relativePaths: string[] }) => {
+      handler: (ctx, request: { projectId: string; relativePaths: string[] }) => trackRawMutation(async () => {
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory", "createDirectory"],
         })
@@ -718,7 +718,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
             }),
           }),
         })
-      },
+      }),
     },
     openSourceManager: {
       kind: "invoke",
