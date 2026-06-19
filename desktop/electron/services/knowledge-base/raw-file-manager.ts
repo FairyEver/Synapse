@@ -301,8 +301,7 @@ export class KnowledgeBaseRawFileManager {
     budget: RawUploadBudget,
     depth: number,
   ): Promise<void> {
-    const targetPath = path.join(targetDirectory, path.basename(sourceDirectory))
-    await mkdir(targetPath, { recursive: true })
+    const targetPath = await createAvailableDirectoryPath(targetDirectory, path.basename(sourceDirectory))
     entries.push(await entryForPath(rawRoot, targetPath, "directory"))
     const children = await readdir(sourceDirectory, { withFileTypes: true })
     for (const child of children) {
@@ -672,6 +671,21 @@ async function copyFileToAvailablePath(sourcePath: string, directoryPath: string
     } catch (error) {
       if (!isFileExistsError(error)) throw error
       candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
+      index += 1
+    }
+  }
+}
+
+async function createAvailableDirectoryPath(directoryPath: string, directoryName: string): Promise<string> {
+  let candidate = path.join(directoryPath, directoryName)
+  let index = 2
+  while (true) {
+    try {
+      await mkdir(candidate)
+      return candidate
+    } catch (error) {
+      if (!isFileExistsError(error)) throw error
+      candidate = path.join(directoryPath, `${directoryName}-${index}`)
       index += 1
     }
   }

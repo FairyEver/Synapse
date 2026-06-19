@@ -207,7 +207,7 @@ describe("KnowledgeBaseRawFileManager", () => {
       .resolves.toBe("keep\n")
   })
 
-  it("merges folder collisions and renames colliding files during recursive upload", async () => {
+  it("keeps repeated top-level folder uploads separate", async () => {
     const rawRoot = await tempDir()
     await mkdir(path.join(rawRoot, "项目A", "会议资料"), { recursive: true })
     await writeFile(path.join(rawRoot, "项目A", "会议资料", "01.pdf"), "old\n", "utf8")
@@ -221,12 +221,12 @@ describe("KnowledgeBaseRawFileManager", () => {
 
     expect(result.skipped).toEqual([])
     expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([
-      "项目A/会议资料",
-      "项目A/会议资料/01-2.pdf",
+      "项目A/会议资料-2",
+      "项目A/会议资料-2/01.pdf",
     ])
     await expect(readFile(path.join(rawRoot, "项目A", "会议资料", "01.pdf"), "utf8"))
       .resolves.toBe("old\n")
-    await expect(readFile(path.join(rawRoot, "项目A", "会议资料", "01-2.pdf"), "utf8"))
+    await expect(readFile(path.join(rawRoot, "项目A", "会议资料-2", "01.pdf"), "utf8"))
       .resolves.toBe("new\n")
   })
 
