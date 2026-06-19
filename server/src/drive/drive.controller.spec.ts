@@ -390,6 +390,7 @@ describe("DriveController", () => {
         .expect(200)
       expect(render.headers["content-type"]).toContain("text/html; charset=utf-8")
       expect(render.headers["content-security-policy"]).toContain("frame-ancestors 'self'")
+      expect(render.headers["content-security-policy"]).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https:")
       expect(render.text).toContain("Notes")
       expect(drive.resolveOwnerRenderAccess).toHaveBeenLastCalledWith({
         userId: "user-1",
@@ -878,6 +879,12 @@ describe("DriveController", () => {
 
     expect(response.headers["content-type"]).toContain("text/html; charset=utf-8")
     expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'self'")
+    expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
+    expect(response.headers["content-security-policy"]).toContain("script-src 'none'")
+    expect(response.headers["content-security-policy"]).toContain("connect-src 'none'")
+    expect(response.headers["content-security-policy"]).toContain("sandbox")
+    expect(response.headers["content-security-policy"]).not.toContain("'unsafe-inline' https:")
+    expect(response.headers["content-security-policy"]).not.toContain("'unsafe-eval'")
     expect(response.text).toContain("Shared page")
     expect(drive.resolveShareRenderAccess).toHaveBeenCalledWith({
       shareId: "shr_file",

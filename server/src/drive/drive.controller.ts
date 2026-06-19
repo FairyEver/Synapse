@@ -25,7 +25,7 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
 const DRIVE_OWNER_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self';"
-const DRIVE_SHARE_RENDER_CSP = DRIVE_OWNER_RENDER_CSP
+const DRIVE_SHARE_RENDER_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox;"
 type DriveAccessCookieKind = "share"
 
 const prepareUploadSchema = z.object({
