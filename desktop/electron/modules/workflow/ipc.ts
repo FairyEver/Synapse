@@ -13,14 +13,14 @@ import type { WorkflowWindowManager } from "../../services/workflow/window-manag
 import type { EventBus } from "../../runtime/event-bus"
 import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
-import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunResult, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowRunSnapshot } from "../../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -86,18 +86,72 @@ function visibleEngineRejectionError(error: unknown): string {
   return `引擎异常（${errorName}）：${brief}`
 }
 
-function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {
+function sanitizeNodeRunResultForRenderer(result: NodeRunResult): NodeRunResult {
+  return sanitizeNodeResultsForSnapshot({ [result.nodeId]: result })[result.nodeId] ?? result
+}
+
+function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): WorkflowRunResult {
   return {
-    runId: status.runId,
-    workflowId: status.workflowId,
-    status: status.status,
-    nodeResults: status.nodeResults,
-    startedAt: status.startedAt,
-    endedAt: status.endedAt,
-    durationMs: status.durationMs,
-    error: status.error,
-    params: status.params,
-    definition: status.definition ? sanitizeWorkflowDefinitionForSnapshot(status.definition) : undefined,
+    ...result,
+    nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
+    ...(result.output !== undefined ? { output: sanitizeError(result.output) } : {}),
+  }
+}
+
+function sanitizeWorkflowRunStatusForRenderer(status: WorkflowRunStatus): WorkflowRunStatus {
+  return {
+    ...status,
+    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults),
+    ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
+    ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
+    ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
+  }
+}
+
+function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): WorkflowEvent {
+  switch (event.type) {
+    case "node:started":
+    case "node:skipped":
+      return event.result ? { ...event, result: sanitizeNodeRunResultForRenderer(event.result) } : event
+    case "node:completed":
+      return {
+        ...event,
+        output: sanitizeWorkflowOutputForHistory(event.output),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+      }
+    case "node:failed":
+      return {
+        ...event,
+        error: sanitizeError(event.error),
+        ...(event.result ? { result: sanitizeNodeRunResultForRenderer(event.result) } : {}),
+      }
+    case "workflow:completed":
+      return { ...event, result: sanitizeWorkflowRunResultForRenderer(event.result) }
+    case "workflow:failed":
+    case "workflow:cancelled":
+      return {
+        ...event,
+        ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}),
+        ...(event.result ? { result: sanitizeWorkflowRunResultForRenderer(event.result) } : {}),
+      }
+    default:
+      return event
+  }
+}
+
+function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {
+  const sanitized = sanitizeWorkflowRunStatusForRenderer(status)
+  return {
+    runId: sanitized.runId,
+    workflowId: sanitized.workflowId,
+    status: sanitized.status,
+    nodeResults: sanitized.nodeResults,
+    startedAt: sanitized.startedAt,
+    endedAt: sanitized.endedAt,
+    durationMs: sanitized.durationMs,
+    error: sanitized.error,
+    params: sanitized.params,
+    definition: sanitized.definition,
   }
 }
 
@@ -523,10 +577,11 @@ function handleRunEvent(options: {
   } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
     nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: event.type === "node:skipped" ? "skipped" : "failed", input: { variables: {} } }
   }
-  runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+  const sanitizedNextNodeResults = sanitizeNodeResultsForSnapshot(nextNodeResults)
+  runStatuses.set(runId, { ...current, nodeResults: sanitizedNextNodeResults })
 
   const isTerminal = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
-  const payload = isTerminal ? { ...event, workflowId: def.id } : event
+  const payload = sanitizeWorkflowEventForRenderer(isTerminal ? { ...event, workflowId: def.id } : event)
   eventBus.emit(
     { domain: "workflow", type: event.type, payload, timestamp: new Date().toISOString() },
     { backpressure: "block" },
@@ -537,6 +592,7 @@ function handleRunEvent(options: {
   const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
   const endedAt = Date.now()
   const nodeResults = event.result?.nodeResults ?? nextNodeResults
+  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(nodeResults)
   const durationMs = event.result?.durationMs ?? endedAt - startedAt
   logger.info("workflow run finished", { workflowId: def.id, runId, status, durationMs })
   runStatuses.set(runId, {
@@ -544,13 +600,13 @@ function handleRunEvent(options: {
     runId,
     workflowId: def.id,
     status,
-    nodeResults,
+    nodeResults: sanitizedNodeResults,
     startedAt,
     endedAt,
     durationMs,
-    params,
-    definition: def,
-    ...(event.type === "workflow:failed" ? { error: event.error } : {}),
+    params: sanitizeWorkflowOutputForHistory(params),
+    definition: sanitizeWorkflowDefinitionForSnapshot(def),
+    ...(event.type === "workflow:failed" ? { error: sanitizeError(event.error) } : {}),
   })
   saveRunSnapshot(snapshots, {
     runId,
@@ -560,7 +616,7 @@ function handleRunEvent(options: {
     endedAt,
     status,
     params,
-    nodeResults: sanitizeNodeResultsForSnapshot(nodeResults),
+    nodeResults: sanitizedNodeResults,
     definition: def,
     ...(event.type === "workflow:failed" ? { error: event.error } : {}),
   }, eventBus)
@@ -588,12 +644,24 @@ function handleEngineRejection(options: {
   if (!current || current.status !== "running") return
   const endedAt = Date.now()
   const durationMs = endedAt - startedAt
-  runStatuses.set(runId, { runId, workflowId: def.id, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs, error: visibleError, params, definition: def })
+  const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(current.nodeResults)
+  runStatuses.set(runId, {
+    runId,
+    workflowId: def.id,
+    status: "failed",
+    nodeResults: sanitizedNodeResults,
+    startedAt,
+    endedAt,
+    durationMs,
+    error: visibleError,
+    params: sanitizeWorkflowOutputForHistory(params),
+    definition: sanitizeWorkflowDefinitionForSnapshot(def),
+  })
   eventBus.emit(
-    { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
+    { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result: { status: "failed", nodeResults: sanitizedNodeResults, durationMs } }, timestamp: new Date().toISOString() },
     { backpressure: "block" },
   )
-  saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: sanitizeNodeResultsForSnapshot(current.nodeResults), definition: def, error: visibleError }, eventBus)
+  saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: sanitizedNodeResults, definition: def, error: visibleError }, eventBus)
   pruneTerminalStatuses(runStatuses, def.id)
 }
 
@@ -1253,10 +1321,7 @@ export const workflowIpcModule: IpcModule = {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
           logger.info("run-status served from memory", { runId, workflowId: live.workflowId, status: live.status })
-          return {
-            ...live,
-            definition: live.definition ? sanitizeWorkflowDefinitionForSnapshot(live.definition) : undefined,
-          }
+          return sanitizeWorkflowRunStatusForRenderer(live)
         }
         // Fallback: terminal runs pruned from the in-memory map (MAX_TERMINAL_STATUSES_PER_WORKFLOW = 5)
         // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an

@@ -133,9 +133,17 @@ describe("workflowIpcModule", () => {
       stackLength: expect.any(Number),
     })
     expect(runStatuses.get(runId)?.error).toBe(`引擎异常（Error）：engine failed token=[redacted] at [path] with prompt text`)
+    expect(runStatuses.get(runId)?.nodeResults["prompt-1"]?.input).toEqual({
+      variables: { secret: "token=[redacted]" },
+      prompt: "prompt token=[redacted] at [path]",
+    })
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("prompt text")
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("/Users/example/repo")
+    expect(JSON.stringify(runStatuses.get(runId))).not.toContain("sk-secret")
+    expect(JSON.stringify(runStatuses.get(runId))).not.toContain("/Users/example/repo")
     expect(snapshots.save).toHaveBeenCalledWith(expect.objectContaining({
       params: {
         apiToken: "[redacted]",
@@ -159,6 +167,118 @@ describe("workflowIpcModule", () => {
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/params")
+  })
+
+  it("sanitizes workflow live events and memory run status before renderer exposure", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined) }
+    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const engine = {
+      run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        const nodeResult = {
+          nodeId: "codex-1",
+          status: "success" as const,
+          input: {
+            variables: {
+              apiToken: "sk-live-secret",
+              note: "Authorization: Bearer live-token at /Users/example/live",
+            },
+            prompt: "prompt password=live-password at /Users/example/prompt",
+          },
+          output: "stdout token=sk-live-secret at /Users/example/stdout",
+          outputs: {
+            finalMessage: "Cookie: session=live-cookie",
+            codexDebug: {
+              promptPreview: "Bearer live-token",
+              stdoutPath: "/Users/example/stdout.txt",
+            },
+          },
+        }
+        emit({ type: "node:completed", runId, nodeId: "codex-1", output: nodeResult.output, result: nodeResult })
+        emit({
+          type: "workflow:completed",
+          runId,
+          workflowId: "workflow-1",
+          result: {
+            status: "completed",
+            nodeResults: { "codex-1": nodeResult },
+            durationMs: 5,
+            output: "Authorization: Bearer live-token",
+          },
+        })
+        return Promise.resolve()
+      }),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:run", {
+      id: "workflow-1",
+      params: {
+        apiKey: "sk-param-secret",
+        note: "Bearer param-token at /Users/example/params",
+      },
+    })
+    await Promise.resolve()
+
+    const runId = (result as { runId: string }).runId
+    const liveStatus = await harness.invoke("synapse:workflow:run-status", { runId })
+    const serializedEvents = JSON.stringify(eventBus.emit.mock.calls)
+    const serializedStatus = JSON.stringify(liveStatus)
+    const serializedMemory = JSON.stringify(runStatuses.get(runId))
+
+    for (const serialized of [serializedEvents, serializedStatus, serializedMemory]) {
+      expect(serialized).not.toContain("sk-live-secret")
+      expect(serialized).not.toContain("live-token")
+      expect(serialized).not.toContain("live-password")
+      expect(serialized).not.toContain("live-cookie")
+      expect(serialized).not.toContain("sk-param-secret")
+      expect(serialized).not.toContain("/Users/example/live")
+      expect(serialized).not.toContain("/Users/example/prompt")
+      expect(serialized).not.toContain("/Users/example/params")
+    }
+    expect(liveStatus).toEqual(expect.objectContaining({
+      params: {
+        apiKey: "[redacted]",
+        note: "Bearer [redacted] at [path]",
+      },
+      nodeResults: {
+        "codex-1": expect.objectContaining({
+          input: {
+            variables: {
+              apiToken: "[key]",
+              note: "Authorization=[redacted] [redacted] at [path]",
+            },
+            prompt: "prompt password=[redacted] at [path]",
+          },
+          output: "stdout token=[redacted] at [path]",
+          outputs: expect.objectContaining({
+            finalMessage: "Cookie=[redacted]",
+            codexDebug: expect.objectContaining({
+              promptPreview: "Bearer [redacted]",
+              stdoutPath: "/Users/example/stdout.txt",
+            }),
+          }),
+        }),
+      },
+    }))
+    expect(snapshots.save).toHaveBeenCalledWith(expect.objectContaining({
+      nodeResults: expect.objectContaining({
+        "codex-1": expect.objectContaining({
+          output: "stdout token=[redacted] at [path]",
+        }),
+      }),
+    }))
   })
 
   it("passes triggerSource to engine.run for each IPC entry point", async () => {
