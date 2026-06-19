@@ -97,6 +97,51 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       .rejects.toThrow()
   })
 
+  it("restores old config in-process when post-switch verification fails", async () => {
+    const harness = await migrationHarness({ corruptNewRootAfterSwitch: true })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库存储迁移校验失败。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    expect(harness.service.isActive()).toBe(false)
+    expect(harness.states.at(-1)).toMatchObject({
+      active: false,
+      phase: "failed",
+      message: "知识库存储迁移失败，已恢复到旧位置",
+    })
+    expect(harness.sourceManager.setMigrationBlocked).toHaveBeenLastCalledWith(false)
+    await harness.service.recoverIfNeeded()
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Knowledge\n")
+  })
+
+  it("keeps knowledge base operations blocked when post-switch recovery fails", async () => {
+    const harness = await migrationHarness({
+      corruptNewRootAfterSwitch: true,
+      failRestoreOldConfigAfterSwitch: true,
+    })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库存储迁移校验失败。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    expect(harness.service.isActive()).toBe(true)
+    expect(harness.states.at(-1)).toMatchObject({
+      active: true,
+      phase: "failed",
+      message: "知识库存储迁移恢复失败",
+    })
+    expect(harness.sourceManager.setMigrationBlocked).toHaveBeenLastCalledWith(true)
+  })
+
   it("rejects dangerous custom storage roots before migration starts", async () => {
     const targetRoots = [...new Set([
       path.parse(process.cwd()).root,
@@ -291,6 +336,8 @@ type MigrationHarnessOptions = {
   availableBytes?: number | null
   activeKnowledgeBaseSession?: boolean
   corruptCopiedClaudeContent?: string
+  corruptNewRootAfterSwitch?: boolean
+  failRestoreOldConfigAfterSwitch?: boolean
 }
 
 async function migrationHarness(options: MigrationHarnessOptions = {}) {
@@ -315,12 +362,27 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     userDataPath: oldRoot,
     loadConfig: async () => structuredClone(config),
     updateConfig: async (patch) => {
+      const previousStorage = config.global.knowledgeBaseStorage
+      const nextStorage = patch.global?.knowledgeBaseStorage
+      if (
+        options.failRestoreOldConfigAfterSwitch
+        && previousStorage.mode === "custom"
+        && nextStorage?.mode === "default"
+      ) {
+        throw new Error("restore config failed")
+      }
       config = {
         ...config,
         global: {
           ...config.global,
           ...patch.global,
         },
+      }
+      if (
+        options.corruptNewRootAfterSwitch
+        && nextStorage?.mode === "custom"
+      ) {
+        await rm(path.join(newRoot, "knowledge-bases", "kb-1", ".raw", ".manifest.json"), { force: true })
       }
       return structuredClone(config)
     },

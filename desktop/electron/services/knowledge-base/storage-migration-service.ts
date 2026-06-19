@@ -168,6 +168,7 @@ export class KnowledgeBaseStorageMigrationService {
 
     let oldStorage: SynapseKnowledgeBaseStorageConfig | null = null
     let tempPath: string | null = null
+    let keepSourceManagerBlocked = false
 
     try {
       const config = await this.deps.loadConfig()
@@ -336,6 +337,34 @@ export class KnowledgeBaseStorageMigrationService {
         await rm(tempPath, { recursive: true, force: true })
         await this.clearJournal()
       }
+      if (oldStorage && this.nonCancellable && this.state.phase === "switching") {
+        try {
+          await this.deps.updateConfig({ global: { knowledgeBaseStorage: oldStorage } })
+          await this.clearJournal()
+          logger.warn("Knowledge Base storage migration failed after switching; restored old storage in-process.", knowledgeBaseErrorMeta(error))
+          await this.transitionState({
+            active: false,
+            phase: "failed",
+            cancellable: false,
+            message: "知识库存储迁移失败，已恢复到旧位置",
+            errorMessage: error instanceof Error ? error.message : "迁移失败。",
+          })
+        } catch (recoveryError) {
+          keepSourceManagerBlocked = true
+          logger.warn("Knowledge Base storage migration failed after switching and in-process recovery failed.", {
+            migrationError: knowledgeBaseErrorMeta(error),
+            recoveryError: knowledgeBaseErrorMeta(recoveryError),
+          })
+          await this.transitionState({
+            active: true,
+            phase: "failed",
+            cancellable: false,
+            message: "知识库存储迁移恢复失败",
+            errorMessage: "知识库存储迁移失败，已阻止知识库操作。请重启 Synapse 完成恢复。",
+          })
+        }
+        throw error
+      }
       logger.warn("Knowledge Base storage migration failed.", knowledgeBaseErrorMeta(error))
       await this.transitionState({
         active: false,
@@ -346,7 +375,9 @@ export class KnowledgeBaseStorageMigrationService {
       })
       throw error
     } finally {
-      this.deps.sourceManager.setMigrationBlocked(false)
+      if (!keepSourceManagerBlocked) {
+        this.deps.sourceManager.setMigrationBlocked(false)
+      }
       this.cancelRequested = false
       this.nonCancellable = false
     }
