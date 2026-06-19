@@ -1,8 +1,9 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
+import { createReadStream } from "node:fs";
 import type { Stats } from "node:fs";
 import { lstat, open, readdir, realpath, unlink } from "node:fs/promises";
 import { basename, isAbsolute, join, relative } from "node:path";
-import type { Writable } from "node:stream";
+import { Transform, type TransformCallback, type Writable } from "node:stream";
 import archiver from "archiver";
 import { redactSensitiveLogText } from "../common/audit-error";
 
@@ -157,11 +158,34 @@ export class LogFileService {
       archive.pipe(output);
 
       for (const file of archiveEntries) {
-        archive.file(file.path, { name: file.name });
+        archive.append(this.createRedactedLogStream(file.path), { name: file.name });
       }
 
       archive.finalize();
     });
+  }
+
+  private createRedactedLogStream(filePath: string): Transform {
+    let pending = "";
+    const source = createReadStream(filePath, { encoding: "utf8" });
+    const redactor = new Transform({
+      transform(chunk: Buffer | string, _encoding: BufferEncoding, callback: TransformCallback) {
+        const text = pending + chunk.toString();
+        const lines = text.split(/\r?\n/);
+        pending = lines.pop() ?? "";
+        if (lines.length > 0) {
+          this.push(lines.map((line) => redactSensitiveLogText(line)).join("\n") + "\n");
+        }
+        callback();
+      },
+      flush(callback: TransformCallback) {
+        if (pending) this.push(redactSensitiveLogText(pending));
+        callback();
+      },
+    });
+
+    source.on("error", (error) => redactor.destroy(error));
+    return source.pipe(redactor);
   }
 
   private async listDownloadFiles(opts: { from?: string; to?: string } = {}): Promise<LogFileInfo[]> {

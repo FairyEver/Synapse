@@ -1,11 +1,13 @@
+import { createReadStream } from "node:fs";
 import { lstat, open, readdir, readFile, realpath, unlink } from "node:fs/promises";
-import { Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogFileService } from "./log-file.service";
 
 const archiverMock = vi.hoisted(() => {
   let handlers: Record<string, () => void> = {};
   const archive = {
+    append: vi.fn(),
     file: vi.fn(),
     finalize: vi.fn(async () => {
       handlers.end?.();
@@ -22,6 +24,7 @@ const archiverMock = vi.hoisted(() => {
     factory: vi.fn(() => archive),
     reset: () => {
       handlers = {};
+      archive.append.mockClear();
       archive.file.mockClear();
       archive.finalize.mockClear();
       archive.on.mockClear();
@@ -41,10 +44,15 @@ vi.mock("node:fs/promises", () => ({
   unlink: vi.fn(),
 }));
 
+vi.mock("node:fs", () => ({
+  createReadStream: vi.fn(),
+}));
+
 vi.mock("archiver", () => ({
   default: archiverMock.factory,
 }));
 
+const mockedCreateReadStream = vi.mocked(createReadStream);
 const mockedLstat = vi.mocked(lstat);
 const mockedOpen = vi.mocked(open);
 const mockedReaddir = vi.mocked(readdir);
@@ -57,6 +65,7 @@ describe("LogFileService", () => {
     vi.resetAllMocks();
     archiverMock.reset();
     mockedRealpath.mockImplementation(async (path) => String(path) as never);
+    mockedCreateReadStream.mockReturnValue(Readable.from([""]) as never);
   });
 
   it("skips log files deleted between readdir and lstat", async () => {
@@ -275,9 +284,54 @@ describe("LogFileService", () => {
       .toEqual({ bytes: 42, fileCount: 2 });
 
     expect(archiverMock.archive.pipe).toHaveBeenCalledWith(output);
-    expect(archiverMock.archive.file).toHaveBeenCalledTimes(2);
+    expect(archiverMock.archive.file).not.toHaveBeenCalled();
+    expect(archiverMock.archive.append).toHaveBeenCalledTimes(2);
     expect(archiverMock.archive.finalize).toHaveBeenCalledWith();
     expect(mockedReadFile).not.toHaveBeenCalled();
+  });
+
+  it("redacts sensitive values before adding log files to zip downloads", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log"] as never);
+    mockedLstat.mockResolvedValue({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
+    } as never);
+    const source = new PassThrough();
+    mockedCreateReadStream.mockReturnValue(source as never);
+    const service = new LogFileService("/tmp/synapse-logs");
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await expect(service.streamZipTo(output, { from: "2026-05-01", to: "2026-05-01" }))
+      .resolves
+      .toEqual({ bytes: 42, fileCount: 1 });
+
+    expect(archiverMock.archive.file).not.toHaveBeenCalled();
+    expect(archiverMock.archive.append).toHaveBeenCalledTimes(1);
+    expect(archiverMock.archive.append).toHaveBeenCalledWith(
+      expect.anything(),
+      { name: "server.2026-05-01.log" },
+    );
+    const [entryStream] = archiverMock.archive.append.mock.calls[0];
+    source.end(
+      "request failed Authorization: Bearer raw-bearer "
+        + "ANTHROPIC_API_KEY=env-secret file=/Users/liyang/project/readme.md\n"
+        + "{\"token\":\"json-token\",\"apiKey\":\"json-api-key\"}",
+    );
+    const content = await readStreamToString(entryStream as Readable);
+    expect(content).toContain("Authorization: [REDACTED]");
+    expect(content).toContain("ANTHROPIC_API_KEY=[REDACTED]");
+    expect(content).toContain("\"token\":\"[REDACTED]\"");
+    expect(content).toContain("\"apiKey\":\"[REDACTED]\"");
+    expect(content).toContain("/Users/liyang/project/readme.md");
+    expect(content).not.toContain("raw-bearer");
+    expect(content).not.toContain("env-secret");
+    expect(content).not.toContain("json-token");
+    expect(content).not.toContain("json-api-key");
   });
 
   it("includes active log files in bounded zip downloads by modified date", async () => {
@@ -307,9 +361,10 @@ describe("LogFileService", () => {
       .resolves
       .toEqual({ bytes: 42, fileCount: 1 });
 
-    expect(archiverMock.archive.file).toHaveBeenCalledTimes(1);
-    expect(archiverMock.archive.file).toHaveBeenCalledWith(
-      "/tmp/synapse-logs/server.log",
+    expect(archiverMock.archive.file).not.toHaveBeenCalled();
+    expect(archiverMock.archive.append).toHaveBeenCalledTimes(1);
+    expect(archiverMock.archive.append).toHaveBeenCalledWith(
+      expect.anything(),
       { name: "server.log" },
     );
   });
@@ -332,9 +387,10 @@ describe("LogFileService", () => {
       .resolves
       .toEqual({ bytes: 42, fileCount: 1 });
 
-    expect(archiverMock.archive.file).toHaveBeenCalledTimes(1);
-    expect(archiverMock.archive.file).toHaveBeenCalledWith(
-      "/tmp/synapse-logs/server.2026-05-01.log",
+    expect(archiverMock.archive.file).not.toHaveBeenCalled();
+    expect(archiverMock.archive.append).toHaveBeenCalledTimes(1);
+    expect(archiverMock.archive.append).toHaveBeenCalledWith(
+      expect.anything(),
       { name: "server.2026-05-01.log" },
     );
   });
@@ -363,6 +419,7 @@ describe("LogFileService", () => {
       .toEqual({ bytes: 42, fileCount: 0 });
 
     expect(archiverMock.archive.file).not.toHaveBeenCalled();
+    expect(archiverMock.archive.append).not.toHaveBeenCalled();
   });
 });
 
@@ -378,4 +435,12 @@ function mockReadableFile(content: string) {
   };
   mockedOpen.mockResolvedValue(handle as never);
   return handle;
+}
+
+async function readStreamToString(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
