@@ -6,7 +6,7 @@ const rootPublicRedirectPathPrefixes = ['/share/']
 type DashboardRedirectLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
 
 export function buildDashboardRedirectPath(location: DashboardRedirectLocation) {
-  return `${location.pathname}${location.search}${location.hash}`
+  return `${location.pathname}${sanitizePublicRedirectSearch(location)}${location.hash}`
 }
 
 export function buildDashboardSignInUrl(location: DashboardRedirectLocation | undefined) {
@@ -25,6 +25,16 @@ function stripDashboardBasePath(pathname: string) {
     return pathname.slice(legacyDashboardBasePath.length)
   }
   return pathname
+}
+
+function sanitizePublicRedirectSearch(location: DashboardRedirectLocation) {
+  if (!rootPublicRedirectPathPrefixes.some((prefix) => location.pathname.startsWith(prefix))) {
+    return location.search
+  }
+  const params = new URLSearchParams(location.search)
+  params.delete('password')
+  const search = params.toString()
+  return search ? `?${search}` : ''
 }
 
 export function normalizeDashboardRedirect(value: string | undefined) {
