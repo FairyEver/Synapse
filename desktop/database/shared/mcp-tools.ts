@@ -11,6 +11,8 @@
 
 import { buildMcpToolActions } from "./capability-registry"
 import {
+  DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT,
+  DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
   DATABASE_ROW_LIST_DEFAULT_LIMIT,
   DATABASE_ROW_LIST_MAX_LIMIT,
 } from "./limits"
@@ -406,11 +408,16 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_log_list",
-      description: "Return recent Database mutation operations. Use this when the user asks what an Agent or MCP client recently changed.",
+      description: `Return recent Database mutation operations. Use this when the user asks what an Agent or MCP client recently changed. limit defaults to ${DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT} and must be between 0 and ${DATABASE_OPERATION_LOG_LIST_MAX_LIMIT}.`,
       inputSchema: {
         type: "object",
         properties: {
-          limit: { type: "number", description: "Maximum log entries to return. Defaults to 50." },
+          limit: {
+            type: "integer",
+            minimum: 0,
+            maximum: DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
+            description: `Maximum log entries to return. Defaults to ${DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT}.`,
+          },
         },
       },
     },

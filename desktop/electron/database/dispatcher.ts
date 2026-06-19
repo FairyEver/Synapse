@@ -9,7 +9,11 @@
 
 import { databaseService } from "./service"
 import { getMutatingActions } from "../../database/shared/capability-registry"
-import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../database/shared/limits"
+import {
+  DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT,
+  DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
+  DATABASE_ROW_LIST_MAX_LIMIT,
+} from "../../database/shared/limits"
 import { sanitizeError } from "../services/error-sanitize"
 import { createMainLogger } from "../services/log-store"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
@@ -71,6 +75,14 @@ function optionalRowListLimit(params: Record<string, unknown>): number | undefin
     throw new Error(`Invalid 'limit': expected integer between 0 and ${DATABASE_ROW_LIST_MAX_LIMIT}`)
   }
   return limit
+}
+
+function optionalOperationLogListLimit(params: Record<string, unknown>): number {
+  const limit = optionalNonNegativeInteger(params, "limit")
+  if (limit !== undefined && limit > DATABASE_OPERATION_LOG_LIST_MAX_LIMIT) {
+    throw new Error(`Invalid 'limit': expected integer between 0 and ${DATABASE_OPERATION_LOG_LIST_MAX_LIMIT}`)
+  }
+  return limit ?? DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT
 }
 
 function requireObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -237,9 +249,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "database.log.list": (params) => ({
     ok: true,
-    data: databaseService.databaseLogList(
-      typeof params.limit === "number" && Number.isFinite(params.limit) && params.limit >= 0 ? params.limit : 50,
-    ),
+    data: databaseService.databaseLogList(optionalOperationLogListLimit(params)),
   }),
 
   "database.table.rename": (params) => {

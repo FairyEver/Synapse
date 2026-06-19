@@ -36,6 +36,7 @@ import {
 } from "./type-coercion"
 import { createMainLogger } from "../services/log-store"
 import { buildWhere, buildOrderBy } from "./query-builder"
+import { DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT } from "../../database/shared/limits"
 import {
   SYSTEM_COLUMN_NAMES,
   validateColumnName,
@@ -1173,7 +1174,7 @@ class DatabaseService {
     )
   }
 
-  databaseLogList(limit = 50): DatabaseOperationLogEntry[] {
+  databaseLogList(limit = DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT): DatabaseOperationLogEntry[] {
     const db = this.getDb()
     const rows = db.prepare(`
       SELECT "id", "source", "action", "table_name", "affected", "dry_run", "created_at"

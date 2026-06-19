@@ -20,7 +20,7 @@ Return one table schema and metadata. Call before writes, filters, choice handli
 
 ### database_log_list
 
-Return recent Database mutation operations.
+Return recent Database mutation operations. `limit` defaults to 50 and must be between 0 and 500.
 
 **Params:** `limit?`
 

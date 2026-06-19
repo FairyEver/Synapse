@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../../database/shared/limits"
+import {
+  DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT,
+  DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
+  DATABASE_ROW_LIST_MAX_LIMIT,
+} from "../../../database/shared/limits"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { dispatchDatabaseAction, setDatabaseChangeListener } from "../dispatcher"
 
 const mocks = vi.hoisted(() => ({
   databaseService: {
+    databaseLogList: vi.fn(),
     databaseRowCreate: vi.fn(),
     recordOperation: vi.fn(),
   },
@@ -25,6 +30,7 @@ vi.mock("../../services/log-store", () => ({
 describe("database dispatcher", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.databaseService.databaseLogList.mockReturnValue([])
     mocks.databaseService.databaseRowCreate.mockReturnValue({ id: 1 })
   })
 
@@ -64,6 +70,32 @@ describe("database dispatcher", () => {
       tableName: "tasks",
       limit: DATABASE_ROW_LIST_MAX_LIMIT + 1,
     })).rejects.toThrow(`Invalid 'limit': expected integer between 0 and ${DATABASE_ROW_LIST_MAX_LIMIT}`)
+  })
+
+  it("bounds operation log list pagination before reaching sqlite", async () => {
+    await expect(dispatchDatabaseAction("database.log.list", {
+      limit: "abc",
+    })).rejects.toThrow("Missing or invalid 'limit': expected number")
+
+    await expect(dispatchDatabaseAction("database.log.list", {
+      limit: -1,
+    })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
+
+    await expect(dispatchDatabaseAction("database.log.list", {
+      limit: 1.5,
+    })).rejects.toThrow("Invalid 'limit': expected non-negative integer")
+
+    await expect(dispatchDatabaseAction("database.log.list", {
+      limit: DATABASE_OPERATION_LOG_LIST_MAX_LIMIT + 1,
+    })).rejects.toThrow(`Invalid 'limit': expected integer between 0 and ${DATABASE_OPERATION_LOG_LIST_MAX_LIMIT}`)
+
+    await dispatchDatabaseAction("database.log.list", {})
+    expect(mocks.databaseService.databaseLogList).toHaveBeenLastCalledWith(DATABASE_OPERATION_LOG_LIST_DEFAULT_LIMIT)
+
+    await dispatchDatabaseAction("database.log.list", {
+      limit: DATABASE_OPERATION_LOG_LIST_MAX_LIMIT,
+    })
+    expect(mocks.databaseService.databaseLogList).toHaveBeenLastCalledWith(DATABASE_OPERATION_LOG_LIST_MAX_LIMIT)
   })
 
   it("warns without failing the mutation when operation log recording fails", async () => {
