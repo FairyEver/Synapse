@@ -259,6 +259,7 @@ Use these tools for Drive-backed `公开素材`, `图床`, `外链`, `直链`, `
 Natural language mapping:
 
 - `上传到公开素材` / `上传到图床` / `生成直链` / `生成外链` / `public asset` / `direct link` -> `drive_direct_link_upload`
+- `重命名公开素材` / `重命名图床素材` / `rename public asset` -> `drive_direct_link_rename`
 - `分享云盘文件` -> `drive_share_create`
 
 ### `drive_direct_link_upload`
@@ -298,6 +299,15 @@ Input:
 - `filePath` required: absolute local replacement image file path.
 - `name` optional.
 - `mimeType` optional: inferred from filename extension when omitted.
+
+### `drive_direct_link_rename`
+
+Rename a public asset while preserving the same `/files/<assetId>` URL.
+
+Input:
+
+- `assetId` required.
+- `name` required: new public asset display name.
 
 ### `drive_direct_link_delete`
 

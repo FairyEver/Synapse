@@ -37,6 +37,7 @@ describe("Drive capability domain", () => {
       "drive_direct_link_list",
       "drive_direct_link_get",
       "drive_direct_link_update",
+      "drive_direct_link_rename",
       "drive_direct_link_delete",
       "drive_direct_link_restore",
       "drive_trash_list",
@@ -50,6 +51,7 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_list).toBe("drive.direct_link.list")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_get).toBe("drive.direct_link.get")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_update).toBe("drive.direct_link.update")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_rename).toBe("drive.direct_link.rename")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_delete).toBe("drive.direct_link.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_restore).toBe("drive.direct_link.restore")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_list).toBe("drive.trash.list")
@@ -85,6 +87,13 @@ describe("Drive capability domain", () => {
         mimeType: { type: "string" },
       },
       required: ["assetId", "filePath"],
+    })
+    expect(tools.get("drive_direct_link_rename")?.inputSchema).toMatchObject({
+      properties: {
+        assetId: { type: "string" },
+        name: { type: "string" },
+      },
+      required: ["assetId", "name"],
     })
     expect(tools.get("drive_direct_link_delete")?.inputSchema).toMatchObject({
       properties: { assetId: { type: "string" } },
@@ -129,6 +138,7 @@ describe("Drive capability domain", () => {
 
     expect(capabilities.get("drive.direct_link.upload")).toMatchObject({ mutates: true })
     expect(capabilities.get("drive.direct_link.update")).toMatchObject({ mutates: true })
+    expect(capabilities.get("drive.direct_link.rename")).toMatchObject({ mutates: true })
     expect(capabilities.get("drive.direct_link.delete")).toMatchObject({ mutates: true, risk: "high" })
     expect(capabilities.get("drive.direct_link.restore")).toMatchObject({ mutates: true })
     expect(capabilities.get("drive.trash.delete")).toMatchObject({ mutates: true, risk: "high" })

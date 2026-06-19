@@ -36,6 +36,7 @@ Use these tools only for Synapse Drive:
 - `drive_direct_link_list`
 - `drive_direct_link_get`
 - `drive_direct_link_update`
+- `drive_direct_link_rename`
 - `drive_direct_link_delete`
 - `drive_direct_link_restore`
 - `drive_trash_list`
@@ -56,20 +57,21 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 6. To save Drive content locally, call `drive_file_download_create` for a file, `drive_file_version_download_create` for a specific file version, or `drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
 7. If the user asks to upload to `公开素材`, upload to a `图床`, generate a `直链`, generate an `外链`, create a `public asset`, or create a `direct link`, call `drive_direct_link_upload`. Public assets are image-only in v1, flat, and duplicate names are allowed; every upload creates a new asset id and `/files/<assetId>` URL.
 8. If the user asks to replace an existing public asset, call `drive_direct_link_update` with `assetId` and `filePath`. The `/files/<assetId>` URL is preserved.
-9. If the user asks to share an existing Drive file or folder, call `drive_share_create` for the item and return the `/share/...` public URL.
+9. If the user asks to rename an existing public asset, call `drive_direct_link_rename` with `assetId` and `name`. The `/files/<assetId>` URL is preserved.
+10. If the user asks to share an existing Drive file or folder, call `drive_share_create` for the item and return the `/share/...` public URL.
    - Pass `passwordEnabled: false` only when the user asks for a no-password link. Omit it to keep the default password requirement.
    - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
    - Pass `accessMode: "link_read"` for the default read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `drive_share_create` result when the user needs the password for a specific share. `drive_share_list` lists existing shares without returning passwords.
-10. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
-11. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
-12. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
-13. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
-14. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
-15. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
-16. Use `drive_trash_list` to inspect user-visible trash. Use `drive_item_restore` for normal Drive items in trash, `drive_direct_link_restore` for public assets, and `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
-17. Report the final item name, item id, and share URL or public asset URL when one was created.
+11. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
+12. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
+13. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
+14. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
+15. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
+16. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
+17. Use `drive_trash_list` to inspect user-visible trash. Use `drive_item_restore` for normal Drive items in trash, `drive_direct_link_restore` for public assets, and `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
+18. Report the final item name, item id, and share URL or public asset URL when one was created.
 
 ## Safety
 
@@ -110,6 +112,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "重命名": call `drive_item_rename`.
 - "分享这个 HTML": call `drive_share_create`.
 - "替换公开素材": call `drive_direct_link_update`.
+- "重命名公开素材": call `drive_direct_link_rename`.
 - "恢复公开素材": call `drive_direct_link_restore`.
 - "查看回收站": call `drive_trash_list`.
 - "从回收站恢复": call `drive_item_restore` or `drive_direct_link_restore` depending on the item kind.

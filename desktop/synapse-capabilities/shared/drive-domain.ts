@@ -33,6 +33,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
   { id: "drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
   { id: "drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file while preserving its /files/<assetId> URL.", mutates: true },
+  { id: "drive.direct_link.rename" as CapabilityId, title: "Rename public asset", description: "Rename a public asset while preserving its /files/<assetId> URL.", mutates: true },
   { id: "drive.direct_link.delete" as CapabilityId, title: "Delete public asset", description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.", mutates: true, risk: "high" },
   { id: "drive.direct_link.restore" as CapabilityId, title: "Restore public asset", description: "Restore a trashed public asset and make the same public URL available again.", mutates: true },
   { id: "drive.trash.list" as CapabilityId, title: "List Drive trash", description: "List user-visible Drive trash, including normal Drive files and public assets.", mutates: false },
@@ -431,6 +432,18 @@ export function buildDriveTools(): McpToolDefinition[] {
           mimeType: stringField("Optional image MIME type; inferred from filename extension when omitted."),
         },
         required: ["assetId", "filePath"],
+      },
+    },
+    {
+      name: "drive_direct_link_rename",
+      description: "Rename a Drive 公开素材 public asset while preserving its /files/<assetId> URL.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assetId: stringField("Public asset id to rename."),
+          name: stringField("New public asset display name."),
+        },
+        required: ["assetId", "name"],
       },
     },
     {

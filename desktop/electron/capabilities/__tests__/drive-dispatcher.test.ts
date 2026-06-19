@@ -64,6 +64,7 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_direct_link_list",
       "drive_direct_link_get",
       "drive_direct_link_update",
+      "drive_direct_link_rename",
       "drive_direct_link_delete",
       "drive_direct_link_restore",
       "drive_trash_list",
@@ -401,6 +402,24 @@ describe("createDriveCapabilityDispatcher", () => {
       name: "new-logo.png",
       mimeType: "image/png",
     })
+  })
+
+  it("renames public assets", async () => {
+    const asset = drivePublicAsset({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "brand.png",
+    })
+    const renameDrivePublicAsset = vi.fn(async () => asset)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ renameDrivePublicAsset }),
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.rename", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "brand.png",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(renameDrivePublicAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", "brand.png")
   })
 
   it("routes public asset delete and restore tools", async () => {
@@ -1074,6 +1093,7 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     getDrivePublicAsset: vi.fn(),
     uploadDrivePublicAssets: vi.fn(),
     replaceDrivePublicAssetFile: vi.fn(),
+    renameDrivePublicAsset: vi.fn(),
     trashDrivePublicAsset: vi.fn(),
     restoreDrivePublicAsset: vi.fn(),
     listDriveTrash: vi.fn(),

@@ -110,6 +110,7 @@ type DriveAccountServicePort = {
     readonly name: string
     readonly mimeType?: string | null
   }) => Promise<DrivePublicAssetDto>
+  readonly renameDrivePublicAsset: (assetId: string, name: string) => Promise<DrivePublicAssetDto>
   readonly trashDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
   readonly restoreDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
   readonly listDriveTrash: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
@@ -354,6 +355,14 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.direct_link.update":
           return dispatchDriveMutation(deps, action, params, context, () =>
             replacePublicAsset(deps, params, context, action))
+        case "drive.direct_link.rename":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.renameDrivePublicAsset(
+              requireString(params, "assetId"),
+              requireString(params, "name"),
+            ),
+          }))
         case "drive.direct_link.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
