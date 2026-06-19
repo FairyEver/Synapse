@@ -27,6 +27,8 @@ const textExtensions = new Set([
   '.yaml',
   '.yml',
 ])
+const windowsReservedPathNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
+const windowsHostilePathSegmentChars = /[<>:"|?*\u0000-\u001f]/u
 
 export function normalizeSkillFilePath(input: string): string {
   const value = input.trim().split('\\').join('/')
@@ -34,10 +36,20 @@ export function normalizeSkillFilePath(input: string): string {
     throw new Error('文件路径无效')
   }
   const segments = value.split('/')
-  if (segments.some((segment: string) => !segment || segment === '.' || segment === '..')) {
+  if (segments.some(isInvalidSkillPathSegment)) {
     throw new Error('文件路径无效')
   }
   return segments.join('/')
+}
+
+function isInvalidSkillPathSegment(segment: string): boolean {
+  return !segment ||
+    segment === '.' ||
+    segment === '..' ||
+    windowsHostilePathSegmentChars.test(segment) ||
+    windowsReservedPathNames.test(segment) ||
+    segment.endsWith('.') ||
+    segment.endsWith(' ')
 }
 
 export async function createInitialSkillFiles(): Promise<SkillEditorFile[]> {

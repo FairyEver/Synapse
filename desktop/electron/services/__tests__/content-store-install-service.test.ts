@@ -180,6 +180,16 @@ describe("ContentStoreInstallService", () => {
       message: "unsafe ZIP entry path",
     },
     {
+      name: "Windows-hostile path",
+      package: () => createPackage({
+        payloadEntries: [
+          { name: "content/SKILL.md", bytes: Buffer.from("# Store Skill\n") },
+          { name: "content/bad?name.md", bytes: Buffer.from("bad") },
+        ],
+      }),
+      message: "unsafe ZIP entry path",
+    },
+    {
       name: "duplicate entry",
       package: () => createPackage({
         extraEntries: [{ name: "content/SKILL.md", bytes: Buffer.from("# duplicate\n") }],

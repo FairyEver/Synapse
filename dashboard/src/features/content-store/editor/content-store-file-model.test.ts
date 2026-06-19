@@ -19,6 +19,13 @@ describe('content store Skill file model', () => {
     expect(() => normalizeSkillFilePath('docs//guide.md')).toThrow('文件路径无效')
   })
 
+  it.each(['bad?name.md', 'a*b.txt', 'notes<draft>.md', 'docs/name /file.md', 'docs/CON.md', 'docs/control\u0001.md'])(
+    'rejects Windows-hostile path %s',
+    (path) => {
+      expect(() => normalizeSkillFilePath(path)).toThrow('文件路径无效')
+    }
+  )
+
   it('initializes Skill drafts with one SKILL.md file', async () => {
     const files = await createInitialSkillFiles()
 

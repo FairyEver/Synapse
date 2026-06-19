@@ -625,15 +625,27 @@ async function materializeEntries(
 }
 
 function assertSafeArchivePath(value: string): void {
+  const segments = value.split("/")
   if (
     value.length === 0
     || value.includes("\\")
     || value.startsWith("/")
     || /^[A-Za-z]:/.test(value)
-    || value.split("/").some((segment) => segment.length === 0 || segment === "." || segment === "..")
+    || segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")
+    || segments.some(isWindowsHostileArchivePathSegment)
   ) {
     throw new Error("unsafe ZIP entry path")
   }
+}
+
+const windowsReservedArchivePathNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
+const windowsHostileArchivePathSegmentChars = /[<>:"|?*\u0000-\u001f]/u
+
+function isWindowsHostileArchivePathSegment(segment: string): boolean {
+  return windowsHostileArchivePathSegmentChars.test(segment)
+    || windowsReservedArchivePathNames.test(segment)
+    || segment.endsWith(".")
+    || segment.endsWith(" ")
 }
 
 function decodeUtf8(bytes: Uint8Array): string {

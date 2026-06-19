@@ -46,6 +46,7 @@ const textExtensions = new Set([
 ])
 
 const windowsReservedPathNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
+const windowsHostilePathSegmentChars = /[<>:"|?*\u0000-\u001f]/u
 
 export function normalizeSkillFiles(files: readonly ContentStoreFileInput[]): NormalizedContentStoreFile[] {
   if (files.length === 0) throw new BadRequestException("Skill 文件不能为空。")
@@ -160,7 +161,9 @@ function decodeUtf8(bytes: Buffer): { readonly kind: "text"; readonly text: stri
 function validateContentStorePathSegments(relativePath: string): void {
   for (const segment of relativePath.split("/")) {
     if (!segment || segment === ".") continue
-    if (segment.includes(":")) throw new BadRequestException("文件路径包含非法字符。")
+    if (windowsHostilePathSegmentChars.test(segment)) {
+      throw new BadRequestException("文件路径包含非法字符。")
+    }
     if (windowsReservedPathNames.test(segment)) {
       throw new BadRequestException("文件路径不能使用 Windows 保留名称。")
     }
