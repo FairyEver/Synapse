@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { errorLogMeta } from "@/lib/error-sanitize"
-import type { AutomationItem, AutomationRun } from "@/types/automation"
+import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
 import { AutomationRunsDialog } from "./components/automation-runs-dialog"
 import {
@@ -212,7 +212,11 @@ function AutomationModule() {
     try {
       await promise(
         () => stopRunOrThrow(runId),
-        { loading: "正在停止自动化...", success: "自动化已停止。", error: "停止自动化失败。" },
+        {
+          loading: "正在停止自动化...",
+          success: (result) => result.stopRequested ? "停止请求已发送。" : "自动化已停止。",
+          error: "停止自动化失败。",
+        },
       )
       logger.info("Automation stop requested.", { automationId: item.id, runId })
       await refresh()
@@ -226,9 +230,11 @@ function AutomationModule() {
     }
   }
 
-  async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean; readonly alreadyFinished?: boolean }> {
+  async function stopRunOrThrow(runId: string): Promise<AutomationStopRunResult> {
     const result = await stopAutomationRun(runId)
-    if (!result.stopped && !result.alreadyFinished) throw new Error("Automation run was not active")
+    if (!result.stopped && !result.alreadyFinished && !result.stopRequested) {
+      throw new Error("Automation run was not active")
+    }
     return result
   }
 

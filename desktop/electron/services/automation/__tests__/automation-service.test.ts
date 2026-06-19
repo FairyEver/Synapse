@@ -340,6 +340,39 @@ describe("AutomationService", () => {
     await runPromise
   })
 
+  it("does not report stopped when a run ignores abort past the settle timeout", async () => {
+    vi.useFakeTimers()
+    try {
+      const action = abortIgnoringAction()
+      const emit = vi.fn()
+      const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+      const harness = createHarness({ action: action.definition, eventBus })
+      const item = await harness.service.automationCreate(createAutomationInput())
+
+      const runPromise = harness.service.runNow(item.id)
+      await action.started
+      const running = (await harness.runs.listByAutomation(item.id)).find((run) => run.status === "running")
+      expect(running).toBeDefined()
+
+      const stopPromise = harness.service.stopRun(running!.id)
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      await expect(stopPromise).resolves.toEqual({
+        stopped: false,
+        stopRequested: true,
+      })
+      await expect(harness.runs.get(running!.id)).resolves.toEqual(expect.objectContaining({
+        status: "running",
+      }))
+      expect(emit.mock.calls.some(([event]) => event.payload.reason === "run-stopped")).toBe(false)
+
+      action.resolve()
+      await expect(runPromise).resolves.toEqual(expect.objectContaining({ status: "cancelled" }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("keeps the successful run status after scheduling the next cron trigger", async () => {
     const harness = createHarness()
     const item = await harness.service.automationCreate(createCronAutomationInput())
@@ -907,6 +940,38 @@ function longRunningAction(): MainActionDefinition<TestActionConfig> {
         resolve({ status: "cancelled", summary: "已停止" })
       }, { once: true })
     }),
+  }
+}
+
+function abortIgnoringAction(): {
+  readonly definition: MainActionDefinition<TestActionConfig>
+  readonly started: Promise<void>
+  readonly resolve: () => void
+} {
+  let resolveStarted: (() => void) | undefined
+  let resolveRun: (() => void) | undefined
+  const started = new Promise<void>((resolve) => {
+    resolveStarted = resolve
+  })
+  return {
+    definition: {
+      ...testAction,
+      execute: async () => {
+        resolveStarted?.()
+        await new Promise<void>((resolve) => {
+          resolveRun = resolve
+        })
+        return {
+          status: "success",
+          summary: "ok",
+          outputs: { stdout: "ok" },
+        }
+      },
+    },
+    started,
+    resolve: () => {
+      resolveRun?.()
+    },
   }
 }
 

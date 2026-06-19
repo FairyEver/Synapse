@@ -301,7 +301,11 @@ export const automationIpcModule: IpcModule = {
       channel: "synapse:automation:runs:stop",
       kind: "invoke",
       request: z.object({ runId: z.string().min(1) }),
-      response: z.object({ stopped: z.boolean(), alreadyFinished: z.boolean().optional() }),
+      response: z.object({
+        stopped: z.boolean(),
+        alreadyFinished: z.boolean().optional(),
+        stopRequested: z.boolean().optional(),
+      }),
       handler: async (ctx, request: StopRunRequest) => loggedAutomationIpc(
         "synapse:automation:runs:stop",
         "automation.ipc.stop-run",

@@ -94,6 +94,7 @@ export type AutomationRun = {
 export type AutomationStopRunResult = {
   stopped: boolean
   alreadyFinished?: boolean
+  stopRequested?: boolean
 }
 
 export type AutomationChangedEvent = {
