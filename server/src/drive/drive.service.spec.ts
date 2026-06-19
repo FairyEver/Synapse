@@ -676,6 +676,35 @@ describe("DriveService", () => {
     expect(session?.status).toBe("failed")
   })
 
+  it("retries pending Drive item storage deletes", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "handoff.txt", mimeType: "text/plain" })
+    const stored = await prisma.driveItem.findUniqueOrThrow({ where: { id: item.id } })
+    await prisma.driveItem.update({
+      where: { id: item.id },
+      data: {
+        deletedAt: new Date(),
+        storageStatus: "delete_pending",
+        storageDeletePending: true,
+      },
+    })
+
+    const result = await service.retryPendingDriveItemStorageDeletes()
+
+    expect(result).toEqual({ attempted: 1, deleted: 1, failed: 0 })
+    expect(deleteObject).toHaveBeenCalledWith(stored.storageKey)
+    const row = await prisma.driveItem.findUniqueOrThrow({ where: { id: item.id } })
+    expect(row.storageStatus).toBe("deleted")
+    expect(row.storageDeletePending).toBe(false)
+  })
+
   it("deletes uploaded objects when upload sessions are cancelled", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
@@ -1717,6 +1746,18 @@ describe("DriveService", () => {
     expect(serialized).not.toContain("raw-bearer")
     expect(serialized).not.toContain("db-password")
     expect(serialized).not.toContain("/Users/liyang/project/.env")
+  })
+
+  it("scheduled cleanup retries pending storage deletes", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const retryItems = vi.spyOn(service, "retryPendingDriveItemStorageDeletes").mockResolvedValue({ attempted: 1, deleted: 1, failed: 0 })
+    const retryVersions = vi.spyOn(service, "retryPendingFileVersionDeletes").mockResolvedValue({ attempted: 2, deleted: 1, failed: 1 })
+
+    await expect(service.scheduledPendingStorageDeleteRetry()).resolves.toBeUndefined()
+
+    expect(retryItems).toHaveBeenCalledTimes(1)
+    expect(retryVersions).toHaveBeenCalledTimes(1)
   })
 
   it("admin delete moves active files to trash without disabling shares or deleting storage", async () => {

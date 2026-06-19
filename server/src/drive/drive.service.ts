@@ -497,6 +497,43 @@ export class DriveService implements OnApplicationBootstrap {
     return { attempted: versions.length, deleted, failed }
   }
 
+  async retryPendingDriveItemStorageDeletes(limit = 100): Promise<{ readonly attempted: number; readonly deleted: number; readonly failed: number }> {
+    const items = await this.prisma.driveItem.findMany({
+      where: {
+        storageDeletePending: true,
+        storageStatus: DRIVE_STORAGE_STATUS.deletePending,
+        deletedAt: { not: null },
+        storageKey: { not: null },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: Math.max(1, Math.min(Math.floor(limit), 500)),
+    })
+    let deleted = 0
+    let failed = 0
+    for (const item of items) {
+      try {
+        await this.storage.deleteObject(item.storageKey!)
+        await this.prisma.driveItem.update({
+          where: { id: item.id },
+          data: {
+            storageDeletePending: false,
+            storageStatus: DRIVE_STORAGE_STATUS.deleted,
+          },
+        })
+        deleted += 1
+      } catch (error) {
+        failed += 1
+        this.logger.warn({
+          itemId: item.id,
+          storageKeyLength: item.storageKey?.length ?? 0,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: formatAuditError(error),
+        }, "Drive item pending storage delete retry failed")
+      }
+    }
+    return { attempted: items.length, deleted, failed }
+  }
+
   async prepareUpload(userId: string, input: DrivePrepareUploadInput): Promise<DriveUploadPrepareResult> {
     const name = normalizeDriveName(input.name)
     const requestedSize = parseRequestedSize(input.size)
@@ -1700,6 +1737,22 @@ export class DriveService implements OnApplicationBootstrap {
           ? { errorCode: error.code }
           : {}),
       }, "Drive pending upload session cleanup failed")
+    }
+  }
+
+  @Cron("*/30 * * * *")
+  async scheduledPendingStorageDeleteRetry(): Promise<void> {
+    try {
+      await this.retryPendingDriveItemStorageDeletes()
+      await this.retryPendingFileVersionDeletes()
+    } catch (error) {
+      this.logger.warn({
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+        ...(error instanceof Error && "code" in error && typeof error.code === "string"
+          ? { errorCode: error.code }
+          : {}),
+      }, "Drive pending storage delete retry failed")
     }
   }
 
