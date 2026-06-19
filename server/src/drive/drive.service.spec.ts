@@ -1150,6 +1150,7 @@ describe("DriveService", () => {
     })
 
     expect(result.root.name).toBe("交接材料")
+    expect(result.rootCreated).toBe(true)
     expect(result.entries).toHaveLength(2)
     expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual(["brief.txt", "docs/spec.txt"])
     expect(result.entries.every((entry) => entry.upload.method === "PUT")).toBe(true)
@@ -1183,6 +1184,7 @@ describe("DriveService", () => {
       publicAppUrl: "https://synapse.test",
     })
     expect(prepared.root.id).toBe(root.id)
+    expect(prepared.rootCreated).toBe(false)
     expect(prepared.entries.find((entry) => entry.relativePath === "a.md")?.item.id).toBe(existing.id)
 
     for (const entry of prepared.entries) {

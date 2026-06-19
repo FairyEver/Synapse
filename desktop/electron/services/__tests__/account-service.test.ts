@@ -300,6 +300,7 @@ describe("AccountService", () => {
     const { service } = await createTestAccountService({ fetch })
     vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
       root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
       entries: [
         preparedFolderEntry("a.md", "session-a", "https://upload.example.test/a"),
         preparedFolderEntry("docs/b.md", "session-b", "https://upload.example.test/b"),
@@ -332,6 +333,46 @@ describe("AccountService", () => {
     })
   })
 
+  it("cleans up a newly prepared folder root when every local folder upload fails", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-failed-"))
+    const firstPath = path.join(dir, "a.md")
+    const secondPath = path.join(dir, "b.md")
+    await writeFile(firstPath, "alpha")
+    await writeFile(secondPath, "beta")
+
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
+      entries: [
+        preparedFolderEntry("a.md", "session-a", "https://upload.example.test/a"),
+        preparedFolderEntry("b.md", "session-b", "https://upload.example.test/b"),
+      ],
+    })
+    vi.spyOn(service as unknown as {
+      putPreparedUploadFromPath: (...args: unknown[]) => Promise<void>
+    }, "putPreparedUploadFromPath").mockRejectedValue(new Error("network down"))
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(driveItem())
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+    vi.spyOn(service, "deleteDriveItem").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: firstPath, relativePath: "a.md", mimeType: "text/markdown" },
+          { path: secondPath, relativePath: "b.md", mimeType: "text/markdown" },
+        ],
+      }],
+    })).resolves.toEqual({ completed: 0, failed: 2, skipped: 0, message: "上传失败。" })
+
+    expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-a")
+    expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-b")
+    expect(service.deleteDriveItem).toHaveBeenCalledWith("folder-root")
+  })
+
   it("skips non-canonical local drive folder relative paths before prepare", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-safe-paths-"))
     await mkdir(path.join(dir, "safe", "docs"), { recursive: true })
@@ -349,6 +390,7 @@ describe("AccountService", () => {
     const { service } = await createTestAccountService({ fetch })
     vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
       root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
       entries: [preparedFolderEntry("docs/a.md", "session-a", "https://upload.example.test/a")],
     })
     vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
@@ -398,6 +440,7 @@ describe("AccountService", () => {
     const { service } = await createTestAccountService({ fetch })
     vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
       root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
       entries: [preparedFolderEntry("docs/a.md", "session-a", "https://upload.example.test/a")],
     })
     vi.spyOn(service, "completeDriveUpload").mockResolvedValue(

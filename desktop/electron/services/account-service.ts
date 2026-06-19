@@ -769,11 +769,35 @@ export class AccountService {
       }
     }
 
+    if (completed === 0 && failed > 0 && prepared.rootCreated) {
+      await this.cleanupFailedFolderUploadRoot(prepared.root.id, {
+        failed,
+        skipped,
+      })
+    }
+
     return {
       completed,
       failed,
       skipped,
       ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
+  private async cleanupFailedFolderUploadRoot(
+    rootItemId: string,
+    input: { readonly failed: number; readonly skipped: number },
+  ): Promise<void> {
+    try {
+      await this.deleteDriveItem(rootItemId)
+    } catch (error) {
+      logger.warn("Drive local folder upload cleanup failed.", {
+        operation: "uploadDriveLocalFolder",
+        rootItemId,
+        failed: input.failed,
+        skipped: input.skipped,
+        error,
+      })
     }
   }
 

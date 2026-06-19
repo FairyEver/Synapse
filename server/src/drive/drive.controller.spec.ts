@@ -476,7 +476,7 @@ describe("DriveController", () => {
     await userApp.init()
     try {
       process.env.APP_PUBLIC_URL = "https://app.example"
-      drive.prepareFolderUpload.mockResolvedValue({ root: { id: "folder-1" }, entries: [] })
+      drive.prepareFolderUpload.mockResolvedValue({ root: { id: "folder-1" }, rootCreated: true, entries: [] })
       await request(userApp.getHttpServer())
         .post("/api/drive/uploads/folder/prepare")
         .send({ parentId: null, folderName: "交接材料", files: [{ relativePath: "brief.txt", size: "11", mimeType: "text/plain" }] })

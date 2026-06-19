@@ -695,7 +695,7 @@ export class DriveService implements OnApplicationBootstrap {
         entries.push({ relativePath: parts.join("/"), ...prepared })
       }
 
-      return { root, entries }
+      return { root, rootCreated: rootResult.created, entries }
     } catch (error) {
       if (root) await this.rollbackFolderUploadPrepare(userId, root.id, preservedItemIds, preparedSessionIds)
       throw error

@@ -79,6 +79,7 @@ export interface DriveFolderUploadPrepareFileInput {
 
 export interface DriveFolderUploadPrepareResult {
   readonly root: DriveItemDto
+  readonly rootCreated: boolean
   readonly entries: Array<{
     readonly relativePath: string
     readonly sessionId: string

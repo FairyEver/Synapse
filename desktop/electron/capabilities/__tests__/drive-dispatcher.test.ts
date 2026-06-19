@@ -729,6 +729,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({
       prepareDriveFolderUpload: vi.fn(async () => ({
         root,
+        rootCreated: true,
         entries: [
           {
             relativePath: "a.txt",
