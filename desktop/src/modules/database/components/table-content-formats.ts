@@ -1,5 +1,7 @@
 import type { Column } from "@/types/database"
 
+import { normalizeContentFileNameSegment } from "@/lib/content-attachments"
+
 type TableContentColumn = Pick<Column, "name" | "kind">
 
 type TableContentFormat = "csv" | "markdown"
@@ -77,8 +79,8 @@ function escapeMarkdownCell(value: string): string {
 }
 
 function sanitizeFileName(name: string): string {
-  const value = name.trim().replace(/[\\/:*?"<>|]+/g, "-")
-  return value || "table"
+  const value = name.trim()
+  return value ? normalizeContentFileNameSegment(value) : "table"
 }
 
 function createXlsxBlob(data: TableContentData): Blob {
