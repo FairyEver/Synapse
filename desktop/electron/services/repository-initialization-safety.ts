@@ -8,6 +8,7 @@ import type {
   SynapseRepositoryInitializationDangerFlag,
   SynapseRepositoryInitializationPreview,
 } from "../../src/types/repository"
+import { normalizePathForCompare } from "../../src/lib/path-compare"
 
 const BACKUP_PREFIX = ".synapse-init-backup-"
 
@@ -33,29 +34,56 @@ function entryType(entry: Dirent): EntryFingerprint["type"] {
   return "other"
 }
 
+function pathForPlatform(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
+  return platform === "win32" ? path.win32 : path.posix
+}
+
+function normalizedPathForPlatform(value: string, platform: NodeJS.Platform): string {
+  const pathOps = pathForPlatform(platform)
+  return normalizePathForCompare(value, {
+    platform,
+    resolvePath: pathOps.resolve,
+  })
+}
+
+function isSamePath(left: string, right: string, platform: NodeJS.Platform): boolean {
+  return normalizedPathForPlatform(left, platform) === normalizedPathForPlatform(right, platform)
+}
+
+function isSameOrAncestorPath(candidate: string, descendant: string, platform: NodeJS.Platform): boolean {
+  const pathOps = pathForPlatform(platform)
+  const normalizedCandidate = normalizedPathForPlatform(candidate, platform)
+  const normalizedDescendant = normalizedPathForPlatform(descendant, platform)
+  if (normalizedCandidate === normalizedDescendant) return true
+  const relative = pathOps.relative(normalizedCandidate, normalizedDescendant)
+  return Boolean(relative) && !relative.startsWith("..") && !pathOps.isAbsolute(relative)
+}
+
 function detectDangerFlags(localPath: string, entries: readonly Dirent[]): SynapseRepositoryInitializationDangerFlag[] {
   const flags = new Set<SynapseRepositoryInitializationDangerFlag>()
-  const resolved = path.resolve(localPath)
-  const home = path.resolve(os.homedir())
+  const platform = process.platform
+  const pathOps = pathForPlatform(platform)
+  const resolved = pathOps.resolve(localPath)
+  const home = pathOps.resolve(os.homedir())
   const deniedUserDirs = [
     ["home", home],
-    ["desktop", path.join(home, "Desktop")],
-    ["documents", path.join(home, "Documents")],
-    ["downloads", path.join(home, "Downloads")],
+    ["desktop", pathOps.join(home, "Desktop")],
+    ["documents", pathOps.join(home, "Documents")],
+    ["downloads", pathOps.join(home, "Downloads")],
   ] as const
 
   for (const [flag, deniedPath] of deniedUserDirs) {
-    if (resolved === path.resolve(deniedPath)) {
+    if (isSamePath(resolved, deniedPath, platform)) {
       flags.add(flag)
     }
   }
 
-  if (path.parse(resolved).root === resolved) {
+  if (isSamePath(pathOps.parse(resolved).root, resolved, platform)) {
     flags.add("filesystem-root")
   }
 
-  const cwd = path.resolve(process.cwd())
-  if (resolved === cwd || cwd.startsWith(`${resolved}${path.sep}`)) {
+  const cwd = pathOps.resolve(process.cwd())
+  if (isSameOrAncestorPath(resolved, cwd, platform)) {
     flags.add("synapse-source-checkout")
   }
 

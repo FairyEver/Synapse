@@ -64,6 +64,7 @@
 - Bridge 外部适配器不能再注册为本地 renderer 平台，使用保留平台前缀创建的会话也会按外部 Bridge 身份处理。
 - Agent 自定义执行命令返回 stdout/stderr 前会脱敏 token、Authorization 和 Cookie，避免 side-channel token 进入对话记录。
 - Windows 上 Agent 消息里的本地路径会渲染为可点击引用，支持盘符路径、UNC 路径和反斜杠相对路径。
+- Windows 上初始化本地仓库时，会按大小写不敏感规则识别用户目录和 Synapse 源码目录，避免高风险目录被误放行。
 - 模型价格 MCP 的权限检查和审计会脱敏外部传入的规则 ID，避免异常入参把 token 片段写入审计记录。
 - 从设置页整库导入数据库成功后，已打开的数据库页面会自动刷新，不再停留在导入前的数据。
 - Usage Analysis 今日数据自动刷新临时失败后，会允许后续自动重试，不再在 10 分钟内只能手动刷新。
