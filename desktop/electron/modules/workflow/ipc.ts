@@ -30,6 +30,7 @@ const DELETE_ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE = "旧运行仍在后台执行，�
 const WORKFLOW_PACKAGE_MAX_BYTES = 1024 * 1024
 const runCompletions = new Map<string, Promise<unknown>>()
 const deletedWorkflows = new Set<string>()
+const REDACTED_WORKFLOW_CONFIG_VALUE = "[redacted]"
 
 /**
  * Maximum number of terminal (completed/failed/cancelled) run statuses to keep
@@ -168,6 +169,19 @@ function snapshotToListItem(snapshot: WorkflowRunSnapshot): WorkflowRunListItem 
     params: snapshot.params,
     definition: snapshot.definition,
   }
+}
+
+function hasRedactedCodexConfigOverrides(definition: WorkflowDefinition): boolean {
+  return definition.nodes.some((node) => {
+    if (node.type !== "codex") return false
+    const configOverrides = node.config.configOverrides
+    if (!Array.isArray(configOverrides)) return false
+    return configOverrides.some((entry) =>
+      typeof entry === "object"
+      && entry !== null
+      && (entry as { value?: unknown }).value === REDACTED_WORKFLOW_CONFIG_VALUE
+    )
+  })
 }
 
 function listActiveRunItems(runStatuses: Map<string, WorkflowRunStatus>, workflowId?: string): WorkflowRunListItem[] {
@@ -1206,6 +1220,16 @@ export const workflowIpcModule: IpcModule = {
         if (!def || !workflowId) {
           logger.error("workflow:rerun — cannot find definition for previous run", { previousRunId })
           return { errors: [{ type: "invalid_config", message: "无法找到上次运行使用的工作流定义" }] }
+        }
+        if (hasRedactedCodexConfigOverrides(def)) {
+          const currentDefinition = await ctx.resolve<WorkflowService>("core.workflow").get(workflowId)
+          if (currentDefinition && !hasRedactedCodexConfigOverrides(currentDefinition)) {
+            def = currentDefinition
+            logger.info("workflow:rerun using current definition because history definition is redacted", { previousRunId, workflowId })
+          } else {
+            logger.warn("workflow:rerun blocked by redacted Code X config overrides", { previousRunId, workflowId })
+            return { errors: [{ type: "invalid_config", message: "历史运行记录中的 Code X 配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。" }] }
+          }
         }
 
         // Use previous run's params as fallback when caller passes empty params

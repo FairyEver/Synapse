@@ -500,6 +500,101 @@ describe("workflowIpcModule", () => {
     })
   })
 
+  it("uses the current workflow definition when rerun history has redacted Code X config overrides", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshotDefinition = codexWorkflowDefinition("[redacted]")
+    const currentDefinition = codexWorkflowDefinition("reasoning.effort=high")
+    const snapshots = {
+      save: vi.fn(async () => undefined),
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: "workflow-1",
+        version: "v1",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: { topic: "from-history" },
+        nodeResults: {},
+        definition: snapshotDefinition,
+      })),
+    }
+    const workflow = { get: vi.fn(async () => currentDefinition) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+
+    expect(result).toEqual({ runId: expect.any(String) })
+    expect(workflow.get).toHaveBeenCalledWith("workflow-1")
+    const executedDefinition = (engine.run.mock.calls[0] as unknown[] | undefined)?.[0] as ReturnType<typeof codexWorkflowDefinition> | undefined
+    expect(executedDefinition).toBeDefined()
+    expect(executedDefinition!.nodes[0].config.configOverrides).toEqual([
+      { key: "model_reasoning_effort", value: "reasoning.effort=high" },
+    ])
+    expect(engine.run).toHaveBeenCalledWith(
+      currentDefinition,
+      { topic: "from-history" },
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      "rerun",
+      expect.anything(),
+    )
+  })
+
+  it("blocks rerun when only a redacted Code X history definition is available", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = {
+      save: vi.fn(async () => undefined),
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: "workflow-1",
+        version: "v1",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definition: codexWorkflowDefinition("[redacted]"),
+      })),
+    }
+    const workflow = { get: vi.fn(async () => null) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+
+    expect(result).toEqual({
+      errors: [{
+        type: "invalid_config",
+        message: "历史运行记录中的 Code X 配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。",
+      }],
+    })
+    expect(workflow.get).toHaveBeenCalledWith("workflow-1")
+    expect(engine.run).not.toHaveBeenCalled()
+  })
+
   it("blocks workflow delete when the active run does not finish after abort timeout", async () => {
     vi.useFakeTimers()
     let finishActiveRun: (() => void) | undefined
@@ -1417,5 +1512,21 @@ function workflowDefinition() {
     params: [],
     nodes: [],
     edges: [],
+  }
+}
+
+function codexWorkflowDefinition(configOverrideValue: string) {
+  return {
+    ...workflowDefinition(),
+    nodes: [{
+      id: "codex-1",
+      name: "Code X",
+      type: "codex",
+      position: { x: 100, y: 100 },
+      config: {
+        prompt: "Run task",
+        configOverrides: [{ key: "model_reasoning_effort", value: configOverrideValue }],
+      },
+    }],
   }
 }
