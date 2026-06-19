@@ -55,6 +55,11 @@ vi.mock("../../../services/config-store", () => ({
 describe("agent tool IPC methods", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    childProcessMock.execFile.mockImplementation((_cmd: string, _args: readonly string[], _opts: unknown, cb?: (err: Error | null) => void) => {
+      if (cb) {
+        cb(new Error("ENOENT"))
+      }
+    })
     fsPromisesMock.realpath.mockImplementation(async (value: string) => value)
     electronMock.shell.openPath.mockResolvedValue("")
     vi.mocked(configStore.load).mockResolvedValue({
@@ -104,6 +109,34 @@ describe("agent tool IPC methods", () => {
         line: 12,
       }),
     }))
+  })
+
+  it("uses cmd.exe for Windows editor shim line jumps", async () => {
+    const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32")
+    const auditSink = fakeAuditSink()
+    const expectedPath = path.resolve("/repo", "src/app.ts")
+    childProcessMock.execFile.mockImplementation((cmd: string, _args: readonly string[], _opts: unknown, cb?: (err: Error | null) => void) => {
+      if (cb) {
+        cb(cmd === "cmd.exe" ? null : new Error("ENOENT"))
+      }
+    })
+
+    try {
+      await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
+        projectId: "project-1",
+        reference: "src/app.ts:12",
+      })).resolves.toEqual({ ok: true, path: expectedPath })
+    } finally {
+      platform.mockRestore()
+    }
+
+    expect(childProcessMock.execFile).toHaveBeenCalledWith(
+      "cmd.exe",
+      ["/d", "/s", "/c", "cursor.cmd", "--goto", `${expectedPath}:12`],
+      { timeout: 5000, windowsHide: true },
+      expect.any(Function),
+    )
+    expect(electronMock.shell.openPath).not.toHaveBeenCalled()
   })
 
   it("blocks Agent reference opens when shell execution is denied", async () => {

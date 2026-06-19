@@ -926,9 +926,17 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
 /** Try opening a file at a specific line using a known editor CLI. */
 async function openFileWithLine(filePath: string, line: number): Promise<boolean> {
   const editors = ["cursor", "code", "code-insiders"]
+  const target = `${filePath}:${line}`
   for (const editor of editors) {
     try {
-      await execFileAsync(editor, ["--goto", `${filePath}:${line}`], { timeout: 5000 })
+      if (process.platform === "win32") {
+        await execFileAsync("cmd.exe", ["/d", "/s", "/c", `${editor}.cmd`, "--goto", target], {
+          timeout: 5000,
+          windowsHide: true,
+        })
+      } else {
+        await execFileAsync(editor, ["--goto", target], { timeout: 5000 })
+      }
       return true
     } catch {
       continue
