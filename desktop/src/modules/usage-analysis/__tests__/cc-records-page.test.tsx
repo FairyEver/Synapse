@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import { CcRecordsPage } from "../cc/pages/records"
 import type { CcRecordDetailsResult, CcRecordListResult } from "@/types/usage-analysis-conversations"
@@ -52,16 +57,37 @@ function createDetailState(): ReportState<CcRecordDetailsResult> {
 
 let recordsState = createRecordState()
 let detailState = createDetailState()
+let roots: Root[] = []
 
 vi.mock("../cc/hooks", () => ({
   useCcRecordDetails: () => detailState,
   useCcRecords: () => recordsState,
 }))
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 describe("CcRecordsPage", () => {
   beforeEach(() => {
     recordsState = createRecordState()
     detailState = createDetailState()
+    window.IntersectionObserver = class {
+      disconnect() {}
+      observe() {}
+      takeRecords() {
+        return []
+      }
+      unobserve() {}
+    } as unknown as typeof IntersectionObserver
+  })
+
+  afterEach(() => {
+    for (const root of roots) {
+      act(() => {
+        root.unmount()
+      })
+    }
+    roots = []
+    document.body.innerHTML = ""
   })
 
   it("renders record filters, progress status, and session summary actions", () => {
@@ -132,4 +158,41 @@ describe("CcRecordsPage", () => {
     expect(html).toContain("已显示全部 1 条")
     expect(html).not.toContain("加载更多")
   })
+
+  it("keeps raw text search scanning when the first candidate page has no matches", async () => {
+    recordsState = {
+      ...recordsState,
+      data: {
+        ...recordData,
+        items: [],
+        nextCursor: "50",
+        partial: true,
+      },
+    }
+
+    await renderRecordsPage()
+    await clickRawTextSwitch()
+
+    expect(document.body.textContent).toContain("结果可能不完整")
+    expect(document.body.textContent).toContain("已显示 0 / 128")
+    expect(document.body.textContent).not.toContain("暂无数据")
+  })
 })
+
+async function renderRecordsPage() {
+  const container = document.createElement("div")
+  document.body.append(container)
+  const root = createRoot(container)
+  roots.push(root)
+  await act(async () => {
+    root.render(<CcRecordsPage range="30d" refreshKey={0} />)
+  })
+}
+
+async function clickRawTextSwitch() {
+  const control = document.querySelector<HTMLElement>("#cc-conversation-raw-text")
+  expect(control).not.toBeNull()
+  await act(async () => {
+    control?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}

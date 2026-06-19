@@ -11,6 +11,8 @@ import {
   CC_RECORD_PAGE_SIZE,
   formatRecordLoadStatus,
   shouldRequestNextRecords,
+  shouldShowRecordEmptyState,
+  shouldShowRecordLoadMoreSentinel,
 } from "../record-loading"
 
 export function CcRecordsPage({
@@ -119,6 +121,18 @@ export function CcRecordsPage({
   const statusTotal = rawText && !rawSearchNextCursor ? shown : total
   const statusText = formatRecordLoadStatus({ shown, total: statusTotal, loading: state.loading })
   const partial = recordsData?.partial === true
+  const hasRawSearchNextCursor = Boolean(rawSearchNextCursor)
+  const empty = shouldShowRecordEmptyState({
+    shown,
+    rawText,
+    hasNextCursor: hasRawSearchNextCursor,
+    partial,
+  })
+  const showLoadMoreSentinel = shouldShowRecordLoadMoreSentinel({
+    shown,
+    rawText,
+    hasNextCursor: hasRawSearchNextCursor,
+  })
 
   useEffect(() => {
     const target = loadMoreRef.current
@@ -170,7 +184,7 @@ export function CcRecordsPage({
           正在加载
         </div>
       ) : (
-        <ReportState loading={false} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
+        <ReportState loading={false} error={state.error} empty={empty} refreshing={refreshing}>
           {partial ? (
             <Alert>
               <AlertTitle>结果可能不完整</AlertTitle>
@@ -204,7 +218,7 @@ export function CcRecordsPage({
             }}
             onLoadMoreDetails={() => setDetailLimit((current) => current + 200)}
           />
-          {shown > 0 ? (
+          {showLoadMoreSentinel ? (
             <div
               ref={loadMoreRef}
               className="flex items-center justify-center border-t border-border px-3 py-2 text-sm text-muted-foreground"

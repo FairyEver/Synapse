@@ -3,6 +3,8 @@ import {
   CC_RECORD_PAGE_SIZE,
   formatRecordLoadStatus,
   shouldRequestNextRecords,
+  shouldShowRecordEmptyState,
+  shouldShowRecordLoadMoreSentinel,
 } from "../cc/record-loading"
 
 describe("CC record loading helpers", () => {
@@ -57,6 +59,29 @@ describe("CC record loading helpers", () => {
       total: 128,
       loading: false,
       lastRequestedShown: null,
+    })).toBe(false)
+  })
+
+  it("keeps raw text search out of the terminal empty state while more pages remain", () => {
+    expect(shouldShowRecordEmptyState({
+      shown: 0,
+      rawText: true,
+      hasNextCursor: true,
+      partial: false,
+    })).toBe(false)
+    expect(shouldShowRecordLoadMoreSentinel({
+      shown: 0,
+      rawText: true,
+      hasNextCursor: true,
+    })).toBe(true)
+  })
+
+  it("keeps partial raw text search warnings visible even with no matched rows", () => {
+    expect(shouldShowRecordEmptyState({
+      shown: 0,
+      rawText: true,
+      hasNextCursor: false,
+      partial: true,
     })).toBe(false)
   })
 })
