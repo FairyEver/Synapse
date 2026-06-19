@@ -940,20 +940,6 @@ function KnowledgeBaseSourceManagerWindow() {
     }))
   }, [bridge, bumpTreeDirectoryVersion, markTreeDirectoryChecked, payload, setTreeDirectoryLoading, showError])
 
-  useEffect(() => {
-    if (!payload || !bridge) return
-    const rootDirectories = directoryTree[""] ?? []
-    const pathsToPreload = rootDirectories
-      .map((entry) => entry.relativePath)
-      .filter((directoryPath) =>
-        !hasDirectoryCache(directoryTree, directoryPath)
-        && !checkedTreeDirectoriesRef.current.has(directoryPath)
-        && !loadingDirectoriesRef.current.has(directoryPath)
-      )
-    if (pathsToPreload.length === 0) return
-    void refreshTreeDirectories(pathsToPreload)
-  }, [bridge, directoryTree, payload, refreshTreeDirectories])
-
   const loadTreeDirectory = useCallback(async (directoryPath: string) => {
     if (
       !payload
