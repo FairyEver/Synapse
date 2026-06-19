@@ -15,12 +15,13 @@ function resolveSkillSlug(
   contentId: string,
 ): string {
   const trimmedName = skillName?.trim() ?? ""
+  const fallback = slugifySkillName(skillTitle ?? "", contentId)
 
   if (trimmedName.length > 0) {
-    return trimmedName
+    return slugifySkillName(trimmedName, fallback)
   }
 
-  return slugifySkillName(skillTitle ?? "", contentId)
+  return fallback
 }
 
 export { resolveSkillSlug }
