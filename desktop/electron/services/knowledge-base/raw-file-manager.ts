@@ -1,5 +1,5 @@
 import { constants, type Dirent } from "node:fs"
-import { access, copyFile, lstat, mkdir, readdir, rename } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readdir, realpath, rename } from "node:fs/promises"
 import path from "node:path"
 
 import type {
@@ -400,6 +400,7 @@ export class KnowledgeBaseRawFileManager {
     targetDirectoryPath: string,
   ): Promise<Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">> {
     const targetDirectory = path.resolve(targetDirectoryPath)
+    await assertRawExportTargetOutsideRawRoot(rawRoot, targetDirectory)
     await mkdir(targetDirectory, { recursive: true })
     const entries: SynapseKnowledgeBaseRawEntry[] = []
     const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
@@ -679,6 +680,28 @@ function isSameOrDescendant(sourcePath: string, targetDirectoryPath: string): bo
   const source = normalizeRawPath(sourcePath)
   const target = normalizeRawPath(targetDirectoryPath)
   return target === source || target.startsWith(`${source}/`)
+}
+
+async function assertRawExportTargetOutsideRawRoot(rawRoot: string, targetDirectory: string): Promise<void> {
+  const resolvedRawRoot = path.resolve(rawRoot)
+  const resolvedTarget = path.resolve(targetDirectory)
+  if (isAbsoluteSameOrDescendant(resolvedRawRoot, resolvedTarget)) {
+    throw new Error("导出目标不能位于知识库资料目录内。")
+  }
+
+  const realRawRoot = await realpath(resolvedRawRoot).catch(() => resolvedRawRoot)
+  const realTarget = await realpath(resolvedTarget).catch((error: unknown) => {
+    if (isMissingPathError(error)) return null
+    throw error
+  })
+  if (realTarget && isAbsoluteSameOrDescendant(realRawRoot, realTarget)) {
+    throw new Error("导出目标不能位于知识库资料目录内。")
+  }
+}
+
+function isAbsoluteSameOrDescendant(parentPath: string, candidatePath: string): boolean {
+  const relative = path.relative(parentPath, candidatePath)
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }
 
 function isInvalidRawPathError(error: unknown): boolean {
