@@ -35,6 +35,35 @@ describe("DrivePublicAssetService", () => {
     expect(completed.name).toBe("logo.png")
   })
 
+  it("creates separate assets and drive files when the same name is uploaded twice", async () => {
+    const firstPrepared = await service.prepareUpload("user-1", {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+    await storage.putObject({ key: await storageKeyForSession(prisma, firstPrepared.sessionId), body: pngSignatureBuffer(), contentType: "image/png" })
+    const first = await service.completeUpload("user-1", firstPrepared.sessionId, { publicAppUrl: "https://synapse.example" })
+
+    const secondPrepared = await service.prepareUpload("user-1", {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+    await storage.putObject({ key: await storageKeyForSession(prisma, secondPrepared.sessionId), body: pngSignatureBuffer(), contentType: "image/png" })
+    const second = await service.completeUpload("user-1", secondPrepared.sessionId, { publicAppUrl: "https://synapse.example" })
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(second.assetId).not.toBe(first.assetId)
+    expect(second.itemId).not.toBe(first.itemId)
+    expect(second.url).not.toBe(first.url)
+    expect([...prisma.__debug.publicAssets.values()]).toHaveLength(2)
+    expect([...prisma.__debug.items.values()]).toHaveLength(2)
+    expect(usage.usedBytes).toBe(16n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("returns the current asset when public asset upload completion is retried", async () => {
     const prepared = await service.prepareUpload("user-1", {
       name: "logo.png",
