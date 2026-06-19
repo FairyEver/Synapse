@@ -9,6 +9,7 @@ import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
 import { scanKnowledgeBaseSources, type KnowledgeBaseSourceScanItem } from "./source-scan"
 import { diffWikiSnapshots, snapshotWikiMarkdown, type WikiSnapshot } from "./wiki-snapshot"
+import { withKnowledgeBaseManifestMutationLock } from "./manifest-mutation-lock"
 
 const REPORT_SCHEMA = "synapse.kb.ingest.report.v1"
 const ADDRESS_PATTERN = /^[cl]-\d{6}$/u
@@ -91,27 +92,29 @@ export class KnowledgeBaseIngestCoordinator {
       })
       return
     }
-    const manifestResult = await readKnowledgeBaseManifest(this.deps.projectPath)
-    if (manifestResult.status === "invalid") {
-      knowledgeBaseLogger.warn("Knowledge Base ingest finalizer skipped invalid manifest.", {
-        boundary: "knowledge-base.ingest-finalizer",
-        projectId: this.deps.projectId,
-        conversationId: input.conversationId,
-        turnId: input.turnId,
-        warningCode: "invalid-manifest",
-        ...knowledgeBaseErrorMeta(manifestResult.error),
-      })
-      return
-    }
-    const nextManifest = await buildFinalManifest(
-      this.deps.projectPath,
-      manifestResult.manifest,
-      preflight,
-      report,
-      this.deps.addressService ?? new DragonScaleAddressService(),
-    )
-    if (!nextManifest) return
-    await writeKnowledgeBaseManifest(this.deps.projectPath, nextManifest)
+    await withKnowledgeBaseManifestMutationLock(this.deps.projectPath, async () => {
+      const manifestResult = await readKnowledgeBaseManifest(this.deps.projectPath)
+      if (manifestResult.status === "invalid") {
+        knowledgeBaseLogger.warn("Knowledge Base ingest finalizer skipped invalid manifest.", {
+          boundary: "knowledge-base.ingest-finalizer",
+          projectId: this.deps.projectId,
+          conversationId: input.conversationId,
+          turnId: input.turnId,
+          warningCode: "invalid-manifest",
+          ...knowledgeBaseErrorMeta(manifestResult.error),
+        })
+        return
+      }
+      const nextManifest = await buildFinalManifest(
+        this.deps.projectPath,
+        manifestResult.manifest,
+        preflight,
+        report,
+        this.deps.addressService ?? new DragonScaleAddressService(),
+      )
+      if (!nextManifest) return
+      await writeKnowledgeBaseManifest(this.deps.projectPath, nextManifest)
+    })
   }
 }
 

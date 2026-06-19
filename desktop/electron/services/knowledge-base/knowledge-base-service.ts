@@ -38,6 +38,7 @@ import {
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger as logger } from "./logging"
 import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
+import { withKnowledgeBaseManifestMutationLock } from "./manifest-mutation-lock"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -307,66 +308,72 @@ export class KnowledgeBaseService {
 
   async renameRawEntry(payload: SynapseKnowledgeBaseRenameRawEntryPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
-    const rawRoot = await this.ensureRawRoot(projectPath)
-    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "renameRawEntry")
-    const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
-    const result = { entries: [entry], skipped: [] }
-    const changes = [{
-      from: payload.relativePath,
-      to: entry.relativePath,
-      kind: entry.kind,
-    }]
-    try {
-      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "renameRawEntry", changes)
-    } catch (error) {
-      await this.rollbackRawPathChanges(projectPath, payload.projectId, "renameRawEntry", changes, error)
-      throw error
-    }
-    this.recordRawMutation("renameRawEntry", payload.projectId, result, {
-      rawNewName: payload.newName,
-      rawRelativePaths: [payload.relativePath],
+    return withKnowledgeBaseManifestMutationLock(projectPath, async () => {
+      const rawRoot = await this.ensureRawRoot(projectPath)
+      const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "renameRawEntry")
+      const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
+      const result = { entries: [entry], skipped: [] }
+      const changes = [{
+        from: payload.relativePath,
+        to: entry.relativePath,
+        kind: entry.kind,
+      }]
+      try {
+        await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "renameRawEntry", changes)
+      } catch (error) {
+        await this.rollbackRawPathChanges(projectPath, payload.projectId, "renameRawEntry", changes, error)
+        throw error
+      }
+      this.recordRawMutation("renameRawEntry", payload.projectId, result, {
+        rawNewName: payload.newName,
+        rawRelativePaths: [payload.relativePath],
+      })
+      return { projectId: payload.projectId, ...result }
     })
-    return { projectId: payload.projectId, ...result }
   }
 
   async moveRawEntries(payload: SynapseKnowledgeBaseMoveRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
-    const rawRoot = await this.ensureRawRoot(projectPath)
-    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "moveRawEntries")
-    const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
-    const movedEntriesByPath = new Map(result.entries.map((entry) => [entry.relativePath, entry]))
-    const changes = payload.relativePaths.flatMap((relativePath) => {
-      const targetRelativePath = joinRawPath(payload.targetDirectoryPath, path.posix.basename(normalizeRawRelativePath(relativePath)))
-      const entry = movedEntriesByPath.get(targetRelativePath)
-      return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
+    return withKnowledgeBaseManifestMutationLock(projectPath, async () => {
+      const rawRoot = await this.ensureRawRoot(projectPath)
+      const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "moveRawEntries")
+      const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+      const movedEntriesByPath = new Map(result.entries.map((entry) => [entry.relativePath, entry]))
+      const changes = payload.relativePaths.flatMap((relativePath) => {
+        const targetRelativePath = joinRawPath(payload.targetDirectoryPath, path.posix.basename(normalizeRawRelativePath(relativePath)))
+        const entry = movedEntriesByPath.get(targetRelativePath)
+        return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
+      })
+      try {
+        await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "moveRawEntries", changes)
+      } catch (error) {
+        await this.rollbackRawPathChanges(projectPath, payload.projectId, "moveRawEntries", changes, error)
+        throw error
+      }
+      this.recordRawMutation("moveRawEntries", payload.projectId, result, {
+        rawRelativePaths: payload.relativePaths,
+        rawTargetDirectoryPath: payload.targetDirectoryPath,
+      })
+      return { projectId: payload.projectId, ...result }
     })
-    try {
-      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "moveRawEntries", changes)
-    } catch (error) {
-      await this.rollbackRawPathChanges(projectPath, payload.projectId, "moveRawEntries", changes, error)
-      throw error
-    }
-    this.recordRawMutation("moveRawEntries", payload.projectId, result, {
-      rawRelativePaths: payload.relativePaths,
-      rawTargetDirectoryPath: payload.targetDirectoryPath,
-    })
-    return { projectId: payload.projectId, ...result }
   }
 
   async trashRawEntries(payload: SynapseKnowledgeBaseTrashRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
-    const rawRoot = await this.ensureRawRoot(projectPath)
-    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "trashRawEntries")
-    await this.preflightRawManifestWrite(manifestSync, projectPath, payload.projectId, "trashRawEntries", payload.relativePaths)
-    const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
-    await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
-      from: entry.relativePath,
-      kind: entry.kind,
-    })))
-    this.recordRawMutation("trashRawEntries", payload.projectId, result, {
-      rawRelativePaths: payload.relativePaths,
+    return withKnowledgeBaseManifestMutationLock(projectPath, async () => {
+      const rawRoot = await this.ensureRawRoot(projectPath)
+      const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "trashRawEntries")
+      await this.preflightRawManifestWrite(manifestSync, projectPath, payload.projectId, "trashRawEntries", payload.relativePaths)
+      const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
+      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
+        from: entry.relativePath,
+        kind: entry.kind,
+      })))
+      this.recordRawMutation("trashRawEntries", payload.projectId, result, {
+        rawRelativePaths: payload.relativePaths,
+      })
+      return { projectId: payload.projectId, ...result }
     })
-    return { projectId: payload.projectId, ...result }
   }
 
   private recordRawMutation(

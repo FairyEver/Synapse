@@ -653,6 +653,63 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("# Brief\n")
   })
 
+  it("serializes manifest-tracked raw moves per knowledge base", async () => {
+    const firstMove = deferred<void>()
+    const realRawFileManager = new KnowledgeBaseRawFileManager({ trashItem: vi.fn(async () => undefined) })
+    const moveEntries = vi.fn(async (
+      rawRoot: string,
+      relativePaths: readonly string[],
+      targetDirectoryPath: string,
+    ) => {
+      if (moveEntries.mock.calls.length === 1) {
+        await firstMove.promise
+      }
+      return realRawFileManager.moveEntries(rawRoot, relativePaths, targetDirectoryPath)
+    })
+    const { projectId, projectPath, service } = await managedFixture({
+      rawFileManager: {
+        moveEntries,
+      } as unknown as KnowledgeBaseRawFileManager,
+    })
+    const rawRoot = path.join(projectPath, ".raw")
+    await mkdir(path.join(rawRoot, "dst"), { recursive: true })
+    await writeFile(path.join(rawRoot, "a.md"), "a\n")
+    await writeFile(path.join(rawRoot, "b.md"), "b\n")
+    await writeFile(path.join(rawRoot, ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/a.md": { hash: "hash-a" },
+        ".raw/b.md": { hash: "hash-b" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
+
+    const first = service.moveRawEntries({
+      projectId,
+      relativePaths: ["a.md"],
+      targetDirectoryPath: "dst",
+    })
+    await waitUntil(() => moveEntries.mock.calls.length === 1)
+    const second = service.moveRawEntries({
+      projectId,
+      relativePaths: ["b.md"],
+      targetDirectoryPath: "dst",
+    })
+    await flushAsync()
+
+    expect(moveEntries).toHaveBeenCalledTimes(1)
+
+    firstMove.resolve()
+    await Promise.all([first, second])
+    const manifest = JSON.parse(await readFile(path.join(rawRoot, ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+    }
+    expect(manifest.sources).toEqual({
+      ".raw/dst/a.md": { hash: "hash-a" },
+      ".raw/dst/b.md": { hash: "hash-b" },
+    })
+  })
+
   it("trashes selected raw entries through the injected trash boundary", async () => {
     const trashItem = vi.fn(async () => undefined)
     const { projectId, projectPath, service } = await managedFixture({
@@ -874,3 +931,25 @@ describe("KnowledgeBaseService", () => {
   })
 
 })
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+async function flushAsync(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return
+    await flushAsync()
+  }
+  throw new Error("Timed out waiting for condition.")
+}
