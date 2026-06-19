@@ -287,10 +287,15 @@ describe("DriveController", () => {
     const auditLog = { record: vi.fn(async () => undefined) }
     const controller = new DriveAdminController(drive as unknown as DriveService, publicAssets as never, auditLog as never)
     const response = createDownloadResponse()
-    publicAssets.listAdminAssets.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    publicAssets.listAdminAssets.mockResolvedValue({ data: [{ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" }], total: 1, page: 1, pageSize: 20 })
     publicAssets.getAdminAsset.mockResolvedValue({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" })
-    publicAssets.listAdminAccessLogs.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
-    publicAssets.listAdminRevisions.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    publicAssets.listAdminAccessLogs.mockResolvedValue({
+      data: [{ referer: "https://secret.example/path?token=leak", userAgent: "Sensitive Browser" }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    publicAssets.listAdminRevisions.mockResolvedValue({ data: [{ id: "rev-1" }], total: 1, page: 1, pageSize: 20 })
     publicAssets.openAdminRevisionDownload.mockResolvedValue({
       stream: Readable.from("old"),
       fileName: "logo-old.png",
@@ -331,6 +336,33 @@ describe("DriveController", () => {
     expect(drive.getAdminStorageSummary).toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       adminEmail: "admin@example.com",
+      action: "admin.drive.public_assets.list",
+      targetType: "drive_public_asset",
+      targetId: "list",
+      detail: expect.objectContaining({ count: 1, total: 1 }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.public_asset.get",
+      targetType: "drive_public_asset",
+      targetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.public_asset_access_logs.list",
+      targetType: "drive_public_asset",
+      targetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      detail: expect.objectContaining({ count: 1, total: 1 }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.public_asset_revisions.list",
+      targetType: "drive_public_asset",
+      targetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      detail: expect.objectContaining({ count: 1, total: 1 }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
       action: "admin.drive.public_asset_revision.download",
       targetType: "drive_public_asset_revision",
       targetId: "rev-1",
@@ -341,6 +373,8 @@ describe("DriveController", () => {
       targetType: "drive_item",
       targetId: "item-1",
     }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret.example")
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("Sensitive Browser")
     expect(response.attachment).toHaveBeenCalledWith("logo-old.png")
     expect(response.attachment).toHaveBeenCalledWith("brief.txt")
   })

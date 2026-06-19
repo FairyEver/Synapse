@@ -506,35 +506,106 @@ export class DriveAdminController {
   }
 
   @Get("/public-assets")
-  listPublicAssets(@Query() query: Record<string, unknown>, @Req() request: AdminRequest) {
+  async listPublicAssets(@Query() query: Record<string, unknown>, @Req() request: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: adminPublicAssetSortFields })
-    return requirePublicAssetService(this.publicAssets).listAdminAssets(resolveAdminPublicAppUrl(request), {
-      pagination,
+    const filters = {
       search: typeof query.search === "string" ? query.search : undefined,
       userId: typeof query.userId === "string" ? query.userId : undefined,
       lifecycleStatus: typeof query.lifecycleStatus === "string" ? query.lifecycleStatus : undefined,
+    }
+    const result = await requirePublicAssetService(this.publicAssets).listAdminAssets(resolveAdminPublicAppUrl(request), {
+      pagination,
+      ...filters,
     })
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.drive.public_assets.list",
+      targetType: "drive_public_asset",
+      targetId: "list",
+      detail: {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        filters,
+        count: result.data.length,
+        total: result.total,
+      },
+      ipAddress: request.ip ?? "system",
+    })
+    return result
   }
 
   @Get("/public-assets/:assetId")
-  getPublicAsset(@Param("assetId") assetId: string, @Req() request: AdminRequest) {
-    return requirePublicAssetService(this.publicAssets).getAdminAsset(assetId, resolveAdminPublicAppUrl(request))
+  async getPublicAsset(@Param("assetId") assetId: string, @Req() request: AdminRequest) {
+    const result = await requirePublicAssetService(this.publicAssets).getAdminAsset(
+      assetId,
+      resolveAdminPublicAppUrl(request),
+    )
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.drive.public_asset.get",
+      targetType: "drive_public_asset",
+      targetId: assetId,
+      detail: { assetId },
+      ipAddress: request.ip ?? "system",
+    })
+    return result
   }
 
   @Get("/public-assets/:assetId/access-logs")
-  listPublicAssetAccessLogs(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() _request?: AdminRequest) {
-    return requirePublicAssetService(this.publicAssets).listAdminAccessLogs(
-      assetId,
-      parsePagination({ ...query, sortBy: typeof query.sortBy === "string" ? query.sortBy : "accessedAt" }, { allowedSortFields: adminPublicAssetAccessLogSortFields }),
+  async listPublicAssetAccessLogs(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(
+      { ...query, sortBy: typeof query.sortBy === "string" ? query.sortBy : "accessedAt" },
+      { allowedSortFields: adminPublicAssetAccessLogSortFields },
     )
+    const result = await requirePublicAssetService(this.publicAssets).listAdminAccessLogs(
+      assetId,
+      pagination,
+    )
+    await this.recordAuditSafely({
+      adminEmail: request?.admin?.email ?? "system",
+      action: "admin.drive.public_asset_access_logs.list",
+      targetType: "drive_public_asset",
+      targetId: assetId,
+      detail: {
+        assetId,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        count: result.data.length,
+        total: result.total,
+      },
+      ipAddress: request?.ip ?? "system",
+    })
+    return result
   }
 
   @Get("/public-assets/:assetId/revisions")
-  listPublicAssetRevisions(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() _request?: AdminRequest) {
-    return requirePublicAssetService(this.publicAssets).listAdminRevisions(
+  async listPublicAssetRevisions(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: adminPublicAssetRevisionSortFields })
+    const result = await requirePublicAssetService(this.publicAssets).listAdminRevisions(
       assetId,
-      parsePagination(query, { allowedSortFields: adminPublicAssetRevisionSortFields }),
+      pagination,
     )
+    await this.recordAuditSafely({
+      adminEmail: request?.admin?.email ?? "system",
+      action: "admin.drive.public_asset_revisions.list",
+      targetType: "drive_public_asset",
+      targetId: assetId,
+      detail: {
+        assetId,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        count: result.data.length,
+        total: result.total,
+      },
+      ipAddress: request?.ip ?? "system",
+    })
+    return result
   }
 
   @Get("/public-assets/:assetId/revisions/:revisionId/download")
