@@ -157,27 +157,55 @@ function splitPathList(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-function collectProjectsDirs(root: string, maxDepth = 5): string[] {
-  if (maxDepth < 0) return []
+const DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_ENTRIES = 100_000
+const DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_PROJECT_ROOTS = 2_000
+
+type DesktopRootDiscoveryLimits = {
+  readonly maxDirectoryEntries: number
+  readonly maxProjectRoots: number
+}
+
+type DesktopRootDiscoveryState = {
+  visitedEntries: number
+  readonly projectRoots: string[]
+  truncated: boolean
+}
+
+function normalizePositiveLimit(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : fallback
+}
+
+function collectProjectsDirs(
+  root: string,
+  state: DesktopRootDiscoveryState,
+  limits: DesktopRootDiscoveryLimits,
+  maxDepth = 5,
+): void {
+  if (maxDepth < 0 || state.truncated || state.projectRoots.length >= limits.maxProjectRoots) return
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(root, { withFileTypes: true })
   } catch (error) {
-    if (isMissingDirectoryError(error)) return []
+    if (isMissingDirectoryError(error)) return
     throw new Error(`Unable to read Claude usage directory: ${root}`, { cause: error })
   }
 
-  const roots: string[] = []
-  for (const entry of entries) {
+  for (const entry of entries.toSorted((a, b) => a.name.localeCompare(b.name))) {
+    state.visitedEntries += 1
+    if (state.visitedEntries > limits.maxDirectoryEntries) {
+      state.truncated = true
+      return
+    }
+    if (state.projectRoots.length >= limits.maxProjectRoots) return
     if (!entry.isDirectory()) continue
     const fullPath = path.join(root, entry.name)
     if (entry.name === "projects") {
-      roots.push(fullPath)
+      state.projectRoots.push(fullPath)
       continue
     }
-    roots.push(...collectProjectsDirs(fullPath, maxDepth - 1))
+    collectProjectsDirs(fullPath, state, limits, maxDepth - 1)
+    if (state.truncated || state.projectRoots.length >= limits.maxProjectRoots) return
   }
-  return roots
 }
 
 function isMissingDirectoryError(error: unknown): boolean {
@@ -210,19 +238,51 @@ function claudeDesktopDataRoots(home: string, env: NodeJS.ProcessEnv, platform: 
   ]
 }
 
+function resolveClaudeDesktopProjectRoots(
+  home: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  limits: DesktopRootDiscoveryLimits,
+): string[] {
+  const state: DesktopRootDiscoveryState = {
+    visitedEntries: 0,
+    projectRoots: [],
+    truncated: false,
+  }
+  for (const root of claudeDesktopDataRoots(home, env, platform)) {
+    collectProjectsDirs(root, state, limits)
+    if (state.truncated || state.projectRoots.length >= limits.maxProjectRoots) break
+  }
+  return state.projectRoots
+}
+
 export function resolveClaudeUsageRoots({
   home,
   env = process.env,
   platform = process.platform,
+  includeDesktopRoots = true,
+  maxDesktopDirectoryEntries = DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_ENTRIES,
+  maxDesktopProjectRoots = DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_PROJECT_ROOTS,
 }: {
   readonly home: string
   readonly env?: NodeJS.ProcessEnv
   readonly platform?: NodeJS.Platform
+  readonly includeDesktopRoots?: boolean
+  readonly maxDesktopDirectoryEntries?: number
+  readonly maxDesktopProjectRoots?: number
 }): string[] {
   const targetPath = pathForPlatform(platform)
   const configRoots = splitPathList(env.CLAUDE_CONFIG_DIR).map((root) => targetPath.join(root, "projects"))
   const cliRoots = [targetPath.join(home, ".claude", "projects"), ...configRoots]
-  const desktopRoots = claudeDesktopDataRoots(home, env, platform).flatMap((root) => collectProjectsDirs(root))
+  const desktopRoots = includeDesktopRoots
+    ? resolveClaudeDesktopProjectRoots(home, env, platform, {
+      maxDirectoryEntries: normalizePositiveLimit(
+        maxDesktopDirectoryEntries,
+        DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_ENTRIES,
+      ),
+      maxProjectRoots: normalizePositiveLimit(maxDesktopProjectRoots, DEFAULT_DESKTOP_ROOT_DISCOVERY_MAX_PROJECT_ROOTS),
+    })
+    : []
   return uniquePaths([...cliRoots, ...desktopRoots])
 }
 
@@ -237,7 +297,7 @@ export function registerUsageAnalysisHandlers(): void {
   const db = getUsageAnalysisDb(userDataPath)
   const dbPath = getUsageAnalysisDbPath(userDataPath)
   const home = os.homedir()
-  const ccRoots = resolveClaudeUsageRoots({ home })
+  const ccRoots = resolveClaudeUsageRoots({ home, includeDesktopRoots: false })
   const cc = new CcUsageAnalysisService({
     db,
     roots: ccRoots,
@@ -251,11 +311,12 @@ export function registerUsageAnalysisHandlers(): void {
 
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async (_event, input?: UsageRefreshInput) => {
     const scope = normalizeUsageRefreshInput(input)
-    logger.info("Usage Analysis CC refresh requested.", { rootCount: ccRoots.length })
+    const refreshRoots = resolveClaudeUsageRoots({ home })
+    logger.info("Usage Analysis CC refresh requested.", { rootCount: refreshRoots.length })
     return refreshUsageInWorker({
       dbPath,
       prefix: "cc",
-      roots: ccRoots,
+      roots: refreshRoots,
       scope,
     })
   })

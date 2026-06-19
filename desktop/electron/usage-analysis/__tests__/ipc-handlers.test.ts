@@ -143,6 +143,63 @@ describe("usage analysis ipc handlers", () => {
     }
   })
 
+  it("can skip Claude desktop project discovery during handler registration", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-home-"))
+    try {
+      const desktopRoot = path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Claude",
+        "local-agent-mode-sessions",
+      )
+      fs.mkdirSync(path.join(desktopRoot, "account", "projects"), { recursive: true })
+      const readdirSpy = vi.spyOn(fs, "readdirSync")
+
+      expect(resolveClaudeUsageRoots({
+        home,
+        env: {},
+        platform: "darwin",
+        includeDesktopRoots: false,
+      })).toEqual([
+        path.posix.join(home, ".claude", "projects"),
+      ])
+      expect(readdirSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.restoreAllMocks()
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it("limits Claude desktop project root discovery", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-home-"))
+    try {
+      const sessionRoot = path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Claude",
+        "local-agent-mode-sessions",
+      )
+      const firstProjects = path.join(sessionRoot, "account-a", "projects")
+      const secondProjects = path.join(sessionRoot, "account-b", "projects")
+      fs.mkdirSync(firstProjects, { recursive: true })
+      fs.mkdirSync(secondProjects, { recursive: true })
+
+      expect(resolveClaudeUsageRoots({
+        home,
+        env: {},
+        platform: "darwin",
+        maxDesktopProjectRoots: 1,
+      })).toEqual([
+        path.posix.join(home, ".claude", "projects"),
+        firstProjects,
+      ])
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it("does not silently ignore unreadable Claude desktop session roots", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-home-"))
     try {
