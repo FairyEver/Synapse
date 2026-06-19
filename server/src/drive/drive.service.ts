@@ -653,6 +653,16 @@ export class DriveService implements OnApplicationBootstrap {
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
     if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
+    const plannedFiles = input.files.map((file) => {
+      const parts = normalizeRelativePath(file.relativePath)
+      const relativePath = parts.join("/")
+      return { file, parts, relativePath }
+    })
+    const seenRelativePaths = new Set<string>()
+    for (const planned of plannedFiles) {
+      if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件路径重复。")
+      seenRelativePaths.add(planned.relativePath)
+    }
     let root: DriveItemDto | null = null
     let preservedItemIds = new Set<string>()
     const preparedSessionIds: string[] = []
@@ -666,8 +676,8 @@ export class DriveService implements OnApplicationBootstrap {
         : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, root.id))
       const folderIdsByPath = new Map<string, string>([["", root.id]])
 
-      for (const file of input.files) {
-        const parts = normalizeRelativePath(file.relativePath)
+      for (const planned of plannedFiles) {
+        const { file, parts, relativePath } = planned
         const fileName = parts.at(-1)
         if (!fileName) throw new BadRequestException("文件路径无效。")
         const folderParts = parts.slice(0, -1)
@@ -693,7 +703,7 @@ export class DriveService implements OnApplicationBootstrap {
           publicAppUrl: input.publicAppUrl,
         })
         preparedSessionIds.push(prepared.sessionId)
-        entries.push({ relativePath: parts.join("/"), ...prepared })
+        entries.push({ relativePath, ...prepared })
       }
 
       return { root, rootCreated: rootResult.created, entries }

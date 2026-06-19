@@ -1209,6 +1209,36 @@ describe("DriveService", () => {
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
   })
 
+  it("rejects duplicate normalized folder upload paths before creating artifacts", async () => {
+    const prisma = createPrismaMemory()
+    const createUploadInstruction = vi.fn(async () => ({
+      method: "PUT" as const,
+      url: "https://cos.example/upload",
+      expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+      headers: { "Content-Type": "text/plain" },
+    }))
+    const service = new DriveService(prisma as unknown as PrismaService, {
+      ...storageMock,
+      createUploadInstruction,
+    })
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    await expect(service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [
+        { relativePath: "docs/e\u0301.txt", size: "11", mimeType: "text/plain" },
+        { relativePath: "docs/é.txt", size: "12", mimeType: "text/plain" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toThrow("文件路径重复。")
+
+    expect(createUploadInstruction).not.toHaveBeenCalled()
+    expect(await service.listItems("user-1", null)).toEqual([])
+    expect(await prisma.driveUploadSession.findMany()).toEqual([])
+    expect(await prisma.driveItem.findMany()).toEqual([])
+  })
+
   it("merges folder uploads into existing folders and overwrites same-name files", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
@@ -1250,7 +1280,7 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
-  it("rejects Windows-unsafe folder upload path segments and rolls back", async () => {
+  it("rejects Windows-unsafe folder upload path segments before creating artifacts", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1266,9 +1296,7 @@ describe("DriveService", () => {
 
     expect(await service.listItems("user-1", null)).toEqual([])
     expect(await prisma.driveUploadSession.findMany()).toEqual([])
-    const items = await prisma.driveItem.findMany()
-    expect(items).toHaveLength(1)
-    expect(items[0]?.deletedAt).toBeInstanceOf(Date)
+    expect(await prisma.driveItem.findMany()).toEqual([])
   })
 
   it("rolls back folder upload prepare artifacts when a later file fails", async () => {
