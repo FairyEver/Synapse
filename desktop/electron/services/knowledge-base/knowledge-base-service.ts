@@ -282,6 +282,7 @@ export class KnowledgeBaseService {
     const result = await this.rawFileManager.uploadFiles(rawRoot, payload.targetDirectoryPath, payload.filePaths)
     this.recordRawMutation("uploadRawFiles", payload.projectId, result, {
       rawTargetDirectoryPath: payload.targetDirectoryPath,
+      skippedPathLogMode: "basename",
     })
     return { projectId: payload.projectId, ...result }
   }
@@ -292,6 +293,7 @@ export class KnowledgeBaseService {
     const result = await this.rawFileManager.uploadItems(rawRoot, payload.targetDirectoryPath, payload.itemPaths)
     this.recordRawMutation("uploadRawItems", payload.projectId, result, {
       rawTargetDirectoryPath: payload.targetDirectoryPath,
+      skippedPathLogMode: "basename",
     })
     return { projectId: payload.projectId, ...result }
   }
@@ -384,7 +386,7 @@ export class KnowledgeBaseService {
     details: RawMutationLogDetails = {},
   ): void {
     const affectedRawPaths = limitRawLogPaths(result.entries.map((entry) => entry.relativePath))
-    const skippedRawPaths = limitRawLogPaths(result.skipped.map((entry) => entry.path))
+    const skippedRawPaths = limitRawLogPaths(result.skipped.map((entry) => formatSkippedRawPathForLog(entry.path, details)))
     const rawRelativePaths = limitRawLogPaths(details.rawRelativePaths ?? [])
     logger.info("Knowledge Base raw mutation completed.", {
       affectedCount: result.entries.length,
@@ -585,9 +587,19 @@ type RawMutationLogDetails = {
   readonly rawNewName?: string
   readonly rawRelativePaths?: readonly string[]
   readonly rawTargetDirectoryPath?: string
+  readonly skippedPathLogMode?: "raw-relative" | "basename"
 }
 
 const RAW_MUTATION_LOG_PATH_LIMIT = 25
+
+function formatSkippedRawPathForLog(pathValue: string, details: RawMutationLogDetails): string {
+  if (details.skippedPathLogMode !== "basename") return pathValue
+  return basenameForLog(pathValue)
+}
+
+function basenameForLog(pathValue: string): string {
+  return path.posix.basename(pathValue.replace(/\\/g, "/"))
+}
 
 const SUPPORTED_SOURCE_EXTENSIONS = new Set([
   ".md",

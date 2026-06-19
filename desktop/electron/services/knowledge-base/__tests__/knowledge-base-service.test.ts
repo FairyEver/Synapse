@@ -855,6 +855,27 @@ describe("KnowledgeBaseService", () => {
     expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(sourcePath)
   })
 
+  it("logs skipped raw upload paths without full external paths", async () => {
+    const sourcePath = path.join(await tempDir(), "secret-client-folder")
+    await mkdir(sourcePath, { recursive: true })
+    const { projectId, service } = await managedFixture()
+    mocks.logger.info.mockClear()
+
+    await service.uploadRawFiles({
+      projectId,
+      targetDirectoryPath: "",
+      filePaths: [sourcePath],
+    })
+
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw mutation completed.", expect.objectContaining({
+      operation: "uploadRawFiles",
+      projectId,
+      skippedCount: 1,
+      skippedRawPaths: ["secret-client-folder"],
+    }))
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(sourcePath)
+  })
+
   it("logs raw-relative paths for destructive raw mutations", async () => {
     const trashItem = vi.fn(async () => undefined)
     const { projectId, projectPath, service } = await managedFixture({
