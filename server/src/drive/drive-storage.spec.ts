@@ -146,6 +146,20 @@ describe("LocalDriveStorage", () => {
     await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1/versions/version-1" })).stream)).resolves.toBe("hello")
   })
 
+  it("deletes encoded item objects without failing on legacy version directories", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await storage.putObject({ key: "drive/item-1", body: Buffer.from("current"), contentType: "text/plain" })
+    await mkdir(path.join(root, "drive", "item-1", "versions"), { recursive: true })
+    await writeFile(path.join(root, "drive", "item-1", "versions", "version-1"), "legacy-version")
+
+    await expect(storage.deleteObject("drive/item-1")).resolves.toBeUndefined()
+    await expect(storage.headObject("drive/item-1")).resolves.toBeNull()
+    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1/versions/version-1" })).stream))
+      .resolves.toBe("legacy-version")
+  })
+
   it("continues reading legacy local objects stored directly by key path", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)

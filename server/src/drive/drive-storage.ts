@@ -99,6 +99,7 @@ export class LocalDriveStorage implements DriveStoragePort {
     for (const objectPath of this.candidatePathsForKey(key)) {
       try {
         const info = await stat(objectPath)
+        if (info.isDirectory()) continue
         return { key, size: BigInt(info.size) }
       } catch (error) {
         if (isMissingLocalDriveObjectError(error)) continue
@@ -109,7 +110,8 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async deleteObject(key: string): Promise<void> {
-    await Promise.all(this.candidatePathsForKey(key).map((objectPath) => rm(objectPath, { force: true })))
+    await rm(this.objectPathForKey(key), { force: true })
+    await this.deleteLegacyObjectFile(key)
     this.contentTypes.delete(key)
   }
 
@@ -209,7 +211,8 @@ export class LocalDriveStorage implements DriveStoragePort {
   private async requirePathForKey(key: string): Promise<string> {
     for (const objectPath of this.candidatePathsForKey(key)) {
       try {
-        await stat(objectPath)
+        const info = await stat(objectPath)
+        if (info.isDirectory()) continue
         return objectPath
       } catch (error) {
         if (isMissingLocalDriveObjectError(error)) continue
@@ -222,7 +225,8 @@ export class LocalDriveStorage implements DriveStoragePort {
   private firstExistingPathForKeySync(key: string): string {
     for (const objectPath of this.candidatePathsForKey(key)) {
       try {
-        statSync(objectPath)
+        const info = statSync(objectPath)
+        if (info.isDirectory()) continue
         return objectPath
       } catch (error) {
         if (isMissingLocalDriveObjectError(error)) continue
@@ -239,6 +243,18 @@ export class LocalDriveStorage implements DriveStoragePort {
       throw new Error("Invalid drive storage key.")
     }
     return objectPath
+  }
+
+  private async deleteLegacyObjectFile(key: string): Promise<void> {
+    const objectPath = this.legacyPathForKey(key)
+    try {
+      const info = await stat(objectPath)
+      if (info.isDirectory()) return
+    } catch (error) {
+      if (isMissingLocalDriveObjectError(error)) return
+      throw error
+    }
+    await rm(objectPath, { force: true })
   }
 }
 
