@@ -13,9 +13,11 @@ Read the source. Write the wiki. Cross-reference everything. A single source typ
 
 ## Delta Tracking
 
-Before ingesting any file, list the actual files under `.raw/` and check `.raw/.manifest.json` to avoid re-processing unchanged sources. Process only source files that really exist under `.raw/`; never invent source paths or manifest entries for files that are not present.
+Before ingesting any file, list the actual files under `.raw/` and check `.raw/.manifest.json` only as read-only context. Process only source files that really exist under `.raw/`; never invent source paths or manifest entries for files that are not present.
 
 When Synapse injects an ingest preflight with a bounded list of changed `.raw/` sources, process only the listed sources in this turn. If the preflight says additional changed sources were omitted, finish the current batch and let the user or Synapse run `/wiki-ingest` again for the next batch.
+
+Synapse owns the SHA-256 comparison between `.raw/` files and `.raw/.manifest.json`, and Synapse writes the final manifest after your turn. Do not compute your own source hash or use a shell hash command to decide whether a source changed.
 
 ```bash
 # Check if manifest exists
@@ -38,10 +40,9 @@ When Synapse injects an ingest preflight with a bounded list of changed `.raw/` 
 
 **Before ingesting a file:**
 1. Verify the file exists under `.raw/` and is not `.raw/.manifest.json`.
-2. Compute a hash: `md5sum [file] | cut -d' ' -f1` (or `sha256sum` on Linux).
-2. Check if the path exists in `.manifest.json` with the same hash.
-3. If hash matches, skip. Report: "Already ingested (unchanged). Use `force` to re-ingest."
-4. If missing or hash differs, proceed with ingest.
+2. If Synapse injected an ingest preflight, process only source paths in that preflight list.
+3. If a source is not in the preflight list, treat it as already filtered out for this turn unless the user explicitly requested `force` or named that exact source.
+4. If no preflight is present, use the manifest only to understand prior pages and address mappings; do not edit it or infer hash mismatches yourself.
 
 **After ingesting a file:**
 1. Do not edit `.raw/.manifest.json`.
