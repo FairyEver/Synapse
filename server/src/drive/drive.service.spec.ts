@@ -1936,6 +1936,53 @@ describe("DriveService", () => {
     expect(storage.deleteObject).not.toHaveBeenCalled()
   })
 
+  it("redacts admin delete audit write failures in logs", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const auditLog = { record: vi.fn(async (input: any) => {
+      if (input.action === "admin.drive.delete") {
+        throw new Error("audit failed Authorization: Bearer plain-token token=plain-secret Cookie: session=secret /Users/example/.env")
+      }
+    }) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    const deleteAuditRecorder = service as unknown as {
+      recordDriveDeleteAuditSafely: (input: {
+        readonly adminEmail: string
+        readonly action: string
+        readonly targetType: string
+        readonly targetId: string
+        readonly detail: Record<string, unknown>
+        readonly ipAddress: string
+      }) => Promise<void>
+    }
+
+    try {
+      await expect(deleteAuditRecorder.recordDriveDeleteAuditSafely({
+        adminEmail: "admin@example.com",
+        action: "admin.drive.delete",
+        targetType: "drive_item",
+        targetId: "item-1",
+        detail: { count: 1 },
+        ipAddress: "127.0.0.1",
+      })).resolves.toBeUndefined()
+
+      const warnCall = warnSpy.mock.calls.find(([, message]) => message === "Failed to record drive delete audit log")
+      expect(warnCall?.[0]).toEqual(expect.objectContaining({
+        action: "admin.drive.delete",
+        targetType: "drive_item",
+        targetId: "item-1",
+        errorName: "Error",
+        errorMessage: expect.stringContaining("[REDACTED]"),
+      }))
+      expect(JSON.stringify(warnCall)).not.toContain("plain-token")
+      expect(JSON.stringify(warnCall)).not.toContain("plain-secret")
+      expect(JSON.stringify(warnCall)).not.toContain("session=secret")
+      expect(JSON.stringify(warnCall)).not.toContain("/Users/example/.env")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("rejects public share access for non-active lifecycle even when share metadata is enabled", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

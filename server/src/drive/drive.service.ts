@@ -2736,7 +2736,7 @@ export class DriveService implements OnApplicationBootstrap {
         targetType: input.targetType,
         targetId: input.targetId,
         errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : undefined,
+        errorMessage: formatAuditError(error),
       }, "Failed to record drive delete audit log")
     }
   }
