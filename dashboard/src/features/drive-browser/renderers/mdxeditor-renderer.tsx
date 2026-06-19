@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -52,6 +52,8 @@ export function DriveMDXeditorRenderer({
   const initialText = preview.text ?? ''
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const savedValueRef = useRef(initialText)
+  const applyingExternalMarkdownRef = useRef(false)
+  const externalMarkdownFrameRef = useRef<number | null>(null)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +61,25 @@ export function DriveMDXeditorRenderer({
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
+  const clearExternalMarkdownSync = useCallback(() => {
+    applyingExternalMarkdownRef.current = false
+    if (externalMarkdownFrameRef.current !== null) {
+      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+      externalMarkdownFrameRef.current = null
+    }
+  }, [])
+  const beginExternalMarkdownSync = useCallback(() => {
+    applyingExternalMarkdownRef.current = true
+    if (externalMarkdownFrameRef.current !== null) {
+      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+    }
+    externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+      externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+        applyingExternalMarkdownRef.current = false
+        externalMarkdownFrameRef.current = null
+      })
+    })
+  }, [])
   const plugins = useMemo(() => [
     toolbarPlugin({
       toolbarContents: () => (
@@ -91,8 +112,13 @@ export function DriveMDXeditorRenderer({
     setDirty(false)
     setError(null)
     setConflictOpen(false)
+    beginExternalMarkdownSync()
     editorRef.current?.setMarkdown(initialText)
-  }, [current.id, edit?.currentVersionId, initialText])
+  }, [beginExternalMarkdownSync, current.id, edit?.currentVersionId, initialText])
+
+  useEffect(() => () => {
+    clearExternalMarkdownSync()
+  }, [clearExternalMarkdownSync])
 
   const handleSave = async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
@@ -120,6 +146,7 @@ export function DriveMDXeditorRenderer({
       setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
+      beginExternalMarkdownSync()
       editorRef.current?.setMarkdown(nextText)
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
@@ -177,7 +204,7 @@ export function DriveMDXeditorRenderer({
           onChange={(nextValue, initialMarkdownNormalize) => {
             if (!canEdit) return
             setValue(nextValue)
-            if (initialMarkdownNormalize) {
+            if (initialMarkdownNormalize || applyingExternalMarkdownRef.current) {
               savedValueRef.current = nextValue
               setDirty(false)
               return
