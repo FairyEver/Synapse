@@ -321,7 +321,14 @@ export class CcConversationService {
     const query = input.query?.trim()
     if (!query || !input.rawText) return this.listConversations(input)
 
-    const candidateResult = this.listConversations({ ...input, query: undefined, rawText: false })
+    const cursorOffset = input.cursor ? normalizeOffset(input.cursor) : normalizeOffset(input.offset)
+    const candidateResult = this.listConversations({
+      ...input,
+      query: undefined,
+      rawText: false,
+      offset: cursorOffset,
+      cursor: undefined,
+    })
     const candidates = candidateResult.items
     const matches: CcConversationListItem[] = []
     let missingFileCount = 0
@@ -372,10 +379,18 @@ export class CcConversationService {
       }
     }
 
-    const result = { items: matches, total: matches.length, partial: candidateResult.total > candidates.length }
+    const nextOffset = cursorOffset + candidates.length
+    const nextCursor = nextOffset < candidateResult.total ? String(nextOffset) : undefined
+    const result = {
+      items: matches,
+      total: candidateResult.total,
+      ...(nextCursor ? { nextCursor } : {}),
+      partial: Boolean(nextCursor),
+    }
     this.logger.info("CC conversation raw text search completed.", {
       candidateCount: candidates.length,
       candidateTotal: candidateResult.total,
+      cursorOffset,
       matchedCount: matches.length,
       missingFileCount,
       parseErrorCount,

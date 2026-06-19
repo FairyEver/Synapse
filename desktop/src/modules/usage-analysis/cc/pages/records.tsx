@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import type { CcRecordListInput } from "@/types/usage-analysis-conversations"
+import type { CcRecordListInput, CcRecordListResult } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
 import type { UsageRangePreset } from "../../shared/types"
 import { ConversationFilters } from "../components/conversation-filters"
@@ -23,40 +23,102 @@ export function CcRecordsPage({
   readonly refreshing?: boolean
 }) {
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const [rawText, setRawText] = useState(false)
   const [loadedLimit, setLoadedLimit] = useState(CC_RECORD_PAGE_SIZE)
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null)
   const [detailLimit, setDetailLimit] = useState(200)
+  const [rawSearchCursor, setRawSearchCursor] = useState<string | undefined>(undefined)
+  const [rawSearchData, setRawSearchData] = useState<CcRecordListResult | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const lastRequestedShownRef = useRef<number | null>(null)
+  const lastRequestedRawCursorRef = useRef<string | null>(null)
+  const appliedRawPageRef = useRef<{ cursor: string; data: CcRecordListResult } | null>(null)
+
+  useEffect(() => {
+    if (!rawText) {
+      setDebouncedQuery(query)
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [query, rawText])
+
+  const effectiveQuery = rawText ? debouncedQuery : query
 
   useEffect(() => {
     setLoadedLimit(CC_RECORD_PAGE_SIZE)
+    setRawSearchCursor(undefined)
+    setRawSearchData(null)
     lastRequestedShownRef.current = null
-  }, [range])
+    lastRequestedRawCursorRef.current = null
+    appliedRawPageRef.current = null
+  }, [range, effectiveQuery, rawText, refreshKey])
 
   useEffect(() => {
     setDetailLimit(200)
   }, [expandedSessionId])
 
-  const input = useMemo<CcRecordListInput>(() => ({
-    preset: range,
-    query,
-    rawText,
-    limit: loadedLimit,
-    offset: 0,
-  }), [range, query, rawText, loadedLimit])
+  const input = useMemo<CcRecordListInput>(() => {
+    if (rawText) {
+      return {
+        preset: range,
+        query: effectiveQuery,
+        rawText,
+        limit: CC_RECORD_PAGE_SIZE,
+        offset: rawSearchCursor ? Number(rawSearchCursor) : 0,
+        ...(rawSearchCursor ? { cursor: rawSearchCursor } : {}),
+      }
+    }
+    return {
+      preset: range,
+      query: effectiveQuery,
+      rawText,
+      limit: loadedLimit,
+      offset: 0,
+    }
+  }, [range, effectiveQuery, rawText, loadedLimit, rawSearchCursor])
   const state = useCcRecords(input, refreshKey)
   const detailState = useCcRecordDetails(
     expandedSessionId ? { sessionId: expandedSessionId, limit: detailLimit } : null,
     refreshKey,
   )
-  const rows = state.data?.items ?? []
-  const total = state.data?.total ?? 0
+  useEffect(() => {
+    if (!rawText || !state.data) return
+
+    const cursor = rawSearchCursor ?? "0"
+    const pageData = state.data
+    const appliedPage = appliedRawPageRef.current
+    if (appliedPage?.cursor === cursor && appliedPage.data === pageData) return
+    appliedRawPageRef.current = { cursor, data: pageData }
+
+    setRawSearchData((current) => {
+      const currentItems = cursor === "0" ? [] : [...(current?.items ?? [])]
+      const seen = new Set(currentItems.map((item) => item.sessionId))
+      for (const item of pageData.items) {
+        if (seen.has(item.sessionId)) continue
+        currentItems.push(item)
+        seen.add(item.sessionId)
+      }
+      return {
+        ...pageData,
+        items: currentItems,
+      }
+    })
+  }, [rawText, rawSearchCursor, state.data])
+
+  const recordsData = rawText ? rawSearchData : state.data
+  const rows = recordsData?.items ?? []
+  const total = recordsData?.total ?? 0
   const shown = rows.length
-  const initialLoading = state.loading && !state.data
-  const statusText = formatRecordLoadStatus({ shown, total, loading: state.loading })
-  const partial = state.data?.partial === true
+  const initialLoading = state.loading && !recordsData
+  const rawSearchNextCursor = rawText ? recordsData?.nextCursor : undefined
+  const statusTotal = rawText && !rawSearchNextCursor ? shown : total
+  const statusText = formatRecordLoadStatus({ shown, total: statusTotal, loading: state.loading })
+  const partial = recordsData?.partial === true
 
   useEffect(() => {
     const target = loadMoreRef.current
@@ -64,6 +126,13 @@ export function CcRecordsPage({
 
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return
+      if (rawText) {
+        if (!rawSearchNextCursor || state.loading || lastRequestedRawCursorRef.current === rawSearchNextCursor) return
+
+        lastRequestedRawCursorRef.current = rawSearchNextCursor
+        setRawSearchCursor(rawSearchNextCursor)
+        return
+      }
       if (!shouldRequestNextRecords({
         shown,
         total,
@@ -77,7 +146,7 @@ export function CcRecordsPage({
 
     observer.observe(target)
     return () => observer.disconnect()
-  }, [shown, total, state.loading])
+  }, [rawText, rawSearchNextCursor, shown, total, state.loading])
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
