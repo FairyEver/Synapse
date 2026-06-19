@@ -47,6 +47,7 @@ export interface UpsertDeviceHelloInput {
 const deviceNameLimit = 120
 const platformLimit = 80
 const appVersionLimit = 80
+const deviceTextCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" })
 
 @Injectable()
 export class LiveDeviceService {
@@ -109,10 +110,10 @@ export class LiveDeviceService {
       .map((live) => toLiveOnlyDeviceRow(live, { includeUser: false }))
 
     return {
-      data: [
+      data: sortDevicesByPagination([
         ...devices,
         ...(pagination.page === 1 ? liveOnlyDevices : []),
-      ].sort(compareDevicesByObservedAt),
+      ], pagination),
       total: total + liveOnlyDevices.length,
       page: pagination.page,
       pageSize: pagination.pageSize,
@@ -147,10 +148,10 @@ export class LiveDeviceService {
       .filter((live) => !liveKeysWithRows.has(deviceKey(live.userId, live.clientInstanceId)))
       .map((live) => toLiveOnlyDeviceRow(live, { includeUser: true }))
     const offset = (pagination.page - 1) * pagination.pageSize
-    const data = [
+    const data = sortDevicesByPagination([
       ...devices,
       ...liveOnlyDevices,
-    ].sort(compareDevicesByObservedAt)
+    ], pagination)
 
     return {
       data: data.slice(offset, offset + pagination.pageSize),
@@ -279,17 +280,53 @@ function userFields(row: AdminUserDeviceRow) {
   }
 }
 
-function compareDevicesByObservedAt(left: DashboardDeviceRow, right: DashboardDeviceRow): number {
-  return observedAt(right) - observedAt(left)
+function sortDevicesByPagination(
+  devices: readonly DashboardDeviceRow[],
+  pagination: PaginationQuery,
+): DashboardDeviceRow[] {
+  return devices
+    .map((device, index) => ({ device, index }))
+    .sort((left, right) => {
+      const comparison = compareDeviceSortValues(
+        getDeviceSortValue(left.device, pagination.sortBy),
+        getDeviceSortValue(right.device, pagination.sortBy),
+        pagination.sortOrder,
+      )
+      return comparison === 0 ? left.index - right.index : comparison
+    })
+    .map((entry) => entry.device)
 }
 
-function observedAt(row: DashboardDeviceRow): number {
-  return Math.max(
-    parseDeviceTime(row.lastSeenAt),
-    parseDeviceTime(row.connectedAt),
-    parseDeviceTime(row.disconnectedAt),
-    parseDeviceTime(row.firstSeenAt),
-  )
+function getDeviceSortValue(device: DashboardDeviceRow, sortBy: string): string | number | null | undefined {
+  switch (sortBy) {
+    case "deviceName":
+      return device.deviceName
+    case "platform":
+      return device.platform
+    case "appVersion":
+      return device.appVersion
+    case "firstSeenAt":
+      return parseDeviceTime(device.firstSeenAt)
+    case "lastSeenAt":
+      return parseDeviceTime(device.lastSeenAt)
+    default:
+      return parseDeviceTime(device.lastSeenAt)
+  }
+}
+
+function compareDeviceSortValues(
+  left: string | number | null | undefined,
+  right: string | number | null | undefined,
+  sortOrder: PaginationQuery["sortOrder"],
+): number {
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+
+  const comparison = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : deviceTextCollator.compare(String(left), String(right))
+  return sortOrder === "desc" ? -comparison : comparison
 }
 
 function liveDeviceObservedAt(live: LiveClientInstance): Date {

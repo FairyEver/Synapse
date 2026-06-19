@@ -125,6 +125,36 @@ describe("LiveDeviceService", () => {
     expect(result.data[0]).not.toHaveProperty("userId")
   })
 
+  it("keeps user device rows ordered by the requested sort field", async () => {
+    const prisma = createPrismaMock()
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([
+        device({
+          clientInstanceId: "client-a",
+          platform: "darwin-arm64",
+          lastSeenAt: new Date("2026-06-06T09:00:00.000Z"),
+        }),
+        device({
+          id: "device-b",
+          clientInstanceId: "client-b",
+          platform: "win32-x64",
+          lastSeenAt: new Date("2026-06-06T10:00:00.000Z"),
+        }),
+      ])
+      .mockResolvedValueOnce([])
+    prisma.userDevice.count.mockResolvedValue(2)
+    const service = new LiveDeviceService(prisma as unknown as PrismaService, new LiveClientRegistry())
+
+    const result = await service.listUserDevices("user-1", {
+      page: 1,
+      pageSize: 20,
+      sortBy: "platform",
+      sortOrder: "asc",
+    })
+
+    expect(result.data.map((row) => row.clientInstanceId)).toEqual(["client-a", "client-b"])
+  })
+
   it("upserts hello metadata without overwriting the user display name", async () => {
     const prisma = createPrismaMock()
     const service = new LiveDeviceService(prisma as unknown as PrismaService, new LiveClientRegistry())
@@ -289,6 +319,38 @@ describe("LiveDeviceService", () => {
       page: 1,
       pageSize: 20,
     })
+  })
+
+  it("keeps admin device rows ordered by the requested sort field", async () => {
+    const prisma = createPrismaMock()
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([
+        device({
+          clientInstanceId: "client-a",
+          platform: "darwin-arm64",
+          lastSeenAt: new Date("2026-06-06T09:00:00.000Z"),
+          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+        }),
+        device({
+          id: "device-b",
+          clientInstanceId: "client-b",
+          platform: "win32-x64",
+          lastSeenAt: new Date("2026-06-06T10:00:00.000Z"),
+          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+        }),
+      ])
+      .mockResolvedValueOnce([])
+    prisma.userDevice.count.mockResolvedValue(2)
+    const service = new LiveDeviceService(prisma as unknown as PrismaService, new LiveClientRegistry())
+
+    const result = await service.listAdminDevices({
+      page: 1,
+      pageSize: 20,
+      sortBy: "platform",
+      sortOrder: "asc",
+    })
+
+    expect(result.data.map((row) => row.clientInstanceId)).toEqual(["client-a", "client-b"])
   })
 
   it("includes live-only clients in the first admin device page", async () => {
