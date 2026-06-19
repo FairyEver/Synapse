@@ -1,5 +1,6 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
 import { sanitizeWorkflowOutputForHistory } from "../../../electron/services/workflow/run-snapshot-sanitize"
+import type { ActorIdentity } from "../../../electron/runtime/security"
 import type {
   WorkflowDefinition,
   WorkflowRunResult,
@@ -20,6 +21,7 @@ export interface WorkflowActionRuntimeDeps {
     readonly triggerSource: "automation"
     readonly automationId: string
     readonly automationRunId: string
+    readonly actor: ActorIdentity
   }) => Promise<{
     readonly runId: string
     readonly definition: WorkflowDefinition
@@ -66,6 +68,7 @@ export function createWorkflowAction(deps: WorkflowActionRuntimeDeps): MainActio
           triggerSource: "automation",
           automationId: context.taskId,
           automationRunId: context.runId,
+          actor: context.actor,
         })
         const status = workflowStatusToActionStatus(run.result.status)
         const label = status === "success" ? "完成" : status === "cancelled" ? "已停止" : "失败"

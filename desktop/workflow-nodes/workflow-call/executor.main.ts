@@ -63,6 +63,8 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
       triggerSource: "workflow-call",
       abortSignal: context.abortSignal,
       actor: context.actor,
+      automationId: context.automationId,
+      automationRunId: context.automationRunId,
       parentWorkflowId: context.workflowId,
       parentRunId: context.runId,
       parentNodeId: context.nodeId,

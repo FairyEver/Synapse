@@ -166,6 +166,18 @@ type RunWorkflowHandlerOptions = {
   readonly actor?: ActorIdentity
 }
 
+function buildWorkflowRunAttribution(input: {
+  readonly automationId?: string
+  readonly automationRunId?: string
+}): { readonly automationId?: string; readonly automationRunId?: string } | undefined {
+  return input.automationId || input.automationRunId
+    ? {
+        automationId: input.automationId,
+        automationRunId: input.automationRunId,
+      }
+    : undefined
+}
+
 /**
  * core.logging — wraps the existing `logStore` singleton.
  *
@@ -441,6 +453,7 @@ export function createRunWorkflowHandler(deps: {
       : undefined
     const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
     const projectId = activeRepo?.uuid
+    const attribution = buildWorkflowRunAttribution(options ?? {})
     const completion = workflowEngine.run(def, effectiveParams, runId, (event) => {
       const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
       const nextNodeResults = { ...current.nodeResults }
@@ -476,7 +489,7 @@ export function createRunWorkflowHandler(deps: {
           })
         }
       }
-    }, ac.signal, projectId, source, options?.actor).catch((err) => {
+    }, ac.signal, projectId, source, options?.actor, undefined, attribution).catch((err) => {
       const diagnostic = capabilityRejectionDiagnostic(err)
       capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
       runAborts.delete(runId)
@@ -545,6 +558,7 @@ export function createRunWorkflowAndWait(deps: {
     readonly triggerSource: "mcp" | "automation"
     readonly automationId?: string
     readonly automationRunId?: string
+    readonly actor?: ActorIdentity
   }) => {
     const handler = createRunWorkflowHandler(deps)
     const started = await handler(input.workflowId, input.params, {
@@ -552,6 +566,7 @@ export function createRunWorkflowAndWait(deps: {
       triggerSource: input.triggerSource,
       automationId: input.automationId,
       automationRunId: input.automationRunId,
+      actor: input.actor,
     })
     if ("errors" in started) {
       throw new Error(started.errors[0]?.message ?? "工作流启动失败")
@@ -1815,6 +1830,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             input.triggerSource,
             input.actor,
             input.callStack,
+            buildWorkflowRunAttribution(input),
           )
           const endedAt = Date.now()
           try {

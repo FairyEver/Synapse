@@ -14,6 +14,11 @@ import { computeFullExecutionSet } from "./workflow-utils"
 const logger = createMainLogger("service.workflow.engine")
 const DEFAULT_WORKFLOW_MAX_CONCURRENCY = 5
 
+type WorkflowRunAttribution = {
+  readonly automationId?: string
+  readonly automationRunId?: string
+}
+
 function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorMessage?: string; readonly errorLength: number } {
   return {
     errorName,
@@ -121,6 +126,7 @@ export class WorkflowEngine {
     triggerSource?: string,
     actor?: ActorIdentity,
     callStack?: readonly WorkflowCallStackEntry[],
+    attribution?: WorkflowRunAttribution,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -281,6 +287,8 @@ export class WorkflowEngine {
               nodeName: node.name,
               abortSignal: effectiveAbortSignal,
               actor,
+              automationId: attribution?.automationId,
+              automationRunId: attribution?.automationRunId,
               workflowCallStack,
             },
             agentDeps: this.agentDeps,

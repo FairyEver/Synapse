@@ -1230,6 +1230,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "repo-1",
       "mcp",
       actor,
+      undefined,
+      undefined,
     )
   })
 

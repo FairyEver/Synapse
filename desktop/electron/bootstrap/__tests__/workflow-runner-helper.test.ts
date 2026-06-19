@@ -82,6 +82,7 @@ const definition: WorkflowDefinition = {
 
 describe("createRunWorkflowAndWait", () => {
   it("resolves with run result when the workflow completes", async () => {
+    const actor = { kind: "user" as const, id: "automation", display: "Automation" }
     const workflowEngine = {
       run: vi.fn(async (
         _def: WorkflowDefinition,
@@ -112,10 +113,23 @@ describe("createRunWorkflowAndWait", () => {
       triggerSource: "automation",
       automationId: "auto-1",
       automationRunId: "auto-run-1",
+      actor,
     })).resolves.toMatchObject({
       definition,
       result: { status: "completed", output: "done" },
     })
+    expect(workflowEngine.run).toHaveBeenCalledWith(
+      definition,
+      {},
+      expect.any(String),
+      expect.any(Function),
+      expect.any(AbortSignal),
+      "repo-1",
+      "automation",
+      actor,
+      undefined,
+      { automationId: "auto-1", automationRunId: "auto-run-1" },
+    )
   })
 
   it("aborts the workflow run when the outer signal aborts", async () => {

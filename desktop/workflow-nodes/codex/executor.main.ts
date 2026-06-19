@@ -205,6 +205,8 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         workflowRunId: context.runId,
         workflowNodeId: context.nodeId,
         workflowNodeName: context.nodeName,
+        ...(context.automationId ? { automationId: context.automationId } : {}),
+        ...(context.automationRunId ? { automationRunId: context.automationRunId } : {}),
       },
     })
 

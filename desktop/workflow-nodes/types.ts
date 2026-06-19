@@ -34,6 +34,8 @@ export interface WorkflowRuntimeContext {
   nodeName?: string
   abortSignal: AbortSignal
   actor?: ActorIdentity
+  automationId?: string
+  automationRunId?: string
   workflowCallStack?: readonly WorkflowCallStackEntry[]
 }
 
@@ -93,6 +95,8 @@ export interface WorkflowCallRunInput {
   triggerSource: string
   abortSignal: AbortSignal
   actor?: ActorIdentity
+  automationId?: string
+  automationRunId?: string
   parentWorkflowId?: string
   parentRunId: string
   parentNodeId?: string

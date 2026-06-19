@@ -301,6 +301,13 @@ describe("codexNodeExecutor", () => {
   it("resolves project id to cwd, interpolates prompt, and does not call sendToAgent", async () => {
     const runtimeDeps = makeRuntimeDeps()
     const input = makeInput({}, runtimeDeps)
+    const actor = { kind: "user" as const, id: "automation", display: "Automation" }
+    input.context = {
+      ...input.context,
+      actor,
+      automationId: "auto-1",
+      automationRunId: "auto-run-1",
+    }
 
     const result = await codexNodeExecutor.execute(input)
 
@@ -309,6 +316,7 @@ describe("codexNodeExecutor", () => {
     expect(input.agentDeps.sendToAgent).not.toHaveBeenCalled()
     expect(runtimeDeps.resolveProjectWorkspacePath).toHaveBeenCalledWith("repo-1")
     expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      actor,
       command: "codex",
       cwd: projectWorkspacePath,
       stdin: "Summarize release notes",
@@ -318,6 +326,8 @@ describe("codexNodeExecutor", () => {
         workflowId: "wf-1",
         workflowRunId: "run-1",
         workflowNodeId: "node-1",
+        automationId: "auto-1",
+        automationRunId: "auto-run-1",
       }),
     }))
   })
