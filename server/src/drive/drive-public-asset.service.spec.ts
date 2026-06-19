@@ -218,9 +218,11 @@ describe("DrivePublicAssetService", () => {
     })
     const storageKey = await storageKeyForSession(prisma, prepared.sessionId)
     await storage.putObject({ key: storageKey, body: Buffer.from("notimage"), contentType: "image/png" })
+    expect(publicAppUrlCacheSize(service)).toBe(1)
 
     await expect(service.completeUpload("user-1", prepared.sessionId, { ipAddress: "127.0.0.1" })).rejects.toThrow("上传文件校验失败。")
 
+    expect(publicAppUrlCacheSize(service)).toBe(0)
     expect(objects.has(storageKey)).toBe(false)
     expect((await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0].status).toBe("failed")
     expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).reservedBytes).toBe(0n)
@@ -561,6 +563,10 @@ async function storageKeyForSession(prisma: ReturnType<typeof createPrismaMemory
   const session = (await prisma.driveUploadSession.findMany({ where: { id: sessionId } }))[0]
   if (!session) throw new Error(`Missing upload session ${sessionId}`)
   return session.storageKey
+}
+
+function publicAppUrlCacheSize(service: DrivePublicAssetService): number {
+  return (service as unknown as { readonly publicAppUrlsBySessionId: ReadonlyMap<string, string> }).publicAppUrlsBySessionId.size
 }
 
 function createStorageMemory(

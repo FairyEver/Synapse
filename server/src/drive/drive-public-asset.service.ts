@@ -846,6 +846,7 @@ export class DrivePublicAssetService {
       }
     })
     if (!transitioned) return false
+    this.publicAppUrlsBySessionId.delete(session.id)
     if (await this.isStorageKeyPublished(session.storageKey)) return true
     await this.deleteObjectSafely(session.storageKey)
     return true
