@@ -379,6 +379,41 @@ describe("DriveController", () => {
     expect(response.attachment).toHaveBeenCalledWith("brief.txt")
   })
 
+  it("records failed admin download audits when stream transfer fails", async () => {
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const controller = new DriveAdminController(drive as unknown as DriveService, publicAssets as never, auditLog as never)
+    const requestContext = {
+      admin: { email: "admin@example.com" },
+      ip: "127.0.0.1",
+      headers: { host: "dashboard.example" },
+    } as never
+
+    drive.openAdminItemDownload.mockResolvedValue({
+      stream: createFailingReadable("drive stream failed token=secret"),
+      fileName: "brief.txt",
+      size: 4n,
+      contentType: "text/plain",
+    })
+
+    await expect(controller.downloadItem("item-1", requestContext, createDownloadResponse() as never))
+      .rejects.toThrow("drive stream failed")
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.item.download",
+      targetType: "drive_item",
+      targetId: "item-1",
+      detail: expect.objectContaining({
+        itemId: "item-1",
+        name: "brief.txt",
+        status: "failed",
+        errorName: "Error",
+        errorLength: "drive stream failed token=secret".length,
+      }),
+    }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("token=secret")
+  })
+
   it("redirects owner direct downloads and renders owner files", async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [DrivePublicController],
@@ -1121,6 +1156,14 @@ function createDownloadResponse() {
   response.status = vi.fn(() => response)
   response.send = vi.fn(() => response)
   return response
+}
+
+function createFailingReadable(message: string): Readable {
+  return new Readable({
+    read() {
+      this.destroy(new Error(message))
+    },
+  })
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

@@ -484,7 +484,7 @@ export class DriveAdminController {
   @Get("/items/:id/download")
   async downloadItem(@Param("id") id: string, @Req() request: AdminRequest, @Res() response: Response) {
     const download = await this.drive.openAdminItemDownload(id)
-    await this.recordAuditSafely({
+    await this.sendAdminDownloadWithAudit(response, download, {
       adminEmail: request.admin!.email,
       action: "admin.drive.item.download",
       targetType: "drive_item",
@@ -492,7 +492,6 @@ export class DriveAdminController {
       detail: { itemId: id, name: download.fileName },
       ipAddress: request.ip ?? "system",
     })
-    await sendDriveFileDownload(response, download)
   }
 
   @Post("/items/:id/restore")
@@ -616,7 +615,7 @@ export class DriveAdminController {
     @Res() response: Response,
   ) {
     const download = await requirePublicAssetService(this.publicAssets).openAdminRevisionDownload(assetId, revisionId)
-    await this.recordAuditSafely({
+    await this.sendAdminDownloadWithAudit(response, download, {
       adminEmail: request.admin!.email,
       action: "admin.drive.public_asset_revision.download",
       targetType: "drive_public_asset_revision",
@@ -624,7 +623,31 @@ export class DriveAdminController {
       detail: { assetId, revisionId, name: download.fileName },
       ipAddress: request.ip ?? "system",
     })
-    await sendDriveFileDownload(response, download)
+  }
+
+  private async sendAdminDownloadWithAudit(
+    response: Response,
+    download: Parameters<typeof sendDriveFileDownload>[1],
+    audit: AuditRecordInput,
+  ): Promise<void> {
+    const detail = isRecord(audit.detail) ? audit.detail : {}
+    try {
+      await sendDriveFileDownload(response, download)
+      await this.recordAuditSafely({
+        ...audit,
+        detail: { ...detail, status: "completed" },
+      })
+    } catch (error) {
+      await this.recordAuditSafely({
+        ...audit,
+        detail: {
+          ...detail,
+          status: "failed",
+          ...downloadTransferErrorMetadata(error),
+        },
+      })
+      throw error
+    }
   }
 
   private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
@@ -638,6 +661,14 @@ export class DriveAdminController {
         errorName: error instanceof Error ? error.name : typeof error,
       }, "Failed to record drive admin audit log")
     }
+  }
+}
+
+function downloadTransferErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }
 
