@@ -36,19 +36,34 @@ describe("DrivePublicAssetService", () => {
     expect(completed.name).toBe("logo.png")
   })
 
-  it("rejects public asset upload prepare when MIME does not match the extension", async () => {
-    await expect(service.prepareUpload("user-1", {
-      name: "logo.png",
+  it("creates a public asset with a display name that has no image extension", async () => {
+    const prepared = await service.prepareUpload("user-1", {
+      name: "logo",
       size: "8",
-      mimeType: "image/jpeg",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+    await storage.putObject({ key: await storageKeyForSession(prisma, prepared.sessionId), body: pngSignatureBuffer(), contentType: "image/png" })
+
+    const completed = await service.completeUpload("user-1", prepared.sessionId, { ipAddress: "127.0.0.1" })
+
+    expect(completed.name).toBe("logo")
+    expect(completed.mimeType).toBe("image/png")
+  })
+
+  it("rejects public asset upload prepare when MIME is not an image", async () => {
+    await expect(service.prepareUpload("user-1", {
+      name: "logo",
+      size: "8",
+      mimeType: "text/plain",
       publicAppUrl: "https://synapse.example",
     })).rejects.toBeInstanceOf(BadRequestException)
     await expect(service.prepareUpload("user-1", {
-      name: "logo.png",
+      name: "logo",
       size: "8",
-      mimeType: "image/jpeg",
+      mimeType: "text/plain",
       publicAppUrl: "https://synapse.example",
-    })).rejects.toThrow("文件类型与扩展名不匹配。")
+    })).rejects.toThrow("仅支持图片。")
     expect(await prisma.driveUploadSession.findMany()).toEqual([])
   })
 

@@ -1,12 +1,18 @@
 import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION } from "@synapse/shared"
 
 const PUBLIC_ASSET_TYPES: ReadonlyMap<string, string> = new Map(Object.entries(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+const PUBLIC_ASSET_MIME_TYPES: ReadonlySet<string> = new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
 
 export function validatePublicAssetNameAndMime(input: { readonly name: string; readonly mimeType?: string | null }) {
-  const extension = input.name.split(".").pop()?.toLowerCase()
-  if (!extension || !PUBLIC_ASSET_TYPES.has(extension)) throw new Error("仅支持图片。")
-  const expected = PUBLIC_ASSET_TYPES.get(extension)!
-  if (input.mimeType !== expected) throw new Error("文件类型与扩展名不匹配。")
+  const mimeType = input.mimeType?.trim().toLowerCase() ?? null
+  if (!mimeType || !PUBLIC_ASSET_MIME_TYPES.has(mimeType)) throw new Error("仅支持图片。")
+
+  const extension = publicAssetNameExtension(input.name)
+  if (!extension) return { extension: null, mimeType }
+
+  const expected = PUBLIC_ASSET_TYPES.get(extension)
+  if (!expected) throw new Error("仅支持图片。")
+  if (mimeType !== expected) throw new Error("文件类型与扩展名不匹配。")
   return { extension, mimeType: expected }
 }
 
@@ -22,4 +28,10 @@ export function detectPublicAssetImageType(bytes: Buffer): string | null {
   if (bytes.subarray(4, 12).toString("ascii") === "ftypavif") return "image/avif"
   if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00) return "image/x-icon"
   return null
+}
+
+function publicAssetNameExtension(name: string): string | null {
+  const dotIndex = name.lastIndexOf(".")
+  if (dotIndex <= 0 || dotIndex === name.length - 1) return null
+  return name.slice(dotIndex + 1).toLowerCase()
 }

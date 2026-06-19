@@ -508,7 +508,7 @@ async function uploadPublicAsset(
     files: [{
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
+      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
     }],
   })
   const first = result.results[0]
@@ -537,7 +537,7 @@ async function replacePublicAsset(
       assetId,
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
+      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
     }),
   }
 }

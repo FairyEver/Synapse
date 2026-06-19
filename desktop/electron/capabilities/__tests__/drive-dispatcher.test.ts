@@ -343,6 +343,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
       filePath: "/tmp/logo.png",
+      name: "logo",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -351,7 +352,7 @@ describe("createDriveCapabilityDispatcher", () => {
       context: expect.objectContaining({ driveAction: "drive.direct_link.upload" }),
     }))
     expect(uploadDrivePublicAssets).toHaveBeenCalledWith({
-      files: [{ path: "/tmp/logo.png", name: "logo.png", mimeType: "image/png" }],
+      files: [{ path: "/tmp/logo.png", name: "logo", mimeType: "image/png" }],
     })
   })
 
@@ -388,7 +389,7 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.direct_link.update", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       filePath: "/tmp/new-logo.png",
-      name: "new-logo.png",
+      name: "new-logo",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -399,7 +400,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(replaceDrivePublicAssetFile).toHaveBeenCalledWith({
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       path: "/tmp/new-logo.png",
-      name: "new-logo.png",
+      name: "new-logo",
       mimeType: "image/png",
     })
   })

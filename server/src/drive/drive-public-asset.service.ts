@@ -979,11 +979,6 @@ function resolveDtoPublicAppUrl(auditContext: DriveAuditContext): string {
 function normalizePublicAssetName(value: string): string {
   const name = value.normalize("NFC")
   if (!isValidDriveItemName(name)) throw new BadRequestException("文件名无效。")
-  try {
-    validatePublicAssetNameAndMime({ name, mimeType: mimeFromName(name) })
-  } catch {
-    throw new BadRequestException("仅支持图片。")
-  }
   return name
 }
 
@@ -992,17 +987,6 @@ function parseRequestedSize(value: string): bigint {
   const size = BigInt(value)
   if (size <= 0n) throw new BadRequestException("文件大小无效。")
   return size
-}
-
-function mimeFromName(name: string): string | null {
-  const extension = name.split(".").pop()?.toLowerCase()
-  if (extension === "jpg" || extension === "jpeg") return "image/jpeg"
-  if (extension === "png") return "image/png"
-  if (extension === "webp") return "image/webp"
-  if (extension === "gif") return "image/gif"
-  if (extension === "avif") return "image/avif"
-  if (extension === "ico") return "image/x-icon"
-  return null
 }
 
 async function ensureUsage(client: DrivePrismaClient, userId: string) {

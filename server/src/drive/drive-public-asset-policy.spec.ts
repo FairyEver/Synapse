@@ -9,6 +9,13 @@ describe("public asset policy", () => {
     })
   })
 
+  it("accepts display names without an image extension when MIME is supported", () => {
+    expect(validatePublicAssetNameAndMime({ name: "logo", mimeType: "image/png" })).toEqual({
+      extension: null,
+      mimeType: "image/png",
+    })
+  })
+
   it("rejects svg", () => {
     expect(() => validatePublicAssetNameAndMime({ name: "logo.svg", mimeType: "image/svg+xml" })).toThrow(
       "仅支持图片",
