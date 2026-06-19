@@ -44,6 +44,16 @@ const diagnosticsCheckSchema = z.object({
   durationMs: z.number().optional(),
 })
 
+const knowledgeBaseStorageDiagnosticsSchema = z.object({
+  mode: z.enum(["default", "custom"]),
+  rootPath: z.string(),
+  knowledgeBasesPath: z.string(),
+  available: z.boolean(),
+  runtimeCount: z.number(),
+  missingRuntimeCount: z.number(),
+  oldAbsoluteReferenceCount: z.number(),
+})
+
 const diagnosticsReportSchema = z.object({
   schemaVersion: z.literal(1),
   generatedAt: z.string(),
@@ -56,6 +66,7 @@ const diagnosticsReportSchema = z.object({
   }),
   system: z.record(z.string(), z.unknown()),
   app: z.record(z.string(), z.unknown()),
+  knowledgeBaseStorage: knowledgeBaseStorageDiagnosticsSchema.optional(),
   activeContext: z.object({
     repositoryUuid: z.string().optional(),
     repositoryName: z.string().optional(),

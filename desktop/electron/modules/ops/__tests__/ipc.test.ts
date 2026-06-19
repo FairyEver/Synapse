@@ -274,6 +274,15 @@ function createReport(): SynapseDiagnosticsReport {
     app: {
       version: "0.2.49",
     },
+    knowledgeBaseStorage: {
+      mode: "custom",
+      rootPath: "/kb-root",
+      knowledgeBasesPath: "/kb-root/knowledge-bases",
+      available: false,
+      runtimeCount: 2,
+      missingRuntimeCount: 1,
+      oldAbsoluteReferenceCount: 3,
+    },
     activeContext: {
       projectId: "project-1",
       projectName: "Project",
