@@ -7,7 +7,6 @@ description: >
   Triggers on: "set up wiki", "scaffold vault", "create knowledge base", "/wiki",
   "wiki setup", "obsidian vault", "knowledge base", "second brain setup",
   "running notetaker", "persistent memory", "llm wiki".
-allowed-tools: Read Write Edit Glob Grep Bash
 ---
 
 # wiki: Synapse Knowledge Base Knowledge Companion

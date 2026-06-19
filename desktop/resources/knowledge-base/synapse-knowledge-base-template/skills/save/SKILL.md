@@ -7,7 +7,6 @@ description: >
   Triggers on: "save this", "save that answer", "/save", "file this",
   "save to wiki", "save this session", "file this conversation", "keep this",
   "save this analysis", "add this to the wiki".
-allowed-tools: Read Write Edit Glob Grep
 ---
 
 # save: File Conversations Into the Wiki

@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -102,21 +102,28 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseService", () => {
-  it("keeps the bundled canvas skill shell contract aligned with its operations", async () => {
-    const skillPath = path.join(
+  it("keeps bundled skill frontmatter aligned with the Agent Skills contract", async () => {
+    const skillsRoot = path.join(
       process.cwd(),
       "resources",
       "knowledge-base",
       "synapse-knowledge-base-template",
       "skills",
-      "canvas",
-      "SKILL.md",
     )
-    const skill = await readFile(skillPath, "utf8")
-    const allowedTools = skill.match(/^allowed-tools:\s*(.+)$/m)?.[1].split(/\s+/) ?? []
+    const skillDirectories = await readdir(skillsRoot, { withFileTypes: true })
+    const skillFiles = skillDirectories
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(skillsRoot, entry.name, "SKILL.md"))
+      .sort()
+    const skills = await Promise.all(skillFiles.map(async (skillPath) => ({
+      path: skillPath,
+      content: await readFile(skillPath, "utf8"),
+    })))
+    const canvasSkill = skills.find((skill) => skill.path.endsWith(path.join("canvas", "SKILL.md")))
 
-    expect(skill).toMatch(/\b(curl|cp|python3|find)\b/)
-    expect(allowedTools).toContain("Bash")
+    expect(skills.length).toBeGreaterThan(0)
+    expect(skills.filter((skill) => /^allowed-tools:\s*/m.test(skill.content)).map((skill) => skill.path)).toEqual([])
+    expect(canvasSkill?.content).toMatch(/\b(curl|cp|python3|find)\b/)
   })
 
   it("creates managed knowledge base runtime from template", async () => {

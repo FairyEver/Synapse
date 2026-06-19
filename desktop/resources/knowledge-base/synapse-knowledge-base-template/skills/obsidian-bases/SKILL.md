@@ -1,7 +1,6 @@
 ---
 name: obsidian-bases
 description: "Create and edit Obsidian Bases (.base files): Obsidian's native database layer for dynamic tables, card views, list views, filters, formulas, and summaries over vault notes. Triggers on: create a base, add a base file, obsidian bases, base view, filter notes, formula, database view, dynamic table, task tracker base, reading list base."
-allowed-tools: Read Write
 ---
 
 # obsidian-bases: Obsidian's Database Layer
