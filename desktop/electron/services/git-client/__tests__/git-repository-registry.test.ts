@@ -93,6 +93,19 @@ describe("git repository registry", () => {
     expect(await registry.list()).toHaveLength(1)
   })
 
+  it("preserves concurrent add-local mutations", async () => {
+    const registry = await makeRegistry()
+    const added = await Promise.all(Array.from({ length: 8 }, (_, index) =>
+      registry.addLocal({ name: `Repo ${index}`, localPath: `/tmp/repo-${index}` }),
+    ))
+
+    const repositories = await registry.list()
+
+    expect(repositories.map((repository) => repository.id).sort()).toEqual(
+      added.map((repository) => repository.id).sort(),
+    )
+  })
+
   it("deduplicates Windows repositories by case-insensitive normalized path", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
     const registry = createGitRepositoryRegistry({
