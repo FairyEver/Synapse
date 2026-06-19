@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -12,8 +12,10 @@ async function createKnowledgeBaseRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-ingest-finalizer-"))
   roots.push(root)
   await mkdir(path.join(root, ".raw"), { recursive: true })
+  await mkdir(path.join(root, ".vault-meta"), { recursive: true })
   await mkdir(path.join(root, "wiki", "sources"), { recursive: true })
   await writeFile(path.join(root, ".raw", "source.md"), "# Source\n", "utf8")
+  await writeFile(path.join(root, ".vault-meta", "address-counter.txt"), "10\n", "utf8")
   await writeFile(path.join(root, "wiki", "index.md"), "# Index\n", "utf8")
   await writeKnowledgeBaseManifest(root, {
     version: 1,
@@ -144,6 +146,56 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     expect(result.manifest.address_map).toEqual({
       "wiki/existing.md": "c-000001",
       "wiki/sources/renamed.md": "c-000011",
+    })
+  })
+
+  it("assigns addresses to newly created ingest pages when the Agent omitted them", async () => {
+    const root = await createKnowledgeBaseRoot()
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+    await writeFile(path.join(root, "wiki", "sources", "source.md"), [
+      "---",
+      "type: source",
+      "---",
+      "# Source Summary",
+      "",
+    ].join("\n"), "utf8")
+    await coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [{
+              source: ".raw/source.md",
+              pages_created: ["wiki/sources/source.md"],
+            }],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })
+
+    const page = await readFile(path.join(root, "wiki", "sources", "source.md"), "utf8")
+    expect(page).toContain("address: c-000010\n")
+    expect(page).toContain("type: source\n")
+    await expect(readFile(path.join(root, ".vault-meta", "address-counter.txt"), "utf8"))
+      .resolves.toBe("11\n")
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.manifest.address_map).toEqual({
+      "wiki/existing.md": "c-000001",
+      "wiki/sources/source.md": "c-000010",
     })
   })
 

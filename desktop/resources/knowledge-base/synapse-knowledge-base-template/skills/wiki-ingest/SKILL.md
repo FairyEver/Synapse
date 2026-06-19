@@ -187,12 +187,12 @@ Do not silently overwrite old claims. Flag and let the user decide.
 
 ## Address Assignment (DragonScale Mechanism 2 MVP)
 
-**Opt-in feature**. DragonScale address assignment runs only if `scripts/allocate-address.sh` is present AND `.vault-meta/` exists. Otherwise, skip this entire section and proceed with ingest normally.
+**Opt-in feature**. DragonScale address assignment runs only if `.vault-meta/` exists. In Synapse-managed Knowledge Base sessions, Synapse finalizes missing addresses after the turn with its cross-platform allocator. The Bash helper remains an optional compatibility tool for POSIX/manual vault workflows.
 
 **Feature detection (run at start of every ingest)**:
 
 ```bash
-if [ -x ./scripts/allocate-address.sh ] && [ -d ./.vault-meta ]; then
+if [ -d ./.vault-meta ]; then
   DRAGONSCALE_ADDRESSES=1
 else
   DRAGONSCALE_ADDRESSES=0
@@ -215,16 +215,18 @@ Format: `c-<6-digit-counter>`. The `c-` prefix stands for "creation-order counte
 
 Rollout baseline: **2026-04-23** (Phase 2 ship date). Pages with `created:` >= this date are post-rollout and MUST have an address (unless excluded below). Pages with `created:` earlier are legacy-exempt until a deliberate backfill pass assigns `l-NNNNNN` addresses.
 
-### Required tool: `scripts/allocate-address.sh`
+### Address allocator
 
-Address allocation is delegated to an atomic Bash helper. The helper uses `flock` on `.vault-meta/.address.lock` to prevent read-use-increment races and recovers the counter by scanning existing frontmatter if the counter file is missing.
+In Synapse-managed Knowledge Base sessions, you may create a new page without `address:` if the local Bash helper is unavailable. The Synapse ingest finalizer will allocate a stable `c-NNNNNN` address and update `.raw/.manifest.json` after this turn, as long as the new page path appears in the ingest report.
+
+On POSIX/manual vault workflows, address allocation can be delegated to the Bash helper. The helper uses `flock` on `.vault-meta/.address.lock` to prevent read-use-increment races and recovers the counter by scanning existing frontmatter if the counter file is missing.
 
 ```bash
 ADDR=$(./scripts/allocate-address.sh)
 # ADDR is now e.g. "c-000042"; counter is already incremented
 ```
 
-**CRITICAL**: never use the Write or Edit tool on `.vault-meta/address-counter.txt`. That would fire the PostToolUse hook, which runs `git add wiki/ .raw/` and can accidentally commit unrelated pending wiki changes under a generic message. Counter mutation is **only** permitted through the helper script (Bash tool).
+**CRITICAL**: never use the Write or Edit tool on `.vault-meta/address-counter.txt`. That would fire the PostToolUse hook, which runs `git add wiki/ .raw/` and can accidentally commit unrelated pending wiki changes under a generic message. Counter mutation is only permitted through Synapse finalization or the helper script.
 
 ### Helper modes
 
@@ -234,8 +236,8 @@ ADDR=$(./scripts/allocate-address.sh)
 
 ### Assignment procedure (per new page)
 
-1. Before writing a new non-meta page, call `./scripts/allocate-address.sh` and capture the output.
-2. Include `address: c-XXXXXX` in the page's frontmatter.
+1. Before writing a new non-meta page, call `./scripts/allocate-address.sh` and capture the output only when the helper is available and works in the current OS shell.
+2. Include `address: c-XXXXXX` in the page's frontmatter when you successfully reserved one. In Synapse-managed sessions, if the helper is unavailable, omit `address:` and let Synapse finalization assign it.
 3. Do not edit `.raw/.manifest.json`. Keep the address in page frontmatter and include the page path in the ingest report.
 
 ### `address_map` in `.raw/.manifest.json`

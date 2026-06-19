@@ -3,6 +3,8 @@ import path from "node:path"
 
 import type { AgentProjectAfterTurnInput, AgentProjectMessageContext } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
+import { atomicWriteTextFile } from "./atomic-write"
+import { DragonScaleAddressService } from "./dragonscale/address-service"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
 import { scanKnowledgeBaseSources, type KnowledgeBaseSourceScanItem } from "./source-scan"
@@ -42,6 +44,7 @@ export class KnowledgeBaseIngestCoordinator {
   constructor(private readonly deps: {
     readonly projectId: string
     readonly projectPath: string
+    readonly addressService?: Pick<DragonScaleAddressService, "allocate">
   }) {}
 
   async prepareTurn(message: AgentMessage, context: AgentProjectMessageContext): Promise<AgentMessage> {
@@ -88,7 +91,13 @@ export class KnowledgeBaseIngestCoordinator {
       })
       return
     }
-    const nextManifest = await buildFinalManifest(this.deps.projectPath, manifestResult.manifest, preflight, report)
+    const nextManifest = await buildFinalManifest(
+      this.deps.projectPath,
+      manifestResult.manifest,
+      preflight,
+      report,
+      this.deps.addressService ?? new DragonScaleAddressService(),
+    )
     if (!nextManifest) return
     await writeKnowledgeBaseManifest(this.deps.projectPath, nextManifest)
   }
@@ -132,6 +141,7 @@ async function buildFinalManifest(
   manifest: KnowledgeBaseManifest,
   preflight: IngestPreflight,
   report: IngestReport,
+  addressService: Pick<DragonScaleAddressService, "allocate">,
 ): Promise<KnowledgeBaseManifest | null> {
   const sourceByPath = new Map(preflight.sources.map((source) => [source.relativePath, source]))
   const wikiAfter = await snapshotWikiMarkdown(projectPath)
@@ -145,6 +155,7 @@ async function buildFinalManifest(
     if (!source || !isSafeRawPath(item.source)) continue
     const pagesCreated = await validatedPages(projectPath, item.pages_created ?? [], diff.created)
     const pagesUpdated = await validatedPages(projectPath, item.pages_updated ?? [], diff.updated)
+    await ensureAddressesForCreatedPages(projectPath, pagesCreated, addressService)
     await syncAddressMapFromPages(projectPath, addressMap, [...pagesCreated, ...pagesUpdated])
     sources[item.source] = {
       hash: source.hash,
@@ -161,6 +172,39 @@ async function buildFinalManifest(
     sources,
     address_map: addressMap,
   }
+}
+
+async function ensureAddressesForCreatedPages(
+  projectPath: string,
+  pages: readonly string[],
+  addressService: Pick<DragonScaleAddressService, "allocate">,
+): Promise<void> {
+  for (const pagePath of [...new Set(pages)].sort((a, b) => a.localeCompare(b))) {
+    await ensurePageAddress(projectPath, pagePath, addressService)
+  }
+}
+
+async function ensurePageAddress(
+  projectPath: string,
+  pagePath: string,
+  addressService: Pick<DragonScaleAddressService, "allocate">,
+): Promise<void> {
+  if (isAddressExcludedPath(pagePath)) return
+  const filePath = path.join(projectPath, pagePath)
+  let content: string
+  try {
+    content = await readFile(filePath, "utf8")
+  } catch {
+    return
+  }
+  const frontmatter = parsePageFrontmatter(content)
+  const type = frontmatterField(frontmatter, "type")
+  if (type === "meta" || type === "fold") return
+  const existing = frontmatterField(frontmatter, "address")
+  if (existing && ADDRESS_PATTERN.test(existing)) return
+
+  const { address } = await addressService.allocate(projectPath)
+  await atomicWriteTextFile(filePath, addPageAddress(content, address))
 }
 
 async function validatedPages(
@@ -231,6 +275,21 @@ function parsePageFrontmatter(content: string): string {
   if (!content.startsWith("---\n")) return ""
   const end = content.indexOf("\n---", 4)
   return end === -1 ? "" : content.slice(4, end)
+}
+
+function addPageAddress(content: string, address: string): string {
+  if (!content.startsWith("---\n")) {
+    return `---\naddress: ${address}\n---\n${content}`
+  }
+  const end = content.indexOf("\n---", 4)
+  if (end === -1) {
+    return `---\naddress: ${address}\n---\n${content}`
+  }
+  const frontmatter = content.slice(4, end)
+  if (/^address:\s*.+$/mu.test(frontmatter)) {
+    return `${content.slice(0, 4)}${frontmatter.replace(/^address:\s*.+$/mu, `address: ${address}`)}${content.slice(end)}`
+  }
+  return `${content.slice(0, 4)}address: ${address}\n${content.slice(4)}`
 }
 
 function frontmatterField(frontmatter: string, key: "address" | "type"): string | null {
