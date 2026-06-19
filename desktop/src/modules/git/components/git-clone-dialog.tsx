@@ -29,14 +29,14 @@ type GitCloneDialogProps = {
   readonly busy: boolean
   readonly environment: SynapseGitEnvironmentState | null
   readonly onOpenChange: (open: boolean) => void
-  readonly onSubmit: (input: CloneInput) => Promise<void>
+  readonly onSubmit: (input: CloneInput) => Promise<string | null>
 }
 
 type GitAddLocalDialogProps = {
   readonly open: boolean
   readonly busy: boolean
   readonly onOpenChange: (open: boolean) => void
-  readonly onSubmit: (input: AddLocalInput) => Promise<void>
+  readonly onSubmit: (input: AddLocalInput) => Promise<string | null>
 }
 
 function basename(input: string): string {
@@ -84,7 +84,8 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
       setError("请输入保存位置。")
       return
     }
-    await onSubmit({ remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name })
+    const submitError = await onSubmit({ remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name })
+    if (submitError) setError(submitError)
   }
 
   const chooseTargetPath = async () => {
@@ -178,7 +179,8 @@ export function GitAddLocalDialog({ open, busy, onOpenChange, onSubmit }: GitAdd
       setError("请输入本地路径。")
       return
     }
-    await onSubmit({ localPath: localPath.trim(), name: resolvedName })
+    const submitError = await onSubmit({ localPath: localPath.trim(), name: resolvedName })
+    if (submitError) setError(submitError)
   }
 
   const chooseLocalPath = async () => {

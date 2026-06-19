@@ -124,7 +124,12 @@ export function GitModule() {
         environment={environment}
         onOpenChange={setCloneOpen}
         onSubmit={async (input) => {
-          if (await operations.cloneRepository(input)) setCloneOpen(false)
+          const result = await operations.cloneRepository(input)
+          if (result.ok) {
+            setCloneOpen(false)
+            return null
+          }
+          return result.error
         }}
       />
       <GitAddLocalDialog
@@ -132,7 +137,12 @@ export function GitModule() {
         busy={operations.busy.global === "add-local"}
         onOpenChange={setAddLocalOpen}
         onSubmit={async (input) => {
-          if (await operations.addLocalRepository(input)) setAddLocalOpen(false)
+          const result = await operations.addLocalRepository(input)
+          if (result.ok) {
+            setAddLocalOpen(false)
+            return null
+          }
+          return result.error
         }}
       />
     </>

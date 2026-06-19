@@ -16,6 +16,8 @@ type AddLocalRepositoryInput = {
 type GitGlobalOperation = "clone" | "add-local"
 export type GitRepositoryOperation = "sync" | "pull" | "push" | "remove"
 
+export type GitGlobalOperationResult = { readonly ok: true } | { readonly ok: false; readonly error: string }
+
 export type GitOperationBusyState = {
   readonly global: GitGlobalOperation | null
   readonly repositories: Readonly<Record<string, GitRepositoryOperation>>
@@ -30,16 +32,17 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
   const [busy, setBusy] = useState<GitOperationBusyState>(EMPTY_BUSY_STATE)
   const [error, setError] = useState<string | null>(null)
 
-  async function runGlobal(label: GitGlobalOperation, action: () => Promise<unknown>): Promise<boolean> {
+  async function runGlobal(label: GitGlobalOperation, action: () => Promise<unknown>): Promise<GitGlobalOperationResult> {
     setBusy((current) => ({ ...current, global: label }))
     setError(null)
     try {
       await action()
       await onCompleted()
-      return true
+      return { ok: true }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败。")
-      return false
+      const message = err instanceof Error ? err.message : "操作失败。"
+      setError(message)
+      return { ok: false, error: message }
     } finally {
       setBusy((current) => ({ ...current, global: null }))
     }
