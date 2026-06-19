@@ -15,6 +15,7 @@ import {
   computePath,
   dedupePath,
   resolveCachedLoginShellPath,
+  resolveExecutableInPath,
   splitPath,
   type PathStrategy,
 } from "./shell-environment"
@@ -128,6 +129,8 @@ export interface ControlledProcessRunnerDeps {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly spawnImpl?: SpawnFn
+  readonly platform?: NodeJS.Platform
+  readonly fileExists?: (candidate: string) => boolean
 }
 
 type SpawnFn = (
@@ -200,12 +203,16 @@ export class ControlledProcessRunner {
   private readonly permissionGuard: PermissionGuard
   private readonly auditSink: AuditSink
   private readonly spawnImpl: SpawnFn
+  private readonly platform: NodeJS.Platform
+  private readonly fileExists: ((candidate: string) => boolean) | undefined
 
   constructor(deps: ControlledProcessRunnerDeps) {
     this.permissionGuard = deps.permissionGuard
     this.auditSink = deps.auditSink
     this.spawnImpl = deps.spawnImpl ?? ((command, args, options) =>
       spawn(command, [...args], options) as ChildProcessWithoutNullStreams)
+    this.platform = deps.platform ?? process.platform
+    this.fileExists = deps.fileExists
   }
 
   async start(request: ControlledProcessRunRequest): Promise<ControlledProcessSession> {
@@ -238,7 +245,7 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
-    const launch = buildLaunch(request)
+    const launch = buildLaunch(request, { platform: this.platform, fileExists: this.fileExists })
     let child: ChildProcessWithoutNullStreams
     try {
       child = this.spawnImpl(launch.command, launch.args, {
@@ -295,8 +302,8 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
-    const launch = buildLaunch(request)
-    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
+    const launch = buildLaunch(request, { platform: this.platform, fileExists: this.fileExists })
+    const launchPathEntries = splitPath(launch.env.PATH ?? "", this.platform === "win32" ? ";" : ":")
     const launchDiagnostics: ControlledProcessDiagnostics = {
       envKeys: Object.keys(launch.env).sort(),
       pathSummary: launchPathEntries.length > 0
@@ -747,6 +754,7 @@ function buildAllowedEnv(
   env: Record<string, string | undefined> | undefined,
   envAllowlist: readonly string[] | undefined,
   pathStrategy: PathStrategy = "merge",
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const allowlist = new Set([...DEFAULT_ENV_ALLOWLIST, ...(envAllowlist ?? [])])
   const nextEnv: NodeJS.ProcessEnv = {}
@@ -754,11 +762,11 @@ function buildAllowedEnv(
   for (const key of allowlist) {
     if (!key) continue
     if (key === "PATH") {
-      const userEntry = findEnvEntry(env, "PATH")
+      const userEntry = findEnvEntry(env, "PATH", platform)
       const shellPath = resolveCachedLoginShellPath()
-      const fallbackPath = process.env.PATH ?? ""
-      const delim = process.platform === "win32" ? ";" : ":"
-      const caseInsensitive = process.platform === "win32"
+      const fallbackPath = findEnvEntry(process.env, "PATH", platform)?.value ?? ""
+      const delim = platform === "win32" ? ";" : ":"
+      const caseInsensitive = platform === "win32"
       nextEnv.PATH = computePath(
         pathStrategy,
         userEntry?.value,
@@ -769,8 +777,8 @@ function buildAllowedEnv(
       )
       continue
     }
-    let entry = findEnvEntry(env, key)
-    if (!entry) entry = findEnvEntry(process.env, key)
+    let entry = findEnvEntry(env, key, platform)
+    if (!entry) entry = findEnvEntry(process.env, key, platform)
     if (entry) nextEnv[entry.key] = entry.value
   }
 
@@ -867,10 +875,11 @@ function previewLaunchForPermission(
 function findEnvEntry(
   env: Record<string, string | undefined> | undefined,
   key: string,
+  platform: NodeJS.Platform = process.platform,
 ): { key: string; value: string } | undefined {
   const exact = env?.[key]
   if (exact !== undefined) return { key, value: exact }
-  if (!env || process.platform !== "win32") return undefined
+  if (!env || platform !== "win32") return undefined
 
   const lowered = key.toLowerCase()
   const actualKey = Object.keys(env).find((candidate) => candidate.toLowerCase() === lowered)
@@ -888,22 +897,29 @@ interface ControlledProcessLaunch {
   readonly isolationMetadata?: Record<string, unknown>
 }
 
-function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLaunch {
+function buildLaunch(
+  request: ControlledProcessRunRequest,
+  options: {
+    readonly platform?: NodeJS.Platform
+    readonly fileExists?: (candidate: string) => boolean
+  } = {},
+): ControlledProcessLaunch {
+  const platform = options.platform ?? process.platform
   const args = request.args ?? []
-  const env = buildAllowedEnv(request.env, request.envAllowlist, request.pathStrategy ?? "merge")
+  const env = buildAllowedEnv(request.env, request.envAllowlist, request.pathStrategy ?? "merge", platform)
   const isolation = request.isolation
   if (!isolation) {
     return {
-      ...wrapWindowsBatchCommand(request.command, args, env),
+      ...wrapWindowsBatchCommand(resolveLaunchCommand(request.command, env, options), args, env, platform),
       env,
-      processGroup: process.platform !== "win32",
+      processGroup: platform !== "win32",
     }
   }
   if (isolation.kind !== "run_as_user") {
     const exhaustive: never = isolation.kind
     throw new Error(`Unsupported process isolation: ${exhaustive}`)
   }
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     throw new Error("run_as_user is not supported on Windows")
   }
   const user = isolation.user.trim()
@@ -936,12 +952,31 @@ function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLau
   }
 }
 
+function resolveLaunchCommand(
+  command: string,
+  env: NodeJS.ProcessEnv,
+  options: {
+    readonly platform?: NodeJS.Platform
+    readonly fileExists?: (candidate: string) => boolean
+  },
+): string {
+  const platform = options.platform ?? process.platform
+  if (platform !== "win32" || /[\\/]/u.test(command)) {
+    return command
+  }
+  return resolveExecutableInPath(command, findEnvEntry(env, "PATH", platform)?.value, {
+    platform,
+    fileExists: options.fileExists,
+  }) ?? command
+}
+
 function wrapWindowsBatchCommand(
   command: string,
   args: readonly string[],
   env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
 ): Pick<ControlledProcessLaunch, "command" | "args"> {
-  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
+  if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
     return { command, args }
   }
 
