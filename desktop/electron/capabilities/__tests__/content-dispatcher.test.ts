@@ -135,6 +135,22 @@ function createDeps(options: {
   }
 }
 
+function createSecurityHarness(
+  result: { allowed: true } | { allowed: false; reason: string; policyId?: string } = { allowed: true },
+) {
+  const auditSink = {
+    clearForTests: vi.fn(),
+    list: vi.fn(() => []),
+    record: vi.fn(),
+  }
+  const permissionGuard = {
+    check: vi.fn(async () => result),
+    registerPolicy: vi.fn(),
+  }
+  const actor = { kind: "user" as const, id: "synapse-mcp", display: "Synapse MCP" }
+  return { actor, auditSink, permissionGuard }
+}
+
 describe("content capability dispatcher", () => {
   beforeEach(() => {
     logStoreMock.logger.info.mockClear()
@@ -166,6 +182,98 @@ describe("content capability dispatcher", () => {
     expect(result.total).toBe(2)
     expect(deps.contentReader.listContent).toHaveBeenCalledWith("rule")
     expect(deps.contentReader.listDeletedContent).toHaveBeenCalledWith("rule")
+  })
+
+  it("checks permission and audits allowed content reads without content body", async () => {
+    const { actor, auditSink, permissionGuard } = createSecurityHarness()
+    const deps = {
+      ...createDeps(),
+      security: { actor, auditSink, permissionGuard },
+    }
+    const dispatcher = createContentCapabilityDispatcher(deps)
+    const contextActor = mcpClientActorForSource("mcp-stdio")
+
+    await dispatcher.dispatch("content.rule.list", { includeDeleted: true }, { source: "mcp-stdio", actor: contextActor })
+    await dispatcher.dispatch("content.rule.get", { id: "rule-1" }, { source: "mcp-stdio", actor: contextActor })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "content.read",
+      actor: contextActor,
+      resource: "content:rule:list",
+      context: {
+        source: "mcp-stdio",
+        contentAction: "content.rule.list",
+        contentType: "rule",
+        operation: "list",
+        includeDeleted: true,
+      },
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "content.read",
+      actor: contextActor,
+      resource: "content:rule:rule-1",
+      context: {
+        source: "mcp-stdio",
+        contentAction: "content.rule.get",
+        contentType: "rule",
+        operation: "get",
+        contentId: "rule-1",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      actor: contextActor,
+      resource: "content:rule:list",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        contentAction: "content.rule.list",
+        resultCount: 2,
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      actor: contextActor,
+      resource: "content:rule:rule-1",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        contentAction: "content.rule.get",
+        contentId: "rule-1",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("# Content")
+  })
+
+  it("denies content reads before reading content", async () => {
+    const { actor, auditSink, permissionGuard } = createSecurityHarness({
+      allowed: false as const,
+      reason: "content read denied",
+      policyId: "deny-content-read",
+    })
+    const deps = {
+      ...createDeps(),
+      security: { actor, auditSink, permissionGuard },
+    }
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.rule.get", { id: "rule-1" }, { source: "mcp-stdio" }))
+      .rejects.toThrow("content read denied")
+
+    expect(deps.contentReader.getDetail).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.read",
+      actor,
+      resource: "content:rule:rule-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "mcp-stdio",
+        contentAction: "content.rule.get",
+        contentType: "rule",
+        operation: "get",
+        contentId: "rule-1",
+        reason: "content read denied",
+        policyId: "deny-content-read",
+      }),
+    }))
   })
 
   it("creates a skill from sourceDirectoryPath and generated icon bytes", async () => {

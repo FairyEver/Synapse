@@ -29,6 +29,7 @@ export type PermissionAction =
   | "workflow.run"
   | "workflow.read"
   | "workflow.mutate"
+  | "content.read"
   | "content.mutate"
 
 export type ActorIdentity =

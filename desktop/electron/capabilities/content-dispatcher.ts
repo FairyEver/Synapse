@@ -66,6 +66,7 @@ type ParsedContentAction = {
   operation: "list" | "get" | "create" | "update" | "delete"
   type: SynapseContentType
 }
+type ReadContentOperation = Extract<ParsedContentAction["operation"], "list" | "get">
 type MutatingContentOperation = Extract<ParsedContentAction["operation"], "create" | "update" | "delete">
 
 type SkillSourceMergeResult = {
@@ -87,9 +88,9 @@ function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps
       const parsed = parseContentAction(action)
       switch (parsed.operation) {
         case "list":
-          return listContent(deps, parsed.type, params)
+          return dispatchContentRead(deps, parsed.type, parsed.operation, action, params, context, () => listContent(deps, parsed.type, params))
         case "get":
-          return getContent(deps, parsed.type, params)
+          return dispatchContentRead(deps, parsed.type, parsed.operation, action, params, context, () => getContent(deps, parsed.type, params))
         case "create":
           return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, (security) => createContent(deps, parsed.type, params, security))
         case "update":
@@ -98,6 +99,57 @@ function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps
           return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => deleteContent(deps, parsed.type, params))
       }
     },
+  }
+}
+
+async function dispatchContentRead(
+  deps: ContentCapabilityDispatcherDeps,
+  contentType: SynapseContentType,
+  operation: ReadContentOperation,
+  action: string,
+  params: ContentToolParams,
+  context: DispatchContext,
+  task: () => Promise<DispatchResult>,
+): Promise<DispatchResult> {
+  const security = buildContentReadSecurity(deps.security, contentType, operation, action, params, context)
+  if (security) {
+    try {
+      await authorizeContentRead(security)
+    } catch (error) {
+      logger.warn("content capability read dispatch failed", {
+        ...security.metadata,
+        ...dispatchErrorDiagnostic(error),
+      })
+      throw error
+    }
+  }
+
+  try {
+    const result = await task()
+    security?.deps.auditSink.record({
+      action: "content.read",
+      actor: security.deps.actor,
+      resource: security.resource,
+      outcome: "allowed",
+      metadata: {
+        ...security.metadata,
+        ...contentReadResultCorrelation(result),
+      },
+    })
+    return result
+  } catch (error) {
+    security?.deps.auditSink.record({
+      action: "content.read",
+      actor: security.deps.actor,
+      resource: security.resource,
+      outcome: "failed",
+      metadata: {
+        ...security.metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
   }
 }
 
@@ -194,6 +246,10 @@ function dispatchResultCorrelation(result: DispatchResult): Record<string, unkno
     ...(typeof record.status === "string" ? { resultStatus: record.status } : {}),
     ...(typeof record.type === "string" ? { resultContentType: record.type } : {}),
   }
+}
+
+function contentReadResultCorrelation(result: DispatchResult): Record<string, unknown> {
+  return result.ok && typeof result.total === "number" ? { resultCount: result.total } : {}
 }
 
 function dispatchErrorDiagnostic(error: unknown): {
@@ -490,6 +546,66 @@ function buildContentMutationSecurity(
     metadata,
     resource: contentId ? `content:${contentType}:${contentId}` : `content:${contentType}:${operation}`,
   }
+}
+
+function buildContentReadSecurity(
+  deps: ContentIconImageSecurityDeps | undefined,
+  contentType: SynapseContentType,
+  operation: ReadContentOperation,
+  action: string,
+  params: ContentToolParams,
+  context: DispatchContext,
+): {
+  readonly deps: ContentIconImageSecurityDeps
+  readonly metadata: Record<string, unknown>
+  readonly resource: string
+} | null {
+  if (!deps) return null
+  const source = context.source ?? "api"
+  const contentId = optionalTrimmedString(params.id)
+  const metadata: Record<string, unknown> = {
+    source,
+    contentAction: action,
+    contentType,
+    operation,
+  }
+  if (contentId) metadata.contentId = contentId
+  if (operation === "list" && params.includeDeleted === true) metadata.includeDeleted = true
+
+  return {
+    deps: { ...deps, actor: context.actor ?? deps.actor },
+    metadata,
+    resource: contentId ? `content:${contentType}:${contentId}` : `content:${contentType}:${operation}`,
+  }
+}
+
+async function authorizeContentRead(input: {
+  readonly deps: ContentIconImageSecurityDeps
+  readonly metadata: Record<string, unknown>
+  readonly resource: string
+}): Promise<void> {
+  const permission = await checkCapabilityPermission({
+    permissionGuard: input.deps.permissionGuard,
+    auditSink: input.deps.auditSink,
+    action: "content.read",
+    actor: input.deps.actor,
+    resource: input.resource,
+    context: input.metadata,
+  })
+  if (!permission || permission.allowed) return
+
+  input.deps.auditSink.record({
+    action: "content.read",
+    actor: input.deps.actor,
+    resource: input.resource,
+    outcome: "denied",
+    metadata: {
+      ...input.metadata,
+      reason: permission.reason,
+      policyId: permission.policyId,
+    },
+  })
+  throw new ContentCapabilityError("CONTENT_FORBIDDEN", permission.reason)
 }
 
 async function authorizeContentMutation(input: {

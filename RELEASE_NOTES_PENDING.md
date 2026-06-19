@@ -49,6 +49,7 @@
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
 - 工作流实时事件和运行状态会脱敏 Code X 节点结果，避免 token、Cookie、Authorization 和本地路径通过 live 通道泄露。
 - Workflow MCP 读取工作流定义和运行历史时会经过权限检查并写入审计记录，避免敏感工作流内容被静默读取。
+- Content MCP 读取 Rule、Skill 和 Prompt 列表或详情时会经过权限检查并写入审计记录，避免内容资源被静默读取。
 - Workflow MCP 创建节点时会在工具契约层要求提供节点配置，不再先接受空配置再在保存时失败。
 - MCP 工具返回 `ok:false` 时会标记为工具调用失败，不再把 Drive、Workflow 等调度失败包装成成功响应。
 - Code X 历史运行重新运行时，不会把历史快照里的 `[redacted]` 配置覆盖值当作真实参数执行；可用时会改用当前工作流定义，否则会提示无法安全重跑。
