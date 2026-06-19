@@ -300,6 +300,80 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(containers.open).not.toHaveBeenCalled()
   })
 
+  it("workflow Agent dependency opens managed knowledge base projects at their backing directory", async () => {
+    const managedProject = {
+      id: "kb-1",
+      name: "Knowledge Base",
+      path: "synapse-kb://kb-1",
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: "2026-05-24",
+          managed: true,
+          runtimeId: "kb-1",
+        },
+      },
+    }
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: null,
+          repositories: [],
+          global: {
+            knowledgeBaseStorage: { mode: "custom", rootPath: "/kb-root" },
+            projects: [managedProject],
+          },
+        })),
+      },
+    }))
+
+    const agentRuntime = {
+      sendScheduled: vi.fn(async () => ({
+        status: "success",
+        summary: "ok",
+        durationMs: 5,
+      })),
+    }
+    const container = { get: vi.fn(() => agentRuntime) }
+    const containers = { open: vi.fn(async () => container) }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return containers
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; projectId?: string; abortSignal: AbortSignal }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    await engine.agentDeps.sendToAgent({
+      providerId: "test-provider",
+      modelTier: "fast",
+      prompt: "use kb",
+      projectId: "kb-1",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(containers.open).toHaveBeenCalledWith("kb-1", expect.objectContaining({
+      workspacePath: "/kb-root/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    }))
+  })
+
   it("coreWorkflowEngineDescriptor resolves repository workspace paths for Codex nodes", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {
@@ -362,6 +436,54 @@ describe("bootstrap descriptors (T1.5)", () => {
     }
 
     await expect(engine.runtimeDeps.resolveProjectWorkspacePath?.("project-1")).resolves.toBe("/global-project-path")
+  })
+
+  it("coreWorkflowEngineDescriptor resolves managed knowledge base workspace paths for Codex nodes", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: null,
+          repositories: [],
+          global: {
+            knowledgeBaseStorage: { mode: "custom", rootPath: "/kb-root" },
+            projects: [{
+              id: "kb-1",
+              name: "Knowledge Base",
+              path: "synapse-kb://kb-1",
+              capabilities: {
+                knowledgeBase: {
+                  enabled: true,
+                  schemaVersion: 1,
+                  templateVersion: "2026-05-24",
+                  managed: true,
+                  runtimeId: "kb-1",
+                },
+              },
+            }],
+          },
+        })),
+      },
+    }))
+
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create({
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return { open: vi.fn() }
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    } as never) as unknown as {
+      runtimeDeps: {
+        resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
+      }
+    }
+
+    await expect(engine.runtimeDeps.resolveProjectWorkspacePath?.("kb-1"))
+      .resolves.toBe("/kb-root/knowledge-bases/kb-1")
   })
 
   it("coreWorkflowEngineDescriptor returns null when the Codex project cannot be resolved", async () => {

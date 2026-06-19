@@ -49,6 +49,10 @@ import {
   KnowledgeBaseStorageMigrationService,
   type KnowledgeBaseStorageMigrationState,
 } from "../services/knowledge-base/storage-migration-service"
+import {
+  isManagedKnowledgeBaseProject,
+  resolveProjectWorkspacePath as resolveKnowledgeBaseAwareProjectWorkspacePath,
+} from "../services/knowledge-base/managed-path"
 import { knowledgeBaseSourceManagerWindowService } from "../services/knowledge-base/source-manager-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
@@ -144,6 +148,7 @@ import { agentProviderFailureFromResponse } from "../services/workflow/workflow-
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunResult, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
+import type { SynapseConfig, SynapseProjectConfig, SynapseRepositoryConfig } from "../../src/types/config"
 import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
@@ -1704,6 +1709,18 @@ export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, Wo
   create() { return new Map<string, WorkflowRunStatus>() },
 }
 
+function resolveWorkflowProjectWorkspacePath(
+  config: Pick<SynapseConfig, "global">,
+  repo: SynapseRepositoryConfig | undefined,
+  project: SynapseProjectConfig | undefined,
+): string | null {
+  if (repo) return repo.localPath
+  if (!project) return null
+  return resolveKnowledgeBaseAwareProjectWorkspacePath(project, {
+    storage: config.global.knowledgeBaseStorage,
+  })
+}
+
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
@@ -1715,7 +1732,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       const config = await configStore.load()
       const repo = config.repositories.find((r) => r.uuid === projectId)
       const proj = !repo ? config.global.projects.find((p) => p.id === projectId) : undefined
-      return { repo, proj }
+      return { config, repo, proj }
     }
     const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({
       providerId,
@@ -1735,14 +1752,18 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         if (!projectId) {
           throw new Error("Workflow prompt project is required")
         }
-        const { repo, proj } = await loadWorkflowProject(projectId)
+        const { config, repo, proj } = await loadWorkflowProject(projectId)
         if (!repo && !proj) {
           throw new Error("Workflow prompt project was not found")
         }
         const effectiveProjectId = repo?.uuid ?? proj?.id ?? projectId
-        const workspacePath = repo?.localPath ?? proj?.path ?? os.homedir()
+        const workspacePath = resolveWorkflowProjectWorkspacePath(config, repo, proj) ?? os.homedir()
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
+        const container = await containers.open(effectiveProjectId, {
+          name: "",
+          workspacePath,
+          ...(isManagedKnowledgeBaseProject(proj) ? { managedKnowledgeBase: true } : undefined),
+        })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         let agentConversation: import("../../src/types/agent-navigation").SynapseAgentConversationTarget | undefined
         const result = await agentRuntime.sendScheduled({
@@ -1806,8 +1827,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
       resolveProjectWorkspacePath: async (projectId) => {
-        const { repo, proj } = await loadWorkflowProject(projectId)
-        return repo?.localPath ?? proj?.path ?? null
+        const { config, repo, proj } = await loadWorkflowProject(projectId)
+        return resolveWorkflowProjectWorkspacePath(config, repo, proj)
       },
       workflowCall: {
         getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
