@@ -74,6 +74,7 @@ type PlatformInfo = Record<string, unknown> & {
 
 type PathStats = {
   isDirectory(): boolean
+  size?: number
 }
 
 type DirectoryEntry = {
@@ -190,6 +191,9 @@ const RECENT_LOG_FILE_LIMIT = 3
 const RECENT_LOG_SAMPLE_LIMIT = 5
 const LIFECYCLE_LOG_SAMPLE_LIMIT = 5
 const AGENT_LOG_SAMPLE_LIMIT = 5
+const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_TEXT_FILES = 64
+const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_BYTES = 512 * 1024
+const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_DEPTH = 4
 const KNOWLEDGE_BASE_TEXT_FILE_EXTENSIONS = new Set([
   ".md",
   ".mdx",
@@ -202,6 +206,11 @@ const KNOWLEDGE_BASE_TEXT_FILE_EXTENSIONS = new Set([
 type RecentLogSnapshot = {
   scannedFiles: string[]
   content: string
+}
+
+type KnowledgeBaseOldReferenceScanBudget = {
+  bytesRead: number
+  filesRead: number
 }
 
 type LogTimestamp = {
@@ -662,27 +671,56 @@ class DiagnosticsService {
     userDataPath: string
   }): Promise<number> {
     const oldKnowledgeBasesPath = path.join(input.userDataPath, "knowledge-bases")
-    let count = 0
+    const budget: KnowledgeBaseOldReferenceScanBudget = {
+      bytesRead: 0,
+      filesRead: 0,
+    }
 
     for (const project of input.managedProjects) {
       const runtimePath = resolveProjectWorkspacePath(project, {
         userDataPath: input.userDataPath,
         storage: input.storage,
       })
-      count += await this.countTextOccurrencesInDirectory(
-        path.join(runtimePath, "wiki"),
-        oldKnowledgeBasesPath,
-      )
-      count += await this.countTextOccurrencesInFile(
+      if (await this.hasTextOccurrenceInFile(
         path.join(runtimePath, ".raw", ".manifest.json"),
         oldKnowledgeBasesPath,
-      )
+        budget,
+      )) {
+        return 1
+      }
+      if (await this.hasTextOccurrenceInDirectory(
+        path.join(runtimePath, "wiki"),
+        oldKnowledgeBasesPath,
+        budget,
+        0,
+      )) {
+        return 1
+      }
     }
 
-    return count
+    return 0
   }
 
-  private async countTextOccurrencesInDirectory(directoryPath: string, needle: string): Promise<number> {
+  private isKnowledgeBaseOldReferenceScanBudgetExhausted(budget: KnowledgeBaseOldReferenceScanBudget): boolean {
+    return budget.filesRead >= KNOWLEDGE_BASE_OLD_REFERENCE_MAX_TEXT_FILES
+      || budget.bytesRead >= KNOWLEDGE_BASE_OLD_REFERENCE_MAX_BYTES
+  }
+
+  private async hasTextOccurrenceInDirectory(
+    directoryPath: string,
+    needle: string,
+    budget: KnowledgeBaseOldReferenceScanBudget,
+    depth: number,
+  ): Promise<boolean> {
+    if (this.isKnowledgeBaseOldReferenceScanBudgetExhausted(budget)) return false
+    if (depth > KNOWLEDGE_BASE_OLD_REFERENCE_MAX_DEPTH) {
+      this.deps.logger.debug("Diagnostics knowledge base old reference scan depth limit reached.", {
+        directoryPath,
+        depth,
+      })
+      return false
+    }
+
     let entries: DirectoryEntry[]
     try {
       entries = await this.readDirectory(directoryPath)
@@ -691,31 +729,65 @@ class DiagnosticsService {
         directoryPath,
         error: error instanceof Error ? error.message : String(error),
       })
-      return 0
+      return false
     }
 
-    let count = 0
     for (const entry of entries) {
+      if (this.isKnowledgeBaseOldReferenceScanBudgetExhausted(budget)) {
+        this.deps.logger.debug("Diagnostics knowledge base old reference scan budget exhausted.", {
+          directoryPath,
+          filesRead: budget.filesRead,
+          bytesRead: budget.bytesRead,
+        })
+        return false
+      }
+
       const entryPath = path.join(directoryPath, entry.name)
       if (entry.isDirectory()) {
-        count += await this.countTextOccurrencesInDirectory(entryPath, needle)
+        if (await this.hasTextOccurrenceInDirectory(entryPath, needle, budget, depth + 1)) return true
       } else if (entry.isFile() && KNOWLEDGE_BASE_TEXT_FILE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-        count += await this.countTextOccurrencesInFile(entryPath, needle)
+        if (await this.hasTextOccurrenceInFile(entryPath, needle, budget)) return true
       }
     }
-    return count
+    return false
   }
 
-  private async countTextOccurrencesInFile(filePath: string, needle: string): Promise<number> {
+  private async hasTextOccurrenceInFile(
+    filePath: string,
+    needle: string,
+    budget: KnowledgeBaseOldReferenceScanBudget,
+  ): Promise<boolean> {
+    if (this.isKnowledgeBaseOldReferenceScanBudgetExhausted(budget)) return false
+
+    try {
+      const pathStats = await this.statPath(filePath)
+      const remainingBytes = KNOWLEDGE_BASE_OLD_REFERENCE_MAX_BYTES - budget.bytesRead
+      if (typeof pathStats.size === "number" && pathStats.size > remainingBytes) {
+        this.deps.logger.debug("Diagnostics knowledge base old reference file scan skipped by size limit.", {
+          filePath,
+          size: pathStats.size,
+          remainingBytes,
+        })
+        return false
+      }
+    } catch (error) {
+      this.deps.logger.debug("Diagnostics file stat skipped before scan.", {
+        filePath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    budget.filesRead += 1
     try {
       const content = await this.readTextFile(filePath)
-      return countOccurrences(content, needle)
+      budget.bytesRead += Buffer.byteLength(content, "utf8")
+      return content.includes(needle)
     } catch (error) {
       this.deps.logger.debug("Diagnostics file scan skipped.", {
         filePath,
         error: error instanceof Error ? error.message : String(error),
       })
-      return 0
+      return false
     }
   }
 
@@ -1689,19 +1761,6 @@ function createDiagnosticsFolderName(generatedAt: string): string {
 function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
   const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
-}
-
-function countOccurrences(value: string, needle: string): number {
-  if (!needle) return 0
-  let count = 0
-  let index = value.indexOf(needle)
-
-  while (index !== -1) {
-    count += 1
-    index = value.indexOf(needle, index + needle.length)
-  }
-
-  return count
 }
 
 function createEmptyConfig(): SynapseConfig {

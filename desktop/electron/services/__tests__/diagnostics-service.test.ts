@@ -610,6 +610,78 @@ describe("DiagnosticsService.collect", () => {
     }
   })
 
+  it("stops scanning knowledge base text after detecting an old absolute reference", async () => {
+    const userDataPath = "/app/userData"
+    const customRootPath = "/Volumes/Data/SynapseData"
+    const oldReference = path.join(userDataPath, "knowledge-bases", "kb-1", "wiki", "old.md")
+    const readTextFile = vi.fn(async (filePath: string) => {
+      if (filePath.endsWith(path.join("wiki", "page-001.md"))) return oldReference
+      return "new content"
+    })
+    const service = createService({
+      appInfo: createAppInfo({ userDataPath }),
+      configStore: {
+        load: vi.fn(async () => createConfig({
+          knowledgeBaseStorage: {
+            mode: "custom",
+            rootPath: customRootPath,
+          },
+          projects: [createManagedKnowledgeBaseProject("kb-1")],
+        })),
+      },
+      readDirectory: vi.fn(async () => Array.from({ length: 100 }, (_, index) => createFileEntry(
+        `page-${String(index + 1).padStart(3, "0")}.md`,
+      ))),
+      readTextFile,
+      statPath: vi.fn(async () => ({ isDirectory: () => true, size: 128 })),
+    })
+
+    const report = await service.collect()
+
+    expect(report.knowledgeBaseStorage?.oldAbsoluteReferenceCount).toBe(1)
+    expect(readTextFile).toHaveBeenCalledWith(path.join(
+      customRootPath,
+      "knowledge-bases",
+      "kb-1",
+      "wiki",
+      "page-001.md",
+    ))
+    expect(readTextFile).not.toHaveBeenCalledWith(path.join(
+      customRootPath,
+      "knowledge-bases",
+      "kb-1",
+      "wiki",
+      "page-100.md",
+    ))
+  })
+
+  it("bounds knowledge base old path diagnostics when no reference is found", async () => {
+    const customRootPath = "/Volumes/Data/SynapseData"
+    const readTextFile = vi.fn(async () => "new content")
+    const service = createService({
+      appInfo: createAppInfo({ userDataPath: "/app/userData" }),
+      configStore: {
+        load: vi.fn(async () => createConfig({
+          knowledgeBaseStorage: {
+            mode: "custom",
+            rootPath: customRootPath,
+          },
+          projects: [createManagedKnowledgeBaseProject("kb-1")],
+        })),
+      },
+      readDirectory: vi.fn(async () => Array.from({ length: 100 }, (_, index) => createFileEntry(
+        `page-${String(index + 1).padStart(3, "0")}.md`,
+      ))),
+      readTextFile,
+      statPath: vi.fn(async () => ({ isDirectory: () => true, size: 128 })),
+    })
+
+    const report = await service.collect()
+
+    expect(report.knowledgeBaseStorage?.oldAbsoluteReferenceCount).toBe(0)
+    expect(readTextFile.mock.calls.length).toBeLessThanOrEqual(64)
+  })
+
   it("reports packaged Claude runtime as available", async () => {
     const service = createService({
       appInfo: {
@@ -1132,6 +1204,46 @@ function createConfig(options: {
       knowledgeBaseStorage: options.knowledgeBaseStorage ?? { mode: "default" },
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
+  }
+}
+
+function createAppInfo(options: { userDataPath: string }) {
+  return {
+    getAppPath: () => "/app",
+    getLocale: () => "zh-CN",
+    getName: () => "Synapse",
+    getVersion: () => "0.2.49",
+    hasSingleInstanceLock: () => true,
+    isPackaged: false,
+    getPath: (name: Parameters<Electron.App["getPath"]>[0]) => {
+      if (name === "userData") return options.userDataPath
+      return `/app/${name}`
+    },
+  }
+}
+
+function createManagedKnowledgeBaseProject(runtimeId: string): SynapseConfig["global"]["projects"][number] {
+  return {
+    id: runtimeId,
+    name: "个人知识库",
+    path: `synapse-kb://${runtimeId}`,
+    capabilities: {
+      knowledgeBase: {
+        enabled: true,
+        managed: true,
+        runtimeId,
+        schemaVersion: 1,
+        templateVersion: "2026-05-21",
+      },
+    },
+  }
+}
+
+function createFileEntry(name: string) {
+  return {
+    name,
+    isDirectory: () => false,
+    isFile: () => true,
   }
 }
 
