@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
+import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 
 export function DriveMDXeditorRenderer({
@@ -245,9 +246,8 @@ export function DriveMDXeditorRenderer({
 }
 
 function buildLoginUrl(): string {
-  if (typeof window === 'undefined') return '/sign-in'
-  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  return `/sign-in?redirect=${encodeURIComponent(redirect)}`
+  if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
+  return buildDashboardSignInUrl(window.location)
 }
 
 function downloadLocalVersion(name: string, value: string): void {

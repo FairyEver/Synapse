@@ -248,6 +248,7 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('shows login action when edit requires authentication', () => {
+    window.history.pushState(null, '', '/share/share-1')
     renderRenderer({
       edit: {
         ...editable(),
@@ -258,7 +259,7 @@ describe('DriveMDXeditorRenderer', () => {
     })
 
     expect(editor().readOnly).toBe(true)
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toContain('/sign-in?redirect=')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
   })
 
   it('opens a conflict dialog and can reload after a version conflict', async () => {
