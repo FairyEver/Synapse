@@ -958,6 +958,78 @@ describe("DriveService", () => {
     }))
   })
 
+  it("keeps completed uploads successful when audit recording fails", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const auditLog = { record: vi.fn(async (input: any) => {
+      if (input.action === "drive.upload.complete") throw new Error("audit failed with token=secret")
+    }) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.html",
+      size: "11",
+      mimeType: "text/html",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    try {
+      await expect(service.completeUpload("user-1", prepared.sessionId)).resolves.toMatchObject({
+        id: prepared.item.id,
+        storageStatus: "active",
+      })
+
+      const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+      expect(item.storageStatus).toBe("active")
+      const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+      expect(usage.usedBytes).toBe(11n)
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        action: "drive.upload.complete",
+        targetType: "drive.item",
+        targetId: prepared.item.id,
+        errorName: "Error",
+      }), "Drive audit log write failed")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("token=secret")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it("keeps created shares successful when audit recording fails", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const auditLog = { record: vi.fn(async (input: any) => {
+      if (input.action === "drive.share.create") throw new Error("audit failed with token=secret")
+    }) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+
+    try {
+      const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+      expect(share.url).toMatch(/^https:\/\/synapse\.test\/share\/shr_/u)
+      await expect(prisma.driveShare.findFirst({ where: { id: share.id } })).resolves.toMatchObject({
+        id: share.id,
+        enabled: true,
+      })
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        action: "drive.share.create",
+        targetType: "drive.share",
+        targetId: share.id,
+        errorName: "Error",
+      }), "Drive audit log write failed")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("token=secret")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("rejects Windows-unsafe rename targets", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

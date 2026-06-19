@@ -2467,15 +2467,25 @@ export class DriveService implements OnApplicationBootstrap {
     readonly detail: Record<string, unknown>
     readonly ipAddress?: string
   }): Promise<void> {
-    const actorEmail = await this.resolveDriveAuditActorEmail(input.userId)
-    await this.auditLog?.record({
-      adminEmail: actorEmail,
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      detail: input.detail,
-      ipAddress: input.ipAddress ?? "system",
-    })
+    try {
+      const actorEmail = await this.resolveDriveAuditActorEmail(input.userId)
+      await this.auditLog?.record({
+        adminEmail: actorEmail,
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        detail: input.detail,
+        ipAddress: input.ipAddress ?? "system",
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      }, "Drive audit log write failed")
+    }
   }
 
   private async resolveDriveAuditActorEmail(userId: string): Promise<string> {
