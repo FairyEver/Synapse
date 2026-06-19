@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
-import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
 import {
@@ -38,6 +38,11 @@ const MODEL_PRICE_MUTATION_ACTIONS = new Set([
   "model_price.rule.enable",
   "model_price.rule.disable",
 ])
+const MODEL_PRICE_READ_ACTIONS = new Set([
+  "model_price.used_model.list",
+  "model_price.rule.list",
+  "model_price.rule.get",
+])
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const defaultLogger = createMainLogger("capability.model-price-dispatcher")
 
@@ -47,13 +52,13 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
       const logger = deps.logger ?? defaultLogger
       const correlation = dispatchCorrelation(action, params, context)
       logger.info("model price mcp dispatch", correlation)
-      const security = modelPriceMutationSecurity(deps, action, params, context)
-      if (security) await authorizeModelPriceMutation(deps, security)
+      const security = modelPriceDispatchSecurity(deps, action, params, context)
+      if (security) await authorizeModelPriceDispatch(deps, security)
       try {
         const result = dispatchModelPriceAction(deps.db, action, params)
         if (security) {
           deps.auditSink?.record({
-            action: "database.mutate",
+            action: security.action,
             actor: security.actor,
             resource: security.resource,
             outcome: "allowed",
@@ -65,7 +70,7 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
       } catch (error) {
         if (security) {
           deps.auditSink?.record({
-            action: "database.mutate",
+            action: security.action,
             actor: security.actor,
             resource: security.resource,
             outcome: "failed",
@@ -150,22 +155,27 @@ function dispatchModelPriceAction(
   }
 }
 
-type ModelPriceMutationSecurity = {
+type ModelPriceDispatchSecurity = {
+  readonly action: Extract<PermissionAction, "database.read" | "database.mutate">
   readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
 
-function modelPriceMutationSecurity(
+function modelPriceDispatchSecurity(
   deps: ModelPriceDispatcherDeps,
   action: string,
   params: Record<string, unknown>,
   context: DispatchContext,
-): ModelPriceMutationSecurity | null {
+): ModelPriceDispatchSecurity | null {
+  if (MODEL_PRICE_READ_ACTIONS.has(action)) {
+    return modelPriceReadSecurity(deps, action, params, context)
+  }
   if (!MODEL_PRICE_MUTATION_ACTIONS.has(action)) return null
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : action
   const auditRuleId = sanitizeError(ruleId)
   return {
+    action: "database.mutate",
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
     resource: `model-price-rule:${auditRuleId}`,
     metadata: {
@@ -176,21 +186,46 @@ function modelPriceMutationSecurity(
   }
 }
 
-async function authorizeModelPriceMutation(
+function modelPriceReadSecurity(
   deps: ModelPriceDispatcherDeps,
-  security: ModelPriceMutationSecurity,
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): ModelPriceDispatchSecurity {
+  const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : undefined
+  const auditRuleId = ruleId ? sanitizeError(ruleId) : undefined
+  const resource = action === "model_price.used_model.list"
+    ? "model-price:used-models"
+    : action === "model_price.rule.list"
+      ? "model-price-rules"
+      : `model-price-rule:${auditRuleId ?? action}`
+  return {
+    action: "database.read",
+    actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
+    resource,
+    metadata: {
+      source: context.source ?? "api",
+      modelPriceAction: action,
+      ...(auditRuleId ? { ruleId: auditRuleId } : undefined),
+    },
+  }
+}
+
+async function authorizeModelPriceDispatch(
+  deps: ModelPriceDispatcherDeps,
+  security: ModelPriceDispatchSecurity,
 ): Promise<void> {
   const permission = await checkCapabilityPermission({
     permissionGuard: deps.permissionGuard,
     auditSink: deps.auditSink,
-    action: "database.mutate",
+    action: security.action,
     actor: security.actor,
     resource: security.resource,
     context: security.metadata,
   })
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
-      action: "database.mutate",
+      action: security.action,
       actor: security.actor,
       resource: security.resource,
       outcome: "denied",

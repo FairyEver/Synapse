@@ -49,6 +49,57 @@ function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
 }
 
 describe("model price capability dispatcher", () => {
+  it("checks permission and audits model price read actions", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    insertUsageEvent(db, "cc", { id: "cc-1", model: "local-model", inputTokens: 100 })
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+    const created = await dispatcher.dispatch("model_price.rule.create", {
+      modelPattern: "local-model",
+      inputPer1M: 1,
+    }, { source: "api" })
+    vi.mocked(permissionGuard.check).mockClear()
+    auditEvents.length = 0
+    const ruleId = (created.data as { id: string }).id
+
+    await dispatcher.dispatch("model_price.used_model.list", {}, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
+    await dispatcher.dispatch("model_price.rule.list", {}, { source: "mcp-http" })
+    await dispatcher.dispatch("model_price.rule.get", { ruleId }, { source: "mcp-http" })
+
+    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      resource: "model-price:used-models",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        modelPriceAction: "model_price.used_model.list",
+      }),
+    }))
+    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(3)
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.read",
+      outcome: "allowed",
+      resource: "model-price:used-models",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.read",
+      outcome: "allowed",
+      resource: "model-price-rules",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.read",
+      outcome: "allowed",
+      resource: `model-price-rule:${ruleId}`,
+      metadata: expect.objectContaining({ ruleId }),
+    }))
+    db.close()
+  })
+
   it("checks permission and audits mutating price rule actions", async () => {
     const db = createTestDb()
     const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()

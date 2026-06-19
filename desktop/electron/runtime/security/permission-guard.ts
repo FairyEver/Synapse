@@ -12,6 +12,7 @@
  */
 
 export type PermissionAction =
+  | "database.read"
   | "database.mutate"
   | "fs.write"
   | "fs.read.outside-userdata"
