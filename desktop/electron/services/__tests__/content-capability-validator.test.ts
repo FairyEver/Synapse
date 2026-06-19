@@ -47,6 +47,25 @@ describe("content capability validator", () => {
     })
   })
 
+  it("allows rule names with dots but rejects skill names with dots", () => {
+    expect(normalizeCreateContentParams("rule", {
+      ...validRuleParams,
+      name: "team.rule",
+    }).name).toBe("team.rule")
+
+    expect(() => normalizeCreateContentParams("skill", {
+      name: "team.skill",
+      title: "Team Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      files: [],
+    })).toThrowError("只能使用小写字母、数字、连字符；首尾必须是字母或数字。")
+  })
+
   it("rejects invalid categories", () => {
     expect(() => normalizeCreateContentParams("rule", {
       ...validRuleParams,

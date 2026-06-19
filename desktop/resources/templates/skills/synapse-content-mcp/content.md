@@ -63,6 +63,8 @@ Rules require:
 - `content`
 - appearance fields
 
+Rule names may use lowercase letters, numbers, hyphens, and dots. Skill names may use only lowercase letters, numbers, and hyphens; do not use dots in Skill names because installed Skill directories and `SKILL.md` frontmatter must use the editor-compatible Skill name.
+
 Skills require:
 
 - `name`

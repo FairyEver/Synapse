@@ -39,6 +39,23 @@ describe("createSkillFileDraftsFromFiles", () => {
 })
 
 describe("mergeCreateSkillFiles", () => {
+  it("rejects skill names with dots", () => {
+    const errors = validateCreateSkillPayload({
+      title: "Skill",
+      name: "foo.bar",
+      description: "Description",
+      category: "test",
+      icon: "wrench",
+      iconBg: "default",
+      iconType: "icon",
+      iconImage: "",
+      content: "# Skill",
+      files: [],
+    } satisfies SynapseCreateSkillPayload)
+
+    expect(errors.name).toBe("只能使用小写字母、数字、连字符；首尾必须是字母或数字。")
+  })
+
   it("allows attachment totals above the single-file limit when they stay within 50MB", () => {
     const tenMegabytes = 10 * 1024 * 1024
 

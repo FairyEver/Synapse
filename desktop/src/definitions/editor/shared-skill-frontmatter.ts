@@ -1,9 +1,9 @@
+import { SKILL_NAME_PATTERN } from "../../lib/skill-name-input"
+
 type SkillFrontmatter = {
   name: string
   description: string
 }
-
-const SKILL_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 
 function slugifySkillName(source: string, fallback: string): string {
   const normalized = source

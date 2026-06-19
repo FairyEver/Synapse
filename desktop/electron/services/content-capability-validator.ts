@@ -9,6 +9,7 @@ import {
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
 import { normalizeContentNameInput, validateContentNameInput } from "../../src/lib/content-name-input"
+import { normalizeSkillNameInput, validateSkillNameInput } from "../../src/lib/skill-name-input"
 import type {
   SynapseContentIconType,
   SynapseContentType,
@@ -183,7 +184,7 @@ function normalizeContentPayload(
 
   const namedPayload = {
     ...basePayload,
-    name: normalizeName(params.name),
+    name: normalizeName(contentType, params.name),
   }
 
   if (contentType === "rule") {
@@ -356,9 +357,14 @@ function normalizeCategory(contentType: SynapseContentType, value: unknown): str
   return category
 }
 
-function normalizeName(value: unknown): string {
-  const name = normalizeContentNameInput(requireTrimmedString(value, "name"))
-  const error = validateContentNameInput(name)
+function normalizeName(contentType: Exclude<SynapseContentType, "prompt">, value: unknown): string {
+  const rawName = requireTrimmedString(value, "name")
+  const name = contentType === "skill"
+    ? normalizeSkillNameInput(rawName)
+    : normalizeContentNameInput(rawName)
+  const error = contentType === "skill"
+    ? validateSkillNameInput(name)
+    : validateContentNameInput(name)
 
   if (error) {
     throwInvalid("name", error)

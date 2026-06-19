@@ -51,6 +51,8 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 }
 ```
 
+Rule `name` may use lowercase letters, numbers, hyphens, and dots.
+
 `content_skill_create`
 
 ```json
@@ -71,6 +73,8 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
   ]
 }
 ```
+
+Skill `name` may use only lowercase letters, numbers, and hyphens. Do not use dots; Synapse writes this value into the installed Skill directory and `SKILL.md` frontmatter.
 
 `files` are attachments only. Do not include `SKILL.md` or `.synapse.json`; Synapse generates those install files from the Skill body and repository metadata.
 
