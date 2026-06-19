@@ -102,6 +102,16 @@ function WorkflowImportDialog({
     })
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && importing) return
+    onOpenChange(nextOpen)
+  }
+
+  function preventCloseWhileImporting(event: Event) {
+    if (!importing) return
+    event.preventDefault()
+  }
+
   function handleSelectModel(selection: ProviderModelSelection) {
     if (!selectingRefId) return
     updateMapping(selectingRefId, {
@@ -111,8 +121,14 @@ function WorkflowImportDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="flex max-h-[calc(100vh-2rem)] flex-col sm:max-w-[760px]">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[calc(100vh-2rem)] flex-col sm:max-w-[760px]"
+        showCloseButton={!importing}
+        onEscapeKeyDown={preventCloseWhileImporting}
+        onInteractOutside={preventCloseWhileImporting}
+      >
         <DialogHeader>
           <DialogTitle>导入工作流</DialogTitle>
         </DialogHeader>

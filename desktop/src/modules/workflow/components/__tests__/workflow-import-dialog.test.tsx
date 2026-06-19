@@ -176,6 +176,20 @@ describe("WorkflowImportDialog", () => {
     const importButton = Array.from(document.querySelectorAll("button")).find((node) => node.textContent === "导入")
     expect(importButton?.disabled).toBe(true)
   })
+
+  it("blocks close actions while importing", () => {
+    const onOpenChange = vi.fn()
+    renderDialog({ importing: true, onOpenChange })
+
+    expect(buttonByText("取消").disabled).toBe(true)
+    const closeButton = queryButtonByText("关闭")
+    if (closeButton) {
+      act(() => closeButton.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+    }
+
+    expect(queryButtonByText("关闭")).toBeNull()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
 })
 
 function providers(): SynapseAgentProvider[] {
@@ -208,4 +222,15 @@ function providers(): SynapseAgentProvider[] {
       updatedAt: "2026-05-19T10:00:00.000Z",
     },
   ]
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = queryButtonByText(text)
+  if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
+function queryButtonByText(text: string): HTMLButtonElement | null {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+    .find((node) => node.textContent === text) ?? null
 }
