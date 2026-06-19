@@ -359,8 +359,28 @@ function mergeLocalMachineConfig(
     global: {
       ...importedConfig.global,
       knowledgeBaseStorage: currentConfig.global.knowledgeBaseStorage,
+      variables: mergeLocalVariableValues(importedConfig.global.variables, currentConfig.global.variables),
     },
   }
+}
+
+function mergeLocalVariableValues(
+  importedVariables: SynapseVariable[],
+  currentVariables: SynapseVariable[],
+): SynapseVariable[] {
+  const currentByKey = new Map(currentVariables.map((variable) => [variableKey(variable), variable]))
+
+  return importedVariables.map((variable) => {
+    const currentVariable = currentByKey.get(variableKey(variable))
+    if (variable.value === "" && currentVariable && currentVariable.value !== "") {
+      return {
+        ...variable,
+        value: currentVariable.value,
+      }
+    }
+
+    return variable
+  })
 }
 
 function validateRepository(

@@ -141,6 +141,43 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
+  it("keeps current same-name variable values when importing a redacted backup", async () => {
+    const currentConfig: SynapseConfig = {
+      ...createDefaultConfig(),
+      global: {
+        ...createDefaultConfig().global,
+        variables: [
+          { name: "API_TOKEN", value: "sk-current-token", description: "Current token" },
+          { name: "EMPTY_VALUE", value: "", description: "Already empty" },
+        ],
+      },
+    }
+    vi.mocked(configStore.load).mockResolvedValue(currentConfig)
+    const filePath = await writeBackupFile({
+      variables: [
+        { name: "API_TOKEN", value: "", description: "Backup token" },
+        { name: "BACKUP_VALUE", value: "from-backup", description: "Backup value" },
+        { name: "EMPTY_VALUE", value: "", description: "Backup empty" },
+      ],
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        global: expect.objectContaining({
+          variables: [
+            { name: "API_TOKEN", value: "sk-current-token", description: "Backup token" },
+            { name: "BACKUP_VALUE", value: "from-backup", description: "Backup value" },
+            { name: "EMPTY_VALUE", value: "", description: "Backup empty" },
+          ],
+        }),
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("migrates legacy repository variables and preserves custom directories global lists sort order and agent defaults when importing a backup", async () => {
     const filePath = await writeBackupFile({
       favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
