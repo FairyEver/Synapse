@@ -61,6 +61,16 @@ describe("resolveAgentProjectScope", () => {
     ], "win32").defaultProjectId).toBe("project-1")
   })
 
+  it("matches active repository paths to projects after resolving dot segments", () => {
+    expect(resolveAgentProjectScope({
+      uuid: "repo-1",
+      name: "Desktop",
+      localPath: "/Users/liyang/tmp/../Desktop",
+    }, [
+      { id: "project-1", name: "Desktop Project", path: "/Users/liyang/Desktop" },
+    ]).defaultProjectId).toBe("project-1")
+  })
+
   it("always includes the built-in local Agent workspace", () => {
     expect(resolveAgentProjectScope(null, [])).toEqual({
       defaultProjectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,

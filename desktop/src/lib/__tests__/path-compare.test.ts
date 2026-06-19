@@ -8,6 +8,18 @@ describe("path compare helpers", () => {
       .toBe("c:\\users\\ada\\repo")
   })
 
+  it("normalizes dot segments before comparing paths", () => {
+    expect(arePathsEqualForCompare("/workspace/tmp/../repo", "/workspace/repo/", {
+      platform: "linux",
+    })).toBe(true)
+  })
+
+  it("normalizes Windows dot segments before comparing paths", () => {
+    expect(arePathsEqualForCompare("C:/Users/Ada/tmp/../Repo", "c:\\users\\ada\\repo\\", {
+      platform: "win32",
+    })).toBe(true)
+  })
+
   it("uses injected path resolution when provided", () => {
     expect(arePathsEqualForCompare("repo", "/workspace/repo/", {
       platform: "linux",
