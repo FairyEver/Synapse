@@ -206,6 +206,24 @@ const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
 
+type DriveItemTreeQueryRow = {
+  readonly id: string
+  readonly parentId: string | null
+  readonly type: string
+  readonly name: string
+  readonly size: bigint
+  readonly mimeType: string | null
+  readonly storageStatus: string
+  readonly createdAt: Date
+  readonly updatedAt: Date
+  readonly path: string
+  readonly depth: number
+  readonly activeShareId: string | null
+  readonly total: bigint | number
+  readonly fileCount: bigint | number
+  readonly folderCount: bigint | number
+}
+
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
@@ -1041,8 +1059,11 @@ export class DriveService implements OnApplicationBootstrap {
 
   async listItemTree(userId: string, input: DriveItemTreeListInput = {}): Promise<DriveItemTreeListPageDto> {
     const parentId = input.parentId ?? null
-    if (parentId) await this.requireOwnedFolder(userId, parentId)
     const page = normalizeDriveItemTreePage(input)
+    if (typeof this.prisma.$queryRaw === "function") {
+      return this.listItemTreeWithRecursiveQuery(userId, parentId, page)
+    }
+    if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
       where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
@@ -1057,6 +1078,127 @@ export class DriveService implements OnApplicationBootstrap {
       folderCount: entries.filter((item) => item.type === "folder").length,
       hasMore: page.offset + page.limit < entries.length,
       nextOffset: page.offset + page.limit < entries.length ? page.offset + page.limit : null,
+    }
+  }
+
+  private async listItemTreeWithRecursiveQuery(
+    userId: string,
+    parentId: string | null,
+    page: { readonly offset: number; readonly limit: number },
+  ): Promise<DriveItemTreeListPageDto> {
+    const parentPath = parentId ? await this.resolveOwnedItemPath(userId, await this.requireOwnedFolder(userId, parentId)) : ""
+    const rootPredicate = parentId
+      ? Prisma.sql`di."parentId" = ${parentId}`
+      : Prisma.sql`di."parentId" IS NULL`
+    const rootDepth = parentId ? 1 : 0
+    const rootPathPrefix = parentPath ? `${parentPath}/` : ""
+    const rows = await this.prisma.$queryRaw<DriveItemTreeQueryRow[]>`
+      WITH RECURSIVE tree AS (
+        SELECT
+          di.id,
+          di."parentId",
+          di.type,
+          di.name,
+          di.size,
+          di."mimeType",
+          di."storageStatus",
+          di."createdAt",
+          di."updatedAt",
+          concat(${rootPathPrefix}, di.name)::text AS path,
+          ${rootDepth}::int AS depth,
+          ARRAY[
+            concat(
+              di.type,
+              ':',
+              lpad((9223372036854775807::numeric - floor(extract(epoch from di."createdAt") * 1000000))::text, 22, '0'),
+              ':',
+              di.id
+            )
+          ]::text[] AS sort_path
+        FROM "DriveItem" di
+        WHERE di."userId" = ${userId}
+          AND ${rootPredicate}
+          AND di."deletedAt" IS NULL
+          AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active}
+          AND NOT EXISTS (SELECT 1 FROM "PublicAsset" pa WHERE pa."itemId" = di.id)
+
+        UNION ALL
+
+        SELECT
+          child.id,
+          child."parentId",
+          child.type,
+          child.name,
+          child.size,
+          child."mimeType",
+          child."storageStatus",
+          child."createdAt",
+          child."updatedAt",
+          concat(tree.path, '/', child.name)::text AS path,
+          tree.depth + 1 AS depth,
+          tree.sort_path || concat(
+            child.type,
+            ':',
+            lpad((9223372036854775807::numeric - floor(extract(epoch from child."createdAt") * 1000000))::text, 22, '0'),
+            ':',
+            child.id
+          )
+        FROM "DriveItem" child
+        INNER JOIN tree ON child."parentId" = tree.id
+        WHERE child."userId" = ${userId}
+          AND child."deletedAt" IS NULL
+          AND child."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active}
+          AND NOT EXISTS (SELECT 1 FROM "PublicAsset" pa WHERE pa."itemId" = child.id)
+      ),
+      counted AS (
+        SELECT
+          tree.*,
+          count(*) OVER () AS total,
+          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.file}) OVER () AS "fileCount",
+          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.folder}) OVER () AS "folderCount"
+        FROM tree
+      )
+      SELECT
+        counted.id,
+        counted."parentId",
+        counted.type,
+        counted.name,
+        counted.size,
+        counted."mimeType",
+        counted."storageStatus",
+        counted."createdAt",
+        counted."updatedAt",
+        counted.path,
+        counted.depth,
+        counted.total,
+        counted."fileCount",
+        counted."folderCount",
+        share.id AS "activeShareId"
+      FROM counted
+      LEFT JOIN LATERAL (
+        SELECT ds.id
+        FROM "DriveShare" ds
+        WHERE ds."itemId" = counted.id AND ds.enabled = true
+        ORDER BY ds."createdAt" DESC
+        LIMIT 1
+      ) share ON true
+      ORDER BY counted.sort_path
+      OFFSET ${page.offset}
+      LIMIT ${page.limit + 1}
+    `
+    const pageRows = rows.slice(0, page.limit)
+    const statsRow = rows[0]
+    const total = statsRow ? numericCount(statsRow.total) : 0
+    const fileCount = statsRow ? numericCount(statsRow.fileCount) : 0
+    const folderCount = statsRow ? numericCount(statsRow.folderCount) : 0
+    const hasMore = rows.length > page.limit
+    return {
+      items: pageRows.map(toDriveItemTreeEntryDto),
+      total,
+      fileCount,
+      folderCount,
+      hasMore,
+      nextOffset: hasMore ? page.offset + page.limit : null,
     }
   }
 
@@ -1718,6 +1860,24 @@ export class DriveService implements OnApplicationBootstrap {
     const folder = await this.requireOwnedItem(userId, folderId)
     if (folder.type !== DRIVE_ITEM_TYPE.folder) throw new BadRequestException("目标不是文件夹。")
     return folder
+  }
+
+  private async resolveOwnedItemPath(
+    userId: string,
+    item: { readonly id: string; readonly parentId: string | null; readonly name: string },
+  ): Promise<string> {
+    const parts = [item.name]
+    let parentId = item.parentId
+    while (parentId) {
+      const parent = await this.prisma.driveItem.findFirst({
+        where: { id: parentId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+        select: { id: true, parentId: true, name: true },
+      })
+      if (!parent) break
+      parts.unshift(parent.name)
+      parentId = parent.parentId
+    }
+    return parts.join("/")
   }
 
   private async requireOwnedFile(userId: string, itemId: string) {
@@ -2591,6 +2751,29 @@ function buildDriveItemTreeEntries(items: readonly DriveItemDto[], parentId: str
     walk(null, "", 0)
   }
   return entries
+}
+
+function numericCount(value: bigint | number): number {
+  return typeof value === "bigint" ? Number(value) : value
+}
+
+function toDriveItemTreeEntryDto(row: DriveItemTreeQueryRow): DriveItemTreeEntryDto {
+  return {
+    ...toDriveItemDto({
+      id: row.id,
+      parentId: row.parentId,
+      type: row.type,
+      name: row.name,
+      size: row.size,
+      mimeType: row.mimeType,
+      storageStatus: row.storageStatus,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      shares: row.activeShareId ? [{ id: row.activeShareId, enabled: true }] : [],
+    }),
+    path: row.path,
+    depth: row.depth,
+  }
 }
 
 function parseRequestedSize(value: string): bigint {

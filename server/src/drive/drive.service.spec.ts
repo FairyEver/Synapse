@@ -2058,6 +2058,73 @@ describe("DriveService", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("uses a bounded recursive query for Drive item tree pages when raw SQL is available", async () => {
+    const createdAt = new Date("2026-06-07T12:00:00.000Z")
+    const rows = [
+      {
+        id: "folder-1",
+        parentId: null,
+        type: "folder",
+        name: "Work",
+        size: 0n,
+        mimeType: null,
+        storageStatus: "active",
+        createdAt,
+        updatedAt: createdAt,
+        path: "Work",
+        depth: 0,
+        activeShareId: null,
+        total: 3n,
+        fileCount: 1n,
+        folderCount: 2n,
+      },
+      {
+        id: "folder-2",
+        parentId: "folder-1",
+        type: "folder",
+        name: "Archive",
+        size: 0n,
+        mimeType: null,
+        storageStatus: "active",
+        createdAt,
+        updatedAt: createdAt,
+        path: "Work/Archive",
+        depth: 1,
+        activeShareId: null,
+        total: 3n,
+        fileCount: 1n,
+        folderCount: 2n,
+      },
+    ]
+    const prisma = {
+      $queryRaw: vi.fn(async () => rows),
+      driveItem: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+      },
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+
+    const tree = await service.listItemTree("user-1", { parentId: null, offset: 0, limit: 1 })
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
+    expect(prisma.driveItem.findMany).not.toHaveBeenCalled()
+    expect(tree).toMatchObject({
+      total: 3,
+      fileCount: 1,
+      folderCount: 2,
+      hasMore: true,
+      nextOffset: 1,
+    })
+    expect(tree.items).toEqual([
+      expect.objectContaining({
+        id: "folder-1",
+        path: "Work",
+        depth: 0,
+      }),
+    ])
+  })
+
   it("ensures nested folder paths by reusing existing folders and creating missing folders", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
