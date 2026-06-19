@@ -34,6 +34,7 @@ type ContentStoreUploadServiceDeps = {
 
 type FingerprintInput = Pick<EditorScanContentStoreUploadRequest, "editorId" | "scope" | "projectPath"> & {
   readonly sourceDirectoryPath: string
+  readonly platform?: NodeJS.Platform
 }
 
 export class ContentStoreUploadService {
@@ -95,22 +96,24 @@ export class ContentStoreUploadService {
 }
 
 function createLocalSourceFingerprint(input: FingerprintInput): string {
+  const platform = input.platform ?? process.platform
   const tuple = {
     version: 1,
     editorId: input.editorId.trim(),
     scope: input.scope,
-    projectPath: normalizeFingerprintPath(input.projectPath ?? null),
-    sourceDirectoryPath: normalizeFingerprintPath(input.sourceDirectoryPath),
+    projectPath: normalizeFingerprintPath(input.projectPath ?? null, platform),
+    sourceDirectoryPath: normalizeFingerprintPath(input.sourceDirectoryPath, platform),
   }
   return createHash("sha256").update(JSON.stringify(tuple)).digest("hex")
 }
 
-function normalizeFingerprintPath(value: string | null): string | null {
+function normalizeFingerprintPath(value: string | null, platform: NodeJS.Platform = process.platform): string | null {
   const trimmed = value?.trim()
   if (!trimmed) return null
-  const resolved = path.resolve(trimmed)
-  const portable = resolved.split(path.sep).join("/")
-  return process.platform === "win32" ? portable.replace(/^([A-Z]):/, (_, drive: string) => `${drive.toLowerCase()}:`) : portable
+  const pathModule = platform === "win32" ? path.win32 : path
+  const resolved = pathModule.resolve(trimmed)
+  const portable = resolved.split(pathModule.sep).join("/")
+  return platform === "win32" ? portable.toLowerCase() : portable
 }
 
 function buildContentStoreConsoleEditUrl(publicAppUrl: string, itemId: string): string {

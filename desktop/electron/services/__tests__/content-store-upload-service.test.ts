@@ -78,6 +78,25 @@ describe("ContentStoreUploadService", () => {
     expect(first).not.toContain("/Users/example")
   })
 
+  it("folds Windows case-equivalent paths in local source fingerprints", () => {
+    const input = {
+      editorId: "claude-code" as const,
+      scope: "project" as const,
+      projectPath: "C:\\Work\\Repo",
+      sourceDirectoryPath: "C:\\Work\\Repo\\.claude\\skills\\review",
+      platform: "win32" as const,
+    }
+
+    const first = createLocalSourceFingerprint(input)
+    const second = createLocalSourceFingerprint({
+      ...input,
+      projectPath: "c:\\work\\repo\\",
+      sourceDirectoryPath: "c:\\work\\repo\\.claude\\skills\\REVIEW\\",
+    })
+
+    expect(second).toBe(first)
+  })
+
   it("uploads a local Skill directory as strict base64 draft files", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-store-skill-"))
     await mkdir(path.join(dir, "assets"))
