@@ -27,13 +27,14 @@ describe("KnowledgeBaseRawFileManager", () => {
     await writeFile(path.join(rawRoot, ".manifest.json"), "{}\n", "utf8")
     await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
     await writeFile(path.join(rawRoot, "子目录", ".gitkeep"), "user file\n", "utf8")
+    await writeFile(path.join(rawRoot, "子目录", ".manifest.json"), "user manifest\n", "utf8")
     const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
 
     const rootEntries = await manager.list(rawRoot, "")
     const childEntries = await manager.list(rawRoot, "子目录")
 
     expect(rootEntries.map((entry) => entry.name)).toEqual(["子目录", "brief.md"])
-    expect(childEntries.map((entry) => entry.name)).toEqual([".gitkeep"])
+    expect(childEntries.map((entry) => entry.name)).toEqual([".gitkeep", ".manifest.json"])
   })
 
   it("lists raw directory pages with total metadata", async () => {

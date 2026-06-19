@@ -104,7 +104,7 @@ export class KnowledgeBaseRawFileManager {
         if (!entry.isFile() && !entry.isDirectory()) return false
         if (entryKind === "directory" && !entry.isDirectory()) return false
         const relativePath = normalizeRelativePath(path.join(normalizeRawPath(directoryPath), entry.name))
-        if (entry.name === ".manifest.json" || isRootInternalRawFile(relativePath)) return false
+        if (isRootInternalRawFile(relativePath)) return false
         if (!query) return true
         return `${entry.name}\n${relativePath}`.toLowerCase().includes(query)
       })
@@ -465,7 +465,7 @@ export class KnowledgeBaseRawFileManager {
   ): Promise<RawUploadSkipReason | null> {
     const sourceStat = await lstat(sourcePath)
     const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
-    if (isRootInternalRawFile(relativePath) || relativePath === ".manifest.json") {
+    if (isRootInternalRawFile(relativePath)) {
       return null
     }
     if (isSystemNoiseFile(path.basename(sourcePath)) || sourceStat.isSymbolicLink()) {
@@ -497,7 +497,7 @@ export class KnowledgeBaseRawFileManager {
   ): Promise<void> {
     const sourceStat = await lstat(sourcePath)
     const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
-    if (isRootInternalRawFile(relativePath) || relativePath === ".manifest.json") {
+    if (isRootInternalRawFile(relativePath)) {
       return
     }
     if (isSystemNoiseFile(path.basename(sourcePath))) {
@@ -590,7 +590,7 @@ function reserveRawExportFileBudget(size: number, budget: RawExportBudget, limit
 }
 
 function isRootInternalRawFile(relativePath: string): boolean {
-  return relativePath === ".gitkeep"
+  return relativePath === ".gitkeep" || relativePath === ".manifest.json"
 }
 
 function validateEntryName(name: string): void {
