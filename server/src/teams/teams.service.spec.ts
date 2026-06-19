@@ -328,6 +328,33 @@ describe("TeamsService", () => {
     })
   })
 
+  it("keeps the original failure when failure audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockRejectedValue(new BadRequestException("邀请无效或已过期。"))
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit token=secret failed")) }
+    const service = new TeamsService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      auditLog as never,
+    )
+
+    try {
+      await expect(service.joinTeam("user-1", { token: "bad-token" }, "203.0.113.13"))
+        .rejects
+        .toThrow("邀请无效或已过期。")
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "team.join.failure",
+      detail: { reason: "invalid_invitation" },
+    }))
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret")
+  })
+
   it("returns the existing team error when concurrent team joins hit the user membership constraint", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue(null)

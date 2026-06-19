@@ -401,7 +401,7 @@ export class TeamsService {
     readonly ipAddress: string
   }): Promise<void> {
     const actorEmail = await this.getAuditActorEmail(input.actorUserId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: input.action,
       targetType: input.targetType,
