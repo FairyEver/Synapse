@@ -25,6 +25,7 @@ describe("RepositoryTemplateService", () => {
       { id: "synapse-content-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-database-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-drive-mcp", icon: "folder-tree", iconBg: "teal" },
+      { id: "synapse-model-price-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-repository-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-variable-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-workflow-mcp", icon: "terminal", iconBg: "teal" },
@@ -52,6 +53,21 @@ describe("RepositoryTemplateService", () => {
     expect(automationSkill?.content).toContain("paramTemplates")
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("builtin.workflow")
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
+  })
+
+  it("documents safe Model Price MCP rule operations in the built-in skill", async () => {
+    const seeds = await readRepositorySeedContents()
+    const modelPriceSkill = seeds.find((seed) => seed.id === "synapse-model-price-mcp")
+    const apiReference = modelPriceSkill?.attachments
+      ?.find((attachment) => attachment.originalName === "api-reference.md")
+    const apiText = apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : ""
+
+    expect(modelPriceSkill?.content).toContain("model_price_used_model_list")
+    expect(modelPriceSkill?.content).toContain("ruleId")
+    expect(modelPriceSkill?.content).toContain("RMB per 1M tokens")
+    expect(modelPriceSkill?.content).toContain("historical repricing")
+    expect(apiText).toContain("model_price_rule_update")
+    expect(apiText).toContain("ruleId")
   })
 
 })
