@@ -395,18 +395,14 @@ export class KnowledgeBaseStorageMigrationService {
       if (!(error instanceof MigrationJournalCorruptError)) throw error
       logger.warn("Knowledge Base storage migration journal is corrupt.", knowledgeBaseErrorMeta(error))
       this.deps.sourceManager.setMigrationBlocked(true)
-      try {
-        await this.transitionState({
-          active: false,
-          phase: "failed",
-          cancellable: false,
-          progress: { copiedBytes: 0, totalBytes: null },
-          message: "知识库存储迁移恢复失败",
-          errorMessage: error.message,
-        })
-      } finally {
-        this.deps.sourceManager.setMigrationBlocked(false)
-      }
+      await this.transitionState({
+        active: true,
+        phase: "failed",
+        cancellable: false,
+        progress: { copiedBytes: 0, totalBytes: null },
+        message: "知识库存储迁移恢复失败",
+        errorMessage: error.message,
+      })
       return
     }
     if (!journal) return

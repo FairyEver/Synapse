@@ -55,6 +55,21 @@ describe("KnowledgeBaseStorageMigrationDialog", () => {
 
     expect(buttonByText("正在切换").disabled).toBe(true)
   })
+
+  it("keeps active failed recovery states blocking", () => {
+    renderDialog({
+      ...activeProgress,
+      phase: "failed",
+      cancellable: false,
+      copiedBytes: 0,
+      totalBytes: null,
+      message: "知识库存储迁移恢复失败",
+      errorMessage: "恢复记录已损坏",
+    })
+
+    expect(queryButtonByText("关闭")).toBeNull()
+    expect(buttonByText("知识库存储迁移恢复失败").disabled).toBe(true)
+  })
 })
 
 function renderDialog(progress: SynapseKnowledgeBaseStorageMigrationProgress) {
@@ -79,8 +94,12 @@ function getDialog(): HTMLElement {
 }
 
 function buttonByText(text: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>("button")]
-    .find((item) => item.textContent === text)
+  const button = queryButtonByText(text)
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+function queryButtonByText(text: string): HTMLButtonElement | null {
+  return [...document.querySelectorAll<HTMLButtonElement>("button")]
+    .find((item) => item.textContent === text) ?? null
 }

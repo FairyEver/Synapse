@@ -249,14 +249,15 @@ describe("KnowledgeBaseStorageMigrationService", () => {
 
     await expect(harness.service.recoverIfNeeded()).resolves.toBeUndefined()
 
+    expect(harness.service.isActive()).toBe(true)
     expect(harness.states.at(-1)).toMatchObject({
-      active: false,
+      active: true,
       phase: "failed",
       message: "知识库存储迁移恢复失败",
       errorMessage: "知识库存储迁移恢复记录已损坏，请检查或移除恢复记录后重试。",
     })
     expect(harness.sourceManager.setMigrationBlocked).toHaveBeenCalledWith(true)
-    expect(harness.sourceManager.setMigrationBlocked).toHaveBeenCalledWith(false)
+    expect(harness.sourceManager.setMigrationBlocked).not.toHaveBeenCalledWith(false)
   })
 
   it("keeps a verified new root during recovery", async () => {

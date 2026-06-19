@@ -30,7 +30,7 @@ function KnowledgeBaseStorageMigrationDialog({
   const [dismissedPhase, setDismissedPhase] = useState<
     SynapseKnowledgeBaseStorageMigrationProgress["phase"] | null
   >(null)
-  const terminal = TERMINAL_PHASES.has(progress.phase)
+  const terminal = TERMINAL_PHASES.has(progress.phase) && !progress.active
   const open = progress.active || (terminal && dismissedPhase !== progress.phase)
   const progressValue = useMemo(() => {
     if (!progress.totalBytes || progress.totalBytes <= 0) return undefined
