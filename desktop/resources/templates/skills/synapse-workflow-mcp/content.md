@@ -53,7 +53,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 5. Call `workflow_param_update` to define input parameters.
 6. Choose one save strategy:
    - For complex graphs, fetch the workflow, build the complete valid DAG locally, then call `workflow_definition_update`.
-   - For incremental edits, create each new node already connected by passing `incomingEdges` and/or `outgoingEdges` to `workflow_node_create`. This keeps strict validation intact because disconnected intermediate nodes are not saved.
+   - For incremental edits, create each new node with a schema-valid `node.config` and already connected by passing `incomingEdges` and/or `outgoingEdges` to `workflow_node_create`. This keeps strict validation intact because disconnected intermediate nodes are not saved.
    - A useful incremental pattern is to build from the existing End node backward: create the node with `outgoingEdges: [{ "to": "end-node-id" }]`, then add or update upstream connected nodes.
 7. Use `workflow_edge_create` for extra structural edges only when the graph remains valid after that single edge is saved. For switch nodes, include a `branch` field matching a branch id.
 8. Update node configs with `workflow_node_update`: add final prompt templates, Codex/Claude Code CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.

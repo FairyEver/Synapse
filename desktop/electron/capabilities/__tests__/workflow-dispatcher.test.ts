@@ -826,9 +826,23 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     await expect(dispatcher.dispatch(
       "workflow.node.create",
-      { workflowId: "wf-1", node: { name: "New Node", type: "prompt" } },
+      { workflowId: "wf-1", node: { name: "New Node", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
+  })
+
+  it("workflow.node.create rejects missing node config before loading the workflow", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "workflow.node.create",
+      { workflowId: "wf-1", node: { name: "Prompt", type: "prompt" } },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'node.config'")
+
+    expect(deps.workflowService.get).not.toHaveBeenCalled()
     expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
@@ -837,7 +851,7 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     await expect(dispatcher.dispatch(
       "workflow.node.create",
-      { workflowId: "wf-1", node: { name: "Prompt", type: "prompt" } },
+      { workflowId: "wf-1", node: { name: "Prompt", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
     expect(deps.workflowService.save).not.toHaveBeenCalled()
@@ -862,7 +876,7 @@ describe("createWorkflowDispatcher", () => {
 
     await expect(dispatcher.dispatch(
       "workflow.node.create",
-      { workflowId: "wf-1", node: { name: "Unconnected", type: "prompt" } },
+      { workflowId: "wf-1", node: { name: "Unconnected", type: "script", config: { shell: "posix", script: "printf ok", variables: [] } } },
       { source: "api" },
     )).rejects.toThrow("Save failed")
 

@@ -343,9 +343,9 @@ export function buildWorkflowTools(): McpToolDefinition[] {
               name: { type: "string", description: "Display name for the node." },
               type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"codex\", \"claude_code\", \"end\")." },
               position: { type: "object", description: "Optional { x, y } position. Auto-calculated if omitted.", properties: { x: { type: "number" }, y: { type: "number" } } },
-              config: { type: "object", description: "Node configuration. Use workflow_node_type_describe to see required fields." },
+              config: { type: "object", description: "Required node configuration. Use workflow_node_type_describe to see required fields and minimal valid config for the selected type." },
             },
-            required: ["name", "type"],
+            required: ["name", "type", "config"],
           },
           incomingEdges: {
             type: "array",

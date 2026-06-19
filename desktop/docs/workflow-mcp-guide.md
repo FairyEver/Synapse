@@ -404,7 +404,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 2. workflow_node_type_describe({ nodeType })           → 获取本次要用的每种节点配置 JSON Schema
 3. workflow_definition_create({ name: "..." })         → 创建空工作流（自带 end 节点）
 4. workflow_param_update({ workflowId, params })       → 定义工作流参数
-5. workflow_node_create({ workflowId, node, incomingEdges?, outgoingEdges? })
+5. workflow_node_create({ workflowId, node: { name, type, config, position? }, incomingEdges?, outgoingEdges? })
                                                          → 添加已连接节点（position 可省略，自动布局）
 6. workflow_edge_create({ workflowId, from, to })       → 在单次保存后仍有效时补充连接
 7. workflow_node_update({ workflowId, nodeId, patch })  → 配置节点（设置 prompt、variables、paramTemplates 等）
@@ -419,7 +419,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 关键点：
 - 步骤 3 创建的工作流已包含一个 end 节点，无需手动创建
 - 严格校验会在每次 MCP 写入后执行，不要先保存未连接的占位节点再补边；复杂图优先本地组装完整定义后用 `workflow_definition_update`
-- 步骤 5 中 position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
+- 步骤 5 中 `node.config` 必填，并且必须符合 `workflow_node_type_describe` 返回的节点 schema；position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
 - 创建 `workflow_call` 前，先读取子工作流定义，按子工作流 `params` 填写 `paramTemplates`
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI

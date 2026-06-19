@@ -257,9 +257,9 @@ Delete a workflow. Cancels active runs and removes snapshots.
 
 Add a node to a workflow.
 
-**Params:** `workflowId` (string, required), `node: { name, type, position?, config? }`, `incomingEdges?`, `outgoingEdges?`
+**Params:** `workflowId` (string, required), `node: { name, type, config, position? }`, `incomingEdges?`, `outgoingEdges?`
 **Returns:** `{ nodeId, versionHash, edgeIds?, validation? }`
-**Notes:** Position auto-calculated if omitted. Strict validation runs before saving, so disconnected placeholder nodes are rejected. Workflow node IDs must use only letters, numbers, `_`, or `-`; never use path separators, `..`, absolute paths, or spaces. Use `incomingEdges` / `outgoingEdges` to create a node and its connecting edges in the same validated mutation, or use `workflow_definition_update` for a complete DAG rewrite. Save `nodeId` and returned `edgeIds` for later updates.
+**Notes:** `node.config` is required and must match the selected node type schema from `workflow_node_type_describe`. Position auto-calculated if omitted. Strict validation runs before saving, so disconnected placeholder nodes are rejected. Workflow node IDs must use only letters, numbers, `_`, or `-`; never use path separators, `..`, absolute paths, or spaces. Use `incomingEdges` / `outgoingEdges` to create a node and its connecting edges in the same validated mutation, or use `workflow_definition_update` for a complete DAG rewrite. Save `nodeId` and returned `edgeIds` for later updates.
 
 `incomingEdges` items are `{ from, branch? }`, where `from` is an existing upstream node ID. Include `branch` when the upstream node is a switch.
 

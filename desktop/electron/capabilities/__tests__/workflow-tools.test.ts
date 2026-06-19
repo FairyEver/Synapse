@@ -87,6 +87,12 @@ describe("workflow MCP tool definitions", () => {
 
   it("documents atomic edge creation fields on workflow_node_create", () => {
     const createProperties = toolByName("workflow_node_create").inputSchema.properties
+    const nodeSchema = objectProperty(createProperties, "node")
+    const nodeRequired = nodeSchema.required
+
+    expect(Array.isArray(nodeRequired) ? nodeRequired : []).toContain("config")
+    expect(stringProperty(objectProperty(objectProperty(nodeSchema, "properties"), "config"), "description"))
+      .toContain("required")
     expect(createProperties).toHaveProperty("incomingEdges")
     expect(createProperties).toHaveProperty("outgoingEdges")
 

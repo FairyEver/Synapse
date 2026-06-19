@@ -51,6 +51,12 @@ function requireObject(params: Record<string, unknown>, key: string): Record<str
   return v as Record<string, unknown>
 }
 
+function requireNestedObject(params: Record<string, unknown>, parentKey: string, key: string): Record<string, unknown> {
+  const v = params[key]
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`Missing or invalid '${parentKey}.${key}': expected object`)
+  return v as Record<string, unknown>
+}
+
 function requireNestedString(params: Record<string, unknown>, parentKey: string, key: string): string {
   const v = params[key]
   if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${parentKey}.${key}': expected non-empty string`)
@@ -360,6 +366,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node.create": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const node = requireObject(params, "node")
+    const nodeConfig = requireNestedObject(node, "node", "config")
     let nodeId: string
     const incomingEdges = optionalEdgeSpecs(params, "incomingEdges", "from")
     const outgoingEdges = optionalEdgeSpecs(params, "outgoingEdges", "to")
@@ -374,7 +381,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
         name: (node.name as string) ?? "",
         type: requireString(node, "type"),
         position,
-        config: (node.config as Record<string, unknown>) ?? {},
+        config: nodeConfig,
       })
       for (const edgeSpec of incomingEdges) {
         const edgeId = randomUUID()
