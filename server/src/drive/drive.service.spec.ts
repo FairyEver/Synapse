@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
+import { DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES } from "./drive-browser"
 import { DriveService } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 
@@ -1554,6 +1555,7 @@ describe("DriveService", () => {
       "",
       "x".repeat(150 * 1024),
     ].join("\n")
+    const expectedPreviewText = longMarkdown.slice(0, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
     const storage: DriveStoragePort = {
       ...storageMock,
       getObjectStream: vi.fn(async () => ({ stream: Readable.from(longMarkdown), size: BigInt(Buffer.byteLength(longMarkdown)), contentType: "text/markdown" })),
@@ -1575,7 +1577,7 @@ describe("DriveService", () => {
     expect(snapshot.current.previewKind).toBe("markdown")
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
-      text: longMarkdown,
+      text: expectedPreviewText,
       html: expect.stringContaining('<h1 id="notes">Notes</h1>'),
       outline: [
         {
@@ -1592,7 +1594,7 @@ describe("DriveService", () => {
           ],
         },
       ],
-      truncated: false,
+      truncated: true,
       visitUrl: null,
     })
   })
