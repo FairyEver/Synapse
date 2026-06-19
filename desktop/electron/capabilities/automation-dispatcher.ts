@@ -66,6 +66,7 @@ const MUTATING_AUTOMATION_ACTIONS = new Set([
   "automation.run.execute",
   "automation.run.disable",
 ])
+const SAFE_AUDIT_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/
 
 export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityDispatcherDeps) {
   return {
@@ -577,25 +578,27 @@ function automationMutationSecurity(
 ): AutomationMutationSecurity | null {
   if (!MUTATING_AUTOMATION_ACTIONS.has(action)) return null
   const source = context.source ?? "api"
-  const automationId = typeof params.automationId === "string" && params.automationId.trim()
-    ? params.automationId.trim()
-    : action
-  const runId = typeof params.runId === "string" && params.runId.trim()
-    ? params.runId.trim()
-    : undefined
+  const automationId = safeAuditIdentifier(params.automationId)
+  const runId = safeAuditIdentifier(params.runId)
   return {
     actor: context.actor ?? { kind: "user", id: `automation-dispatch:${source}` },
-    resource: `automation:${runId ?? automationId}`,
+    resource: `automation:${runId ?? automationId ?? action}`,
     metadata: {
       source,
       automationAction: action,
-      ...(automationId !== action ? { automationId } : {}),
+      ...(automationId ? { automationId } : {}),
       ...(runId ? { runId } : {}),
       ...(isRecord(params.patch) ? { patchKeys: Object.keys(params.patch) } : {}),
       ...(isRecord(params.trigger) && typeof params.trigger.type === "string" ? { triggerType: params.trigger.type } : {}),
       ...(isRecord(params.executor) && typeof params.executor.type === "string" ? { executorType: params.executor.type } : {}),
     },
   }
+}
+
+function safeAuditIdentifier(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return SAFE_AUDIT_IDENTIFIER_PATTERN.test(trimmed) ? trimmed : undefined
 }
 
 async function authorizeAutomationMutation(

@@ -516,6 +516,43 @@ describe("automation capability dispatcher", () => {
     }))
   })
 
+  it("sanitizes external run ids before permission checks and denied audits", async () => {
+    const { actions, triggers } = registries()
+    const service = serviceMock()
+    const permissionGuard = permissionGuardMock({ allowed: false, reason: "blocked", policyId: "test-policy" })
+    const auditSink = auditSinkMock()
+    const dispatcher = createAutomationCapabilityDispatcher({
+      service,
+      accountService: accountServiceMock(),
+      triggers,
+      actions,
+      permissionGuard,
+      auditSink,
+    })
+    const unsafeRunId = "run-token=secret-value-/Users/example/private"
+
+    await expect(dispatcher.dispatch("automation.run.disable", { runId: unsafeRunId }, { source: "mcp-http" }))
+      .rejects.toThrow("blocked")
+
+    expect(service.stopRun).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "automation:automation.run.disable",
+      context: expect.not.objectContaining({ runId: unsafeRunId }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      outcome: "denied",
+      resource: "automation:automation.run.disable",
+      metadata: expect.not.objectContaining({ runId: unsafeRunId }),
+    }))
+    const serialized = JSON.stringify([
+      vi.mocked(permissionGuard.check).mock.calls,
+      vi.mocked(auditSink.record).mock.calls,
+    ])
+    expect(serialized).not.toContain("secret-value")
+    expect(serialized).not.toContain("/Users/example/private")
+  })
+
   it("audits permission guard failures before automation mutations", async () => {
     const { actions, triggers } = registries()
     const service = serviceMock()

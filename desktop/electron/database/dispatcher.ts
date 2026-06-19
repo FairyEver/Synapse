@@ -317,6 +317,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 }
 
 const MUTATING_ACTIONS = new Set<string>(getMutatingActions())
+const SAFE_AUDIT_TABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 
 type DatabaseChangeEvent = { action: string; table?: string }
 type DatabaseChangeListener = (event: DatabaseChangeEvent) => void
@@ -352,6 +353,11 @@ function extractTableName(action: string, params: Record<string, unknown>): stri
   return undefined
 }
 
+function extractAuditTableName(action: string, params: Record<string, unknown>): string | undefined {
+  const tableName = extractTableName(action, params)?.trim()
+  return tableName && SAFE_AUDIT_TABLE_PATTERN.test(tableName) ? tableName : undefined
+}
+
 function databaseSideEffectErrorMeta(
   action: string,
   params: Record<string, unknown>,
@@ -367,7 +373,7 @@ function databaseSideEffectErrorMeta(
     errorName: error instanceof Error ? error.name : typeof error,
     ...(sanitizedMessage ? { error: sanitizedMessage } : {}),
     source: context.source ?? "api",
-    table: extractTableName(action, params),
+    table: extractAuditTableName(action, params),
   }
 }
 
@@ -477,7 +483,7 @@ function databaseMutationSecurity(
 ): DatabaseMutationSecurity | null {
   if (!MUTATING_ACTIONS.has(action)) return null
   const source = context.source ?? "api"
-  const table = extractTableName(action, params)
+  const table = extractAuditTableName(action, params)
   const dryRun = params.dryRun === true
   return {
     actor: context.actor ?? { kind: "user", id: `database-dispatch:${source}` },

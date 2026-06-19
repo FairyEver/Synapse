@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../../database/shared/limits"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { dispatchDatabaseAction, setDatabaseChangeListener } from "../dispatcher"
 
 const mocks = vi.hoisted(() => ({
@@ -114,5 +115,42 @@ describe("database dispatcher", () => {
     )
     const metadata = JSON.stringify(mocks.logger.warn.mock.calls[0]?.[1])
     expect(metadata).not.toContain("private task")
+  })
+
+  it("sanitizes external table names before permission checks and failed audits", async () => {
+    const checkPermission = vi.fn(async () => ({ allowed: true as const }))
+    const recordAudit = vi.fn((_event: Parameters<AuditSink["record"]>[0]) => undefined)
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(() => vi.fn()),
+      check: checkPermission,
+    }
+    const auditSink: AuditSink = {
+      record: recordAudit,
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+    const unsafeTableName = "tasks-token=secret-value-/Users/example/private"
+
+    await expect(dispatchDatabaseAction("database.row.create", {
+      tableName: unsafeTableName,
+    }, { source: "mcp-http" }, { permissionGuard, auditSink }))
+      .rejects.toThrow("Missing or invalid 'data': expected object")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "database:database.row.create",
+      context: expect.not.objectContaining({ table: unsafeTableName }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "failed",
+      resource: "database:database.row.create",
+      metadata: expect.not.objectContaining({ table: unsafeTableName }),
+    }))
+    const serialized = JSON.stringify([
+      checkPermission.mock.calls,
+      recordAudit.mock.calls,
+    ])
+    expect(serialized).not.toContain("secret-value")
+    expect(serialized).not.toContain("/Users/example/private")
   })
 })
