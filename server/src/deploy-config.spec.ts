@@ -279,6 +279,8 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location ~ ^/share/[^/]+/(download|render)$")
     expect(nginx).toContain("location ~ ^/share/[^/]+/items/[^/]+/(download|render)$")
     expect(nginx).toContain("location /drive/items/")
+    expect(nginx).toContain("location = /drive")
+    expect(nginx).toContain("location = /drive/")
     expect(nginx).toContain("location /share/")
     expect(nginx).not.toContain("location /files/")
     expect(nginx).not.toContain("location /pages/")

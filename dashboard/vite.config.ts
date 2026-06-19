@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
 export function isDriveBrowserSpaPath(pathname: string) {
+  if (pathname === '/drive' || pathname === '/drive/') return true
   if (pathname === '/console/drive') return true
   if (/^\/console\/drive\/folders\/[^/]+$/u.test(pathname)) return true
   if (/^\/drive\/items\/[^/]+$/u.test(pathname)) return true
