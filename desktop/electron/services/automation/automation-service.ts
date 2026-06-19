@@ -752,32 +752,12 @@ export class AutomationService {
     const validation = this.validateItem(item)
     const baseItem = validation.status === "valid"
       ? item
-      : await this.disableInvalidItem(item, validation)
+      : { ...item, enabled: false, validation }
     if (!this.runningItemIds.has(item.id)) return baseItem
     const runId = this.deps.execution.getActiveRunIdForItem(item.id)
     return {
       ...baseItem,
       activeRun: { status: "running", id: runId },
-    }
-  }
-
-  private async disableInvalidItem(
-    item: AutomationItem,
-    validation: AutomationValidation,
-  ): Promise<AutomationItem> {
-    if (!item.enabled) return { ...item, enabled: false, validation }
-    this.cancel(item.id)
-    try {
-      const disabledItem = await this.deps.items.setEnabled(item.id, false)
-      this.emitAutomationChanged({ automationId: item.id, reason: "disabled" })
-      return { ...disabledItem, validation }
-    } catch (error) {
-      this.deps.logger?.warn?.("Failed to persist disabled state for invalid automation.", {
-        automationId: item.id,
-        boundary: "automation-disable-invalid",
-        ...errorMetadata(error),
-      })
-      return { ...item, enabled: false, validation }
     }
   }
 

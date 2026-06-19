@@ -224,6 +224,46 @@ describe("AutomationService", () => {
     expect(listedIds).toEqual(["automation:edited", "automation:new", "automation:old"])
   })
 
+  it("projects invalid listed automations as disabled without persisting the change", async () => {
+    const harness = createHarness()
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:invalid",
+      enabled: true,
+      trigger: { type: "builtin.missing-trigger", config: {} },
+    }))
+
+    const [listed] = await harness.service.automationList()
+
+    expect(listed).toEqual(expect.objectContaining({
+      id: "automation:invalid",
+      enabled: false,
+      validation: expect.objectContaining({ status: "needs_update" }),
+    }))
+    await expect(harness.items.get("automation:invalid")).resolves.toEqual(expect.objectContaining({
+      enabled: true,
+    }))
+  })
+
+  it("projects invalid loaded automations as disabled without persisting the change", async () => {
+    const harness = createHarness()
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:invalid",
+      enabled: true,
+      trigger: { type: "builtin.missing-trigger", config: {} },
+    }))
+
+    const loaded = await harness.service.automationGet("automation:invalid")
+
+    expect(loaded).toEqual(expect.objectContaining({
+      id: "automation:invalid",
+      enabled: false,
+      validation: expect.objectContaining({ status: "needs_update" }),
+    }))
+    await expect(harness.items.get("automation:invalid")).resolves.toEqual(expect.objectContaining({
+      enabled: true,
+    }))
+  })
+
   it("clears runtime running markers when stop times out waiting for active runs", async () => {
     const controlled = manuallyResolvedAction()
     const harness = createHarness({ action: controlled.action })
