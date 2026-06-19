@@ -23,6 +23,18 @@ export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 // 配置备份导入文件最大字节数：限制设置页从外部 JSON 恢复配置时主进程读取和解析的单文件体积。
 export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
+// Data Store 单表导出最大行数：限制表级导出一次可处理的记录数量，避免主进程长时间构造超大 SQL。
+export const DATA_STORE_TABLE_EXPORT_MAX_ROWS = 10_000
+
+// Data Store 单表导出 payload 最大字节数：限制嵌入导出 SQL 的 JSON/base64 元数据体积。
+export const DATA_STORE_TABLE_EXPORT_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024
+
+// Data Store 单表导出单元格最大字节数：限制文本和 BLOB 单元格序列化前后的体积，避免大字段放大内存占用。
+export const DATA_STORE_TABLE_EXPORT_MAX_CELL_BYTES = 1024 * 1024
+
+// Data Store 表导入文件最大字节数：限制从外部 SQL 文件读取和解析的单文件体积。
+export const DATA_STORE_TABLE_IMPORT_MAX_FILE_BYTES = 32 * 1024 * 1024
+
 // Automation Ingress Webhook 运行记录持久化保留上限：限制 webhook.runs 本地历史无限增长。
 export const AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT = 1000
 

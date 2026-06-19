@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ImportExportManager } from "../import-export"
+import { DATA_STORE_TABLE_EXPORT_MAX_CELL_BYTES } from "../../../config"
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs")
@@ -79,18 +80,21 @@ describe("ImportExportManager", () => {
   })
 
   it("exports small tables after passing the row budget", () => {
-    const allRows = vi.fn(() => [{
-      id: 1,
-      created_at: "2026-06-14T00:00:00.000Z",
-      updated_at: "2026-06-14T00:00:00.000Z",
-      title: "Hello",
-    }])
+    const allRows = vi.fn()
+    const iterateRows = vi.fn(function* () {
+      yield {
+        id: 1,
+        created_at: "2026-06-14T00:00:00.000Z",
+        updated_at: "2026-06-14T00:00:00.000Z",
+        title: "Hello",
+      }
+    })
     const db = {
       prepare: vi.fn((sql: string) => {
         if (sql.includes("COUNT(*)")) {
           return { get: vi.fn(() => ({ count: 1 })) }
         }
-        return { all: allRows }
+        return { all: allRows, iterate: iterateRows }
       }),
     } as unknown as DatabaseSync
     const manager = new ImportExportManager(
@@ -114,12 +118,53 @@ describe("ImportExportManager", () => {
 
     manager.exportTable("notes", "/tmp/notes.sql")
 
-    expect(allRows).toHaveBeenCalled()
+    expect(iterateRows).toHaveBeenCalled()
+    expect(allRows).not.toHaveBeenCalled()
     expect(writeFileSync).toHaveBeenCalledWith(
       "/tmp/notes.sql",
       expect.stringContaining("INSERT INTO \"notes\""),
       "utf8",
     )
+  })
+
+  it("rejects oversized table export cells before writing the export file", () => {
+    const iterateRows = vi.fn(function* () {
+      yield {
+        id: 1,
+        created_at: "2026-06-14T00:00:00.000Z",
+        updated_at: "2026-06-14T00:00:00.000Z",
+        attachment: new Uint8Array(DATA_STORE_TABLE_EXPORT_MAX_CELL_BYTES + 1),
+      }
+    })
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        if (sql.includes("COUNT(*)")) {
+          return { get: vi.fn(() => ({ count: 1 })) }
+        }
+        return { iterate: iterateRows }
+      }),
+    } as unknown as DatabaseSync
+    const manager = new ImportExportManager(
+      () => db,
+      () => "/tmp/source.db",
+      vi.fn(),
+      vi.fn(),
+      vi.fn(() => ({
+        name: "notes",
+        description: "",
+        columns: [
+          { name: "id", kind: "integer", primaryKey: true },
+          { name: "created_at", kind: "text", system: true },
+          { name: "updated_at", kind: "text", system: true },
+          { name: "attachment", kind: "binary" },
+        ],
+        createdAt: "2026-06-14T00:00:00.000Z",
+        updatedAt: "2026-06-14T00:00:00.000Z",
+      })) as never,
+    )
+
+    expect(() => manager.exportTable("notes", "/tmp/notes.sql")).toThrow("数据表导出单元格超过大小限制")
+    expect(writeFileSync).not.toHaveBeenCalled()
   })
 
   it("rejects oversized table import files before reading them", () => {
