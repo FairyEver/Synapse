@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -33,6 +34,22 @@ describe("DrivePublicAssetService", () => {
 
     expect(completed.url).toMatch(/^https:\/\/synapse\.example\/files\/asset_[0-9A-Za-z]{32}$/u)
     expect(completed.name).toBe("logo.png")
+  })
+
+  it("rejects public asset upload prepare when MIME does not match the extension", async () => {
+    await expect(service.prepareUpload("user-1", {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/jpeg",
+      publicAppUrl: "https://synapse.example",
+    })).rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.prepareUpload("user-1", {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/jpeg",
+      publicAppUrl: "https://synapse.example",
+    })).rejects.toThrow("文件类型与扩展名不匹配。")
+    expect(await prisma.driveUploadSession.findMany()).toEqual([])
   })
 
   it("creates separate assets and drive files when the same name is uploaded twice", async () => {
@@ -102,6 +119,27 @@ describe("DrivePublicAssetService", () => {
 
     expect(replaced.assetId).toBe(asset.assetId)
     expect(replaced.name).toBe("logo.webp")
+  })
+
+  it("rejects public asset replace prepare when MIME does not match the extension", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+
+    await expect(service.prepareReplace("user-1", asset.assetId, {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/jpeg",
+    })).rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.prepareReplace("user-1", asset.assetId, {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/jpeg",
+    })).rejects.toThrow("文件类型与扩展名不匹配。")
+    expect(await prisma.driveUploadSession.findMany()).toEqual([])
   })
 
   it("returns the current asset when public asset replace completion is retried", async () => {

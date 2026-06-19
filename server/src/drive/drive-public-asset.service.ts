@@ -943,7 +943,12 @@ function normalizePublicAssetUploadInput(input: DrivePublicAssetPrepareUploadInp
   const name = normalizePublicAssetName(input.name)
   const size = parseRequestedSize(input.size)
   if (size > drivePublicAssetMaxFileBytes) throw new PayloadTooLargeException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
-  const policy = validatePublicAssetNameAndMime({ name, mimeType: input.mimeType ?? null })
+  let policy: ReturnType<typeof validatePublicAssetNameAndMime>
+  try {
+    policy = validatePublicAssetNameAndMime({ name, mimeType: input.mimeType ?? null })
+  } catch (error) {
+    throw new BadRequestException(error instanceof Error ? error.message : "仅支持图片。")
+  }
   return { name, size, mimeType: policy.mimeType }
 }
 
