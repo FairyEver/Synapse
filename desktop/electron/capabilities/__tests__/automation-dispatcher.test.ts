@@ -238,6 +238,8 @@ describe("automation capability dispatcher", () => {
     expect(tools.map((tool) => tool.name)).toContain("automation_webhook_list")
     expect(tools.find((tool) => tool.name === "automation_webhook_list")?.description)
       .toContain("webhookPublicId")
+    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description)
+      .toContain("Fails if the run is missing or no longer active")
   })
 
   it("lists trigger and executor descriptors from registries", async () => {
@@ -486,6 +488,28 @@ describe("automation capability dispatcher", () => {
     })
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private prompt")
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private output")
+  })
+
+  it("fails stop run requests when the run is not active or missing", async () => {
+    const { auditSink, dispatcher, service } = createHarness()
+    vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false })
+
+    await expect(dispatcher.dispatch("automation.run.disable", { runId: "automation-run:missing" }, { source: "mcp-http" }))
+      .rejects
+      .toThrow('Automation run "automation-run:missing" was not active or was not found')
+
+    expect(service.stopRun).toHaveBeenCalledWith("automation-run:missing")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      resource: "automation:automation-run:missing",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.run.disable",
+        runId: "automation-run:missing",
+        errorName: "Error",
+      }),
+    }))
   })
 
   it("fails manual run execution when the automation is missing or no run starts", async () => {

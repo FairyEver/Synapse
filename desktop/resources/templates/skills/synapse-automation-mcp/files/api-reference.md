@@ -183,6 +183,8 @@ If the run already finished, the result can include:
 { "stopped": false, "alreadyFinished": true }
 ```
 
+If the run is missing or no longer active, the tool fails instead of returning a successful empty stop result.
+
 ### automation_run_list
 
 Input:

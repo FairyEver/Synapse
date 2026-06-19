@@ -173,7 +173,11 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
 
           case "automation.run.disable": {
             const { runId } = parseRunIdParams(params)
-            result = { ok: true, data: await deps.service.stopRun(runId) }
+            const stopResult = await deps.service.stopRun(runId)
+            if (!stopResult.stopped && !stopResult.alreadyFinished && !stopResult.stopRequested) {
+              throw new Error(`Automation run "${runId}" was not active or was not found`)
+            }
+            result = { ok: true, data: stopResult }
             break
           }
 

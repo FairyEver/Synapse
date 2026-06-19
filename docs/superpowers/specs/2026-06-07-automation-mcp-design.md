@@ -56,7 +56,7 @@ The domain id is `automation`. Canonical capability ids follow `<domain>.<resour
 | `automation.item.enable` | `automation_item_enable` | true | Enable one Automation item. |
 | `automation.item.disable` | `automation_item_disable` | true | Disable one Automation item. |
 | `automation.run.execute` | `automation_run_execute` | true | Manually run one Automation item and return a run summary. |
-| `automation.run.disable` | `automation_run_disable` | true | Stop one active Automation run by run id. |
+| `automation.run.disable` | `automation_run_disable` | true | Stop one active Automation run by run id; fail if the run is missing or no longer active. |
 | `automation.run.list` | `automation_run_list` | false | List recent run summaries for one Automation item. |
 | `automation.runtime.inspect` | `automation_runtime_inspect` | false | Inspect timers, running item ids, and compact item runtime state. |
 | `automation.trigger_type.list` | `automation_trigger_type_list` | false | List registered trigger type descriptors. |
@@ -255,6 +255,8 @@ Output:
 ```ts
 { stopped: boolean; alreadyFinished?: boolean }
 ```
+
+If a run id is missing or no longer active, the tool fails instead of returning a successful `{ stopped: false }` result.
 
 `automation_run_list`
 

@@ -81,7 +81,7 @@ const automationCapabilities: readonly CapabilityDefinition[] = [
   { id: "automation.item.enable" as CapabilityId, title: "Enable automation", description: "Enable one Synapse Automation item.", mutates: true },
   { id: "automation.item.disable" as CapabilityId, title: "Disable automation", description: "Disable one Synapse Automation item.", mutates: true },
   { id: "automation.run.execute" as CapabilityId, title: "Run automation", description: "Manually run one Synapse Automation item.", mutates: true },
-  { id: "automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run.", mutates: true },
+  { id: "automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run. Fails if the run is missing or no longer active.", mutates: true },
   { id: "automation.run.list" as CapabilityId, title: "List automation runs", description: "List recent runs for one Synapse Automation item.", mutates: false },
   { id: "automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
   { id: "automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
@@ -224,7 +224,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_run_disable",
-      description: "Stop one active Automation run by runId.",
+      description: "Stop one active Automation run by runId. Fails if the run is missing or no longer active.",
       inputSchema: {
         type: "object",
         properties: { runId: { type: "string", description: "Automation run id." } },
