@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2 } from 'lucide-react'
+import { Download, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminDriveItemRow } from '@/lib/api'
 import {
@@ -24,6 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AdminDriveStorageSummary } from '@/features/drive-browser/admin-drive-storage-summary'
+import { AdminPublicAssets } from '@/features/drive-browser/admin-public-assets'
 
 const allTypesValue = 'all'
 const allSharedValue = 'all'
@@ -69,6 +72,16 @@ export default function DriveAdminPage() {
       void queryClient.invalidateQueries({ queryKey: ['admin-drive-items'] })
       setDeleteTarget(null)
       toast.success('已删除')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: adminApi.restoreDriveItem,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-drive-items'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-drive-storage-summary'] })
+      toast.success('已恢复')
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -145,7 +158,26 @@ export default function DriveAdminPage() {
       {
         id: 'actions',
         cell: ({ row }) => (
-          <div className='flex justify-end'>
+          <div className='flex justify-end gap-2'>
+            {row.original.type === 'file' && row.original.storageStatus === 'active' ? (
+              <Button asChild variant='ghost' className='h-8 w-8 p-0'>
+                <a href={adminApi.downloadDriveItemUrl(row.original.id)}>
+                  <Download data-icon='inline-start' />
+                  <span className='sr-only'>下载</span>
+                </a>
+              </Button>
+            ) : null}
+            {row.original.lifecycleStatus !== 'active' ? (
+              <Button
+                variant='ghost'
+                className='h-8 w-8 p-0'
+                disabled={restoreMutation.isPending}
+                onClick={() => restoreMutation.mutate(row.original.id)}
+              >
+                <RotateCcw data-icon='inline-start' />
+                <span className='sr-only'>恢复</span>
+              </Button>
+            ) : null}
             <Button
               variant='ghost'
               className='h-8 w-8 p-0'
@@ -161,7 +193,7 @@ export default function DriveAdminPage() {
         enableHiding: false,
       },
     ],
-    [deleteMutation.isPending, deleteMutation.mutate]
+    [deleteMutation.isPending, restoreMutation.isPending, restoreMutation.mutate]
   )
 
   return (
@@ -170,113 +202,125 @@ export default function DriveAdminPage() {
         <h1 className='text-lg font-semibold'>云盘</h1>
       </Header>
       <Main>
-        {isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
-        ) : (
-          <ServerDataTable
-            columns={columns}
-            data={data?.data ?? []}
-            page={page}
-            pageSize={pageSize}
-            total={data?.total ?? 0}
-            error={isError ? error : null}
-            onRetry={() => void refetch()}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            sorting={sorting}
-            onSortingChange={setSorting}
-            toolbar={
-              <div className='flex flex-wrap items-center gap-2'>
-                <Input
-                  placeholder='搜索'
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value)
-                    setPage(1)
-                  }}
-                  className='h-8 w-45 lg:w-62.5'
-                />
-                <Input
-                  placeholder='用户 ID'
-                  value={userId}
-                  onChange={(event) => {
-                    setUserId(event.target.value)
-                    setPage(1)
-                  }}
-                  className='h-8 w-45 lg:w-62.5'
-                />
-                <Select
-                  value={type || allTypesValue}
-                  onValueChange={(value) => {
-                    setType(
-                      value === allTypesValue
-                        ? ''
-                        : (value as AdminDriveItemRow['type'])
-                    )
-                    setPage(1)
-                  }}
-                >
-                  <SelectTrigger size='sm' className='w-32'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={allTypesValue}>全部类型</SelectItem>
-                      <SelectItem value='file'>文件</SelectItem>
-                      <SelectItem value='folder'>文件夹</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={shared || allSharedValue}
-                  onValueChange={(value) => {
-                    setShared(
-                      value === allSharedValue
-                        ? ''
-                        : (value as 'true' | 'false')
-                    )
-                    setPage(1)
-                  }}
-                >
-                  <SelectTrigger size='sm' className='w-32'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={allSharedValue}>全部分享</SelectItem>
-                      <SelectItem value='true'>已分享</SelectItem>
-                      <SelectItem value='false'>未分享</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={storageStatus || allStatusesValue}
-                  onValueChange={(value) => {
-                    setStorageStatus(
-                      value === allStatusesValue
-                        ? ''
-                        : (value as AdminDriveItemRow['storageStatus'])
-                    )
-                    setPage(1)
-                  }}
-                >
-                  <SelectTrigger size='sm' className='w-32'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={allStatusesValue}>全部状态</SelectItem>
-                      <SelectItem value='pending'>上传中</SelectItem>
-                      <SelectItem value='active'>正常</SelectItem>
-                      <SelectItem value='delete_pending'>删除中</SelectItem>
-                      <SelectItem value='failed'>失败</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            }
-          />
-        )}
+        <Tabs defaultValue='items' className='min-h-0'>
+          <TabsList>
+            <TabsTrigger value='items'>文件</TabsTrigger>
+            <TabsTrigger value='public-assets'>公开素材</TabsTrigger>
+            <TabsTrigger value='storage'>存储</TabsTrigger>
+          </TabsList>
+          <TabsContent value='items' className='flex min-h-0 flex-col'>
+            <ServerDataTable
+              columns={columns}
+              data={data?.data ?? []}
+              page={page}
+              pageSize={pageSize}
+              total={data?.total ?? 0}
+              error={isError ? error : null}
+              onRetry={() => void refetch()}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              isLoading={isLoading}
+              toolbar={
+                <div className='flex flex-wrap items-center gap-2'>
+                  <Input
+                    placeholder='搜索'
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value)
+                      setPage(1)
+                    }}
+                    className='h-8 w-45 lg:w-62.5'
+                  />
+                  <Input
+                    placeholder='用户 ID'
+                    value={userId}
+                    onChange={(event) => {
+                      setUserId(event.target.value)
+                      setPage(1)
+                    }}
+                    className='h-8 w-45 lg:w-62.5'
+                  />
+                  <Select
+                    value={type || allTypesValue}
+                    onValueChange={(value) => {
+                      setType(
+                        value === allTypesValue
+                          ? ''
+                          : (value as AdminDriveItemRow['type'])
+                      )
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger size='sm' className='w-32'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={allTypesValue}>全部类型</SelectItem>
+                        <SelectItem value='file'>文件</SelectItem>
+                        <SelectItem value='folder'>文件夹</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={shared || allSharedValue}
+                    onValueChange={(value) => {
+                      setShared(
+                        value === allSharedValue
+                          ? ''
+                          : (value as 'true' | 'false')
+                      )
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger size='sm' className='w-32'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={allSharedValue}>全部分享</SelectItem>
+                        <SelectItem value='true'>已分享</SelectItem>
+                        <SelectItem value='false'>未分享</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={storageStatus || allStatusesValue}
+                    onValueChange={(value) => {
+                      setStorageStatus(
+                        value === allStatusesValue
+                          ? ''
+                          : (value as AdminDriveItemRow['storageStatus'])
+                      )
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger size='sm' className='w-32'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={allStatusesValue}>全部状态</SelectItem>
+                        <SelectItem value='pending'>上传中</SelectItem>
+                        <SelectItem value='active'>正常</SelectItem>
+                        <SelectItem value='delete_pending'>删除中</SelectItem>
+                        <SelectItem value='failed'>失败</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              }
+            />
+          </TabsContent>
+          <TabsContent value='public-assets' className='flex min-h-0 flex-col'>
+            <AdminPublicAssets />
+          </TabsContent>
+          <TabsContent value='storage'>
+            <AdminDriveStorageSummary />
+          </TabsContent>
+        </Tabs>
         <ConfirmDialog
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => {

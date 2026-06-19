@@ -467,6 +467,83 @@ describe("DriveService", () => {
     expect(await service.listItems("user-1", null)).toHaveLength(2)
   })
 
+  it("keeps public asset backing files out of normal Drive views and actions", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    const normal = await createCompletedUpload(service, "user-1", { parentId: null, name: "readme.txt", mimeType: "text/plain" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    expect((await service.listItems("user-1", null)).map((item) => item.id)).toEqual([normal.id])
+    expect((await service.listItemTree("user-1", { parentId: null })).items.map((item) => item.id)).toEqual([normal.id])
+    await expect(service.getItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.renameItem("user-1", backing.id, "renamed.png")).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.moveItem("user-1", backing.id, null)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.createShare("user-1", backing.id, "https://synapse.test")).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.deleteItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("hides legacy shares that point at public asset backing files", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    const share = await service.createShare("user-1", backing.id, "https://synapse.test")
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    await expect(service.listShares("user-1", "https://synapse.test")).resolves.toMatchObject({ items: [] })
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("rejects ordinary restore for trashed public asset backing files", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+    await prisma.driveItem.update({
+      where: { id: backing.id },
+      data: {
+        lifecycleStatus: "trashed",
+        trashedAt: new Date("2026-06-07T12:00:00.000Z"),
+        trashedBy: "user-1",
+        deleteRootId: backing.id,
+      },
+    })
+
+    await expect(service.restoreItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("does not overwrite public asset backing files during normal same-name uploads", async () => {
+    const prisma = createPrismaMemory()
+    const objectSizes = new Map<string, bigint>()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: objectSizes.get(key) ?? 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "logo.png",
+      size: "5",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.test",
+    })
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    objectSizes.set(session.storageKey, 5n)
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(prepared.item.id).not.toBe(backing.id)
+    expect(await service.getItem("user-1", prepared.item.id)).toMatchObject({ name: "logo.png", size: "5" })
+    expect((await service.listItems("user-1", null)).map((item) => item.id)).toEqual([prepared.item.id])
+    expect(await prisma.driveItem.findUniqueOrThrow({ where: { id: backing.id } })).toMatchObject({ size: 11n })
+  })
+
   it("lets the last completed concurrent overwrite win with correct usage", async () => {
     const prisma = createPrismaMemory()
     const objectSizes = new Map<string, bigint>()
@@ -1642,7 +1719,43 @@ describe("DriveService", () => {
     expect(serialized).not.toContain("/Users/liyang/project/.env")
   })
 
-  it("admin delete disables shares and hides the file", async () => {
+  it("admin delete moves active files to trash without disabling shares or deleting storage", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const share = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
+    vi.mocked(storage.deleteObject).mockClear()
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    await expect(service.getItem("user-1", prepared.item.id)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(item).toMatchObject({
+      lifecycleStatus: "trashed",
+      storageStatus: "active",
+      storageDeletePending: false,
+    })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    const shareRecord = await prisma.driveShare.findFirst({ where: { id: share.id } })
+    expect(shareRecord?.enabled).toBe(true)
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it("rejects public share access for non-active lifecycle even when share metadata is enabled", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1655,14 +1768,53 @@ describe("DriveService", () => {
     })
     await service.completeUpload("user-1", prepared.sessionId)
     const share = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
+    await prisma.driveItem.update({
+      where: { id: prepared.item.id },
+      data: { lifecycleStatus: "trashed" },
+    })
 
-    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
-
-    await expect(service.getItem("user-1", prepared.item.id)).rejects.toBeInstanceOf(NotFoundException)
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
-  it("admin delete releases reserved quota for pending uploads", async () => {
+  it("excludes trashed items from user-visible listings even when deletedAt is null", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const active = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "active.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", active.sessionId)
+    const trashed = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "trashed.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", trashed.sessionId)
+    await prisma.driveItem.update({
+      where: { id: trashed.item.id },
+      data: {
+        lifecycleStatus: "trashed",
+        trashedAt: new Date("2026-06-07T12:00:00.000Z"),
+        trashedBy: "user-1",
+        restoreParentId: null,
+        restorePath: "trashed.txt",
+        deleteRootId: trashed.item.id,
+        deletedAt: null,
+      },
+    })
+
+    const items = await service.listItems("user-1", null)
+
+    expect(items.map((item) => item.id)).toEqual([active.item.id])
+  })
+
+  it("admin delete moves pending uploads to trash without releasing reserved quota", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async () => undefined) }
     const storage: DriveStoragePort = {
@@ -1682,28 +1834,27 @@ describe("DriveService", () => {
     await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
 
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
-    expect(usage.reservedBytes).toBe(0n)
+    expect(usage.reservedBytes).toBe(11n)
     const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
-    expect(session?.status).toBe("cancelled")
+    expect(session?.status).toBe("pending")
     const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
-    expect(item.deletedAt).toBeInstanceOf(Date)
-    expect(item.uploadStatus).toBe("cancelled")
-    expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+    expect(item.deletedAt).toBeNull()
+    expect(item.lifecycleStatus).toBe("trashed")
+    expect(item.uploadStatus).toBe("pending")
+    expect(storage.deleteObject).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "admin.drive.delete",
+      action: "drive.trash",
       detail: expect.objectContaining({
         count: 1,
-        cancelledUploadSessions: 1,
-        releasedReservedBytes: "11",
       }),
     }))
   })
 
-  it("continues storage cleanup when delete audit recording fails", async () => {
+  it("keeps trashing when lifecycle audit recording fails", async () => {
     const prisma = createPrismaMemory()
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const auditLog = { record: vi.fn(async (input: any) => {
-      if (input.action === "admin.drive.delete") throw new Error("audit failed")
+      if (input.action === "drive.trash") throw new Error("audit failed")
     }) }
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -1725,20 +1876,21 @@ describe("DriveService", () => {
     try {
       await expect(service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")).resolves.toEqual({ ok: true })
 
-      expect(storage.deleteObject).toHaveBeenCalledWith(currentItem.storageKey)
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+      await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: currentItem.id } })).resolves.toMatchObject({ lifecycleStatus: "trashed" })
       expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
-        action: "admin.drive.delete",
+        action: "drive.trash",
         targetType: "drive_item",
         targetId: prepared.item.id,
         errorName: "Error",
         errorMessage: "audit failed",
-      }), "Failed to record drive delete audit log")
+      }), "Failed to record drive lifecycle audit log")
     } finally {
       warnSpy.mockRestore()
     }
   })
 
-  it("keeps admin delete pending storage cleanup visible in the admin list", async () => {
+  it("keeps storage metadata intact when admin delete moves files to trash", async () => {
     const prisma = createPrismaMemory()
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const storage: DriveStoragePort = {
@@ -1758,42 +1910,92 @@ describe("DriveService", () => {
     })
     await service.completeUpload("user-1", prepared.sessionId)
     const currentItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    vi.mocked(storage.deleteObject).mockClear()
 
     try {
       await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
 
-      const list = await service.listAdminItems({
-        pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
-        filters: { search: "handoff" },
+      await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).resolves.toMatchObject({
+        lifecycleStatus: "trashed",
+        storageStatus: "active",
+        storageKey: currentItem.storageKey,
+        storageDeletePending: false,
       })
-      expect(list.data).toEqual([
-        expect.objectContaining({
-          id: prepared.item.id,
-          storageStatus: "delete_pending",
-          storageDeletePending: true,
-        }),
-      ])
-      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
-        itemId: prepared.item.id,
-        storageKeyLength: currentItem.storageKey!.length,
-        errorName: "Error",
-        errorMessage: expect.stringContaining("Authorization: [REDACTED]"),
-      }), "Drive storage object delete failed")
-      const serializedWarns = JSON.stringify(warnSpy.mock.calls)
-      expect(serializedWarns).toContain("apiKey=[REDACTED]")
-      expect(serializedWarns).toContain("[URL]")
-      expect(serializedWarns).toContain("[PATH]")
-      expect(serializedWarns).not.toContain(`drive/${prepared.item.id}`)
-      expect(serializedWarns).not.toContain("plain-token")
-      expect(serializedWarns).not.toContain("plain-key")
-      expect(serializedWarns).not.toContain("user:pass")
-      expect(serializedWarns).not.toContain("/Users/example/file.txt")
+      expect(storage.deleteObject).not.toHaveBeenCalled()
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.anything(), "Drive storage object delete failed")
     } finally {
       warnSpy.mockRestore()
     }
   })
 
-  it("keeps admin list search scoped to visible drive items", async () => {
+  it("admin delete can trash and hide public asset backing files without deleting storage", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "logo.png",
+      size: "11",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    await markAsPublicAssetBacking(prisma, prepared.item.id)
+    vi.mocked(storage.deleteObject).mockClear()
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).resolves.toMatchObject({
+      lifecycleStatus: "trashed",
+      storageStatus: "active",
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(11n)
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    await expect(prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).resolves.toMatchObject({
+      lifecycleStatus: "hidden",
+      storageStatus: "active",
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(0n)
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it("admin restore brings hidden files back and charges quota again", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(0n)
+
+    const restored = await service.restoreItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    expect(restored).toMatchObject({
+      id: prepared.item.id,
+      name: "handoff.txt",
+    })
+    expect(await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).toMatchObject({
+      lifecycleStatus: "active",
+      hiddenAt: null,
+      hiddenBy: null,
+      deleteRootId: null,
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(11n)
+  })
+
+  it("keeps trashed items visible in admin search", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1820,7 +2022,7 @@ describe("DriveService", () => {
       filters: { search: "report" },
     })
 
-    expect(list.data.map((item) => item.id)).toEqual([active.item.id])
+    expect(list.data.map((item) => item.id)).toEqual([active.item.id, deleted.item.id])
   })
 
   it("returns Drive stats and a paged recursive metadata tree without reading file contents", async () => {
@@ -1933,6 +2135,17 @@ async function createCompletedUpload(
   return service.getItem(userId, prepared.item.id)
 }
 
+async function markAsPublicAssetBacking(prisma: ReturnType<typeof createPrismaMemory>, itemId: string) {
+  return prisma.driveItem.update({
+    where: { id: itemId },
+    data: {
+      publicAsset: {
+        assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      },
+    },
+  })
+}
+
 function createPrismaMemory() {
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
@@ -1965,6 +2178,7 @@ function createPrismaMemory() {
         : {}),
     }
   }
+  const shareWhereRow = (share: any) => ({ ...share, item: items.get(share.itemId) ?? null })
 
   const prisma: any = {
     $transaction: async (input: any) => {
@@ -2027,6 +2241,16 @@ function createPrismaMemory() {
           ...data,
           storageKey: data.storageKey ?? null,
           storageDeletePending: data.storageDeletePending ?? false,
+          lifecycleStatus: data.lifecycleStatus ?? "active",
+          trashedAt: data.trashedAt ?? null,
+          trashedBy: data.trashedBy ?? null,
+          hiddenAt: data.hiddenAt ?? null,
+          hiddenBy: data.hiddenBy ?? null,
+          restoreParentId: data.restoreParentId ?? null,
+          restorePath: data.restorePath ?? null,
+          deleteRootId: data.deleteRootId ?? null,
+          objectMissing: data.objectMissing ?? false,
+          publicAsset: data.publicAsset ?? null,
           deletedAt: null,
           createdAt: now(),
           updatedAt: now(),
@@ -2190,12 +2414,12 @@ function createPrismaMemory() {
         return withShareIncludes(share, { editors: true })
       },
       findFirst: async ({ where, include }: any) => {
-        const share = [...shares.values()].find((item) => matchesWhere(item, where))
+        const share = [...shares.values()].find((item) => matchesWhere(shareWhereRow(item), where))
         if (!share) return null
         return withShareIncludes(share, include)
       },
       findMany: async ({ where, include, orderBy, select }: any = {}) => {
-        const found = orderRows([...shares.values()].filter((share) => matchesWhere(share, where ?? {})), orderBy)
+        const found = orderRows([...shares.values()].filter((share) => matchesWhere(shareWhereRow(share), where ?? {})), orderBy)
         if (select) return found.map((share) => selectFields(share, select))
         return found.map((share) => withShareIncludes(share, include))
       },
@@ -2241,6 +2465,7 @@ function matchesWhere(row: any, where: any): boolean {
   return Object.entries(where).every(([key, value]: [string, any]) => {
     if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
+    if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
     if (value && typeof value === "object" && "gt" in value) return row[key] > value.gt

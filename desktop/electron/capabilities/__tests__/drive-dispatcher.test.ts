@@ -1,5 +1,6 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
+import type { DrivePublicAssetDto, DriveTrashListPageDto } from "@synapse/shared"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
@@ -55,6 +56,15 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_folder_path_ensure",
       "drive_reorganization_preview",
       "drive_reorganization_apply",
+      "drive_direct_link_upload",
+      "drive_direct_link_list",
+      "drive_direct_link_get",
+      "drive_direct_link_update",
+      "drive_direct_link_delete",
+      "drive_direct_link_restore",
+      "drive_trash_list",
+      "drive_trash_delete",
+      "drive_item_restore",
     ])
   })
 
@@ -281,6 +291,137 @@ describe("createDriveCapabilityDispatcher", () => {
       .resolves.toMatchObject({ ok: true, data: { items: [expect.objectContaining({ id: "share-1" })] } })
 
     expect(accountService.listDriveShares).toHaveBeenCalledWith({ offset: 10, limit: 5 })
+  })
+
+  it("uploads a public asset through the account helper after authorizing local file read", async () => {
+    const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", name: "logo.png" })
+    const uploadDrivePublicAssets = vi.fn(async () => ({
+      results: [{ status: "fulfilled" as const, fileName: "logo.png", asset }],
+    }))
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets }),
+      permissionGuard,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo.png",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/logo.png",
+      context: expect.objectContaining({ driveAction: "drive.direct_link.upload" }),
+    }))
+    expect(uploadDrivePublicAssets).toHaveBeenCalledWith({
+      files: [{ path: "/tmp/logo.png", name: "logo.png", mimeType: "image/png" }],
+    })
+  })
+
+  it("routes public asset list and get tools", async () => {
+    const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" })
+    const listDrivePublicAssets = vi.fn(async () => ({ items: [asset], total: 1, page: drivePage() }))
+    const getDrivePublicAsset = vi.fn(async () => asset)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ listDrivePublicAssets, getDrivePublicAsset }),
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.list", { offset: 3, limit: 7 }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { items: [asset], total: 1, page: drivePage() }, total: 1 })
+    await expect(dispatcher.dispatch("drive.direct_link.get", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(listDrivePublicAssets).toHaveBeenCalledWith({ offset: 3, limit: 7 })
+    expect(getDrivePublicAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("replaces public asset files after authorizing local file read", async () => {
+    const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", name: "new-logo.png" })
+    const replaceDrivePublicAssetFile = vi.fn(async () => asset)
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ replaceDrivePublicAssetFile }),
+      permissionGuard,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.update", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      filePath: "/tmp/new-logo.png",
+      name: "new-logo.png",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/new-logo.png",
+      context: expect.objectContaining({ driveAction: "drive.direct_link.update" }),
+    }))
+    expect(replaceDrivePublicAssetFile).toHaveBeenCalledWith({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      path: "/tmp/new-logo.png",
+      name: "new-logo.png",
+      mimeType: "image/png",
+    })
+  })
+
+  it("routes public asset delete and restore tools", async () => {
+    const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" })
+    const trashDrivePublicAsset = vi.fn(async () => asset)
+    const restoreDrivePublicAsset = vi.fn(async () => asset)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ trashDrivePublicAsset, restoreDrivePublicAsset }),
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.delete", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+    await expect(dispatcher.dispatch("drive.direct_link.restore", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
+
+    expect(trashDrivePublicAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+    expect(restoreDrivePublicAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("routes Drive trash list, trash delete, and item restore tools", async () => {
+    const trashPage: DriveTrashListPageDto = {
+      items: [{
+        id: "item-1",
+        kind: "normal",
+        name: "old.png",
+        type: "file",
+        size: "4",
+        mimeType: "image/png",
+        originalPath: "/old.png",
+        trashedAt: "2026-06-18T00:00:00.000Z",
+      }],
+      total: 1,
+      page: drivePage(),
+    }
+    const restored = driveItem({ id: "item-1", name: "old.png" })
+    const listDriveTrash = vi.fn(async () => trashPage)
+    const deleteDriveTrashItem = vi.fn(async () => ({ ok: true as const }))
+    const restoreDriveTrashItem = vi.fn(async () => restored)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ listDriveTrash, deleteDriveTrashItem, restoreDriveTrashItem }),
+    })
+
+    await expect(dispatcher.dispatch("drive.trash.list", { offset: 1, limit: 20 }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: trashPage, total: 1 })
+    await expect(dispatcher.dispatch("drive.trash.delete", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { ok: true } })
+    await expect(dispatcher.dispatch("drive.item.restore", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: restored })
+
+    expect(listDriveTrash).toHaveBeenCalledWith({ offset: 1, limit: 20 })
+    expect(deleteDriveTrashItem).toHaveBeenCalledWith("item-1")
+    expect(restoreDriveTrashItem).toHaveBeenCalledWith({ itemId: "item-1" })
   })
 
   it("returns preview snapshots and text content without creating shares", async () => {
@@ -783,7 +924,7 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 })
 
-function createAccountService(overrides: Partial<DriveAccountService> = {}): DriveAccountService {
+function createAccountService(overrides: Partial<DriveAccountService> & Record<string, unknown> = {}): DriveAccountService {
   return {
     listDriveItems: vi.fn(async () => []),
     prepareDriveUpload: vi.fn(async () => ({
@@ -822,6 +963,15 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     deleteDriveFileVersion: vi.fn(),
     updateDriveFileVersionPin: vi.fn(),
     downloadDriveFolderZip: vi.fn(),
+    listDrivePublicAssets: vi.fn(),
+    getDrivePublicAsset: vi.fn(),
+    uploadDrivePublicAssets: vi.fn(),
+    replaceDrivePublicAssetFile: vi.fn(),
+    trashDrivePublicAsset: vi.fn(),
+    restoreDrivePublicAsset: vi.fn(),
+    listDriveTrash: vi.fn(),
+    deleteDriveTrashItem: vi.fn(),
+    restoreDriveTrashItem: vi.fn(),
     ...overrides,
   } as unknown as DriveAccountService
 }
@@ -852,6 +1002,24 @@ function driveItem(overrides: Partial<DriveItem>): DriveItem {
     activeShareId: null,
     createdAt: "2026-06-07T00:00:00.000Z",
     updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function drivePublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {
+  return {
+    assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    itemId: "item-1",
+    name: "logo.png",
+    size: "4",
+    mimeType: "image/png",
+    url: "https://synapse.test/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    lifecycleStatus: "active",
+    accessCount: "0",
+    responseBytes: "0",
+    lastAccessedAt: null,
+    createdAt: "2026-06-18T00:00:00.000Z",
+    updatedAt: "2026-06-18T00:00:00.000Z",
     ...overrides,
   }
 }

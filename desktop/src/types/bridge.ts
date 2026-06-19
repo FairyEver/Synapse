@@ -31,10 +31,14 @@ import type {
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DrivePublicAssetDto,
+  DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
   DriveShareDto,
   DriveShareListPageDto,
   DriveShareListItemDto,
+  DriveTrashItemDto,
+  DriveTrashListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -68,6 +72,32 @@ export type DriveLocalUploadResult = {
   readonly failed: number
   readonly skipped: number
   readonly message?: string
+}
+
+export type DrivePublicAssetLocalFile = {
+  readonly path: string
+  readonly name: string
+  readonly mimeType?: string | null
+}
+
+export type DrivePublicAssetUploadRequest = {
+  readonly files: readonly DrivePublicAssetLocalFile[]
+}
+
+export type DrivePublicAssetUploadResultItem =
+  | {
+    readonly status: "fulfilled"
+    readonly fileName: string
+    readonly asset: DrivePublicAssetDto
+  }
+  | {
+    readonly status: "rejected"
+    readonly fileName: string
+    readonly message: string
+  }
+
+export type DrivePublicAssetUploadResult = {
+  readonly results: readonly DrivePublicAssetUploadResultItem[]
 }
 
 import type {
@@ -816,6 +846,16 @@ export type SynapseBridge = {
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>
     listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
+    listDrivePublicAssets: (input?: { offset?: number; limit?: number }) => Promise<DrivePublicAssetListPageDto>
+    getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+    uploadDrivePublicAssets: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
+    replaceDrivePublicAssetFile: (input: { assetId: string } & DrivePublicAssetLocalFile) => Promise<DrivePublicAssetDto>
+    renameDrivePublicAsset: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
+    trashDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+    restoreDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+    listDriveTrash: (input?: { offset?: number; limit?: number }) => Promise<DriveTrashListPageDto>
+    restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
+    deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }
   live: {

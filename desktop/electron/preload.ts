@@ -323,6 +323,16 @@ const IPC_CHANNELS = {
     "disableDriveShare": "synapse:account:drive:shares:disable",
     "getDriveUsage": "synapse:account:drive:usage:get",
     "listDriveShares": "synapse:account:drive:shares:list",
+    "listDrivePublicAssets": "synapse:account:drive:public-assets:list",
+    "getDrivePublicAsset": "synapse:account:drive:public-assets:get",
+    "uploadDrivePublicAssets": "synapse:account:drive:public-assets:upload",
+    "replaceDrivePublicAssetFile": "synapse:account:drive:public-assets:replace-file",
+    "renameDrivePublicAsset": "synapse:account:drive:public-assets:rename",
+    "trashDrivePublicAsset": "synapse:account:drive:public-assets:trash",
+    "restoreDrivePublicAsset": "synapse:account:drive:public-assets:restore",
+    "listDriveTrash": "synapse:account:drive:trash:list",
+    "restoreDriveTrashItem": "synapse:account:drive:trash:restore",
+    "deleteDriveTrashItem": "synapse:account:drive:trash:delete",
     "stateChanged": "synapse:events:account",
   },
   "live": {
@@ -683,6 +693,38 @@ const synapseBridge: SynapseBridge = {
     disableDriveShare: invoke(IPC_CHANNELS.account.disableDriveShare),
     getDriveUsage: invoke(IPC_CHANNELS.account.getDriveUsage),
     listDriveShares: invoke(IPC_CHANNELS.account.listDriveShares),
+    listDrivePublicAssets: invoke(IPC_CHANNELS.account.listDrivePublicAssets),
+    getDrivePublicAsset: invoke(IPC_CHANNELS.account.getDrivePublicAsset),
+    uploadDrivePublicAssets: invokeWithFailureLogRequest(
+      IPC_CHANNELS.account.uploadDrivePublicAssets,
+      (input) => {
+        const files = typeof input === "object" && input && "files" in input && Array.isArray(input.files)
+          ? input.files
+          : []
+        return {
+          fileCount: files.length,
+          fileNames: files.map((file) => (
+            typeof file === "object" && file && "name" in file && typeof file.name === "string" ? file.name : undefined
+          )).slice(0, 10),
+        }
+      },
+    ),
+    replaceDrivePublicAssetFile: invokeWithFailureLogRequest(
+      IPC_CHANNELS.account.replaceDrivePublicAssetFile,
+      (input) => {
+        const payload = typeof input === "object" && input ? input : {}
+        return {
+          assetId: "assetId" in payload && typeof payload.assetId === "string" ? payload.assetId : undefined,
+          fileName: "name" in payload && typeof payload.name === "string" ? payload.name : undefined,
+        }
+      },
+    ),
+    renameDrivePublicAsset: invoke(IPC_CHANNELS.account.renameDrivePublicAsset),
+    trashDrivePublicAsset: invoke(IPC_CHANNELS.account.trashDrivePublicAsset),
+    restoreDrivePublicAsset: invoke(IPC_CHANNELS.account.restoreDrivePublicAsset),
+    listDriveTrash: invoke(IPC_CHANNELS.account.listDriveTrash),
+    restoreDriveTrashItem: invoke(IPC_CHANNELS.account.restoreDriveTrashItem),
+    deleteDriveTrashItem: invoke(IPC_CHANNELS.account.deleteDriveTrashItem),
     onStateChanged: createDomainEventPayloadSubscription<SynapseAccountStateChangedEvent>(
       subscribe,
       "account",

@@ -5,11 +5,13 @@ import cookieParser from "cookie-parser"
 import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { Readable } from "node:stream"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 import { DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveService } from "./drive.service"
 import { LocalDriveStorage } from "./drive-storage"
 
@@ -22,6 +24,7 @@ type SupertestRequest = {
 
 const request = require("supertest") as (server: unknown) => {
   readonly get: (path: string) => SupertestRequest
+  readonly head: (path: string) => SupertestRequest
   readonly post: (path: string) => SupertestRequest
   readonly patch: (path: string) => SupertestRequest
   readonly put: (path: string) => SupertestRequest
@@ -522,6 +525,143 @@ describe("Drive share and edit E2E", () => {
   })
 })
 
+describe("Drive public asset routes", () => {
+  let app: INestApplication | null = null
+  const publicAssets = {
+    resolvePublicAsset: vi.fn(),
+    recordAccessSafely: vi.fn(async () => undefined),
+  }
+  const storage = {
+    getObjectStream: vi.fn(async () => ({
+      stream: Readable.from(Buffer.from("png-data")),
+      size: 8n,
+      contentType: "image/png",
+    })),
+  }
+
+  beforeEach(async () => {
+    publicAssets.resolvePublicAsset.mockReset()
+    publicAssets.recordAccessSafely.mockReset()
+    publicAssets.recordAccessSafely.mockResolvedValue(undefined)
+    storage.getObjectStream.mockReset()
+    storage.getObjectStream.mockResolvedValue({
+      stream: Readable.from(Buffer.from("png-data")),
+      size: 8n,
+      contentType: "image/png",
+    })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: {} },
+        { provide: DrivePublicAssetService, useValue: publicAssets },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn(() => false) })
+      .compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+  })
+
+  afterEach(async () => {
+    await app?.close()
+    app = null
+  })
+
+  it("serves public assets inline with short public cache", async () => {
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "ok",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      publicAssetId: "public-asset-1",
+      userId: "user-1",
+      storageKey: "drive/item-1",
+      name: "logo.png",
+      mimeType: "image/png",
+      size: 8n,
+      etag: "\"etag-1\"",
+    })
+
+    const response = await request(app!.getHttpServer()).get("/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ").expect(200)
+
+    expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toBe("png-data")
+    expect(response.headers["cache-control"]).toBe("public, max-age=300")
+    expect(response.headers["content-disposition"]).toContain("inline;")
+    expect(response.headers.etag).toBe("\"etag-1\"")
+    expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      publicAssetId: "public-asset-1",
+      method: "GET",
+      statusCode: 200,
+      bytes: 8n,
+    }))
+  })
+
+  it("supports HEAD and does not count response bytes", async () => {
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "ok",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      publicAssetId: "public-asset-1",
+      userId: "user-1",
+      storageKey: "drive/item-1",
+      name: "logo.png",
+      mimeType: "image/png",
+      size: 8n,
+      etag: "\"etag-1\"",
+    })
+
+    const response = await request(app!.getHttpServer()).head("/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ").expect(200)
+
+    expect(response.headers["content-length"]).toBe("8")
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+    expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
+      method: "HEAD",
+      statusCode: 200,
+      bytes: 0n,
+    }))
+  })
+
+  it("returns 304 for matching ETags and records zero bytes", async () => {
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "not_modified",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      publicAssetId: "public-asset-1",
+      userId: "user-1",
+      etag: "\"etag-1\"",
+    })
+
+    await request(app!.getHttpServer())
+      .get("/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+      .set("If-None-Match", "\"etag-1\"")
+      .expect(304)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+    expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
+      method: "GET",
+      statusCode: 304,
+      bytes: 0n,
+    }))
+  })
+
+  it("returns uncached 404 for missing public assets", async () => {
+    publicAssets.resolvePublicAsset.mockResolvedValue({
+      status: "not_found",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    })
+
+    const response = await request(app!.getHttpServer()).get("/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ").expect(404)
+
+    expect(response.headers["cache-control"]).toBe("no-store")
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+    expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      method: "GET",
+      statusCode: 404,
+      bytes: 0n,
+    }))
+  })
+})
+
 async function uploadTextFile(input: {
   readonly app: INestApplication
   readonly userId: string
@@ -658,6 +798,16 @@ function createPrismaMemory() {
           ...data,
           storageKey: data.storageKey ?? null,
           storageDeletePending: data.storageDeletePending ?? false,
+          lifecycleStatus: data.lifecycleStatus ?? "active",
+          trashedAt: data.trashedAt ?? null,
+          trashedBy: data.trashedBy ?? null,
+          hiddenAt: data.hiddenAt ?? null,
+          hiddenBy: data.hiddenBy ?? null,
+          restoreParentId: data.restoreParentId ?? null,
+          restorePath: data.restorePath ?? null,
+          deleteRootId: data.deleteRootId ?? null,
+          objectMissing: data.objectMissing ?? false,
+          publicAsset: data.publicAsset ?? null,
           deletedAt: null,
           createdAt: now(),
           updatedAt: now(),
@@ -804,6 +954,7 @@ function createPrismaMemory() {
         const share = {
           id: id("share"),
           enabled,
+          item: items.get(data.itemId) ?? null,
           passwordEnabled: false,
           passwordHash: null,
           passwordEncrypted: null,
@@ -873,6 +1024,7 @@ function matchesWhere(row: any, where: any): boolean {
   return Object.entries(where).every(([key, value]: [string, any]) => {
     if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
+    if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
     if (value && typeof value === "object" && "gt" in value) return row[key] > value.gt

@@ -14,6 +14,10 @@ import type {
 import type {
   DriveLocalUploadFileItem,
   DriveLocalUploadFolderItem,
+  DrivePublicAssetLocalFile,
+  DrivePublicAssetUploadRequest,
+  DrivePublicAssetUploadResult,
+  DrivePublicAssetUploadResultItem,
   DriveLocalUploadRequest,
   DriveLocalUploadResult,
 } from "../../src/types/bridge"
@@ -30,6 +34,8 @@ import type {
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
+  DrivePublicAssetDto,
+  DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
   DriveReorganizationApplyInput,
   DriveReorganizationApplyResultDto,
@@ -39,6 +45,8 @@ import type {
   DriveShareListPageDto,
   DriveShareListItemDto,
   DriveStatsDto,
+  DriveTrashItemDto,
+  DriveTrashListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
   ContentStoreDraftDto,
@@ -136,6 +144,14 @@ function publicAppUrl(): string {
 }
 
 function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
+  const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  const query = params.toString()
+  return query ? `?${query}` : ""
+}
+
+function drivePageQuery(input?: { readonly offset?: number; readonly limit?: number }): string {
   const params = new URLSearchParams()
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
   if (input?.limit !== undefined) params.set("limit", String(input.limit))
@@ -800,6 +816,187 @@ export class AccountService {
       ...result,
       items: await Promise.all(result.items.map(withCurrentDriveShareUrl)),
     }
+  }
+
+  async listDrivePublicAssets(input?: { readonly offset?: number; readonly limit?: number }): Promise<DrivePublicAssetListPageDto> {
+    return this.getAuthenticatedJson<DrivePublicAssetListPageDto>(
+      `${apiBaseUrl()}/drive/public-assets${drivePageQuery(input)}`,
+      "公开素材加载失败。",
+    )
+  }
+
+  async getDrivePublicAsset(assetId: string): Promise<DrivePublicAssetDto> {
+    return this.getAuthenticatedJson<DrivePublicAssetDto>(
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}`,
+      "公开素材加载失败。",
+    )
+  }
+
+  async uploadDrivePublicAssets(input: DrivePublicAssetUploadRequest): Promise<DrivePublicAssetUploadResult> {
+    const concurrency = 3
+    const files = [...input.files]
+    const results: DrivePublicAssetUploadResultItem[] = new Array(files.length)
+    let nextIndex = 0
+
+    const runNext = async (): Promise<void> => {
+      for (;;) {
+        const index = nextIndex
+        nextIndex += 1
+        const file = files[index]
+        if (!file) return
+        results[index] = await this.uploadDrivePublicAssetFile(file)
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, runNext))
+    return { results }
+  }
+
+  async replaceDrivePublicAssetFile(input: { readonly assetId: string } & DrivePublicAssetLocalFile): Promise<DrivePublicAssetDto> {
+    const fileStat = await safeLocalFileStat(input.path)
+    if (!fileStat?.isFile()) throw new Error("文件不可用。")
+    const uploadLimits = await getDriveUploadLimits()
+    if (fileStat.size > uploadLimits.maxFileBytes) throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
+    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
+
+    const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(input.assetId)}/replace/prepare`,
+      { name: input.name, size: String(fileStat.size), mimeType },
+      "替换准备失败。",
+    )
+
+    try {
+      await this.putPreparedUploadFromPath(prepared.upload, input.path, fileStat.size)
+      return await this.requestAuthenticatedJson<DrivePublicAssetDto>(
+        "POST",
+        `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(input.assetId)}/replace/${encodeURIComponent(prepared.sessionId)}/complete`,
+        undefined,
+        "替换确认失败。",
+      )
+    } catch (error) {
+      await this.cancelDrivePublicAssetReplace(input.assetId, prepared.sessionId)
+      throw error
+    }
+  }
+
+  async renameDrivePublicAsset(assetId: string, name: string): Promise<DrivePublicAssetDto> {
+    return this.requestAuthenticatedJson<DrivePublicAssetDto>(
+      "PATCH",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}`,
+      { name },
+      "重命名失败。",
+    )
+  }
+
+  async trashDrivePublicAsset(assetId: string): Promise<DrivePublicAssetDto> {
+    return this.requestAuthenticatedJson<DrivePublicAssetDto>(
+      "DELETE",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}`,
+      undefined,
+      "移到回收站失败。",
+    )
+  }
+
+  async restoreDrivePublicAsset(assetId: string): Promise<DrivePublicAssetDto> {
+    return this.requestAuthenticatedJson<DrivePublicAssetDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}/restore`,
+      undefined,
+      "恢复失败。",
+    )
+  }
+
+  async listDriveTrash(input?: { readonly offset?: number; readonly limit?: number }): Promise<DriveTrashListPageDto> {
+    return this.getAuthenticatedJson<DriveTrashListPageDto>(
+      `${apiBaseUrl()}/drive/trash${drivePageQuery(input)}`,
+      "回收站加载失败。",
+    )
+  }
+
+  async restoreDriveTrashItem(input: { readonly itemId: string; readonly kind?: DriveTrashItemDto["kind"]; readonly assetId?: string }): Promise<DriveItemDto | DrivePublicAssetDto> {
+    if (input.kind === "public_asset" && input.assetId) {
+      return this.restoreDrivePublicAsset(input.assetId)
+    }
+    return this.requestAuthenticatedJson<DriveItemDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(input.itemId)}/restore`,
+      undefined,
+      "恢复失败。",
+    )
+  }
+
+  async deleteDriveTrashItem(itemId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>(
+      "DELETE",
+      `${apiBaseUrl()}/drive/trash/${encodeURIComponent(itemId)}`,
+      undefined,
+      "删除失败。",
+    )
+  }
+
+  private async uploadDrivePublicAssetFile(file: DrivePublicAssetLocalFile): Promise<DrivePublicAssetUploadResult["results"][number]> {
+    const fileStat = await safeLocalFileStat(file.path)
+    if (!fileStat?.isFile()) return { status: "rejected", fileName: file.name, message: "文件不可用" }
+    const uploadLimits = await getDriveUploadLimits()
+    if (fileStat.size > uploadLimits.maxFileBytes) {
+      return { status: "rejected", fileName: file.name, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
+    }
+
+    let prepared: DriveUploadPrepareResult
+    const mimeType = await resolveDrivePublicAssetMimeType(file.name, file.mimeType)
+    try {
+      prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
+        "POST",
+        `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,
+        { name: file.name, size: String(fileStat.size), mimeType },
+        "上传准备失败。",
+      )
+    } catch {
+      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage() }
+    }
+
+    try {
+      await this.putPreparedUploadFromPath(prepared.upload, file.path, fileStat.size)
+      const asset = await this.requestAuthenticatedJson<DrivePublicAssetDto>(
+        "POST",
+        `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
+        undefined,
+        "上传确认失败。",
+      )
+      return { status: "fulfilled", fileName: file.name, asset }
+    } catch {
+      await this.cancelDrivePublicAssetUpload(prepared.sessionId)
+      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage() }
+    }
+  }
+
+  private async cancelDrivePublicAssetUpload(sessionId: string): Promise<void> {
+    await this.requestAuthenticatedJson<{ ok: true }>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(sessionId)}/cancel`,
+      undefined,
+      "上传取消失败。",
+    ).catch((error) => {
+      logger.warn("Drive public asset upload cancel failed.", {
+        operation: "cancelDrivePublicAssetUpload",
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    })
+  }
+
+  private async cancelDrivePublicAssetReplace(assetId: string, sessionId: string): Promise<void> {
+    await this.requestAuthenticatedJson<{ ok: true }>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}/replace/${encodeURIComponent(sessionId)}/cancel`,
+      undefined,
+      "替换取消失败。",
+    ).catch((error) => {
+      logger.warn("Drive public asset replace cancel failed.", {
+        operation: "cancelDrivePublicAssetReplace",
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    })
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
@@ -1538,6 +1735,13 @@ async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; 
     maxFileBytes: shared.DRIVE_MAX_FILE_BYTES,
     maxFileSizeLabel: shared.DRIVE_MAX_FILE_SIZE_LABEL,
   }
+}
+
+async function resolveDrivePublicAssetMimeType(name: string, mimeType?: string | null): Promise<string | null> {
+  const normalized = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : null
+  if (normalized) return normalized
+  const shared = await sharedUrlsPromise
+  return shared.inferDrivePublicAssetMimeType(name)
 }
 
 function driveMaxFileSizeMessage(label: string): string {

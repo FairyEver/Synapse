@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveItemDto, type DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -460,6 +460,51 @@ describe("AccountService", () => {
 
     expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-first")
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-second")
+  })
+
+  it("infers public asset MIME types before upload and replace prepare requests", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-local-"))
+    const uploadPath = path.join(dir, "logo.png")
+    const replacePath = path.join(dir, "banner.webp")
+    await writeFile(uploadPath, "hello")
+    await writeFile(replacePath, "banner")
+    const asset = drivePublicAsset()
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce(preparedFile("upload-session", "https://upload.example.test/public-asset-upload"))
+      .mockResolvedValueOnce(asset)
+      .mockResolvedValueOnce(preparedFile("replace-session", "https://upload.example.test/public-asset-replace"))
+      .mockResolvedValueOnce(asset)
+    vi.spyOn(service as unknown as {
+      putPreparedUploadFromPath: (...args: unknown[]) => Promise<void>
+    }, "putPreparedUploadFromPath").mockResolvedValue(undefined)
+
+    await expect(service.uploadDrivePublicAssets({
+      files: [{ path: uploadPath, name: "logo.png", mimeType: null }],
+    })).resolves.toEqual({ results: [{ status: "fulfilled", fileName: "logo.png", asset }] })
+    await expect(service.replaceDrivePublicAssetFile({
+      assetId: asset.assetId,
+      path: replacePath,
+      name: "banner.webp",
+      mimeType: null,
+    })).resolves.toEqual(asset)
+
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      1,
+      "POST",
+      expectedApiUrl("/drive/public-assets/uploads/prepare"),
+      { name: "logo.png", size: "5", mimeType: "image/png" },
+      "上传准备失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      3,
+      "POST",
+      expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/prepare`),
+      { name: "banner.webp", size: "6", mimeType: "image/webp" },
+      "替换准备失败。",
+    )
   })
 
   it("does not leak local paths in local upload summaries or logs", async () => {
@@ -2091,6 +2136,23 @@ function driveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
     storageStatus: overrides.storageStatus ?? "active",
     shared: overrides.shared ?? false,
     activeShareId: overrides.activeShareId ?? null,
+    createdAt: overrides.createdAt ?? "2026-06-09T00:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-06-09T00:00:00.000Z",
+  }
+}
+
+function drivePublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {
+  return {
+    assetId: overrides.assetId ?? "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    itemId: overrides.itemId ?? "item-public-asset-1",
+    name: overrides.name ?? "logo.png",
+    size: overrides.size ?? "5",
+    mimeType: overrides.mimeType ?? "image/png",
+    url: overrides.url ?? `${expectedPublicAppUrl}/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ`,
+    lifecycleStatus: overrides.lifecycleStatus ?? "active",
+    accessCount: overrides.accessCount ?? "0",
+    responseBytes: overrides.responseBytes ?? "0",
+    lastAccessedAt: overrides.lastAccessedAt ?? null,
     createdAt: overrides.createdAt ?? "2026-06-09T00:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-06-09T00:00:00.000Z",
   }

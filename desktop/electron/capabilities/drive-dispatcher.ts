@@ -15,6 +15,8 @@ import type {
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
+  DrivePublicAssetDto,
+  DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
   DriveReorganizationApplyInput,
   DriveReorganizationApplyResultDto,
@@ -24,6 +26,7 @@ import type {
   DriveShareDto,
   DriveShareListPageDto,
   DriveStatsDto,
+  DriveTrashListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -81,6 +84,31 @@ type DriveAccountServicePort = {
   readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ ok: true }>
   readonly updateDriveFileVersionPin: (itemId: string, versionId: string, isPinned: boolean) => Promise<DriveFileVersionDto>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
+  readonly listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
+  readonly getDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
+  readonly uploadDrivePublicAssets: (input: {
+    readonly files: ReadonlyArray<{
+      readonly path: string
+      readonly name: string
+      readonly mimeType?: string | null
+    }>
+  }) => Promise<{
+    readonly results: ReadonlyArray<
+      | { readonly status: "fulfilled"; readonly fileName: string; readonly asset: DrivePublicAssetDto }
+      | { readonly status: "rejected"; readonly fileName: string; readonly message: string }
+    >
+  }>
+  readonly replaceDrivePublicAssetFile: (input: {
+    readonly assetId: string
+    readonly path: string
+    readonly name: string
+    readonly mimeType?: string | null
+  }) => Promise<DrivePublicAssetDto>
+  readonly trashDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
+  readonly restoreDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
+  readonly listDriveTrash: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
+  readonly deleteDriveTrashItem: (itemId: string) => Promise<{ ok: true }>
+  readonly restoreDriveTrashItem: (input: { readonly itemId: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
 }
 
 type FileSystemPort = {
@@ -304,6 +332,47 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             ok: true,
             data: await deps.accountService.applyDriveReorganization({ planId: requireString(params, "planId") }),
           }))
+        case "drive.direct_link.upload":
+          return dispatchDriveMutation(deps, action, params, context, () =>
+            uploadPublicAsset(deps, params, context, action))
+        case "drive.direct_link.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const assets = await deps.accountService.listDrivePublicAssets(parsePublicLinksPageInput(params))
+            return { ok: true, data: assets, total: assets.total }
+          })
+        case "drive.direct_link.get":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.getDrivePublicAsset(requireString(params, "assetId")),
+          }))
+        case "drive.direct_link.update":
+          return dispatchDriveMutation(deps, action, params, context, () =>
+            replacePublicAsset(deps, params, context, action))
+        case "drive.direct_link.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.trashDrivePublicAsset(requireString(params, "assetId")),
+          }))
+        case "drive.direct_link.restore":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.restoreDrivePublicAsset(requireString(params, "assetId")),
+          }))
+        case "drive.trash.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const trash = await deps.accountService.listDriveTrash(parsePublicLinksPageInput(params))
+            return { ok: true, data: trash, total: trash.total }
+          })
+        case "drive.trash.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveTrashItem(requireString(params, "itemId")),
+          }))
+        case "drive.item.restore":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.restoreDriveTrashItem({ itemId: requireString(params, "itemId") }),
+          }))
         default:
           throw new Error(`Unknown drive action: ${action}`)
       }
@@ -404,6 +473,59 @@ async function uploadFolder(
     ok: true,
     data,
   }
+}
+
+async function uploadPublicAsset(
+  deps: DriveCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+  action: string,
+): Promise<DispatchResult> {
+  const filePath = requireString(params, "filePath")
+  const name = optionalString(params.name) ?? path.basename(filePath)
+  await authorizeFileRead(deps, filePath, context, action)
+  const result = await deps.accountService.uploadDrivePublicAssets({
+    files: [{
+      path: filePath,
+      name,
+      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
+    }],
+  })
+  const first = result.results[0]
+  if (!first) {
+    return { ok: false, error: "Public asset upload did not return a result.", data: result }
+  }
+  if (first.status === "rejected") {
+    return { ok: false, error: first.message, data: first }
+  }
+  return { ok: true, data: first.asset }
+}
+
+async function replacePublicAsset(
+  deps: DriveCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+  action: string,
+): Promise<DispatchResult> {
+  const assetId = requireString(params, "assetId")
+  const filePath = requireString(params, "filePath")
+  const name = optionalString(params.name) ?? path.basename(filePath)
+  await authorizeFileRead(deps, filePath, context, action)
+  return {
+    ok: true,
+    data: await deps.accountService.replaceDrivePublicAssetFile({
+      assetId,
+      path: filePath,
+      name,
+      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
+    }),
+  }
+}
+
+async function resolvePublicAssetMimeType(name: string, mimeType?: string): Promise<string | null> {
+  if (mimeType) return mimeType
+  const { inferDrivePublicAssetMimeType } = await import("@synapse/shared")
+  return inferDrivePublicAssetMimeType(name)
 }
 
 async function putPreparedUpload(
@@ -543,6 +665,8 @@ function driveMutationSecurity(
   const correlation = driveParamCorrelation(params)
   const target = typeof correlation.itemId === "string"
     ? correlation.itemId
+    : typeof correlation.assetId === "string"
+      ? correlation.assetId
     : typeof correlation.shareId === "string"
       ? correlation.shareId
       : action
@@ -559,7 +683,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "versionId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "isPinned", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "assetId", "versionId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }
@@ -599,6 +723,7 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   if (!data || typeof data !== "object" || Array.isArray(data)) return metadata
   const record = data as Record<string, unknown>
   if (typeof record.itemId === "string") metadata.itemId = record.itemId
+  if (typeof record.assetId === "string") metadata.assetId = record.assetId
   if (typeof record.shareId === "string") metadata.shareId = record.shareId
   if (typeof record.id === "string" && !metadata.itemId && !metadata.shareId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
@@ -640,9 +765,10 @@ async function authorizeFileRead(
   deps: DriveCapabilityDispatcherDeps,
   filePath: string,
   context: DispatchContext,
+  action = "drive.upload",
 ): Promise<void> {
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
-  const metadata = { source: context.source ?? "api", driveAction: "drive.upload" }
+  const metadata = { source: context.source ?? "api", driveAction: action }
   const permission = await checkCapabilityPermission({
     permissionGuard: deps.permissionGuard,
     auditSink: deps.auditSink,
