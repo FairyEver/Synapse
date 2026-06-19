@@ -32,8 +32,14 @@ export interface BeforeQuitDeps {
 
 export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
   updateService.setBeforeInstallQuitHandler(() => {
+    if (deps.knowledgeBaseStorageMigration?.isActive()) {
+      deps.knowledgeBaseStorageMigration.focusDialog()
+      logger.info("Update install blocked by active Knowledge Base storage migration.")
+      return false
+    }
     logger.info("Update install requested. Allowing app to quit.")
     deps.setAllowQuit(true)
+    return true
   })
 
   app.on("before-quit", async (event) => {

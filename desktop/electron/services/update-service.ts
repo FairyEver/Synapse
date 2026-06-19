@@ -78,13 +78,13 @@ class UpdateService {
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
-  private beforeInstallQuitHandler: (() => void) | null = null
+  private beforeInstallQuitHandler: (() => boolean | void) | null = null
 
   setWindowManager(windowManager: WindowManager): void {
     this.windowManager = windowManager
   }
 
-  setBeforeInstallQuitHandler(handler: (() => void) | null): void {
+  setBeforeInstallQuitHandler(handler: (() => boolean | void) | null): void {
     this.beforeInstallQuitHandler = handler
   }
 
@@ -177,10 +177,18 @@ class UpdateService {
       version: this.state.releaseVersion,
     })
 
+    let canQuit = true
     try {
-      this.beforeInstallQuitHandler?.()
+      canQuit = this.beforeInstallQuitHandler?.() ?? true
     } catch (error) {
       logger.error("Failed to prepare app quit for update install.", error)
+      throw new Error("准备安装更新失败，请稍后重试。", { cause: error })
+    }
+    if (!canQuit) {
+      logger.info("Update install postponed because app quit is blocked.", {
+        version: this.state.releaseVersion,
+      })
+      throw new Error("当前无法安全退出应用，请稍后再安装更新。")
     }
 
     autoUpdater.quitAndInstall()

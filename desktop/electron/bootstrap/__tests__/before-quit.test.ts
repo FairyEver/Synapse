@@ -14,12 +14,12 @@ const electronMock = vi.hoisted(() => {
 
 const updateServiceMock = vi.hoisted(() => {
   const mock = {
-    beforeInstallQuitHandler: null as (() => void) | null,
+    beforeInstallQuitHandler: null as (() => boolean | void) | null,
     cancelDownload: vi.fn(async () => {}),
     setBeforeInstallQuitHandler: vi.fn(),
   }
 
-  mock.setBeforeInstallQuitHandler.mockImplementation((handler: (() => void) | null) => {
+  mock.setBeforeInstallQuitHandler.mockImplementation((handler: (() => boolean | void) | null) => {
     mock.beforeInstallQuitHandler = handler
   })
 
@@ -83,6 +83,31 @@ describe("attachBeforeQuitHandler", () => {
     expect(allowQuit).toBe(true)
     expect(stopAll).not.toHaveBeenCalled()
     expect(logStoreMock.dispose).not.toHaveBeenCalled()
+  })
+
+  it("blocks update install quit while knowledge base storage migration is active", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const storageMigration = {
+      isActive: vi.fn(() => true),
+      focusDialog: vi.fn(),
+    }
+    let allowQuit = false
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll: vi.fn(async () => {}) } as never,
+      knowledgeBaseStorageMigration: storageMigration,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+
+    const canQuit = updateServiceMock.beforeInstallQuitHandler?.()
+
+    expect(canQuit).toBe(false)
+    expect(allowQuit).toBe(false)
+    expect(storageMigration.focusDialog).toHaveBeenCalled()
   })
 
   it("blocks before-quit while knowledge base storage migration is active", async () => {

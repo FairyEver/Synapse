@@ -389,4 +389,21 @@ describe("UpdateService", () => {
     expect(beforeInstallQuit).toHaveBeenCalledTimes(1)
     expect(updaterMock.autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
   })
+
+  it("does not install a downloaded update when app quit is blocked", async () => {
+    const { updateService } = await importUpdateService()
+    const beforeInstallQuit = vi.fn(() => false)
+
+    await updateService.checkForUpdates()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+
+    updateService.setBeforeInstallQuitHandler(beforeInstallQuit)
+    await expect(updateService.installUpdate()).rejects.toThrow("当前无法安全退出应用，请稍后再安装更新。")
+
+    expect(beforeInstallQuit).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+  })
 })
