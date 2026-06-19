@@ -70,6 +70,65 @@ const skillFileSchema = {
 }
 
 const skillInlineFields = "name/title/description/category/content"
+const inlineRequiredFields = ["title", "description", "category", "content"] as const
+const appearanceRequirements = [
+  {
+    properties: {
+      iconType: { type: "string", enum: ["icon"] },
+    },
+    required: ["icon"],
+  },
+  {
+    properties: {
+      iconType: { type: "string", enum: ["image"] },
+    },
+    required: ["iconType", "iconImagePath"],
+  },
+  {
+    properties: {
+      iconType: { type: "string", enum: ["image"] },
+    },
+    required: ["iconType", "iconImageBase64"],
+  },
+] as const
+
+function withRequiredFields(
+  requiredFields: readonly string[],
+  requirement: (typeof appearanceRequirements)[number],
+): { readonly properties: Record<string, unknown>; readonly required: readonly string[] } {
+  return {
+    properties: requirement.properties,
+    required: [...requiredFields, ...requirement.required],
+  }
+}
+
+function inlineCreateRequiredFields(type: ContentResourceType): readonly string[] {
+  return type === "rule" || type === "skill"
+    ? ["name", ...inlineRequiredFields]
+    : inlineRequiredFields
+}
+
+function createSchemaAlternatives(type: ContentResourceType): readonly unknown[] {
+  const inlineFields = inlineCreateRequiredFields(type)
+  if (type !== "skill") {
+    return appearanceRequirements.map((requirement) => withRequiredFields([], requirement))
+  }
+  return [
+    ...appearanceRequirements.map((requirement) => withRequiredFields(inlineFields, requirement)),
+    ...appearanceRequirements.map((requirement) => withRequiredFields(["sourceDirectoryPath"], requirement)),
+  ]
+}
+
+function updateSchemaAlternatives(type: ContentResourceType): readonly unknown[] {
+  const inlineFields = inlineCreateRequiredFields(type)
+  if (type !== "skill") {
+    return appearanceRequirements.map((requirement) => withRequiredFields([], requirement))
+  }
+  return [
+    ...appearanceRequirements.map((requirement) => withRequiredFields(inlineFields, requirement)),
+    { required: ["sourceDirectoryPath"] },
+  ]
+}
 
 function listTool(type: ContentResourceType): McpToolDefinition {
   return {
@@ -103,7 +162,7 @@ function getTool(type: ContentResourceType): McpToolDefinition {
 
 function createTool(type: ContentResourceType): McpToolDefinition {
   const properties: Record<string, unknown> = { ...baseCreateProperties }
-  const required = ["title", "description", "category", "content"]
+  const required: string[] = [...inlineRequiredFields]
 
   if (type === "rule" || type === "skill") {
     properties.name = stringField("Stable content slug/name.")
@@ -129,6 +188,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       type: "object",
       properties,
       ...(type === "skill" ? {} : { required }),
+      anyOf: createSchemaAlternatives(type),
     },
   }
 }
@@ -152,6 +212,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
       required: type === "skill"
         ? ["id", "baseHistoryDirname"]
         : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
+      anyOf: updateSchemaAlternatives(type),
     },
   }
 }
