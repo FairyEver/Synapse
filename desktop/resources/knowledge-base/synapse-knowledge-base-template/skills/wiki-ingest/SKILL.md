@@ -15,6 +15,8 @@ Read the source. Write the wiki. Cross-reference everything. A single source typ
 
 Before ingesting any file, list the actual files under `.raw/` and check `.raw/.manifest.json` to avoid re-processing unchanged sources. Process only source files that really exist under `.raw/`; never invent source paths or manifest entries for files that are not present.
 
+When Synapse injects an ingest preflight with a bounded list of changed `.raw/` sources, process only the listed sources in this turn. If the preflight says additional changed sources were omitted, finish the current batch and let the user or Synapse run `/wiki-ingest` again for the next batch.
+
 ```bash
 # Check if manifest exists
 [ -f .raw/.manifest.json ] && echo "exists" || echo "no manifest yet"

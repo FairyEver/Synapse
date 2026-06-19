@@ -12,6 +12,8 @@ import { diffWikiSnapshots, snapshotWikiMarkdown, type WikiSnapshot } from "./wi
 
 const REPORT_SCHEMA = "synapse.kb.ingest.report.v1"
 const ADDRESS_PATTERN = /^[cl]-\d{6}$/u
+const PREFLIGHT_SOURCE_LIST_MAX_ITEMS = 100
+const PREFLIGHT_SOURCE_LIST_MAX_CHARS = 10_000
 const ADDRESS_EXCLUDED_FILENAMES = new Set([
   "_index.md",
   "index.md",
@@ -109,11 +111,28 @@ function isIngestMessage(content: string): boolean {
 
 function buildPreflightAppendix(sources: readonly KnowledgeBaseSourceScanItem[], force: boolean): string {
   const changedSources = sources.filter((source) => source.state !== "unchanged" || force)
+  const sourceLines: string[] = []
+  let sourceListChars = 0
+  for (const source of changedSources) {
+    if (sourceLines.length >= PREFLIGHT_SOURCE_LIST_MAX_ITEMS) break
+    const line = `  - ${source.relativePath} (${source.hash})`
+    const nextSourceListChars = sourceListChars + line.length + 1
+    if (nextSourceListChars > PREFLIGHT_SOURCE_LIST_MAX_CHARS) break
+    sourceLines.push(line)
+    sourceListChars = nextSourceListChars
+  }
+  const omittedCount = changedSources.length - sourceLines.length
   return [
     "Synapse ingest preflight:",
     "- Do not edit `.raw/.manifest.json`; Synapse writes manifest facts after this turn.",
     "- Process only these changed `.raw/` sources:",
-    ...changedSources.map((source) => `  - ${source.relativePath} (${source.hash})`),
+    ...sourceLines,
+    ...(omittedCount > 0
+      ? [
+          `- ${omittedCount} additional changed \`.raw/\` sources were omitted from this prompt to keep the ingest turn bounded.`,
+          "- Process only the listed sources in this turn; run `/wiki-ingest` again after this batch to continue remaining sources.",
+        ]
+      : []),
     "- End with exactly one fenced block tagged `synapse_kb_ingest_report` containing schema `synapse.kb.ingest.report.v1`.",
   ].join("\n")
 }

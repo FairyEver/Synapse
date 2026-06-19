@@ -30,6 +30,25 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseIngestCoordinator", () => {
+  it("bounds the preflight source list for large ingest batches", async () => {
+    const root = await createKnowledgeBaseRoot()
+    for (let index = 0; index < 125; index += 1) {
+      await writeFile(path.join(root, ".raw", `batch-${String(index).padStart(3, "0")}.md`), `# Source ${index}\n`, "utf8")
+    }
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    const prepared = await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+
+    expect(prepared.content).toContain(".raw/batch-000.md")
+    expect(prepared.content).not.toContain(".raw/batch-124.md")
+    expect(prepared.content).toContain("26 additional changed `.raw/` sources were omitted from this prompt")
+    expect(prepared.content.length).toBeLessThan(12_000)
+  })
+
   it("finalizes accepted ingest reports through the manifest writer", async () => {
     const root = await createKnowledgeBaseRoot()
     const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
