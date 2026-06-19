@@ -1685,37 +1685,42 @@ export class DriveService implements OnApplicationBootstrap {
       DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
       DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
     ]
-    const [normalDriveItems, publicAssets, publicAssetRevisions] = await this.prisma.$transaction([
-      this.prisma.driveItem.findMany({
+    const [normalDriveGroups, publicAssetGroups, publicAssetRevisionAggregate] = await this.prisma.$transaction([
+      this.prisma.driveItem.groupBy({
+        by: ["lifecycleStatus"],
         where: {
           type: DRIVE_ITEM_TYPE.file,
           storageStatus: DRIVE_STORAGE_STATUS.active,
           lifecycleStatus: { in: visibleLifecycleStatuses },
           publicAsset: null,
         },
-        select: { size: true, lifecycleStatus: true },
+        _count: { _all: true },
+        _sum: { size: true },
       }),
-      this.prisma.publicAsset.findMany({
+      this.prisma.publicAsset.groupBy({
+        by: ["lifecycleStatus"],
         where: {
           deletedAt: null,
           lifecycleStatus: { in: visibleLifecycleStatuses },
         },
-        select: { size: true, lifecycleStatus: true },
+        _count: { _all: true },
+        _sum: { size: true },
       }),
-      this.prisma.publicAssetRevision.findMany({
-        select: { size: true },
+      this.prisma.publicAssetRevision.aggregate({
+        _count: { _all: true },
+        _sum: { size: true },
       }),
     ])
-    const normalDrive = buildAdminStorageBucket(normalDriveItems)
-    const publicAssetBucket = buildAdminStorageBucket(publicAssets)
-    const revisionBytes = publicAssetRevisions.reduce((sum, revision) => sum + revision.size, 0n)
+    const normalDrive = buildAdminStorageBucket(normalDriveGroups)
+    const publicAssetBucket = buildAdminStorageBucket(publicAssetGroups)
+    const revisionBytes = publicAssetRevisionAggregate._sum.size ?? 0n
     const quotaBytes = bucketQuotaBytes(normalDrive) + bucketQuotaBytes(publicAssetBucket)
     const adminVisibleBytes = quotaBytes + BigInt(normalDrive.hidden.bytes) + BigInt(publicAssetBucket.hidden.bytes) + revisionBytes
     return {
       normalDrive,
       publicAssets: publicAssetBucket,
       publicAssetRevisions: {
-        count: publicAssetRevisions.length,
+        count: publicAssetRevisionAggregate._count._all,
         bytes: revisionBytes.toString(),
       },
       total: {
@@ -3004,7 +3009,11 @@ function buildAdminWhere(filters: DriveAdminFilters): Prisma.DriveItemWhereInput
 }
 
 function buildAdminStorageBucket(
-  rows: readonly { readonly lifecycleStatus: string; readonly size: bigint }[],
+  rows: readonly {
+    readonly lifecycleStatus: string
+    readonly _count: { readonly _all: number }
+    readonly _sum: { readonly size: bigint | null }
+  }[],
 ): DriveAdminStorageSummaryDto["normalDrive"] {
   const bucket = {
     active: { count: 0, bytes: 0n },
@@ -3013,18 +3022,18 @@ function buildAdminStorageBucket(
   }
   for (const row of rows) {
     if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.active) {
-      bucket.active.count += 1
-      bucket.active.bytes += row.size
+      bucket.active.count += row._count._all
+      bucket.active.bytes += row._sum.size ?? 0n
       continue
     }
     if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.trashed) {
-      bucket.trashed.count += 1
-      bucket.trashed.bytes += row.size
+      bucket.trashed.count += row._count._all
+      bucket.trashed.bytes += row._sum.size ?? 0n
       continue
     }
     if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden) {
-      bucket.hidden.count += 1
-      bucket.hidden.bytes += row.size
+      bucket.hidden.count += row._count._all
+      bucket.hidden.bytes += row._sum.size ?? 0n
     }
   }
   return {

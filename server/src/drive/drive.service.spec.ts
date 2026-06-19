@@ -108,6 +108,54 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("builds admin storage summary from database aggregates", async () => {
+    const forbiddenFindMany = vi.fn(() => {
+      throw new Error("storage summary must not materialize rows")
+    })
+    const prisma = {
+      $transaction: async (input: unknown[]) => Promise.all(input),
+      driveItem: {
+        findMany: forbiddenFindMany,
+        groupBy: vi.fn(async () => [
+          { lifecycleStatus: "active", _count: { _all: 2 }, _sum: { size: 11n } },
+          { lifecycleStatus: "trashed", _count: { _all: 1 }, _sum: { size: 5n } },
+          { lifecycleStatus: "hidden", _count: { _all: 1 }, _sum: { size: 7n } },
+        ]),
+      },
+      publicAsset: {
+        findMany: forbiddenFindMany,
+        groupBy: vi.fn(async () => [
+          { lifecycleStatus: "active", _count: { _all: 3 }, _sum: { size: 13n } },
+          { lifecycleStatus: "hidden", _count: { _all: 1 }, _sum: { size: 17n } },
+        ]),
+      },
+      publicAssetRevision: {
+        findMany: forbiddenFindMany,
+        aggregate: vi.fn(async () => ({ _count: { _all: 4 }, _sum: { size: 19n } })),
+      },
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+
+    await expect(service.getAdminStorageSummary()).resolves.toEqual({
+      normalDrive: {
+        active: { count: 2, bytes: "11" },
+        trashed: { count: 1, bytes: "5" },
+        hidden: { count: 1, bytes: "7" },
+      },
+      publicAssets: {
+        active: { count: 3, bytes: "13" },
+        trashed: { count: 0, bytes: "0" },
+        hidden: { count: 1, bytes: "17" },
+      },
+      publicAssetRevisions: { count: 4, bytes: "19" },
+      total: {
+        quotaBytes: "29",
+        adminVisibleBytes: "72",
+      },
+    })
+    expect(forbiddenFindMany).not.toHaveBeenCalled()
+  })
+
   it("returns the completed item when upload completion is retried", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
