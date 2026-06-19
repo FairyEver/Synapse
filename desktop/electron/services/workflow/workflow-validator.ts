@@ -275,7 +275,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
           defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
         }))
       }
-      if ((node.type === "codex" || node.type === "claude_code") && configuredProjectIds) {
+      if (configuredProjectIds) {
         const effectiveProjectId = nodeProjectId ?? defaultProjectId
         if (effectiveProjectId && !configuredProjectIds.has(effectiveProjectId)) {
           errors.push(missingConfiguredProjectError({

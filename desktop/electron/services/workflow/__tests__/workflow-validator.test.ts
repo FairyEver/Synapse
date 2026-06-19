@@ -140,6 +140,21 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects script nodes that inherit a stale workflow default project", () => {
+    const result = validateWorkflow(definitionWithScriptNode({
+      defaultProjectId: "deleted-default-project",
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "script-1",
+        field: "defaultProjectId",
+        message: expect.stringContaining("deleted-default-project"),
+      }),
+    ]))
+  })
+
   it("checks template placeholders inside codex prompts", () => {
     const result = validateWorkflow(definitionWithCodexNode({
       nodes: [
@@ -325,6 +340,40 @@ describe("validateWorkflow", () => {
     ]))
   })
 
+  it("rejects prompt nodes with stale configured project references", () => {
+    const result = validateWorkflow(definitionWithPromptNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        promptNode({ projectId: "deleted-project" }),
+        endNode(),
+      ],
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "prompt-1",
+        field: "projectId",
+        message: expect.stringContaining("deleted-project"),
+      }),
+    ]))
+  })
+
+  it("rejects switch nodes that inherit a stale workflow default project", () => {
+    const result = validateWorkflow(definitionWithSwitchNode({
+      defaultProjectId: "deleted-default-project",
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "switch-1",
+        field: "defaultProjectId",
+        message: expect.stringContaining("deleted-default-project"),
+      }),
+    ]))
+  })
+
   it("rejects http request nodes with empty URLs before save", () => {
     const result = validateWorkflow(definitionWithHttpRequestNode({ url: "   " }))
 
@@ -431,6 +480,44 @@ function definitionWithClaudeCodeNode(overrides: Partial<WorkflowDefinition> = {
   }
 }
 
+function definitionWithPromptNode(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: "workflow-prompt",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    defaultProviderId: "provider-1",
+    defaultModelTier: "sonnet",
+    nodes: [
+      promptNode(),
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "prompt-1", to: "end" }],
+    ...overrides,
+  }
+}
+
+function definitionWithSwitchNode(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: "workflow-switch",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    defaultProviderId: "provider-1",
+    defaultModelTier: "sonnet",
+    nodes: [
+      switchNode(),
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "switch-1", to: "end", branch: "done" }],
+    ...overrides,
+  }
+}
+
 function definitionWithHttpRequestNode(config: { readonly url: string }): WorkflowDefinition {
   return {
     id: "workflow-http",
@@ -450,6 +537,36 @@ function definitionWithHttpRequestNode(config: { readonly url: string }): Workfl
       endNode(),
     ],
     edges: [{ id: "edge-1", from: "http-1", to: "end" }],
+  }
+}
+
+function promptNode(config: Record<string, unknown> = {}): WorkflowDefinition["nodes"][number] {
+  return {
+    id: "prompt-1",
+    name: "Prompt",
+    type: "prompt",
+    position: { x: 0, y: 0 },
+    config: {
+      variables: [],
+      prompt: "Run prompt",
+      ...config,
+    },
+  }
+}
+
+function switchNode(config: Record<string, unknown> = {}): WorkflowDefinition["nodes"][number] {
+  return {
+    id: "switch-1",
+    name: "Switch",
+    type: "switch",
+    position: { x: 0, y: 0 },
+    config: {
+      variables: [],
+      prompt: "Choose branch",
+      branches: [{ id: "done", label: "Done" }],
+      defaultBranch: "done",
+      ...config,
+    },
   }
 }
 
