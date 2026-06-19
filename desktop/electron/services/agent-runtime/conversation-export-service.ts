@@ -111,16 +111,16 @@ class AgentConversationExportService {
 
   async exportBundle(request: AgentConversationExportRequest): Promise<AgentConversationExportResult> {
     const conversation = await this.deps.conversations.get(request.conversationId)
+    if (!conversation || conversation.projectId !== request.projectId) {
+      throw new Error("找不到 Agent 会话。")
+    }
+
     const defaultFileName = createDefaultFileName(
-      conversation?.name ?? conversation?.sessionKey ?? request.conversationId,
+      conversation.name ?? request.conversationId,
       this.now(),
     )
     const outputPath = await this.deps.chooseSavePath(defaultFileName)
     if (!outputPath) return { success: false }
-
-    if (!conversation || conversation.projectId !== request.projectId) {
-      throw new Error("找不到 Agent 会话。")
-    }
 
     await this.checkWritePermission(outputPath, request)
 

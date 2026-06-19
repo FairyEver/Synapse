@@ -227,8 +227,10 @@ describe("AgentConversationExportService", () => {
   })
 
   it("returns success false when the save dialog is cancelled", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert(createConversation())
     const service = new AgentConversationExportService({
-      conversations: new MemoryNamespace<ConversationEntryV1>("conversations"),
+      conversations,
       agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
       agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
       chooseSavePath: vi.fn().mockResolvedValue(null),
@@ -239,6 +241,55 @@ describe("AgentConversationExportService", () => {
       projectId: "project-1",
       conversationId: "conv-1",
     })).resolves.toEqual({ success: false })
+  })
+
+  it("validates project ownership before opening the save dialog", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      projectId: "other-project",
+      name: "Other Project Secret",
+      sessionKey: "other-secret-session",
+    })
+    const chooseSavePath = vi.fn().mockResolvedValue("/tmp/export.zip")
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath,
+      createZipArchive: vi.fn(),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).rejects.toThrow("找不到 Agent 会话。")
+    expect(chooseSavePath).not.toHaveBeenCalled()
+  })
+
+  it("does not use the session key as the default filename fallback", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      name: undefined,
+    })
+    const chooseSavePath = vi.fn().mockResolvedValue(null)
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath,
+      createZipArchive: vi.fn(),
+      now: () => new Date("2026-06-08T08:30:00.000Z"),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: TEST_SESSION_KEY,
+    })).resolves.toEqual({ success: false })
+    expect(chooseSavePath).toHaveBeenCalledWith(expect.stringContaining("conv-1"))
+    expect(chooseSavePath.mock.calls[0]?.[0]).not.toContain(TEST_SESSION_KEY)
   })
 
   it("bounds default bundle and staging directory names for long conversation names", async () => {
