@@ -5,6 +5,14 @@ import { MCP_TOOL_ACTIONS, getActionDomainId } from "../../synapse-capabilities/
 const identity = { name: "test-database", version: "0.0.0" }
 
 async function callTool(toolName: string, dispatcherResult: unknown): Promise<unknown> {
+  const result = await callToolResult(toolName, dispatcherResult)
+  return JSON.parse(result.content[0].text)
+}
+
+async function callToolResult(
+  toolName: string,
+  dispatcherResult: unknown,
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const response = await processMcpRequest(
     {
       jsonrpc: "2.0",
@@ -22,8 +30,7 @@ async function callTool(toolName: string, dispatcherResult: unknown): Promise<un
   expect(response.kind).toBe("result")
   if (response.kind !== "result") throw new Error("Expected result response")
 
-  const result = response.result as { content: Array<{ type: string; text: string }> }
-  return JSON.parse(result.content[0].text)
+  return response.result as { content: Array<{ type: string; text: string }>; isError?: boolean }
 }
 
 describe("Workflow MCP RPC", () => {
@@ -180,6 +187,23 @@ describe("Database MCP RPC", () => {
 })
 
 describe("MCP RPC capability normalization coverage", () => {
+  it("marks dispatcher ok false results as MCP tool errors while preserving the failure payload", async () => {
+    const result = await callToolResult("workflow_run_execute", {
+      ok: false,
+      code: "WORKFLOW_VALIDATION_FAILED",
+      errors: [{ message: "Start node is missing" }],
+      data: { runId: "run-partial" },
+    })
+
+    expect(result.isError).toBe(true)
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ok: false,
+      code: "WORKFLOW_VALIDATION_FAILED",
+      errors: [{ message: "Start node is missing" }],
+      data: { runId: "run-partial" },
+    })
+  })
+
   it("unwraps dispatcher data for every registered non-database capability domain", async () => {
     const entries = Object.entries(MCP_TOOL_ACTIONS)
       .filter(([, action]) => getActionDomainId(action) !== "database")

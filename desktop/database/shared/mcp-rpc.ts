@@ -97,6 +97,10 @@ function normalizeToolResult(action: string, result: unknown): unknown {
   }
 }
 
+function isFailedDispatchResult(result: unknown): boolean {
+  return isRecord(result) && result.ok === false
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -164,7 +168,10 @@ async function processMcpRequest(
       return {
         kind: "result",
         id,
-        result: { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] },
+        result: {
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          ...(isFailedDispatchResult(result) ? { isError: true } : {}),
+        },
       }
     } catch (error) {
       const message = sanitizeMcpErrorMessage(error)
