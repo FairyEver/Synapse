@@ -151,7 +151,11 @@ export class DrivePublicAssetService {
         where: {
           userId,
           deletedAt: null,
-          lifecycleStatus: { in: [DRIVE_ITEM_LIFECYCLE_STATUS.active, DRIVE_ITEM_LIFECYCLE_STATUS.trashed] },
+          lifecycleStatus: { in: [
+            DRIVE_ITEM_LIFECYCLE_STATUS.active,
+            DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+            DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing,
+          ] },
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: page.offset,
@@ -161,7 +165,11 @@ export class DrivePublicAssetService {
         where: {
           userId,
           deletedAt: null,
-          lifecycleStatus: { in: [DRIVE_ITEM_LIFECYCLE_STATUS.active, DRIVE_ITEM_LIFECYCLE_STATUS.trashed] },
+          lifecycleStatus: { in: [
+            DRIVE_ITEM_LIFECYCLE_STATUS.active,
+            DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+            DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing,
+          ] },
         },
       }),
     ])
@@ -178,7 +186,7 @@ export class DrivePublicAssetService {
   }
 
   async getAsset(userId: string, assetId: string, publicAppUrl: string): Promise<DrivePublicAssetDto> {
-    return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId), publicAppUrl)
+    return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId, { includeMissing: true }), publicAppUrl)
   }
 
   async listAdminAssets(
@@ -601,12 +609,16 @@ export class DrivePublicAssetService {
       },
       include: { item: true },
     }) as PublicAssetWithItem | null
-    if (!asset || asset.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active || asset.item.objectMissing) {
+    if (!asset || asset.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) {
+      return { status: "not_found", assetId }
+    }
+    if (asset.item.objectMissing) {
+      await this.markObjectMissing(asset)
       return { status: "not_found", assetId }
     }
     const object = await this.storage.headObject(asset.storageKey)
     if (!object) {
-      void this.markObjectMissing(asset)
+      await this.markObjectMissing(asset)
       return { status: "not_found", assetId }
     }
     const etag = object.etag ?? asset.etag
@@ -783,12 +795,14 @@ export class DrivePublicAssetService {
   private async requireOwnedAsset(
     userId: string,
     assetId: string,
-    options: { readonly includeTrashed?: boolean } = {},
+    options: { readonly includeTrashed?: boolean; readonly includeMissing?: boolean } = {},
   ): Promise<PublicAssetWithItem> {
     if (!isDrivePublicAssetId(assetId)) throw new NotFoundException("公共资源不存在。")
-    const lifecycleStatuses = options.includeTrashed
-      ? [DRIVE_ITEM_LIFECYCLE_STATUS.active, DRIVE_ITEM_LIFECYCLE_STATUS.trashed]
-      : [DRIVE_ITEM_LIFECYCLE_STATUS.active]
+    const lifecycleStatuses = [
+      DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      ...(options.includeTrashed ? [DRIVE_ITEM_LIFECYCLE_STATUS.trashed] : []),
+      ...(options.includeMissing ? [DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing] : []),
+    ]
     const asset = await this.prisma.publicAsset.findFirst({
       where: {
         userId,
@@ -884,7 +898,13 @@ export class DrivePublicAssetService {
 
   private async markObjectMissing(asset: PublicAssetWithItem): Promise<void> {
     try {
-      await this.prisma.driveItem.update({ where: { id: asset.itemId }, data: { objectMissing: true } })
+      await this.prisma.$transaction([
+        this.prisma.driveItem.update({ where: { id: asset.itemId }, data: { objectMissing: true } }),
+        this.prisma.publicAsset.updateMany({
+          where: { id: asset.id, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+          data: { lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing },
+        }),
+      ])
     } catch (error) {
       this.logger.warn({
         assetId: asset.assetId,

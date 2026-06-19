@@ -123,6 +123,23 @@ describe("DrivePublicAssetsView", () => {
     expect(document.body.textContent).toContain("second.png")
   })
 
+  it("marks missing public assets as unavailable", async () => {
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({
+        assetId: "asset_missing",
+        name: "missing.png",
+        lifecycleStatus: "legacy_missing",
+      }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("missing.png")
+    expect(document.body.textContent).toContain("不可用")
+    expect(requireButtonByLabel("复制 missing.png").disabled).toBe(true)
+  })
+
   it("uploads selected images and keeps ordered partial results visible", async () => {
     mocks.uploadDrivePublicAssets.mockResolvedValue({
       results: [
@@ -277,12 +294,17 @@ async function clickRowButtonText(rowText: string, buttonText: string): Promise<
 }
 
 async function clickButtonByLabel(label: string): Promise<void> {
-  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
-  if (!button) throw new Error(`Button not found: ${label}`)
+  const button = requireButtonByLabel(label)
   await act(async () => {
     button.click()
     await flushPromises()
   })
+}
+
+function requireButtonByLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found: ${label}`)
+  return button
 }
 
 async function openRowMenu(name: string): Promise<void> {

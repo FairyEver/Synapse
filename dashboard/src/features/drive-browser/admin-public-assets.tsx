@@ -503,6 +503,7 @@ function driveLifecycleLabel(status: AdminDrivePublicAssetRow['lifecycleStatus']
     active: '正常',
     trashed: '回收站',
     hidden: '隐藏',
+    legacy_missing: '不可用',
   }
   return labels[status]
 }

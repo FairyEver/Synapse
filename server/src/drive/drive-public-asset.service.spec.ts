@@ -587,6 +587,27 @@ describe("DrivePublicAssetService", () => {
 
     expect(listed.items.map((item) => item.assetId).sort()).toEqual([active.assetId, trashed.assetId].sort())
   })
+
+  it("marks missing public asset objects as unavailable in user and admin DTOs", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "missing.png",
+      size: 8n,
+    })
+
+    await expect(service.resolvePublicAsset(asset.assetId, {}))
+      .resolves.toEqual({ status: "not_found", assetId: asset.assetId })
+
+    const listed = await service.listAssets("user-1", "https://assets.example")
+    expect(listed.items.find((item) => item.assetId === asset.assetId)?.lifecycleStatus).toBe("legacy_missing")
+    await expect(service.getAsset("user-1", asset.assetId, "https://assets.example"))
+      .resolves.toMatchObject({ lifecycleStatus: "legacy_missing" })
+    const adminPage = await service.listAdminAssets("https://assets.example", {
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+    })
+    expect(adminPage.data.find((item) => item.assetId === asset.assetId)?.lifecycleStatus).toBe("legacy_missing")
+  })
 })
 
 function pngSignatureBuffer(): Buffer {

@@ -476,6 +476,7 @@ function DrivePublicAssetRow({
   readonly onTrash: () => void
 }) {
   const trashed = asset.lifecycleStatus === "trashed"
+  const unavailable = asset.lifecycleStatus === "legacy_missing"
   return (
     <TableRow aria-busy={busy || undefined}>
       <TableCell className="min-w-0">
@@ -487,6 +488,7 @@ function DrivePublicAssetRow({
           )}
           <span className="min-w-0 truncate font-medium" title={asset.name}>{asset.name}</span>
           {trashed ? <Badge variant="outline">回收站</Badge> : null}
+          {unavailable ? <Badge variant="secondary">不可用</Badge> : null}
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">{formatBytes(asset.size)}</TableCell>
@@ -497,10 +499,10 @@ function DrivePublicAssetRow({
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">{formatDriveDateTime(asset.createdAt)}</TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end">
-          <Button type="button" variant="ghost" size="xs" disabled={busy} aria-label={`复制 ${asset.name}`} onClick={onCopy}>
+          <Button type="button" variant="ghost" size="xs" disabled={busy || unavailable} aria-label={`复制 ${asset.name}`} onClick={onCopy}>
             复制链接
           </Button>
-          {trashed ? (
+          {unavailable ? null : trashed ? (
             <>
               <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onRestore}>恢复</Button>
               <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onDelete}>删除</Button>
