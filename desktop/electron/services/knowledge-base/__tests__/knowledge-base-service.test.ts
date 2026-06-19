@@ -102,6 +102,23 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseService", () => {
+  it("keeps the bundled canvas skill shell contract aligned with its operations", async () => {
+    const skillPath = path.join(
+      process.cwd(),
+      "resources",
+      "knowledge-base",
+      "synapse-knowledge-base-template",
+      "skills",
+      "canvas",
+      "SKILL.md",
+    )
+    const skill = await readFile(skillPath, "utf8")
+    const allowedTools = skill.match(/^allowed-tools:\s*(.+)$/m)?.[1].split(/\s+/) ?? []
+
+    expect(skill).toMatch(/\b(curl|cp|python3|find)\b/)
+    expect(allowedTools).toContain("Bash")
+  })
+
   it("creates managed knowledge base runtime from template", async () => {
     const templateRoot = await tempDir()
     await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
