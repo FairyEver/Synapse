@@ -533,6 +533,52 @@ describe("DriveService", () => {
     await expect(service.deleteItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("keeps pending public asset backing files out of normal Drive list, stats, and tree views", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const normal = await createCompletedUpload(service, "user-1", { parentId: null, name: "readme.txt", mimeType: "text/plain" })
+    const pending = await prisma.driveItem.create({
+      data: {
+        userId: "user-1",
+        parentId: null,
+        type: "file",
+        name: "logo.png",
+        size: 11n,
+        mimeType: "image/png",
+        storageKey: "drive/pending-public-asset",
+        storageStatus: "pending",
+        uploadStatus: "pending",
+        lifecycleStatus: "active",
+        deletedAt: null,
+      },
+    })
+    await prisma.driveUploadSession.create({
+      data: {
+        userId: "user-1",
+        itemId: pending.id,
+        storageKey: "drive/pending-public-asset",
+        expectedName: "logo.png",
+        expectedSize: 11n,
+        expectedMime: "image/png",
+        reservedBytes: 11n,
+        purpose: "public_asset_upload",
+        status: "pending",
+        credentialKind: "presigned_put",
+        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+      },
+    })
+
+    expect((await service.listItems("user-1", null)).map((item) => item.id)).toEqual([normal.id])
+    await expect(service.getStats("user-1")).resolves.toMatchObject({
+      itemCount: 1,
+      fileCount: 1,
+      folderCount: 0,
+    })
+    expect((await service.listItemTree("user-1", { parentId: null })).items.map((item) => item.id)).toEqual([normal.id])
+    await expect(service.getItem("user-1", pending.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
   it("hides legacy shares that point at public asset backing files", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -2642,7 +2688,7 @@ function createPrismaMemory() {
         return { count }
       },
       findFirst: async ({ where, include, select, orderBy }: any) => {
-        const found = orderRows([...items.values()].filter((item) => matchesWhere(item, where)), orderBy)[0]
+        const found = orderRows([...items.values()].filter((item) => matchesWhere(driveItemWhereRow(item), where)), orderBy)[0]
         if (!found) return null
         if (select) return selectFields(found, select)
         return include ? withShares(found) : found
@@ -2650,7 +2696,7 @@ function createPrismaMemory() {
       findMany: async (args: any = {}) => {
         const { where, select, include, orderBy, skip, take } = args
         const found = paginateRows(
-          orderRows([...items.values()].filter((item) => matchesWhere(item, where ?? {})), orderBy),
+          orderRows([...items.values()].filter((item) => matchesWhere(driveItemWhereRow(item), where ?? {})), orderBy),
           { skip, take },
         )
         if (select) return found.map((item) => selectFields(item, select))
@@ -2666,7 +2712,7 @@ function createPrismaMemory() {
         if (!item) throw new Error("item not found")
         return item
       },
-      count: async ({ where }: any = {}) => [...items.values()].filter((item) => matchesWhere(item, where ?? {})).length,
+      count: async ({ where }: any = {}) => [...items.values()].filter((item) => matchesWhere(driveItemWhereRow(item), where ?? {})).length,
     },
     driveUploadSession: {
       create: async ({ data }: any) => {
@@ -2825,6 +2871,13 @@ function createPrismaMemory() {
       },
     },
   }
+  function driveItemWhereRow(item: any) {
+    return {
+      ...item,
+      uploadSessions: [...sessions.values()].filter((session) => session.itemId === item.id),
+    }
+  }
+
   return prisma
 }
 
@@ -2832,7 +2885,11 @@ function matchesWhere(row: any, where: any): boolean {
   return Object.entries(where).every(([key, value]: [string, any]) => {
     if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
+    if (key === "NOT") return !matchesWhere(row, value)
     if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
+    if (value && typeof value === "object" && "some" in value) {
+      return Array.isArray(row[key]) && row[key].some((entry) => matchesWhere(entry, value.some))
+    }
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
     if (value && typeof value === "object" && "gt" in value) return row[key] > value.gt

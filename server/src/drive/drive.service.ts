@@ -64,6 +64,7 @@ import {
   DRIVE_ITEM_LIFECYCLE_STATUS,
   DRIVE_ITEM_TYPE,
   DRIVE_STORAGE_STATUS,
+  DRIVE_UPLOAD_PURPOSE,
   DRIVE_UPLOAD_STATUS,
   driveDefaultQuotaBytes,
   driveMaxFileBytes,
@@ -246,7 +247,7 @@ export class DriveService implements OnApplicationBootstrap {
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+      where: ordinaryDriveItemWhere({ userId, parentId }),
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -1088,9 +1089,9 @@ export class DriveService implements OnApplicationBootstrap {
   async getStats(userId: string): Promise<DriveStatsDto> {
     const usage = await ensureUsage(this.prisma, userId)
     const [itemCount, fileCount, folderCount] = await this.prisma.$transaction([
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.file, publicAsset: null } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.folder, publicAsset: null } }),
+      this.prisma.driveItem.count({ where: ordinaryDriveItemWhere({ userId }) }),
+      this.prisma.driveItem.count({ where: ordinaryDriveItemWhere({ userId, type: DRIVE_ITEM_TYPE.file }) }),
+      this.prisma.driveItem.count({ where: ordinaryDriveItemWhere({ userId, type: DRIVE_ITEM_TYPE.folder }) }),
     ])
     return {
       itemCount,
@@ -1110,7 +1111,7 @@ export class DriveService implements OnApplicationBootstrap {
     }
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+      where: ordinaryDriveItemWhere({ userId }),
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -1166,6 +1167,13 @@ export class DriveService implements OnApplicationBootstrap {
           AND di."deletedAt" IS NULL
           AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active}
           AND NOT EXISTS (SELECT 1 FROM "PublicAsset" pa WHERE pa."itemId" = di.id)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "DriveUploadSession" dus
+            WHERE dus."itemId" = di.id
+              AND dus.purpose = ${DRIVE_UPLOAD_PURPOSE.publicAssetUpload}
+              AND dus.status = ${DRIVE_UPLOAD_STATUS.pending}
+          )
 
         UNION ALL
 
@@ -1194,6 +1202,13 @@ export class DriveService implements OnApplicationBootstrap {
           AND child."deletedAt" IS NULL
           AND child."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active}
           AND NOT EXISTS (SELECT 1 FROM "PublicAsset" pa WHERE pa."itemId" = child.id)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "DriveUploadSession" dus
+            WHERE dus."itemId" = child.id
+              AND dus.purpose = ${DRIVE_UPLOAD_PURPOSE.publicAssetUpload}
+              AND dus.status = ${DRIVE_UPLOAD_STATUS.pending}
+          )
       ),
       counted AS (
         SELECT
@@ -1930,7 +1945,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async requireOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+      where: ordinaryDriveItemWhere({ userId, id: itemId }),
       include: driveItemWithShares,
     })
     if (!item) throw new NotFoundException("文件不存在。")
@@ -1951,7 +1966,7 @@ export class DriveService implements OnApplicationBootstrap {
     let parentId = item.parentId
     while (parentId) {
       const parent = await this.prisma.driveItem.findFirst({
-        where: { id: parentId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+        where: ordinaryDriveItemWhere({ userId, id: parentId }),
         select: { id: true, parentId: true, name: true },
       })
       if (!parent) break
@@ -2851,6 +2866,31 @@ function buildDriveItemTreeEntries(items: readonly DriveItemDto[], parentId: str
 
 function numericCount(value: bigint | number): number {
   return typeof value === "bigint" ? Number(value) : value
+}
+
+function ordinaryDriveItemWhere(input: {
+  readonly userId: string
+  readonly id?: string
+  readonly parentId?: string | null
+  readonly type?: string
+}): Prisma.DriveItemWhereInput {
+  return {
+    userId: input.userId,
+    ...(input.id ? { id: input.id } : {}),
+    ...("parentId" in input ? { parentId: input.parentId ?? null } : {}),
+    ...(input.type ? { type: input.type } : {}),
+    deletedAt: null,
+    lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+    publicAsset: null,
+    NOT: {
+      uploadSessions: {
+        some: {
+          purpose: DRIVE_UPLOAD_PURPOSE.publicAssetUpload,
+          status: DRIVE_UPLOAD_STATUS.pending,
+        },
+      },
+    },
+  }
 }
 
 function toDriveItemTreeEntryDto(row: DriveItemTreeQueryRow): DriveItemTreeEntryDto {
