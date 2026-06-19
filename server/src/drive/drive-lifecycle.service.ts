@@ -47,6 +47,10 @@ type DriveLifecycleItemRecord = {
   readonly publicAsset?: { readonly assetId: string } | null
 }
 
+type DriveTrashRootQueryRecord = Omit<DriveLifecycleItemRecord, "publicAsset" | "shares"> & {
+  readonly assetId: string | null
+}
+
 const DRIVE_TRASH_DEFAULT_LIMIT = 50
 const DRIVE_TRASH_MAX_LIMIT = 200
 
@@ -274,16 +278,31 @@ export class DriveLifecycleService {
 
   async listTrash(userId: string, input: DriveTrashListInput = {}): Promise<DriveTrashListPageDto> {
     const page = normalizeTrashPage(input)
-    const trashedItems = await this.prisma.driveItem.findMany({
-      where: { userId, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed, deleteRootId: { not: null } },
-      include: { publicAsset: true },
-      orderBy: [{ trashedAt: "desc" }, { updatedAt: "desc" }],
-    }) as DriveLifecycleItemRecord[]
-    const roots = trashedItems.filter((item) => item.deleteRootId === item.id)
-    const pageItems = roots.slice(page.offset, page.offset + page.limit + 1)
+    const [rootRows, totalRows] = await Promise.all([
+      this.prisma.$queryRaw<DriveTrashRootQueryRecord[]>`
+        SELECT di.*, pa."assetId"
+        FROM "DriveItem" di
+        LEFT JOIN "PublicAsset" pa ON pa."itemId" = di.id
+        WHERE di."userId" = ${userId}
+          AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.trashed}
+          AND di."deleteRootId" = di.id
+        ORDER BY di."trashedAt" DESC NULLS LAST, di."updatedAt" DESC
+        LIMIT ${page.limit + 1}
+        OFFSET ${page.offset}
+      `,
+      this.prisma.$queryRaw<Array<{ readonly total: bigint | number }>>`
+        SELECT COUNT(*)::bigint AS total
+        FROM "DriveItem" di
+        WHERE di."userId" = ${userId}
+          AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.trashed}
+          AND di."deleteRootId" = di.id
+      `,
+    ])
+    const pageItems = rootRows.map(toTrashRootRecord)
+    const total = Number(totalRows[0]?.total ?? 0)
     return {
       items: pageItems.slice(0, page.limit).map(toTrashItemDto),
-      total: roots.length,
+      total,
       page: {
         offset: page.offset,
         limit: page.limit,
@@ -489,6 +508,14 @@ function toTrashItemDto(item: DriveLifecycleItemRecord): DriveTrashItemDto {
     originalPath: item.restorePath,
     ...(item.publicAsset ? { assetId: item.publicAsset.assetId } : {}),
     trashedAt: (item.trashedAt ?? item.updatedAt).toISOString(),
+  }
+}
+
+function toTrashRootRecord(row: DriveTrashRootQueryRecord): DriveLifecycleItemRecord {
+  const { assetId, ...item } = row
+  return {
+    ...item,
+    publicAsset: assetId ? { assetId } : null,
   }
 }
 

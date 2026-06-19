@@ -140,6 +140,29 @@ describe("DriveLifecycleService", () => {
     expect(trash.total).toBe(1)
   })
 
+  it("pushes trash root filtering and pagination into the query layer", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const first = await seedTrashedDriveFile(prisma, { userId: "user-1", name: "first.png", size: 1n })
+    const second = await seedTrashedDriveFile(prisma, { userId: "user-1", name: "second.png", size: 1n })
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Docs" })
+    const child = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: folder.id, name: "child.png", size: 1n })
+    await lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+
+    const trash = await lifecycle.listTrash("user-1", { offset: 1, limit: 1 })
+
+    expect(trash.items).toHaveLength(1)
+    expect(trash.items.map((item) => item.id)).not.toContain(child.id)
+    expect(trash.total).toBe(3)
+    const queryRawCalls = prisma.__queryRawCalls()
+    expect(queryRawCalls).toHaveLength(2)
+    expect(queryRawCalls[0]?.sql).toContain('di."deleteRootId" = di.id')
+    expect(queryRawCalls[0]?.values).toEqual(expect.arrayContaining(["user-1", 2, 1]))
+    expect(queryRawCalls[1]?.sql).toContain('COUNT(*)')
+    expect(queryRawCalls[1]?.sql).toContain('di."deleteRootId" = di.id')
+    expect([first.id, second.id, folder.id]).toContain(trash.items[0]?.id)
+  })
+
   it("restores trashed roots and clears trash metadata", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
@@ -484,9 +507,26 @@ function createLifecyclePrismaMemory() {
   const now = () => new Date("2026-06-18T12:00:00.000Z")
   const id = () => `item-${nextId++}`
   let beforeNextDriveItemUpdateMany: ((args: any) => Promise<void> | void) | null = null
+  const queryRawCalls: Array<{ readonly sql: string; readonly values: readonly unknown[] }> = []
   const prisma: any = {
     __beforeNextDriveItemUpdateMany: (hook: (args: any) => Promise<void> | void) => {
       beforeNextDriveItemUpdateMany = hook
+    },
+    __queryRawCalls: () => queryRawCalls,
+    $queryRaw: async (strings: TemplateStringsArray | string, ...values: unknown[]) => {
+      const sql = Array.isArray(strings) ? strings.join("?") : String(strings)
+      queryRawCalls.push({ sql, values })
+      const userId = values.find((value): value is string => typeof value === "string")
+      const rootTrashItems = orderRows(
+        [...items.values()].filter((item) =>
+          item.userId === userId &&
+          item.lifecycleStatus === "trashed" &&
+          item.deleteRootId === item.id),
+        [{ trashedAt: "desc" }, { updatedAt: "desc" }],
+      )
+      if (sql.includes("COUNT(*)")) return [{ total: BigInt(rootTrashItems.length) }]
+      const [limit = rootTrashItems.length, offset = 0] = values.filter((value): value is number => typeof value === "number")
+      return rootTrashItems.slice(offset, offset + limit)
     },
     $transaction: async (input: any) => {
       if (typeof input !== "function") return Promise.all(input)
