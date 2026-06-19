@@ -19,6 +19,7 @@ import type { AgentAttachment, AgentEvent, AgentMessage } from "../../services/a
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
 import type { EventBus } from "../../runtime/event-bus"
 import { createMainLogger } from "../../services/log-store"
+import { configStore } from "../../services/config-store"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -32,6 +33,7 @@ import {
   resolveProjectAgent,
   resolveTimelineSession,
   historyEntries,
+  assertKnowledgeBaseStorageMigrationInactive,
 } from "./ipc-shared"
 
 const MAX_CLIENT_SKEW_MS = 60_000
@@ -393,6 +395,9 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       const submittedAt = clampClientSubmittedAt(request.clientSubmittedAt, t_recv)
 
       try {
+        const config = await configStore.load()
+        const project = config.global.projects.find((item) => item.id === request.projectId)
+        assertKnowledgeBaseStorageMigrationInactive(ctx.resolve, project)
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         eventBus.emit({
           domain: "agent",

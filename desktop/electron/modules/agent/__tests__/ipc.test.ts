@@ -238,6 +238,80 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain(backingPath)
   })
 
+  it("blocks managed knowledge base conversation sends during storage migration", async () => {
+    const customRoot = path.join(tmpdir(), "synapse-agent-ipc-migration-kb-root")
+    const backingPath = path.join(customRoot, "knowledge-bases", "kb-1")
+    await fs.rm(backingPath, { recursive: true, force: true })
+    await fs.mkdir(backingPath, { recursive: true })
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        knowledgeBaseStorage: { mode: "custom", rootPath: customRoot },
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              managed: true,
+              runtimeId: "kb-1",
+            },
+          },
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "default",
+      },
+    } as never)
+    const send = vi.fn()
+    const sendToConversation = vi.fn()
+    const storageMigration = { isActive: vi.fn(() => true) }
+    const harness = createHarness({
+      agent: { send, sendToConversation },
+      storageMigration,
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "kb-1",
+      conversationId: "conv-1",
+      content: "hello",
+    })).rejects.toThrow("知识库存储迁移正在进行")
+
+    expect(storageMigration.isActive).toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(sendToConversation).not.toHaveBeenCalled()
+    expect(harness.projectContainers.open).not.toHaveBeenCalled()
+  })
+
+  it("allows ordinary project sends while knowledge base storage migration is active", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [],
+    })
+    const storageMigration = { isActive: vi.fn(() => true) }
+    const harness = createHarness({
+      agent: { send },
+      storageMigration,
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "hello",
+    })).resolves.toEqual(expect.objectContaining({
+      conversationId: "conv-1",
+      resultText: "done",
+    }))
+
+    expect(storageMigration.isActive).not.toHaveBeenCalled()
+    expect(send).toHaveBeenCalled()
+  })
+
   it("passes optional providerId through local renderer sends", async () => {
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
@@ -1780,6 +1854,7 @@ function createHarness(overrides: {
   readonly agent?: Record<string, unknown>
   readonly providerService?: Record<string, unknown>
   readonly dataRepository?: Record<string, unknown>
+  readonly storageMigration?: { isActive: ReturnType<typeof vi.fn> }
 }) {
   const agent = {
     getStatus: () => ({
@@ -1861,6 +1936,7 @@ function createHarness(overrides: {
     listDetachedConversations: vi.fn(() => []),
     closeConversationWindow: vi.fn(() => ({ closed: true })),
   }
+  const storageMigration = overrides.storageMigration ?? { isActive: vi.fn(() => false) }
   const resolve: IpcHandlerContext["resolve"] = <T>(serviceId: string): T => {
     if (serviceId === "core.project-containers") return projectContainers as T
     if (serviceId === "core.event-bus") return eventBus as T
@@ -1869,6 +1945,7 @@ function createHarness(overrides: {
     if (serviceId === "core.audit-sink") return auditSink as T
     if (serviceId === PROVIDER_SERVICE_ID) return providerService as T
     if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID) return conversationWindowService as T
+    if (serviceId === "knowledge-base.storage-migration-service") return storageMigration as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(agentIpcModule, {

@@ -16,6 +16,7 @@ import {
   isManagedKnowledgeBaseProject,
   resolveProjectWorkspacePath,
 } from "../../services/knowledge-base/managed-path"
+import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import { createMainLogger } from "../../services/log-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
@@ -26,6 +27,7 @@ import { resolveDefaultAgentWorkspaceProject } from "./default-agent-workspace"
 
 export const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 export const LOCAL_RENDERER_PLATFORM = "local-renderer"
+export const KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR = "知识库存储迁移正在进行，请稍后再试。"
 const logger = createMainLogger("agent.ipc-shared")
 const MANAGED_KNOWLEDGE_BASE_WORKSPACE_MISSING_ERROR = "知识库运行目录不存在。请重新创建知识库或从备份恢复。"
 const MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR = "无法访问知识库运行目录。请检查磁盘权限后重试。"
@@ -33,6 +35,17 @@ const MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR = "无法访问知识�
 // ─── Shared request schemas ───────────────────────────────────────────────────
 
 export { projectRequestSchema }
+
+export function assertKnowledgeBaseStorageMigrationInactive(
+  resolve: <T>(serviceId: string) => T,
+  project: Parameters<typeof isManagedKnowledgeBaseProject>[0],
+): void {
+  if (!isManagedKnowledgeBaseProject(project)) return
+  const storageMigration = resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
+  if (storageMigration.isActive()) {
+    throw new Error(KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR)
+  }
+}
 
 export const timelineRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
