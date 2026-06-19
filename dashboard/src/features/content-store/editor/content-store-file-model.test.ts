@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   addSkillTextFile,
   addSkillTextFileWithPath,
@@ -98,5 +98,43 @@ describe('content store Skill file model', () => {
       size: 3,
       text: '',
     })
+  })
+
+  it('rejects oversized uploaded files before reading bytes', async () => {
+    const files = await createInitialSkillFiles()
+    const upload = {
+      name: 'large.bin',
+      type: 'application/octet-stream',
+      size: 20 * 1024 * 1024 + 1,
+      arrayBuffer: vi.fn().mockRejectedValue(new Error('should not read')),
+    } as unknown as File
+
+    await expect(replaceSkillFileFromUpload(files, upload)).rejects.toThrow('Skill 单文件超过 20MB。')
+    expect(upload.arrayBuffer).not.toHaveBeenCalled()
+  })
+
+  it('rejects uploaded files that exceed the draft total before reading bytes', async () => {
+    const [entry] = await createInitialSkillFiles()
+    const files = [
+      entry,
+      {
+        path: 'assets/existing.bin',
+        kind: 'binary' as const,
+        text: '',
+        bytesBase64: '',
+        size: 50 * 1024 * 1024,
+        mimeType: 'application/octet-stream',
+        sha256: 'existing',
+      },
+    ]
+    const upload = {
+      name: 'next.bin',
+      type: 'application/octet-stream',
+      size: 1,
+      arrayBuffer: vi.fn().mockRejectedValue(new Error('should not read')),
+    } as unknown as File
+
+    await expect(replaceSkillFileFromUpload(files, upload)).rejects.toThrow('Skill 文件总大小超过 50MB。')
+    expect(upload.arrayBuffer).not.toHaveBeenCalled()
   })
 })

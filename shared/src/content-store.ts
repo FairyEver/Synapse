@@ -3,6 +3,10 @@ export type ContentStoreVisibility = "private" | "public"
 export type ContentStoreModerationStatus = "normal" | "removed"
 export type ContentStoreFileKind = "text" | "binary"
 
+export const contentStoreSkillMaxTotalBytes = 50 * 1024 * 1024
+export const contentStoreSkillMaxFileBytes = 20 * 1024 * 1024
+export const contentStoreSkillMaxFileCount = 200
+
 export interface ContentStoreOwnerDto {
   readonly id: string
   readonly displayName: string | null

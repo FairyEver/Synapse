@@ -19,6 +19,7 @@
 - Workflow MCP 内置 Skill 会正确说明脚本节点的默认 shell：Windows 留空时使用 `cmd`，macOS/Linux 使用 `posix`。
 - Usage Analysis 的原文搜索加载更多会从下一批会话继续扫描，并对输入做短暂去抖，减少重复读取历史 JSONL 的开销。
 - Workflow MCP 指南补齐 Claude Code 节点说明，Agent 通过指南创建本机 Claude Code 工作流时不再误以为只有 Codex 节点可用。
+- 内容商店 Skill 编辑器会在选择文件时立即拦截超出大小上限的附件，避免先读入大文件再到保存阶段失败。
 
 ## 问题修复
 

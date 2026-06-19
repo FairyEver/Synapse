@@ -1,4 +1,8 @@
-import type { ContentStoreFileDto } from '@synapse/shared'
+import {
+  contentStoreSkillMaxFileBytes,
+  contentStoreSkillMaxTotalBytes,
+  type ContentStoreFileDto,
+} from '@synapse/shared'
 import type { SkillEditorFile } from './content-store-editor-types'
 
 const skillEntryPath = 'SKILL.md'
@@ -122,9 +126,10 @@ export async function replaceSkillFileFromUpload(
   pathInput = upload.name
 ): Promise<SkillEditorFile[]> {
   const path = normalizeSkillFilePath(pathInput)
-  const uploaded = await fileToSkillEditorFile(upload, path)
   const withoutExisting = files.filter((file) => file.path !== path)
   assertUniquePath(withoutExisting, path)
+  assertUploadedSkillFileSize(withoutExisting, upload.size)
+  const uploaded = await fileToSkillEditorFile(upload, path)
   return sortSkillFiles([...withoutExisting, uploaded])
 }
 
@@ -171,6 +176,12 @@ export async function createTextFile(
 function assertUniquePath(files: readonly SkillEditorFile[], path: string) {
   const key = pathKey(path)
   if (files.some((file) => pathKey(file.path) === key)) throw new Error('文件已存在')
+}
+
+function assertUploadedSkillFileSize(files: readonly SkillEditorFile[], uploadSize: number) {
+  if (uploadSize > contentStoreSkillMaxFileBytes) throw new Error('Skill 单文件超过 20MB。')
+  const totalSize = files.reduce((total, file) => total + file.size, uploadSize)
+  if (totalSize > contentStoreSkillMaxTotalBytes) throw new Error('Skill 文件总大小超过 50MB。')
 }
 
 function pathKey(path: string): string {
