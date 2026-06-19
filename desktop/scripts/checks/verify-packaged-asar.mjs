@@ -120,6 +120,26 @@ function verifyUnpackedNode(header, unpackedPath, relativePath, failures, messag
   }
 }
 
+function shouldRequireUnpackedSourceMap(relativePath) {
+  return relativePath.startsWith("dist-electron/") && relativePath.endsWith(".js")
+}
+
+function verifyUnpackedSourceMap(header, unpackedPath, relativePath, failures) {
+  const sourceMapPath = `${relativePath}.map`
+  const sourceMapNode = findNode(header, sourceMapPath)
+  if (!sourceMapNode) {
+    failures.push(`missing unpacked source map from app.asar header: ${sourceMapPath}`)
+    return
+  }
+  if (!sourceMapNode.unpacked) {
+    failures.push(`unpacked source map must be unpacked: ${sourceMapPath}`)
+    return
+  }
+  if (!existsSync(path.join(unpackedPath, sourceMapPath))) {
+    failures.push(`missing unpacked source map file: ${sourceMapPath}`)
+  }
+}
+
 const usageAnalysisWorkerEntries = [
   "dist-electron/electron/services/usage-analysis/conversation-worker.js",
   "dist-electron/electron/services/usage-analysis/refresh-worker.js",
@@ -269,6 +289,9 @@ function verifyResources(resourcesPath, label) {
       const filePath = path.join(unpackedPath, relativePath)
       if (!existsSync(filePath)) {
         failures.push(`missing unpacked file: ${relativePath}`)
+      }
+      if (shouldRequireUnpackedSourceMap(relativePath)) {
+        verifyUnpackedSourceMap(header, unpackedPath, relativePath, failures)
       }
       return
     }

@@ -44,6 +44,7 @@ interface CreateAsarBufferOptions {
   readonly includeDeploymentConfig?: boolean
   readonly includeSharedPackage?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
+  readonly includeUnpackedSourceMaps?: boolean
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -55,12 +56,54 @@ function createPackedFileNode(offset: number, content: Buffer, unpacked = false)
   }
 }
 
+function createUnpackedFileNode() {
+  return {
+    size: 1,
+    offset: "0",
+    unpacked: true,
+  }
+}
+
+function createUnpackedJsFiles(includeSourceMaps: boolean) {
+  return {
+    "agent-redaction.js": createUnpackedFileNode(),
+    ...(includeSourceMaps ? { "agent-redaction.js.map": createUnpackedFileNode() } : {}),
+  }
+}
+
+function createUsageAnalysisFiles(includeSourceMaps: boolean) {
+  const files = {
+    "conversation-worker.js": createUnpackedFileNode(),
+    "cc-conversation-service.js": createUnpackedFileNode(),
+    "cc-service.js": createUnpackedFileNode(),
+    "refresh-worker.js": createUnpackedFileNode(),
+    "db-schema.js": createUnpackedFileNode(),
+  }
+  if (!includeSourceMaps) return files
+  return {
+    ...files,
+    "conversation-worker.js.map": createUnpackedFileNode(),
+    "cc-conversation-service.js.map": createUnpackedFileNode(),
+    "cc-service.js.map": createUnpackedFileNode(),
+    "refresh-worker.js.map": createUnpackedFileNode(),
+    "db-schema.js.map": createUnpackedFileNode(),
+  }
+}
+
+function createModelPriceFiles(includeSourceMaps: boolean) {
+  return {
+    "index.js": createUnpackedFileNode(),
+    ...(includeSourceMaps ? { "index.js.map": createUnpackedFileNode() } : {}),
+  }
+}
+
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeSharedPackage = true,
     includeUsageAnalysisWorkers = false,
+    includeUnpackedSourceMaps = true,
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
@@ -127,42 +170,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                   ...(includeUsageAnalysisWorkers
                     ? {
                         "model-price": {
-                          files: {
-                            "index.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                          },
+                          files: createModelPriceFiles(includeUnpackedSourceMaps),
                         },
                         "usage-analysis": {
-                          files: {
-                            "conversation-worker.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                            "cc-conversation-service.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                            "cc-service.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                            "refresh-worker.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                            "db-schema.js": {
-                              size: 1,
-                              offset: "0",
-                              unpacked: true,
-                            },
-                          },
+                          files: createUsageAnalysisFiles(includeUnpackedSourceMaps),
                         },
                       }
                     : {}),
@@ -173,13 +184,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           src: {
             files: {
               lib: {
-                files: {
-                  "agent-redaction.js": {
-                    size: 1,
-                    offset: "0",
-                    unpacked: true,
-                  },
-                },
+                files: createUnpackedJsFiles(includeUnpackedSourceMaps),
               },
             },
           },
@@ -225,10 +230,18 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
 }
 
 describe("packaged asar verification", () => {
-  async function writeUnpackedFixture(resourcesPath: string, segments: readonly string[], content = "x") {
+  async function writeUnpackedFixture(
+    resourcesPath: string,
+    segments: readonly string[],
+    content = "x",
+    options: { readonly sourceMap?: boolean } = {},
+  ) {
     const filePath = path.join(resourcesPath, ...segments)
     await mkdir(path.dirname(filePath), { recursive: true })
     await writeFile(filePath, content)
+    if (options.sourceMap !== false && segments[0] === "app.asar.unpacked" && segments.includes("dist-electron") && path.basename(filePath).endsWith(".js")) {
+      await writeFile(`${filePath}.map`, "{}")
+    }
     return filePath
   }
 
@@ -305,6 +318,65 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("node_modules/@synapse/shared/dist/index.js"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects unpacked Electron JavaScript without sibling source maps", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
+        includeUsageAnalysisWorkers: true,
+        includeUnpackedSourceMaps: false,
+      }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments, "module.exports = {}\n", { sourceMap: false })
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-service.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "model-price", "index.js"],
+        "module.exports = {}\n",
+        { sourceMap: false },
+      )
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("missing unpacked source map"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })
