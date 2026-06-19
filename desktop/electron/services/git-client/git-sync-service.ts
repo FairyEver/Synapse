@@ -98,7 +98,8 @@ export function createGitSyncService(deps: SyncDeps) {
           repositoryId: repository.id,
           timeoutMs: 120_000,
         })
-        if (before.behind > 0) {
+        const afterFetch = await deps.getSnapshot(repository)
+        if (afterFetch.behind > 0) {
           await deps.commandRunner.run({
             cwd: repository.localPath,
             args: ["pull", "--ff-only"],
@@ -109,7 +110,17 @@ export function createGitSyncService(deps: SyncDeps) {
             timeoutMs: 120_000,
           })
         }
-        const afterPull = await deps.getSnapshot(repository)
+        const afterPull = afterFetch.behind > 0
+          ? await deps.getSnapshot(repository)
+          : afterFetch
+        if (afterPull.behind > 0) {
+          logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "remote-still-behind", {
+            ...baseMeta,
+            before: summarizeSyncSnapshot(before),
+            afterPull: summarizeSyncSnapshot(afterPull),
+          })
+          throw new Error("远程仍有未拉取提交，请手动处理后重试。")
+        }
         if (afterPull.ahead > 0) {
           await deps.commandRunner.run({
             cwd: repository.localPath,

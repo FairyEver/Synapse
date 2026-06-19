@@ -140,6 +140,7 @@ describe("git worktree services", () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const getSnapshot = vi.fn()
       .mockResolvedValueOnce({ changes: [], behind: 2, ahead: 1 })
+      .mockResolvedValueOnce({ changes: [], behind: 2, ahead: 1 })
       .mockResolvedValueOnce({ changes: [], behind: 0, ahead: 1 })
     const service = createGitSyncService({ commandRunner: { run }, getSnapshot, logger, now: () => new Date("2026-06-17T10:00:00.000Z") })
 
@@ -151,6 +152,22 @@ describe("git worktree services", () => {
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
     expect(completed?.operationId).toBe(started?.operationId)
+  })
+
+  it("pulls remote commits discovered by fetch during sync", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const getSnapshot = vi.fn()
+      .mockResolvedValueOnce({ changes: [], behind: 0, ahead: 0 })
+      .mockResolvedValueOnce({ changes: [], behind: 1, ahead: 0 })
+      .mockResolvedValueOnce({ changes: [], behind: 0, ahead: 0 })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot, logger, now: () => new Date("2026-06-17T10:00:00.000Z") })
+
+    await service.sync(repository)
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["fetch", "--prune"], timeoutMs: 120000 }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["pull", "--ff-only"], timeoutMs: 120000 }))
+    expect(run).not.toHaveBeenCalledWith(expect.objectContaining({ args: ["push"] }))
   })
 
   it("logs remote operation success with a lightweight snapshot summary", async () => {
