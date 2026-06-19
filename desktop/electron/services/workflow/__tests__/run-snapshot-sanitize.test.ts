@@ -171,7 +171,7 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
           type: "codex",
           position: { x: 0, y: 0 },
           config: {
-            prompt: "ship it",
+            prompt: "ship it with Authorization: Bearer raw-token, Cookie: sid=abc123, ANTHROPIC_API_KEY=sk-raw-secret, /Users/liyang/private.txt",
             configOverrides: [
               { key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" },
               { key: "model_reasoning_effort", value: "high" },
@@ -198,13 +198,51 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       { key: "ANTHROPIC_API_KEY", value: "[redacted]" },
       { key: "model_reasoning_effort", value: "[redacted]" },
     ])
+    expect(codexNode?.config.prompt).toContain("ship it")
+    expect(codexNode?.config.prompt).toContain("[redacted]")
+    expect(codexNode?.config.prompt).toContain("[path]")
     expect(httpNode?.config.configOverrides).toEqual([{ key: "not-codex", value: "preserved" }])
     expect(JSON.stringify(sanitized)).not.toContain("sk-raw-secret")
     expect(JSON.stringify(sanitized)).not.toContain("high")
+    expect(JSON.stringify(sanitized)).not.toContain("raw-token")
+    expect(JSON.stringify(sanitized)).not.toContain("sid=abc123")
+    expect(JSON.stringify(sanitized)).not.toContain("/Users/liyang/private.txt")
+    expect(definition.nodes[0]?.config.prompt).toContain("raw-token")
     expect(definition.nodes[0]?.config.configOverrides).toEqual([
       { key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" },
       { key: "model_reasoning_effort", value: "high" },
     ])
+  })
+
+  it("sanitizes Code X prompts even when no config overrides are present", () => {
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Prompt workflow",
+      version: "1.0.0",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [],
+      edges: [],
+      nodes: [
+        {
+          id: "codex-1",
+          name: "Code X",
+          type: "codex",
+          position: { x: 0, y: 0 },
+          config: {
+            prompt: "Use token=abc123 from /Users/liyang/private.txt",
+          },
+        },
+      ],
+    }
+
+    const sanitized = sanitizeWorkflowDefinitionForSnapshot(definition)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.nodes[0]?.config.prompt).toContain("token=[redacted]")
+    expect(sanitized.nodes[0]?.config.prompt).toContain("[path]")
+    expect(raw).not.toContain("abc123")
+    expect(raw).not.toContain("/Users/liyang/private.txt")
   })
 })
 

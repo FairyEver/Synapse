@@ -38,12 +38,13 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
   if (node.type !== "codex") return node
   const configOverrides = node.config.configOverrides
-  if (!Array.isArray(configOverrides)) return node
+  const prompt = node.config.prompt
   return {
     ...node,
     config: {
       ...node.config,
-      configOverrides: configOverrides.map(redactConfigOverrideValue),
+      ...(typeof prompt === "string" ? { prompt: sanitizeError(prompt) } : {}),
+      ...(Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
     },
   }
 }
