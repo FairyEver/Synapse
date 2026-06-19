@@ -8,6 +8,7 @@ vi.mock("electron", () => ({
 }))
 
 import { readRepositorySeedContents } from "../repository-template-service"
+import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
 
 describe("RepositoryTemplateService", () => {
   it("keeps Synapse MCP skill template icons consistent", async () => {
@@ -40,6 +41,20 @@ describe("RepositoryTemplateService", () => {
     expect(driveSkill?.usage).toContain("设置分享密码和有效期")
     expect(driveSkill?.content).toContain("passwordEnabled")
     expect(driveSkill?.content).toContain("expiresIn")
+  })
+
+  it("documents every Drive MCP tool in the built-in API reference", async () => {
+    const seeds = await readRepositorySeedContents()
+    const driveSkill = seeds.find((seed) => seed.id === "synapse-drive-mcp")
+    const apiReference = driveSkill?.attachments
+      ?.find((attachment) => attachment.originalName === "api-reference.md")
+    const apiText = apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : ""
+
+    const missingTools = buildDriveTools()
+      .map((tool) => tool.name)
+      .filter((toolName) => !apiText.includes(`\`${toolName}\``))
+
+    expect(missingTools).toEqual([])
   })
 
   it("documents Workflow executors in the built-in Automation MCP skill", async () => {
