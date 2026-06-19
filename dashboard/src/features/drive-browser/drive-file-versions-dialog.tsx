@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DriveFileVersionDto, DriveFileVersionSource } from '@synapse/shared'
 import { Download, Loader2, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -49,11 +49,14 @@ export function DriveFileVersionsDialog({
 }) {
   const queryClient = useQueryClient()
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget>(null)
-  const versionsQuery = useQuery({
+  const versionsQuery = useInfiniteQuery({
     queryKey: ['drive-file-versions', itemId],
-    queryFn: () => driveFileVersionsApi.list(itemId, { limit: versionPageSize }),
+    queryFn: ({ pageParam }) => driveFileVersionsApi.list(itemId, { offset: pageParam, limit: versionPageSize }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.page.nextOffset ?? undefined,
     enabled: open,
   })
+  const versions = versionsQuery.data?.pages.flatMap((page) => page.items) ?? []
   const invalidateVersionState = () => {
     void queryClient.invalidateQueries({ queryKey: ['drive-file-versions', itemId] })
     void queryClient.invalidateQueries({ queryKey: ['drive-browser'] })
@@ -102,13 +105,18 @@ export function DriveFileVersionsDialog({
           <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
             <DriveFileVersionContent
               itemId={itemId}
-              versions={versionsQuery.data?.items ?? []}
+              versions={versions}
               loading={versionsQuery.isLoading}
-              error={versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
+              error={versions.length === 0 && versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
               pinningVersionId={pinMutation.variables?.versionId ?? null}
               pinning={pinMutation.isPending}
+              hasMore={versionsQuery.hasNextPage}
+              loadingMore={versionsQuery.isFetchingNextPage}
               onRetry={() => {
                 void versionsQuery.refetch()
+              }}
+              onLoadMore={() => {
+                void versionsQuery.fetchNextPage()
               }}
               onPin={(version) => pinMutation.mutate({ versionId: version.id, isPinned: !version.isPinned })}
               onRestore={(version) => setConfirmTarget({ action: 'restore', version })}
@@ -149,7 +157,10 @@ export function DriveFileVersionContent({
   error,
   pinningVersionId,
   pinning,
+  hasMore,
+  loadingMore,
   onRetry,
+  onLoadMore,
   onPin,
   onRestore,
   onDelete,
@@ -160,7 +171,10 @@ export function DriveFileVersionContent({
   readonly error: string | null
   readonly pinningVersionId: string | null
   readonly pinning: boolean
+  readonly hasMore: boolean
+  readonly loadingMore: boolean
   readonly onRetry: () => void
+  readonly onLoadMore: () => void
   readonly onPin: (version: DriveFileVersionDto) => void
   readonly onRestore: (version: DriveFileVersionDto) => void
   readonly onDelete: (version: DriveFileVersionDto) => void
@@ -208,6 +222,14 @@ export function DriveFileVersionContent({
           />
         ))}
       </DriveFileVersionTable>
+      {hasMore ? (
+        <div className='flex justify-center border-t p-2'>
+          <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={onLoadMore}>
+            {loadingMore ? <Loader2 className='animate-spin' /> : null}
+            {loadingMore ? '加载中' : '加载更多'}
+          </Button>
+        </div>
+      ) : null}
     </DriveFileVersionTableFrame>
   )
 }

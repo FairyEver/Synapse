@@ -18,6 +18,15 @@ describe('DriveFileVersionContent', () => {
     expect(contentClass).not.toContain('sm:max-w-2xl')
   })
 
+  it('uses the version page cursor for additional history pages', () => {
+    const source = readFileSync(new URL('./drive-file-versions-dialog.tsx', import.meta.url), 'utf8')
+
+    expect(source).toContain('useInfiniteQuery')
+    expect(source).toContain('getNextPageParam')
+    expect(source).toContain('lastPage.page.nextOffset')
+    expect(source).toContain('fetchNextPage')
+  })
+
   it('keeps version rows inside a bounded table frame', () => {
     const html = renderVersions([
       version({ id: 'version-4', versionNumber: 4, isCurrent: true }),
@@ -60,6 +69,16 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('删除')
   })
 
+  it('shows a load more action when more version pages are available', () => {
+    const html = renderVersionContent({
+      versions: [version({ id: 'version-100', versionNumber: 100 })],
+      hasMore: true,
+      loadingMore: false,
+    })
+
+    expect(html).toContain('加载更多')
+  })
+
   it('renders loading, empty, and error states in the same bounded area', () => {
     const loadingHtml = renderVersionContent({ loading: true })
     const emptyHtml = renderVersions([])
@@ -88,7 +107,10 @@ function renderVersionContent(overrides: Partial<ComponentProps<typeof DriveFile
       error: null,
       pinningVersionId: null,
       pinning: false,
+      hasMore: false,
+      loadingMore: false,
       onRetry: vi.fn(),
+      onLoadMore: vi.fn(),
       onPin: vi.fn(),
       onRestore: vi.fn(),
       onDelete: vi.fn(),
