@@ -97,6 +97,31 @@ describe("git worktree services", () => {
     ])
   })
 
+  it("limits concurrent repository summary status probes", async () => {
+    let active = 0
+    let maxActive = 0
+    const run = vi.fn(async () => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      active -= 1
+      return {
+        stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n",
+        stderr: "",
+      }
+    })
+    const repositories = Array.from({ length: 9 }, (_, index) => ({
+      ...repository,
+      id: `repo-${index + 1}`,
+      localPath: `/repo-${index + 1}`,
+    }))
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await expect(service.listSummaries(repositories)).resolves.toHaveLength(9)
+
+    expect(maxActive).toBeLessThanOrEqual(4)
+  })
+
   it("loads text diff and marks binary diff", async () => {
     const textService = createGitStatusService({
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "diff --git a/docs/a.md b/docs/a.md\n+hello\n", stderr: "" }) },

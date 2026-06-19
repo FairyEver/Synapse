@@ -32,6 +32,8 @@ type StatusDeps = {
   readonly readStateDiagnostics?: (repository: SynapseGitRepository) => Promise<GitRepositoryStateDiagnostics>
 }
 
+const LIST_SUMMARY_CONCURRENCY_LIMIT = 4
+
 function createGitStateDiagnosticsReader(
   commandRunner: Pick<GitClientCommandRunner, "run">,
   pathExists: (filePath: string) => Promise<boolean>,
@@ -177,7 +179,7 @@ export function createGitStatusService(deps: StatusDeps) {
     },
 
     async listSummaries(repositories: readonly SynapseGitRepository[]): Promise<SynapseGitRepositorySummary[]> {
-      return Promise.all(repositories.map(async (repository) => {
+      return mapWithConcurrency(repositories, LIST_SUMMARY_CONCURRENCY_LIMIT, async (repository) => {
         try {
           return {
             repository,
@@ -196,7 +198,7 @@ export function createGitStatusService(deps: StatusDeps) {
             error: error instanceof Error ? error.message : "读取仓库状态失败。",
           }
         }
-      }))
+      })
     },
 
     async getDiff(
@@ -244,6 +246,26 @@ export function createGitStatusService(deps: StatusDeps) {
       }
     },
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+  const workerCount = Math.min(concurrency, items.length)
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await mapper(items[currentIndex])
+    }
+  }))
+
+  return results
 }
 
 function summarizeSummaryError(error: unknown): Record<string, unknown> {
