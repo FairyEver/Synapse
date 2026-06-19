@@ -1,7 +1,22 @@
 import path from "node:path"
 
-export function normalizeRepositoryPath(localPath: string): string {
-  return path.resolve(localPath)
+type RepositoryPathOptions = {
+  readonly platform?: NodeJS.Platform | string
+}
+
+function pathForPlatform(platform: NodeJS.Platform | string) {
+  return platform === "win32" ? path.win32 : path
+}
+
+export function normalizeRepositoryPath(localPath: string, options: RepositoryPathOptions = {}): string {
+  const platform = options.platform ?? process.platform
+  return pathForPlatform(platform).resolve(localPath)
+}
+
+export function normalizeRepositoryPathForCompare(localPath: string, options: RepositoryPathOptions = {}): string {
+  const platform = options.platform ?? process.platform
+  const normalized = normalizeRepositoryPath(localPath, { platform }).replace(/[\\/]+$/u, "")
+  return platform === "win32" ? normalized.replace(/\//gu, "\\").toLowerCase() : normalized
 }
 
 export function assertRepositoryPath(repositoryPath: string, relativePath: string): string {

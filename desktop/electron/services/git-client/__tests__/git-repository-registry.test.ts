@@ -93,6 +93,21 @@ describe("git repository registry", () => {
     expect(await registry.list()).toHaveLength(1)
   })
 
+  it("deduplicates Windows repositories by case-insensitive normalized path", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
+    const registry = createGitRepositoryRegistry({
+      userDataPath: tempDir,
+      now: () => new Date("2026-06-17T10:00:00.000Z"),
+      platform: "win32",
+    })
+    const first = await registry.addLocal({ name: "Repo", localPath: "C:\\Work\\Repo" })
+    const second = await registry.addLocal({ name: "Repo Again", localPath: "c:\\work\\repo\\" })
+
+    expect(second.id).toBe(first.id)
+    expect(second.localPath).toBe("C:\\Work\\Repo")
+    expect(await registry.list()).toHaveLength(1)
+  })
+
   it("stores data in the git module registry file", async () => {
     const registry = await makeRegistry()
     await registry.addLocal({ name: "Docs", localPath: "/tmp/docs" })

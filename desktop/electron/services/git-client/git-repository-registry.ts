@@ -4,7 +4,7 @@ import path from "node:path"
 import type { SynapseGitRepository } from "../../../src/types/git"
 import type { SynapseGitRepositoryRemoveInput } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
-import { normalizeRepositoryPath } from "./git-path-utils"
+import { normalizeRepositoryPath, normalizeRepositoryPathForCompare } from "./git-path-utils"
 import {
   createGitOperationId,
   logGitOperationFailed,
@@ -25,6 +25,7 @@ type AddLocalInput = {
 
 type RegistryDeps = {
   readonly logger?: Pick<StructuredLogger, "error" | "info">
+  readonly platform?: NodeJS.Platform | string
   readonly userDataPath: string
   readonly now?: () => Date
   readonly trashItem?: (targetPath: string) => Promise<void>
@@ -63,6 +64,7 @@ async function writeRegistry(filePath: string, data: RegistryFile): Promise<void
 export function createGitRepositoryRegistry(deps: RegistryDeps) {
   const filePath = registryFilePath(deps.userDataPath)
   const now = deps.now ?? (() => new Date())
+  const platform = deps.platform ?? process.platform
 
   return {
     async list(): Promise<SynapseGitRepository[]> {
@@ -74,14 +76,17 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       const operation = "git.repository.addLocal"
       const operationId = createGitOperationId()
       const startedAt = performance.now()
-      const localPath = normalizeRepositoryPath(input.localPath)
+      const localPath = normalizeRepositoryPath(input.localPath, { platform })
       logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
         repoPath: localPath,
         nameLength: input.name.length,
       })
       try {
         const data = await readRegistry(filePath)
-        const existing = data.repositories.find((repository) => repository.localPath === localPath)
+        const localPathKey = normalizeRepositoryPathForCompare(localPath, { platform })
+        const existing = data.repositories.find((repository) => (
+          normalizeRepositoryPathForCompare(repository.localPath, { platform }) === localPathKey
+        ))
         if (existing) {
           logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
             ...repositoryLogMeta(existing),
