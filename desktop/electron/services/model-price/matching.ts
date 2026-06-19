@@ -43,7 +43,9 @@ export function compareModelPriceRules(a: ModelPriceRule, b: ModelPriceRule): nu
 }
 
 export function findModelPriceRuleForModel(model: string, rules: readonly ModelPriceRule[]): ModelPriceRule | null {
-  return rules.filter((rule) => rule.enabled).find((rule) => matchesModelPattern(model, rule.modelPattern)) ?? null
+  return rules
+    .filter((rule) => rule.enabled && matchesModelPattern(model, rule.modelPattern))
+    .sort((a, b) => compareModelPriceRuleMatches(model, a, b) || compareModelPriceRules(a, b))[0] ?? null
 }
 
 export function estimateModelUsageCost(
@@ -141,4 +143,14 @@ function matchesModelPattern(model: string, pattern: string): boolean {
   if (!normalizedModel || !normalizedPattern) return false
   if (normalizedPattern.includes("*")) return wildcardPatternToRegex(normalizedPattern).test(normalizedModel)
   return normalizedModel.includes(normalizedPattern)
+}
+
+function compareModelPriceRuleMatches(model: string, a: ModelPriceRule, b: ModelPriceRule): number {
+  const normalizedModel = model.trim().toLowerCase()
+  const aPattern = a.modelPattern.trim().toLowerCase()
+  const bPattern = b.modelPattern.trim().toLowerCase()
+  const aExact = aPattern === normalizedModel ? 1 : 0
+  const bExact = bPattern === normalizedModel ? 1 : 0
+  return bExact - aExact
+    || bPattern.length - aPattern.length
 }
