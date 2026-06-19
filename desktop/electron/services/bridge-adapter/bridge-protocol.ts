@@ -12,9 +12,13 @@ export const BRIDGE_ATTACHMENT_NAME_MAX_CHARS = 255
 export const BRIDGE_ATTACHMENT_MIME_TYPE_MAX_CHARS = 128
 export const BRIDGE_CARD_ACTION_UPDATED_INPUT_MAX_BYTES = 64 * 1024
 
+const RESERVED_INTERNAL_BRIDGE_PLATFORMS = new Set(["local", "local-renderer"])
+
 export const bridgeRegisterSchema = z.object({
   type: z.literal("register"),
-  platform: z.string().trim().min(1),
+  platform: z.string().trim().min(1).refine((platform) => !isReservedInternalBridgePlatform(platform), {
+    message: "platform is reserved for internal use",
+  }),
   capabilities: z.array(z.string().trim().min(1)).optional().default([]),
   project: z.string().trim().min(1).optional(),
   metadata: metadataSchema,
@@ -80,6 +84,10 @@ export type BridgePreviewAck = z.infer<typeof bridgePreviewAckSchema>
 export type BridgeProtocolError = {
   readonly code: string
   readonly message: string
+}
+
+export function isReservedInternalBridgePlatform(platform: string | undefined): boolean {
+  return RESERVED_INTERNAL_BRIDGE_PLATFORMS.has((platform ?? "").trim().toLowerCase())
 }
 
 export function parseBridgeBase(value: unknown):

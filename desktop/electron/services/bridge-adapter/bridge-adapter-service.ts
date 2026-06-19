@@ -32,6 +32,7 @@ import {
   parseBridgePreviewAck,
   parseBridgeRegister,
   sanitizeBridgeMetadata,
+  isReservedInternalBridgePlatform,
   type BridgeMessage,
   type BridgeRegister,
 } from "./bridge-protocol"
@@ -608,7 +609,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         const { agent } = await this.resolveProjectAgent(stringField(body, "project"))
         const created = await agent.createSession({
           sessionKey,
-          platform: platformFromSessionKey(sessionKey) ?? "bridge",
+          platform: bridgePlatformFromSessionKey(sessionKey),
           name: stringField(body, "name") ?? sessionKey,
         })
         return bridgeResponse(200, true, {
@@ -1258,6 +1259,12 @@ function platformFromSessionKey(sessionKey: string): string | undefined {
   const idx = sessionKey.indexOf(":")
   if (idx <= 0) return undefined
   return sessionKey.slice(0, idx)
+}
+
+function bridgePlatformFromSessionKey(sessionKey: string): string {
+  const platform = platformFromSessionKey(sessionKey)
+  if (!platform || isReservedInternalBridgePlatform(platform)) return "bridge"
+  return platform
 }
 
 function stringValue(value: unknown): string | undefined {

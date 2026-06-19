@@ -66,6 +66,26 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
+  it("rejects reserved internal platform names during registration", async () => {
+    const { service, port } = await startBridge()
+    const ws = await openBridge(port, "tok")
+    ws.send(JSON.stringify({
+      type: "register",
+      platform: "local-renderer",
+      capabilities: ["text"],
+    }))
+
+    await expect(readJson(ws)).resolves.toEqual({
+      type: "register_ack",
+      ok: false,
+      error: expect.stringContaining("reserved"),
+      code: "invalid_register",
+    })
+    expect(service.listAdapters()).toEqual([])
+    ws.close()
+    await service.stop()
+  })
+
   it("records denied audit when network listen permission is rejected", async () => {
     const auditSink = new InMemoryAuditSink()
     const service = new BridgeAdapterService({
@@ -680,6 +700,27 @@ describe("BridgeAdapterService", () => {
     })
     expect(deleted.status).toBe(200)
     expect(await agent.getSession(second.id)).toBeNull()
+    await service.stop()
+  })
+
+  it("keeps HTTP-created sessions on the bridge platform for reserved session key prefixes", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent)
+    const base = `http://127.0.0.1:${String(port)}/bridge/sessions`
+
+    const created = await fetch(base, {
+      method: "POST",
+      headers: { Authorization: "Bearer tok", "Content-Type": "application/json" },
+      body: JSON.stringify({ project: "project-1", session_key: "local-renderer:s1", name: "Main" }),
+    })
+    expect(created.status).toBe(200)
+    const createdBody = await created.json() as { data: { id: string } }
+    const session = await agent.getSession(createdBody.data.id)
+
+    expect(session).toEqual(expect.objectContaining({
+      sessionKey: "local-renderer:s1",
+      platform: "bridge",
+    }))
     await service.stop()
   })
 
