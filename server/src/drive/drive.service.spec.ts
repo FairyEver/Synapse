@@ -285,6 +285,30 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(27n)
   })
 
+  it("cleans up copied restore objects when the restore transaction fails", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const v1 = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/markdown", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("db unavailable"))
+
+    await expect(service.restoreFileVersion("user-1", first.id, v1.id)).rejects.toThrow("db unavailable")
+
+    const copiedKey = vi.mocked(storage.copyObject).mock.calls.at(-1)?.[0].toKey
+    expect(copiedKey).toContain(`/versions/`)
+    expect(deleteObject).toHaveBeenCalledWith(copiedKey)
+  })
+
   it("rejects deleting the current version and releases quota for a deleted historical version", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {

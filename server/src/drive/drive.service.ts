@@ -288,54 +288,59 @@ export class DriveService implements OnApplicationBootstrap {
     }
     const nextVersionId = createDriveFileVersionId()
     const nextStorageKey = driveVersionStorageKey(item.id, nextVersionId)
+    let copied = false
+    let committed = false
     try {
       await this.storage.copyObject({
         fromKey: version.storageKey,
         toKey: nextStorageKey,
         contentType: version.mimeType,
       })
-    } catch (error) {
-      throw error
-    }
-    const restored = await this.prisma.$transaction(async (tx) => {
-      await createDriveFileVersion(tx, {
-        id: nextVersionId,
-        itemId: item.id,
-        userId,
-        storageKey: nextStorageKey,
-        size: version.size,
-        mimeType: version.mimeType,
-        source: DRIVE_FILE_VERSION_SOURCE.restore,
-        etag: version.etag,
-        restoredFromVersionId: version.id,
-        createdBy: userId,
-      })
-      await updateDriveUsageAfterUploadCompletion(tx, userId, {
-        reservedBytes: 0n,
-        usedBytesDelta: version.size,
-      })
-      return tx.driveItem.update({
-        where: { id: item.id },
-        data: {
+      copied = true
+      const restored = await this.prisma.$transaction(async (tx) => {
+        await createDriveFileVersion(tx, {
+          id: nextVersionId,
+          itemId: item.id,
+          userId,
           storageKey: nextStorageKey,
           size: version.size,
           mimeType: version.mimeType,
-          storageStatus: DRIVE_STORAGE_STATUS.active,
-          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
-        },
-        include: driveItemWithShares,
+          source: DRIVE_FILE_VERSION_SOURCE.restore,
+          etag: version.etag,
+          restoredFromVersionId: version.id,
+          createdBy: userId,
+        })
+        await updateDriveUsageAfterUploadCompletion(tx, userId, {
+          reservedBytes: 0n,
+          usedBytesDelta: version.size,
+        })
+        return tx.driveItem.update({
+          where: { id: item.id },
+          data: {
+            storageKey: nextStorageKey,
+            size: version.size,
+            mimeType: version.mimeType,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+          },
+          include: driveItemWithShares,
+        })
       })
-    })
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.file_version.restore",
-      targetType: "drive.fileVersion",
-      targetId: version.id,
-      detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: restored.id },
-      ipAddress: auditContext.ipAddress,
-    })
-    await this.cleanupFileVersionsAfterChange(userId, restored.id)
-    return toDriveItemDto(restored)
+      committed = true
+      await this.recordDriveAudit({
+        userId,
+        action: "drive.file_version.restore",
+        targetType: "drive.fileVersion",
+        targetId: version.id,
+        detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: restored.id },
+        ipAddress: auditContext.ipAddress,
+      })
+      await this.cleanupFileVersionsAfterChange(userId, restored.id)
+      return toDriveItemDto(restored)
+    } catch (error) {
+      if (copied && !committed) await this.deleteTemporaryUploadObject(nextStorageKey)
+      throw error
+    }
   }
 
   async updateOwnerFileText(
