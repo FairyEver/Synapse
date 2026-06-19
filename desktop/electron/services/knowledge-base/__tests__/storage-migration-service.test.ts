@@ -180,6 +180,26 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
   })
 
+  it("treats Windows case-equivalent default restore roots as unchanged", async () => {
+    const harness = await migrationHarness({ platform: "win32" })
+    const caseVariantRoot = withFirstLetterCaseToggled(harness.oldRoot)
+    harness.setStorage({ mode: "custom", rootPath: caseVariantRoot })
+
+    const result = await harness.service.startMigration({
+      target: { mode: "default" },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    expect(harness.trashed).toEqual([])
+    expect(harness.sourceManager.closeIdleWindows).not.toHaveBeenCalled()
+    expect(harness.states.at(-1)).toMatchObject({
+      active: false,
+      phase: "completed",
+      message: "知识库存储位置未变化",
+    })
+  })
+
   it("restores default storage when the default old copy still exists", async () => {
     const harness = await migrationHarness()
     harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
@@ -273,6 +293,23 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(harness.trashed).toEqual([path.join(harness.oldRoot, "knowledge-bases")])
   })
 
+  it("does not trash recovered storage when old and new knowledge-bases paths are equivalent", async () => {
+    const harness = await migrationHarness({ platform: "win32" })
+    await harness.seedRuntime("kb-1", harness.oldRoot)
+    await harness.writeJournal({
+      phase: "cleaning",
+      switchStarted: true,
+      newRootVerified: true,
+      newRoot: withFirstLetterCaseToggled(harness.oldRoot),
+      targetStorage: { mode: "default" },
+    })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    expect(harness.trashed).toEqual([])
+  })
+
   it("reports a warning when verified recovery cannot trash the old root", async () => {
     const harness = await migrationHarness({ trashError: new Error("trash unavailable") })
     await harness.seedRuntime("kb-1", harness.newRoot)
@@ -339,6 +376,7 @@ type MigrationHarnessOptions = {
   corruptCopiedClaudeContent?: string
   corruptNewRootAfterSwitch?: boolean
   failRestoreOldConfigAfterSwitch?: boolean
+  platform?: NodeJS.Platform | string
 }
 
 async function migrationHarness(options: MigrationHarnessOptions = {}) {
@@ -420,6 +458,7 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
         resumePause = resolve
       })
     },
+    platform: options.platform,
   })
   service.subscribe((state) => {
     states.push(state)
@@ -462,14 +501,21 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
         },
       }
     },
-    async writeJournal(partial: { phase: string; switchStarted: boolean; newRootVerified: boolean }) {
+    async writeJournal(partial: {
+      phase: string
+      switchStarted: boolean
+      newRootVerified: boolean
+      oldRoot?: string
+      newRoot?: string
+      targetStorage?: SynapseKnowledgeBaseStorageConfig
+    }) {
       await mkdir(path.dirname(journalPath), { recursive: true })
       await writeFile(journalPath, `${JSON.stringify({
         version: 1,
         oldStorage: { mode: "default" },
-        targetStorage: { mode: "custom", rootPath: newRoot },
-        oldRoot,
-        newRoot,
+        targetStorage: partial.targetStorage ?? { mode: "custom", rootPath: newRoot },
+        oldRoot: partial.oldRoot ?? oldRoot,
+        newRoot: partial.newRoot ?? newRoot,
         tempPath: path.join(newRoot, ".knowledge-bases-migration-test"),
         startedAt: "2026-06-10T00:00:00.000Z",
         ...partial,
@@ -498,6 +544,12 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
       resolve?.()
     },
   }
+}
+
+function withFirstLetterCaseToggled(value: string): string {
+  return value.replace(/[A-Za-z]/u, (letter) =>
+    letter === letter.toUpperCase() ? letter.toLowerCase() : letter.toUpperCase()
+  )
 }
 
 function createConfig(storage: SynapseKnowledgeBaseStorageConfig): SynapseConfig {

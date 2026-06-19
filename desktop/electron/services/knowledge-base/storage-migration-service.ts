@@ -10,6 +10,7 @@ import type {
   SynapseKnowledgeBaseStorageConfig,
 } from "../../../src/types/config"
 import type { SynapseKnowledgeBaseStorageStatus as SharedKnowledgeBaseStorageStatus } from "../../../src/types/knowledge-base"
+import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { isManagedKnowledgeBaseProject } from "./managed-path"
 import {
   isPathInside,
@@ -66,6 +67,7 @@ type KnowledgeBaseStorageMigrationDeps = {
   getAvailableBytes?: (targetRoot: string) => Promise<number | null>
   afterCopyEntry?: (entryPath: string) => Promise<void>
   afterPhaseChange?: (phase: KnowledgeBaseStorageMigrationPhase) => Promise<void>
+  platform?: NodeJS.Platform | string
 }
 
 type StartMigrationPayload = {
@@ -182,7 +184,7 @@ export class KnowledgeBaseStorageMigrationService {
         storage: payload.target,
       })
 
-      if (path.resolve(oldRoot) === path.resolve(newRoot)) {
+      if (this.arePathsEquivalent(oldRoot, newRoot)) {
         await this.transitionState({
           active: false,
           phase: "completed",
@@ -286,22 +288,24 @@ export class KnowledgeBaseStorageMigrationService {
         message: "正在清理旧位置",
       })
 
-      try {
-        await this.deps.trashItem(oldKnowledgeBasesPath)
-      } catch (error) {
-        logger.warn("Knowledge Base old storage cleanup failed after migration.", {
-          oldKnowledgeBasesPath,
-          ...knowledgeBaseErrorMeta(error),
-        })
-        await this.clearJournal()
-        await this.transitionState({
-          active: false,
-          phase: "completed-with-warning",
-          cancellable: false,
-          message: "知识库存储已迁移，旧副本仍保留",
-          warningCode: "old-copy-not-trashed",
-        })
-        return { status: "completed-with-warning", warningCode: "old-copy-not-trashed" }
+      if (!this.arePathsEquivalent(oldKnowledgeBasesPath, newKnowledgeBasesPath)) {
+        try {
+          await this.deps.trashItem(oldKnowledgeBasesPath)
+        } catch (error) {
+          logger.warn("Knowledge Base old storage cleanup failed after migration.", {
+            oldKnowledgeBasesPath,
+            ...knowledgeBaseErrorMeta(error),
+          })
+          await this.clearJournal()
+          await this.transitionState({
+            active: false,
+            phase: "completed-with-warning",
+            cancellable: false,
+            message: "知识库存储已迁移，旧副本仍保留",
+            warningCode: "old-copy-not-trashed",
+          })
+          return { status: "completed-with-warning", warningCode: "old-copy-not-trashed" }
+        }
       }
 
       await this.clearJournal()
@@ -440,7 +444,8 @@ export class KnowledgeBaseStorageMigrationService {
           message: "正在清理旧位置",
         })
         const oldKnowledgeBasesPath = path.join(journal.oldRoot, "knowledge-bases")
-        if (await pathExists(oldKnowledgeBasesPath)) {
+        const newKnowledgeBasesPath = path.join(journal.newRoot, "knowledge-bases")
+        if (await pathExists(oldKnowledgeBasesPath) && !this.arePathsEquivalent(oldKnowledgeBasesPath, newKnowledgeBasesPath)) {
           try {
             await this.deps.trashItem(oldKnowledgeBasesPath)
           } catch (error) {
@@ -521,6 +526,13 @@ export class KnowledgeBaseStorageMigrationService {
     if (this.deps.sourceManager.hasActiveMutation()) {
       throw new Error("资料操作仍在进行。")
     }
+  }
+
+  private arePathsEquivalent(left: string, right: string): boolean {
+    return arePathsEqualForCompare(left, right, {
+      platform: this.deps.platform ?? process.platform,
+      resolvePath: path.resolve,
+    })
   }
 
   private async validateTargetRoot(
