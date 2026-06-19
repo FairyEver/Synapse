@@ -832,6 +832,41 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("treats an already consumed session as complete for the same client event", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      itemId: "item-1",
+      versionId: "version-1",
+      type: "skill",
+      status: "consumed",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: new Date("2026-06-09T00:01:00.000Z"),
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      item: item({ id: "item-1", type: "skill" }),
+      version: version({
+        id: "version-1",
+        itemId: "item-1",
+        packageKey: "content-store/packages/item-1/version-1.zip",
+        packageSha256: "a".repeat(64),
+      }),
+    })
+    prisma.contentStoreInstallEvent.findUnique.mockResolvedValue({ id: "event-1" })
+
+    await expect(service.recordInstall("user-1", "session-1", "client-1")).resolves.toEqual({ ok: true })
+    expect(prisma.contentStoreInstallSession.updateMany).not.toHaveBeenCalled()
+    expect(prisma.contentStoreInstallEvent.findUnique).toHaveBeenCalledWith({
+      where: {
+        userId_itemId_versionId_clientInstanceId: {
+          userId: "user-1",
+          itemId: "item-1",
+          versionId: "version-1",
+          clientInstanceId: "client-1",
+        },
+      },
+    })
+  })
+
   it("does not count installs when session consumption loses the pending race", async () => {
     prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
       id: "session-1",
@@ -923,6 +958,7 @@ interface PrismaMock {
   }
   contentStoreInstallEvent: {
     upsert: MockFn
+    findUnique: MockFn
     count: MockFn
   }
   auditLog: {
@@ -945,7 +981,7 @@ function createPrismaMock(): PrismaMock {
     contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    contentStoreInstallEvent: { upsert: vi.fn(), count: vi.fn() },
+    contentStoreInstallEvent: { upsert: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
     auditLog: { create: vi.fn() },
   }
 }

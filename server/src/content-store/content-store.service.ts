@@ -692,8 +692,40 @@ export class ContentStoreService {
   }
 
   async recordInstall(userId: string, sessionId: string, clientInstanceId: string): Promise<{ ok: true }> {
-    const resolved = await this.resolveInstallSession(userId, sessionId)
     const consumedAt = new Date()
+    const session = await this.prisma.contentStoreInstallSession.findFirst({
+      where: { id: sessionId },
+      include: { item: true, version: true },
+    }) as ContentStoreInstallSessionRow | null
+    if (!session) throw new NotFoundException("安装会话不存在。")
+    if (session.userId !== userId) throw new ForbiddenException("安装会话不属于当前用户。")
+    if (session.expiresAt.getTime() <= consumedAt.getTime()) {
+      if (session.status === "pending") {
+        await this.prisma.contentStoreInstallSession.update({ where: { id: sessionId }, data: { status: "expired" } })
+      }
+      throw new BadRequestException("安装会话已过期。")
+    }
+    if (session.item.moderationStatus !== "normal") throw new NotFoundException("内容不存在。")
+    if (session.item.visibility !== "public" && session.item.ownerUserId !== userId) throw new NotFoundException("内容不存在。")
+    toInstallableType(session.type)
+    if (!session.version.packageKey || !session.version.packageSha256) throw new BadRequestException("内容安装包不存在。")
+
+    const eventKey = {
+      userId,
+      itemId: session.itemId,
+      versionId: session.versionId,
+      clientInstanceId,
+    }
+
+    if (session.status === "consumed") {
+      const existingEvent = await this.prisma.contentStoreInstallEvent.findUnique({
+        where: { userId_itemId_versionId_clientInstanceId: eventKey },
+      })
+      if (existingEvent) return { ok: true }
+      throw new BadRequestException("安装会话已失效。")
+    }
+    if (session.status !== "pending") throw new BadRequestException("安装会话已失效。")
+
     await this.prisma.$transaction(async (tx) => {
       const consumed = await tx.contentStoreInstallSession.updateMany({
         where: {
@@ -704,23 +736,21 @@ export class ContentStoreService {
         },
         data: { status: "consumed", consumedAt },
       })
-      if (consumed.count !== 1) throw new BadRequestException("安装会话已失效。")
+      if (consumed.count !== 1) {
+        const existingEvent = await tx.contentStoreInstallEvent.findUnique({
+          where: { userId_itemId_versionId_clientInstanceId: eventKey },
+        })
+        if (existingEvent) return
+        throw new BadRequestException("安装会话已失效。")
+      }
 
       await tx.contentStoreInstallEvent.upsert({
         where: {
-          userId_itemId_versionId_clientInstanceId: {
-            userId,
-            itemId: resolved.contentId,
-            versionId: resolved.versionId,
-            clientInstanceId,
-          },
+          userId_itemId_versionId_clientInstanceId: eventKey,
         },
         update: {},
         create: {
-          userId,
-          itemId: resolved.contentId,
-          versionId: resolved.versionId,
-          clientInstanceId,
+          ...eventKey,
         },
       })
     })
