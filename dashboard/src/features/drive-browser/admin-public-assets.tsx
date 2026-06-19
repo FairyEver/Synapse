@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -27,8 +28,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -239,6 +238,9 @@ export function AdminPublicAssetDetailsDialog({
       <DialogContent className='max-w-5xl'>
         <DialogHeader>
           <DialogTitle>公开素材</DialogTitle>
+          <DialogDescription className='sr-only'>
+            查看公开素材详情、访问日志和历史版本。
+          </DialogDescription>
         </DialogHeader>
         {asset ? (
           <Tabs defaultValue='detail' className='min-h-0'>
@@ -253,7 +255,9 @@ export function AdminPublicAssetDetailsDialog({
             <TabsContent value='logs'>
               <AccessLogTable
                 data={accessLogs.data?.data ?? []}
+                error={accessLogs.isError ? accessLogs.error : null}
                 isLoading={accessLogs.isLoading}
+                onRetry={() => void accessLogs.refetch()}
                 page={accessLogPage}
                 pageSize={accessLogPageSize}
                 total={accessLogs.data?.total ?? 0}
@@ -264,7 +268,9 @@ export function AdminPublicAssetDetailsDialog({
               <RevisionTable
                 assetId={asset.assetId}
                 data={revisions.data?.data ?? []}
+                error={revisions.isError ? revisions.error : null}
                 isLoading={revisions.isLoading}
+                onRetry={() => void revisions.refetch()}
                 page={revisionPage}
                 pageSize={revisionPageSize}
                 total={revisions.data?.total ?? 0}
@@ -308,72 +314,48 @@ function DetailRow({ label, value }: { readonly label: string; readonly value: s
 
 export function AccessLogTable({
   data,
+  error,
   isLoading,
+  onRetry,
   page,
   pageSize,
   total,
   onPageChange,
 }: {
   readonly data: readonly AdminDrivePublicAssetAccessLogRow[]
+  readonly error: unknown
   readonly isLoading: boolean
+  readonly onRetry: () => void
   readonly page: number
   readonly pageSize: number
   readonly total: number
   readonly onPageChange: (page: number) => void
 }) {
   return (
-    <div className='flex flex-col gap-3'>
-      <div className='overflow-hidden rounded-md border'>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>方法</TableHead>
-              <TableHead className='text-right'>状态</TableHead>
-              <TableHead className='text-right'>字节</TableHead>
-              <TableHead>IP</TableHead>
-              <TableHead>来源</TableHead>
-              <TableHead>时间</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className='h-20 text-center'>加载中...</TableCell>
-              </TableRow>
-            ) : data.length > 0 ? (
-              data.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>{log.method}</TableCell>
-                  <TableCell className='text-right tabular-nums'>{log.statusCode}</TableCell>
-                  <TableCell className='text-right tabular-nums'>{formatDriveBytes(log.bytes)}</TableCell>
-                  <TableCell>{log.ip ?? '-'}</TableCell>
-                  <TableCell className='max-w-64 truncate'>{log.referer ?? '-'}</TableCell>
-                  <TableCell>{formatDriveBrowserDate(log.accessedAt)}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className='h-20 text-center'>暂无访问日志</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      <TablePaginationControls
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        isLoading={isLoading}
-        onPageChange={onPageChange}
-      />
-    </div>
+    <ServerDataTable
+      columns={accessLogColumns}
+      data={[...data]}
+      emptyMessage='暂无访问日志'
+      error={error}
+      isLoading={isLoading}
+      loadingRowCount={3}
+      onPageChange={onPageChange}
+      onPageSizeChange={ignorePageSizeChange}
+      onRetry={onRetry}
+      page={page}
+      pageSize={pageSize}
+      showPagination={total > pageSize}
+      total={total}
+    />
   )
 }
 
 function RevisionTable({
   assetId,
   data,
+  error,
   isLoading,
+  onRetry,
   page,
   pageSize,
   total,
@@ -381,111 +363,140 @@ function RevisionTable({
 }: {
   readonly assetId: string
   readonly data: readonly AdminDrivePublicAssetRevisionRow[]
+  readonly error: unknown
   readonly isLoading: boolean
+  readonly onRetry: () => void
   readonly page: number
   readonly pageSize: number
   readonly total: number
   readonly onPageChange: (page: number) => void
 }) {
+  const columns = useMemo<ColumnDef<AdminDrivePublicAssetRevisionRow>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: '名称',
+        enableHiding: false,
+        cell: ({ row }) => (
+          <div className='min-w-0'>
+            <div className='truncate font-medium'>{row.original.name}</div>
+            <div className='truncate text-sm text-muted-foreground'>{row.original.id}</div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'size',
+        header: '大小',
+        enableHiding: false,
+        cell: ({ row }) => (
+          <div className='text-right tabular-nums'>{formatDriveBytes(row.original.size)}</div>
+        ),
+        meta: {
+          thClassName: 'text-right',
+          tdClassName: 'text-right',
+        },
+      },
+      {
+        accessorKey: 'replacedAt',
+        header: '替换时间',
+        enableHiding: false,
+        cell: ({ row }) => formatDriveBrowserDate(row.original.replacedAt),
+      },
+      {
+        id: 'actions',
+        header: '操作',
+        enableHiding: false,
+        cell: ({ row }) => (
+          <div className='flex justify-end'>
+            <Button asChild variant='ghost' className='h-8 px-2'>
+              <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, row.original.id)}>
+                <Download />
+                下载
+              </a>
+            </Button>
+          </div>
+        ),
+        meta: {
+          thClassName: 'text-right',
+          tdClassName: 'text-right',
+        },
+      },
+    ],
+    [assetId]
+  )
+
   return (
-    <div className='flex flex-col gap-3'>
-      <div className='overflow-hidden rounded-md border'>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead className='text-right'>大小</TableHead>
-              <TableHead>替换时间</TableHead>
-              <TableHead className='text-right'>操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={4} className='h-20 text-center'>加载中...</TableCell>
-              </TableRow>
-            ) : data.length > 0 ? (
-              data.map((revision) => (
-                <TableRow key={revision.id}>
-                  <TableCell>
-                    <div className='min-w-0'>
-                      <div className='truncate font-medium'>{revision.name}</div>
-                      <div className='truncate text-sm text-muted-foreground'>{revision.id}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell className='text-right tabular-nums'>{formatDriveBytes(revision.size)}</TableCell>
-                  <TableCell>{formatDriveBrowserDate(revision.replacedAt)}</TableCell>
-                  <TableCell className='text-right'>
-                    <Button asChild variant='ghost' className='h-8 px-2'>
-                      <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, revision.id)}>
-                        <Download />
-                        下载
-                      </a>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={4} className='h-20 text-center'>暂无历史版本</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      <TablePaginationControls
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        isLoading={isLoading}
-        onPageChange={onPageChange}
-      />
-    </div>
+    <ServerDataTable
+      columns={columns}
+      data={[...data]}
+      emptyMessage='暂无历史版本'
+      error={error}
+      isLoading={isLoading}
+      loadingRowCount={3}
+      onPageChange={onPageChange}
+      onPageSizeChange={ignorePageSizeChange}
+      onRetry={onRetry}
+      page={page}
+      pageSize={pageSize}
+      showPagination={total > pageSize}
+      total={total}
+    />
   )
 }
 
-function TablePaginationControls({
-  page,
-  pageSize,
-  total,
-  isLoading,
-  onPageChange,
-}: {
-  readonly page: number
-  readonly pageSize: number
-  readonly total: number
-  readonly isLoading: boolean
-  readonly onPageChange: (page: number) => void
-}) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize))
-  const hasPrevious = page > 1
-  const hasNext = page < pageCount
-  if (pageCount <= 1) return null
+const accessLogColumns: ColumnDef<AdminDrivePublicAssetAccessLogRow>[] = [
+  {
+    accessorKey: 'method',
+    header: '方法',
+    enableHiding: false,
+  },
+  {
+    accessorKey: 'statusCode',
+    header: '状态',
+    enableHiding: false,
+    cell: ({ row }) => (
+      <div className='text-right tabular-nums'>{row.original.statusCode}</div>
+    ),
+    meta: {
+      thClassName: 'text-right',
+      tdClassName: 'text-right',
+    },
+  },
+  {
+    accessorKey: 'bytes',
+    header: '字节',
+    enableHiding: false,
+    cell: ({ row }) => (
+      <div className='text-right tabular-nums'>{formatDriveBytes(row.original.bytes)}</div>
+    ),
+    meta: {
+      thClassName: 'text-right',
+      tdClassName: 'text-right',
+    },
+  },
+  {
+    accessorKey: 'ip',
+    header: 'IP',
+    enableHiding: false,
+    cell: ({ row }) => row.original.ip ?? '-',
+  },
+  {
+    accessorKey: 'referer',
+    header: '来源',
+    enableHiding: false,
+    cell: ({ row }) => (
+      <div className='max-w-64 truncate'>{row.original.referer ?? '-'}</div>
+    ),
+  },
+  {
+    accessorKey: 'accessedAt',
+    header: '时间',
+    enableHiding: false,
+    cell: ({ row }) => formatDriveBrowserDate(row.original.accessedAt),
+  },
+]
 
-  return (
-    <div className='flex items-center justify-end gap-2'>
-      <Button
-        type='button'
-        variant='outline'
-        size='sm'
-        disabled={!hasPrevious || isLoading}
-        onClick={() => onPageChange(page - 1)}
-      >
-        上一页
-      </Button>
-      <span className='text-sm tabular-nums text-muted-foreground'>{page} / {pageCount}</span>
-      <Button
-        type='button'
-        variant='outline'
-        size='sm'
-        disabled={!hasNext || isLoading}
-        onClick={() => onPageChange(page + 1)}
-      >
-        下一页
-      </Button>
-    </div>
-  )
-}
+function ignorePageSizeChange() {}
 
 function driveLifecycleLabel(status: AdminDrivePublicAssetRow['lifecycleStatus']) {
   const labels: Record<AdminDrivePublicAssetRow['lifecycleStatus'], string> = {
