@@ -2,11 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -33,84 +28,66 @@ const CODEX_FIELD_HELP = {
   approvalPolicy: {
     title: "审批策略",
     summary: "决定 Codex 执行命令前什么时候需要人工确认。",
-    impact: "影响范围：命令审批、无人值守运行和失败恢复。",
   },
   sandbox: {
     title: "沙箱",
     summary: "限制 Codex 执行命令时能访问和修改的文件范围。",
-    impact: "影响范围：命令执行、文件读写和自动化运行的安全边界。",
   },
   model: {
     title: "模型",
-    summary: "指定本节点使用的 Codex 模型；继承配置时不传 --model。",
-    impact: "影响范围：回答质量、速度、费用和 Codex 可用能力。",
+    summary: "指定本节点使用的 Codex 模型。留空时继承当前配置。",
   },
   profile: {
     title: "Profile",
     summary: "加载 Codex 配置文件中的指定 profile。",
-    impact: "影响范围：Codex 配置层叠、模型、权限和其它 CLI 默认值。",
   },
   timeoutMins: {
     title: "超时分钟",
     summary: "限制本节点最多运行多久，留空时使用工作流默认超时。",
-    impact: "影响范围：长任务等待时间、失败判定和后续节点启动时间。",
   },
   workingDirectory: {
     title: "工作目录",
-    summary: "设置本次 Codex 实际运行的目录，支持 {{变量}}。",
-    impact: "留空时使用项目目录；workspace-write 写入范围以解析后的工作目录为准。",
+    summary: "设置本次 Codex 运行目录，支持 {{变量}}。留空时使用项目目录。",
   },
   enableSearch: {
     title: "启用搜索",
     summary: "允许 Codex 在本次执行中使用实时网页搜索。",
-    impact: "影响范围：联网查询、结果时效性和外部请求。",
   },
   goals: {
     title: "Goals",
-    summary: "控制 Codex 的目标模式功能是否在本次执行中启用。",
-    impact: "影响范围：任务分解、进度管理和 Codex 运行策略。",
+    summary: "控制本次执行是否启用 Codex 目标模式。",
   },
   skipGitRepoCheck: {
     title: "跳过 Git 仓库检查",
     summary: "允许 Codex 在非 Git 目录中运行。",
-    impact: "影响范围：无仓库项目、临时目录和路径校验。",
   },
   strictConfig: {
     title: "严格配置",
     summary: "让 Codex 遇到不认识的配置项时直接报错。",
-    impact: "影响范围：配置兼容性、升级后的旧配置和启动失败原因。",
   },
   bypassApprovalsAndSandbox: {
     title: "绕过审批和沙箱",
-    summary: "跳过审批并关闭沙箱限制，只适合外部已隔离的环境。",
-    impact: "影响范围：文件写入、命令执行和本机安全边界。",
-    note: "高风险选项；开启后不会同时传审批策略和沙箱参数。",
+    summary: "跳过审批并关闭沙箱限制。只在外部已隔离环境使用。",
   },
   bypassHookTrust: {
     title: "绕过 Hook 信任检查",
-    summary: "允许已启用的 Codex hook 在未持久信任时运行。",
-    impact: "影响范围：自动化 hook、外部脚本和执行前置/后置动作。",
-    note: "只建议在 hook 来源已被自动化流程提前校验时使用。",
+    summary: "允许未持久信任的已启用 Codex hook 运行。",
   },
   additionalWritableDirs: {
     title: "可写目录",
     summary: "除实际工作目录外，额外允许 Codex 写入的目录。",
-    impact: "影响范围：跨目录修改、产物输出和沙箱写权限。",
   },
   images: {
     title: "图片路径",
     summary: "把本地图片作为初始指令附件传给 Codex。",
-    impact: "影响范围：视觉理解任务、输入上下文和本地文件读取。",
   },
   configOverrides: {
     title: "配置覆盖",
-    summary: "为本次执行追加 Codex CLI 的 --config key=value 覆盖项。",
-    impact: "影响范围：单次运行配置、实验参数和高级 CLI 行为。",
+    summary: "为本次执行追加 --config key=value 覆盖项。",
   },
   captureDebugArtifacts: {
     title: "保存调试文件",
-    summary: "保存本次 Codex 执行的提示词、输出和调试预览。",
-    impact: "影响范围：运行历史排查、磁盘占用和敏感信息脱敏后的留存。",
+    summary: "保存本次执行的提示词、输出和调试预览。",
   },
 } satisfies Record<string, HelpTopic>
 
@@ -118,9 +95,6 @@ type SelectOptionHelp = {
   value: string
   label: string
   description: string
-  happens: string
-  bestFor: string
-  risk: string
 }
 
 const CODEX_MODEL_OPTIONS: ReadonlyArray<{ value: string; label: string; description: string }> = [
@@ -136,25 +110,16 @@ const CODEX_APPROVAL_OPTIONS: readonly SelectOptionHelp[] = [
     value: "never",
     label: "never",
     description: "不请求人工审批",
-    happens: "命令失败会直接返回给 Codex 处理，不弹出人工确认。",
-    bestFor: "无人值守工作流、CI 风格任务和可接受自动失败的节点。",
-    risk: "任务可能因为缺少权限直接失败，需要从运行历史排查。",
   },
   {
     value: "on-request",
     label: "on-request",
     description: "模型按需请求审批",
-    happens: "Codex 判断需要更高权限时才请求人工确认。",
-    bestFor: "有人值守的调试运行，或希望保留人工判断的任务。",
-    risk: "无人值守运行可能卡在等待确认。",
   },
   {
     value: "untrusted",
     label: "untrusted",
     description: "只自动执行可信命令",
-    happens: "只有可信命令会自动执行，其它命令需要审批。",
-    bestFor: "对输入或仓库不完全信任，但仍想允许基础读取命令的场景。",
-    risk: "复杂任务更容易等待审批或失败。",
   },
 ]
 
@@ -163,25 +128,16 @@ const CODEX_SANDBOX_OPTIONS: readonly SelectOptionHelp[] = [
     value: "read-only",
     label: "read-only",
     description: "只读沙箱",
-    happens: "Codex 可以读取文件，但默认不能写入工作区。",
-    bestFor: "审查、分析、总结和不希望改文件的任务。",
-    risk: "需要生成或修改文件的任务会失败。",
   },
   {
     value: "workspace-write",
     label: "workspace-write",
     description: "可写工作区",
-    happens: "Codex 可以写入当前工作区和额外授权的可写目录。",
-    bestFor: "大多数自动化修改、生成文件和常规工作流节点。",
-    risk: "会修改项目文件，仍受沙箱边界限制。",
   },
   {
     value: "danger-full-access",
     label: "danger-full-access",
     description: "无沙箱限制",
-    happens: "Codex 命令不受文件系统沙箱限制。",
-    bestFor: "只适合外部环境已经隔离的专用自动化。",
-    risk: "可能访问或修改工作区外文件，风险最高。",
   },
 ]
 
@@ -749,24 +705,7 @@ function ModelInput({
 function renderHelpSelectItem(option: SelectOptionHelp) {
   return (
     <SelectItem key={option.value} value={option.value} textValue={option.label} className="pr-8 text-xs">
-      <HoverCard openDelay={100} closeDelay={100}>
-        <HoverCardTrigger asChild>
-          <span className="flex min-w-0 flex-1 items-center">
-            <OptionLabel label={option.label} description={option.description} />
-          </span>
-        </HoverCardTrigger>
-        <HoverCardContent side="right" align="start" className="w-72">
-          <div className="grid gap-2 text-xs">
-            <div>
-              <div className="font-medium">{option.label}</div>
-              <div className="text-muted-foreground">{option.description}</div>
-            </div>
-            <HelpLine label="会发生什么" text={option.happens} />
-            <HelpLine label="适合" text={option.bestFor} />
-            <HelpLine label="风险" text={option.risk} />
-          </div>
-        </HoverCardContent>
-      </HoverCard>
+      <OptionLabel label={option.label} description={option.description} />
     </SelectItem>
   )
 }
@@ -783,15 +722,6 @@ function OptionLabel({ label, description }: { readonly label: string; readonly 
       <span className="truncate font-medium">{label}</span>
       <span className="truncate text-[11px] text-muted-foreground">{description}</span>
     </span>
-  )
-}
-
-function HelpLine({ label, text }: { readonly label: string; readonly text: string }) {
-  return (
-    <div className="flex gap-2">
-      <div className="w-16 shrink-0 text-xs text-muted-foreground">{label}</div>
-      <div className="min-w-0 flex-1 text-xs leading-relaxed">{text}</div>
-    </div>
   )
 }
 

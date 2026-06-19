@@ -302,7 +302,7 @@ describe("CodexNodePanel", () => {
 
     expect(getByText("沙箱")).toBeTruthy()
     expect(getByText("限制 Codex 执行命令时能访问和修改的文件范围。")).toBeTruthy()
-    expect(getByText("影响范围：命令执行、文件读写和自动化运行的安全边界。")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("影响范围")
 
     click(getByRole("button", { name: "关闭" }))
 
