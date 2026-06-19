@@ -746,7 +746,15 @@ function parseAbsolutePathLines(text: string): PastedPathEntry[] {
 }
 
 function isAbsolutePathLine(value: string): boolean {
-  return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)
+  return (
+    value.startsWith("/")
+    || /^[A-Za-z]:[\\/]/.test(value)
+    || isWindowsUncAbsolutePath(value)
+  )
+}
+
+function isWindowsUncAbsolutePath(value: string): boolean {
+  return /^\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)
 }
 
 function hasTrailingPathSeparator(value: string): boolean {

@@ -1166,6 +1166,68 @@ describe("AgentComposer", () => {
     ])
   })
 
+  it("treats pasted Windows UNC paths as path attachments", async () => {
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [],
+        text: "\\\\server\\share\\docs\\guide.md\n//server/share/docs/",
+      }))
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    const [, attachments] = onSubmit.mock.calls[0] ?? []
+    expect(attachments).toEqual([
+      expect.objectContaining({
+        kind: "path",
+        path: "\\\\server\\share\\docs\\guide.md",
+        entryType: "file",
+        name: "guide.md",
+      }),
+      expect.objectContaining({
+        kind: "path",
+        path: "//server/share/docs/",
+        entryType: "directory",
+        name: "docs",
+      }),
+    ])
+  })
+
   it("renders queued and failed messages above the input", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
