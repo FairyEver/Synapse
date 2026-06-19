@@ -56,6 +56,16 @@ export class KnowledgeBaseIngestCoordinator {
       scanKnowledgeBaseSources(this.deps.projectPath, { force }),
       snapshotWikiMarkdown(this.deps.projectPath),
     ])
+    if (scan.manifest.status === "invalid") {
+      knowledgeBaseLogger.warn("Knowledge Base ingest preflight blocked invalid manifest.", {
+        boundary: "knowledge-base.ingest-finalizer",
+        projectId: this.deps.projectId,
+        turnId: context.turnId,
+        warningCode: "invalid-manifest",
+        ...knowledgeBaseErrorMeta(scan.manifest.error),
+      })
+      throw new Error("知识库资料清单 .raw/.manifest.json 已损坏，请修复后再运行 /wiki-ingest。")
+    }
     this.preflights.set(context.turnId, {
       sources: scan.sources.filter((source) => source.state !== "unchanged" || force),
       wikiBefore,

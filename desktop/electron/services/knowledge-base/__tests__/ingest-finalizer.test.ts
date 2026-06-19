@@ -49,6 +49,21 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     expect(prepared.content.length).toBeLessThan(12_000)
   })
 
+  it("rejects wiki ingest preflight when the raw manifest is invalid", async () => {
+    const root = await createKnowledgeBaseRoot()
+    await writeFile(path.join(root, ".raw", ".manifest.json"), "{", "utf8")
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await expect(coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })).rejects.toThrow(".raw/.manifest.json")
+
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.status).toBe("invalid")
+  })
+
   it("finalizes accepted ingest reports through the manifest writer", async () => {
     const root = await createKnowledgeBaseRoot()
     const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
