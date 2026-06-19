@@ -1359,7 +1359,7 @@ export type SynapseBridge = {
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     exportPackage: (workflowId: string, workflowName?: string) => Promise<{ path: string } | null>
     inspectImportPackage: () => Promise<WorkflowImportPreview | null>
-    importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
+    importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions, packageDigest?: string) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
     onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void

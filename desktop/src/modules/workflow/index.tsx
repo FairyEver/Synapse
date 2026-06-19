@@ -76,7 +76,7 @@ export function WorkflowModule() {
     if (!importPreview) return
     setImporting(true)
     try {
-      const result = await requireBridgeDomain("workflow").importPackage(importPreview.packagePath, mappings, options)
+      const result = await requireBridgeDomain("workflow").importPackage(importPreview.packagePath, mappings, options, importPreview.packageDigest)
       if ("errors" in result) {
         toast.error(result.errors[0]?.message ?? "导入失败：校验未通过")
         return

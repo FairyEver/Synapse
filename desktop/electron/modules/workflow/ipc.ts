@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
@@ -310,7 +310,7 @@ function parseWorkflowPackageOrFail(options: {
   }
 }
 
-async function readWorkflowPackageFile(packagePath: string): Promise<unknown> {
+async function readWorkflowPackageFile(packagePath: string): Promise<{ raw: unknown; digest: string }> {
   const fileStat = await stat(packagePath)
   if (fileStat.size > WORKFLOW_PACKAGE_MAX_BYTES) {
     throw new Error("工作流包文件过大。")
@@ -319,7 +319,10 @@ async function readWorkflowPackageFile(packagePath: string): Promise<unknown> {
   if (Buffer.byteLength(text, "utf8") > WORKFLOW_PACKAGE_MAX_BYTES) {
     throw new Error("工作流包文件过大。")
   }
-  return JSON.parse(text)
+  return {
+    raw: JSON.parse(text),
+    digest: `sha256:${createHash("sha256").update(text).digest("hex")}`,
+  }
 }
 
 function saveRunSnapshot(
@@ -410,6 +413,7 @@ const workflowImportOptionsSchema = z.object({
 
 const workflowImportPreviewSchema = z.object({
   packagePath: z.string(),
+  packageDigest: z.string(),
   workflow: z.object({
     id: workflowIdSchema,
     name: z.string(),
@@ -817,9 +821,9 @@ export const workflowIpcModule: IpcModule = {
         const action: PermissionAction = "fs.read.outside-userdata"
         const source = "workflow.inspectImportPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
-        let raw: unknown
+        let packageFile: { raw: unknown; digest: string }
         try {
-          raw = await readWorkflowPackageFile(packagePath)
+          packageFile = await readWorkflowPackageFile(packagePath)
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
           logger.warn("workflow:inspectImportPackage read failed", {
@@ -830,7 +834,7 @@ export const workflowIpcModule: IpcModule = {
           throw error
         }
         const packageData = parseWorkflowPackageOrFail({
-          raw,
+          raw: packageFile.raw,
           auditSink,
           action,
           resource: packagePath,
@@ -842,7 +846,7 @@ export const workflowIpcModule: IpcModule = {
           workflowId: packageData.workflow.id,
           modelReferenceCount: packageData.modelReferences.length,
         })
-        const preview = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData)
+        const preview = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData, packageFile.digest)
         logger.info("workflow:inspectImportPackage succeeded", {
           fileBase: path.basename(packagePath),
           workflowId: preview.workflow.id,
@@ -853,18 +857,23 @@ export const workflowIpcModule: IpcModule = {
     },
     importPackage: {
       channel: "synapse:workflow:import-package", kind: "invoke",
-      request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema), options: workflowImportOptionsSchema }),
+      request: z.object({
+        packagePath: z.string(),
+        packageDigest: z.string().optional(),
+        mappings: z.array(workflowModelMappingSchema),
+        options: workflowImportOptionsSchema,
+      }),
       response: z.union([
         z.object({ workflowId: workflowIdSchema, versionHash: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
       ]),
-      handler: async (ctx, { packagePath, mappings, options }: { packagePath: string; mappings: WorkflowModelMapping[]; options?: WorkflowImportOptions }) => {
+      handler: async (ctx, { packagePath, packageDigest, mappings, options }: { packagePath: string; packageDigest?: string; mappings: WorkflowModelMapping[]; options?: WorkflowImportOptions }) => {
         const action: PermissionAction = "fs.read.outside-userdata"
         const source = "workflow.importPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
-        let raw: unknown
+        let packageFile: { raw: unknown; digest: string }
         try {
-          raw = await readWorkflowPackageFile(packagePath)
+          packageFile = await readWorkflowPackageFile(packagePath)
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
           logger.warn("workflow:importPackage read failed", {
@@ -875,8 +884,15 @@ export const workflowIpcModule: IpcModule = {
           })
           throw error
         }
+        if (packageDigest !== undefined && packageDigest !== packageFile.digest) {
+          logger.warn("workflow:importPackage digest mismatch", {
+            fileBase: path.basename(packagePath),
+            mappingCount: mappings.length,
+          })
+          throw new Error("工作流包已变化，请重新选择文件。")
+        }
         const packageData = parseWorkflowPackageOrFail({
-          raw,
+          raw: packageFile.raw,
           auditSink,
           action,
           resource: packagePath,

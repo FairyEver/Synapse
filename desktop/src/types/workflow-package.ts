@@ -48,6 +48,7 @@ export interface WorkflowImportProviderOption {
 
 export interface WorkflowImportPreview {
   packagePath: string
+  packageDigest: string
   workflow: {
     id: string
     name: string

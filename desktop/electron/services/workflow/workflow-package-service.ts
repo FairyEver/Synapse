@@ -50,7 +50,7 @@ export class WorkflowPackageService {
     }
   }
 
-  async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackageV1): Promise<WorkflowImportPreview> {
+  async buildImportPreview(packagePath: string, pkg: SynapseWorkflowPackageV1, packageDigest: string): Promise<WorkflowImportPreview> {
     assertPackage(pkg)
     const providers = await this.providerService.listProviders()
     const providerOptions = providers.map(toProviderOption)
@@ -63,6 +63,7 @@ export class WorkflowPackageService {
     })
     return {
       packagePath,
+      packageDigest,
       workflow: {
         id: pkg.workflow.id,
         name: pkg.workflow.name,

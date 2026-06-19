@@ -48,6 +48,7 @@ function renderDialog(props: Partial<Parameters<typeof WorkflowImportDialog>[0]>
 function preview(): WorkflowImportPreview {
   return {
     packagePath: "/tmp/shared.synapse-workflow.json",
+    packageDigest: "sha256:preview",
     workflow: { id: "workflow-1", name: "Shared Workflow", nodeCount: 3, modelReferenceCount: 2, requiresProjectMapping: true },
     modelReferences: [
       {

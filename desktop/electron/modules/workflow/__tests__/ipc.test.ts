@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -923,6 +924,75 @@ describe("workflowIpcModule", () => {
           versionHash: "v-imported",
         },
       }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects workflow package import when the confirmed file differs from the inspected package", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-import-digest-test-"))
+    const packagePath = path.join(tempRoot, "shared.synapse-workflow.json")
+    const inspectedPackage = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: "2026-05-26T00:00:00.000Z",
+      workflow: { ...workflowDefinition(), id: "workflow-inspected", name: "Inspected workflow" },
+      modelReferences: [],
+    }
+    const replacementPackage = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: "2026-05-26T00:01:00.000Z",
+      workflow: { ...workflowDefinition(), id: "workflow-replacement", name: "Replacement workflow" },
+      modelReferences: [],
+    }
+    const inspectedRaw = `${JSON.stringify(inspectedPackage)}\n`
+    const inspectedDigest = `sha256:${createHash("sha256").update(inspectedRaw).digest("hex")}`
+    await writeFile(packagePath, inspectedRaw, "utf8")
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
+    const packageService = {
+      buildImportPreview: vi.fn(async (selectedPath: string, pkg: typeof inspectedPackage, packageDigest: string) => ({
+        packagePath: selectedPath,
+        packageDigest,
+        workflow: {
+          id: pkg.workflow.id,
+          name: pkg.workflow.name,
+          nodeCount: pkg.workflow.nodes.length,
+          modelReferenceCount: pkg.modelReferences.length,
+          requiresProjectMapping: false,
+        },
+        modelReferences: pkg.modelReferences,
+        providerOptions: [],
+        suggestedMappings: [],
+      })),
+      importPackage: vi.fn(async () => ({ workflowId: "workflow-imported", versionHash: "v-imported" })),
+    }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const preview = await harness.invoke("synapse:workflow:inspect-import-package", undefined)
+      expect(preview).toEqual(expect.objectContaining({ packageDigest: inspectedDigest }))
+
+      await writeFile(packagePath, `${JSON.stringify(replacementPackage)}\n`, "utf8")
+
+      await expect(harness.invoke("synapse:workflow:import-package", {
+        packagePath,
+        packageDigest: inspectedDigest,
+        mappings: [],
+      })).rejects.toThrow("工作流包已变化，请重新选择文件。")
+
+      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow:importPackage digest mismatch", {
+        fileBase: "shared.synapse-workflow.json",
+        mappingCount: 0,
+      })
     } finally {
       await rm(tempRoot, { recursive: true, force: true })
     }

@@ -159,6 +159,7 @@ describe("WorkflowModule", () => {
   it("keeps successful import state when opening the imported workflow fails", async () => {
     workflowInspectImportPackage.mockResolvedValue({
       packagePath: "/tmp/workflow.synapse-workflow.json",
+      packageDigest: "sha256:preview",
       workflow: {
         id: "workflow-imported",
         name: "Imported",
@@ -197,7 +198,7 @@ describe("WorkflowModule", () => {
 
     expect(workflowImportPackage).toHaveBeenCalledWith("/tmp/workflow.synapse-workflow.json", [], {
       targetProjectId: "project-1",
-    })
+    }, "sha256:preview")
     expect(workflowOpenEditor).toHaveBeenCalledWith("workflow-imported")
     expect(toastSuccess).toHaveBeenCalledWith("工作流已导入")
     expect(toastError).toHaveBeenCalledWith("工作流已导入，但打开编辑器失败")

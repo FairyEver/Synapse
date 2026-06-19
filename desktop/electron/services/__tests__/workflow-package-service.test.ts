@@ -243,9 +243,10 @@ describe("WorkflowPackageService", () => {
   it("builds an import preview with provider options and suggested mappings", async () => {
     const { service } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
-    const preview = await service.buildImportPreview("/tmp/shared.synapse-workflow.json", pkg)
+    const preview = await service.buildImportPreview("/tmp/shared.synapse-workflow.json", pkg, "sha256:preview")
 
     expect(preview.packagePath).toBe("/tmp/shared.synapse-workflow.json")
+    expect(preview.packageDigest).toBe("sha256:preview")
     expect(preview.workflow).toEqual({
       id: "workflow-source",
       name: "Shared Workflow",
@@ -266,7 +267,7 @@ describe("WorkflowPackageService", () => {
 
   it("requires project mapping for Code X-only workflow packages", async () => {
     const { service } = createService()
-    const preview = await service.buildImportPreview("/tmp/codex.synapse-workflow.json", codexOnlyPackage())
+    const preview = await service.buildImportPreview("/tmp/codex.synapse-workflow.json", codexOnlyPackage(), "sha256:codex")
 
     expect(preview.workflow).toEqual({
       id: "codex-source",
@@ -378,7 +379,7 @@ describe("WorkflowPackageService", () => {
 
   it("requires project mapping and clears Claude Code project ids when importing Claude Code-only workflows", async () => {
     const { service, saved } = createService()
-    const preview = await service.buildImportPreview("/tmp/claude-code.synapse-workflow.json", claudeCodeOnlyPackage())
+    const preview = await service.buildImportPreview("/tmp/claude-code.synapse-workflow.json", claudeCodeOnlyPackage(), "sha256:claude-code")
 
     expect(preview.workflow).toEqual({
       id: "claude-code-source",
