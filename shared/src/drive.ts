@@ -282,10 +282,18 @@ export interface DriveReorganizationApplyInput {
   readonly planId: string
 }
 
+export interface DriveReorganizationAppliedMoveDto {
+  readonly itemId: string
+  readonly fromParentId: string | null
+  readonly targetParentId: string | null
+}
+
 export interface DriveReorganizationApplyResultDto {
   readonly ok: true
   readonly movedCount: number
   readonly skippedCount: number
+  readonly moves: readonly DriveReorganizationAppliedMoveDto[]
+  readonly moveDetailsTruncated?: boolean
 }
 
 export interface DriveBrowserItemDto {

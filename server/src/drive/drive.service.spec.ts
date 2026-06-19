@@ -2370,7 +2370,8 @@ describe("DriveService", () => {
 
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const auditLog = { record: vi.fn(async (_input: any) => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const parent = await service.createFolder("user-1", { parentId: null, name: "Parent" })
     const child = await service.createFolder("user-1", { parentId: parent.id, name: "Child" })
@@ -2391,8 +2392,24 @@ describe("DriveService", () => {
       ok: true,
       movedCount: 1,
       skippedCount: 0,
+      moves: [{ itemId: file.id, fromParentId: parent.id, targetParentId: target.id }],
     })
     await expect(service.getItem("user-1", file.id)).resolves.toMatchObject({ parentId: target.id })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.reorganization.apply",
+      targetType: "drive.item",
+      targetId: preview.planId,
+      detail: expect.objectContaining({
+        planId: preview.planId,
+        movedCount: 1,
+        skippedCount: 0,
+        moves: [{ itemId: file.id, fromParentId: parent.id, targetParentId: target.id }],
+      }),
+    }))
+    const reorganizationAudit = vi.mocked(auditLog.record).mock.calls
+      .map(([input]) => input)
+      .find((input) => input.action === "drive.reorganization.apply")
+    expect(JSON.stringify(reorganizationAudit?.detail)).not.toContain("report.md")
   })
 })
 

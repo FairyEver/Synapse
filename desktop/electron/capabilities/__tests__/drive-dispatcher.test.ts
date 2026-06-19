@@ -127,12 +127,18 @@ describe("createDriveCapabilityDispatcher", () => {
       skipped: [],
       conflicts: [],
     }
-    const applied = { ok: true as const, movedCount: 1, skippedCount: 0 }
+    const applied = {
+      ok: true as const,
+      movedCount: 1,
+      skippedCount: 0,
+      moves: [{ itemId: "file-1", fromParentId: null, targetParentId: "folder-work" }],
+    }
     const accountService = createAccountService({
       previewDriveReorganization: vi.fn(async () => preview),
       applyDriveReorganization: vi.fn(async () => applied),
     })
-    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
     await expect(dispatcher.dispatch("drive.reorganization.apply", {
       moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
@@ -148,6 +154,18 @@ describe("createDriveCapabilityDispatcher", () => {
       moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
     })
     expect(accountService.applyDriveReorganization).toHaveBeenCalledWith({ planId: "drive-reorg-plan-1" })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      resource: "synapse-drive:drive.reorganization.apply",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        driveAction: "drive.reorganization.apply",
+        planId: "drive-reorg-plan-1",
+        movedCount: 1,
+        skippedCount: 0,
+        moves: [{ itemId: "file-1", fromParentId: null, targetParentId: "folder-work" }],
+      }),
+    }))
   })
 
   it("authorizes and audits Drive item reads", async () => {

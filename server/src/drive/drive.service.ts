@@ -25,6 +25,7 @@ import {
   type DriveItemTreeListPageDto,
   type DriveReorganizationApplyInput,
   type DriveReorganizationApplyResultDto,
+  type DriveReorganizationAppliedMoveDto,
   type DriveReorganizationPlannedMoveDto,
   type DriveReorganizationPreviewDto,
   type DriveReorganizationPreviewInput,
@@ -205,6 +206,7 @@ const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
 const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
+const DRIVE_REORGANIZATION_AUDIT_MOVE_LIMIT = 100
 
 type DriveItemTreeQueryRow = {
   readonly id: string
@@ -1343,15 +1345,30 @@ export class DriveService implements OnApplicationBootstrap {
       }
     })
     this.reorganizationPlans.delete(input.planId)
+    const auditMoves = summarizeReorganizationMoves(validated)
+    const moveDetailsTruncated = validated.length > auditMoves.length
     await this.recordDriveAudit({
       userId,
       action: "drive.reorganization.apply",
       targetType: "drive.item",
       targetId: input.planId,
-      detail: { userId, planId: input.planId, movedCount: validated.length, skippedCount: plan.skipped.length },
+      detail: {
+        userId,
+        planId: input.planId,
+        movedCount: validated.length,
+        skippedCount: plan.skipped.length,
+        moves: auditMoves,
+        ...(moveDetailsTruncated ? { moveDetailsTruncated } : {}),
+      },
       ipAddress: auditContext.ipAddress,
     })
-    return { ok: true, movedCount: validated.length, skippedCount: plan.skipped.length }
+    return {
+      ok: true,
+      movedCount: validated.length,
+      skippedCount: plan.skipped.length,
+      moves: auditMoves,
+      ...(moveDetailsTruncated ? { moveDetailsTruncated } : {}),
+    }
   }
 
   async getOwnerBrowserSnapshot(input: {
@@ -2782,6 +2799,16 @@ function normalizeDriveItemTreePage(input: DriveItemTreeListInput): { readonly o
     offset,
     limit: Math.min(requestedLimit, DRIVE_ITEM_TREE_MAX_LIMIT),
   }
+}
+
+function summarizeReorganizationMoves(
+  moves: readonly DriveReorganizationPlannedMoveDto[],
+): DriveReorganizationAppliedMoveDto[] {
+  return moves.slice(0, DRIVE_REORGANIZATION_AUDIT_MOVE_LIMIT).map((move) => ({
+    itemId: move.itemId,
+    fromParentId: move.fromParentId,
+    targetParentId: move.targetParentId,
+  }))
 }
 
 function buildDriveItemTreeEntries(items: readonly DriveItemDto[], parentId: string | null): DriveItemTreeEntryDto[] {

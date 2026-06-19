@@ -730,11 +730,34 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   if (typeof record.failed === "number") metadata.failed = record.failed
   if (typeof record.movedCount === "number") metadata.movedCount = record.movedCount
   if (typeof record.skippedCount === "number") metadata.skippedCount = record.skippedCount
+  const moves = driveReorganizationMoveCorrelation(record.moves)
+  if (moves.length > 0) metadata.moves = moves
+  if (typeof record.moveDetailsTruncated === "boolean") metadata.moveDetailsTruncated = record.moveDetailsTruncated
   if (record.root && typeof record.root === "object" && !Array.isArray(record.root)) {
     const rootId = (record.root as Record<string, unknown>).id
     if (typeof rootId === "string") metadata.rootItemId = rootId
   }
   return metadata
+}
+
+function driveReorganizationMoveCorrelation(value: unknown): Array<{
+  readonly itemId: string
+  readonly fromParentId: string | null
+  readonly targetParentId: string | null
+}> {
+  if (!Array.isArray(value)) return []
+  const moves: Array<{ readonly itemId: string; readonly fromParentId: string | null; readonly targetParentId: string | null }> = []
+  for (const move of value) {
+    if (!move || typeof move !== "object" || Array.isArray(move)) continue
+    const record = move as Record<string, unknown>
+    if (typeof record.itemId !== "string") continue
+    const fromParentId = record.fromParentId
+    const targetParentId = record.targetParentId
+    if (!(typeof fromParentId === "string" || fromParentId === null)) continue
+    if (!(typeof targetParentId === "string" || targetParentId === null)) continue
+    moves.push({ itemId: record.itemId, fromParentId, targetParentId })
+  }
+  return moves
 }
 
 function sanitizeDriveShareList(page: DriveShareListPageDto): DriveShareListPageDto {
