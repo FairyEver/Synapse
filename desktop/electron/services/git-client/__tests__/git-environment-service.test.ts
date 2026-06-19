@@ -19,9 +19,9 @@ describe("git environment service", () => {
   it("reports Git and identity state", async () => {
     const run = vi.fn()
       .mockResolvedValueOnce({ stdout: "git version 2.50.0\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "ssh -V output\n", stderr: "" })
       .mockResolvedValueOnce({ stdout: "Writer\n", stderr: "" })
       .mockResolvedValueOnce({ stdout: "writer@example.com\n", stderr: "" })
+    const runSshVersion = vi.fn().mockResolvedValue(undefined)
 
     const service = createGitEnvironmentService({
       commandRunner: { run },
@@ -29,6 +29,7 @@ describe("git environment service", () => {
       pathExists: async (filePath) => filePath.endsWith("id_ed25519.pub"),
       readFile: async () => "ssh-ed25519 public-key writer@example.com\n",
       platform: "darwin",
+      runSshVersion,
       shellEnvironment,
     })
 
@@ -55,6 +56,33 @@ describe("git environment service", () => {
       sshPublicKeyType: "ssh-ed25519",
       installHint: null,
     })
+    expect(runSshVersion).toHaveBeenCalledOnce()
+  })
+
+  it("does not treat Git availability as SSH availability", async () => {
+    const run = vi.fn(async (input: { readonly args: readonly string[] }) => {
+      if (input.args[0] === "--version") return { stdout: "git version 2.50.0\n", stderr: "" }
+      return { stdout: "", stderr: "" }
+    })
+    const runSshVersion = vi.fn().mockRejectedValue(new Error("ENOENT"))
+    const service = createGitEnvironmentService({
+      commandRunner: { run },
+      homeDir: "/Users/writer",
+      pathExists: async () => false,
+      readFile: async () => "",
+      platform: "darwin",
+      runSshVersion,
+      shellEnvironment,
+    })
+
+    const state = await service.check()
+
+    expect(state.gitAvailable).toBe(true)
+    expect(state.sshAvailable).toBe(false)
+    expect(runSshVersion).toHaveBeenCalledOnce()
+    expect(run).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["-c", "core.sshCommand=ssh -V", "version"],
+    }))
   })
 
   it("returns install hint when Git is missing", async () => {

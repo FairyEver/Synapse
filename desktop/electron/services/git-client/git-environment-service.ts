@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
@@ -22,6 +23,7 @@ type EnvironmentDeps = {
   readonly pathExists: (filePath: string) => Promise<boolean>
   readonly readFile: (filePath: string) => Promise<string>
   readonly platform: Platform
+  readonly runSshVersion?: () => Promise<void>
   readonly shellEnvironment: ShellEnvironmentSnapshot
 }
 
@@ -29,6 +31,58 @@ function installHint(platform: Platform): string {
   if (platform === "win32") return "安装 Git for Windows 后重新检测。"
   if (platform === "darwin") return "安装 Apple Command Line Tools 或官方 Git 后重新检测。"
   return "通过系统包管理器安装 Git 后重新检测。"
+}
+
+function runDefaultSshVersion(deps: Pick<EnvironmentDeps, "homeDir" | "platform" | "shellEnvironment">): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const childProcess = spawn("ssh", ["-V"], {
+      cwd: deps.homeDir,
+      env: buildSshProbeEnvironment(deps),
+      windowsHide: true,
+    })
+    let settled = false
+    const timeout = setTimeout(() => {
+      settled = true
+      childProcess.kill("SIGTERM")
+      reject(new Error("SSH version check timed out."))
+    }, 10_000)
+
+    childProcess.on("error", (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(error)
+    })
+
+    childProcess.on("close", (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      if (code === 0) {
+        resolve()
+        return
+      }
+      reject(new Error("SSH version check failed."))
+    })
+  })
+}
+
+function buildSshProbeEnvironment(
+  deps: Pick<EnvironmentDeps, "platform" | "shellEnvironment">,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    LANG: "C",
+    LC_ALL: "C",
+  }
+  if (deps.shellEnvironment.effectivePath) {
+    if (deps.platform === "win32") {
+      env.Path = deps.shellEnvironment.effectivePath
+    } else {
+      env.PATH = deps.shellEnvironment.effectivePath
+    }
+  }
+  return env
 }
 
 async function readConfig(
@@ -140,6 +194,7 @@ function parseSshPublicKeyDetails(key: SynapseGitSshPublicKey | null): SshPublic
 
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
   const now = deps.now ?? (() => new Date())
+  const runSshVersion = deps.runSshVersion ?? (() => runDefaultSshVersion(deps))
 
   async function getPublicKeyDetails(): Promise<SshPublicKeyDetails> {
     try {
@@ -193,13 +248,7 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
         })
         let sshAvailable = false
         try {
-          await deps.commandRunner.run({
-            cwd: deps.homeDir,
-            args: ["-c", "core.sshCommand=ssh -V", "version"],
-            logFailure: false,
-            operation,
-            operationId,
-          })
+          await runSshVersion()
           sshAvailable = true
         } catch {
           sshAvailable = false
