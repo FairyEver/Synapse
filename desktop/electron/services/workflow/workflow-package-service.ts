@@ -169,7 +169,12 @@ function buildModelReferences(workflow: WorkflowDefinition, providers: readonly 
   }
 
   const defaultTier = workflow.defaultModelTier ?? "default"
-  add(workflow.defaultProviderId, defaultTier, { kind: "workflowDefault" })
+  let workflowDefaultReferenced = false
+  const addWorkflowDefaultReference = () => {
+    if (workflowDefaultReferenced) return
+    workflowDefaultReferenced = true
+    add(workflow.defaultProviderId, defaultTier, { kind: "workflowDefault" })
+  }
 
   for (const node of workflow.nodes) {
     if (!isModelNode(node)) continue
@@ -179,6 +184,7 @@ function buildModelReferences(workflow: WorkflowDefinition, providers: readonly 
     if (explicitProviderId) {
       add(explicitProviderId, explicitTier, modelNodeOccurrence(node, false))
     } else if (workflow.defaultProviderId) {
+      addWorkflowDefaultReference()
       add(workflow.defaultProviderId, defaultTier, modelNodeOccurrence(node, true))
     }
   }

@@ -124,10 +124,22 @@ function claudeCodeOnlyPackage(): SynapseWorkflowPackageV1 {
   }
 }
 
+function codexOnlyWorkflowWithDefaultProvider(): WorkflowDefinition {
+  return {
+    ...codexOnlyPackage().workflow,
+    defaultProviderId: "provider-deepseek",
+    defaultModelTier: "sonnet",
+  }
+}
+
 function createService() {
   const saved: WorkflowDefinition[] = []
   const workflowService = {
-    get: vi.fn(async (id: string) => id === "workflow-source" ? workflowDefinition() : null),
+    get: vi.fn(async (id: string) => {
+      if (id === "workflow-source") return workflowDefinition()
+      if (id === "codex-source") return codexOnlyWorkflowWithDefaultProvider()
+      return null
+    }),
     save: vi.fn(async (def: WorkflowDefinition) => {
       saved.push(def)
       return { versionHash: "v_imported" }
@@ -214,6 +226,18 @@ describe("WorkflowPackageService", () => {
         occurrences: [expect.objectContaining({ kind: "node", nodeId: "n2", inherited: false })],
       }),
     ]))
+  })
+
+  it("does not export model references for Code X-only workflows with a default provider", async () => {
+    const { service } = createService()
+    const pkg = await service.buildExportPackage("codex-source")
+
+    expect(pkg.workflow).toMatchObject({
+      id: "codex-source",
+      defaultProviderId: "provider-deepseek",
+      defaultModelTier: "sonnet",
+    })
+    expect(pkg.modelReferences).toEqual([])
   })
 
   it("builds an import preview with provider options and suggested mappings", async () => {
