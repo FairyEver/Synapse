@@ -97,6 +97,27 @@ describe("ProviderService.deleteProvider", () => {
       secretRef: "provider:secret-fails:api-key",
     })
   })
+
+  it("keeps the active provider selected when deleting its secret fails", async () => {
+    const { service, secrets } = makeProviderService()
+    await service.createProvider({
+      id: "active-secret-fails",
+      name: "Active Secret Fails",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-active-kept",
+      active: true,
+      env: {},
+    })
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "active-secret-fails" })
+    secrets.remove = async () => {
+      throw new Error("secret store unavailable")
+    }
+
+    await expect(service.deleteProvider("active-secret-fails")).rejects.toThrow("secret store unavailable")
+
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "active-secret-fails" })
+  })
 })
 
 describe("ProviderService.listAllProviders", () => {

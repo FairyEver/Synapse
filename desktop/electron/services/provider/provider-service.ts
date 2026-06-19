@@ -471,9 +471,6 @@ export class ProviderService {
     }
     await this.assertSecretWrite(id, "delete")
     const provider = await this.getProvider(id)
-    if (provider.active) {
-      await this.clearActiveUserProvider()
-    }
 
     try {
       if (provider.secretRef) {

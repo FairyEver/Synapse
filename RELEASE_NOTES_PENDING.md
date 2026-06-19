@@ -103,6 +103,7 @@
 - Automation MCP 内置 Skill 的创建示例不再写死 POSIX shell。Agent 创建命令或脚本自动化时会优先使用平台感知默认 shell，避免 Windows 自动化被示例带偏后运行失败。
 - 自动化停止请求超时等待运行落库时，不再误报“已停止”；界面会提示停止请求已发送，并保留运行中的真实状态。
 - 私人令牌设置页新增、编辑或删除变量时会走 `secret.write` 权限检查和审计，不再绕过敏感变量写入记录。
+- 删除当前激活的模型供应商时，如果密钥删除失败，会保留原激活供应商，不再静默切回本地供应商。
 - Bridge 外部适配器不能再注册为本地 renderer 平台，使用保留平台前缀创建的会话也会按外部 Bridge 身份处理。
 - Agent 自定义执行命令返回 stdout/stderr 前会脱敏 token、Authorization 和 Cookie，避免 side-channel token 进入对话记录。
 - Agent slash 命令会保留 Windows 路径里的反斜杠，`/show` 和自定义执行命令工作目录不再把 `C:\...` 路径解析坏。
