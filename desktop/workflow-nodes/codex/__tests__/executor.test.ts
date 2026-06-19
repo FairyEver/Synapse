@@ -667,6 +667,7 @@ describe("codexNodeExecutor", () => {
     const input = makeInput({ captureDebugArtifacts: false }, runtimeDeps)
     const artifactPaths = codexArtifactPaths(electronState.userDataPath, context.runId, context.nodeId)
     const result = await codexNodeExecutor.execute(input)
+    const codexDebug = result.outputs?.codexDebug as { readonly args?: readonly string[] } | undefined
 
     expect(result.status).toBe("success")
     expect(result.output).toBe("final answer from file")
@@ -674,7 +675,10 @@ describe("codexNodeExecutor", () => {
     expect(result.outputs?.codexDebug).not.toHaveProperty("promptPath")
     expect(result.outputs?.codexDebug).not.toHaveProperty("stdoutPath")
     expect(result.outputs?.codexDebug).not.toHaveProperty("stderrPath")
+    expect(codexDebug?.args).toContain("--output-last-message")
+    expect(codexDebug?.args).toContain("[temporary last-message path]")
     expect(capturedLastMessagePath).toBeDefined()
+    expect(codexDebug?.args).not.toContain(capturedLastMessagePath)
     expect(capturedLastMessagePath).not.toBe(artifactPaths.lastMessagePath)
     await expect(access(capturedLastMessagePath!)).rejects.toThrow()
     await expect(access(artifactPaths.lastMessagePath)).rejects.toThrow()

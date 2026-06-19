@@ -6,6 +6,7 @@ import { assertSafeWorkflowId, assertSafeWorkflowNodeId } from "../../electron/s
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 
 const DEBUG_PREVIEW_LENGTH = 2000
+const TEMPORARY_LAST_MESSAGE_ARG_PLACEHOLDER = "[temporary last-message path]"
 const SESSION_HINT_FIELDS = ["thread_id", "session_id", "session_path"] as const
 const ABSOLUTE_PATH_PATTERN = /\b(?:[A-Za-z]:\\(?:[^\\\s"')]+\\)*[^\\\s"'),;]+|\/(?:[^/\s"')]+\/)*[^/\s"'),;]+)/g
 const URL_SECRET_QUERY_PARAM_PATTERN = /([?&][A-Za-z0-9_-]*(?:secret|token|api[-_]?key|authorization|cookie|password|credential)[A-Za-z0-9_-]*=)([^&#\s"']+)/gi
@@ -177,6 +178,8 @@ function extractFinalTextCandidate(value: Record<string, unknown>): string | und
 
 function sanitizeArgsForDebug(args: readonly string[]): string[] {
   return args.map((arg, index) => {
+    if (args[index - 1] === "--output-last-message") return TEMPORARY_LAST_MESSAGE_ARG_PLACEHOLDER
+    if (arg.startsWith("--output-last-message=")) return `--output-last-message=${TEMPORARY_LAST_MESSAGE_ARG_PLACEHOLDER}`
     if (args[index - 1] === "--config") return redactConfigOverrideArg(arg)
     if (arg.startsWith("--config=")) {
       return `--config=${redactConfigOverrideArg(arg.slice("--config=".length))}`
