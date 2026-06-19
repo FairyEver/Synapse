@@ -25,7 +25,7 @@ Read responses intentionally omit raw `trigger.config` and `executor.config`. Do
 
 ## Default Flow
 
-1. If the user gives an Automation name instead of an id, call `automation_item_list` first. Names are not unique.
+1. If the user gives an Automation name instead of an id, call `automation_item_list` first. Names are not unique; pass `limit` and `scope` when you only need a bounded subset.
 2. Before creating or replacing configs, call `automation_trigger_type_list` and `automation_executor_type_list`.
 3. Build a full `trigger` ref: `{ "type": "...", "config": { ... } }`.
 4. Build a full `executor` ref: `{ "type": "...", "config": { ... } }`.

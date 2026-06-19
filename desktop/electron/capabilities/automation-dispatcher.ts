@@ -10,6 +10,7 @@ import { createPlatformActionDefaultConfig } from "../../action-packages/builtin
 import type {
   AutomationCreateInput,
   AutomationItem,
+  AutomationListOptions,
   AutomationRun,
   AutomationUpdateInput,
 } from "../services/automation/types"
@@ -45,11 +46,7 @@ export type AutomationCapabilityDispatcherDeps = {
   readonly auditSink?: AuditSink
 }
 
-type AutomationItemListParams = {
-  readonly enabled?: boolean
-  readonly limit?: number
-  readonly scope?: { readonly type: "global" } | { readonly type: "project"; readonly projectId?: string }
-}
+type AutomationItemListParams = AutomationListOptions
 
 type AutomationMutationSecurity = {
   readonly actor: ActorIdentity
@@ -111,13 +108,9 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
 
           case "automation.item.list": {
             const input = parseListParams(params)
-            const items = await deps.service.automationList()
-            const filtered = items
-              .filter((item) => input.enabled === undefined || item.enabled === input.enabled)
-              .filter((item) => matchesScope(item, input.scope))
-              .slice(0, input.limit ?? items.length)
-              .map((item) => toPublicAutomationItemSummary(item, deps.triggers, deps.actions))
-            result = { ok: true, data: filtered, total: filtered.length }
+            const items = await deps.service.automationList(input)
+            const summaries = items.map((item) => toPublicAutomationItemSummary(item, deps.triggers, deps.actions))
+            result = { ok: true, data: summaries, total: summaries.length }
             break
           }
 
@@ -361,15 +354,6 @@ function parseOptionalScope(value: unknown): AutomationItemListParams["scope"] {
     return { type: "project", projectId: projectId as string | undefined }
   }
   throw new Error("Missing or invalid 'scope.type': expected global or project")
-}
-
-function matchesScope(item: AutomationItem, scope: AutomationItemListParams["scope"]): boolean {
-  if (!scope) return true
-  if (scope.type !== item.scope.type) return false
-  if (scope.type === "project" && scope.projectId) {
-    return item.scope.type === "project" && item.scope.projectId === scope.projectId
-  }
-  return true
 }
 
 function parseAutomationIdParams(params: Record<string, unknown>): { automationId: string } {

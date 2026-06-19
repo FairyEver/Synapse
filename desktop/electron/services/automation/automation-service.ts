@@ -9,6 +9,7 @@ import type { AutomationTriggerRegistry } from "./trigger-registry"
 import type {
   AutomationCreateInput,
   AutomationItem,
+  AutomationListOptions,
   AutomationRun,
   AutomationRunTrigger,
   AutomationTriggerRuntimeContext,
@@ -140,10 +141,14 @@ export class AutomationService {
     }
   }
 
-  async automationList(): Promise<AutomationItem[]> {
+  async automationList(options: AutomationListOptions = {}): Promise<AutomationItem[]> {
     const items = await this.deps.items.list()
-    const result = (await Promise.all(items.map((item) => this.withRuntimeState(item))))
+    const limitedItems = items
+      .filter((item) => options.enabled === undefined || item.enabled === options.enabled)
+      .filter((item) => matchesAutomationScope(item, options.scope))
       .sort(compareAutomationItemsByRecentEdit)
+      .slice(0, options.limit ?? items.length)
+    const result = await Promise.all(limitedItems.map((item) => this.withRuntimeState(item)))
     this.deps.logger?.info("Automations listed.", {
       boundary: "automation.item-list",
       itemCount: result.length,
@@ -865,6 +870,15 @@ function compareAutomationItemsByRecentEdit(left: AutomationItem, right: Automat
   const updatedAtOrder = compareIsoTimestampDesc(left.updatedAt, right.updatedAt)
   if (updatedAtOrder !== 0) return updatedAtOrder
   return compareIsoTimestampDesc(left.createdAt, right.createdAt)
+}
+
+function matchesAutomationScope(item: AutomationItem, scope: AutomationListOptions["scope"]): boolean {
+  if (!scope) return true
+  if (scope.type !== item.scope.type) return false
+  if (scope.type === "project" && scope.projectId) {
+    return item.scope.type === "project" && item.scope.projectId === scope.projectId
+  }
+  return true
 }
 
 function compareIsoTimestampDesc(left: string, right: string): number {

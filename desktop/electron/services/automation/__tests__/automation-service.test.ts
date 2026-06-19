@@ -224,6 +224,30 @@ describe("AutomationService", () => {
     expect(listedIds).toEqual(["automation:edited", "automation:new", "automation:old"])
   })
 
+  it("applies list filters and limits before runtime projection", async () => {
+    const harness = createHarness()
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:invalid-old",
+      name: "Invalid old automation",
+      enabled: true,
+      trigger: { type: "builtin.missing-trigger", config: {} },
+      createdAt: "2026-06-03T00:00:00.000Z",
+      updatedAt: "2026-06-03T00:00:00.000Z",
+    }))
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:new",
+      name: "New automation",
+      enabled: true,
+      createdAt: "2026-06-03T00:10:00.000Z",
+      updatedAt: "2026-06-03T00:10:00.000Z",
+    }))
+
+    const listed = await harness.service.automationList({ enabled: true, limit: 1 })
+
+    expect(listed.map((item) => item.id)).toEqual(["automation:new"])
+    expect(listed[0]?.validation).toBeUndefined()
+  })
+
   it("projects invalid listed automations as disabled without persisting the change", async () => {
     const harness = createHarness()
     await harness.itemStore.upsert(createStoredAutomation({

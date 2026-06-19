@@ -161,8 +161,13 @@ function registries() {
 }
 
 function serviceMock() {
+  const items = [baseItem, { ...baseItem, id: "automation:2", enabled: false }]
   return {
-    automationList: vi.fn(async () => [baseItem, { ...baseItem, id: "automation:2", enabled: false }]),
+    automationList: vi.fn(async (options?: { readonly enabled?: boolean; readonly limit?: number }) => (
+      items
+        .filter((item) => options?.enabled === undefined || item.enabled === options.enabled)
+        .slice(0, options?.limit ?? items.length)
+    )),
     automationGet: vi.fn(async (id: string) => (id === "automation:1" ? baseItem : null)),
     automationCreate: vi.fn(),
     automationUpdate: vi.fn(),
@@ -324,6 +329,15 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify([list, get])).not.toContain("private prompt")
     expect(JSON.stringify([list, get])).not.toContain("everyMinutes")
     expect(permissionGuard.check).not.toHaveBeenCalled()
+  })
+
+  it("passes item list filters and limit to the Automation service", async () => {
+    const { dispatcher, service } = createHarness()
+    const scope = { type: "project" as const, projectId: "project:1" }
+
+    await dispatcher.dispatch("automation.item.list", { enabled: true, scope, limit: 1 }, { source: "mcp-http" })
+
+    expect(service.automationList).toHaveBeenCalledWith({ enabled: true, scope, limit: 1 })
   })
 
   it("creates updates enables disables and deletes automations through the service", async () => {

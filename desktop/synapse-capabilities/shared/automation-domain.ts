@@ -143,7 +143,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           enabled: { type: "boolean", description: "Optional filter for enabled or disabled Automations." },
-          limit: { type: "number", description: "Optional maximum number of Automations to return." },
+          limit: { type: "number", description: "Optional maximum number of Automations to return after applying enabled/scope filters." },
           scope: {
             type: "object",
             description: "Optional scope filter. Pass { type: 'global' } or { type: 'project', projectId: '...' }. Omit projectId to match all project-scoped Automations.",

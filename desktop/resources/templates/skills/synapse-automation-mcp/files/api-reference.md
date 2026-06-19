@@ -40,7 +40,7 @@ Input:
 }
 ```
 
-All fields are optional. Returns public item summaries.
+All fields are optional. Returns public item summaries. `enabled` and `scope` filters are applied before `limit`, so use `limit` for bounded list/lookup flows on large Automation sets.
 
 ### automation_item_get
 

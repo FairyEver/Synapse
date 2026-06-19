@@ -91,6 +91,12 @@ export interface AutomationUpdateInput {
   readonly policy?: Partial<AutomationPolicy>
 }
 
+export interface AutomationListOptions {
+  readonly enabled?: boolean
+  readonly limit?: number
+  readonly scope?: { readonly type: "global" } | { readonly type: "project"; readonly projectId?: string }
+}
+
 export interface AutomationRun extends Record<string, unknown> {
   readonly id: string
   readonly schemaVersion: 1
