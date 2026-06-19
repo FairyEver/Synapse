@@ -58,11 +58,6 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
 
-  useEffect(() => {
-    setUnlockedSnapshot(null)
-    setPagedSnapshot(null)
-  }, [queryKeySignature])
-
   const query = useQuery({
     queryKey,
     queryFn: () => loadDriveBrowser(input),
@@ -100,6 +95,11 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       })
     },
   })
+  useEffect(() => {
+    setUnlockedSnapshot(null)
+    setPagedSnapshot(null)
+    loadMoreMutation.reset()
+  }, [queryKeySignature])
 
   const querySnapshot = toDriveBrowserSnapshot(query.data)
   const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
