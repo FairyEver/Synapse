@@ -275,7 +275,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_list",
-      description: "List current user's Drive share links for /share/... access. Shares let others browse, render previewable HTML, or download shared files and folders.",
+      description: "List current user's Drive share links for /share/... access without returning share passwords. Shares let others browse, render previewable HTML, or download shared files and folders.",
       inputSchema: {
         type: "object",
         properties: pageInputProperties,

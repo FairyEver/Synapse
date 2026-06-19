@@ -61,6 +61,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
    - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
    - Pass `accessMode: "link_read"` for the default read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
+   - Use the `drive_share_create` result when the user needs the password for a specific share. `drive_share_list` lists existing shares without returning passwords.
 10. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
 11. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
 12. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
@@ -72,7 +73,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 
 ## Safety
 
-Never reveal COS AK, SK, Authorization headers, local secrets, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
+Never reveal COS AK, SK, Authorization headers, local secrets, share passwords from list results, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
 
 Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 

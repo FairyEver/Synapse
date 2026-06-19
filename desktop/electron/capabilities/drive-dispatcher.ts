@@ -283,7 +283,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.share.list":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.listDriveShares(parsePublicLinksPageInput(params)),
+            data: sanitizeDriveShareList(await deps.accountService.listDriveShares(parsePublicLinksPageInput(params))),
           }))
         case "drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
@@ -735,6 +735,17 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
     if (typeof rootId === "string") metadata.rootItemId = rootId
   }
   return metadata
+}
+
+function sanitizeDriveShareList(page: DriveShareListPageDto): DriveShareListPageDto {
+  return {
+    ...page,
+    items: page.items.map((item) => ({
+      ...item,
+      urlWithPassword: item.url,
+      password: null,
+    })),
+  }
 }
 
 async function authorizeDriveMutation(

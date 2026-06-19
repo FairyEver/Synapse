@@ -288,7 +288,18 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
     await expect(dispatcher.dispatch("drive.share.list", { offset: 10, limit: 5 }, { source: "mcp-stdio" }))
-      .resolves.toMatchObject({ ok: true, data: { items: [expect.objectContaining({ id: "share-1" })] } })
+      .resolves.toMatchObject({
+        ok: true,
+        data: {
+          items: [expect.objectContaining({
+            id: "share-1",
+            url: "https://synapse.test/share/shr_1",
+            urlWithPassword: "https://synapse.test/share/shr_1",
+            passwordEnabled: true,
+            password: null,
+          })],
+        },
+      })
 
     expect(accountService.listDriveShares).toHaveBeenCalledWith({ offset: 10, limit: 5 })
   })
