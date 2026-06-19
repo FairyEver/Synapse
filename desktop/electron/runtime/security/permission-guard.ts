@@ -26,6 +26,7 @@ export type PermissionAction =
   | "scheduler.mutate"
   | "automation.mutate"
   | "workflow.run"
+  | "workflow.read"
   | "workflow.mutate"
   | "content.mutate"
 

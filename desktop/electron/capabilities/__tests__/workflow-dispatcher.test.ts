@@ -316,6 +316,49 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
+  it("checks permission and audits allowed workflow reads", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.definition.get", { workflowId: "wf-1" }, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(deps.workflowService.get).toHaveBeenCalledWith("wf-1")
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "workflow.read",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      resource: "workflow:wf-1",
+      context: {
+        source: "mcp-http",
+        workflowAction: "workflow.definition.get",
+        workflowId: "wf-1",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.read",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      resource: "workflow:wf-1",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.get",
+        workflowId: "wf-1",
+      }),
+    }))
+  })
+
   it("checks permission and audits workflow.definition.update against the nested definition id", async () => {
     const auditSink = {
       record: vi.fn(),
@@ -393,6 +436,37 @@ describe("createWorkflowDispatcher", () => {
         workflowAction: "workflow.definition.delete",
         workflowId: "wf-1",
         policyId: "deny-workflow",
+      }),
+    }))
+  })
+
+  it("denies workflow reads before calling the workflow service", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false as const, reason: "workflow read denied", policyId: "deny-workflow-read" })),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.run.list", { workflowId: "wf-1" }, { source: "mcp-http" }))
+      .rejects
+      .toThrow("workflow read denied")
+
+    expect(deps.snapshotService.list).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.read",
+      resource: "workflow:wf-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.run.list",
+        workflowId: "wf-1",
+        policyId: "deny-workflow-read",
       }),
     }))
   })
