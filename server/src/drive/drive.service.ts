@@ -1037,8 +1037,9 @@ export class DriveService implements OnApplicationBootstrap {
 
   async listShares(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {
     const pageInput = normalizeDrivePublicLinksPage(page)
+    const now = new Date()
     const shares = await this.prisma.driveShare.findMany({
-      where: { userId, enabled: true, item: { is: { publicAsset: null } } },
+      where: { userId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], item: { is: { publicAsset: null } } },
       include: { item: { select: { id: true, name: true, type: true, deletedAt: true, lifecycleStatus: true } }, ...driveShareWithEditors },
       orderBy: { createdAt: "desc" },
       skip: pageInput.offset,

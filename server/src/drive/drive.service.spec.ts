@@ -544,6 +544,24 @@ describe("DriveService", () => {
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("hides expired enabled shares from the public links list", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const expiredFile = await createCompletedUpload(service, "user-1", { parentId: null, name: "expired.txt", mimeType: "text/plain" })
+    const activeFile = await createCompletedUpload(service, "user-1", { parentId: null, name: "active.txt", mimeType: "text/plain" })
+    const expiredShare = await service.createShare("user-1", expiredFile.id, "https://synapse.test")
+    const activeShare = await service.createShare("user-1", activeFile.id, "https://synapse.test")
+    await prisma.driveShare.update({
+      where: { id: expiredShare.id },
+      data: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+    })
+
+    await expect(service.listShares("user-1", "https://synapse.test")).resolves.toMatchObject({
+      items: [expect.objectContaining({ shareId: activeShare.shareId, itemName: "active.txt" })],
+    })
+  })
+
   it("rejects ordinary restore for trashed public asset backing files", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
