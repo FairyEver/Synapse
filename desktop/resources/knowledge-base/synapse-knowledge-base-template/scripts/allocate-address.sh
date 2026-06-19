@@ -2,7 +2,7 @@
 # allocate-address.sh — atomic creation-order address allocation for the vault.
 #
 # Reserves the next address of the form c-NNNNNN and increments the counter
-# under an exclusive flock. On missing counter file, recovers by scanning the
+# under the project-local address lock. On missing counter file, recovers by scanning the
 # vault for the highest existing c-NNNNNN in page frontmatter and resuming from
 # max+1. Never silently resets to 1 in a non-empty vault.
 #
@@ -21,7 +21,10 @@ set -euo pipefail
 
 VAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COUNTER_FILE="${VAULT_ROOT}/.vault-meta/address-counter.txt"
-LOCK_FILE="${VAULT_ROOT}/.vault-meta/.address.lock"
+LOCK_DIR="${VAULT_ROOT}/.vault-meta/.address.lock.d"
+LOCK_OWNER_FILE="${LOCK_DIR}/owner"
+LOCK_TIMEOUT_SECONDS="${ADDRESS_LOCK_TIMEOUT_SECONDS:-5}"
+LOCK_RETRY_SECONDS="${ADDRESS_LOCK_RETRY_SECONDS:-0.05}"
 WIKI_DIR="${VAULT_ROOT}/wiki"
 
 MODE="${1:-allocate}"
@@ -31,12 +34,29 @@ mkdir -p "$(dirname "$COUNTER_FILE")" || {
   exit 2
 }
 
-# Acquire exclusive lock with 5-second timeout. Release automatically on scope exit.
-exec 9>"$LOCK_FILE"
-if ! flock -x -w 5 9; then
-  echo "ERR: could not acquire address allocator lock within 5s" >&2
-  exit 1
-fi
+acquire_address_lock() {
+  local started_at owner
+  started_at="$SECONDS"
+  owner="$$:${RANDOM:-0}"
+  while true; do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      if ! printf '%s\n' "$owner" > "$LOCK_OWNER_FILE"; then
+        rm -rf "$LOCK_DIR"
+        echo "ERR: could not write address allocator lock owner" >&2
+        exit 1
+      fi
+      trap 'rm -rf "$LOCK_DIR"' EXIT
+      return
+    fi
+    if [ "$((SECONDS - started_at))" -ge "$LOCK_TIMEOUT_SECONDS" ]; then
+      echo "ERR: could not acquire address allocator lock within ${LOCK_TIMEOUT_SECONDS}s" >&2
+      exit 1
+    fi
+    sleep "$LOCK_RETRY_SECONDS"
+  done
+}
+
+acquire_address_lock
 
 scan_max_c_address() {
   # Emit the largest NNNNNN from "address: c-NNNNNN" lines that appear inside

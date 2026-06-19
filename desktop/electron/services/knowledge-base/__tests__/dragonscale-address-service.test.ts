@@ -1,4 +1,6 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -10,6 +12,7 @@ import {
 } from "../dragonscale/address-service"
 
 const roots: string[] = []
+const execFileAsync = promisify(execFile)
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-dragonscale-"))
@@ -152,6 +155,36 @@ describe("DragonScaleAddressService", () => {
 
     await rm(lockPath, { recursive: true, force: true })
     await expect(service.allocate(root)).resolves.toMatchObject({ address: "c-000001" })
+  })
+
+  it("shares the project-local helper lock with the Bash address allocator", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, "scripts"), { recursive: true })
+    await mkdir(path.join(root, ".vault-meta"), { recursive: true })
+    await writeFile(path.join(root, ".vault-meta", "address-counter.txt"), "1\n")
+    await copyFile(
+      path.join(process.cwd(), "resources", "knowledge-base", "synapse-knowledge-base-template", "scripts", "allocate-address.sh"),
+      path.join(root, "scripts", "allocate-address.sh"),
+    )
+    const release = await acquireDragonScaleAddressFileLock(root, {
+      ownerId: "electron-test",
+      timeoutMs: 20,
+      retryMs: 1,
+    })
+
+    try {
+      await expect(execFileAsync("bash", [path.join(root, "scripts", "allocate-address.sh")], {
+        env: { ...process.env, ADDRESS_LOCK_TIMEOUT_SECONDS: "0" },
+      })).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining("could not acquire address allocator lock"),
+      })
+    } finally {
+      await release()
+    }
+
+    const result = await execFileAsync("bash", [path.join(root, "scripts", "allocate-address.sh")])
+    expect(result.stdout.trim()).toBe("c-000001")
   })
 
   it("does not let an old file lock release remove a new lock owner", async () => {

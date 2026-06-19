@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 
 import { atomicWriteTextFile } from "../atomic-write"
@@ -123,7 +122,10 @@ export function dragonScaleAddressLockPath(
   vaultPath: string,
   options: { readonly lockRoot?: string } = {},
 ): string {
-  const lockRoot = options.lockRoot ?? path.join(os.tmpdir(), "synapse-kb-address-locks")
+  if (!options.lockRoot) {
+    return path.join(vaultPath, ".vault-meta", ".address.lock.d")
+  }
+  const lockRoot = options.lockRoot
   const key = createHash("sha256").update(path.resolve(vaultPath)).digest("hex")
   return path.join(lockRoot, `${key}.lock`)
 }

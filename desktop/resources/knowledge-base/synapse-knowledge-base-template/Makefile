@@ -32,5 +32,5 @@ setup-dragonscale:
 	@bash bin/setup-dragonscale.sh
 
 clean-test-state:
-	@rm -f .vault-meta/.address.lock .vault-meta/.tiling.lock .vault-meta/tiling-cache.json .vault-meta/tiling-cache.*.tmp
+	@rm -rf .vault-meta/.address.lock .vault-meta/.address.lock.d .vault-meta/.tiling.lock .vault-meta/tiling-cache.json .vault-meta/tiling-cache.*.tmp
 	@echo "Runtime lockfiles and tiling cache removed."

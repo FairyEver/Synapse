@@ -113,7 +113,7 @@ Format: `c-<6-digit-counter>`. `c-` means "creation-order counter." Zero-padded.
 - Content hash suffix (rotation policy unresolved; see limitations).
 
 **Implementation** (Phase 2, shipped):
-- `scripts/allocate-address.sh`: flock-guarded atomic allocator. All counter reads/writes go through this script; direct Write/Edit on `.vault-meta/address-counter.txt` is prohibited (would fire PostToolUse hook).
+- `scripts/allocate-address.sh`: project-lock-guarded atomic allocator using `.vault-meta/.address.lock.d`. All counter reads/writes go through this script; direct Write/Edit on `.vault-meta/address-counter.txt` is prohibited (would fire PostToolUse hook).
 - `skills/wiki-ingest/SKILL.md` → Address Assignment section: opt-in feature detection; delegates allocation to the helper; records path-to-address mapping in `.raw/.manifest.json` `address_map` for re-ingest stability.
 - `skills/wiki-lint/SKILL.md` → Address Validation section: format check, uniqueness check, counter-drift check, address-map consistency check.
 

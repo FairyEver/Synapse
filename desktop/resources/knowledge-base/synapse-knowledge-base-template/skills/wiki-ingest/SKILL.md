@@ -221,7 +221,7 @@ Rollout baseline: **2026-04-23** (Phase 2 ship date). Pages with `created:` >= t
 
 In Synapse-managed Knowledge Base sessions, you may create a new page without `address:` if the local Bash helper is unavailable. The Synapse ingest finalizer will allocate a stable `c-NNNNNN` address and update `.raw/.manifest.json` after this turn, as long as the new page path appears in the ingest report.
 
-On POSIX/manual vault workflows, address allocation can be delegated to the Bash helper. The helper uses `flock` on `.vault-meta/.address.lock` to prevent read-use-increment races and recovers the counter by scanning existing frontmatter if the counter file is missing.
+On POSIX/manual vault workflows, address allocation can be delegated to the Bash helper. The helper uses the project-local `.vault-meta/.address.lock.d` directory lock to prevent read-use-increment races and recovers the counter by scanning existing frontmatter if the counter file is missing.
 
 ```bash
 ADDR=$(./scripts/allocate-address.sh)
@@ -291,7 +291,7 @@ Only list real `.raw/` source paths you processed and wiki `.md` pages you creat
 
 ### Concurrency policy
 
-- **Single-writer only** in Phase 2. Do not run parallel ingests from multiple Claude sessions or sub-agents that assign addresses. The `flock` in the helper prevents counter corruption but does not serialize page writes themselves.
+- **Single-writer only** in Phase 2. Do not run parallel ingests from multiple Claude sessions or sub-agents that assign addresses. The address lock prevents counter corruption but does not serialize page writes themselves.
 - Sub-agents (codex, general-purpose) that are dispatched for research or review MUST NOT call the allocator. They are read-only in this respect.
 - Multi-writer support is a deferred feature.
 

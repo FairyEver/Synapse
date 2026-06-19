@@ -50,9 +50,9 @@ bash bin/setup-dragonscale.sh /path/to/vault
 
 If you omit the path, it uses the repo root inferred from `bin/`.
 
-### Universal prerequisite: flock
+### Tiling prerequisite: flock
 
-`flock` is the universal prerequisite. Mechanism 2 uses it directly in `scripts/allocate-address.sh` to guard `.vault-meta/.address.lock`. Mechanism 3 uses flock from Python to guard `.vault-meta/.tiling.lock` around cache I/O.
+Mechanism 2 address allocation uses the project-local `.vault-meta/.address.lock.d` directory lock. Mechanism 3 uses `flock` from Python to guard `.vault-meta/.tiling.lock` around cache I/O.
 
 Quick check:
 
@@ -60,9 +60,9 @@ Quick check:
 command -v flock
 ```
 
-If that prints nothing, install `flock` before relying on DragonScale. On Linux it is usually already present. On macOS it commonly comes from `util-linux`.
+If that prints nothing, install `flock` before relying on semantic tiling. On Linux it is usually already present. On macOS it commonly comes from `util-linux`.
 
-If `flock` is missing, setup can still create files, but the address allocator and tiling cache path are not reliable. Treat that as a blocker.
+If `flock` is missing, setup can still create files and the address allocator remains usable, but the tiling cache path is not reliable. Treat that as a blocker for Mechanism 3.
 
 ### Mechanism 3 extra prerequisites: python3, ollama, nomic-embed-text
 
@@ -304,7 +304,7 @@ Example command:
 
 `wiki-lint` enables address validation only when `./scripts/allocate-address.sh` is executable and `./.vault-meta/address-counter.txt` exists. If those conditions are true, lint checks address format, uniqueness, counter consistency against `--peek`, missing addresses on post-rollout pages, and `address_map` consistency in `.raw/.manifest.json`.
 
-The single-writer rule matters here. The allocator uses `flock`, but the ingest skill still says Phase 2 is single-writer only. Do not run parallel ingests from multiple sessions or sub-agents that assign addresses.
+The single-writer rule matters here. The allocator uses a project-local address lock, but the ingest skill still says Phase 2 is single-writer only. Do not run parallel ingests from multiple sessions or sub-agents that assign addresses.
 
 One hard rule from the skill docs is worth repeating. Never edit `.vault-meta/address-counter.txt` directly. Only mutate it through `scripts/allocate-address.sh`.
 
@@ -466,7 +466,7 @@ Note that `.vault-meta/` is a shared gate for Mechanisms 2, 3, and 4. Do not rem
 
 ### Single-writer rule
 
-DragonScale assumes a single writer for the address-assignment path. The allocator is flock-guarded, which protects the counter from simple races. It does not turn the whole wiki into a safe multi-writer system.
+DragonScale assumes a single writer for the address-assignment path. The allocator is guarded by `.vault-meta/.address.lock.d`, which protects the counter from simple races. It does not turn the whole wiki into a safe multi-writer system.
 
 The ingest skill is explicit here. Do not run parallel ingests from multiple Claude sessions or sub-agents that assign addresses.
 
@@ -493,7 +493,7 @@ When those conditions are not met, the repo falls back to earlier behavior. That
 
 ### Missing flock
 
-If `flock` is missing, fix that first. Symptoms can include an unsafe address-allocation path or a tiling cache path that cannot lock correctly.
+If `flock` is missing, fix that before using semantic tiling. Symptoms can include a tiling cache path that cannot lock correctly.
 
 Check:
 
