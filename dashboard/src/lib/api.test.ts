@@ -509,6 +509,28 @@ describe('driveFileVersionsApi', () => {
       '/api/drive/items/item%2Fid/versions/version%2Fid/download'
     )
   })
+
+  it('notifies auth expiration for protected Drive user requests', async () => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(authExpired)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+
+    try {
+      await expect(driveFileVersionsApi.list('item/id')).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+      expect(shouldNotifyAuthExpired('/api/drive/items/item%2Fid/versions', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid', 401)).toBe(false)
+      expect(shouldNotifyAuthExpired('/api/drive/local-upload/session-1', 401)).toBe(false)
+      expect(shouldNotifyAuthExpired('/api/drive/local-download/session-1', 401)).toBe(false)
+    } finally {
+      unsubscribe()
+    }
+  })
 })
 
 describe('dashboardApi auth expiration compatibility', () => {
