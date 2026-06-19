@@ -738,8 +738,8 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   const record = data as Record<string, unknown>
   if (typeof record.itemId === "string") metadata.itemId = record.itemId
   if (typeof record.assetId === "string") metadata.assetId = record.assetId
-  if (typeof record.shareId === "string") metadata.shareId = record.shareId
-  if (typeof record.id === "string" && !metadata.itemId && !metadata.shareId) metadata.itemId = record.id
+  if (typeof record.shareId === "string" && typeof record.id === "string") metadata.shareRecordId = record.id
+  if (typeof record.id === "string" && !metadata.itemId && !metadata.shareRecordId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
   if (typeof record.failed === "number") metadata.failed = record.failed
   if (typeof record.movedCount === "number") metadata.movedCount = record.movedCount

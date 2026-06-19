@@ -998,10 +998,11 @@ describe("createDriveCapabilityDispatcher", () => {
       metadata: expect.objectContaining({
         driveAction: "drive.share.create",
         itemId: "item-1",
-        shareId: "shr_1",
+        shareRecordId: "share-1",
         expiresIn: "30d",
       }),
     }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("shr_1")
   })
 
   it("audits failed share creation", async () => {
