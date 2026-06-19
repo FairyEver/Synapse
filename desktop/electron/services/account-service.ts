@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { createReadStream, createWriteStream, type Stats } from "node:fs"
-import { mkdir, stat } from "node:fs/promises"
+import { mkdir, rename, rm, stat } from "node:fs/promises"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
@@ -1745,8 +1745,25 @@ function limitUtf8Preview(value: string | null, maxBytes: number | undefined): {
 
 async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {
   if (!response.body) throw new Error("下载响应为空。")
-  await mkdir(path.dirname(outputPath), { recursive: true })
-  await pipeline(Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(outputPath))
+  const outputDir = path.dirname(outputPath)
+  await mkdir(outputDir, { recursive: true })
+  const tempPath = path.join(outputDir, `.${path.basename(outputPath)}.${process.pid}.${Date.now()}.${randomBytes(6).toString("hex")}.tmp`)
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
+      createWriteStream(tempPath, { flags: "wx" }),
+    )
+    await rename(tempPath, outputPath)
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch((cleanupError) => {
+      logger.warn("Drive download temp file cleanup failed.", {
+        operation: "writeResponseBodyToFile",
+        errorName: cleanupError instanceof Error ? cleanupError.name : typeof cleanupError,
+        errorCode: errorCode(cleanupError),
+      })
+    })
+    throw error
+  }
 }
 
 function localUploadErrorMessage(): string {

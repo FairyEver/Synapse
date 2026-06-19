@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, truncate, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -81,6 +81,16 @@ function textResponse(body: string, status = 500): Response {
     status,
     headers: { "Content-Type": "text/plain" },
   })
+}
+
+function failingDownloadResponse(): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("partial"))
+      controller.error(new Error("download interrupted"))
+    },
+  })
+  return new Response(body)
 }
 
 const storedProfile: SynapseAccountProfile = {
@@ -227,6 +237,19 @@ describe("AccountService", () => {
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("keeps existing Drive download output when the response stream fails", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-download-"))
+    const outputPath = path.join(dir, "report.txt")
+    await writeFile(outputPath, "previous")
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "fetchAuthenticated").mockResolvedValue(failingDownloadResponse())
+
+    await expect(service.downloadDriveFile({ itemId: "item-1", outputPath })).rejects.toThrow()
+
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("previous")
+    await expect(readdir(dir)).resolves.toEqual(["report.txt"])
   })
 
   it("rejects local files over the shared single file limit before preparing upload", async () => {
