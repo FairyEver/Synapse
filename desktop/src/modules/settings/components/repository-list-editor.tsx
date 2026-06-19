@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
+import { validateLocalRepositoryNameInput } from "@/lib/repository-name"
 import { getRepositoryInitializationDangerMessage } from "@/lib/repository-initialization"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { RepositoryListItem } from "@/modules/settings/components/repository-list-item"
@@ -44,24 +45,6 @@ type RepositoryListEditorProps = {
     repositories: SynapseRepositoryConfig[],
     activeRepoUuid: string | null,
   ) => Promise<boolean>
-}
-
-function validateLocalRepositoryName(value: string): string | null {
-  const nextValue = value.trim()
-
-  if (!nextValue) {
-    return "先输入本地仓库名称。"
-  }
-
-  if (nextValue === "." || nextValue === "..") {
-    return "本地仓库名称不能是 . 或 ..。"
-  }
-
-  if (/[\\/]/.test(nextValue)) {
-    return "本地仓库名称不能包含斜杠。"
-  }
-
-  return null
 }
 
 function RepositoryListEditor({
@@ -224,7 +207,7 @@ function RepositoryListEditor({
   const handleCreateLocalRepository = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    const nameError = validateLocalRepositoryName(newRepositoryName)
+    const nameError = validateLocalRepositoryNameInput(newRepositoryName)
 
     if (nameError) {
       setCreateRepositoryError(nameError)

@@ -106,6 +106,20 @@ describe("RepositoryStructureService", () => {
     await expect(access(path.join(localPath, "prompts"))).rejects.toThrow()
   })
 
+  it("rejects Windows-unsafe local repository names before creating directories", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const parentPath = await makeTempRepositoryPath()
+
+    for (const name of ["CON", "aux.txt", "foo:bar", "report.", "report "]) {
+      await expect(repositoryStructureService.createLocalRepository({
+        name,
+        parentPath,
+      })).rejects.toThrow("本地仓库名称不能使用 Windows 非法文件名。")
+    }
+
+    await expect(readdir(parentPath)).resolves.toEqual([])
+  })
+
   it("refuses to initialize a non-empty directory without a matching confirmation preview", async () => {
     const { repositoryStructureService } = await import("../repository-structure-service")
     const localPath = await makeTempRepositoryPath()

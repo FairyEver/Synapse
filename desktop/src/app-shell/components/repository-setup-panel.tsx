@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
+import { validateLocalRepositoryNameInput } from "@/lib/repository-name"
 import { getRepositoryInitializationDangerMessage } from "@/lib/repository-initialization"
 import { cn } from "@/lib/utils"
 import type { SynapseRepositoryInitializationPreview } from "@/types/repository"
@@ -28,24 +29,6 @@ type RepositorySetupPanelProps = {
 }
 
 const logger = createRendererLogger("app.empty-repository-state")
-
-function validateRepositoryName(value: string): string | null {
-  const nextValue = value.trim()
-
-  if (!nextValue) {
-    return "仓库名称不能为空"
-  }
-
-  if (nextValue === "." || nextValue === "..") {
-    return "仓库名称不能是 . 或 .."
-  }
-
-  if (/[\\/]/.test(nextValue)) {
-    return "仓库名称不能包含斜杠"
-  }
-
-  return null
-}
 
 function RepositorySetupPanel({ reason, layout = "embedded" }: RepositorySetupPanelProps) {
   const repositories = useRepositoryList()
@@ -214,7 +197,7 @@ function RepositorySetupPanel({ reason, layout = "embedded" }: RepositorySetupPa
 
   const handleCreateSubmit = async () => {
     const nextName = createName.trim()
-    const nameError = validateRepositoryName(nextName)
+    const nameError = validateLocalRepositoryNameInput(createName)
     if (nameError) {
       setCreateNameError(nameError)
       return

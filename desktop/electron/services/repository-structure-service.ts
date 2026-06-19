@@ -6,6 +6,7 @@ import path from "node:path"
 import { isFileNotFoundError, pathExists } from "./fs-utils"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "../../src/constants/defaults"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
+import { normalizeLocalRepositoryNameInput, validateLocalRepositoryNameInput } from "../../src/lib/repository-name"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseCreateLocalRepositoryPayload,
@@ -228,21 +229,12 @@ function assertConfirmedInitializationToken(
 }
 
 function normalizeRepositoryName(name: string): string {
-  const nextName = name.trim()
-
-  if (!nextName) {
-    throw new Error("本地仓库名称不能为空。")
+  const error = validateLocalRepositoryNameInput(name)
+  if (error) {
+    throw new Error(error)
   }
 
-  if (nextName === "." || nextName === "..") {
-    throw new Error("本地仓库名称不能是 . 或 ..。")
-  }
-
-  if (/[\\/]/.test(nextName)) {
-    throw new Error("本地仓库名称不能包含斜杠。")
-  }
-
-  return nextName
+  return normalizeLocalRepositoryNameInput(name)
 }
 
 function createRepositoryConfig(name: string, localPath: string): SynapseRepositoryConfig {
