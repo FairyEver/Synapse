@@ -6,12 +6,13 @@
 
 - 工作流是有向无环图（DAG）
 - 节点按拓扑序执行；无依赖关系的节点并行运行
-- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`codex` 和 `end`
+- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`codex`、`claude_code` 和 `end`
 - 每个工作流必须有且仅有一个 `end` 节点，不允许环
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
 - `workflow_call` 节点可调用另一个已保存工作流，并把子工作流 End 输出作为自身输出
 - `codex` 节点在执行项目或任务工作目录中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
+- `claude_code` 节点在执行项目或任务工作目录中运行本机 `claude -p`，并把 Claude Code 最终回复作为自身输出
 
 ## 2. 变量系统
 
@@ -26,7 +27,7 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch/codex 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
+变量可用于 prompt/switch/codex/claude_code 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
 
 script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID、JSON 标量等单值时，脚本里优先用 `printf`，不要让末尾换行混进变量。
 
@@ -123,7 +124,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `variables` | VariableBinding[] | 从父工作流参数、上游节点输出或静态值绑定变量 |
 | `paramTemplates` | `Record<string, string>` | 子工作流参数名到模板文本的映射，支持 `{{变量名}}` |
 
-配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 的 key 应来自子工作流参数名。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex 节点仍需要有效项目。
+配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 的 key 应来自子工作流参数名。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex/claude_code 节点仍需要有效项目。
 
 ### codex — Codex 节点
 
@@ -177,6 +178,59 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 未配置 `workingDirectory` 时，Codex 的进程 cwd 和 `--cd` 都使用项目目录。配置后会先插值并去除首尾空白，空值或不存在的目录会让节点直接失败；`workspace-write` 的当前工作区就是这个实际工作目录。该目录不会自动加入 `additionalWritableDirs`，跨目录写入仍需显式配置可写目录。
 
 当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
+
+### claude_code — Claude Code 节点
+
+不需要 provider/modelTier。它默认在解析后的项目目录中运行本机 `claude -p`；也可以通过 `workingDirectory` 指定任务级工作目录。节点会把插值后的提示词作为 print query 传入，并把 Claude Code 最终回复作为节点输出。
+
+配置字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `prompt` | string | Claude Code 指令模板，支持 `{{变量名}}` |
+| `variables` | VariableBinding[] | 从工作流参数、上游节点输出或静态值绑定变量 |
+| `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
+| `workingDirectory` | string? | 可选任务工作目录，支持 `{{变量名}}`；非空时必须已存在，并作为进程 cwd |
+| `timeoutMins` | number? | 节点超时分钟数 |
+| `permissionMode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"auto"` \| `"dontAsk"` \| `"bypassPermissions"` | Claude Code 权限模式 |
+| `model` | string? | 可选 Claude Code CLI 模型名 |
+| `maxTurns` | number? | 可选最大轮数 |
+| `outputFormat` | `"text"` \| `"json"` \| `"stream-json"` | Claude Code 输出格式 |
+| `verbose` | boolean | 是否输出详细运行信息 |
+| `safeMode` | boolean | 是否启用 safe mode |
+| `bareMode` | boolean | 是否启用 bare mode |
+| `noSessionPersistence` | boolean | 是否不保留 Claude Code 会话 |
+| `settingSources` | `("user" \| "project" \| "local")[]` | Claude Code 设置来源，默认 `["user", "project", "local"]` |
+| `settingsPath` | string? | 可选 Claude Code settings 文件路径，支持 `{{变量名}}`，必须存在 |
+| `mcpConfigPath` | string? | 可选 Claude Code MCP 配置文件路径，支持 `{{变量名}}`，必须存在 |
+| `strictMcpConfig` | boolean | 是否传入 strict MCP config |
+| `additionalDirectories` | string[] | 额外可访问目录，支持 `{{变量名}}`，必须存在 |
+| `allowedTools` | string[] | 允许的 Claude Code 工具规则 |
+| `disallowedTools` | string[] | 禁用的 Claude Code 工具规则 |
+| `captureDebugArtifacts` | boolean | 是否保存脱敏调试产物 |
+
+最小有效配置：
+
+```json
+{
+  "prompt": "总结 {{input}}",
+  "variables": [],
+  "permissionMode": "acceptEdits",
+  "outputFormat": "stream-json",
+  "verbose": true,
+  "safeMode": false,
+  "bareMode": false,
+  "noSessionPersistence": false,
+  "settingSources": ["user", "project", "local"],
+  "strictMcpConfig": false,
+  "additionalDirectories": [],
+  "allowedTools": [],
+  "disallowedTools": [],
+  "captureDebugArtifacts": true
+}
+```
+
+未配置 `workingDirectory` 时，Claude Code 的进程 cwd 使用项目目录。配置后会先插值并去除首尾空白，空值或不存在的目录会让节点直接失败。`settingsPath`、`mcpConfigPath` 和 `additionalDirectories` 也会在运行前校验存在。运行历史中的调试信息位于 `outputs.claudeCodeDebug`；下游 `node_output` 只接收最终回复文本。
 
 ### end — 终止节点
 
@@ -422,6 +476,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 - 步骤 5 中 `node.config` 必填，并且必须符合 `workflow_node_type_describe` 返回的节点 schema；position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
 - 创建 `workflow_call` 前，先读取子工作流定义，按子工作流 `params` 填写 `paramTemplates`
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
+- 创建 `claude_code` 前，先用 `workflow_node_type_describe({ nodeType: "claude_code" })` 读取最新 schema；不要给 claude_code 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
 - 步骤 9 可在任何修改后调用，提前发现问题
 - 步骤 11 需轮询直到 status 变为 `completed` / `failed` / `cancelled`
@@ -444,3 +499,5 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | 子工作流模板变量未绑定 | `paramTemplates` 中使用了未出现在 `variables` 的 `{{变量名}}` | 在调用节点 `variables` 中添加绑定 |
 | Codex 项目缺失 | codex 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
 | Codex 工作目录不可用 | `workingDirectory` 插值后为空或目录不存在 | 修正工作目录变量或先创建目标目录 |
+| Claude Code 项目缺失 | claude_code 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
+| Claude Code 路径不可用 | `workingDirectory`、`settingsPath`、`mcpConfigPath` 或 `additionalDirectories` 插值后不存在 | 修正路径变量或先创建目标目录/文件 |
