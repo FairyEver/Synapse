@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
@@ -15,6 +15,8 @@ const MAX = 20
 export class RunSnapshotService {
   constructor(private readonly dataDir: string) {}
   private dir(wfId: string) { return path.join(this.dataDir, "workflow-runs", assertSafeWorkflowId(wfId)) }
+  private runArtifactDir(runId: string) { return path.join(this.dataDir, "workflow-runs", assertSafeWorkflowRunId(runId)) }
+  private runArtifactNodesDir(runId: string) { return path.join(this.runArtifactDir(runId), "nodes") }
   private snapshotTime(s: WorkflowRunSnapshot): number { return s.startedAt || s.endedAt || 0 }
 
   private async readSnapshotFiles(workflowId: string): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {
@@ -109,6 +111,8 @@ export class RunSnapshotService {
   async deleteWorkflow(workflowId: string): Promise<void> {
     const dir = this.dir(workflowId)
     try {
+      const snapshots = await this.readSnapshotFiles(workflowId)
+      await this.deleteRunArtifactDirectories(workflowId, snapshots.map(({ snapshot }) => snapshot.runId))
       await rm(dir, { recursive: true, force: true })
       logger.info("run snapshots deleted for workflow", { workflowId })
     } catch (err) {
@@ -119,6 +123,34 @@ export class RunSnapshotService {
         workflowId,
         ...snapshotErrorMetadata(err),
       })
+      throw err
+    }
+  }
+
+  private async deleteRunArtifactDirectories(workflowId: string, runIds: readonly string[]): Promise<void> {
+    const uniqueRunIds = [...new Set(runIds)]
+    await Promise.all(uniqueRunIds.map(async (runId) => {
+      try {
+        await rm(this.runArtifactNodesDir(runId), { recursive: true, force: true })
+        await this.removeEmptyRunArtifactDirectory(runId)
+        logger.info("run artifacts deleted for workflow", { workflowId, runId })
+      } catch (err) {
+        logger.error("run artifact cleanup failed for workflow", {
+          workflowId,
+          runId,
+          ...snapshotErrorMetadata(err),
+        })
+        throw err
+      }
+    }))
+  }
+
+  private async removeEmptyRunArtifactDirectory(runId: string): Promise<void> {
+    try {
+      await rmdir(this.runArtifactDir(runId))
+    } catch (err) {
+      const code = errorCode(err)
+      if (code === "ENOENT" || code === "ENOTEMPTY" || code === "EEXIST") return
       throw err
     }
   }

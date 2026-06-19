@@ -81,6 +81,20 @@ describe("RunSnapshotService", () => {
     await expect(readdir(escapedDir)).resolves.toEqual(["keep.txt"])
   })
 
+  it("deletes run-id artifact directories referenced by workflow snapshots", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+    await svc.save(snapshot("run-artifacts", 100))
+    const artifactDir = path.join(root, "workflow-runs", "run-artifacts", "nodes", "codex-1", "codex")
+    await mkdir(artifactDir, { recursive: true })
+    await writeFile(path.join(artifactDir, "prompt.txt"), "secret prompt", "utf-8")
+
+    await svc.deleteWorkflow("wf")
+
+    await expect(readdir(path.join(root, "workflow-runs", "wf"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readdir(path.join(root, "workflow-runs", "run-artifacts", "nodes"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("lists snapshots by run start time descending", async () => {
     const svc = new RunSnapshotService(await tmpDir())
     await svc.save(snapshot("older", 100))
