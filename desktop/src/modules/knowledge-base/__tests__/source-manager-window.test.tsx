@@ -638,6 +638,43 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     }))
   })
 
+  it("keeps the URL dialog open when URL source staging is skipped", async () => {
+    bridgeMocks.knowledgeBase.addUrlSource.mockResolvedValueOnce({
+      projectId: "project-1",
+      uploaded: [],
+      skipped: [{ path: "https://example.com/missing", reason: "network_error" }],
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("添加 URL").click()
+      await Promise.resolve()
+    })
+    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="https://example.com/page"]')
+    expect(urlInput).not.toBeNull()
+
+    act(() => {
+      changeInput(urlInput!, "https://example.com/missing")
+    })
+    await act(async () => {
+      buttonByText("添加").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
+        projectId: "project-1",
+        url: "https://example.com/missing",
+      })
+    })
+    const preservedInput = document.querySelector<HTMLInputElement>('input[placeholder="https://example.com/page"]')
+    expect(preservedInput?.value).toBe("https://example.com/missing")
+  })
+
   it("keeps breadcrumbs in a dedicated scroll row below toolbar actions", async () => {
     renderWindow()
 

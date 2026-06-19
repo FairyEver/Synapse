@@ -1079,7 +1079,7 @@ function KnowledgeBaseSourceManagerWindow() {
     if (!payload || !bridge) return
     const url = sourceUrl.trim()
     if (!url) return
-    await promise(
+    const result = await promise(
       async () => {
         const result = await bridge.knowledgeBase.addUrlSource({
           projectId: payload.projectId,
@@ -1094,8 +1094,10 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "添加失败",
       },
     )
-    setSourceUrl("")
-    setAddUrlOpen(false)
+    if (result.uploaded.length > 0) {
+      setSourceUrl("")
+      setAddUrlOpen(false)
+    }
   }, [bridge, payload, promise, refreshDirectory, sourceUrl])
 
   const createFolder = useCallback(async () => {
