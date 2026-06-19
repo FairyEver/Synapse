@@ -35,8 +35,13 @@ function runGitProbe(cwd: string, args: string[]): Promise<string | null> {
   }).then((result) => result.stdout.trim() || null)
 }
 
-class RepositoryStore {
-  private watchers = new Map<string, FSWatcher>()
+type RepositoryWatcherEntry = {
+  readonly localPath: string
+  readonly watcher: FSWatcher
+}
+
+export class RepositoryStore {
+  private watchers = new Map<string, RepositoryWatcherEntry>()
   private disappearedListeners = new Set<(repositoryUuid: string) => void>()
 
   onRepositoryDisappeared(listener: (repositoryUuid: string) => void): () => void {
@@ -45,8 +50,12 @@ class RepositoryStore {
   }
 
   watchRepository(repository: SynapseRepositoryConfig): void {
-    if (this.watchers.has(repository.uuid)) {
+    const existing = this.watchers.get(repository.uuid)
+    if (existing?.localPath === repository.localPath) {
       return
+    }
+    if (existing) {
+      this.unwatchRepository(repository.uuid)
     }
 
     try {
@@ -59,7 +68,10 @@ class RepositoryStore {
         void this.checkDirectoryExists(repository)
       })
 
-      this.watchers.set(repository.uuid, watcher)
+      this.watchers.set(repository.uuid, {
+        localPath: repository.localPath,
+        watcher,
+      })
       logger.debug("Started watching repository directory.", {
         repositoryUuid: repository.uuid,
       })
@@ -69,18 +81,32 @@ class RepositoryStore {
     }
   }
 
-  unwatchRepository(uuid: string): void {
-    const watcher = this.watchers.get(uuid)
+  reconcileRepositories(repositories: SynapseRepositoryConfig[]): void {
+    const nextUuids = new Set(repositories.map((repository) => repository.uuid))
 
-    if (watcher) {
-      watcher.close()
+    for (const uuid of this.watchers.keys()) {
+      if (!nextUuids.has(uuid)) {
+        this.unwatchRepository(uuid)
+      }
+    }
+
+    for (const repository of repositories) {
+      this.watchRepository(repository)
+    }
+  }
+
+  unwatchRepository(uuid: string): void {
+    const entry = this.watchers.get(uuid)
+
+    if (entry) {
+      entry.watcher.close()
       this.watchers.delete(uuid)
     }
   }
 
   unwatchAll(): void {
-    for (const [uuid, watcher] of this.watchers) {
-      watcher.close()
+    for (const [uuid, entry] of this.watchers) {
+      entry.watcher.close()
       this.watchers.delete(uuid)
     }
   }

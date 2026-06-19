@@ -110,6 +110,9 @@ export const configIpcModule: IpcModule = {
         const variableAudits = await authorizeVariablePatch(ctx, patch)
         try {
           const config = await configStore.update(patch)
+          if (patch.repositories !== undefined) {
+            repositoryStore.reconcileRepositories(config.repositories)
+          }
 
           recordVariableAudits(ctx, variableAudits, "allowed")
 

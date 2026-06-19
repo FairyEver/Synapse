@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
     rm: vi.fn(),
     unlink: vi.fn(),
   },
+  repositoryStore: {
+    reconcileRepositories: vi.fn(),
+    unwatchAll: vi.fn(),
+  },
   logger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -57,9 +61,7 @@ vi.mock("../../../services/log-store", () => ({
 }))
 
 vi.mock("../../../services/repository-store", () => ({
-  repositoryStore: {
-    unwatchAll: vi.fn(),
-  },
+  repositoryStore: mocks.repositoryStore,
 }))
 
 vi.mock("../../../database", () => ({
@@ -92,6 +94,19 @@ describe("configIpcModule", () => {
     })
 
     expect(result).toEqual(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
+  })
+
+  it("reconciles repository watchers after repository list updates", async () => {
+    const nextConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    nextConfig.repositories = [repositoryFixture({ uuid: "repo-1", localPath: "/new-repo" })]
+    vi.mocked(configStore.update).mockResolvedValue(nextConfig)
+    const harness = createHarness()
+
+    await harness.invoke("synapse:config:update", {
+      repositories: nextConfig.repositories,
+    })
+
+    expect(mocks.repositoryStore.reconcileRepositories).toHaveBeenCalledWith(nextConfig.repositories)
   })
 
   it("preserves defaultProviderModel through IPC round-trip", async () => {
@@ -401,5 +416,17 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
       defaultProviderModel: null,
       ...agent,
     },
+  }
+}
+
+function repositoryFixture(
+  overrides: Partial<SynapseConfig["repositories"][number]> = {},
+): SynapseConfig["repositories"][number] {
+  return {
+    uuid: "repo-1",
+    name: "Repo",
+    localPath: "/repo",
+    contentDirs: {},
+    ...overrides,
   }
 }
