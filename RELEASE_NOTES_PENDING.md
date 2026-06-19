@@ -56,6 +56,7 @@
 - 网盘整理会阻止把两个同名文件夹移动到同一目标目录，避免整理后出现难以区分的重复文件夹。
 - 修复本地 Drive 存储模式下，文件上传完成后创建历史版本可能失败的问题。使用本地 fallback 存储时，云盘文件现在可以正常完成上传、分享、在线编辑和版本保存。
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
+- 诊断报告中的日志样本会先脱敏再写入详情和 `diagnostics.json`，避免排障包或设置页复制内容泄露 token、Cookie、Authorization 等敏感信息。
 - 工作流实时事件和运行状态会脱敏 Code X 节点结果，避免 token、Cookie、Authorization 和本地路径通过 live 通道泄露。
 - Workflow MCP 读取工作流定义和运行历史时会经过权限检查并写入审计记录，避免敏感工作流内容被静默读取。
 - Content MCP 读取 Rule、Skill 和 Prompt 列表或详情时会经过权限检查并写入审计记录，避免内容资源被静默读取。

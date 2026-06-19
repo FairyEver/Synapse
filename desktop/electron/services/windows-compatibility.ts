@@ -1,7 +1,9 @@
 import os from "node:os"
 import path from "node:path"
 
+import { redactSensitiveText } from "../../src/lib/agent-redaction"
 import { normalizePathForCompare } from "../../src/lib/path-compare"
+import { sanitizeUrl } from "../../src/lib/url-sanitize"
 
 type WindowsCompatibilityPathSet = {
   appPath?: string
@@ -194,7 +196,7 @@ function summarizeWindowsCompatibilityLogSignals(content: string): WindowsCompat
     }
 
     if (samples.length < 5) {
-      samples.push(line.length > 300 ? `${line.slice(0, 300)}...` : line)
+      samples.push(redactWindowsCompatibilityLogSample(line))
     }
   }
 
@@ -205,6 +207,11 @@ function summarizeWindowsCompatibilityLogSignals(content: string): WindowsCompat
     keywords: Array.from(keywords).sort(),
     samples,
   }
+}
+
+function redactWindowsCompatibilityLogSample(line: string): string {
+  const redacted = redactSensitiveText(line.replace(/https?:\/\/[^\s"'<>]+/gi, (url) => sanitizeUrl(url)))
+  return redacted.length > 300 ? `${redacted.slice(0, 300)}...` : redacted
 }
 
 function createEnvSnapshot(

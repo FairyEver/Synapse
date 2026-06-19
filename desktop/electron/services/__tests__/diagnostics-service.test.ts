@@ -77,6 +77,18 @@ describe("summarizeLogSignals", () => {
       ],
     })
   })
+
+  it("redacts sensitive values from recent log samples", () => {
+    const summary = summarizeLogSignals([
+      "[2026-04-29T03:11:18.063Z] [WARN ] failed Authorization: Bearer raw-bearer Cookie: session=raw-cookie token=raw-token at /Users/liyang/project/file.ts",
+    ].join("\n"))
+    const serialized = JSON.stringify(summary.samples)
+
+    expect(serialized).toContain("/Users/liyang/project/file.ts")
+    expect(serialized).not.toContain("raw-bearer")
+    expect(serialized).not.toContain("raw-cookie")
+    expect(serialized).not.toContain("raw-token")
+  })
 })
 
 describe("summarizeWindowsCompatibilityLogSignals", () => {
@@ -103,6 +115,17 @@ describe("summarizeWindowsCompatibilityLogSignals", () => {
       warningCount: 0,
       keywords: [],
     })
+  })
+
+  it("redacts sensitive values from Windows compatibility log samples", () => {
+    const summary = summarizeWindowsCompatibilityLogSignals([
+      "[2026-04-29T03:11:18.063Z] [ERROR] spawn codex.cmd ENOENT Authorization: Bearer raw-bearer token=raw-token at C:\\Users\\liyang\\project\\file.ts",
+    ].join("\n"))
+    const serialized = JSON.stringify(summary.samples)
+
+    expect(serialized).toContain("C:\\\\Users\\\\liyang\\\\project\\\\file.ts")
+    expect(serialized).not.toContain("raw-bearer")
+    expect(serialized).not.toContain("raw-token")
   })
 })
 
@@ -135,6 +158,17 @@ describe("summarizeServiceLifecycle", () => {
     })
     expect(summary.restartTrace).toBe(true)
     expect(summary.rendererRestartTrace).toBe(false)
+  })
+
+  it("redacts sensitive values from lifecycle samples", () => {
+    const summary = summarizeServiceLifecycle([
+      "[2026-04-29T03:31:20.000Z] [INFO ] [main:main] Electron app is ready. Initializing IPC registry. Authorization: Bearer raw-bearer token=raw-token at /Users/liyang/project/file.ts",
+    ].join("\n"))
+    const serialized = JSON.stringify(summary.samples)
+
+    expect(serialized).toContain("/Users/liyang/project/file.ts")
+    expect(serialized).not.toContain("raw-bearer")
+    expect(serialized).not.toContain("raw-token")
   })
 })
 
@@ -1009,6 +1043,7 @@ describe("DiagnosticsService.exportBundle", () => {
     const writtenFiles = new Map<string, string>()
     const logContent = [
       "[2026-04-29T03:31:20.000Z] [INFO] [agent] starting /Users/liyang/project/file.ts",
+      "[2026-04-29T03:31:20.100Z] [WARN] failed Authorization: Bearer report-bearer token=report-token at /Users/liyang/project/file.ts",
       "Authorization: Bearer sk-live-bearer Cookie: session=raw-cookie",
       "{\"apiKey\":\"sk-json-secret\",\"message\":\"ok\",\"dataServerToken\":\"data-server-secret\"}",
       "fetch https://user:password@example.com/callback?token=query-secret&ok=1",
@@ -1018,7 +1053,7 @@ describe("DiagnosticsService.exportBundle", () => {
       logStore: {
         getLogDirectory: () => "/logs",
         listLogFilesInfo: vi.fn(async () => [{ name: "main.log", sizeBytes: logContent.length }]),
-        readLogsByNames: vi.fn(async () => ""),
+        readLogsByNames: vi.fn(async () => logContent),
         flush: vi.fn(async () => undefined),
       },
       readTextFile: vi.fn(async (targetPath: string) => {
@@ -1054,6 +1089,12 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(exportedLog).not.toContain("query-secret")
     expect(exportedLog).not.toContain("sk-env-secret")
     expect(exportedLog).not.toContain("side-token")
+    const diagnosticsPath = findWrittenPath(writtenFiles, `${packagePathSuffix}/diagnostics.json`)
+    const diagnosticsJson = writtenFiles.get(diagnosticsPath ?? "")
+    expect(diagnosticsJson).toBeDefined()
+    expect(diagnosticsJson).toContain("Authorization: Bearer [redacted]")
+    expect(diagnosticsJson).not.toContain("report-bearer")
+    expect(diagnosticsJson).not.toContain("report-token")
   })
 
   it("does not use renderer-provided generatedAt for staging paths", { timeout: 15_000 }, async () => {

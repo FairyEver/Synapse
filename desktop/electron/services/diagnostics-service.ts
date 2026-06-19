@@ -1809,7 +1809,7 @@ function summarizeLogSignals(content: string): {
     }
 
     if (samples.length < RECENT_LOG_SAMPLE_LIMIT) {
-      samples.push(line.length > 300 ? `${line.slice(0, 300)}...` : line)
+      samples.push(redactDiagnosticsLogSample(line))
     }
   }
 
@@ -1935,6 +1935,11 @@ function redactDiagnosticsLogLine(line: string): string {
   return redactSensitiveText(line.replace(/https?:\/\/[^\s"'<>]+/gi, (url) => sanitizeUrl(url)))
 }
 
+function redactDiagnosticsLogSample(line: string): string {
+  const redacted = redactDiagnosticsLogLine(line)
+  return redacted.length > 300 ? `${redacted.slice(0, 300)}...` : redacted
+}
+
 function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
   const samples: string[] = []
   let latestStartupDurationsMs: Record<string, number> = {}
@@ -1949,7 +1954,7 @@ function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {
 
   const recordSample = (line: string) => {
     if (samples.length >= LIFECYCLE_LOG_SAMPLE_LIMIT) return
-    samples.push(line.length > 300 ? `${line.slice(0, 300)}...` : line)
+    samples.push(redactDiagnosticsLogSample(line))
   }
 
   const recordDuration = (key: string, timestamp: LogTimestamp | null) => {
