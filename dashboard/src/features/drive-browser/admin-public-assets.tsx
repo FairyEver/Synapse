@@ -206,8 +206,11 @@ export function AdminPublicAssetDetailsDialog({
 }) {
   const [accessLogPage, setAccessLogPage] = useState(1)
   const accessLogPageSize = 20
+  const [revisionPage, setRevisionPage] = useState(1)
+  const revisionPageSize = 20
   useEffect(() => {
     setAccessLogPage(1)
+    setRevisionPage(1)
   }, [asset?.assetId])
 
   const accessLogs = useQuery({
@@ -221,10 +224,10 @@ export function AdminPublicAssetDetailsDialog({
     enabled: Boolean(asset),
   })
   const revisions = useQuery({
-    queryKey: ['admin-drive-public-asset-revisions', asset?.assetId],
+    queryKey: ['admin-drive-public-asset-revisions', asset?.assetId, revisionPage, revisionPageSize],
     queryFn: () => adminApi.listDrivePublicAssetRevisions(asset!.assetId, {
-      page: 1,
-      pageSize: 20,
+      page: revisionPage,
+      pageSize: revisionPageSize,
       sortBy: 'replacedAt',
       sortOrder: 'desc',
     }),
@@ -258,7 +261,15 @@ export function AdminPublicAssetDetailsDialog({
               />
             </TabsContent>
             <TabsContent value='revisions'>
-              <RevisionTable assetId={asset.assetId} data={revisions.data?.data ?? []} isLoading={revisions.isLoading} />
+              <RevisionTable
+                assetId={asset.assetId}
+                data={revisions.data?.data ?? []}
+                isLoading={revisions.isLoading}
+                page={revisionPage}
+                pageSize={revisionPageSize}
+                total={revisions.data?.total ?? 0}
+                onPageChange={setRevisionPage}
+              />
             </TabsContent>
           </Tabs>
         ) : null}
@@ -310,9 +321,6 @@ export function AccessLogTable({
   readonly total: number
   readonly onPageChange: (page: number) => void
 }) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize))
-  const hasPrevious = page > 1
-  const hasNext = page < pageCount
   return (
     <div className='flex flex-col gap-3'>
       <div className='overflow-hidden rounded-md border'>
@@ -351,29 +359,13 @@ export function AccessLogTable({
           </TableBody>
         </Table>
       </div>
-      {pageCount > 1 ? (
-        <div className='flex items-center justify-end gap-2'>
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            disabled={!hasPrevious || isLoading}
-            onClick={() => onPageChange(page - 1)}
-          >
-            上一页
-          </Button>
-          <span className='text-sm tabular-nums text-muted-foreground'>{page} / {pageCount}</span>
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            disabled={!hasNext || isLoading}
-            onClick={() => onPageChange(page + 1)}
-          >
-            下一页
-          </Button>
-        </div>
-      ) : null}
+      <TablePaginationControls
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        isLoading={isLoading}
+        onPageChange={onPageChange}
+      />
     </div>
   )
 }
@@ -382,55 +374,115 @@ function RevisionTable({
   assetId,
   data,
   isLoading,
+  page,
+  pageSize,
+  total,
+  onPageChange,
 }: {
   readonly assetId: string
   readonly data: readonly AdminDrivePublicAssetRevisionRow[]
   readonly isLoading: boolean
+  readonly page: number
+  readonly pageSize: number
+  readonly total: number
+  readonly onPageChange: (page: number) => void
 }) {
   return (
-    <div className='overflow-hidden rounded-md border'>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>名称</TableHead>
-            <TableHead className='text-right'>大小</TableHead>
-            <TableHead>替换时间</TableHead>
-            <TableHead className='text-right'>操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
+    <div className='flex flex-col gap-3'>
+      <div className='overflow-hidden rounded-md border'>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className='h-20 text-center'>加载中...</TableCell>
+              <TableHead>名称</TableHead>
+              <TableHead className='text-right'>大小</TableHead>
+              <TableHead>替换时间</TableHead>
+              <TableHead className='text-right'>操作</TableHead>
             </TableRow>
-          ) : data.length > 0 ? (
-            data.map((revision) => (
-              <TableRow key={revision.id}>
-                <TableCell>
-                  <div className='min-w-0'>
-                    <div className='truncate font-medium'>{revision.name}</div>
-                    <div className='truncate text-sm text-muted-foreground'>{revision.id}</div>
-                  </div>
-                </TableCell>
-                <TableCell className='text-right tabular-nums'>{formatDriveBytes(revision.size)}</TableCell>
-                <TableCell>{formatDriveBrowserDate(revision.replacedAt)}</TableCell>
-                <TableCell className='text-right'>
-                  <Button asChild variant='ghost' className='h-8 px-2'>
-                    <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, revision.id)}>
-                      <Download />
-                      下载
-                    </a>
-                  </Button>
-                </TableCell>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={4} className='h-20 text-center'>加载中...</TableCell>
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={4} className='h-20 text-center'>暂无历史版本</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            ) : data.length > 0 ? (
+              data.map((revision) => (
+                <TableRow key={revision.id}>
+                  <TableCell>
+                    <div className='min-w-0'>
+                      <div className='truncate font-medium'>{revision.name}</div>
+                      <div className='truncate text-sm text-muted-foreground'>{revision.id}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell className='text-right tabular-nums'>{formatDriveBytes(revision.size)}</TableCell>
+                  <TableCell>{formatDriveBrowserDate(revision.replacedAt)}</TableCell>
+                  <TableCell className='text-right'>
+                    <Button asChild variant='ghost' className='h-8 px-2'>
+                      <a href={adminApi.downloadDrivePublicAssetRevisionUrl(assetId, revision.id)}>
+                        <Download />
+                        下载
+                      </a>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} className='h-20 text-center'>暂无历史版本</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <TablePaginationControls
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        isLoading={isLoading}
+        onPageChange={onPageChange}
+      />
+    </div>
+  )
+}
+
+function TablePaginationControls({
+  page,
+  pageSize,
+  total,
+  isLoading,
+  onPageChange,
+}: {
+  readonly page: number
+  readonly pageSize: number
+  readonly total: number
+  readonly isLoading: boolean
+  readonly onPageChange: (page: number) => void
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const hasPrevious = page > 1
+  const hasNext = page < pageCount
+  if (pageCount <= 1) return null
+
+  return (
+    <div className='flex items-center justify-end gap-2'>
+      <Button
+        type='button'
+        variant='outline'
+        size='sm'
+        disabled={!hasPrevious || isLoading}
+        onClick={() => onPageChange(page - 1)}
+      >
+        上一页
+      </Button>
+      <span className='text-sm tabular-nums text-muted-foreground'>{page} / {pageCount}</span>
+      <Button
+        type='button'
+        variant='outline'
+        size='sm'
+        disabled={!hasNext || isLoading}
+        onClick={() => onPageChange(page + 1)}
+      >
+        下一页
+      </Button>
     </div>
   )
 }
