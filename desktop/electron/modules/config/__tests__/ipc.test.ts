@@ -130,6 +130,81 @@ describe("configIpcModule", () => {
     expect(loggedMessage).not.toContain("内部资料")
   })
 
+  it("checks and audits secret writes for variable patches", async () => {
+    const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    previousConfig.global.variables = [{ name: "TOKEN", value: "old-secret" }]
+    const nextConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    nextConfig.global.variables = [
+      { name: "TOKEN", value: "new-secret" },
+      { name: "BARK_ID", value: "phone-secret", description: "phone push" },
+    ]
+    vi.mocked(configStore.load).mockResolvedValue(previousConfig)
+    vi.mocked(configStore.update).mockResolvedValue(nextConfig)
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+      registerPolicy: vi.fn(),
+    }
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const harness = createHarness({ auditSink, permissionGuard })
+
+    await harness.invoke("synapse:config:update", {
+      global: { variables: nextConfig.global.variables },
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:BARK_ID",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:user:BARK_ID",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("new-secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("phone-secret")
+  })
+
+  it("records failed secret write audits when variable patch persistence fails", async () => {
+    const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    previousConfig.global.variables = [{ name: "TOKEN", value: "old-secret" }]
+    vi.mocked(configStore.load).mockResolvedValue(previousConfig)
+    vi.mocked(configStore.update).mockRejectedValue(new Error("disk full: new-secret"))
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+      registerPolicy: vi.fn(),
+    }
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const harness = createHarness({ auditSink, permissionGuard })
+
+    await expect(harness.invoke("synapse:config:update", {
+      global: { variables: [{ name: "TOKEN", value: "new-secret" }] },
+    })).rejects.toThrow("disk full")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "failed",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("new-secret")
+  })
+
   it("ignores legacy conversation rollover prompt patches through IPC", async () => {
     vi.mocked(configStore.update).mockResolvedValue(
       configFixture({
@@ -272,6 +347,10 @@ describe("configIpcModule", () => {
 })
 
 function createHarness(options: {
+  readonly permissionGuard?: {
+    readonly check: ReturnType<typeof vi.fn>
+    readonly registerPolicy: ReturnType<typeof vi.fn>
+  }
   readonly auditSink?: {
     readonly clearForTests: ReturnType<typeof vi.fn>
     readonly flush?: ReturnType<typeof vi.fn>
@@ -282,10 +361,10 @@ function createHarness(options: {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
     if (serviceId === "core.permission-guard") {
-      return {
+      return (options.permissionGuard ?? {
         check: vi.fn().mockResolvedValue({ allowed: true }),
         registerPolicy: vi.fn(),
-      } as T
+      }) as T
     }
     if (serviceId === "core.audit-sink") {
       return (options.auditSink ?? {

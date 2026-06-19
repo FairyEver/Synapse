@@ -9,10 +9,11 @@ import { z } from "zod"
 import { app, BrowserWindow } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
-import type { IpcModule } from "../../runtime/ipc/types"
-import type { AuditSink, PermissionGuard } from "../../runtime/security"
-import type { SynapseConfigPatch } from "../../../src/types/config"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
+import type { SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
 import { sanitizeConfigPatchForLog } from "../../../src/lib/config-log-redaction"
+import { checkCapabilityPermission } from "../../capabilities/permission-audit"
 import { configBackupService } from "../../services/config-backup-service"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
@@ -69,6 +70,17 @@ const importResultSchema = z.object({
   filePath: z.string(),
 }).nullable()
 
+type VariableAuditPlan = {
+  readonly name: string
+  readonly change: "create" | "update" | "delete"
+}
+
+type VariableAuditEntry = {
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+  readonly actor: ActorIdentity
+}
+
 export const configIpcModule: IpcModule = {
   id: "config",
   methods: {
@@ -93,15 +105,26 @@ export const configIpcModule: IpcModule = {
       channel: "synapse:config:update",
       request: configPatchSchema,
       response: configSchema,
-      handler: async (_ctx, patch: SynapseConfigPatch) => {
+      handler: async (ctx, patch: SynapseConfigPatch) => {
         logger.info(`Handling config.update request. patch: ${JSON.stringify(sanitizeConfigPatchForLog(patch))}`)
-        const config = await configStore.update(patch)
+        const variableAudits = await authorizeVariablePatch(ctx, patch)
+        try {
+          const config = await configStore.update(patch)
 
-        logger.info(
-          `Config updated. activeRepoUuid: ${config.activeRepoUuid}, repositoryCount: ${config.repositories.length}`
-        )
+          recordVariableAudits(ctx, variableAudits, "allowed")
 
-        return config
+          logger.info(
+            `Config updated. activeRepoUuid: ${config.activeRepoUuid}, repositoryCount: ${config.repositories.length}`
+          )
+
+          return config
+        } catch (error) {
+          recordVariableAudits(ctx, variableAudits, "failed", {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: String(error).length,
+          })
+          throw error
+        }
       },
     },
     exportBackup: {
@@ -331,6 +354,152 @@ export const configIpcModule: IpcModule = {
     },
   },
   events: {},
+}
+
+function extractVariablePatch(patch: SynapseConfigPatch): readonly SynapseVariable[] | null {
+  if (!patch || typeof patch !== "object") {
+    return null
+  }
+  const globalPatch = (patch as { global?: unknown }).global
+  if (!globalPatch || typeof globalPatch !== "object") {
+    return null
+  }
+  const variables = (globalPatch as { variables?: unknown }).variables
+  if (!Array.isArray(variables)) {
+    return null
+  }
+  if (!variables.every(isVariablePatchItem)) {
+    return null
+  }
+  return variables
+}
+
+function isVariablePatchItem(value: unknown): value is SynapseVariable {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+  const item = value as { name?: unknown; value?: unknown; description?: unknown }
+  return typeof item.name === "string"
+    && typeof item.value === "string"
+    && (item.description === undefined || typeof item.description === "string")
+}
+
+async function authorizeVariablePatch(
+  ctx: IpcHandlerContext,
+  patch: SynapseConfigPatch,
+): Promise<readonly VariableAuditEntry[]> {
+  const nextVariables = extractVariablePatch(patch)
+  if (!nextVariables) {
+    return []
+  }
+
+  const previousConfig = await configStore.load()
+  const plans = buildVariableAuditPlans(previousConfig.global.variables, nextVariables)
+  if (plans.length === 0) {
+    return []
+  }
+
+  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  const audits: VariableAuditEntry[] = []
+
+  for (const plan of plans) {
+    const resource = `variable:user:${plan.name}`
+    const metadata = {
+      source: "settings",
+      variableAction: "config.update.variables",
+      variableName: plan.name,
+      change: plan.change,
+      includeValue: false,
+    }
+    const permission = await checkCapabilityPermission({
+      permissionGuard,
+      auditSink,
+      action: "secret.write",
+      actor,
+      resource,
+      context: metadata,
+    })
+
+    if (permission && !permission.allowed) {
+      auditSink.record({
+        action: "secret.write",
+        actor,
+        resource,
+        outcome: "denied",
+        metadata: {
+          ...metadata,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+
+    audits.push({ actor, resource, metadata })
+  }
+
+  return audits
+}
+
+function buildVariableAuditPlans(
+  previousVariables: readonly SynapseVariable[],
+  nextVariables: readonly SynapseVariable[],
+): readonly VariableAuditPlan[] {
+  const previousByName = toVariableMap(previousVariables)
+  const nextByName = toVariableMap(nextVariables)
+  const plans: VariableAuditPlan[] = []
+
+  for (const [normalizedName, previous] of previousByName) {
+    if (!nextByName.has(normalizedName)) {
+      plans.push({ name: previous.name, change: "delete" })
+    }
+  }
+
+  for (const [normalizedName, next] of nextByName) {
+    const previous = previousByName.get(normalizedName)
+    if (!previous) {
+      plans.push({ name: next.name, change: "create" })
+      continue
+    }
+    if (hasVariableChanged(previous, next)) {
+      plans.push({ name: next.name, change: "update" })
+    }
+  }
+
+  return plans
+}
+
+function toVariableMap(variables: readonly SynapseVariable[]): Map<string, SynapseVariable> {
+  return new Map(variables.map((variable) => [variable.name.toLowerCase(), variable]))
+}
+
+function hasVariableChanged(previous: SynapseVariable, next: SynapseVariable): boolean {
+  return previous.name !== next.name
+    || previous.value !== next.value
+    || (previous.description ?? "") !== (next.description ?? "")
+}
+
+function recordVariableAudits(
+  ctx: IpcHandlerContext,
+  audits: readonly VariableAuditEntry[],
+  outcome: "allowed" | "failed",
+  metadata?: Record<string, unknown>,
+): void {
+  if (audits.length === 0) {
+    return
+  }
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+  for (const audit of audits) {
+    auditSink.record({
+      action: "secret.write",
+      actor: audit.actor,
+      resource: audit.resource,
+      outcome,
+      metadata: metadata ? { ...audit.metadata, ...metadata } : audit.metadata,
+    })
+  }
 }
 
 async function flushAuditSink(auditSink: AuditSink): Promise<void> {
