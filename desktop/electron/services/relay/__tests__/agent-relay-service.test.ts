@@ -45,7 +45,7 @@ describe("AgentRelayService", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "agent.spawn",
       actor: { kind: "agent", id: "relay" },
-      resource: "relay:target:relay:source:bridge:s1",
+      resource: expect.stringMatching(/^relay:target:[a-f0-9]{16}$/u),
       context: expect.objectContaining({
         sourceProjectId: "source",
         sourceSessionKey: "bridge:s1",
@@ -56,7 +56,7 @@ describe("AgentRelayService", () => {
     expect(auditSink.list()[0]).toMatchObject({
       action: "agent.spawn",
       actor: { kind: "agent", id: "relay" },
-      resource: "relay:target:relay:source:bridge:s1",
+      resource: expect.stringMatching(/^relay:target:[a-f0-9]{16}$/u),
       outcome: "denied",
       metadata: expect.objectContaining({
         sourceProjectId: "source",
@@ -67,6 +67,56 @@ describe("AgentRelayService", () => {
         policyId: "policy-1",
       }),
     })
+    expect(auditSink.list()[0]?.resource).not.toContain("bridge:s1")
+    expect(auditSink.list()[0]?.resource).not.toContain("relay:source")
+  })
+
+  it("audits permission check failures without raw relay session keys in resource", async () => {
+    const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
+    const auditSink = new InMemoryAuditSink()
+    const permissionGuard = {
+      check: vi.fn(async () => {
+        throw new Error("permission backend unavailable")
+      }),
+    }
+    const agent = successAgent("done")
+    const service = new AgentRelayService({
+      projectContainers: fakeProjectContainers(agent),
+      bindings: new MemoryNamespace<RelayBindingEntryV1>("relay.bindings"),
+      runs,
+      listProjects: async () => [
+        { projectId: "source", name: "Source" },
+        { projectId: "target", name: "Target" },
+      ],
+      permissionGuard: permissionGuard as never,
+      auditSink,
+      now: () => new Date("2026-05-14T00:00:00.000Z"),
+    })
+
+    await expect(service.send({
+      sourceProjectId: "source",
+      sourceSessionKey: "bridge:s1",
+      targetProjectId: "target",
+      message: "user prompt body",
+    })).rejects.toThrow("Agent relay spawn permission check failed")
+
+    expect(await runs.list()).toEqual([])
+    expect(agent.sendSideSessionWithTimeout).not.toHaveBeenCalled()
+    expect(auditSink.list()[0]).toMatchObject({
+      action: "agent.spawn",
+      actor: { kind: "agent", id: "relay" },
+      resource: expect.stringMatching(/^relay:target:[a-f0-9]{16}$/u),
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        sourceProjectId: "source",
+        sourceSessionKey: "bridge:s1",
+        targetProjectId: "target",
+        targetSessionKey: "relay:source:bridge:s1",
+        error: "Error (30 chars)",
+      }),
+    })
+    expect(auditSink.list()[0]?.resource).not.toContain("bridge:s1")
+    expect(auditSink.list()[0]?.resource).not.toContain("relay:source")
   })
 
   it("logs relay Agent runtime failures with correlation context without persisting raw error text", async () => {

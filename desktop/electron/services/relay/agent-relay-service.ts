@@ -343,7 +343,7 @@ function relaySessionKey(sourceProjectId: string, sourceSessionKey: string): str
 }
 
 function relayAuditResource(targetProjectId: string, targetSessionKey: string): string {
-  return `relay:${targetProjectId}:${targetSessionKey}`
+  return `relay:${targetProjectId}:${sessionKeyHash(targetProjectId, targetSessionKey)}`
 }
 
 function sessionKeyHash(projectId: string, sessionKey: string): string {
