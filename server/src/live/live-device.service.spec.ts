@@ -267,16 +267,14 @@ describe("LiveDeviceService", () => {
       sortOrder: "desc",
     })
 
-    expect(prisma.userDevice.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      skip: 0,
-      take: 20,
+    expect(prisma.userDevice.findMany).toHaveBeenNthCalledWith(1, {
       orderBy: { lastSeenAt: "desc" },
       include: {
         user: {
           select: { id: true, email: true, displayName: true },
         },
       },
-    }))
+    })
     expect(result).toEqual({
       data: [
         expect.objectContaining({
@@ -340,5 +338,46 @@ describe("LiveDeviceService", () => {
       page: 1,
       pageSize: 20,
     })
+  })
+
+  it("paginates admin live-only clients together with persisted device rows", async () => {
+    const prisma = createPrismaMock()
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([
+        device({
+          clientInstanceId: "client-a",
+          lastSeenAt: new Date("2026-06-06T10:00:00.000Z"),
+          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+        }),
+        device({
+          id: "device-b",
+          clientInstanceId: "client-b",
+          lastSeenAt: new Date("2026-06-06T09:59:00.000Z"),
+          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+        }),
+      ])
+      .mockResolvedValueOnce([])
+    prisma.userDevice.count.mockResolvedValue(2)
+    const registry = new LiveClientRegistry()
+    registerClient(registry, {
+      clientInstanceId: "client-live-only",
+      connectionId: "conn-live-only",
+      deviceName: "Live Mac",
+    })
+    const service = new LiveDeviceService(prisma as unknown as PrismaService, registry)
+
+    const result = await service.listAdminDevices({
+      page: 1,
+      pageSize: 2,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
+
+    expect(result.total).toBe(3)
+    expect(result.data).toHaveLength(2)
+    expect(result.data.map((row) => row.clientInstanceId)).toEqual([
+      "client-live-only",
+      "client-a",
+    ])
   })
 })

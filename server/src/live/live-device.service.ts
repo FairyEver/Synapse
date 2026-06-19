@@ -121,9 +121,10 @@ export class LiveDeviceService {
 
   async listAdminDevices(pagination: PaginationQuery): Promise<PaginatedResponse<DashboardDeviceRow>> {
     const liveClients = this.registry.listAll()
+    const { orderBy } = toPrismaArgs(pagination)
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.userDevice.findMany({
-        ...toPrismaArgs(pagination),
+        orderBy,
         include: {
           user: {
             select: { id: true, email: true, displayName: true },
@@ -145,12 +146,14 @@ export class LiveDeviceService {
     const liveOnlyDevices = Array.from(liveByKey.values())
       .filter((live) => !liveKeysWithRows.has(deviceKey(live.userId, live.clientInstanceId)))
       .map((live) => toLiveOnlyDeviceRow(live, { includeUser: true }))
+    const offset = (pagination.page - 1) * pagination.pageSize
+    const data = [
+      ...devices,
+      ...liveOnlyDevices,
+    ].sort(compareDevicesByObservedAt)
 
     return {
-      data: [
-        ...devices,
-        ...(pagination.page === 1 ? liveOnlyDevices : []),
-      ].sort(compareDevicesByObservedAt),
+      data: data.slice(offset, offset + pagination.pageSize),
       total: total + liveOnlyDevices.length,
       page: pagination.page,
       pageSize: pagination.pageSize,
