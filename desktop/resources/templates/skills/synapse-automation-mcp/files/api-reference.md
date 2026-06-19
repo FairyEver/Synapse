@@ -54,6 +54,8 @@ Returns one public item summary or `null`.
 
 ### automation_item_create
 
+For command or script executors, start from the `defaultConfig` returned by `automation_executor_type_list`, then override the user-requested command, script, timeout, or environment fields. Do not set `shell` unless the user explicitly requests a non-default shell.
+
 Input:
 
 ```json
@@ -69,7 +71,7 @@ Input:
   },
   "executor": {
     "type": "builtin.command",
-    "config": { "command": "date", "shell": "posix", "timeoutMins": 30 }
+    "config": { "command": "date", "timeoutMins": 30 }
   },
   "policy": { "missedRunPolicy": "skip", "overlapPolicy": "skip" }
 }

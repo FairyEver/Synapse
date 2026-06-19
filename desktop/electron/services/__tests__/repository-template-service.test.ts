@@ -55,6 +55,18 @@ describe("RepositoryTemplateService", () => {
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
   })
 
+  it("does not force a POSIX shell in Automation MCP create examples", async () => {
+    const seeds = await readRepositorySeedContents()
+    const automationSkill = seeds.find((seed) => seed.id === "synapse-automation-mcp")
+    const apiReference = automationSkill?.attachments
+      ?.find((attachment) => attachment.originalName === "api-reference.md")
+    const apiText = apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : ""
+
+    expect(apiText).toContain("automation_executor_type_list")
+    expect(apiText).toContain("defaultConfig")
+    expect(apiText).not.toContain('"shell": "posix"')
+  })
+
   it("documents safe Model Price MCP rule operations in the built-in skill", async () => {
     const seeds = await readRepositorySeedContents()
     const modelPriceSkill = seeds.find((seed) => seed.id === "synapse-model-price-mcp")
