@@ -17,6 +17,7 @@ type ZipArchiveMessages = {
 type ZipArchiveOptions = {
   actor?: ActorIdentity
   messages?: ZipArchiveMessages
+  platform?: NodeJS.Platform
   processRunner?: Pick<ControlledProcessRunner, "run">
   timeoutMs?: number
 }
@@ -129,13 +130,15 @@ async function createZipArchive(
   options?: ZipArchiveOptions,
 ): Promise<void> {
   const messages = resolveMessages(options?.messages)
+  const platform = options?.platform ?? process.platform
   const timeoutMs = options?.timeoutMs
 
-  if (process.platform === "win32") {
+  if (platform === "win32") {
+    const sourceDirectoryName = path.basename(sourceDirectoryPath)
     const script = [
       "Compress-Archive",
       "-LiteralPath",
-      escapePowerShellSingleQuotedString(sourceDirectoryPath),
+      escapePowerShellSingleQuotedString(sourceDirectoryName),
       "-DestinationPath",
       escapePowerShellSingleQuotedString(outputFilePath),
       "-CompressionLevel",
@@ -151,13 +154,14 @@ async function createZipArchive(
       script,
     ], messages, {
       actor: options?.actor,
+      cwd: path.dirname(sourceDirectoryPath),
       processRunner: options?.processRunner,
       timeoutMs,
     })
     return
   }
 
-  if (process.platform === "darwin") {
+  if (platform === "darwin") {
     await runArchiveCommand("ditto", [
       "-c",
       "-k",

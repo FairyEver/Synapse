@@ -41,6 +41,30 @@ describe("createZipArchive", () => {
     }))
   })
 
+  it("keeps the source directory as the top-level zip entry on Windows", async () => {
+    const processRunner = createProcessRunner()
+    const sourceDirectoryPath = "/tmp/synapse package"
+
+    await createZipArchive(sourceDirectoryPath, "/tmp/export.zip", {
+      actor: { kind: "user" },
+      platform: "win32",
+      processRunner,
+    })
+
+    expect(processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "powershell.exe",
+      cwd: "/tmp",
+      args: expect.arrayContaining([
+        expect.stringContaining("-LiteralPath 'synapse package'"),
+      ]),
+    }))
+    expect(processRunner.run).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        expect.stringContaining("-LiteralPath '/tmp/synapse package'"),
+      ]),
+    }))
+  })
+
   it("redacts process output before including it in archive failure errors", async () => {
     const processRunner = createProcessRunner({
       exitCode: 1,
