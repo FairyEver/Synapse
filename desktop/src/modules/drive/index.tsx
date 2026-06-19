@@ -2807,7 +2807,7 @@ function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLoca
 }
 
 function countDriveLocalUploadItems(items: readonly DriveLocalUploadItem[]): number {
-  return items.length
+  return items.reduce((count, item) => count + (item.kind === "folder" ? item.files.length : 1), 0)
 }
 
 function driveLoadError(error: unknown): DriveLoadError {

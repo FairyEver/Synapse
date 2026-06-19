@@ -1034,6 +1034,29 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
   })
 
+  it("counts files across multiple dropped folders before uploading", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    const fullFolderEntries = Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_FILES }, (_, index) => (
+      createFileEntry(`first-${index}.txt`, new File(["content"], `first-${index}.txt`, { type: "text/plain" }))
+    ))
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [
+        createDirectoryTransferItem("first", fullFolderEntries),
+        createDirectoryTransferItem("second", [
+          createFileEntry("overflow.txt", new File(["overflow"], "overflow.txt", { type: "text/plain" })),
+        ]),
+      ],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
+  })
+
   it("shows cancel share as the shared row action", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
