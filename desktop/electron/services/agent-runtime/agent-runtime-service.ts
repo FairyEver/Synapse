@@ -90,6 +90,7 @@ import {
   sanitizePermissionRawInput,
   sanitizePermissionText,
 } from "./permission-sanitize"
+import { redactSensitiveText } from "./redaction"
 import { markCancelRequested } from "./turn-outcome"
 
 interface CommandExecutionRunner {
@@ -1340,7 +1341,7 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
     exitCode: result.exitCode,
     signal: result.signal,
   })
-  return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
+  return output ? `${status}\n\n${truncateRunes(redactSensitiveText(output), 4000)}` : status
 }
 
 function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number } {

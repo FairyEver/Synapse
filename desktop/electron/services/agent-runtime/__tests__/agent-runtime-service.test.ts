@@ -454,6 +454,54 @@ describe("AgentRuntimeService", () => {
     }))
   })
 
+  it("redacts sensitive custom command output before persisting it", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const customCommands = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    await customCommands.addExec({
+      name: "leaky-env",
+      exec: "env",
+      createdBy: "user-1",
+    })
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: [
+        "SYNAPSE_SIDE_CHANNEL_TOKEN=side-token",
+        "Authorization: Bearer bearer-token",
+        "Cookie: sid=cookie-token",
+        "read /Users/liyang/project/file.ts",
+      ].join("\n"),
+      stderr: "token=stderr-token",
+      timedOut: false,
+      durationMs: 1,
+    }))
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      customCommands,
+      commandRunner: { run },
+      now: fixedNow,
+    })
+
+    const result = await service.send({ ...baseMessage("/leaky-env"), platform: "local-renderer" })
+    const conversation = await conversations.get(result.conversationId)
+    const serialized = JSON.stringify([result, conversation])
+
+    expect(serialized).toContain("[redacted]")
+    expect(serialized).toContain("/Users/liyang/project/file.ts")
+    expect(serialized).not.toContain("side-token")
+    expect(serialized).not.toContain("bearer-token")
+    expect(serialized).not.toContain("cookie-token")
+    expect(serialized).not.toContain("stderr-token")
+  })
+
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new HangingSession()
