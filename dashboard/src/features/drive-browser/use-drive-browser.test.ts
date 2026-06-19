@@ -133,6 +133,49 @@ describe('toDriveBrowserQueryKey', () => {
     expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.current.id : null).toBe('folder-2')
     expect(hook.result.current.status === 'ready' ? hook.result.current.loadMoreChildrenError : null).toBeNull()
   })
+
+  it('ignores duplicate load-more requests for the same child page', async () => {
+    const firstSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-1')],
+      childrenPage: { hasMore: true, limit: 50, nextOffset: 50 },
+    })
+    const nextSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-2')],
+      childrenPage: { hasMore: false, limit: 50, nextOffset: null },
+    })
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(firstSnapshot)
+      .mockResolvedValueOnce(nextSnapshot)
+      .mockResolvedValueOnce(nextSnapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'folder-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      hook.result.current.loadMoreChildren?.()
+      hook.result.current.loadMoreChildren?.()
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.children.map((child) => child.id) : [])
+        .toEqual(['file-1', 'file-2'])
+    })
+
+    expect(driveBrowserApi.getOwnerItem).toHaveBeenCalledTimes(2)
+    expect(driveBrowserApi.getOwnerItem).toHaveBeenLastCalledWith('folder-1', 'console', {
+      childrenOffset: 50,
+      childrenLimit: 50,
+    })
+  })
 })
 
 function baseCurrent(): DriveBrowserSnapshotDto['current'] {
@@ -161,6 +204,20 @@ function createSnapshot(overrides: Partial<DriveBrowserSnapshotDto> = {}): Drive
     canDownload: true,
     canZip: false,
     ...overrides,
+  }
+}
+
+function createChild(id: string): DriveBrowserSnapshotDto['children'][number] {
+  return {
+    id,
+    name: `${id}.txt`,
+    type: 'file',
+    size: '1',
+    mimeType: 'text/plain',
+    updatedAt: '2026-06-13T00:00:00.000Z',
+    browserUrl: `/drive/items/${id}`,
+    downloadUrl: `/drive/items/${id}/download`,
+    previewKind: 'text',
   }
 }
 

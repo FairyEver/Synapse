@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DriveBrowserPasswordRequiredDto,
@@ -54,6 +54,7 @@ type DriveBrowserLoadOptions = {
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const [unlockedSnapshot, setUnlockedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
   const [pagedSnapshot, setPagedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
+  const loadingChildrenPageKeyRef = useRef<string | null>(null)
   const queryKeyPayload = useMemo(() => toDriveBrowserQueryKey(input), [input])
   const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
@@ -75,7 +76,8 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     },
   })
   const loadMoreMutation = useMutation({
-    mutationFn: async (snapshot: DriveBrowserSnapshotDto) => {
+    mutationFn: async (variables: { readonly snapshot: DriveBrowserSnapshotDto; readonly pageKey: string }) => {
+      const snapshot = variables.snapshot
       const nextOffset = snapshot.childrenPage?.nextOffset
       if (nextOffset === null || nextOffset === undefined) throw new Error('没有更多文件。')
       const result = await loadDriveBrowser(input, {
@@ -83,6 +85,11 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         childrenLimit: snapshot.childrenPage?.limit,
       })
       return requireDriveBrowserSnapshot(result)
+    },
+    onSettled: (_data, _error, variables) => {
+      if (loadingChildrenPageKeyRef.current === variables.pageKey) {
+        loadingChildrenPageKeyRef.current = null
+      }
     },
     onSuccess: (nextSnapshot) => {
       if (unlockedSnapshot) {
@@ -98,6 +105,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   useEffect(() => {
     setUnlockedSnapshot(null)
     setPagedSnapshot(null)
+    loadingChildrenPageKeyRef.current = null
     loadMoreMutation.reset()
   }, [queryKeySignature])
 
@@ -137,7 +145,12 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       status: 'ready',
       snapshot,
       loadMoreChildren: snapshot.childrenPage?.hasMore
-        ? () => loadMoreMutation.mutate(snapshot)
+        ? () => {
+            const pageKey = driveBrowserChildrenPageKey(snapshot)
+            if (loadingChildrenPageKeyRef.current === pageKey) return
+            loadingChildrenPageKeyRef.current = pageKey
+            loadMoreMutation.mutate({ snapshot, pageKey })
+          }
         : undefined,
       loadingMoreChildren: loadMoreMutation.isPending,
       loadMoreChildrenError: loadMoreMutation.error ? getErrorMessage(loadMoreMutation.error) : null,
@@ -250,4 +263,14 @@ function mergeDriveBrowserSnapshots(
     ...next,
     children: [...current.children, ...next.children],
   }
+}
+
+function driveBrowserChildrenPageKey(snapshot: DriveBrowserSnapshotDto): string {
+  return [
+    snapshot.context,
+    snapshot.surface,
+    snapshot.current.id,
+    snapshot.childrenPage?.nextOffset ?? '',
+    snapshot.childrenPage?.limit ?? '',
+  ].join(':')
 }
