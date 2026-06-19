@@ -5,9 +5,11 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { SynapseAccountState } from "@/types/account"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 
 const mocks = vi.hoisted(() => ({
+  accountState: { status: "unauthenticated" } as SynapseAccountState,
   loadEditors: vi.fn(),
   prepare: vi.fn(),
   recordComplete: vi.fn(),
@@ -26,6 +28,7 @@ const editor: SynapseEditorAdapterSummary = {
 
 vi.mock("@/app-shell/account", () => ({
   useAccount: () => ({
+    state: mocks.accountState,
     startLogin: mocks.startLogin,
   }),
 }))
@@ -103,6 +106,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  mocks.accountState = { status: "unauthenticated" }
   vi.clearAllMocks()
 })
 
@@ -154,27 +158,72 @@ describe("ContentStoreInstallWindowPage", () => {
     expect(document.body.textContent).toContain("已安装")
   })
 
-  it("shows login action when the session cannot be resolved for the current account", async () => {
+  it("continues preparing the install package after browser login completes", async () => {
     mocks.resolve
       .mockResolvedValueOnce({ status: "unauthenticated" })
-      .mockResolvedValueOnce({ status: "unauthenticated" })
-    mocks.startLogin.mockResolvedValue({ status: "authenticated" })
+      .mockResolvedValueOnce({
+        status: "ready",
+        session: {
+          id: "session-1",
+          contentId: "content-1",
+          versionId: "version-1",
+          type: "skill",
+          title: "Store Skill",
+          packageSha256: "a".repeat(64),
+          expiresAt: "2026-06-10T00:00:00.000Z",
+        },
+      })
+    mocks.prepare.mockResolvedValue({
+      status: "prepared",
+      source: {
+        id: "prepared-1",
+        contentId: "content-1",
+        versionId: "version-1",
+        type: "skill",
+        title: "Store Skill",
+        mainFile: "content/SKILL.md",
+        mainContent: "# Store Skill\n",
+        files: [{ path: "content/SKILL.md", size: 14, kind: "text" }],
+      },
+    })
+    mocks.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://auth.example/login" })
 
-    await renderPage()
+    const root = await renderPage()
 
     expect(document.body.textContent).toContain("需要登录")
 
     await act(async () => {
       clickButton("登录")
       await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     expect(mocks.startLogin).toHaveBeenCalledTimes(1)
     expect(mocks.prepare).not.toHaveBeenCalled()
+
+    mocks.accountState = {
+      status: "authenticated",
+      connectivity: "online",
+      profile: {
+        syncedAt: "2026-06-10T00:00:00.000Z",
+        teams: [],
+        user: {
+          displayName: "User",
+          email: "user@example.com",
+          id: "user-1",
+          status: "active",
+        },
+      },
+    }
+    await rerenderPage(root)
+
+    expect(mocks.prepare).toHaveBeenCalledWith("session-1")
+    expect(document.body.textContent).toContain("选择编辑器")
   })
 })
 
-async function renderPage() {
+async function renderPage(): Promise<Root> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -182,6 +231,17 @@ async function renderPage() {
 
   await act(async () => {
     root.render(<ContentStoreInstallWindowPage request={{ session: "session-1" }} />)
+    await Promise.resolve()
+  })
+  return root
+}
+
+async function rerenderPage(root: Root) {
+  await act(async () => {
+    root.render(<ContentStoreInstallWindowPage request={{ session: "session-1" }} />)
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
     await Promise.resolve()
   })
 }

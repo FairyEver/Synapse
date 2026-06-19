@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CheckCircle2, CircleAlert, LogIn, RotateCw } from "lucide-react"
 import { recordContentStoreInstallComplete } from "@/app-shell/content-store-install"
 import { useAccount } from "@/app-shell/account"
@@ -44,6 +44,7 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
   const { load, markCompleted, state } = useContentStoreInstall(request.session)
   const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const authenticatedRetrySessionRef = useRef<string | null>(null)
 
   const source = state.status === "ready" ? state.source : null
   const item = useMemo(() => source ? toContentMeta(source) : null, [source])
@@ -75,9 +76,22 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
   }, [resetAndLoad])
 
   const startLogin = useCallback(async () => {
-    await account.startLogin()
-    await resetAndLoad()
+    const nextState = await account.startLogin()
+    if (nextState.status === "authenticated") {
+      await resetAndLoad()
+    }
   }, [account, resetAndLoad])
+
+  useEffect(() => {
+    if (account.state.status !== "authenticated") {
+      authenticatedRetrySessionRef.current = null
+      return
+    }
+    if (state.status !== "unauthenticated") return
+    if (authenticatedRetrySessionRef.current === request.session) return
+    authenticatedRetrySessionRef.current = request.session
+    void resetAndLoad()
+  }, [account.state.status, request.session, resetAndLoad, state.status])
 
   const handleInstalled = useCallback(async () => {
     await recordContentStoreInstallComplete(request.session)
