@@ -19,7 +19,7 @@ import { errorLogMeta } from "../utils"
 
 import "streamdown/styles.css"
 
-const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
+const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^)]+\)|(?:file:\/\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]|\.{1,2}[\\/]|\/|[\w.-]+[\\/])[^\s`),]+(?::\d+(?::\d+)?)?)/g
 const OBSIDIAN_WIKILINK_PATTERN = /!?\[\[([^\]\r\n]+)\]\]/g
 const SHORT_UPPERCASE_PATH_PATTERN = /^[A-Z0-9]{2,6}(?:\/[A-Z0-9]{2,6})+$/
 const TRAILING_REFERENCE_PUNCTUATION_PATTERN = /[.,;:!?，。；：！？]+$/
@@ -478,7 +478,7 @@ function wrapLocalReferencesInPlainText(content: string): string {
     if (match.startsWith("[")) return match
     if (!shouldWrapLocalReference(match, offset, content)) return match
     const { reference, suffix } = splitTrailingReferencePunctuation(match)
-    return `[${reference}](${markdownLinkHref(reference)})${suffix}`
+    return `[${reference}](${markdownLinkDestination(reference)})${suffix}`
   })
 }
 
@@ -515,13 +515,30 @@ function escapeMarkdownStrongText(value: string): string {
 }
 
 function markdownLinkHref(reference: string): string {
-  if (reference.startsWith("file://")
+  if (isWindowsPathReference(reference)) {
+    return `./${reference}`
+  }
+  if (isAbsoluteLocalReferenceHref(reference)
     || reference.startsWith("./")
     || reference.startsWith("../")
-    || reference.startsWith("/")) {
+    || reference.startsWith(".\\")
+    || reference.startsWith("..\\")) {
     return reference
   }
   return `./${reference}`
+}
+
+function markdownLinkDestination(reference: string): string {
+  const href = markdownLinkHref(reference)
+  return href.includes("\\") ? `<${href}>` : href
+}
+
+function isWindowsPathReference(reference: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(reference)
+    || /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(reference)
+    || reference.startsWith(".\\")
+    || reference.startsWith("..\\")
+    || /^[\w.-]+\\/.test(reference)
 }
 
 function splitTrailingReferencePunctuation(match: string): {
@@ -560,11 +577,19 @@ function isProtocolUrlMatch(reference: string, content: string, offset: number):
 }
 
 function isLocalReferenceHref(href: string): boolean {
-  return href.startsWith("file://")
+  return isAbsoluteLocalReferenceHref(href)
     || href.startsWith("./")
     || href.startsWith("../")
+    || href.startsWith(".\\")
+    || href.startsWith("..\\")
+    || /^[\w.-]+[\\/]/.test(href)
+}
+
+function isAbsoluteLocalReferenceHref(href: string): boolean {
+  return href.startsWith("file://")
     || href.startsWith("/")
-    || /^[\w.-]+\//.test(href)
+    || /^[A-Za-z]:[\\/]/.test(href)
+    || /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(href)
 }
 
 function streamdownLinkReference(href: string | undefined, children: ReactNode): string | undefined {

@@ -295,6 +295,16 @@ describe("AgentMessageEvent", () => {
     expect(wrapped).toBe("Open [./README.md](./README.md). Then inspect [desktop/src/App.tsx:12](./desktop/src/App.tsx:12);")
   })
 
+  it("wraps Windows local references in assistant plain text", () => {
+    const wrapped = wrapLocalReferences(
+      String.raw`Open C:\workspace\project\src\app.ts:12, \\server\share\file.md and src\file.ts.`,
+    )
+
+    expect(wrapped).toBe(
+      String.raw`Open [C:\workspace\project\src\app.ts:12](<./C:\workspace\project\src\app.ts:12>), [\\server\share\file.md](<./\\server\share\file.md>) and [src\file.ts](<./src\file.ts>).`,
+    )
+  })
+
   it("tracks assistant code block copy clicks without logging code content", async () => {
     vi.mocked(window.navigator.clipboard.writeText).mockResolvedValue(undefined)
     const container = document.createElement("div")
@@ -458,6 +468,51 @@ describe("AgentMessageEvent", () => {
       },
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("./private/secret-file.ts")
+  })
+
+  it("opens Windows local references from assistant messages", async () => {
+    const onOpenReference = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const windowsReference = String.raw`C:\workspace\project\src\app.ts:12`
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-windows-reference",
+            kind: "message",
+            role: "assistant",
+            content: `Open ${windowsReference}`,
+            timestamp: "2026-04-27T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const links = Array.from(container.querySelectorAll<HTMLAnchorElement>("a"))
+    const linkSummaries = links.map((link) => ({
+      href: link.getAttribute("href"),
+      reference: link.getAttribute("data-reference"),
+      text: link.textContent,
+    }))
+    expect(linkSummaries).toContainEqual({
+      href: expect.any(String),
+      reference: windowsReference,
+      text: windowsReference,
+    })
+    const link = links.find((item) => item.getAttribute("data-reference") === windowsReference)
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onOpenReference).toHaveBeenCalledWith(windowsReference)
+    expect(shellBridge.openExternal).not.toHaveBeenCalled()
   })
 
   it("does not log raw external link credentials when opening fails", async () => {
