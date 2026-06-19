@@ -67,7 +67,7 @@ function AgentUserQuestionCard({
     if (submitting || !complete) return
     setSubmitting(true)
     const answerRecord = Object.fromEntries(
-      questions.map((question, index) => [question.question, (answers[index] ?? []).join(", ")]),
+      questions.map((question, index) => [questionAnswerKey(question, index), (answers[index] ?? []).join(", ")]),
     )
     track({
       component: "agent",
@@ -296,7 +296,9 @@ function parseQuestions(rawQuestions: readonly unknown[]): readonly SynapseAgent
     })
     if (options.some((option) => !option)) return []
     const header = typeof record?.header === "string" ? record.header : undefined
+    const id = questionId(record)
     questions.push({
+      ...(id ? { id } : {}),
       question,
       ...(header ? { header } : {}),
       options: options as SynapseAgentUserQuestion["options"],
@@ -304,6 +306,16 @@ function parseQuestions(rawQuestions: readonly unknown[]): readonly SynapseAgent
     })
   }
   return questions
+}
+
+function questionAnswerKey(question: SynapseAgentUserQuestion, index: number): string {
+  return questionId(question as unknown as Record<string, unknown>) ?? `question-${index}`
+}
+
+function questionId(record: Record<string, unknown> | undefined): string | undefined {
+  const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
+  if (id) return id
+  return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {

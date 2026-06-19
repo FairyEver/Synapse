@@ -833,8 +833,10 @@ function parseAskUserQuestions(input: Record<string, unknown>): readonly AgentUs
     const options = parseAskUserQuestionOptions(record?.options)
     if (!question || !options) return undefined
     const header = stringValue(record?.header)
+    const id = stringValue(record?.id) ?? stringValue(record?.key)
     const multiSelect = typeof record?.multiSelect === "boolean" ? record.multiSelect : false
     questions.push({
+      ...(id ? { id } : {}),
       question,
       ...(header ? { header } : {}),
       options,

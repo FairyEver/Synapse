@@ -592,7 +592,9 @@ function questionsMetadata(
     })
     if (options.some((option) => !option)) return undefined
     const header = typeof record?.header === "string" ? record.header : undefined
+    const id = questionId(record)
     questions.push({
+      ...(id ? { id } : {}),
       question,
       ...(header ? { header } : {}),
       options: options as SynapseAgentUserQuestion["options"],
@@ -600,6 +602,12 @@ function questionsMetadata(
     })
   }
   return questions.length > 0 ? questions : undefined
+}
+
+function questionId(record: Record<string, unknown> | undefined): string | undefined {
+  const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
+  if (id) return id
+  return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {

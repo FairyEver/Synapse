@@ -107,6 +107,8 @@ export interface AgentUserQuestionOption {
 }
 
 export interface AgentUserQuestion {
+  readonly id?: string
+  readonly key?: string
   readonly question: string
   readonly header?: string
   readonly options?: readonly AgentUserQuestionOption[]

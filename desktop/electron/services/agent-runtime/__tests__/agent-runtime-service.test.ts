@@ -821,6 +821,50 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
+  it("rejects AskUserQuestion allow responses that do not cover every question", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [
+      {
+        question: "请选择处理方式",
+        header: "当前文件",
+        options: [{ label: "保留当前" }, { label: "覆盖当前" }],
+        multiSelect: false,
+      },
+      {
+        question: "请选择处理方式",
+        header: "目标文件",
+        options: [{ label: "保留目标" }, { label: "覆盖目标" }],
+        multiSelect: false,
+      },
+    ]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "unused")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choices"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "请选择处理方式": "保留目标" } },
+      actor: { kind: "user" },
+    })).rejects.toThrow("继续前需要回答所有问题。")
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "未收到选择，已停止操作。",
+    }])
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
   it("uses empty answer stop wording for AskUserQuestion deny responses without answers", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{

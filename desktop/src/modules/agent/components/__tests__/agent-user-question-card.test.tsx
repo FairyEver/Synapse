@@ -118,10 +118,56 @@ describe("AgentUserQuestionCard", () => {
 
     expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
       questions,
-      answers: { "该怎么处理？": "重试" },
+      answers: { "question-0": "重试" },
     })
     expect(container.textContent).not.toContain("允许")
     expect(container.textContent).not.toContain("拒绝")
+  })
+
+  it("submits duplicate question text answers with stable per-question keys", async () => {
+    const duplicateQuestions = [
+      {
+        question: "请选择处理方式",
+        header: "当前文件",
+        options: [
+          { label: "保留当前" },
+          { label: "覆盖当前" },
+        ],
+        multiSelect: false,
+      },
+      {
+        question: "请选择处理方式",
+        header: "目标文件",
+        options: [
+          { label: "保留目标" },
+          { label: "覆盖目标" },
+        ],
+        multiSelect: false,
+      },
+    ]
+    const onRespond: ComponentProps<typeof AgentUserQuestionCard>["onRespond"] = vi.fn(async () => undefined)
+    const container = renderCard(onRespond, {
+      ...questionItem,
+      questions: duplicateQuestions,
+      toolInputRaw: { questions: duplicateQuestions },
+    })
+
+    act(() => {
+      optionButton(container, "覆盖当前").click()
+      optionButton(container, "保留目标").click()
+    })
+    await act(async () => {
+      buttonByText(container, "提交").click()
+      await Promise.resolve()
+    })
+
+    expect(onRespond).toHaveBeenCalledWith("request-1", "allow", {
+      questions: duplicateQuestions,
+      answers: {
+        "question-0": "覆盖当前",
+        "question-1": "保留目标",
+      },
+    })
   })
 
   it("can skip a pending question without treating it as approval", async () => {

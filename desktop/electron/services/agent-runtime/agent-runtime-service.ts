@@ -27,6 +27,7 @@ import type { ModelPriceRule } from "../model-price"
 import { AgentCommandRouter } from "./command-router"
 import {
   AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE,
+  AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE,
   AGENT_ASK_USER_QUESTION_ANSWERS_REQUIRED_MESSAGE,
   AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE,
   AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE,
@@ -1305,11 +1306,42 @@ function askUserQuestionUpdatedInput(
   if (!Array.isArray(questions)) {
     throw new Error(AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE)
   }
+  assertAskUserQuestionAnswersCoverQuestions(answers, questions)
   return {
     ...request.updatedInput,
     questions,
     answers,
   }
+}
+
+function assertAskUserQuestionAnswersCoverQuestions(
+  answers: Record<string, unknown>,
+  questions: readonly unknown[],
+): void {
+  if (Object.keys(answers).length < questions.length) {
+    throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
+  }
+  const missingAnswer = questions.some((question, index) => {
+    const record = recordValue(question)
+    const stableKey = askUserQuestionAnswerKey(record, index)
+    const textKey = stringRecordValue(record?.question)
+    return !hasAnswerValue(answers[stableKey]) && (!textKey || !hasAnswerValue(answers[textKey]))
+  })
+  if (missingAnswer) {
+    throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
+  }
+}
+
+function askUserQuestionAnswerKey(question: Record<string, unknown> | undefined, index: number): string {
+  return stringRecordValue(question?.id) ?? stringRecordValue(question?.key) ?? `question-${index}`
+}
+
+function hasAnswerValue(value: unknown): boolean {
+  return typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null
+}
+
+function stringRecordValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
 function askUserQuestionResponseMessage(request: AgentPermissionResponseRequest): string | undefined {

@@ -12,6 +12,8 @@ export interface SynapseAgentUserQuestionOption {
 }
 
 export interface SynapseAgentUserQuestion {
+  readonly id?: string
+  readonly key?: string
   readonly question: string
   readonly header?: string
   readonly options?: readonly SynapseAgentUserQuestionOption[]
