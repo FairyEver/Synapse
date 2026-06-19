@@ -302,6 +302,34 @@ describe("UpdateService", () => {
     }))
   })
 
+  it("does not poll update metadata every minute after the startup auto check", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    updateService.initialize()
+    const noUpdateCheck = async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.32" })
+      return {
+        isUpdateAvailable: false,
+        updateInfo: { version: "0.2.32" },
+        versionInfo: { version: "0.2.32" },
+      }
+    }
+    updaterMock.autoUpdater.checkForUpdates
+      .mockImplementationOnce(noUpdateCheck)
+      .mockImplementationOnce(noUpdateCheck)
+
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000 - 60_000)
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
+  })
+
   it("opens a main window before broadcasting the update page from notification clicks with no live windows", async () => {
     vi.useFakeTimers()
     updaterMock.notificationSupported = true

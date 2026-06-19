@@ -20,7 +20,7 @@ import { createMainLogger } from "./log-store"
 const autoUpdater: AppUpdater = electronUpdater.autoUpdater
 const logger = createMainLogger("updater")
 
-const AUTO_CHECK_INTERVAL_MS = 60_000
+const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
 const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
 
