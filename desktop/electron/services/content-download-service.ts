@@ -138,7 +138,7 @@ class ContentDownloadService {
         await mkdir(stagingDirectoryPath, { recursive: true })
         logger.info("Created staging directory for zip export.", { stagingDirectoryPath: path.basename(stagingDirectoryPath) })
 
-        const mainFilePath = path.join(stagingDirectoryPath, "main.md")
+        const mainFilePath = path.join(stagingDirectoryPath, "SKILL.md")
         await writeFile(mainFilePath, `${detail.content}\n`, "utf8")
         logger.info("Wrote main content to staging.", { filePath: path.basename(mainFilePath) })
 

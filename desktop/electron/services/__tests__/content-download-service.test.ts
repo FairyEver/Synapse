@@ -125,6 +125,21 @@ describe("ContentDownloadService", () => {
     expect(await readFile(targetPath, "utf8")).toBe("zip-by-runtime-archive")
   })
 
+  it("stages skill archives with SKILL.md as the main file", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skill.zip")
+    mocks.getDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.createZipArchive.mockImplementationOnce(async (sourceDirectoryPath: string, outputFilePath: string) => {
+      await expect(readFile(path.join(sourceDirectoryPath, "SKILL.md"), "utf8")).resolves.toBe("# Test Skill\n\n")
+      await expect(readFile(path.join(sourceDirectoryPath, "main.md"), "utf8")).rejects.toThrow()
+      await writeFile(outputFilePath, "zip-by-runtime-archive", "utf8")
+    })
+
+    await contentDownloadService.downloadSkill("skill-1", targetPath)
+
+    expect(await readFile(targetPath, "utf8")).toBe("zip-by-runtime-archive")
+  })
+
   it("rejects repository skill downloads when an attachment cannot be copied", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skill.zip")
