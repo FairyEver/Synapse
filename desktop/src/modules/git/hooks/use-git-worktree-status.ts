@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitDiffResult, SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 
@@ -10,23 +10,36 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
   const [loading, setLoading] = useState(true)
   const [diffLoading, setDiffLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const diffRequestIdRef = useRef(0)
 
   const loadDiff = useCallback(async (file: SynapseGitFileChange | null) => {
+    const requestId = diffRequestIdRef.current + 1
+    diffRequestIdRef.current = requestId
     setSelectedFile(file)
     setDiff(null)
-    if (!file) return
+    if (!file) {
+      setDiffLoading(false)
+      return
+    }
     setDiffLoading(true)
     try {
-      setDiff(await requireSynapseBridge().git.getDiff({
+      const nextDiff = await requireSynapseBridge().git.getDiff({
         repositoryId: repository.id,
         path: file.path,
         originalPath: file.originalPath,
         staged: file.staged,
-      }))
+      })
+      if (diffRequestIdRef.current === requestId) {
+        setDiff(nextDiff)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取文件差异失败。")
+      if (diffRequestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : "读取文件差异失败。")
+      }
     } finally {
-      setDiffLoading(false)
+      if (diffRequestIdRef.current === requestId) {
+        setDiffLoading(false)
+      }
     }
   }, [repository.id])
 
