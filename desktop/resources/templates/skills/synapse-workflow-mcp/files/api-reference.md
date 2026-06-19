@@ -62,7 +62,7 @@ No provider needed. Config fields:
 No provider needed. Config fields:
 
 - `script` (string) — shell script content
-- `shell` (enum: posix/cmd/powershell, default "posix")
+- `shell?` (enum: posix/cmd/powershell) — platform default when omitted: Windows uses `cmd`; macOS/Linux use `posix`. Set `posix` explicitly only when the workflow should require a POSIX shell.
 - `env?` (object) — key-value environment variables
 - `pathStrategy?` (enum: merge/replace) — PATH handling
 - `posixLogin?` (boolean) — run as login shell (posix only)
