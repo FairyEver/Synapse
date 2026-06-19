@@ -2,12 +2,18 @@ import { useCallback, useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitCommitDetail, SynapseGitCommitSummary, SynapseGitRepository } from "@/types/git"
 
-export function useGitHistory(repository: SynapseGitRepository) {
+type UseGitHistoryOptions = {
+  readonly enabled?: boolean
+}
+
+export function useGitHistory(repository: SynapseGitRepository, options: UseGitHistoryOptions = {}) {
+  const enabled = options.enabled ?? true
   const [commits, setCommits] = useState<readonly SynapseGitCommitSummary[]>([])
   const [selectedCommit, setSelectedCommit] = useState<SynapseGitCommitDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   const loadCommit = useCallback(async (hash: string) => {
     setDetailLoading(true)
@@ -31,22 +37,20 @@ export function useGitHistory(repository: SynapseGitRepository) {
         offset: 0,
       })
       setCommits(next)
-      const first = next[0]
-      if (first) {
-        await loadCommit(first.hash)
-      } else {
-        setSelectedCommit(null)
-      }
+      setSelectedCommit(null)
+      setHasLoaded(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取历史失败。")
+      setHasLoaded(true)
     } finally {
       setLoading(false)
     }
-  }, [loadCommit, repository.id])
+  }, [repository.id])
 
   useEffect(() => {
+    if (!enabled || hasLoaded) return
     void refresh()
-  }, [refresh])
+  }, [enabled, hasLoaded, refresh])
 
-  return { commits, selectedCommit, loading, detailLoading, error, refresh, loadCommit }
+  return { commits, selectedCommit, loading, detailLoading, error, hasLoaded, refresh, loadCommit }
 }

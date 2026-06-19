@@ -98,9 +98,22 @@ describe("GitWorkbench", () => {
   it("shows current branch history", async () => {
     await renderWorkbench(roots)
 
+    expect(bridge.git.listHistory).not.toHaveBeenCalled()
+    expect(bridge.git.getCommit).not.toHaveBeenCalled()
+
     await click(findButton("历史"))
+    expect(bridge.git.listHistory).toHaveBeenCalledWith({
+      repositoryId: "repo-1",
+      limit: 40,
+      offset: 0,
+    })
     expect(document.body.textContent).toContain("更新文档")
     expect(document.body.textContent).toContain("abc123")
+    expect(bridge.git.getCommit).not.toHaveBeenCalled()
+
+    await click(findButton("更新文档"))
+    expect(bridge.git.getCommit).toHaveBeenCalledWith("repo-1", "abc")
+    expect(document.body.textContent).toContain("+hello")
   })
 
   it("does not leave a surface gap between tabs and content", () => {
@@ -253,6 +266,7 @@ describe("GitWorkbench", () => {
         loading: false,
         detailLoading: false,
         error: null,
+        hasLoaded: true,
         refresh: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}
@@ -284,6 +298,7 @@ describe("GitWorkbench", () => {
         loading: false,
         detailLoading: false,
         error: null,
+        hasLoaded: true,
         refresh: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}
@@ -380,6 +395,7 @@ describe("GitWorkbench", () => {
         loading: false,
         detailLoading: false,
         error: null,
+        hasLoaded: true,
         refresh: vi.fn(async () => undefined),
         loadCommit: vi.fn(async () => undefined),
       }}

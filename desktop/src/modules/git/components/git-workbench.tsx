@@ -35,14 +35,16 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const [operationError, setOperationError] = useState<string | null>(null)
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const status = useGitWorktreeStatus(repository)
-  const history = useGitHistory(repository)
+  const history = useGitHistory(repository, { enabled: view === "history" })
   const currentBranch = status.snapshot?.currentBranch ?? null
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
 
   const refreshAll = async () => {
     await status.refresh()
-    await history.refresh()
+    if (history.hasLoaded) {
+      await history.refresh()
+    }
   }
 
   const refreshAfterBranchChange = async () => {
@@ -217,7 +219,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             repository={repository}
             status={status}
             pushDisabled={busy !== null}
-            onCommitted={history.refresh}
+            onCommitted={history.hasLoaded ? history.refresh : undefined}
             onPush={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
           />
         </TabsContent>
