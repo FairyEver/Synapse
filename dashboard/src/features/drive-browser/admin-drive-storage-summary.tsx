@@ -21,9 +21,19 @@ type StorageRow = {
   bucket: 'normalDrive' | 'publicAssets'
 }
 
+type StorageTotalRow = {
+  label: string
+  value: (total: AdminDriveStorageSummaryDto['total']) => string
+}
+
 const storageRows: StorageRow[] = [
   { label: '普通文件', bucket: 'normalDrive' },
   { label: '公开素材', bucket: 'publicAssets' },
+]
+
+const storageTotalRows: StorageTotalRow[] = [
+  { label: '配额计入', value: (total) => formatDriveBytes(total.quotaBytes) },
+  { label: '管理员可见', value: (total) => formatDriveBytes(total.adminVisibleBytes) },
 ]
 
 export function AdminDriveStorageSummary() {
@@ -74,16 +84,20 @@ export function AdminDriveStorageSummary() {
               <TableCell className='text-right text-muted-foreground'>-</TableCell>
               <TableCell className='text-right text-muted-foreground'>-</TableCell>
             </TableRow>
-            <TableRow>
-              <TableCell className='font-medium'>合计</TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {data ? formatDriveBytes(data.total.quotaBytes) : '-'}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {data ? formatDriveBytes(data.total.adminVisibleBytes) : '-'}
-              </TableCell>
-              <TableCell className='text-right text-muted-foreground'>-</TableCell>
-            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+      <div className='overflow-hidden rounded-md border'>
+        <Table aria-label='存储汇总'>
+          <TableBody>
+            {storageTotalRows.map((row) => (
+              <TableRow key={row.label}>
+                <TableCell className='font-medium'>{row.label}</TableCell>
+                <TableCell className='text-right tabular-nums'>
+                  {data ? row.value(data.total) : '-'}
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>

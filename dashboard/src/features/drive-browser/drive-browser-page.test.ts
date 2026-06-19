@@ -104,6 +104,37 @@ describe('drive browser view model', () => {
     expect(adminPublicAssetsSource).toContain('历史版本')
   })
 
+  it('renders admin storage totals outside lifecycle bucket columns', () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(['admin-drive-storage-summary'], {
+      normalDrive: {
+        active: { count: 1, bytes: '1024' },
+        trashed: { count: 2, bytes: '2048' },
+        hidden: { count: 3, bytes: '4096' },
+      },
+      publicAssets: {
+        active: { count: 4, bytes: '8192' },
+        trashed: { count: 5, bytes: '16384' },
+        hidden: { count: 6, bytes: '32768' },
+      },
+      publicAssetRevisions: { count: 7, bytes: '65536' },
+      total: {
+        quotaBytes: '131072',
+        adminVisibleBytes: '262144',
+      },
+    })
+
+    const summaryHtml = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(AdminDriveStorageSummary)
+      )
+    )
+
+    expect(summaryHtml).toContain('配额计入')
+    expect(summaryHtml).toContain('管理员可见')
+    expect(summaryHtml).not.toContain('>合计<')
+  })
+
   it('renders access log pagination controls when more pages exist', () => {
     const html = renderToStaticMarkup(
       createElement(AccessLogTable, {
