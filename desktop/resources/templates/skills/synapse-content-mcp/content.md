@@ -48,7 +48,7 @@ For Skill resources, use one of these attachment modes:
 
 Do not provide both `files` and `sourceDirectoryPath`.
 
-When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths or path traversal. The server normalizes paths, rejects duplicates, skips unsafe names from source directories, and enforces count and size limits.
+When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths, path traversal, `SKILL.md`, or `.synapse.json`. The server normalizes paths, rejects duplicates and Skill install control files, skips unsafe names from source directories, and enforces count and size limits.
 
 When using `sourceDirectoryPath`, the server reads the Skill main file and imports non-hidden attachments. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
 

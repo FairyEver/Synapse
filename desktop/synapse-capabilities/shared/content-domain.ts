@@ -114,7 +114,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
     properties.files = {
       type: "array",
       items: skillFileSchema,
-      description: "Attachment files. Mutually exclusive with sourceDirectoryPath.",
+      description: "Attachment files. Mutually exclusive with sourceDirectoryPath. Paths are relative to the Skill root and cannot be SKILL.md or .synapse.json.",
     }
     properties.sourceDirectoryPath = stringField("Local Skill directory to import. Mutually exclusive with files.")
   }

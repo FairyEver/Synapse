@@ -72,6 +72,8 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 }
 ```
 
+`files` are attachments only. Do not include `SKILL.md` or `.synapse.json`; Synapse generates those install files from the Skill body and repository metadata.
+
 To import an existing Skill directory:
 
 ```json

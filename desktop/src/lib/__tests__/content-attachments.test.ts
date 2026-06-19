@@ -57,4 +57,13 @@ describe("normalizeContentAttachmentPath", () => {
     expect(() => assertUniqueContentAttachmentPaths(["assets/e\u0301.txt", "assets/é.txt"]))
       .toThrow("附件文件名重复：assets/é.txt")
   })
+
+  it("rejects root Skill install control files as attachments", () => {
+    expect(() => assertUniqueContentAttachmentPaths(["skill.md"]))
+      .toThrow("附件路径不能使用 Skill 安装保留文件：skill.md")
+    expect(() => assertUniqueContentAttachmentPaths([".Synapse.JSON"]))
+      .toThrow("附件路径不能使用 Skill 安装保留文件：.Synapse.JSON")
+    expect(() => assertUniqueContentAttachmentPaths(["references/SKILL.md"]))
+      .not.toThrow()
+  })
 })

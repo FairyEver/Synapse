@@ -1,6 +1,6 @@
 import path from "node:path"
 import type { PrepareSkillDirectoryContext } from "../main-types"
-import { normalizeContentAttachmentPath } from "../../lib/content-attachments"
+import { assertUniqueContentAttachmentPaths, normalizeContentAttachmentPath } from "../../lib/content-attachments"
 import { SYNAPSE_SKILL_ID_FILE_NAME } from "../../../electron/services/editor-adapters/skill-identity"
 import { serializeSkillFrontmatter } from "./shared-skill-frontmatter"
 
@@ -17,6 +17,12 @@ async function writeSynapseSkillDirectory({
   targetPath,
   writeTextFile,
 }: PrepareSkillDirectoryContext): Promise<void> {
+  const attachments = detail.attachments.map((attachment) => ({
+    ...attachment,
+    originalName: normalizeContentAttachmentPath(attachment.originalName),
+  }))
+  assertUniqueContentAttachmentPaths(attachments.map((attachment) => attachment.originalName))
+
   const skillMainContent = serializeSkillFrontmatter({
     description: detail.description,
     name: path.basename(targetPath),
@@ -35,14 +41,14 @@ async function writeSynapseSkillDirectory({
     }, null, 2),
   )
 
-  for (const attachment of detail.attachments) {
-    const originalName = normalizeContentAttachmentPath(attachment.originalName)
+  for (const attachment of attachments) {
+    const originalName = attachment.originalName
     if (!originalName) {
       throw new Error("附件文件名不能为空。")
     }
 
     await copyAttachment(
-      { ...attachment, originalName },
+      attachment,
       path.join(stagingDirectoryPath, originalName),
     )
   }

@@ -62,4 +62,16 @@ describe("writeSynapseSkillDirectory", () => {
       }, null, 2),
     )
   })
+
+  it("rejects attachments that would overwrite generated install files", async () => {
+    const { context } = createContext()
+    context.detail.attachments = [
+      { originalName: "SKILL.md", sha256: "sha-skill", size: 10 },
+      { originalName: ".synapse.json", sha256: "sha-meta", size: 10 },
+    ]
+
+    await expect(writeSynapseSkillDirectory(context))
+      .rejects.toThrow("附件路径不能使用 Skill 安装保留文件：SKILL.md")
+    expect(context.copyAttachment).not.toHaveBeenCalled()
+  })
 })

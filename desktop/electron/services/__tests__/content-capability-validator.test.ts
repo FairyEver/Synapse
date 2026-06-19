@@ -187,6 +187,34 @@ describe("content capability validator", () => {
     })).toThrow(ContentCapabilityError)
   })
 
+  it("rejects skill attachments that target generated install files", () => {
+    expect(() => normalizeCreateContentParams("skill", {
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      files: [{ path: "SKILL.md", contentText: "# Replacement" }],
+    })).toThrowError("附件路径不能使用 Skill 安装保留文件：SKILL.md")
+
+    expect(() => normalizeUpdateContentParams("skill", {
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      files: [{ path: ".synapse.json", contentText: "{}" }],
+    })).toThrowError("附件路径不能使用 Skill 安装保留文件：.synapse.json")
+  })
+
   it("rejects files and sourceDirectoryPath together", () => {
     expect(() => normalizeCreateContentParams("skill", {
       name: "test-skill",

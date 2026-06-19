@@ -2,6 +2,9 @@ import { normalizePathForCompare } from "./path-compare"
 
 const WINDOWS_RESERVED_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
 const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*", "/", "\\"])
+const SKILL_ATTACHMENT_RESERVED_INSTALL_PATHS = new Set(
+  ["SKILL.md", ".synapse.json"].map((value) => normalizePathForCompare(value, { platform: "win32" })),
+)
 
 function normalizeContentAttachmentPath(originalName: string): string {
   return originalName
@@ -36,6 +39,9 @@ function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): v
       throw new Error("附件文件名不能为空。")
     }
     const windowsPathKey = normalizePathForCompare(normalized, { platform: "win32" })
+    if (SKILL_ATTACHMENT_RESERVED_INSTALL_PATHS.has(windowsPathKey)) {
+      throw new Error(`附件路径不能使用 Skill 安装保留文件：${normalized}`)
+    }
     if (seen.has(windowsPathKey)) {
       throw new Error(`附件文件名重复：${normalized}`)
     }
