@@ -457,9 +457,12 @@ describe("createDriveCapabilityDispatcher", () => {
       page: drivePage(),
     }
     const restored = driveItem({ id: "item-1", name: "old.png" })
+    const restoredAsset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", name: "logo.png" })
     const listDriveTrash = vi.fn(async () => trashPage)
     const deleteDriveTrashItem = vi.fn(async () => ({ ok: true as const }))
-    const restoreDriveTrashItem = vi.fn(async () => restored)
+    const restoreDriveTrashItem = vi.fn(async (input: { readonly itemId: string }) => (
+      input.itemId === "item-public" ? restoredAsset : restored
+    ))
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ listDriveTrash, deleteDriveTrashItem, restoreDriveTrashItem }),
     })
@@ -470,10 +473,20 @@ describe("createDriveCapabilityDispatcher", () => {
       .resolves.toEqual({ ok: true, data: { ok: true } })
     await expect(dispatcher.dispatch("drive.item.restore", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: restored })
+    await expect(dispatcher.dispatch("drive.item.restore", {
+      itemId: "item-public",
+      kind: "public_asset",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: restoredAsset })
 
     expect(listDriveTrash).toHaveBeenCalledWith({ offset: 1, limit: 20 })
     expect(deleteDriveTrashItem).toHaveBeenCalledWith("item-1")
     expect(restoreDriveTrashItem).toHaveBeenCalledWith({ itemId: "item-1" })
+    expect(restoreDriveTrashItem).toHaveBeenCalledWith({
+      itemId: "item-public",
+      kind: "public_asset",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    })
   })
 
   it("returns preview snapshots and text content without creating shares", async () => {

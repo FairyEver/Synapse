@@ -329,7 +329,7 @@ Input:
 
 ### `drive_trash_list`
 
-List user-visible Drive trash, including normal Drive files and public assets.
+List user-visible Drive trash, including normal Drive files and public assets. Rows from this list can be restored with `drive_item_restore`; keep `kind` and `assetId` for public asset rows.
 
 Input:
 
@@ -346,11 +346,13 @@ Input:
 
 ### `drive_item_restore`
 
-Restore a Drive item from trash.
+Restore a Drive item from trash. For public asset rows returned by `drive_trash_list`, pass `kind: "public_asset"` and the row `assetId`.
 
 Input:
 
 - `itemId` required.
+- `kind` optional. Pass the row value from `drive_trash_list`; supported values are `normal` and `public_asset`.
+- `assetId` required when `kind` is `public_asset`.
 
 ## Safety Notes
 

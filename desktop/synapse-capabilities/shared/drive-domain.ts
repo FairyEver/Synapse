@@ -489,11 +489,17 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_restore",
-      description: "Restore a Drive item from trash.",
+      description: "Restore a Drive item from trash. For public_asset rows returned by drive_trash_list, pass kind and assetId.",
       inputSchema: {
         type: "object",
         properties: {
           itemId: stringField("Trashed Drive item id to restore."),
+          kind: {
+            type: "string",
+            enum: ["normal", "public_asset"],
+            description: "Trash item kind from drive_trash_list. Pass public_asset together with assetId for public assets.",
+          },
+          assetId: stringField("Public asset id from drive_trash_list. Required when kind is public_asset."),
         },
         required: ["itemId"],
       },

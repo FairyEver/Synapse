@@ -26,6 +26,7 @@ import type {
   DriveShareDto,
   DriveShareListPageDto,
   DriveStatsDto,
+  DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
@@ -115,7 +116,11 @@ type DriveAccountServicePort = {
   readonly restoreDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
   readonly listDriveTrash: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
   readonly deleteDriveTrashItem: (itemId: string) => Promise<{ ok: true }>
-  readonly restoreDriveTrashItem: (input: { readonly itemId: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
+  readonly restoreDriveTrashItem: (input: {
+    readonly itemId: string
+    readonly kind?: DriveTrashItemDto["kind"]
+    readonly assetId?: string
+  }) => Promise<DriveItemDto | DrivePublicAssetDto>
 }
 
 type FileSystemPort = {
@@ -386,7 +391,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.item.restore":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.restoreDriveTrashItem({ itemId: requireString(params, "itemId") }),
+            data: await deps.accountService.restoreDriveTrashItem(parseDriveTrashRestoreInput(params)),
           }))
         default:
           throw new Error(`Unknown drive action: ${action}`)
@@ -903,6 +908,30 @@ function requireString(params: Record<string, unknown>, key: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function parseDriveTrashRestoreInput(params: Record<string, unknown>): {
+  readonly itemId: string
+  readonly kind?: DriveTrashItemDto["kind"]
+  readonly assetId?: string
+} {
+  const itemId = requireString(params, "itemId")
+  const kind = optionalDriveTrashItemKind(params.kind)
+  const assetId = optionalString(params.assetId)
+  if (kind === "public_asset" && assetId === undefined) {
+    throw new Error("Missing or invalid 'assetId': expected non-empty string for public_asset trash items")
+  }
+  return {
+    itemId,
+    ...(kind === undefined ? {} : { kind }),
+    ...(assetId === undefined ? {} : { assetId }),
+  }
+}
+
+function optionalDriveTrashItemKind(value: unknown): DriveTrashItemDto["kind"] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === "normal" || value === "public_asset") return value
+  throw new Error("Missing or invalid 'kind': expected normal or public_asset")
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {

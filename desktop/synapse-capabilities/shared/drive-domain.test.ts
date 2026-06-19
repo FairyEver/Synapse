@@ -112,7 +112,11 @@ describe("Drive capability domain", () => {
       required: ["itemId"],
     })
     expect(tools.get("drive_item_restore")?.inputSchema).toMatchObject({
-      properties: { itemId: { type: "string" } },
+      properties: {
+        itemId: { type: "string" },
+        kind: { type: "string", enum: ["normal", "public_asset"] },
+        assetId: { type: "string" },
+      },
       required: ["itemId"],
     })
   })

@@ -70,7 +70,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 14. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
 15. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
 16. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
-17. Use `drive_trash_list` to inspect user-visible trash. Use `drive_item_restore` for normal Drive items in trash, `drive_direct_link_restore` for public assets, and `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
+17. Use `drive_trash_list` to inspect user-visible trash. Restore rows from that list with `drive_item_restore`; pass `kind` and `assetId` when the row kind is `public_asset`. Use `drive_direct_link_restore` only when the user directly provides a public asset id. Use `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
 18. Report the final item name, item id, and share URL or public asset URL when one was created.
 
 ## Safety
@@ -115,7 +115,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "重命名公开素材": call `drive_direct_link_rename`.
 - "恢复公开素材": call `drive_direct_link_restore`.
 - "查看回收站": call `drive_trash_list`.
-- "从回收站恢复": call `drive_item_restore` or `drive_direct_link_restore` depending on the item kind.
+- "从回收站恢复": call `drive_item_restore`; include `kind` and `assetId` for `public_asset` trash rows.
 - "公开链接列表": call `drive_share_list`.
 - "看看云盘空间": call `drive_usage_get`.
 - "整理我的云盘": call `drive_stats_get`, `drive_item_tree_list`, optional small per-file `drive_file_content_read`, `drive_folder_path_ensure`, `drive_reorganization_preview`, then `drive_reorganization_apply` with the returned `planId`.
