@@ -87,6 +87,7 @@ type MigrationJournal = {
   phase: KnowledgeBaseStorageMigrationPhase
   switchStarted: boolean
   newRootVerified: boolean
+  defaultTargetBackupPath?: string | null
   startedAt: string
 }
 
@@ -163,6 +164,7 @@ export class KnowledgeBaseStorageMigrationService {
 
     let oldStorage: SynapseKnowledgeBaseStorageConfig | null = null
     let tempPath: string | null = null
+    let activeJournal: MigrationJournal | null = null
     let keepSourceManagerBlocked = false
 
     try {
@@ -242,9 +244,11 @@ export class KnowledgeBaseStorageMigrationService {
         phase: "copying",
         switchStarted: false,
         newRootVerified: false,
+        defaultTargetBackupPath: null,
         startedAt: new Date().toISOString(),
       }
 
+      activeJournal = journal
       await this.writeJournal(journal)
       await this.transitionState({
         active: true,
@@ -271,11 +275,17 @@ export class KnowledgeBaseStorageMigrationService {
       await verifyKnowledgeBasesTree(oldKnowledgeBasesPath, tempKnowledgeBasesPath, runtimeIds)
       this.assertNotCancelled()
 
-      await this.writeJournal({
+      const defaultTargetBackupPath = shouldPreserveExistingDefaultTarget
+        ? await resolveExistingKnowledgeBasesBackupPath(newKnowledgeBasesPath)
+        : null
+      const switchingJournal: MigrationJournal = {
         ...journal,
         phase: "switching",
         switchStarted: true,
-      })
+        defaultTargetBackupPath,
+      }
+      activeJournal = switchingJournal
+      await this.writeJournal(switchingJournal)
       this.nonCancellable = true
       await this.transitionState({
         active: true,
@@ -283,14 +293,12 @@ export class KnowledgeBaseStorageMigrationService {
         cancellable: false,
         message: "正在切换知识库存储",
       })
-      if (shouldPreserveExistingDefaultTarget) {
-        const backupPath = await moveExistingKnowledgeBasesAside(newKnowledgeBasesPath)
-        if (backupPath) {
+      if (defaultTargetBackupPath) {
+        await rename(newKnowledgeBasesPath, defaultTargetBackupPath)
           logger.info("Existing default Knowledge Base storage preserved before restore.", {
-            backupPath,
+            backupPath: defaultTargetBackupPath,
             targetKnowledgeBasesPath: newKnowledgeBasesPath,
           })
-        }
       }
       await rename(tempKnowledgeBasesPath, newKnowledgeBasesPath)
       await rm(tempPath, { recursive: true, force: true })
@@ -365,6 +373,7 @@ export class KnowledgeBaseStorageMigrationService {
       }
       if (oldStorage && this.nonCancellable && this.state.phase === "switching") {
         try {
+          if (activeJournal) await this.restoreDefaultTargetBackupIfNeeded(activeJournal)
           await this.deps.updateConfig({ global: { knowledgeBaseStorage: oldStorage } })
           await this.clearJournal()
           logger.warn("Knowledge Base storage migration failed after switching; restored old storage in-process.", knowledgeBaseErrorMeta(error))
@@ -496,6 +505,7 @@ export class KnowledgeBaseStorageMigrationService {
         return
       }
 
+      await this.restoreDefaultTargetBackupIfNeeded(journal)
       await this.deps.updateConfig({ global: { knowledgeBaseStorage: journal.oldStorage } })
       await this.clearJournal()
       await this.transitionState({
@@ -508,6 +518,19 @@ export class KnowledgeBaseStorageMigrationService {
     } finally {
       this.deps.sourceManager.setMigrationBlocked(false)
     }
+  }
+
+  private async restoreDefaultTargetBackupIfNeeded(journal: MigrationJournal): Promise<void> {
+    if (!journal.defaultTargetBackupPath) return
+    const targetKnowledgeBasesPath = path.join(journal.newRoot, "knowledge-bases")
+    if (await pathExists(targetKnowledgeBasesPath)) return
+    if (!await pathExists(journal.defaultTargetBackupPath)) return
+
+    await rename(journal.defaultTargetBackupPath, targetKnowledgeBasesPath)
+    logger.info("Existing default Knowledge Base storage restored after migration rollback.", {
+      backupPath: journal.defaultTargetBackupPath,
+      targetKnowledgeBasesPath,
+    })
   }
 
   async getStorageStatus(): Promise<SharedKnowledgeBaseStorageStatus> {
@@ -1042,13 +1065,11 @@ function commonTopLevelSystemNamesForPlatform(platform: NodeJS.Platform): Set<st
   return new Set(["bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt", "opt", "proc", "root", "run", "sbin", "sys", "tmp", "usr", "var"])
 }
 
-async function moveExistingKnowledgeBasesAside(knowledgeBasesPath: string): Promise<string | null> {
+async function resolveExistingKnowledgeBasesBackupPath(knowledgeBasesPath: string): Promise<string | null> {
   if (!await hasDirectoryEntries(knowledgeBasesPath)) {
     return null
   }
-  const backupPath = await uniqueKnowledgeBasesBackupPath(path.dirname(knowledgeBasesPath))
-  await rename(knowledgeBasesPath, backupPath)
-  return backupPath
+  return uniqueKnowledgeBasesBackupPath(path.dirname(knowledgeBasesPath))
 }
 
 async function uniqueKnowledgeBasesBackupPath(rootPath: string): Promise<string> {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir as fsReaddir, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir as fsReaddir, rename, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -223,6 +223,29 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       .resolves.toBe("# Preserved old data\n")
   })
 
+  it("restores the preserved default copy when restore-to-default switching fails", async () => {
+    const harness = await migrationHarness({ pauseAtPhase: "switching" })
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+    await harness.seedRuntime("kb-1", harness.newRoot, { content: "# Current custom data\n" })
+    await harness.seedRuntime("kb-1", harness.oldRoot, { content: "# Preserved old data\n" })
+    const migration = harness.service.startMigration({
+      target: { mode: "default" },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("switching")
+    const migrationDirs = (await fsReaddir(harness.oldRoot))
+      .filter((entry) => entry.startsWith(".knowledge-bases-migration-"))
+    expect(migrationDirs).toHaveLength(1)
+    await rm(path.join(harness.oldRoot, migrationDirs[0], "knowledge-bases"), { recursive: true, force: true })
+    harness.resume()
+
+    await expect(migration).rejects.toThrow()
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Preserved old data\n")
+  })
+
   it("cancels during copy and keeps the old config", async () => {
     const harness = await migrationHarness({ pauseAfterFirstCopy: true })
     await harness.seedRuntime("kb-1")
@@ -309,6 +332,30 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     await harness.service.recoverIfNeeded()
 
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("restores a journaled default backup during recovery when the target is missing", async () => {
+    const harness = await migrationHarness()
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+    await harness.seedRuntime("kb-1", harness.oldRoot, { content: "# Preserved old data\n" })
+    const backupPath = path.join(harness.oldRoot, "knowledge-bases.backup-before-migration-test")
+    await rename(path.join(harness.oldRoot, "knowledge-bases"), backupPath)
+    await harness.writeJournal({
+      phase: "switching",
+      switchStarted: true,
+      newRootVerified: false,
+      oldStorage: { mode: "custom", rootPath: harness.newRoot },
+      targetStorage: { mode: "default" },
+      oldRoot: harness.newRoot,
+      newRoot: harness.oldRoot,
+      defaultTargetBackupPath: backupPath,
+    })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Preserved old data\n")
   })
 
   it("reports a failed recovery state when the journal is corrupt", async () => {
@@ -597,16 +644,19 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
       newRootVerified: boolean
       oldRoot?: string
       newRoot?: string
+      oldStorage?: SynapseKnowledgeBaseStorageConfig
       targetStorage?: SynapseKnowledgeBaseStorageConfig
+      defaultTargetBackupPath?: string | null
     }) {
       await mkdir(path.dirname(journalPath), { recursive: true })
       await writeFile(journalPath, `${JSON.stringify({
         version: 1,
-        oldStorage: { mode: "default" },
+        oldStorage: partial.oldStorage ?? { mode: "default" },
         targetStorage: partial.targetStorage ?? { mode: "custom", rootPath: newRoot },
         oldRoot: partial.oldRoot ?? oldRoot,
         newRoot: partial.newRoot ?? newRoot,
         tempPath: path.join(newRoot, ".knowledge-bases-migration-test"),
+        defaultTargetBackupPath: partial.defaultTargetBackupPath ?? null,
         startedAt: "2026-06-10T00:00:00.000Z",
         ...partial,
       }, null, 2)}\n`, "utf8")
