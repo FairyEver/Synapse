@@ -2,7 +2,7 @@ import { zodToJsonSchema } from "zod-to-json-schema"
 import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
-import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
 import { sanitizeError } from "../services/error-sanitize"
@@ -48,12 +48,20 @@ export type AutomationCapabilityDispatcherDeps = {
 
 type AutomationItemListParams = AutomationListOptions
 
-type AutomationMutationSecurity = {
+type AutomationDispatchSecurity = {
+  readonly action: Extract<PermissionAction, "automation.read" | "automation.mutate">
   readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
 
+const READING_AUTOMATION_ACTIONS = new Set([
+  "automation.item.list",
+  "automation.item.get",
+  "automation.run.list",
+  "automation.runtime.inspect",
+  "automation.webhook.list",
+])
 const MUTATING_AUTOMATION_ACTIONS = new Set([
   "automation.item.create",
   "automation.item.update",
@@ -68,8 +76,8 @@ const SAFE_AUDIT_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/
 export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityDispatcherDeps) {
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
-      const security = automationMutationSecurity(action, params, context)
-      if (security) await authorizeAutomationMutation(deps, security)
+      const security = automationDispatchSecurity(action, params, context)
+      if (security) await authorizeAutomationDispatch(deps, security)
 
       try {
         let result: DispatchResult
@@ -196,7 +204,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
 
         if (security) {
           deps.auditSink?.record({
-            action: "automation.mutate",
+            action: security.action,
             actor: security.actor,
             resource: security.resource,
             outcome: "allowed",
@@ -207,7 +215,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
       } catch (error) {
         if (security) {
           deps.auditSink?.record({
-            action: "automation.mutate",
+            action: security.action,
             actor: security.actor,
             resource: security.resource,
             outcome: "failed",
@@ -555,16 +563,22 @@ function assignIfDefined<T extends object, K extends keyof T>(target: T, key: K,
   if (value !== undefined) target[key] = value
 }
 
-function automationMutationSecurity(
+function automationDispatchSecurity(
   action: string,
   params: Record<string, unknown>,
   context: DispatchContext,
-): AutomationMutationSecurity | null {
-  if (!MUTATING_AUTOMATION_ACTIONS.has(action)) return null
+): AutomationDispatchSecurity | null {
+  const permissionAction = MUTATING_AUTOMATION_ACTIONS.has(action)
+    ? "automation.mutate"
+    : READING_AUTOMATION_ACTIONS.has(action)
+      ? "automation.read"
+      : null
+  if (!permissionAction) return null
   const source = context.source ?? "api"
   const automationId = safeAuditIdentifier(params.automationId)
   const runId = safeAuditIdentifier(params.runId)
   return {
+    action: permissionAction,
     actor: context.actor ?? { kind: "user", id: `automation-dispatch:${source}` },
     resource: `automation:${runId ?? automationId ?? action}`,
     metadata: {
@@ -585,21 +599,21 @@ function safeAuditIdentifier(value: unknown): string | undefined {
   return SAFE_AUDIT_IDENTIFIER_PATTERN.test(trimmed) ? trimmed : undefined
 }
 
-async function authorizeAutomationMutation(
+async function authorizeAutomationDispatch(
   deps: Pick<AutomationCapabilityDispatcherDeps, "permissionGuard" | "auditSink">,
-  security: AutomationMutationSecurity,
+  security: AutomationDispatchSecurity,
 ): Promise<void> {
   let permission: Awaited<ReturnType<NonNullable<AutomationCapabilityDispatcherDeps["permissionGuard"]>["check"]>> | undefined
   try {
     permission = await deps.permissionGuard?.check({
-      action: "automation.mutate",
+      action: security.action,
       actor: security.actor,
       resource: security.resource,
       context: security.metadata,
     })
   } catch (error) {
     deps.auditSink?.record({
-      action: "automation.mutate",
+      action: security.action,
       actor: security.actor,
       resource: security.resource,
       outcome: "failed",
@@ -614,7 +628,7 @@ async function authorizeAutomationMutation(
   }
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
-      action: "automation.mutate",
+      action: security.action,
       actor: security.actor,
       resource: security.resource,
       outcome: "denied",

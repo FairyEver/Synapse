@@ -269,11 +269,20 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify(result)).not.toContain("private prompt")
   })
 
-  it("lists Webhooks for builtin webhook trigger configuration", async () => {
-    const { accountService, dispatcher } = createHarness()
+  it("checks read permission and lists Webhooks for builtin webhook trigger configuration", async () => {
+    const { accountService, auditSink, dispatcher, permissionGuard } = createHarness()
 
     const result = await dispatcher.dispatch("automation.webhook.list", {}, { source: "mcp-http" })
 
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "automation.read",
+      actor: { kind: "user", id: "automation-dispatch:mcp-http" },
+      resource: "automation:automation.webhook.list",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.webhook.list",
+      }),
+    })
     expect(accountService.listWebhooks).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
       ok: true,
@@ -290,6 +299,11 @@ describe("automation capability dispatcher", () => {
     })
     expect(JSON.stringify(result)).not.toContain("whsec_secret")
     expect(JSON.stringify(result)).not.toContain("maskedUrl")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.webhook.list",
+      outcome: "allowed",
+    }))
   })
 
   it("returns Windows-aware shell defaults for Automation executor discovery", async () => {
@@ -311,8 +325,8 @@ describe("automation capability dispatcher", () => {
     ]))
   })
 
-  it("lists and gets public item summaries without raw configs", async () => {
-    const { dispatcher, permissionGuard } = createHarness()
+  it("checks read permission when listing and getting public item summaries without raw configs", async () => {
+    const { auditSink, dispatcher, permissionGuard } = createHarness()
 
     const list = await dispatcher.dispatch("automation.item.list", { enabled: true }, { source: "mcp-http" })
     const get = await dispatcher.dispatch("automation.item.get", { automationId: "automation:1" }, { source: "mcp-http" })
@@ -328,7 +342,59 @@ describe("automation capability dispatcher", () => {
     })
     expect(JSON.stringify([list, get])).not.toContain("private prompt")
     expect(JSON.stringify([list, get])).not.toContain("everyMinutes")
-    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.item.list",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.item.list",
+      }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation:1",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.item.get",
+        automationId: "automation:1",
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.item.list",
+      outcome: "allowed",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation:1",
+      outcome: "allowed",
+    }))
+  })
+
+  it("denies automation reads before service calls", async () => {
+    const { actions, triggers } = registries()
+    const service = serviceMock()
+    const permissionGuard = permissionGuardMock({ allowed: false, reason: "blocked", policyId: "test-policy" })
+    const auditSink = auditSinkMock()
+    const dispatcher = createAutomationCapabilityDispatcher({
+      service,
+      accountService: accountServiceMock(),
+      triggers,
+      actions,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("automation.item.list", {}, { source: "mcp-http" }))
+      .rejects.toThrow("blocked")
+
+    expect(service.automationList).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      outcome: "denied",
+      resource: "automation:automation.item.list",
+      metadata: expect.objectContaining({ reason: "blocked", policyId: "test-policy" }),
+    }))
   })
 
   it("passes item list filters and limit to the Automation service", async () => {
