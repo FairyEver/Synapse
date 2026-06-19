@@ -351,6 +351,34 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(harness.states.some((state) => state.warningCode === "free-space-unknown")).toBe(true)
   })
 
+  it("reports custom storage unavailable when the managed data directory is missing", async () => {
+    const harness = await migrationHarness()
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+
+    const status = await harness.service.getStorageStatus()
+
+    expect(status).toMatchObject({
+      mode: "custom",
+      rootPath: harness.newRoot,
+      knowledgeBasesPath: path.join(harness.newRoot, "knowledge-bases"),
+      available: false,
+    })
+    expect(status.unavailableReason).toBeTruthy()
+  })
+
+  it("reports custom storage unavailable when the managed data directory is a symlink", async () => {
+    const harness = await migrationHarness()
+    const outsideData = path.join(await tempDir(), "outside-data")
+    await mkdir(outsideData, { recursive: true })
+    await symlink(outsideData, path.join(harness.newRoot, "knowledge-bases"), "dir")
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+
+    const status = await harness.service.getStorageStatus()
+
+    expect(status.available).toBe(false)
+    expect(status.unavailableReason).toContain("符号链接")
+  })
+
   it("shows an actionable message when a knowledge base session blocks migration", async () => {
     const harness = await migrationHarness({ activeKnowledgeBaseSession: true })
     await harness.seedRuntime("kb-1")

@@ -176,6 +176,7 @@ describe("KnowledgeBaseService", () => {
     const templateRoot = await createMinimalTemplateRoot()
     const userDataPath = await tempDir()
     const customRoot = await tempDir()
+    await mkdir(path.join(customRoot, "knowledge-bases"), { recursive: true })
     const service = new KnowledgeBaseService({
       managedTemplateRoot: templateRoot,
       userDataPath,
@@ -189,6 +190,24 @@ describe("KnowledgeBaseService", () => {
 
     expect(result.runtimePath).toBe(path.join(customRoot, "knowledge-bases", "kb-custom"))
     await expect(readFile(path.join(result.runtimePath, "CLAUDE.md"), "utf8")).resolves.toBeDefined()
+  })
+
+  it("blocks managed creation when a custom storage root has lost its managed data directory", async () => {
+    const templateRoot = await createMinimalTemplateRoot()
+    const userDataPath = await tempDir()
+    const customRoot = await tempDir()
+    const service = new KnowledgeBaseService({
+      managedTemplateRoot: templateRoot,
+      userDataPath,
+      loadConfig: async () => configWithKnowledgeBaseStorage({
+        mode: "custom",
+        rootPath: customRoot,
+      }),
+    })
+
+    await expect(service.createManaged({ projectId: "kb-missing-data", name: "Knowledge" }))
+      .rejects.toThrow("知识库存储位置不可用。")
+    await expect(access(path.join(customRoot, "knowledge-bases"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("blocks managed operations when a custom storage root is unavailable", async () => {

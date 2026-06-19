@@ -35,6 +35,7 @@ import {
   knowledgeBaseVirtualPath,
   resolveManagedKnowledgeBasePath,
 } from "./managed-path"
+import { assertKnowledgeBaseStorageAvailable } from "./storage-root"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger as logger } from "./logging"
 import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
@@ -531,9 +532,12 @@ export class KnowledgeBaseService {
     const storage = currentConfig.global.knowledgeBaseStorage
     if (storage.mode === "custom") {
       try {
-        await access(storage.rootPath, constants.R_OK | constants.W_OK)
+        await assertKnowledgeBaseStorageAvailable({
+          userDataPath: this.userDataPath,
+          storage,
+        })
       } catch (error) {
-        logger.warn("Knowledge Base custom storage root is unavailable.", {
+        logger.warn("Knowledge Base custom storage is unavailable.", {
           rootPath: storage.rootPath,
           ...knowledgeBaseErrorMeta(error),
         })

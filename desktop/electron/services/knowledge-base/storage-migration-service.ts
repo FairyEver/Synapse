@@ -13,6 +13,7 @@ import type { SynapseKnowledgeBaseStorageStatus as SharedKnowledgeBaseStorageSta
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { isManagedKnowledgeBaseProject } from "./managed-path"
 import {
+  assertKnowledgeBaseStorageAvailable,
   isPathInside,
   resolveKnowledgeBaseStorageRoot,
   resolveKnowledgeBasesDirectory,
@@ -501,7 +502,10 @@ export class KnowledgeBaseStorageMigrationService {
     })
 
     try {
-      await access(rootPath, constants.R_OK | constants.W_OK)
+      await assertKnowledgeBaseStorageAvailable({
+        userDataPath: this.deps.userDataPath,
+        storage,
+      })
       return {
         mode: storage.mode,
         rootPath,
