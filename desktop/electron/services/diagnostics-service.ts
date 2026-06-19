@@ -119,6 +119,17 @@ type GitVersionProbeResult =
   | { ok: true; version: string }
   | { ok: false; error: string }
 
+type DiagnosticsExecFile = (
+  file: string,
+  args: readonly string[],
+  options: {
+    timeout: number
+    env?: NodeJS.ProcessEnv
+    windowsHide?: boolean
+  },
+  callback: (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void,
+) => void
+
 type CodexRuntimeProcessDiagnostics = {
   pid: number
   command: string
@@ -1051,6 +1062,9 @@ class DiagnosticsService {
       if (!probe.ok) {
         return this.degraded("database.mcp", "Database", "MCP", "MCP ping 失败", details)
       }
+      if (codexRuntime.processListError) {
+        return this.degraded("database.mcp", "Database", "MCP", "Codex 运行态检查失败", details)
+      }
 
       return this.ok("database.mcp", "Database", "MCP", "MCP 可用", details)
     })
@@ -1487,9 +1501,21 @@ async function collectCodexRuntimeDiagnostics(settingsPath: string): Promise<Cod
   return diagnostics
 }
 
-function collectCodexProcesses(): Promise<{ processes: CodexRuntimeProcessDiagnostics[]; error?: string }> {
+function collectCodexProcesses(input: {
+  readonly platform?: NodeJS.Platform
+  readonly execFile?: DiagnosticsExecFile
+} = {}): Promise<{ processes: CodexRuntimeProcessDiagnostics[]; error?: string }> {
+  const execFileImpl = input.execFile ?? (execFile as DiagnosticsExecFile)
+  const platform = input.platform ?? process.platform
+  if (platform === "win32") return collectWindowsCodexProcesses(execFileImpl)
+  return collectPosixCodexProcesses(execFileImpl)
+}
+
+function collectPosixCodexProcesses(
+  execFileImpl: DiagnosticsExecFile,
+): Promise<{ processes: CodexRuntimeProcessDiagnostics[]; error?: string }> {
   return new Promise((resolve) => {
-    execFile("ps", ["-axo", "pid=,lstart=,command="], {
+    execFileImpl("ps", ["-axo", "pid=,lstart=,command="], {
       timeout: 3000,
       env: {
         ...process.env,
@@ -1506,6 +1532,53 @@ function collectCodexProcesses(): Promise<{ processes: CodexRuntimeProcessDiagno
       }
 
       resolve({ processes: parseCodexProcessList(String(stdout)) })
+    })
+  })
+}
+
+function collectWindowsCodexProcesses(
+  execFileImpl: DiagnosticsExecFile,
+): Promise<{ processes: CodexRuntimeProcessDiagnostics[]; error?: string }> {
+  return new Promise((resolve) => {
+    execFileImpl("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      [
+        "$ErrorActionPreference = 'Stop'",
+        "$items = Get-CimInstance Win32_Process | Where-Object {",
+        "  ($_.Name -match '(?i)codex') -or ($_.ExecutablePath -match '(?i)codex') -or ($_.CommandLine -match '(?i)codex')",
+        "} | ForEach-Object {",
+        "  $startedAt = $null",
+        "  $command = $_.CommandLine",
+        "  if (-not $command) { $command = $_.ExecutablePath }",
+        "  if (-not $command) { $command = $_.Name }",
+        "  if ($_.CreationDate) { $startedAt = [Management.ManagementDateTimeConverter]::ToDateTime($_.CreationDate).ToUniversalTime().ToString('o') }",
+        "  [pscustomobject]@{ pid = $_.ProcessId; command = $command; startedAt = $startedAt }",
+        "}",
+        "$items | ConvertTo-Json -Compress",
+      ].join("; "),
+    ], {
+      timeout: 3000,
+      windowsHide: true,
+    }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({
+          processes: [],
+          error: truncateDiagnosticError(firstLine(stderr) || firstLine(stdout) || error.message),
+        })
+        return
+      }
+
+      try {
+        resolve({ processes: parseWindowsCodexProcessList(String(stdout)) })
+      } catch (parseError) {
+        resolve({
+          processes: [],
+          error: truncateDiagnosticError(errorLogMessage(parseError, "Codex process list parse failed")),
+        })
+      }
     })
   })
 }
@@ -1535,9 +1608,64 @@ function parseCodexProcessList(stdout: string): CodexRuntimeProcessDiagnostics[]
   return processes
 }
 
+function parseWindowsCodexProcessList(stdout: string): CodexRuntimeProcessDiagnostics[] {
+  const text = stdout.trim()
+  if (!text) return []
+
+  const parsed = JSON.parse(text) as unknown
+  const rows = Array.isArray(parsed) ? parsed : [parsed]
+  const processes: CodexRuntimeProcessDiagnostics[] = []
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue
+    const record = row as Record<string, unknown>
+    const pid = Number(record.pid ?? record.ProcessId)
+    const command = stringOrNull(record.command ?? record.CommandLine ?? record.ExecutablePath ?? record.Name)
+    if (!Number.isFinite(pid) || !command || !isCodexProcessLine(command)) continue
+
+    const startedAtText = stringOrNull(record.startedAt ?? record.CreationDate) ?? undefined
+    const startedAtMs = startedAtText ? parseWindowsProcessStartedAtMs(startedAtText) : undefined
+    processes.push({
+      pid,
+      command: redactSensitiveText(command),
+      ...(startedAtText ? { startedAtText } : {}),
+      ...(startedAtMs !== undefined
+        ? { startedAt: new Date(startedAtMs).toISOString(), startedAtMs }
+        : {}),
+    })
+  }
+
+  return processes
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null
+}
+
+function parseWindowsProcessStartedAtMs(value: string): number | undefined {
+  const timestamp = Date.parse(value)
+  if (Number.isFinite(timestamp)) return timestamp
+
+  const dmtf = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.(\d{1,6}))?([+-]\d{3})?$/u.exec(value)
+  if (!dmtf) return undefined
+
+  const milliseconds = Number((dmtf[7] ?? "0").padEnd(3, "0").slice(0, 3))
+  const localTimeMs = Date.UTC(
+    Number(dmtf[1]),
+    Number(dmtf[2]) - 1,
+    Number(dmtf[3]),
+    Number(dmtf[4]),
+    Number(dmtf[5]),
+    Number(dmtf[6]),
+    milliseconds,
+  )
+  const offsetMinutes = dmtf[8] ? Number(dmtf[8]) : 0
+  return localTimeMs - offsetMinutes * 60_000
+}
+
 function isCodexProcessLine(line: string): boolean {
   return line.includes("/Applications/Codex.app/")
-    || /\bcodex(?:\s+app-server|\s+exec|\s|$)/i.test(line)
+    || /\bcodex(?:\.(?:exe|cmd|bat)|\s+app-server|\s+exec|\s|$)/i.test(line)
 }
 
 function firstLine(value: string | Buffer | undefined): string {
@@ -1874,6 +2002,7 @@ function parseLogTimestamp(line: string): LogTimestamp | null {
 }
 
 export {
+  collectCodexProcesses,
   DiagnosticsService,
   createDiagnosticsFolderName,
   summarizeDiagnosticsChecks,

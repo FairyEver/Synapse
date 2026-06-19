@@ -259,6 +259,91 @@ describe("DiagnosticsService.collect", () => {
     })
   })
 
+  it("degrades MCP diagnostics when Codex process listing fails", async () => {
+    const service = createService({
+      getMcpHttpStatus: vi.fn(() => ({
+        running: true,
+        port: 23578,
+        url: "http://127.0.0.1:23578/mcp",
+      })),
+      getMcpServers: vi.fn(() => [{
+        target: "codex",
+        settingsPath: "/Users/lcj/.codex/config.toml",
+        settingsFileExists: true,
+        registered: true,
+        mode: "http" as const,
+        url: "http://127.0.0.1:23578/mcp",
+      }]),
+      probeMcpHttp: vi.fn(async () => ({ ok: true, method: "ping", status: 200 })),
+      collectCodexRuntimeDiagnostics: vi.fn(async () => ({
+        settingsPath: "/Users/lcj/.codex/config.toml",
+        settingsFileExists: true,
+        processes: [],
+        processStartedBeforeConfigModified: false,
+        processListError: "process list unavailable",
+      })),
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "database.mcp")
+
+    expect(check).toMatchObject({
+      status: "degraded",
+      severity: "warning",
+      message: "Codex 运行态检查失败",
+      details: {
+        codexRuntime: {
+          processListError: "process list unavailable",
+        },
+      },
+    })
+  })
+
+  it("uses PowerShell to collect Codex processes on Windows", async () => {
+    const diagnosticsModule = await import("../diagnostics-service")
+    const collectCodexProcesses = (diagnosticsModule as {
+      collectCodexProcesses?: (input: {
+        readonly platform: NodeJS.Platform
+        readonly execFile: (
+          file: string,
+          args: readonly string[],
+          options: { readonly timeout: number },
+          callback: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => void
+      }) => Promise<{ processes: Array<{ pid: number; command: string; startedAt?: string; startedAtMs?: number }> }>
+    }).collectCodexProcesses
+
+    expect(collectCodexProcesses).toBeTypeOf("function")
+
+    const execFileMock = vi.fn((file, args, options, callback) => {
+      callback(null, JSON.stringify({
+        pid: 4512,
+        command: "C:\\Users\\Ada Lovelace\\AppData\\Local\\Programs\\Codex\\Codex.exe apiKey=plain-secret",
+        startedAt: "2026-06-14T07:00:00.000Z",
+      }), "")
+    })
+
+    const result = await collectCodexProcesses!({
+      platform: "win32",
+      execFile: execFileMock,
+    })
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      "powershell.exe",
+      expect.arrayContaining(["-NoProfile", "-NonInteractive", "-Command"]),
+      expect.objectContaining({ timeout: 3000 }),
+      expect.any(Function),
+    )
+    expect(execFileMock.mock.calls[0]?.[1].at(-1)).not.toContain("??")
+    expect(result.processes).toHaveLength(1)
+    expect(result.processes[0]).toMatchObject({
+      pid: 4512,
+      startedAt: "2026-06-14T07:00:00.000Z",
+      startedAtMs: Date.parse("2026-06-14T07:00:00.000Z"),
+    })
+    expect(result.processes[0]?.command).toContain("[redacted]")
+  })
+
   it("reports App PATH, login shell PATH, and node visibility", async () => {
     const service = createService({
       collectShellEnvironment: vi.fn(() => ({
