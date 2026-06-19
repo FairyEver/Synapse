@@ -33,4 +33,21 @@ describe("wiki snapshots", () => {
       updated: ["wiki/sources/old.md"],
     })
   })
+
+  it("can snapshot only declared wiki page candidates", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(root, "wiki", "sources", "reported.md"), "# Reported\n")
+    await writeFile(path.join(root, "wiki", "sources", "unrelated.md"), "# Unrelated\n")
+
+    const snapshot = await snapshotWikiMarkdown(root, {
+      paths: [
+        "wiki/sources/reported.md",
+        "wiki/sources/missing.md",
+        "../outside.md",
+      ],
+    })
+
+    expect(Object.keys(snapshot.files)).toEqual(["wiki/sources/reported.md"])
+  })
 })

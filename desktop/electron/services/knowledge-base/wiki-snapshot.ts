@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
-import type { Dirent } from "node:fs"
-import { lstat, readdir, readFile, stat } from "node:fs/promises"
+import type { Dirent, Stats } from "node:fs"
+import { lstat, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
 export interface WikiSnapshotFile {
@@ -19,9 +19,21 @@ export interface WikiSnapshotDiff {
   readonly updated: readonly string[]
 }
 
-export async function snapshotWikiMarkdown(projectPath: string): Promise<WikiSnapshot> {
+export interface WikiSnapshotOptions {
+  readonly paths?: readonly string[]
+}
+
+export async function snapshotWikiMarkdown(projectPath: string, options: WikiSnapshotOptions = {}): Promise<WikiSnapshot> {
   const root = path.resolve(projectPath)
   const files: Record<string, WikiSnapshotFile> = {}
+  const candidatePaths = normalizeCandidateWikiPaths(root, options.paths)
+  if (candidatePaths) {
+    for (const relativePath of candidatePaths) {
+      const file = await snapshotMarkdownFile(root, path.join(root, relativePath))
+      if (file) files[file.path] = file
+    }
+    return { files }
+  }
   await walk(root, path.join(root, "wiki"), files)
   return { files }
 }
@@ -66,15 +78,43 @@ async function walk(root: string, directoryPath: string, files: Record<string, W
       continue
     }
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue
-    const content = await readFile(absolutePath)
-    const fileStat = await stat(absolutePath)
-    files[relativePath] = {
-      path: relativePath,
-      hash: createHash("sha256").update(content).digest("hex"),
-      size: fileStat.size,
-      mtimeMs: fileStat.mtimeMs,
-    }
+    const file = await snapshotMarkdownFile(root, absolutePath)
+    if (file) files[relativePath] = file
   }
+}
+
+async function snapshotMarkdownFile(root: string, absolutePath: string): Promise<WikiSnapshotFile | null> {
+  if (!isInside(root, absolutePath)) return null
+  let fileStat: Stats
+  try {
+    fileStat = await lstat(absolutePath)
+  } catch (error) {
+    if (isMissingPathError(error)) return null
+    throw error
+  }
+  if (fileStat.isSymbolicLink() || !fileStat.isFile()) return null
+  const relativePath = normalizeRelativePath(path.relative(root, absolutePath))
+  if (!isSafeWikiMarkdownPath(relativePath)) return null
+  const content = await readFile(absolutePath)
+  return {
+    path: relativePath,
+    hash: createHash("sha256").update(content).digest("hex"),
+    size: fileStat.size,
+    mtimeMs: fileStat.mtimeMs,
+  }
+}
+
+function normalizeCandidateWikiPaths(root: string, paths: readonly string[] | undefined): readonly string[] | null {
+  if (!paths) return null
+  const normalized = new Set<string>()
+  for (const value of paths) {
+    const relativePath = normalizeRelativePath(value)
+    if (!isSafeWikiMarkdownPath(relativePath)) continue
+    const absolutePath = path.resolve(root, relativePath)
+    if (!isInside(root, absolutePath)) continue
+    normalized.add(normalizeRelativePath(path.relative(root, absolutePath)))
+  }
+  return [...normalized].sort((a, b) => a.localeCompare(b))
 }
 
 function isInside(root: string, target: string): boolean {
@@ -83,7 +123,11 @@ function isInside(root: string, target: string): boolean {
 }
 
 function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/")
+  return value.split(/[\\/]+/u).join("/")
+}
+
+function isSafeWikiMarkdownPath(value: string): boolean {
+  return value.startsWith("wiki/") && value.endsWith(".md") && !path.isAbsolute(value) && !value.split("/").includes("..")
 }
 
 function isMissingPathError(error: unknown): boolean {

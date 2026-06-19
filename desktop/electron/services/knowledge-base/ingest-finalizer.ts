@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { AgentProjectAfterTurnInput, AgentProjectMessageContext } from "../agent-runtime/project-contributions"
@@ -8,7 +8,7 @@ import { DragonScaleAddressService } from "./dragonscale/address-service"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
 import { scanKnowledgeBaseSources, type KnowledgeBaseSourceScanItem } from "./source-scan"
-import { diffWikiSnapshots, snapshotWikiMarkdown, type WikiSnapshot } from "./wiki-snapshot"
+import { snapshotWikiMarkdown, type WikiSnapshot } from "./wiki-snapshot"
 import { withKnowledgeBaseManifestMutationLock } from "./manifest-mutation-lock"
 
 const REPORT_SCHEMA = "synapse.kb.ingest.report.v1"
@@ -29,7 +29,6 @@ const ADDRESS_EXCLUDED_PREFIXES = ["wiki/folds/", "wiki/meta/"]
 
 type IngestPreflight = {
   readonly sources: readonly KnowledgeBaseSourceScanItem[]
-  readonly wikiBefore: WikiSnapshot
 }
 
 type IngestReport = {
@@ -53,10 +52,7 @@ export class KnowledgeBaseIngestCoordinator {
   async prepareTurn(message: AgentMessage, context: AgentProjectMessageContext): Promise<AgentMessage> {
     if (!isIngestMessage(message.content)) return message
     const force = /\b(force|re-ingest|reingest|重新|强制)\b/iu.test(message.content)
-    const [scan, wikiBefore] = await Promise.all([
-      scanKnowledgeBaseSources(this.deps.projectPath, { force }),
-      snapshotWikiMarkdown(this.deps.projectPath),
-    ])
+    const scan = await scanKnowledgeBaseSources(this.deps.projectPath, { force })
     if (scan.manifest.status === "invalid") {
       knowledgeBaseLogger.warn("Knowledge Base ingest preflight blocked invalid manifest.", {
         boundary: "knowledge-base.ingest-finalizer",
@@ -69,7 +65,6 @@ export class KnowledgeBaseIngestCoordinator {
     }
     this.preflights.set(context.turnId, {
       sources: scan.sources.filter((source) => source.state !== "unchanged" || force),
-      wikiBefore,
     })
     return {
       ...message,
@@ -176,8 +171,7 @@ async function buildFinalManifest(
   addressService: Pick<DragonScaleAddressService, "allocate">,
 ): Promise<KnowledgeBaseManifest | null> {
   const sourceByPath = new Map(preflight.sources.map((source) => [source.relativePath, source]))
-  const wikiAfter = await snapshotWikiMarkdown(projectPath)
-  const diff = diffWikiSnapshots(preflight.wikiBefore, wikiAfter)
+  const wikiAfter = await snapshotWikiMarkdown(projectPath, { paths: reportedWikiPages(report) })
   const sources = { ...manifest.sources }
   const addressMap = { ...manifest.address_map }
   let changed = false
@@ -185,8 +179,8 @@ async function buildFinalManifest(
   for (const item of report.processed_sources) {
     const source = sourceByPath.get(item.source)
     if (!source || !isSafeRawPath(item.source)) continue
-    const pagesCreated = await validatedPages(projectPath, item.pages_created ?? [], diff.created)
-    const pagesUpdated = await validatedPages(projectPath, item.pages_updated ?? [], diff.updated)
+    const pagesCreated = validatedPages(item.pages_created ?? [], wikiAfter)
+    const pagesUpdated = validatedPages(item.pages_updated ?? [], wikiAfter)
     await ensureAddressesForCreatedPages(projectPath, pagesCreated, addressService)
     await syncAddressMapFromPages(projectPath, addressMap, [...pagesCreated, ...pagesUpdated])
     sources[item.source] = {
@@ -239,21 +233,22 @@ async function ensurePageAddress(
   await atomicWriteTextFile(filePath, addPageAddress(content, address))
 }
 
-async function validatedPages(
-  projectPath: string,
+function reportedWikiPages(report: IngestReport): string[] {
+  const pages: string[] = []
+  for (const item of report.processed_sources) {
+    pages.push(...(item.pages_created ?? []), ...(item.pages_updated ?? []))
+  }
+  return [...new Set(pages)].sort((a, b) => a.localeCompare(b))
+}
+
+function validatedPages(
   values: readonly string[],
-  changedPaths: readonly string[],
-): Promise<string[]> {
-  const changed = new Set(changedPaths)
+  snapshot: WikiSnapshot,
+): string[] {
   const accepted: string[] = []
   for (const value of values) {
-    if (!isSafeWikiPagePath(value) || !changed.has(value)) continue
-    try {
-      await access(path.join(projectPath, value))
-      accepted.push(value)
-    } catch {
-      continue
-    }
+    if (!isSafeWikiPagePath(value) || !snapshot.files[value]) continue
+    accepted.push(value)
   }
   return [...new Set(accepted)].sort((a, b) => a.localeCompare(b))
 }
