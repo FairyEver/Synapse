@@ -46,8 +46,10 @@ class EditorAdapterService {
       editorId: adapter.id,
       label: adapter.label,
       rulesPath: paths.rulesPath,
+      rulesPathKind: paths.rulesPathKind ?? "directory",
       rulesExists: results[index * 2],
       skillsPath: paths.skillsPath,
+      skillsPathKind: paths.skillsPathKind ?? "directory",
       skillsExists: results[index * 2 + 1],
     }))
   }

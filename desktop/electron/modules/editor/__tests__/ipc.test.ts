@@ -87,6 +87,53 @@ describe("editorIpcModule", () => {
     }))
   })
 
+  it("creates the parent directory when a global rules path points to a file", async () => {
+    const rulesFilePath = path.resolve("/Users/test/.gemini/GEMINI.md")
+    const rulesParentPath = path.dirname(rulesFilePath)
+    editorAdapterServiceMock.getGlobalDirectories.mockResolvedValue([
+      {
+        editorId: "antigravity",
+        label: "Antigravity",
+        rulesPath: rulesFilePath,
+        rulesPathKind: "file",
+        rulesExists: false,
+        skillsPath,
+        skillsPathKind: "directory",
+        skillsExists: false,
+      },
+    ])
+    const { harness, auditSink, permissionGuard } = createHarness()
+
+    await harness.invoke("synapse:editor:create-directory", {
+      dirPath: rulesFilePath,
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: rulesParentPath,
+      context: {
+        source: "editor.createDirectory",
+        requestedPath: rulesFilePath,
+        pathKind: "file",
+      },
+    })
+    expect(fsMock.mkdir).toHaveBeenCalledWith(rulesParentPath, { recursive: true })
+    expect(electronMock.shell.showItemInFolder).toHaveBeenCalledWith(rulesParentPath)
+    expect(fsMock.mkdir).not.toHaveBeenCalledWith(rulesFilePath, expect.anything())
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: rulesParentPath,
+      outcome: "allowed",
+      metadata: {
+        source: "editor.createDirectory",
+        requestedPath: rulesFilePath,
+        pathKind: "file",
+      },
+    }))
+  })
+
   it("rejects directory creation outside known global editor directories", async () => {
     const { harness, permissionGuard, auditSink } = createHarness()
 

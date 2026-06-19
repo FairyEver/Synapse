@@ -30,6 +30,7 @@ const windsurfAdapter: EditorAdapter = {
     const windsurfHomePath = resolveWindsurfHomePath()
     return {
       rulesPath: path.join(windsurfHomePath, "memories", "global_rules.md"),
+      rulesPathKind: "file",
       skillsPath: path.join(windsurfHomePath, "skills"),
     }
   },

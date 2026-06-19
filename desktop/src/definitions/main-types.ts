@@ -18,7 +18,9 @@ export type EditorAdapterResolveContext = {
 
 export type EditorGlobalDirectoryPaths = {
   rulesPath: string | null
+  rulesPathKind?: "directory" | "file"
   skillsPath: string | null
+  skillsPathKind?: "directory" | "file"
 }
 
 export type EditorScanPathConfig = {

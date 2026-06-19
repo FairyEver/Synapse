@@ -14,24 +14,48 @@ import { editorAdapterService } from "../../services/editor-adapter-service"
 import { runGuardedShellOperation } from "../shell/guarded-shell"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
-async function resolveAllowedGlobalEditorDirectory(dirPath: string): Promise<string> {
+type ResolvedGlobalEditorDirectoryCreation = {
+  readonly directoryPath: string
+  readonly metadata: Record<string, unknown>
+}
+
+async function resolveAllowedGlobalEditorDirectory(dirPath: string): Promise<ResolvedGlobalEditorDirectoryCreation> {
   const requestedPath = path.resolve(dirPath)
   const directories = await editorAdapterService.getGlobalDirectories()
-  const allowedPaths = new Set(
-    directories.flatMap((entry) => [entry.rulesPath, entry.skillsPath])
-      .filter((value): value is string => typeof value === "string" && value.length > 0)
-      .map((value) => path.resolve(value)),
-  )
+  const allowedPaths = new Map<string, { readonly kind: "directory" | "file" }>()
+  for (const entry of directories) {
+    if (entry.rulesPath) {
+      allowedPaths.set(path.resolve(entry.rulesPath), { kind: entry.rulesPathKind ?? "directory" })
+    }
+    if (entry.skillsPath) {
+      allowedPaths.set(path.resolve(entry.skillsPath), { kind: entry.skillsPathKind ?? "directory" })
+    }
+  }
 
-  if (!allowedPaths.has(requestedPath)) {
+  const allowed = allowedPaths.get(requestedPath)
+  if (!allowed) {
     throw new Error("只能创建已知编辑器目录。")
   }
 
-  return requestedPath
+  if (allowed.kind === "file") {
+    return {
+      directoryPath: path.dirname(requestedPath),
+      metadata: {
+        source: "editor.createDirectory",
+        requestedPath,
+        pathKind: "file",
+      },
+    }
+  }
+
+  return {
+    directoryPath: requestedPath,
+    metadata: { source: "editor.createDirectory" },
+  }
 }
 
 async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): Promise<void> {
-  const allowedDirPath = await resolveAllowedGlobalEditorDirectory(dirPath)
+  const target = await resolveAllowedGlobalEditorDirectory(dirPath)
   const actor = { kind: "user" } as const
   const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
   const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
@@ -39,17 +63,17 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
   const permission = await permissionGuard.check({
     action: "fs.write",
     actor,
-    resource: allowedDirPath,
-    context: { source: "editor.createDirectory" },
+    resource: target.directoryPath,
+    context: target.metadata,
   })
   if (!permission.allowed) {
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: allowedDirPath,
+      resource: target.directoryPath,
       outcome: "denied",
       metadata: {
-        source: "editor.createDirectory",
+        ...target.metadata,
         reason: permission.reason,
         policyId: permission.policyId,
       },
@@ -58,22 +82,22 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
   }
 
   try {
-    await mkdir(allowedDirPath, { recursive: true })
+    await mkdir(target.directoryPath, { recursive: true })
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: allowedDirPath,
+      resource: target.directoryPath,
       outcome: "allowed",
-      metadata: { source: "editor.createDirectory" },
+      metadata: target.metadata,
     })
   } catch (error) {
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: allowedDirPath,
+      resource: target.directoryPath,
       outcome: "failed",
       metadata: {
-        source: "editor.createDirectory",
+        ...target.metadata,
         errorName: error instanceof Error ? error.name : typeof error,
         errorLength: String(error).length,
       },
@@ -83,9 +107,9 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
 
   await runGuardedShellOperation({
     ctx,
-    resource: allowedDirPath,
+    resource: target.directoryPath,
     source: "editor.createDirectory",
-    run: () => shell.showItemInFolder(allowedDirPath),
+    run: () => shell.showItemInFolder(target.directoryPath),
   })
 }
 
@@ -93,8 +117,10 @@ const globalDirectorySchema = z.object({
   editorId: z.string(),
   label: z.string(),
   rulesPath: z.string().nullable(),
+  rulesPathKind: z.enum(["directory", "file"]).default("directory"),
   rulesExists: z.boolean(),
   skillsPath: z.string().nullable(),
+  skillsPathKind: z.enum(["directory", "file"]).default("directory"),
   skillsExists: z.boolean(),
 })
 

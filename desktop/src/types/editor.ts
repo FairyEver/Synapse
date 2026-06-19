@@ -113,7 +113,9 @@ export type SynapseEditorGlobalDirectory = {
   editorId: SynapseEditorId
   label: string
   rulesPath: string | null
+  rulesPathKind: "directory" | "file"
   rulesExists: boolean
   skillsPath: string | null
+  skillsPathKind: "directory" | "file"
   skillsExists: boolean
 }

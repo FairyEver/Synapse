@@ -28,6 +28,7 @@ const antigravityAdapter: EditorAdapter = {
   resolveGlobalDirectoryPaths() {
     return {
       rulesPath: getHomePath(".gemini", "GEMINI.md"),
+      rulesPathKind: "file",
       skillsPath: path.join(resolveAntigravityHomePath(), "skills"),
     }
   },
