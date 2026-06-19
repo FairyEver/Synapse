@@ -67,6 +67,7 @@ type KnowledgeBaseStorageMigrationDeps = {
   hasActiveKnowledgeBaseSession: () => Promise<boolean>
   getAvailableBytes?: (targetRoot: string) => Promise<number | null>
   afterCopyEntry?: (entryPath: string) => Promise<void>
+  afterStatsEntry?: (entryPath: string) => Promise<void>
   afterPhaseChange?: (phase: KnowledgeBaseStorageMigrationPhase) => Promise<void>
   platform?: NodeJS.Platform | string
 }
@@ -160,20 +161,21 @@ export class KnowledgeBaseStorageMigrationService {
     this.cancelRequested = false
     this.nonCancellable = false
 
-    await this.transitionState({
-      active: true,
-      phase: "preparing",
-      cancellable: false,
-      progress: { copiedBytes: 0, totalBytes: null },
-      message: "正在准备迁移",
-    })
-    this.deps.sourceManager.setMigrationBlocked(true)
-
     let oldStorage: SynapseKnowledgeBaseStorageConfig | null = null
     let tempPath: string | null = null
     let keepSourceManagerBlocked = false
 
     try {
+      await this.transitionState({
+        active: true,
+        phase: "preparing",
+        cancellable: true,
+        progress: { copiedBytes: 0, totalBytes: null },
+        message: "正在准备迁移",
+      })
+      this.deps.sourceManager.setMigrationBlocked(true)
+      this.assertNotCancelled()
+
       const config = await this.deps.loadConfig()
       oldStorage = config.global.knowledgeBaseStorage
       const oldRoot = resolveKnowledgeBaseStorageRoot({
@@ -209,7 +211,26 @@ export class KnowledgeBaseStorageMigrationService {
       })
       tempPath = path.join(newRoot, `.knowledge-bases-migration-${Date.now()}`)
       const tempKnowledgeBasesPath = path.join(tempPath, "knowledge-bases")
-      const sourceStats = await treeStats(oldKnowledgeBasesPath)
+      await this.transitionState({
+        active: true,
+        phase: "preparing",
+        cancellable: true,
+        message: "正在统计知识库",
+        progress: { copiedBytes: 0, totalBytes: null },
+      })
+      const sourceStats = await treeStats(oldKnowledgeBasesPath, {
+        shouldCancel: () => this.assertNotCancelled(),
+        onProgress: async (stats, entryPath) => {
+          this.emitState({
+            progress: {
+              copiedBytes: stats.bytes,
+              totalBytes: null,
+            },
+          })
+          await this.deps.afterStatsEntry?.(entryPath)
+        },
+      })
+      this.assertNotCancelled()
       const warningCode = await this.validateAvailableSpace(newRoot, sourceStats.bytes)
       const journal: MigrationJournal = {
         version: 1,
@@ -893,7 +914,15 @@ async function hashFile(filePath: string): Promise<string> {
   return hash.digest("hex")
 }
 
-async function treeStats(rootPath: string): Promise<{ files: number; bytes: number }> {
+type TreeStatsProgress = { files: number; bytes: number }
+
+type TreeStatsOptions = {
+  shouldCancel?: () => void
+  onProgress?: (stats: TreeStatsProgress, entryPath: string) => Promise<void> | void
+}
+
+async function treeStats(rootPath: string, options: TreeStatsOptions = {}): Promise<TreeStatsProgress> {
+  options.shouldCancel?.()
   if (!await pathExists(rootPath)) {
     return { files: 0, bytes: 0 }
   }
@@ -901,25 +930,37 @@ async function treeStats(rootPath: string): Promise<{ files: number; bytes: numb
   if (rootStat.isSymbolicLink()) {
     return { files: 0, bytes: 0 }
   }
-  if (!rootStat.isDirectory()) {
-    return { files: 1, bytes: rootStat.size }
-  }
   let files = 0
   let bytes = 0
-  const entries = await readdir(rootPath, { withFileTypes: true })
-  for (const entry of entries) {
-    const entryPath = path.join(rootPath, entry.name)
-    if (entry.isDirectory()) {
-      const childStats = await treeStats(entryPath)
-      files += childStats.files
-      bytes += childStats.bytes
-      continue
-    }
-    if (!entry.isFile()) continue
-    const entryStat = await lstat(entryPath)
+  const recordFile = async (entryPath: string, size: number) => {
     files += 1
-    bytes += entryStat.size
+    bytes += size
+    await options.onProgress?.({ files, bytes }, entryPath)
+    options.shouldCancel?.()
   }
+  if (!rootStat.isDirectory()) {
+    await recordFile(rootPath, rootStat.size)
+    return { files, bytes }
+  }
+
+  const collect = async (currentPath: string) => {
+    options.shouldCancel?.()
+    const entries = await readdir(currentPath, { withFileTypes: true })
+    for (const entry of entries) {
+      options.shouldCancel?.()
+      const entryPath = path.join(currentPath, entry.name)
+      const entryStat = await lstat(entryPath)
+      if (entryStat.isSymbolicLink()) continue
+      if (entryStat.isDirectory()) {
+        await collect(entryPath)
+        continue
+      }
+      if (!entryStat.isFile()) continue
+      await recordFile(entryPath, entryStat.size)
+    }
+  }
+
+  await collect(rootPath)
   return { files, bytes }
 }
 

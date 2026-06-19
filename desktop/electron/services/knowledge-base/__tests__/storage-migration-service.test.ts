@@ -240,6 +240,54 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
   })
 
+  it("cancels during preparation before source size is known", async () => {
+    const harness = await migrationHarness({ pauseAtPhase: "preparing" })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("preparing")
+    expect(harness.service.getState()).toMatchObject({
+      phase: "preparing",
+      cancellable: true,
+      progress: {
+        copiedBytes: 0,
+        totalBytes: null,
+      },
+    })
+    await harness.service.cancelMigration()
+    harness.resume()
+
+    await expect(migration).resolves.toEqual({ status: "cancelled" })
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("cancels while collecting source size and keeps the old config", async () => {
+    const harness = await migrationHarness({ pauseAfterFirstStats: true })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForStatsPause()
+    expect(harness.service.getState()).toMatchObject({
+      phase: "preparing",
+      cancellable: true,
+      progress: {
+        totalBytes: null,
+      },
+    })
+    expect(harness.service.getState().progress.copiedBytes).toBeGreaterThan(0)
+    await harness.service.cancelMigration()
+    harness.resume()
+
+    await expect(migration).resolves.toEqual({ status: "cancelled" })
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
   it("does not cancel after switching begins", async () => {
     const harness = await migrationHarness({ pauseAtPhase: "switching" })
     await harness.seedRuntime("kb-1")
@@ -398,7 +446,8 @@ type RuntimeSeedOptions = {
 type MigrationHarnessOptions = {
   trashError?: Error
   pauseAfterFirstCopy?: boolean
-  pauseAtPhase?: "switching"
+  pauseAfterFirstStats?: boolean
+  pauseAtPhase?: "preparing" | "switching"
   availableBytes?: number | null
   activeKnowledgeBaseSession?: boolean
   corruptCopiedClaudeContent?: string
@@ -415,9 +464,14 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
   const states: ReturnType<KnowledgeBaseStorageMigrationService["getState"]>[] = []
   let resumePause: (() => void) | null = null
   let pausedCopy = false
+  let pausedStats = false
   let copyPausedResolve: (() => void) | null = null
+  let statsPausedResolve: (() => void) | null = null
   const copyPaused = new Promise<void>((resolve) => {
     copyPausedResolve = resolve
+  })
+  const statsPaused = new Promise<void>((resolve) => {
+    statsPausedResolve = resolve
   })
   let config = createConfig({ mode: "default" })
   const sourceManager = {
@@ -476,6 +530,14 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
       if (!options.pauseAfterFirstCopy || pausedCopy) return
       pausedCopy = true
       copyPausedResolve?.()
+      await new Promise<void>((resolve) => {
+        resumePause = resolve
+      })
+    },
+    afterStatsEntry: async () => {
+      if (!options.pauseAfterFirstStats || pausedStats) return
+      pausedStats = true
+      statsPausedResolve?.()
       await new Promise<void>((resolve) => {
         resumePause = resolve
       })
@@ -565,6 +627,9 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     },
     waitForCopyPause() {
       return copyPaused
+    },
+    waitForStatsPause() {
+      return statsPaused
     },
     resume() {
       const resolve = resumePause

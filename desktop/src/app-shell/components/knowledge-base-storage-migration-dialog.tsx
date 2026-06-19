@@ -36,6 +36,7 @@ function KnowledgeBaseStorageMigrationDialog({
     if (!progress.totalBytes || progress.totalBytes <= 0) return undefined
     return Math.min(100, Math.round((progress.copiedBytes / progress.totalBytes) * 100))
   }, [progress.copiedBytes, progress.totalBytes])
+  const statsText = useMemo(() => migrationStatsText(progress), [progress])
 
   useEffect(() => {
     if (progress.active) {
@@ -66,6 +67,9 @@ function KnowledgeBaseStorageMigrationDialog({
           </DialogDescription>
         </DialogHeader>
         <Progress value={progressValue ?? 0} aria-label="迁移进度" />
+        {statsText ? (
+          <p className="text-sm text-muted-foreground">{statsText}</p>
+        ) : null}
         {progress.warningCode ? (
           <p className="text-sm text-muted-foreground">{warningText(progress.warningCode)}</p>
         ) : null}
@@ -93,6 +97,20 @@ function KnowledgeBaseStorageMigrationDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function migrationStatsText(progress: SynapseKnowledgeBaseStorageMigrationProgress): string | null {
+  if (progress.phase === "preparing" && progress.totalBytes === null && progress.copiedBytes > 0) {
+    return `已统计 ${formatBytes(progress.copiedBytes)}`
+  }
+  return null
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
 function migrationPhaseText(phase: SynapseKnowledgeBaseStorageMigrationProgress["phase"]): string {

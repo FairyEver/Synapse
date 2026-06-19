@@ -56,6 +56,20 @@ describe("KnowledgeBaseStorageMigrationDialog", () => {
     expect(buttonByText("正在切换").disabled).toBe(true)
   })
 
+  it("shows collected size while preparing", () => {
+    renderDialog({
+      ...activeProgress,
+      phase: "preparing",
+      cancellable: true,
+      copiedBytes: 1536,
+      totalBytes: null,
+      message: "正在统计知识库",
+    })
+
+    expect(document.body.textContent).toContain("已统计 1.5 KB")
+    expect(buttonByText("取消迁移").disabled).toBe(false)
+  })
+
   it("keeps active failed recovery states blocking", () => {
     renderDialog({
       ...activeProgress,
