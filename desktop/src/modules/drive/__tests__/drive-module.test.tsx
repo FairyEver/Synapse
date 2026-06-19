@@ -394,6 +394,7 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "pending-file", name: "pending.txt", type: "file", storageStatus: "pending" }),
       createDriveItem({ id: "failed-file", name: "failed.txt", type: "file", storageStatus: "failed" }),
+      createDriveItem({ id: "failed-folder", name: "failed-folder", type: "folder", storageStatus: "failed" }),
       createDriveItem({ id: "deleting-file", name: "deleting.txt", type: "file", storageStatus: "delete_pending" }),
       createDriveItem({ id: "shared-file", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
       createDriveItem({ id: "folder-1", name: "folder", type: "folder" }),
@@ -410,6 +411,7 @@ describe("DriveModule", () => {
     expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
     expect(getTableRow("pending.txt").querySelector("td")?.textContent).toContain("上传中")
     expect(getTableRow("failed.txt").querySelector("td")?.textContent).toContain("上传失败")
+    expect(getTableRow("failed-folder").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("deleting.txt").querySelector("td")?.textContent).toContain("删除中")
     expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("已分享")
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
@@ -418,8 +420,13 @@ describe("DriveModule", () => {
     for (const name of ["pending.txt", "failed.txt", "deleting.txt"]) {
       const shareButton = rowButton(name, "分享")
       expect(shareButton?.disabled).toBe(true)
+      expect(rowButton(name, "预览")?.disabled).toBe(true)
       expect(rowButton(name, "取消分享")).toBeUndefined()
     }
+    expect(rowButton("failed-folder", "预览")?.disabled).toBe(true)
+    getTableRow("failed-folder").click()
+    await flushAct()
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
     expect(rowButton("shared.txt", "分享")).toBeUndefined()
     expect(rowButton("shared.txt", "取消分享")?.disabled).toBe(false)
   })

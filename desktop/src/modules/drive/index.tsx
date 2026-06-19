@@ -1452,18 +1452,19 @@ function DriveFileListRow({
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
+  const canOpen = canOpenDriveItem(item)
   const canShare = canShareDriveItem(item)
   const hasActiveShare = Boolean(item.activeShareId)
   const pointerDownStartedOnNameRef = useRef(false)
 
   return (
     <TableRow
-      className={cn(isFolder && !opening ? "cursor-pointer" : undefined)}
+      className={cn(isFolder && canOpen && !opening ? "cursor-pointer" : undefined)}
       aria-busy={opening || undefined}
       onPointerDownCapture={(event) => {
         pointerDownStartedOnNameRef.current = isDriveItemNameTarget(event.target)
       }}
-      onClick={isFolder && !opening ? (event) => {
+      onClick={isFolder && canOpen && !opening ? (event) => {
         const shouldIgnoreSelectionClick = pointerDownStartedOnNameRef.current && hasSelectedTextInside(event.currentTarget)
         pointerDownStartedOnNameRef.current = false
         if (shouldIgnoreSelectionClick) return
@@ -1539,7 +1540,7 @@ function DriveFileListRow({
               分享
             </Button>
           )}
-          <Button type="button" variant="ghost" size="xs" onClick={() => onOpenItem(item)}>
+          <Button type="button" variant="ghost" size="xs" disabled={!canOpen} onClick={() => onOpenItem(item)}>
             预览
           </Button>
           <Button type="button" variant="ghost" size="xs" onClick={() => onDelete(item)}>
@@ -2757,6 +2758,10 @@ function getDriveStorageStatusBadge(storageStatus: DriveItemDto["storageStatus"]
 }
 
 function canShareDriveItem(item: DriveItemDto): boolean {
+  return item.storageStatus === "active"
+}
+
+function canOpenDriveItem(item: DriveItemDto): boolean {
   return item.storageStatus === "active"
 }
 
