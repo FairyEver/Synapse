@@ -108,6 +108,22 @@ describe("Drive capability domain", () => {
     })
   })
 
+  it("allows Drive reorganization moves to target the root directory", () => {
+    const tool = buildDriveTools().find((item) => item.name === "drive_reorganization_preview")
+    const moves = tool?.inputSchema.properties.moves as {
+      readonly items?: {
+        readonly properties?: Record<string, unknown>
+      }
+    }
+
+    expect(moves.items?.properties?.targetParentId).toMatchObject({
+      anyOf: [
+        { type: "string" },
+        { type: "null" },
+      ],
+    })
+  })
+
   it("marks public asset and trash write capabilities correctly", () => {
     const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
 

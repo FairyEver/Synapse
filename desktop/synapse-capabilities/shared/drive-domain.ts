@@ -50,7 +50,13 @@ export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries
 )
 
 const stringField = (description: string) => ({ type: "string", description })
-const optionalParentId = stringField("Parent folder item id. Omit or pass null to use the Drive root directory.")
+const optionalParentId = {
+  anyOf: [
+    { type: "string" },
+    { type: "null" },
+  ],
+  description: "Parent folder item id. Omit or pass null to use the Drive root directory.",
+}
 const driveAccessExpiresInValues = ["3d", "7d", "30d", "1y", "forever"]
 const driveShareAccessModeValues = ["link_read", "link_edit", "specified_users_edit"]
 const pageInputProperties = {
