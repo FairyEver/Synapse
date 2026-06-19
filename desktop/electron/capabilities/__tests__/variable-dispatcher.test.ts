@@ -65,9 +65,12 @@ const baseConfig = configFixture({
 
 describe("variable capability dispatcher", () => {
   it("lists user variables without values", async () => {
-    const { dispatcher } = createHarness(baseConfig)
+    const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
 
-    await expect(dispatcher.dispatch("variable.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(dispatcher.dispatch("variable.item.list", {}, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })).resolves.toEqual({
       ok: true,
       data: {
         variables: [
@@ -78,6 +81,27 @@ describe("variable capability dispatcher", () => {
       },
       total: 2,
     })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "secret.read",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      resource: "variable:user:*",
+      context: {
+        source: "mcp-http",
+        variableAction: "variable.item.list",
+        includeValue: false,
+      },
+    })
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "allowed",
+      resource: "variable:user:*",
+      metadata: expect.objectContaining({
+        variableCount: 2,
+      }),
+    }))
+    const auditJson = JSON.stringify(auditEvents)
+    expect(auditJson).not.toContain("api token")
+    expect(auditJson).not.toContain("TOKEN")
   })
 
   it("rejects repositoryUuid because variables are user scoped", async () => {
@@ -89,14 +113,29 @@ describe("variable capability dispatcher", () => {
   })
 
   it("gets one variable without value by default", async () => {
-    const { dispatcher, permissionGuard } = createHarness(baseConfig)
+    const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
 
     await expect(dispatcher.dispatch("variable.item.get", { name: "token" }, { source: "api" })).resolves.toMatchObject({
       data: {
         variable: { name: "TOKEN", description: "api token", hasValue: true },
       },
     })
-    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "secret.read",
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      resource: "variable:user:TOKEN",
+      context: {
+        source: "api",
+        variableAction: "variable.item.get",
+        variableName: "TOKEN",
+        includeValue: false,
+      },
+    })
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "allowed",
+      resource: "variable:user:TOKEN",
+    }))
   })
 
   it("requires secret.read and audits when includeValue is true", async () => {

@@ -41,6 +41,8 @@ Returns:
 
 This tool never returns values.
 
+Requires `secret.read` permission and records an audit event without variable values or descriptions.
+
 ### variable_item_get
 
 Canonical action: `variable.item.get`
@@ -63,6 +65,8 @@ Input with value:
 ```
 
 Use `includeValue: true` only when the user explicitly needs the stored value.
+
+Both metadata reads and value reads require `secret.read` permission. Audit records must not include stored values.
 
 ### variable_item_create
 

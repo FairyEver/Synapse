@@ -10,8 +10,8 @@ Do not use this skill for Database rows, Scheduler tasks, Workflow variables, Co
 
 ## Default Flow
 
-1. Use `variable_item_list` to inspect variable names and descriptions without values.
-2. Use `variable_item_get` without `includeValue` when you need one variable's metadata.
+1. Use `variable_item_list` to inspect variable names and descriptions without values. This still requires secret-read permission because names and descriptions can reveal secret inventory.
+2. Use `variable_item_get` without `includeValue` when you need one variable's metadata. This also requires secret-read permission.
 3. Use `variable_item_get` with `includeValue: true` only when the user explicitly needs the stored value.
 4. Use `variable_item_upsert` when the user asks to set a variable and does not care whether it already exists.
 5. Use `variable_item_create` only when the user wants creation to fail if the variable already exists.
@@ -20,7 +20,7 @@ Do not use this skill for Database rows, Scheduler tasks, Workflow variables, Co
 
 ## Sensitive Value Rules
 
-- `variable_item_list` never returns values.
+- `variable_item_list` never returns values, but variable names and descriptions are secret-adjacent metadata.
 - Mutation tools never return values.
 - Do not repeat token, password, secret, credential, API key, cookie, or authorization values in your final answer.
 - After writing a value, report the variable name and operation result only.

@@ -35,7 +35,7 @@ export function createVariableCapabilityDispatcher(deps: VariableCapabilityDispa
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       switch (action) {
         case "variable.item.list":
-          return listVariables(deps, params)
+          return listVariables(deps, action, params, context)
         case "variable.item.get":
           return getVariable(deps, action, params, context)
         case "variable.item.create":
@@ -200,6 +200,50 @@ async function authorizeSecret(
   }
 }
 
+async function authorizeVariableInventoryRead(
+  deps: VariableCapabilityDispatcherDeps,
+  capabilityAction: string,
+  context: DispatchContext,
+): Promise<SecretAuditContext> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const resource = "variable:user:*"
+  const metadata = {
+    source: context.source ?? "api",
+    variableAction: capabilityAction,
+    includeValue: false,
+  }
+
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "secret.read",
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink.record({
+      action: "secret.read",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  return {
+    action: "secret.read",
+    actor,
+    resource,
+    metadata,
+  }
+}
+
 function recordSecretAudit(
   deps: VariableCapabilityDispatcherDeps,
   audit: SecretAuditContext,
@@ -274,18 +318,30 @@ function variableResponse(variable: SynapseVariable) {
 
 async function listVariables(
   deps: VariableCapabilityDispatcherDeps,
+  action: string,
   params: Record<string, unknown>,
+  context: DispatchContext,
 ): Promise<DispatchResult> {
   rejectRepositoryScope(params)
-  const config = await deps.loadConfig()
-  const variables = config.global.variables.map(toSafeVariable)
-  return {
-    ok: true,
-    data: {
-      variables,
+  const audit = await authorizeVariableInventoryRead(deps, action, context)
+  try {
+    const config = await deps.loadConfig()
+    const variables = config.global.variables.map(toSafeVariable)
+    recordSecretAudit(deps, audit, "allowed", { variableCount: variables.length })
+    return {
+      ok: true,
+      data: {
+        variables,
+        total: variables.length,
+      },
       total: variables.length,
-    },
-    total: variables.length,
+    }
+  } catch (error) {
+    recordSecretAudit(deps, audit, "failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: String(error).length,
+    })
+    throw error
   }
 }
 
@@ -300,10 +356,8 @@ async function getVariable(
   const includeValue = params.includeValue === true
   const config = await deps.loadConfig()
   const { variable } = requireExistingVariable(config.global.variables, name)
-  if (includeValue) {
-    const audit = await authorizeSecret(deps, "secret.read", action, context, variable.name, true)
-    recordSecretAudit(deps, audit, "allowed")
-  }
+  const audit = await authorizeSecret(deps, "secret.read", action, context, variable.name, includeValue)
+  recordSecretAudit(deps, audit, "allowed")
   return {
     ok: true,
     data: {
