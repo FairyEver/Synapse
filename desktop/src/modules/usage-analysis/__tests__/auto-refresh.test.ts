@@ -28,6 +28,17 @@ describe("usage analysis auto refresh", () => {
     expect(refresh).toHaveBeenCalledTimes(2)
   })
 
+  it("allows a new automatic refresh after a failure within the cooldown window", async () => {
+    const refresh = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce(undefined)
+
+    await expect(runUsageAutoRefreshOnce("cc", refresh, { now: () => 1_000 })).rejects.toThrow("temporary failure")
+    await runUsageAutoRefreshOnce("cc", refresh, { now: () => 1_001 })
+
+    expect(refresh).toHaveBeenCalledTimes(2)
+  })
+
   it("does not start duplicate refreshes while one is already running", async () => {
     let finishRefresh: (() => void) | undefined
     const refresh = vi.fn(() => new Promise<void>((resolve) => {

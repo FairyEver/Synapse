@@ -23,8 +23,10 @@ export function runUsageAutoRefreshOnce(
   if (autoRefreshInFlight[source]) return null
   if (lastStartedAt !== undefined && now - lastStartedAt < USAGE_AUTO_REFRESH_COOLDOWN_MS) return null
 
-  lastAutoRefreshAt[source] = now
-  const refreshPromise = refresh().finally(() => {
+  const refreshPromise = refresh().then((result) => {
+    lastAutoRefreshAt[source] = now
+    return result
+  }).finally(() => {
     if (autoRefreshInFlight[source] === refreshPromise) {
       delete autoRefreshInFlight[source]
     }
