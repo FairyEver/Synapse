@@ -154,7 +154,12 @@ export class KnowledgeBaseRawFileManager {
     await mkdir(targetDirectory, { recursive: true })
     const entries: SynapseKnowledgeBaseRawEntry[] = []
     const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
+    const budget: RawUploadBudget = { copiedFiles: 0, copiedBytes: 0, stopped: false }
     for (const filePath of filePaths) {
+      if (budget.stopped) {
+        skipped.push({ path: filePath, reason: budget.stopReason ?? "too-large" })
+        continue
+      }
       try {
         const sourcePath = path.resolve(filePath)
         const sourceStat = await lstat(sourcePath)
@@ -164,6 +169,17 @@ export class KnowledgeBaseRawFileManager {
             reason: "not-file",
           })
           skipped.push({ path: filePath, reason: "not-file" })
+          continue
+        }
+        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, budget, this.uploadLimits)
+        if (budgetFailure) {
+          knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
+            fileName: path.basename(filePath),
+            reason: budgetFailure,
+            copiedFiles: budget.copiedFiles,
+            copiedBytes: budget.copiedBytes,
+          })
+          skipped.push({ path: filePath, reason: budgetFailure })
           continue
         }
         const targetPath = await copyFileToAvailablePath(sourcePath, targetDirectory, path.basename(sourcePath))

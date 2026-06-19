@@ -132,6 +132,50 @@ describe("KnowledgeBaseRawFileManager", () => {
     ))).resolves.toEqual(expect.arrayContaining(["alpha\n", "bravo\n"]))
   })
 
+  it("stops direct file upload when the file count budget is reached", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const firstSource = path.join(sourceRoot, "a.md")
+    const secondSource = path.join(sourceRoot, "b.md")
+    await writeFile(firstSource, "a\n", "utf8")
+    await writeFile(secondSource, "b\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxFiles: 1 },
+    })
+
+    const result = await manager.uploadFiles(rawRoot, "", [firstSource, secondSource])
+
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual(["a.md"])
+    expect(result.skipped).toEqual([{ path: secondSource, reason: "too-many-files" }])
+    await expect(lstat(path.join(rawRoot, "b.md"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("skips direct file uploads that exceed byte budgets", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const bigSource = path.join(sourceRoot, "big.md")
+    const firstSource = path.join(sourceRoot, "first.md")
+    const secondSource = path.join(sourceRoot, "second.md")
+    await writeFile(bigSource, "12345", "utf8")
+    await writeFile(firstSource, "1234", "utf8")
+    await writeFile(secondSource, "1234", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxFileBytes: 4, maxTotalBytes: 6 },
+    })
+
+    const result = await manager.uploadFiles(rawRoot, "", [bigSource, firstSource, secondSource])
+
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual(["first.md"])
+    expect(result.skipped).toEqual([
+      { path: bigSource, reason: "file-too-large" },
+      { path: secondSource, reason: "too-large" },
+    ])
+    await expect(lstat(path.join(rawRoot, "big.md"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(lstat(path.join(rawRoot, "second.md"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("uploads folders recursively while preserving structure and skipping system noise", async () => {
     const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const rawRoot = await tempDir()
