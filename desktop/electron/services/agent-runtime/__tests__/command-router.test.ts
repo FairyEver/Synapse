@@ -324,6 +324,28 @@ describe("AgentCommandRouter", () => {
     expect(JSON.stringify(records)).not.toContain("BearerSecret")
   })
 
+  it("preserves Windows backslashes for /show references", async () => {
+    const { providerService } = makeProviderService()
+    const shown: string[][] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+      showReference: async (_message, args) => {
+        shown.push([...args])
+        return `show:${args.join("|")}`
+      },
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/show C:\\repo\\docs\\note.md"), baseConversation()),
+    )
+
+    expect(result.resultText).toBe("show:C:\\repo\\docs\\note.md")
+    expect(shown).toEqual([["C:\\repo\\docs\\note.md"]])
+  })
+
   it("lists modes, switches safe modes, handles /new and /status, and routes dangerous modes to the selector", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({
@@ -596,6 +618,36 @@ describe("AgentCommandRouter", () => {
     expect(await registry.resolve("deploy")).toEqual(expect.objectContaining({
       exec: "Write-Output ok",
       shell: "powershell",
+    }))
+  })
+
+  it("preserves quoted Windows work directories for admin exec commands", async () => {
+    const { providerService } = makeProviderService()
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const registry = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      customCommands: registry,
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(
+        baseMessage('/commands addexec --work-dir "C:\\repo with spaces" build pnpm build'),
+        baseConversation(),
+      ),
+    )
+
+    expect(result.resultText).toBe("执行命令已保存：/build")
+    expect(await registry.resolve("build")).toEqual(expect.objectContaining({
+      exec: "pnpm build",
+      workDir: "C:\\repo with spaces",
     }))
   })
 

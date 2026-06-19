@@ -523,15 +523,16 @@ export function splitCommandLine(content: string): string[] {
   const values: string[] = []
   let current = ""
   let quote: "\"" | "'" | undefined
-  let escaping = false
-  for (const char of content) {
-    if (escaping) {
-      current += char
-      escaping = false
-      continue
-    }
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index]
     if (char === "\\") {
-      escaping = true
+      const next = content[index + 1]
+      if (next && shouldEscapeCommandChar(next, quote)) {
+        current += next
+        index += 1
+      } else {
+        current += char
+      }
       continue
     }
     if (quote) {
@@ -555,9 +556,13 @@ export function splitCommandLine(content: string): string[] {
     }
     current += char
   }
-  if (escaping) current += "\\"
   if (current) values.push(current)
   return values
+}
+
+function shouldEscapeCommandChar(char: string, quote: "\"" | "'" | undefined): boolean {
+  if (quote) return char === quote
+  return char === "\"" || char === "'" || /\s/.test(char)
 }
 
 function commandName(name: string): string {

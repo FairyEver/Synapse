@@ -80,6 +80,7 @@
 - 私人令牌设置页新增、编辑或删除变量时会走 `secret.write` 权限检查和审计，不再绕过敏感变量写入记录。
 - Bridge 外部适配器不能再注册为本地 renderer 平台，使用保留平台前缀创建的会话也会按外部 Bridge 身份处理。
 - Agent 自定义执行命令返回 stdout/stderr 前会脱敏 token、Authorization 和 Cookie，避免 side-channel token 进入对话记录。
+- Agent slash 命令会保留 Windows 路径里的反斜杠，`/show` 和自定义执行命令工作目录不再把 `C:\...` 路径解析坏。
 - Windows 上 Agent 消息里的本地路径会渲染为可点击引用，支持盘符路径、UNC 路径和反斜杠相对路径。
 - Windows 上初始化本地仓库时，会按大小写不敏感规则识别用户目录和 Synapse 源码目录，避免高风险目录被误放行。
 - Git 变更列表快速切换文件时，旧 diff 请求返回后不会再覆盖当前选中文件的差异内容。
