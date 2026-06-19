@@ -1266,7 +1266,7 @@ function KnowledgeBaseSourceManagerWindow() {
       }),
       {
         loading: "正在导出",
-        success: "已导出",
+        success: (result) => rawMutationSuccessMessage(result, "已导出", null),
         error: "导出失败",
       },
     )

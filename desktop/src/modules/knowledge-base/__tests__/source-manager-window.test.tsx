@@ -1862,6 +1862,52 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
   })
 
+  it("does not report export success when no entries were exported", async () => {
+    const exportResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [],
+      skipped: [],
+    }
+    bridgeMocks.knowledgeBase.exportRawEntries.mockResolvedValueOnce(exportResult)
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+
+    await act(async () => {
+      buttonByLabel("导出所选").click()
+      await Promise.resolve()
+    })
+
+    expect(lastRawMutationSuccessMessage(exportResult)).toBeNull()
+  })
+
+  it("reports skipped export entries when nothing was exported", async () => {
+    const exportResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [],
+      skipped: [{ path: "brief.md", reason: "export-error" }],
+    }
+    bridgeMocks.knowledgeBase.exportRawEntries.mockResolvedValueOnce(exportResult)
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+
+    await act(async () => {
+      buttonByLabel("导出所选").click()
+      await Promise.resolve()
+    })
+
+    expect(lastRawMutationSuccessMessage(exportResult)).toBe("跳过 1 项（导出失败 1）")
+  })
+
   it("moves one unselected entry when dragged to a folder row", async () => {
     renderWindow()
     await waitForExpectation(() => {
