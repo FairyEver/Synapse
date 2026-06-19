@@ -21,6 +21,7 @@ import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
 import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
+import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
 import { repositoryStore } from "./repository-store"
 
@@ -340,6 +341,9 @@ async function pullWithRebase(
   onProgress?: MaintenanceProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
+  await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
+    logger.warn("Maintenance pull with rebase skipped because repository already has a rebase in progress.", { localPath })
+  })
   try {
     await runMaintenanceGitCommand(
       repository.localPath,

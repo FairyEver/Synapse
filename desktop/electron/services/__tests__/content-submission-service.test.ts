@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     markFailure: vi.fn(),
     readState: vi.fn(),
   },
+  isGitRebaseInProgress: vi.fn(),
   runGitCommand: vi.fn(),
   userIdentityService: {
     requireReadyRepoProfile: vi.fn(),
@@ -67,7 +68,7 @@ vi.mock("../config-store", () => ({
 }))
 
 vi.mock("../git-command", () => ({
-  isGitRebaseInProgress: vi.fn(),
+  isGitRebaseInProgress: mocks.isGitRebaseInProgress,
   runGitCommand: mocks.runGitCommand,
 }))
 
@@ -138,6 +139,7 @@ describe("contentSubmissionService", () => {
     })
     mocks.pendingPushesService.markFailure.mockResolvedValue(undefined)
     mocks.pendingPushesService.readState.mockResolvedValue({ count: 0, items: [] })
+    mocks.isGitRebaseInProgress.mockResolvedValue(false)
   })
 
   it("pulls and syncs before update conflict detection", async () => {
@@ -175,6 +177,29 @@ describe("contentSubmissionService", () => {
       latestModifiedAt: "2026-05-20T12:00:00.000Z",
       latestModifiedByDisplayName: "Remote User",
     })
+  })
+
+  it("does not abort a rebase that existed before content sync", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.isGitRebaseInProgress.mockResolvedValueOnce(true)
+
+    await expect(contentSubmissionService.updateContent({
+      contentType: "rule",
+      payload: {
+        id: "rule-1",
+        title: "Rule",
+        baseHistoryDirname: "local-old",
+      },
+    } as never))
+      .rejects
+      .toThrow("当前仓库正在进行 rebase")
+
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["pull", "--rebase", "-X", "theirs"],
+    }))
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["rebase", "--abort"],
+    }))
   })
 
   it("pulls and syncs before purge conflict detection", async () => {

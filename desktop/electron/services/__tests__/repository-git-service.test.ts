@@ -112,6 +112,29 @@ describe("repositoryGitService", () => {
     }))
   })
 
+  it("does not abort a rebase that existed before diverged sync retry", async () => {
+    const formattedDivergedError = Object.assign(
+      new Error("仓库分支需要手动处理后再同步。"),
+      { output: "fatal: Not possible to fast-forward, aborting." },
+    )
+    mocks.isGitRebaseInProgress.mockResolvedValueOnce(true)
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args[0] === "pull" && input.args.includes("--ff-only")) throw formattedDivergedError
+      throw new Error(`unexpected git command: ${input.args.join(" ")}`)
+    })
+
+    await expect(repositoryGitService.syncRepository(repository, vi.fn()))
+      .rejects
+      .toThrow("当前仓库正在进行 rebase")
+
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["pull", "--rebase", "-X", "theirs", "--progress"],
+    }))
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["rebase", "--abort"],
+    }))
+  })
+
   it("logs failed repository git commands with operation diagnostics", async () => {
     const pullError = Object.assign(new Error("fatal: Authentication failed for https://user:secret@example.com/repo.git"), {
       exitCode: 128,

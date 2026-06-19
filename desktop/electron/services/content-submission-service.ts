@@ -20,6 +20,7 @@ import { contentWriteService, type ContentWriteResult } from "./content-write-se
 import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
+import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
@@ -119,6 +120,9 @@ async function pullWithRebase(
   onProgress?: PushProgressListener,
 ): Promise<void> {
   onProgress?.("正在拉取最新内容...")
+  await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
+    logger.warn("Pull with rebase skipped because repository already has a rebase in progress.", { localPath })
+  })
 
   try {
     await runGitCommand({

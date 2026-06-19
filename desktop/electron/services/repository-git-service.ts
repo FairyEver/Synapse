@@ -5,6 +5,7 @@ import type {
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
 import { isGitRebaseInProgress, runGitCommand } from "./git-command"
+import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
 import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-client/git-logging"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
@@ -289,6 +290,9 @@ class RepositoryGitService {
           operation: "sync",
           statusText: "正在变基合并远程更新...",
           percent: null,
+        })
+        await assertNoPreexistingGitRebase(repository.localPath, (localPath) => {
+          logger.warn("Repository sync rebase skipped because repository already has a rebase in progress.", { localPath })
         })
 
         try {

@@ -151,4 +151,33 @@ describe("repositoryMaintenanceService", () => {
     expect(result.message).toBe("整理了 1 条内容，已同步。")
     expect(mocks.pendingPushesService.clear).not.toHaveBeenCalled()
   })
+
+  it("does not abort a rebase that existed before maintenance sync", async () => {
+    const root = await createTempRoot()
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: {},
+    }
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: true,
+      gitRootPath: root,
+    })
+    mocks.isGitRebaseInProgress.mockResolvedValueOnce(true)
+
+    const { repositoryMaintenanceService } = await import("../repository-maintenance-service")
+
+    await expect(repositoryMaintenanceService.runManualMaintenance(repository))
+      .rejects
+      .toThrow("当前仓库正在进行 rebase")
+
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["pull", "--rebase", "-X", "theirs"],
+    }))
+    expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      args: ["rebase", "--abort"],
+    }))
+  })
 })
