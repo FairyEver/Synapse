@@ -121,6 +121,42 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 
+  it("sanitizes ruleId before permission checks and denied audits", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    vi.mocked(permissionGuard.check).mockResolvedValueOnce({
+      allowed: false,
+      reason: "denied by policy",
+      policyId: "test-policy",
+    })
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("model_price.rule.update", {
+      ruleId: "missing-token=secret-value",
+      outputPer1M: 2,
+    }, { source: "mcp-http" })).rejects.toThrow("denied by policy")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "model-price-rule:missing-token=[redacted]",
+      context: expect.objectContaining({
+        ruleId: "missing-token=[redacted]",
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("secret-value")
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      outcome: "denied",
+      resource: "model-price-rule:missing-token=[redacted]",
+      metadata: expect.objectContaining({
+        ruleId: "missing-token=[redacted]",
+      }),
+    }))
+    db.close()
+  })
+
   it("audits failed model price permission checks without raw error text", async () => {
     const db = createTestDb()
     const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
@@ -150,6 +186,31 @@ describe("model price capability dispatcher", () => {
     }))
     expect(JSON.stringify(auditEvents)).not.toContain("token=secret")
     expect(JSON.stringify(auditEvents)).not.toContain("/Users/example")
+    db.close()
+  })
+
+  it("sanitizes ruleId in failed mutation audits", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("model_price.rule.update", {
+      ruleId: "missing-token=secret-value",
+      outputPer1M: 2,
+    }, { source: "mcp-http" })).rejects.toThrow(/Model price rule not found/)
+
+    expect(JSON.stringify(auditEvents)).not.toContain("secret-value")
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      outcome: "failed",
+      resource: "model-price-rule:missing-token=[redacted]",
+      metadata: expect.objectContaining({
+        ruleId: "missing-token=[redacted]",
+      }),
+    }))
     db.close()
   })
 

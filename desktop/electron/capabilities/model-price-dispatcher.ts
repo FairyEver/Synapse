@@ -164,13 +164,14 @@ function modelPriceMutationSecurity(
 ): ModelPriceMutationSecurity | null {
   if (!MODEL_PRICE_MUTATION_ACTIONS.has(action)) return null
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : action
+  const auditRuleId = sanitizeError(ruleId)
   return {
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
-    resource: `model-price-rule:${ruleId}`,
+    resource: `model-price-rule:${auditRuleId}`,
     metadata: {
       source: context.source ?? "api",
       modelPriceAction: action,
-      ...(ruleId !== action ? { ruleId } : undefined),
+      ...(ruleId !== action ? { ruleId: auditRuleId } : undefined),
     },
   }
 }
