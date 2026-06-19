@@ -110,6 +110,21 @@ export class WorkflowService {
       })
       return { errors: [{ type: "invalid_config", message: "保存失败：项目配置读取失败，请重试" }] }
     }
+    let availableWorkflowIds: string[]
+    try {
+      availableWorkflowIds = (await this.workflowsNamespace.list()).map((entry) => entry.id)
+    } catch (err) {
+      logger.warn("workflow save workflow validation context failed", {
+        id: def.id,
+        name: def.name,
+        ...errorLogMeta(err),
+      })
+      return { errors: [{ type: "invalid_config", message: "保存失败：工作流列表读取失败，请重试" }] }
+    }
+    validationOptions = {
+      ...validationOptions,
+      availableWorkflowIds,
+    }
     const validation = validateWorkflow(def, validationOptions)
     if (!validation.valid) {
       logger.warn("workflow save blocked by validation", { id: def.id, name: def.name, errorCount: validation.errors.length, errors: validation.errors })

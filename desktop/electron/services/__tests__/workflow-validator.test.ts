@@ -82,6 +82,35 @@ describe("validateWorkflow", () => {
     expect(result.valid).toBe(false)
     expect(result.errors.some((error) => error.message.includes("不能调用当前工作流"))).toBe(true)
   })
+  it("rejects workflow_call nodes that reference a missing child workflow", () => {
+    const endForCall = {
+      ...nodeEnd,
+      config: {
+        outputType: "text",
+        template: "{{result}}",
+        variables: [{ name: "result", source: { type: "node_output", node: "call" } }],
+      },
+    }
+    const def: WorkflowDefinition = {
+      ...base,
+      nodes: [
+        { id: "call", name: "Call", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "deleted-child", variables: [], paramTemplates: {} } },
+        endForCall,
+      ],
+      edges: [{ id: "e1", from: "call", to: "end" }],
+    }
+
+    const result = validateWorkflow(def, { availableWorkflowIds: ["wf", "other-child"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "call",
+        field: "workflowId",
+        message: "节点「Call」调用的子工作流不存在，请重新选择工作流",
+      }),
+    ]))
+  })
   it("rejects workflow_call templates that reference unbound variables", () => {
     const endForCall = {
       ...nodeEnd,

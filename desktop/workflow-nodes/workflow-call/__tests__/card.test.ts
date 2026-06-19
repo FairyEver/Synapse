@@ -64,4 +64,28 @@ describe("WorkflowCallNodeCard", () => {
     expect(container.textContent).toContain("写作业 V1")
     expect(container.textContent).not.toContain(workflowId)
   })
+
+  it("shows a missing child workflow state when the selected workflow no longer exists", async () => {
+    const workflowGet = vi.fn().mockResolvedValue(null)
+    ;(window as unknown as { synapse: { workflow: { get: typeof workflowGet } } }).synapse = {
+      workflow: { get: workflowGet },
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(React.createElement(WorkflowCallNodeCard, {
+        config: { workflowId: "deleted-child", variables: [], paramTemplates: {} },
+        name: "调用工作流",
+      }))
+    })
+    await flushEffects()
+
+    expect(workflowGet).toHaveBeenCalledWith("deleted-child")
+    expect(container.textContent).toContain("子工作流不存在")
+    expect(container.textContent).not.toContain("已选择工作流")
+  })
 })

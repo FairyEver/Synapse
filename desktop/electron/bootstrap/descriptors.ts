@@ -171,6 +171,17 @@ type RunWorkflowHandlerOptions = {
   readonly actor?: ActorIdentity
 }
 
+async function loadWorkflowValidationOptions(workflowService: Pick<WorkflowService, "list">) {
+  const [appConfig, workflows] = await Promise.all([
+    configStore.load(),
+    workflowService.list(),
+  ])
+  return {
+    configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
+    availableWorkflowIds: workflows.map((workflow) => workflow.id),
+  }
+}
+
 function buildWorkflowRunAttribution(input: {
   readonly automationId?: string
   readonly automationRunId?: string
@@ -383,9 +394,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
         runStatuses,
         runCompletions,
         capabilityLogger,
-        loadValidationOptions: async () => ({
-          configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
-        }),
+        loadValidationOptions: () => loadWorkflowValidationOptions(workflowService),
       }),
       },
       getAgentRuntime: async (projectId) => {
@@ -682,9 +691,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         runCompletions,
         capabilityLogger,
         isWorkflowDeleted: (workflowId) => deletedWorkflowIds.has(workflowId),
-        loadValidationOptions: async () => ({
-          configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
-        }),
+        loadValidationOptions: () => loadWorkflowValidationOptions(workflowService),
       }),
       cancelRun: (runId: string) => {
         const controller = runAborts.get(runId)
@@ -719,9 +726,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       listProviders: () => providerService.listProviders(),
       permissionGuard,
       auditSink,
-      loadValidationOptions: async () => ({
-        configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
-      }),
+      loadValidationOptions: () => loadWorkflowValidationOptions(workflowService),
     })
     const contentDispatcher = createContentCapabilityDispatcher({
       contentReader: contentService,

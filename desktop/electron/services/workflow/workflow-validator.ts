@@ -11,6 +11,7 @@ const logger = createMainLogger("service.workflow.validator")
 
 export interface WorkflowValidationOptions {
   readonly configuredProjectIds?: Iterable<string>
+  readonly availableWorkflowIds?: Iterable<string>
 }
 
 export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfig, "repositories" | "global">): string[] {
@@ -172,6 +173,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
   const defaultProjectId = normalizeProjectId(def.defaultProjectId)
   const hasDefaultProjectId = Boolean(defaultProjectId)
   const configuredProjectIds = normalizeConfiguredProjectIds(options.configuredProjectIds)
+  const availableWorkflowIds = options.availableWorkflowIds ? new Set([...options.availableWorkflowIds].map((id) => id.trim()).filter(Boolean)) : undefined
 
   if (!def.name?.trim()) {
     errors.push({ type: "invalid_config", message: "工作流名称不能为空" })
@@ -333,6 +335,8 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
         errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, field: "workflowId", message: `节点「${node.name}」请选择要调用的工作流` })
       } else if (childWorkflowId === def.id) {
         errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, field: "workflowId", message: `节点「${node.name}」不能调用当前工作流` })
+      } else if (availableWorkflowIds && !availableWorkflowIds.has(childWorkflowId)) {
+        errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, field: "workflowId", message: `节点「${node.name}」调用的子工作流不存在，请重新选择工作流` })
       }
 
       const templates = cfg.paramTemplates

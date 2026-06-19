@@ -190,6 +190,29 @@ describe("WorkflowService", () => {
     ]))
     expect(await svc.list()).toEqual([])
   })
+  it("rejects workflow_call references to missing child workflows before persisting", async () => {
+    const { svc } = createRepo()
+    const parent = {
+      ...makeDef(),
+      id: "parent",
+      nodes: [
+        { id: "call", name: "调用", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "deleted-child", variables: [], paramTemplates: {} } },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "{{result}}", variables: [{ name: "result", source: { type: "node_output", node: "call" } }] } },
+      ],
+      edges: [{ id: "edge-1", from: "call", to: "end" }],
+    } satisfies WorkflowDefinition
+
+    const result = await svc.save(parent)
+
+    expect("errors" in result).toBe(true)
+    expect((result as { errors: Array<{ field?: string; message: string }> }).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "workflowId",
+        message: "节点「调用」调用的子工作流不存在，请重新选择工作流",
+      }),
+    ]))
+    expect(await svc.get("parent")).toBeNull()
+  })
   it("normalizes nullable optional metadata before persisting so restart can list workflows", async () => {
     const { svc, dir } = createRepo()
     const dirty = {

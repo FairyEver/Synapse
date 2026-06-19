@@ -135,6 +135,17 @@ describe("WorkflowCallNodePanel", () => {
     expect(document.body.textContent).not.toContain("父工作流")
   })
 
+  it("shows a missing child workflow state when the selected workflow no longer exists", async () => {
+    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue(null)
+
+    const { container } = renderPanel({ workflowId: "deleted-child", variables: [], paramTemplates: {} })
+    await flushEffects()
+
+    expect(workflowGet).toHaveBeenCalledWith("deleted-child")
+    expect(container.textContent).toContain("子工作流不存在")
+  })
+
   it("updates templates on blur", async () => {
     workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue({

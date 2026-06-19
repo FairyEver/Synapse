@@ -22,6 +22,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
   const [workflows, setWorkflows] = useState<WorkflowMeta[]>([])
   const [childParams, setChildParams] = useState<WorkflowParam[]>([])
   const [templates, setTemplates] = useState<Record<string, string>>(config.paramTemplates)
+  const [selectedWorkflowMissing, setSelectedWorkflowMissing] = useState(false)
   const lastCommittedRef = useRef<WorkflowCallNodeConfig>(config)
 
   useEffect(() => {
@@ -38,10 +39,17 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
     void (async () => {
       if (!config.workflowId) {
         setChildParams([])
+        setSelectedWorkflowMissing(false)
         return
       }
       const child = await window.synapse?.workflow.get(config.workflowId)
       if (cancelled) return
+      if (!child) {
+        setChildParams([])
+        setSelectedWorkflowMissing(true)
+        return
+      }
+      setSelectedWorkflowMissing(false)
       const nextParams = child?.params ?? []
       setChildParams(nextParams)
       const withInitialTemplates = buildInitialParamTemplates(lastCommittedRef.current, nextParams, workflowParams)
@@ -63,6 +71,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
     () => workflows.find((workflow) => workflow.id === config.workflowId)?.name,
     [workflows, config.workflowId],
   )
+  const workflowSummary = selectedWorkflowMissing ? "子工作流不存在" : selectedWorkflowName
 
   const commit = (patch: Partial<WorkflowCallNodeConfig>) => {
     const next = { ...lastCommittedRef.current, ...patch }
@@ -75,7 +84,7 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
 
   return (
     <div className="grid gap-2">
-      <CollapsibleSection title="工作流" summary={selectedWorkflowName}>
+      <CollapsibleSection title="工作流" summary={workflowSummary}>
         <div className="grid gap-1.5">
           <Label className="text-xs">工作流</Label>
           <Select value={config.workflowId} onValueChange={(workflowId) => commit({ workflowId })}>
@@ -88,6 +97,9 @@ export function WorkflowCallNodePanel({ config, onChange, upstreamNodes, workflo
               ))}
             </SelectContent>
           </Select>
+          {selectedWorkflowMissing ? (
+            <p className="text-xs text-destructive">子工作流不存在</p>
+          ) : null}
         </div>
       </CollapsibleSection>
 

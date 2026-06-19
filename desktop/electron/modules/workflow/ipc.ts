@@ -699,10 +699,20 @@ async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string
   return projectId || undefined
 }
 
-async function loadWorkflowValidationOptions(): Promise<WorkflowValidationOptions> {
+async function loadWorkflowValidationOptions(workflowService?: Partial<Pick<WorkflowService, "list">>): Promise<WorkflowValidationOptions> {
   const appConfig = await configStore.load()
+  const workflows = typeof workflowService?.list === "function" ? await workflowService.list() : undefined
   return {
     configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
+    availableWorkflowIds: workflows?.map((workflow) => workflow.id),
+  }
+}
+
+function resolveWorkflowValidationService(ctx: { resolve<T>(serviceId: string): T }): Partial<Pick<WorkflowService, "list">> | undefined {
+  try {
+    return ctx.resolve<WorkflowService>("core.workflow")
+  } catch {
+    return undefined
   }
 }
 
@@ -1068,10 +1078,11 @@ export const workflowIpcModule: IpcModule = {
     },
     validate: {
       channel: "synapse:workflow:validate", kind: "invoke", request: workflowDefinitionSchema, response: validationResultSchema,
-      handler: async (_ctx, def) => {
+      handler: async (ctx, def) => {
         const d = def as { id: string; nodes: unknown[] }
         logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
-        const result = validateWorkflow(def as never, await loadWorkflowValidationOptions())
+        const workflowService = resolveWorkflowValidationService(ctx)
+        const result = validateWorkflow(def as never, await loadWorkflowValidationOptions(workflowService))
         logger.info("workflow:validate result", { id: d.id, valid: result.valid, errorCount: result.errors.length, warnCount: result.warnings.length })
         if (!result.valid) logger.warn("workflow:validate errors", { id: d.id, errors: result.errors })
         return result
@@ -1101,7 +1112,7 @@ export const workflowIpcModule: IpcModule = {
 
         // Validate before running — prevents invalid workflows from executing
         // when triggered from paths that skip editor-side validation (e.g. list page "Run" button)
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(svc))
         if (!validation.valid) {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1150,11 +1161,12 @@ export const workflowIpcModule: IpcModule = {
         logger.info("workflow:runDefinition requested", { workflowId: def.id, paramKeys: Object.keys(params) })
         const engine = ctx.resolve<WorkflowEngine>("core.workflow.engine")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+        const workflowService = resolveWorkflowValidationService(ctx)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
 
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService))
         if (!validation.valid) {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1260,7 +1272,8 @@ export const workflowIpcModule: IpcModule = {
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
 
-        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
+        const workflowService = resolveWorkflowValidationService(ctx)
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService))
         if (!validation.valid) return { errors: validation.errors }
         const paramErrors = validateRunParams(def, effectiveParams)
         if (paramErrors.length > 0) {

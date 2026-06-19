@@ -23,17 +23,21 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
   const timer = useRunningTimer(startedAt, status === "running")
   const paramCount = Object.keys(config.paramTemplates).length
   const [workflowName, setWorkflowName] = useState<string | null>(null)
+  const [workflowMissing, setWorkflowMissing] = useState(false)
   const workflowId = typeof config.workflowId === "string" ? config.workflowId.trim() : ""
 
   useEffect(() => {
     setWorkflowName(null)
+    setWorkflowMissing(false)
     if (!workflowId) return
     const workflowApi = window.synapse?.workflow
     if (!workflowApi) return
     let cancelled = false
     void workflowApi.get(workflowId)
       .then((workflow) => {
-        if (!cancelled) setWorkflowName(workflow?.name?.trim() || null)
+        if (cancelled) return
+        setWorkflowName(workflow?.name?.trim() || null)
+        setWorkflowMissing(!workflow)
       })
       .catch((err) => {
         if (cancelled) return
@@ -49,7 +53,7 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
   }, [workflowId])
 
   const workflowDisplay = workflowId
-    ? workflowName ?? "已选择工作流"
+    ? workflowMissing ? "子工作流不存在" : workflowName ?? "已选择工作流"
     : "未选择工作流"
 
   return (
@@ -66,7 +70,7 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
         <p className="truncate text-[11px] text-muted-foreground">{progressLabel}</p>
       ) : (
         <>
-          <p className="truncate text-[11px] text-muted-foreground">{workflowDisplay}</p>
+          <p className={cn("truncate text-[11px] text-muted-foreground", workflowMissing && "text-destructive")}>{workflowDisplay}</p>
           <p className="truncate text-[11px] text-muted-foreground opacity-70">{paramCount > 0 ? `${paramCount} 个参数` : "无参数映射"}</p>
         </>
       )}
