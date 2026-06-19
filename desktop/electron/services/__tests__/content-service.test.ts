@@ -34,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   logger: {
     warn: vi.fn(),
   },
+  repositoryStore: {
+    getRepositoryState: vi.fn(),
+  },
   resolveContentDirectoryPath: vi.fn(),
 }))
 
@@ -62,6 +65,10 @@ vi.mock("../content-index-service", () => ({
 
 vi.mock("../log-store", () => ({
   createMainLogger: () => mocks.logger,
+}))
+
+vi.mock("../repository-store", () => ({
+  repositoryStore: mocks.repositoryStore,
 }))
 
 import { contentService } from "../content-service"
@@ -155,6 +162,54 @@ describe("contentService.listDeletedContent", () => {
       "Failed to load deleted repository content, returning empty list.",
       { contentType: "rule", error },
     )
+  })
+})
+
+describe("contentService.getAttachmentFile", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.builtinContentService.isBuiltinContentId.mockReturnValue(false)
+  })
+
+  it("reads repository attachments from the git root when active path is a subdirectory", async () => {
+    const subdirRepository = {
+      ...repository,
+      localPath: "/repo/packages/content",
+    }
+    const attachment = {
+      originalName: "docs/readme.md",
+      sha256: "a".repeat(64),
+      size: 5,
+    }
+    const attachmentFile = {
+      relativePath: "docs/readme.md",
+      name: "readme.md",
+      size: 5,
+      kind: "text",
+      content: "hello",
+    }
+    mocks.configStore.load.mockResolvedValue({
+      ...createConfig(),
+      repositories: [subdirRepository],
+    })
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: true,
+      gitRootPath: "/repo",
+    })
+    mocks.contentHistoryService.readHistoryVersion.mockResolvedValue({
+      attachments: [attachment],
+    })
+    mocks.attachmentsPoolService.readAttachmentFile.mockResolvedValue(attachmentFile)
+
+    await expect(contentService.getAttachmentFile(
+      "skill",
+      "skill-1",
+      "history-1",
+      "docs/readme.md",
+    )).resolves.toEqual(attachmentFile)
+
+    expect(mocks.attachmentsPoolService.readAttachmentFile).toHaveBeenCalledWith("/repo", attachment)
   })
 })
 

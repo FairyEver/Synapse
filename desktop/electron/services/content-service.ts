@@ -23,6 +23,7 @@ import { contentIndexService } from "./content-index-service"
 import { configStore } from "./config-store"
 import { CONTENT_ICON_IMAGE_MAX_BYTES } from "./content-capability-validator"
 import { createMainLogger } from "./log-store"
+import { repositoryStore } from "./repository-store"
 
 const logger = createMainLogger("service.content")
 
@@ -166,7 +167,13 @@ class ContentService {
       return null
     }
 
-    return attachmentsPoolService.readAttachmentFile(context.repository.localPath, attachment)
+    const repositoryState = await repositoryStore.getRepositoryState(context.repository)
+
+    if (repositoryState.status !== "ready") {
+      throw new Error("当前目录不存在，请先在 Settings 里重新选择本地目录。")
+    }
+
+    return attachmentsPoolService.readAttachmentFile(repositoryState.gitRootPath ?? context.repository.localPath, attachment)
   }
 
   async getRules(): Promise<SynapseContentMeta<"rule">[]> {
