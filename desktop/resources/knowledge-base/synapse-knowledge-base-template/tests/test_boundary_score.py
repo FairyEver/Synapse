@@ -123,6 +123,31 @@ def test_days_since():
     assert_true("garbage date -> large sentinel", garbage >= 9999.0)
 
 
+class ReadBombPath:
+    def __init__(self, size):
+        self.size = size
+        self.read_called = False
+
+    def stat(self):
+        class Stat:
+            pass
+        stat = Stat()
+        stat.st_size = self.size
+        return stat
+
+    def read_text(self, encoding="utf-8"):
+        self.read_called = True
+        raise AssertionError("oversized page body should not be read")
+
+
+def test_safe_read_text_skips_oversized_before_reading():
+    path = ReadBombPath(bs.MAX_BODY_BYTES + 1)
+    text, reason = bs.safe_read_text(path)
+    assert_eq("oversized read returns no text", None, text)
+    assert_eq("oversized read reason", "too_large", reason)
+    assert_eq("oversized read_text not called", False, path.read_called)
+
+
 def test_graph_and_scoring_on_temp_vault():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -283,6 +308,7 @@ if __name__ == "__main__":
         test_wikilink_longer_fence_handles_nested()
         test_wikilink_indented_not_filtered()
         test_days_since()
+        test_safe_read_text_skips_oversized_before_reading()
         test_graph_and_scoring_on_temp_vault()
         test_graph_excludes_self_loop_unresolved_meta()
         test_included_rejects_symlink()

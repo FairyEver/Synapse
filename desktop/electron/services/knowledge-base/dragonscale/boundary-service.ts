@@ -36,6 +36,16 @@ interface ParsedFrontmatter {
   readonly title?: string
 }
 
+type BoundaryServiceDeps = {
+  readonly fileSize?: (filePath: string) => Promise<number>
+  readonly readFile?: (filePath: string) => Promise<Buffer>
+}
+
+type SmallFileAccess = {
+  readonly fileSize: (filePath: string) => Promise<number>
+  readonly readFile: (filePath: string) => Promise<Buffer>
+}
+
 const EXCLUDE_TYPES = new Set(["meta", "fold"])
 const EXCLUDE_FILENAMES = new Set([
   "_index.md",
@@ -59,6 +69,15 @@ const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true })
 const logger = createMainLogger("knowledge-base.dragonscale.boundary")
 
 export class DragonScaleBoundaryService {
+  private readonly fileAccess: SmallFileAccess
+
+  constructor(deps: BoundaryServiceDeps = {}) {
+    this.fileAccess = {
+      fileSize: deps.fileSize ?? defaultFileSize,
+      readFile: deps.readFile ?? readFile,
+    }
+  }
+
   async score(
     projectPath: string,
     options: DragonScaleBoundaryScoreOptions = {},
@@ -70,7 +89,7 @@ export class DragonScaleBoundaryService {
 
     const root = path.resolve(projectPath)
     const today = options.today ?? localDateString(new Date())
-    const scan = await collectPages(root)
+    const scan = await collectPages(root, this.fileAccess)
     const pages = scan.pages
     const { outEdges, inEdges } = buildGraph(pages)
     let results = [...pages.values()].map((page) => scorePage(page, outEdges, inEdges, today))
@@ -103,7 +122,7 @@ export class DragonScaleBoundaryService {
   }
 }
 
-async function collectPages(root: string): Promise<BoundaryPageScanResult> {
+async function collectPages(root: string, fileAccess: SmallFileAccess): Promise<BoundaryPageScanResult> {
   const wikiPath = path.join(root, "wiki")
   const rootRealPath = await resolveExistingPath(root)
   const markdownPaths = await collectMarkdownPaths(root, rootRealPath, wikiPath)
@@ -115,7 +134,7 @@ async function collectPages(root: string): Promise<BoundaryPageScanResult> {
   const skipped: Record<string, number> = {}
   for (const markdownPath of markdownPaths) {
     const relativePath = normalizeRelativePath(path.relative(root, markdownPath))
-    const read = await readSmallUtf8(markdownPath)
+    const read = await readSmallUtf8(markdownPath, fileAccess)
     if (!read.ok) {
       if (read.reason === "read_error") {
         logger.warn("DragonScale boundary page read failed.", {
@@ -174,17 +193,23 @@ async function collectMarkdownPaths(root: string, rootRealPath: string, director
   return results
 }
 
-async function readSmallUtf8(filePath: string): Promise<
+async function readSmallUtf8(filePath: string, fileAccess: SmallFileAccess): Promise<
   | { readonly ok: true; readonly content: string }
   | { readonly ok: false; readonly reason: "too_large" | "read_error"; readonly error?: unknown }
 > {
   try {
-    const bytes = await readFile(filePath)
+    const size = await fileAccess.fileSize(filePath)
+    if (size > DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES) return { ok: false, reason: "too_large" }
+    const bytes = await fileAccess.readFile(filePath)
     if (bytes.byteLength > DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES) return { ok: false, reason: "too_large" }
     return { ok: true, content: UTF8_DECODER.decode(bytes) }
   } catch (error) {
     return { ok: false, reason: "read_error", error }
   }
+}
+
+async function defaultFileSize(filePath: string): Promise<number> {
+  return (await lstat(filePath)).size
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {

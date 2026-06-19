@@ -121,6 +121,18 @@ def included(path: Path, fm: dict) -> bool:
     return True
 
 
+def safe_read_text(path: Path) -> tuple[str | None, str | None]:
+    try:
+        if path.stat().st_size > MAX_BODY_BYTES:
+            return None, "too_large"
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None, "read_error"
+    if len(text.encode("utf-8")) > MAX_BODY_BYTES:
+        return None, "too_large"
+    return text, None
+
+
 def days_since(date_str: str | None) -> float:
     """Return days since the given YYYY-MM-DD string, or a large sentinel if missing."""
     if not date_str:
@@ -195,11 +207,8 @@ def collect_pages() -> dict[str, dict]:
     if not WIKI_DIR.is_dir():
         return pages
     for md in sorted(WIKI_DIR.rglob("*.md")):
-        try:
-            text = md.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if len(text.encode("utf-8")) > MAX_BODY_BYTES:
+        text, read_reason = safe_read_text(md)
+        if read_reason:
             continue
         fm, body = parse_frontmatter(text)
         if not included(md, fm):

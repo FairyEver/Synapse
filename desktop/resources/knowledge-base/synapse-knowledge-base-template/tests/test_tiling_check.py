@@ -94,6 +94,31 @@ def test_is_local_url():
     assert_true("1.2.3.4 NOT local",       not tc._is_local_url("http://1.2.3.4"))
 
 
+class ReadBombPath:
+    def __init__(self, size):
+        self.size = size
+        self.read_called = False
+
+    def stat(self):
+        class Stat:
+            pass
+        stat = Stat()
+        stat.st_size = self.size
+        return stat
+
+    def read_text(self, encoding="utf-8"):
+        self.read_called = True
+        raise AssertionError("oversized page body should not be read")
+
+
+def test_safe_read_text_skips_oversized_before_reading():
+    path = ReadBombPath(tc.MAX_BODY_BYTES + 1)
+    text, reason = tc.safe_read_text(path)
+    assert_eq("oversized read returns no text", None, text)
+    assert_eq("oversized read reason", "too_large", reason)
+    assert_eq("oversized read_text not called", False, path.read_called)
+
+
 def test_cache_schema():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -150,6 +175,7 @@ if __name__ == "__main__":
         test_body_hash_model_scoped()
         test_included_basic()
         test_is_local_url()
+        test_safe_read_text_skips_oversized_before_reading()
         test_cache_schema()
         test_url_guard_via_subprocess()
     except Fail as exc:

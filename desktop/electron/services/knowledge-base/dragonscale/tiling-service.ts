@@ -54,6 +54,13 @@ interface LoadThresholdsResult {
 type TilingServiceDeps = {
   readonly embeddingProvider?: DragonScaleEmbeddingProvider
   readonly now?: () => Date
+  readonly fileSize?: (filePath: string) => Promise<number>
+  readonly readFile?: (filePath: string) => Promise<Buffer>
+}
+
+type SmallFileAccess = {
+  readonly fileSize: (filePath: string) => Promise<number>
+  readonly readFile: (filePath: string) => Promise<Buffer>
 }
 
 const EXCLUDE_TYPES = new Set(["meta", "fold"])
@@ -77,10 +84,15 @@ const logger = createMainLogger("knowledge-base.dragonscale.tiling")
 export class DragonScaleTilingService {
   private readonly embeddingProvider: DragonScaleEmbeddingProvider
   private readonly now: () => Date
+  private readonly fileAccess: SmallFileAccess
 
   constructor(deps: TilingServiceDeps = {}) {
     this.embeddingProvider = deps.embeddingProvider ?? new DragonScaleOllamaEmbeddingProvider()
     this.now = deps.now ?? (() => new Date())
+    this.fileAccess = {
+      fileSize: deps.fileSize ?? defaultFileSize,
+      readFile: deps.readFile ?? readFile,
+    }
   }
 
   async peek(projectPath: string, options: DragonScaleTilingPeekOptions = {}): Promise<DragonScaleTilingPeekResult> {
@@ -174,7 +186,7 @@ export class DragonScaleTilingService {
     }
 
     return this.withVaultLock(root, async () => {
-      const scan = await scanPages(root, model)
+      const scan = await scanPages(root, model, this.fileAccess)
       const warnings: string[] = []
       if (scan.scanned > DRAGONSCALE_TILING_SCALE_HARD_FAIL_PAGES) {
         return emptyCheckResult({
@@ -318,7 +330,7 @@ export function dragonScaleTilingBodyHash(body: string, model: string): string {
   return hash.digest("hex")
 }
 
-async function scanPages(root: string, model: string): Promise<PageScanResult> {
+async function scanPages(root: string, model: string, fileAccess: SmallFileAccess): Promise<PageScanResult> {
   const rootRealPath = await resolveExistingPath(root)
   const markdownPaths = await collectMarkdownPaths(root, rootRealPath, path.join(root, "wiki"))
   const skipped: Record<string, number> = {}
@@ -326,7 +338,7 @@ async function scanPages(root: string, model: string): Promise<PageScanResult> {
 
   for (const filePath of markdownPaths.paths) {
     const relativePath = normalizeRelativePath(path.relative(root, filePath))
-    const read = await readSmallUtf8(filePath)
+    const read = await readSmallUtf8(filePath, fileAccess)
     if (!read.ok) {
       if (read.reason === "read_error") {
         logger.warn("DragonScale tiling page read failed", {
@@ -408,12 +420,16 @@ async function collectMarkdownPaths(
   return { paths, scanned, skipped }
 }
 
-async function readSmallUtf8(filePath: string): Promise<
+async function readSmallUtf8(filePath: string, fileAccess: SmallFileAccess): Promise<
   | { readonly ok: true; readonly content: string }
   | { readonly ok: false; readonly reason: string; readonly error?: unknown }
 > {
   try {
-    const bytes = await readFile(filePath)
+    const size = await fileAccess.fileSize(filePath)
+    if (size > DRAGONSCALE_TILING_MAX_BODY_BYTES) {
+      return { ok: false, reason: "too_large" }
+    }
+    const bytes = await fileAccess.readFile(filePath)
     if (bytes.byteLength > DRAGONSCALE_TILING_MAX_BODY_BYTES) {
       return { ok: false, reason: "too_large" }
     }
@@ -421,6 +437,10 @@ async function readSmallUtf8(filePath: string): Promise<
   } catch (error) {
     return { ok: false, reason: "read_error", error }
   }
+}
+
+async function defaultFileSize(filePath: string): Promise<number> {
+  return (await lstat(filePath)).size
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {

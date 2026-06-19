@@ -238,6 +238,18 @@ def included(path: Path, fm: dict) -> tuple[bool, str]:
     return True, "included"
 
 
+def safe_read_text(path: Path) -> tuple[str | None, str | None]:
+    try:
+        if path.stat().st_size > MAX_BODY_BYTES:
+            return None, "too_large"
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None, "read_error"
+    if len(text.encode("utf-8")) > MAX_BODY_BYTES:
+        return None, "too_large"
+    return text, None
+
+
 def embed(text: str, model: str, url: str) -> list[float]:
     data = _http_post_json(
         f"{url}/api/embeddings",
@@ -302,13 +314,9 @@ def run_check(
             except (OSError, ValueError):
                 skipped_counts["escapes vault"] = skipped_counts.get("escapes vault", 0) + 1
                 continue
-            try:
-                text = md.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                skipped_counts["read_error"] = skipped_counts.get("read_error", 0) + 1
-                continue
-            if len(text.encode("utf-8")) > MAX_BODY_BYTES:
-                skipped_counts["too_large"] = skipped_counts.get("too_large", 0) + 1
+            text, read_reason = safe_read_text(md)
+            if read_reason:
+                skipped_counts[read_reason] = skipped_counts.get(read_reason, 0) + 1
                 continue
             fm, body = parse_frontmatter(text)
             ok, reason = included(md, fm)

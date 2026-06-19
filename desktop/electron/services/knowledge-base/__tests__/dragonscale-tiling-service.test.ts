@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -160,6 +160,30 @@ describe("DragonScaleTilingService", () => {
         reason: "read_error",
       }),
     )
+  })
+
+  it("skips oversized pages before reading their content", async () => {
+    const root = await tempDir()
+    const tooLargePath = path.join(root, "wiki", "concepts", "TooLarge.md")
+    const readFileForBody = vi.fn(async (filePath: string) => {
+      if (filePath === tooLargePath) throw new Error("oversized page body should not be read")
+      return readFile(filePath)
+    })
+    const fileSize = vi.fn(async (filePath: string) => {
+      if (filePath === tooLargePath) return 128 * 1024 + 1
+      return (await lstat(filePath)).size
+    })
+    await writePage(root, "wiki/concepts/Alpha.md", "---\ntype: concept\n---\n\nAlpha body\n")
+    await writePage(root, "wiki/concepts/TooLarge.md", "body that should be skipped by size metadata\n")
+
+    const result = await new DragonScaleTilingService({
+      embeddingProvider: new FakeEmbeddingProvider(),
+      fileSize,
+      readFile: readFileForBody,
+    }).check(root)
+
+    expect(result.skipped).toMatchObject({ too_large: 1 })
+    expect(readFileForBody).not.toHaveBeenCalledWith(tooLargePath)
   })
 
   it("uses cache hits for unchanged bodies and ignores frontmatter-only changes", async () => {

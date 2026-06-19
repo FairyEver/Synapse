@@ -1,7 +1,7 @@
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   DragonScaleBoundaryService,
@@ -89,6 +89,33 @@ describe("DragonScaleBoundaryService", () => {
       "wiki/concepts/Alpha.md",
       "wiki/concepts/Beta.md",
     ])
+  })
+
+  it("skips oversized pages before reading their content", async () => {
+    const root = await tempDir()
+    const tooLargePath = path.join(root, "wiki", "concepts", "TooLarge.md")
+    const readFileForBody = vi.fn(async (filePath: string) => {
+      if (filePath === tooLargePath) throw new Error("oversized page body should not be read")
+      return readFile(filePath)
+    })
+    const fileSize = vi.fn(async (filePath: string) => {
+      if (filePath === tooLargePath) return 256 * 1024 + 1
+      return (await lstat(filePath)).size
+    })
+    await writePage(root, "wiki/concepts/Alpha.md", "---\ntype: concept\nupdated: 2026-05-24\n---\n\n[[Beta]]\n")
+    await writePage(root, "wiki/concepts/Beta.md", "---\ntype: concept\nupdated: 2026-05-24\n---\n\n# Beta\n")
+    await writePage(root, "wiki/concepts/TooLarge.md", "body that should be skipped by size metadata\n")
+
+    const result = await new DragonScaleBoundaryService({
+      fileSize,
+      readFile: readFileForBody,
+    }).score(root, {
+      includeScoreZero: true,
+      today: "2026-05-24",
+    })
+
+    expect(result.skipped).toEqual({ too_large: 1 })
+    expect(readFileForBody).not.toHaveBeenCalledWith(tooLargePath)
   })
 
   it("computes graph degrees from Obsidian wikilinks", async () => {
