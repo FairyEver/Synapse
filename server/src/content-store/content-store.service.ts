@@ -128,6 +128,12 @@ type ContentStoreItemWithInstallCountRow = ContentStoreItemRow & {
   }
 }
 
+interface ContentStoreLatestVersionNumberRow {
+  readonly id: string
+  readonly itemId: string
+  readonly versionNumber: number
+}
+
 interface ContentStoreDraftRow {
   readonly id: string
   readonly itemId: string
@@ -943,12 +949,15 @@ export class ContentStoreService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.contentStoreItem.findMany({
         where,
-        include: { owner: { select: { id: true, displayName: true } } },
+        include: {
+          owner: { select: { id: true, displayName: true } },
+          _count: { select: { installEvents: true } },
+        },
         ...toPrismaArgs({ ...pagination, sortBy: pagination.sortBy === "createdAt" ? "createdAt" : pagination.sortBy }),
         orderBy: [{ featured: "desc" }, { [pagination.sortBy]: pagination.sortOrder }],
       }),
       this.prisma.contentStoreItem.count({ where }),
-    ]) as [ContentStoreItemRow[], number]
+    ]) as [ContentStoreItemWithInstallCountRow[], number]
     return this.paginatedItems(this.prisma, items, total, pagination)
   }
 
@@ -973,26 +982,43 @@ export class ContentStoreService {
       }),
       this.prisma.contentStoreItem.count({ where }),
     ]) as [ContentStoreItemWithInstallCountRow[], number]
+    return this.paginatedItems(this.prisma, items, total, pagination)
+  }
+
+  private async paginatedItems(
+    db: ContentStoreDb,
+    items: readonly ContentStoreItemWithInstallCountRow[],
+    total: number,
+    pagination: PaginationQuery,
+  ): Promise<PaginatedResponse<ContentStoreItemDto>> {
+    const latestVersionNumbers = await this.latestVersionNumbersByItem(db, items)
     return {
-      data: await Promise.all(items.map((item) => this.itemDto(this.prisma, item, item._count.installEvents))),
+      data: items.map((item) => itemDto(
+        item,
+        item._count.installEvents,
+        latestVersionNumbers.get(item.id) ?? null,
+      )),
       total,
       page: pagination.page,
       pageSize: pagination.pageSize,
     }
   }
 
-  private async paginatedItems(
+  private async latestVersionNumbersByItem(
     db: ContentStoreDb,
     items: readonly ContentStoreItemRow[],
-    total: number,
-    pagination: PaginationQuery,
-  ): Promise<PaginatedResponse<ContentStoreItemDto>> {
-    return {
-      data: await Promise.all(items.map((item) => this.itemDto(db, item))),
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-    }
+  ): Promise<Map<string, number>> {
+    const latestVersionRefs = items.flatMap((item) => item.latestVersionId
+      ? [{ id: item.latestVersionId, itemId: item.id }]
+      : [])
+    if (latestVersionRefs.length === 0) return new Map()
+
+    const versions = await db.contentStoreVersion.findMany({
+      where: { OR: latestVersionRefs.map(({ id, itemId }) => ({ id, itemId })) },
+      select: { id: true, itemId: true, versionNumber: true },
+    }) as ContentStoreLatestVersionNumberRow[]
+
+    return new Map(versions.map((version) => [version.itemId, version.versionNumber]))
   }
 
   private async itemDto(db: ContentStoreDb, item: ContentStoreItemRow, knownInstallCount?: number): Promise<ContentStoreItemDto> {

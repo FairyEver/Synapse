@@ -481,6 +481,40 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("maps default list item metadata with bounded queries", async () => {
+    prisma.contentStoreItem.count.mockResolvedValue(2)
+    prisma.contentStoreItem.findMany.mockResolvedValue([
+      item({ id: "item-1", latestVersionId: "version-1", _count: { installEvents: 2 } }),
+      item({ id: "item-2", latestVersionId: "version-2", _count: { installEvents: 5 } }),
+    ])
+    prisma.contentStoreVersion.findMany.mockResolvedValue([
+      { id: "version-1", itemId: "item-1", versionNumber: 3 },
+      { id: "version-2", itemId: "item-2", versionNumber: 4 },
+    ])
+
+    const result = await service.listStore("user-1", { pageSize: 50 })
+
+    expect(prisma.contentStoreItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        _count: { select: { installEvents: true } },
+      }),
+    }))
+    expect(prisma.contentStoreInstallEvent.count).not.toHaveBeenCalled()
+    expect(prisma.contentStoreVersion.findFirst).not.toHaveBeenCalled()
+    expect(prisma.contentStoreVersion.findMany).toHaveBeenCalledTimes(1)
+    expect(prisma.contentStoreVersion.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { id: "version-1", itemId: "item-1" },
+          { id: "version-2", itemId: "item-2" },
+        ],
+      },
+      select: { id: true, itemId: true, versionNumber: true },
+    })
+    expect(result.data.map((row) => row.installCount)).toEqual([2, 5])
+    expect(result.data.map((row) => row.latestVersionNumber)).toEqual([3, 4])
+  })
+
   it("requires a published version for public detail access", async () => {
     prisma.contentStoreItem.findFirst.mockResolvedValue(null)
 
