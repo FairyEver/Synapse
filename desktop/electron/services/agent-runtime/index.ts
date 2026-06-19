@@ -170,9 +170,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         isManagedKnowledgeBase
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
-      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
-        hasManagedKnowledgeBaseWorkspace
-        && message.platform === "local-renderer"
       const isManagedKnowledgeBaseRuntimeMessage = (message: AgentMessage) =>
         hasManagedKnowledgeBaseWorkspace
         && (message.platform === "local-renderer" || message.platform === "workflow")
@@ -214,11 +211,11 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           isManagedKnowledgeBaseRuntimeMessage(message)
           && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
         prepareMessage: (message, context) =>
-          isManagedKnowledgeBaseRendererMessage(message) && knowledgeBaseIngest
+          isManagedKnowledgeBaseRuntimeMessage(message) && knowledgeBaseIngest
             ? knowledgeBaseIngest.prepareTurn(message, context)
             : message,
         afterTurn: (input) =>
-          isManagedKnowledgeBaseRendererMessage(input.message) && knowledgeBaseIngest
+          isManagedKnowledgeBaseRuntimeMessage(input.message) && knowledgeBaseIngest
             ? knowledgeBaseIngest.finalizeTurn(input)
             : undefined,
         sdkAgents: async () => ({}),

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -17,6 +17,9 @@ import type { AgentEvent, AgentMessage } from "../types"
 
 const createdSessionInputs = vi.hoisted(() => ({
   values: [] as unknown[],
+}))
+const sentMessages = vi.hoisted(() => ({
+  values: [] as AgentMessage[],
 }))
 
 vi.mock("../../provider", () => ({
@@ -53,7 +56,8 @@ vi.mock("../claude-sdk-session", () => ({
       createdSessionInputs.values.push(options)
     }
 
-    async send(_message: AgentMessage): Promise<boolean> {
+    async send(message: AgentMessage): Promise<boolean> {
+      sentMessages.values.push(message)
       return true
     }
 
@@ -324,6 +328,33 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
+  it("runs managed knowledge base ingest preflight for workflow wiki-ingest sends", async () => {
+    createdSessionInputs.values = []
+    sentMessages.values = []
+    const workspacePath = createKnowledgeBaseWorkspace()
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      managedKnowledgeBase: true,
+      workspacePath,
+    })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      await service.send({
+        projectId: "project-1",
+        sessionKey: "workflow-run-1",
+        platform: "workflow",
+        userId: "workflow",
+        content: "/wiki-ingest ingest all",
+      })
+
+      expect(sentMessages.values.at(-1)?.content).toContain("Synapse ingest preflight:")
+      expect(sentMessages.values.at(-1)?.content).toContain(".raw/source.md")
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
   it("passes managed knowledge base slash commands through to the SDK for renderer sessions", async () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
@@ -402,6 +433,22 @@ function createRunnableProjectContext(options: {
 
 function createTestWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "synapse-agent-runtime-"))
+}
+
+function createKnowledgeBaseWorkspace(): string {
+  const workspace = createTestWorkspace()
+  mkdirSync(join(workspace, ".raw"), { recursive: true })
+  mkdirSync(join(workspace, ".vault-meta"), { recursive: true })
+  mkdirSync(join(workspace, "wiki"), { recursive: true })
+  writeFileSync(join(workspace, ".raw", "source.md"), "# Source\n", "utf8")
+  writeFileSync(join(workspace, ".raw", ".manifest.json"), JSON.stringify({
+    version: 1,
+    sources: {},
+    address_map: {},
+  }), "utf8")
+  writeFileSync(join(workspace, ".vault-meta", "address-counter.txt"), "1\n", "utf8")
+  writeFileSync(join(workspace, "wiki", "index.md"), "# Index\n", "utf8")
+  return workspace
 }
 
 function createMemoryDataRepository(): Pick<DataRepository, "namespace"> {
