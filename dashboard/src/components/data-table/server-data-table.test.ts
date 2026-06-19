@@ -1,12 +1,36 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+
+import { type ColumnDef } from '@tanstack/react-table'
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import * as dataTableExports from './index'
+import { DataTableColumnHeader } from './column-header'
 import {
+  ServerDataTable,
   getServerDataTableBoundedPage,
   getServerDataTableErrorMessage,
   getServerDataTablePageCount,
   getServerDataTablePinnedColumnClass,
 } from './server-data-table'
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let root: Root | null = null
+let host: HTMLDivElement | null = null
+
+afterEach(() => {
+  if (root) {
+    act(() => {
+      root?.unmount()
+    })
+  }
+  host?.remove()
+  root = null
+  host = null
+  document.body.innerHTML = ''
+})
 
 describe('data table defaults', () => {
   it('exports the dashboard list default page size', () => {
@@ -54,3 +78,75 @@ describe('server table pinned columns', () => {
     expect(getServerDataTablePinnedColumnClass('name')).toBe('')
   })
 })
+
+describe('ServerDataTable', () => {
+  it('shows column visibility controls for hideable server columns', async () => {
+    type Row = {
+      email: string
+      teamName: string
+    }
+
+    const columns: ColumnDef<Row>[] = [
+      {
+        accessorKey: 'email',
+        header: ({ column }) => (
+          createElement(DataTableColumnHeader, { column, title: '邮箱' })
+        ),
+      },
+      {
+        id: 'teamName',
+        header: ({ column }) => (
+          createElement(DataTableColumnHeader, { column, title: '团队' })
+        ),
+        cell: ({ row }) => row.original.teamName,
+        enableSorting: false,
+      },
+    ]
+
+    renderServerTable(columns, [
+      { email: 'admin@example.com', teamName: '核心团队' },
+    ])
+
+    const viewButton = buttonByText('View')
+    expect(viewButton).not.toBeNull()
+
+    await click(viewButton)
+
+    expect(document.body.textContent).toContain('email')
+    expect(document.body.textContent).toContain('teamName')
+  })
+})
+
+function renderServerTable<TData>(columns: ColumnDef<TData>[], data: TData[]) {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+
+  act(() => {
+    root?.render(createElement(ServerDataTable<TData, unknown>, {
+      columns,
+      data,
+      page: 1,
+      pageSize: 10,
+      total: data.length,
+      onPageChange: () => undefined,
+      onPageSizeChange: () => undefined,
+      showPagination: false,
+    }))
+  })
+}
+
+async function click(element: HTMLElement | null) {
+  if (!element) throw new Error('button not found')
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    element.click()
+    await Promise.resolve()
+  })
+}
+
+function buttonByText(text: string): HTMLButtonElement | null {
+  const button = Array.from(document.querySelectorAll('button'))
+    .find((element) => element.textContent?.trim() === text)
+  return button instanceof HTMLButtonElement ? button : null
+}

@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DataTablePagination } from './pagination'
+import { DataTableViewOptions } from './view-options'
 
 type ServerDataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[]
@@ -155,10 +156,18 @@ export function ServerDataTable<TData, TValue>({
     },
   })
   const errorMessage = error ? getServerDataTableErrorMessage(error) : null
+  const canToggleColumns = table
+    .getAllLeafColumns()
+    .some((column) => column.getCanHide())
 
   return (
     <div className={cn('flex flex-1 flex-col gap-4', className)}>
-      {toolbar}
+      {toolbar || canToggleColumns ? (
+        <div className='flex items-center justify-between gap-2'>
+          <div className='min-w-0 flex-1'>{toolbar}</div>
+          {canToggleColumns ? <DataTableViewOptions table={table} /> : null}
+        </div>
+      ) : null}
       <div className='overflow-hidden rounded-md border'>
         <Table>
           <TableHeader>
