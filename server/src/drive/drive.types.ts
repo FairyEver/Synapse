@@ -5,6 +5,7 @@ import {
   type DrivePublicAssetDto,
   type DriveStorageStatus,
   buildDrivePublicAssetUrl,
+  maskDriveBrowserUrl,
 } from "@synapse/shared"
 
 export type DrivePrepareUploadInput = {
@@ -206,7 +207,7 @@ export function toDriveAdminPublicAssetAccessLogDto(log: {
     statusCode: log.statusCode,
     bytes: log.bytes.toString(),
     ip: log.ip,
-    referer: log.referer,
+    referer: log.referer ? maskDriveBrowserUrl(log.referer) : null,
     userAgent: log.userAgent,
     accessedAt,
     createdAt: accessedAt,

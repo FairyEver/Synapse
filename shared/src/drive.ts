@@ -458,10 +458,13 @@ export function maskDriveShareUrl(value: string): string {
 export function maskDriveBrowserUrl(value: string): string {
   try {
     const parsed = new URL(value)
-    parsed.pathname = maskDriveBrowserPath(parsed.pathname)
-    return maskPasswordQuery(parsed.toString())
+    const maskedPathname = maskDriveBrowserPath(parsed.pathname)
+    const pathChanged = maskedPathname !== parsed.pathname
+    parsed.pathname = maskedPathname
+    const queryChanged = maskSensitiveDriveSearchParams(parsed.searchParams)
+    return pathChanged || queryChanged ? parsed.toString() : value
   } catch {
-    return maskPasswordQuery(maskDriveBrowserPath(value))
+    return maskSensitiveDriveQuery(maskDriveBrowserPath(value))
   }
 }
 
@@ -476,6 +479,7 @@ function maskDriveBrowserPath(value: string): string {
     .replace(/\/console\/drive\/items\/[^/?#]+/u, "/console/drive/items/***")
     .replace(/\/share\/[^/?#]+/u, "/share/***")
     .replace(/(\/share\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
+    .replace(/\/files\/[^/?#]+/u, "/files/***")
 }
 
 function buildRelativeUrlWithPassword(url: string, password: string): string {
@@ -490,14 +494,27 @@ function buildRelativeUrlWithPassword(url: string, password: string): string {
   return `${path}?${params.toString()}${hash}`
 }
 
-function maskPasswordQuery(value: string): string {
+function maskSensitiveDriveQuery(value: string): string {
   try {
     const parsed = new URL(value)
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (key.toLowerCase() === "password") parsed.searchParams.set(key, "***")
-    }
-    return parsed.toString()
+    const changed = maskSensitiveDriveSearchParams(parsed.searchParams)
+    return changed ? parsed.toString() : value
   } catch {
-    return value.replace(/([?&]password=)[^&#]*/giu, "$1***")
+    return value.replace(/([?&](?:password|token|access_token|api_?key|signature|sig)=)[^&#]*/giu, "$1***")
   }
+}
+
+function maskSensitiveDriveSearchParams(params: URLSearchParams): boolean {
+  let changed = false
+  for (const key of [...params.keys()]) {
+    if (isSensitiveDriveQueryKey(key)) {
+      params.set(key, "***")
+      changed = true
+    }
+  }
+  return changed
+}
+
+function isSensitiveDriveQueryKey(key: string): boolean {
+  return /^(?:password|token|access_token|api_?key|signature|sig)$/iu.test(key)
 }

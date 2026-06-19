@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import {
   DRIVE_MAX_FILE_SIZE_LABEL,
   isDrivePublicAssetId,
+  maskDriveBrowserUrl,
   type DrivePublicAssetDto,
   type DrivePublicAssetListPageDto,
   type DriveUploadPrepareResult,
@@ -642,7 +643,7 @@ export class DrivePublicAssetService {
             publicAssetId: input.publicAssetId ?? null,
             userId: input.userId ?? null,
             ip: input.ip ?? null,
-            referer: input.referer ?? null,
+            referer: input.referer ? maskDriveBrowserUrl(input.referer) : null,
             userAgent: input.userAgent ?? null,
             method: input.method,
             statusCode: input.statusCode,

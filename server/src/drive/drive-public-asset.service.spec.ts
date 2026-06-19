@@ -244,6 +244,52 @@ describe("DrivePublicAssetService", () => {
     expect(prisma.__debug.publicAssetAccessLogs.size).toBe(3)
   })
 
+  it("sanitizes public asset access referers before persistence", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+
+    await service.recordAccessSafely({
+      assetId: asset.assetId,
+      publicAssetId: asset.id,
+      userId: "user-1",
+      method: "GET",
+      statusCode: 200,
+      bytes: 8n,
+      referer: "https://synapse.example/share/shr_secret/items/item_secret?password=secret&token=tok_123",
+    })
+
+    const stored = [...prisma.__debug.publicAssetAccessLogs.values()][0]
+    expect(stored.referer).toBe("https://synapse.example/share/***/items/***?password=***&token=***")
+  })
+
+  it("sanitizes existing public asset access referers for admin responses", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+    await prisma.publicAssetAccessLog.create({
+      data: {
+        assetId: asset.assetId,
+        publicAssetId: asset.id,
+        userId: "user-1",
+        method: "GET",
+        statusCode: 200,
+        bytes: 8n,
+        referer: "https://synapse.example/files/asset_secret?Password=secret&token=tok_123",
+      },
+    })
+
+    const logs = await service.listAdminAccessLogs(asset.assetId, { page: 1, pageSize: 20, sortBy: "accessedAt", sortOrder: "desc" })
+
+    expect(logs.data[0].referer).toBe("https://synapse.example/files/***?Password=***&token=***")
+  })
+
   it("lists hidden and trashed public assets for admins with owner metadata", async () => {
     await prisma.user.create({ data: { id: "user-2", email: "owner2@example.com", passwordHash: "hash" } })
     await seedPublicAsset({
