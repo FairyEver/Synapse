@@ -6,6 +6,7 @@ import { getHttpPort } from "./http-server"
 import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp-installer"
 import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-server"
 import { sanitizeDatabaseLogPath } from "./logging"
+import { notifyDatabaseChange } from "./dispatcher"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 import type { DatabaseMcpTarget } from "../../src/types/database"
@@ -339,6 +340,8 @@ function registerDatabaseHandlers(): void {
     try {
       databaseService.importDatabase(filePath)
       recordAudit(event, "import", filePath, "allowed")
+      recordMutatingOperation("database.import")
+      notifyDatabaseChange("database.import")
       return { success: true }
     } catch (error) {
       recordAudit(event, "import", filePath, "failed", error instanceof Error ? error.message : String(error))

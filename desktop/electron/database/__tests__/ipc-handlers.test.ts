@@ -4,14 +4,18 @@ import { DATABASE_IPC_CHANNELS } from "../channels"
 
 const mocks = vi.hoisted(() => ({
   databaseService: {
+    importDatabase: vi.fn(),
     databaseRowDelete: vi.fn(),
     databaseRowUpdate: vi.fn(),
     recordOperation: vi.fn(),
   },
+  notifyDatabaseChange: vi.fn(),
   handlers: new Map<string, (event: unknown, params: unknown) => unknown>(),
   handleValidatedIpc: vi.fn((channel: string, handler: (event: unknown, params: unknown) => unknown) => {
     mocks.handlers.set(channel, handler)
   }),
+  showOpenDialog: vi.fn(),
+  showSaveDialog: vi.fn(),
 }))
 
 vi.mock("electron", () => ({
@@ -19,13 +23,17 @@ vi.mock("electron", () => ({
     fromWebContents: vi.fn(),
   },
   dialog: {
-    showOpenDialog: vi.fn(),
-    showSaveDialog: vi.fn(),
+    showOpenDialog: mocks.showOpenDialog,
+    showSaveDialog: mocks.showSaveDialog,
   },
 }))
 
 vi.mock("../service", () => ({
   databaseService: mocks.databaseService,
+}))
+
+vi.mock("../dispatcher", () => ({
+  notifyDatabaseChange: mocks.notifyDatabaseChange,
 }))
 
 vi.mock("../../ipc/validated-ipc", () => ({
@@ -60,9 +68,13 @@ describe("database IPC handlers", () => {
     vi.resetModules()
     mocks.handlers.clear()
     mocks.handleValidatedIpc.mockClear()
+    mocks.databaseService.importDatabase.mockReset()
     mocks.databaseService.databaseRowDelete.mockReset()
     mocks.databaseService.databaseRowUpdate.mockReset()
     mocks.databaseService.recordOperation.mockReset()
+    mocks.notifyDatabaseChange.mockReset()
+    mocks.showOpenDialog.mockReset()
+    mocks.showSaveDialog.mockReset()
   })
 
   it("records the affected count returned by single-row update and delete", async () => {
@@ -93,5 +105,35 @@ describe("database IPC handlers", () => {
       table: "tasks",
       affected: 0,
     })
+  })
+
+  it("broadcasts a database change after full database import succeeds", async () => {
+    const { registerDatabaseHandlers } = await import("../ipc-handlers")
+    registerDatabaseHandlers()
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/import.db"] })
+
+    const result = await mocks.handlers.get(DATABASE_IPC_CHANNELS.databaseImport)?.({ sender: {} }, undefined)
+
+    expect(result).toEqual({ success: true })
+    expect(mocks.databaseService.importDatabase).toHaveBeenCalledWith("/tmp/import.db")
+    expect(mocks.databaseService.recordOperation).toHaveBeenCalledWith({
+      source: "ipc",
+      action: "database.import",
+      table: undefined,
+      affected: undefined,
+    })
+    expect(mocks.notifyDatabaseChange).toHaveBeenCalledWith("database.import")
+  })
+
+  it("does not broadcast a database change when full database import is canceled", async () => {
+    const { registerDatabaseHandlers } = await import("../ipc-handlers")
+    registerDatabaseHandlers()
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] })
+
+    const result = await mocks.handlers.get(DATABASE_IPC_CHANNELS.databaseImport)?.({ sender: {} }, undefined)
+
+    expect(result).toEqual({ success: false })
+    expect(mocks.databaseService.importDatabase).not.toHaveBeenCalled()
+    expect(mocks.notifyDatabaseChange).not.toHaveBeenCalled()
   })
 })

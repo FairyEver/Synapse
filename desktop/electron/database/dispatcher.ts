@@ -327,6 +327,23 @@ function setDatabaseChangeListener(listener: DatabaseChangeListener | null): voi
   changeListener = listener
 }
 
+function notifyDatabaseChange(action: string, table?: string): void {
+  if (!changeListener) {
+    return
+  }
+  try {
+    changeListener({ action, table })
+  } catch (error) {
+    logger.warn("Database mutation change notification failed.", {
+      action,
+      errorLength: String(error).length,
+      errorName: error instanceof Error ? error.name : typeof error,
+      source: "ipc",
+      table,
+    })
+  }
+}
+
 function extractTableName(action: string, params: Record<string, unknown>): string | undefined {
   if (action === "database.table.rename") {
     return typeof params.toTableName === "string" ? params.toTableName : undefined
@@ -478,7 +495,7 @@ function hasDatabaseAction(action: string): boolean {
   return action in ACTION_HANDLERS
 }
 
-export { dispatchDatabaseAction, hasDatabaseAction, setDatabaseChangeListener }
+export { dispatchDatabaseAction, hasDatabaseAction, notifyDatabaseChange, setDatabaseChangeListener }
 export type {
   DatabaseDispatchSecurityDeps,
   DispatchContext,
