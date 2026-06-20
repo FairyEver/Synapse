@@ -517,7 +517,7 @@ function DrivePublicAssetRow({
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">{formatDriveDateTime(asset.createdAt)}</TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end">
-          <Button type="button" variant="ghost" size="xs" disabled={busy || unavailable} aria-label={`复制 ${asset.name}`} onClick={onCopy}>
+          <Button type="button" variant="ghost" size="xs" disabled={busy || unavailable || trashed} aria-label={`复制 ${asset.name}`} onClick={onCopy}>
             复制链接
           </Button>
           {unavailable ? null : trashed ? (

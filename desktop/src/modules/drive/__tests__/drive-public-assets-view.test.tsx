@@ -140,6 +140,23 @@ describe("DrivePublicAssetsView", () => {
     expect(requireButtonByLabel("复制 missing.png").disabled).toBe(true)
   })
 
+  it("disables copying links for trashed public assets", async () => {
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({
+        assetId: "asset_trashed",
+        name: "trashed.png",
+        lifecycleStatus: "trashed",
+      }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("trashed.png")
+    expect(document.body.textContent).toContain("回收站")
+    expect(requireButtonByLabel("复制 trashed.png").disabled).toBe(true)
+  })
+
   it("uploads selected images and keeps ordered partial results visible", async () => {
     mocks.uploadDrivePublicAssets.mockResolvedValue({
       results: [
