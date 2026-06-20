@@ -17,8 +17,9 @@ export interface DataRepositoryAuditSinkDeps {
 }
 
 const MAX_MEMORY_EVENTS = 10_000
-const SENSITIVE_TEXT_VALUE_PATTERN = /\b(token|secret|authorization|api[_-]?key|password|auth)\b(\s*[:=]\s*)(Bearer\s+[^\s"'`<>),;]+|"[^"]*"|'[^']*'|[^\s"'`<>),;]+)/gi
+const SENSITIVE_TEXT_VALUE_PATTERN = /\b(token|secret|authorization|api[_-]?key|password|auth|(?:set[-_]?cookie|cookie))\b(\s*[:=]\s*)(Bearer\s+[^\s"'`<>),;]+|"[^"]*"|'[^']*'|[^\s"'`<>),;]+)/gi
 const BEARER_TEXT_VALUE_PATTERN = /\bBearer\s+[^\s"'`<>),;]+/gi
+const COOKIE_HEADER_TEXT_PATTERN = /\b((?:set-)?cookie)(\s*:\s*)[^\r\n]+/gi
 const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
 const WINDOWS_DRIVE_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"'`<>),;]+(?:\s+[^\\\s"'`<>),;]+)*\\)+[^\\\s"'`<>),;]+/g
 const WINDOWS_UNC_PATH_PATTERN = /\\\\(?:[^\\\s"'`<>),;]+(?:\s+[^\\\s"'`<>),;]+)*\\){2,}[^\\\s"'`<>),;]+/g
@@ -153,6 +154,8 @@ function sanitizeText(value: string): string {
   return sanitizePathText(
     sanitizeUrlText(
       value
+        .replace(COOKIE_HEADER_TEXT_PATTERN, (_match, key: string, separator: string) =>
+          `${key}${separator}[redacted]`)
         .replace(SENSITIVE_TEXT_VALUE_PATTERN, (_match, key: string, separator: string) =>
           `${key}${separator}[redacted]`)
         .replace(BEARER_TEXT_VALUE_PATTERN, "Bearer [redacted]"),
@@ -207,6 +210,7 @@ function sanitizeUrlText(value: string): string {
 function isSensitiveKey(key: string): boolean {
   const normalized = key.replace(/[-_\s]/g, "").toLowerCase()
   if (normalized.includes("sessionkey")) return true
+  if (normalized.includes("cookie")) return true
   if (normalized === "args" || normalized.endsWith("args")) return true
   if (/^(prompt|message|content|body|text|reason|stack)$/.test(normalized)) return true
   return /\b(token|secret|authorization|api[_-]?key|password|bearer)\b/i.test(key)

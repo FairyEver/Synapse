@@ -215,6 +215,47 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("nested-api-key")
   })
 
+  it("redacts cookie fragments before caching persistence and logging", async () => {
+    const namespace = new FakeAuditNamespace(
+      new Error("write failed Cookie: persist_sid=persist-secret at /tmp/audit.jsonl"),
+    )
+    const warnings: unknown[] = []
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      logger: { warn: (_message, meta) => warnings.push(meta) },
+      idFactory: () => "audit-cookie",
+      now: () => new Date("2026-06-20T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "network.connect",
+      actor: { kind: "agent", id: "diagnostics" },
+      resource: "https://example.test Cookie: sid=resource-secret; theme=light",
+      outcome: "failed",
+      metadata: {
+        cookie: "sid=metadata-key-secret",
+        error: "request failed Cookie: sid=header-secret; session=second-secret",
+        nested: {
+          detail: "curl failed cookie=session=assignment-secret",
+        },
+      },
+    })
+    await sink.flushForTests()
+
+    const serializedEvents = JSON.stringify(sink.list())
+    const serializedWarnings = JSON.stringify(warnings)
+
+    expect(serializedEvents).toContain("Cookie: [redacted]")
+    expect(serializedEvents).toContain("cookie=[redacted]")
+    expect(serializedEvents).not.toContain("resource-secret")
+    expect(serializedEvents).not.toContain("metadata-key-secret")
+    expect(serializedEvents).not.toContain("header-secret")
+    expect(serializedEvents).not.toContain("second-secret")
+    expect(serializedEvents).not.toContain("assignment-secret")
+    expect(serializedWarnings).toContain("Cookie: [redacted]")
+    expect(serializedWarnings).not.toContain("persist-secret")
+  })
+
   it("preserves operational error metadata while sanitizing sensitive fragments", async () => {
     const namespace = new FakeAuditNamespace()
     const sink = new DataRepositoryAuditSink({
