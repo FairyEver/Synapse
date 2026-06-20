@@ -30,6 +30,16 @@ describe("dashboard Vite dev proxy", () => {
     }))
   })
 
+  it("proxies public asset file links through /files", () => {
+    const proxy = config.server?.proxy
+    const filesProxy = proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined
+
+    expect(filesProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+  })
+
   it("keeps direct drive responses behind focused proxy rules", () => {
     const proxy = config.server?.proxy
     const ownerDownloadProxy = proxy && !Array.isArray(proxy)

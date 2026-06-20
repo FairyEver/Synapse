@@ -369,6 +369,28 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("returns a failed dispatch result when public asset upload is rejected", async () => {
+    const uploadDrivePublicAssets = vi.fn(async () => ({
+      results: [{ status: "rejected" as const, fileName: "logo.txt", message: "仅支持图片。" }],
+    }))
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets }),
+      permissionGuard,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo.txt",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: "仅支持图片。",
+      data: { status: "rejected", fileName: "logo.txt", message: "仅支持图片。" },
+    })
+  })
+
   it("routes public asset list and get tools", async () => {
     const asset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" })
     const listDrivePublicAssets = vi.fn(async () => ({ items: [asset], total: 1, page: drivePage() }))

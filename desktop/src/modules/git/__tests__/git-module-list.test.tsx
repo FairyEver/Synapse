@@ -187,6 +187,9 @@ describe("GitModule repository list", () => {
     expect(document.body.textContent).toContain("Docs：1 个改动。")
     expect(document.body.textContent).toContain("Missing：目录不可访问。")
     expect(document.body.textContent).toContain("/work/docs")
+    expect(document.querySelector("[data-git-environment-section='Git 运行环境']")?.className).toContain("min-w-0")
+    expect(document.querySelector("[data-git-environment-repository-list='true']")).toBeTruthy()
+    expect(document.querySelector("table")).toBeNull()
   })
 
   it("copies visible Git diagnostics", async () => {

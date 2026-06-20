@@ -54,6 +54,7 @@ export function DriveMDXeditorRenderer({
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const savedValueRef = useRef(initialText)
   const applyingExternalMarkdownRef = useRef(false)
+  const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
@@ -64,13 +65,15 @@ export function DriveMDXeditorRenderer({
   const loginUrl = useMemo(() => buildLoginUrl(), [])
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
+    externalMarkdownTargetRef.current = null
     if (externalMarkdownFrameRef.current !== null) {
       window.cancelAnimationFrame(externalMarkdownFrameRef.current)
       externalMarkdownFrameRef.current = null
     }
   }, [])
-  const beginExternalMarkdownSync = useCallback(() => {
+  const beginExternalMarkdownSync = useCallback((target: string) => {
     applyingExternalMarkdownRef.current = true
+    externalMarkdownTargetRef.current = target
     if (externalMarkdownFrameRef.current !== null) {
       window.cancelAnimationFrame(externalMarkdownFrameRef.current)
     }
@@ -113,7 +116,7 @@ export function DriveMDXeditorRenderer({
     setDirty(false)
     setError(null)
     setConflictOpen(false)
-    beginExternalMarkdownSync()
+    beginExternalMarkdownSync(initialText)
     editorRef.current?.setMarkdown(initialText)
   }, [beginExternalMarkdownSync, current.id, edit?.currentVersionId, initialText])
 
@@ -147,7 +150,7 @@ export function DriveMDXeditorRenderer({
       setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
-      beginExternalMarkdownSync()
+      beginExternalMarkdownSync(nextText)
       editorRef.current?.setMarkdown(nextText)
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
@@ -205,11 +208,14 @@ export function DriveMDXeditorRenderer({
           onChange={(nextValue, initialMarkdownNormalize) => {
             if (!canEdit) return
             setValue(nextValue)
-            if (initialMarkdownNormalize || applyingExternalMarkdownRef.current) {
+            const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
+              && externalMarkdownTargetRef.current === nextValue
+            if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
               savedValueRef.current = nextValue
               setDirty(false)
               return
             }
+            clearExternalMarkdownSync()
             setDirty(nextValue !== savedValueRef.current)
           }}
           plugins={plugins}

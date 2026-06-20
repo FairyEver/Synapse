@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
-import { FileText, Folder, LoaderCircle, RefreshCw } from "lucide-react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react"
+import { LoaderCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
 
@@ -33,13 +33,30 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { DriveItemIcon } from "./drive-item-icon"
 
 const DRIVE_TRASH_PAGE_SIZE = 50
 const DRIVE_TRASH_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 
-function DriveTrashView({ onBack }: { readonly onBack?: () => void }) {
+type DriveTrashViewActionState = {
+  readonly loading: boolean
+}
+
+type DriveTrashViewHandle = {
+  readonly refresh: () => void
+}
+
+type DriveTrashViewProps = {
+  readonly inlineToolbar?: boolean
+  readonly onActionStateChange?: (state: DriveTrashViewActionState) => void
+}
+
+const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(function DriveTrashView({
+  inlineToolbar = true,
+  onActionStateChange,
+}, ref) {
   const [page, setPage] = useState<DriveTrashListPageDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -88,6 +105,16 @@ function DriveTrashView({ onBack }: { readonly onBack?: () => void }) {
   useEffect(() => {
     void loadTrash()
   }, [loadTrash])
+
+  useImperativeHandle(ref, () => ({
+    refresh: () => {
+      void loadTrash()
+    },
+  }), [loadTrash])
+
+  useEffect(() => {
+    onActionStateChange?.({ loading })
+  }, [loading, onActionStateChange])
 
   const runTrashMutation = useCallback(async (item: DriveTrashItemDto, action: () => Promise<unknown>, successMessage: string, fallback: string) => {
     setBusyItemId(item.id)
@@ -162,11 +189,11 @@ function DriveTrashView({ onBack }: { readonly onBack?: () => void }) {
                     "已恢复",
                     "恢复失败",
                   )
-	                }}
-	                onDelete={() => {
-	                  setDeleteTarget(item)
-	                }}
-	              />
+                }}
+                onDelete={() => {
+                  setDeleteTarget(item)
+                }}
+              />
             ))}
           </TableBody>
         </Table>
@@ -178,17 +205,14 @@ function DriveTrashView({ onBack }: { readonly onBack?: () => void }) {
 
   return (
     <div className="flex min-h-full flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {onBack ? (
-            <Button type="button" size="sm" variant="outline" onClick={onBack}>返回</Button>
-          ) : null}
+      {inlineToolbar ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="truncate text-base font-medium">回收站</h2>
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadTrash() }}>
+            刷新
+          </Button>
         </div>
-        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadTrash() }}>
-          刷新
-        </Button>
-      </div>
+      ) : null}
       {content}
       {!loading && page?.page.hasMore ? (
         <div className="flex items-center justify-center gap-2">
@@ -226,18 +250,18 @@ function DriveTrashView({ onBack }: { readonly onBack?: () => void }) {
       </AlertDialog>
     </div>
   )
-}
+})
 
 function DriveTrashTableHeader() {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-28">来源</TableHead>
-        <TableHead className="w-24 text-right">大小</TableHead>
-        <TableHead className="w-52">原路径</TableHead>
-        <TableHead className="w-40 text-right">删除时间</TableHead>
-        <TableHead className="w-28 text-right" aria-label="操作" />
+        <TableHead className="w-24">来源</TableHead>
+        <TableHead className="w-20 text-right">大小</TableHead>
+        <TableHead className="w-40">原路径</TableHead>
+        <TableHead className="w-44 whitespace-nowrap text-right">删除时间</TableHead>
+        <TableHead className="w-24 text-right" aria-label="操作" />
       </TableRow>
     </TableHeader>
   )
@@ -253,10 +277,10 @@ function DriveTrashTableSkeleton() {
             <TableRow key={row}>
               <TableCell><Skeleton className="h-4 w-48" /></TableCell>
               <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-28" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-4 w-14" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-4 w-36" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-7 w-20" /></TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -284,9 +308,9 @@ function DriveTrashRow({
           {busy ? (
             <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
           ) : isFolder ? (
-            <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <DriveItemIcon kind="folder" />
           ) : (
-            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <DriveItemIcon kind="file" />
           )}
           <span className="min-w-0 truncate font-medium" title={item.name}>{item.name}</span>
         </div>
@@ -296,9 +320,9 @@ function DriveTrashRow({
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">{isFolder ? "-" : formatBytes(item.size)}</TableCell>
       <TableCell className="truncate text-muted-foreground" title={item.originalPath ?? undefined}>{item.originalPath ?? "-"}</TableCell>
-      <TableCell className="truncate text-right tabular-nums text-muted-foreground">{formatDriveDateTime(item.trashedAt)}</TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">{formatDriveDateTime(item.trashedAt)}</TableCell>
       <TableCell className="text-right">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-1">
           <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onRestore}>恢复</Button>
           <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onDelete}>删除</Button>
         </div>
@@ -337,3 +361,4 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export { DriveTrashView }
+export type { DriveTrashViewActionState, DriveTrashViewHandle }

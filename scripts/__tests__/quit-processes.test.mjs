@@ -93,6 +93,20 @@ test("matchesSynapseDevProcess filters by requested dev script", () => {
     commandLine: "node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev",
     cwd: workspaceRoot,
   }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 306,
+    pgid: 306,
+    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --port 3000 --host 0.0.0.0 --open /console/`,
+    cwd: `${workspaceRoot}/dashboard`,
+  }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 307,
+    pgid: 307,
+    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --port 3000 --host 0.0.0.0 --open /console/`,
+    cwd: `${workspaceRoot}/dashboard`,
+  }, { workspaceRoot, targetScripts: ["dev:desktop"] }), false)
 })
 
 test("filterSynapseDevProcessRows applies requested dev script targets", () => {

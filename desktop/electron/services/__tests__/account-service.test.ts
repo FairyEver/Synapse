@@ -671,6 +671,91 @@ describe("AccountService", () => {
     )
   })
 
+  it("keeps ordered public asset upload results and cancels failed sessions", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-batch-"))
+    const okPath = path.join(dir, "ok.png")
+    const failedPath = path.join(dir, "failed.png")
+    await writeFile(okPath, "ok")
+    await writeFile(failedPath, "failed")
+    const okAsset = drivePublicAsset({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", name: "ok.png" })
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson").mockImplementation(async (method, url, body) => {
+      const urlText = String(url)
+      if (urlText.endsWith("/drive/public-assets/uploads/prepare") && (body as { readonly name?: string }).name === "ok.png") {
+        return preparedFile("public-upload-ok", "https://upload.example.test/public-ok")
+      }
+      if (urlText.endsWith("/drive/public-assets/uploads/prepare") && (body as { readonly name?: string }).name === "failed.png") {
+        return preparedFile("public-upload-failed", "https://upload.example.test/public-failed")
+      }
+      if (urlText.endsWith("/drive/public-assets/uploads/public-upload-ok/complete")) return okAsset
+      if (urlText.endsWith("/drive/public-assets/uploads/public-upload-failed/cancel")) return { ok: true }
+      throw new Error(`unexpected ${String(method)} ${urlText}`)
+    })
+    vi.spyOn(service as unknown as {
+      putPreparedUploadFromPath: (upload: DriveUploadPrepareResult["upload"], filePath: string, size: number) => Promise<void>
+    }, "putPreparedUploadFromPath").mockImplementation(async (upload) => {
+      if (upload.url.includes("public-failed")) throw new Error("network down")
+    })
+
+    await expect(service.uploadDrivePublicAssets({
+      files: [
+        { path: okPath, name: "ok.png", mimeType: null },
+        { path: failedPath, name: "failed.png", mimeType: null },
+      ],
+    })).resolves.toEqual({
+      results: [
+        { status: "fulfilled", fileName: "ok.png", asset: okAsset },
+        { status: "rejected", fileName: "failed.png", message: "上传失败。" },
+      ],
+    })
+
+    expect(requestAuthenticatedJson).toHaveBeenCalledWith(
+      "POST",
+      expectedApiUrl("/drive/public-assets/uploads/public-upload-failed/cancel"),
+      undefined,
+      "上传取消失败。",
+    )
+  })
+
+  it("cancels public asset replacement sessions when local upload fails", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-replace-"))
+    const replacePath = path.join(dir, "replacement.png")
+    await writeFile(replacePath, "replacement")
+    const asset = drivePublicAsset()
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson").mockImplementation(async (method, url) => {
+      const urlText = String(url)
+      if (urlText.endsWith(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/prepare`)) {
+        return preparedFile("public-replace-failed", "https://upload.example.test/public-replace")
+      }
+      if (urlText.endsWith(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/public-replace-failed/cancel`)) {
+        return { ok: true }
+      }
+      throw new Error(`unexpected ${String(method)} ${urlText}`)
+    })
+    vi.spyOn(service as unknown as {
+      putPreparedUploadFromPath: (...args: unknown[]) => Promise<void>
+    }, "putPreparedUploadFromPath").mockRejectedValue(new Error("upload failed"))
+
+    await expect(service.replaceDrivePublicAssetFile({
+      assetId: asset.assetId,
+      path: replacePath,
+      name: "replacement.png",
+      mimeType: null,
+    })).rejects.toThrow("upload failed")
+
+    expect(requestAuthenticatedJson).toHaveBeenCalledWith(
+      "POST",
+      expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/public-replace-failed/cancel`),
+      undefined,
+      "替换取消失败。",
+    )
+  })
+
   it("does not leak local paths in local upload summaries or logs", async () => {
     const missingPath = "/tmp/synapse-secret-folder/secret-token.txt"
     const { service } = await createTestAccountService()

@@ -282,7 +282,8 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location = /drive")
     expect(nginx).toContain("location = /drive/")
     expect(nginx).toContain("location /share/")
-    expect(nginx).not.toContain("location /files/")
+    expect(nginx).toContain("location /files/")
+    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
     expect(nginx).not.toContain("location /pages/")
     expect(nginx).not.toContain("location /sites/")
     expect(nginx).not.toContain("download|zip")
@@ -304,7 +305,7 @@ describe("server deployment configuration", () => {
     expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|render)$'")
     expect(viteConfig).toContain("'^/share/[^/]+/(download|render)$'")
     expect(viteConfig).toContain("'^/share/[^/]+/items/[^/]+/(download|render)$'")
-    expect(viteConfig).not.toContain("'/files':")
+    expect(viteConfig).toContain("'/files':")
     expect(viteConfig).not.toContain("download|zip")
   })
 

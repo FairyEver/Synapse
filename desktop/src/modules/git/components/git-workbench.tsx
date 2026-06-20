@@ -117,7 +117,10 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
               {statusLabel}
             </Badge>
           </div>
-          <div className="flex min-w-0 items-center justify-start gap-2 lg:justify-end">
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end"
+            data-git-workbench-action-bar="true"
+          >
             <Button
               type="button"
               size="sm"
@@ -175,7 +178,10 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
               </span>
             ) : null}
           </div>
-          <div className="flex min-w-0 items-center gap-2 md:justify-end">
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end"
+            data-git-workbench-metadata-bar="true"
+          >
             {status.snapshot?.upstream ? (
               <Badge variant="outline" className="hidden max-w-52 truncate sm:inline-flex">
                 {status.snapshot.upstream}
@@ -207,14 +213,14 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           </Alert>
         </div>
       ) : null}
-      <Tabs value={view} onValueChange={setView} className="flex min-h-0 flex-1 flex-col gap-0">
+      <Tabs value={view} onValueChange={setView} className="flex min-h-0 min-w-0 flex-1 flex-col gap-0">
         <div className="shrink-0 border-b bg-background px-4 py-2">
           <TabsList>
             <TabsTrigger value="changes">改动</TabsTrigger>
             <TabsTrigger value="history">历史</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="changes" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
+        <TabsContent value="changes" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
           <GitChangesTab
             repository={repository}
             status={status}
@@ -223,7 +229,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             onPush={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
           />
         </TabsContent>
-        <TabsContent value="history" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
+        <TabsContent value="history" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
           <GitHistoryTab history={history} />
         </TabsContent>
       </Tabs>

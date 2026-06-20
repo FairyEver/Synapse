@@ -85,7 +85,7 @@ export function GitModule() {
         ) : undefined}
       >
         <Tabs value={view} className="contents">
-          <TabsContent value="repositories" className="m-0 h-full data-[state=inactive]:hidden">
+          <TabsContent value="repositories" className="m-0 h-full min-w-0 data-[state=inactive]:hidden">
             {selectedRepository ? (
               <GitWorkbench
                 repository={selectedRepository}
@@ -105,8 +105,8 @@ export function GitModule() {
               />
             )}
           </TabsContent>
-          <TabsContent value="environment" className="m-0 h-full data-[state=inactive]:hidden">
-            <div className="h-full bg-surface">
+          <TabsContent value="environment" className="m-0 h-full min-w-0 data-[state=inactive]:hidden">
+            <div className="h-full min-w-0 bg-surface">
               <GitEnvironmentPanel
                 environment={environment}
                 repositorySummaries={repositoriesState.summaries}

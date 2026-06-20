@@ -283,11 +283,13 @@ export class DrivePublicAssetService {
       where: { id: revisionId, assetId },
     })
     if (!revision) throw new NotFoundException("历史版本不存在。")
+    const info = await this.storage.headObject(revision.storageKey)
+    if (!info) throw new NotFoundException("历史版本不存在。")
     const object = await this.storage.getObjectStream({ key: revision.storageKey })
     return {
       stream: object.stream,
       fileName: revision.name,
-      size: object.size ?? revision.size,
+      size: object.size ?? info.size,
       contentType: object.contentType ?? revision.mimeType,
     }
   }
@@ -590,11 +592,16 @@ export class DrivePublicAssetService {
     if (asset.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active || asset.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) {
       throw new NotFoundException("公共资源不存在。")
     }
+    const info = await this.storage.headObject(asset.storageKey)
+    if (!info) {
+      await this.markObjectMissing(asset)
+      throw new NotFoundException("公共资源不存在。")
+    }
     const object = await this.storage.getObjectStream({ key: asset.storageKey })
     return {
       stream: object.stream,
       fileName: asset.name,
-      size: object.size ?? asset.size,
+      size: object.size ?? info.size,
       contentType: object.contentType ?? asset.mimeType,
     }
   }

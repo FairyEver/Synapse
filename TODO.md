@@ -76,3 +76,44 @@ Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data`
 - 第二阶段：删除 `synapse-data.db` 自动改名和 reset 保护。
 - 第三阶段：删除 legacy 备份自动恢复。
 - 最后阶段：再考虑是否删除手动导入旧备份的兼容能力；这部分可以保留更久，因为用户可能很久以后才导入历史备份。
+
+## Console / Dashboard 命名收敛
+
+- 创建时间：2026-06-19
+- 当前状态：待专项清理
+- 相关范围：
+  - `dashboard/` 包目录与 `@synapse/dashboard` 包名
+  - dashboard dev / build / Docker / nginx / CI / 测试脚本
+  - renderer 与 dashboard 代码里的 `dashboardApi`、dashboard 变量名、测试描述和文档描述
+  - 兼容路由 `/dashboard` 与 `/api/dashboard`
+
+### 背景
+
+管理后台当前产品命名与用户可见入口已经统一为 Console，主路由是 `/console`，主 API 路由是 `/api/console`。
+
+项目中仍保留了一批 `dashboard` 命名。部分是历史内部命名，例如 `dashboard/` 包、`@synapse/dashboard`、`dashboardApi`；部分是兼容入口，例如 `/dashboard` 到 `/console` 的重定向，以及 `/api/dashboard` legacy alias。
+
+### 清理建议
+
+不要一刀切删除所有 `dashboard`。
+
+- 可以优先把内部变量、测试描述、脚本描述、文档中的当前语义改为 `console`。
+- 可以评估把 `dashboard/` 包目录和 `@synapse/dashboard` 包名改为 Console，但必须同步更新 pnpm workspace、根脚本、Dockerfile、nginx、部署脚本、CI、测试和文档。
+- `/dashboard` 和 `/api/dashboard` 暂时保留为 legacy redirect / alias，避免破坏旧链接、旧邀请链接、书签、旧版本客户端或已有集成。
+
+### 风险
+
+- 包目录或包名漏改会导致 dev、build、Docker、部署或 CI 失败。
+- 直接删除 `/dashboard` 旧入口会让历史链接和书签失效。
+- 直接删除 `/api/dashboard` 旧 API alias 可能影响旧客户端或外部集成。
+- 审计日志、测试快照、历史数据字段中如果强行重命名，可能影响历史查询和兼容判断。
+
+### 验收建议
+
+专项清理时至少验证：
+
+- `pnpm dev`、`pnpm dev:server`、`pnpm quit:processes` 正常。
+- `/console` 和 `/api/console` 是当前主入口。
+- `/dashboard` 仍能重定向到 `/console`。
+- `/api/dashboard` 兼容 alias 仍按预期工作。
+- Docker / nginx / 部署相关测试通过。

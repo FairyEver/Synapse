@@ -7,7 +7,7 @@
     "dev": "pnpm run dev:server & pnpm run dev:desktop & wait",
     "dev:website": "pnpm --filter @synapse/website run dev",
     "dev:desktop": "pnpm --filter @synapse/shared run build && pnpm --filter @synapse/desktop run dev",
-    "dev:server": "pnpm --filter @synapse/shared run build && docker compose --env-file server/.env.local -f server/compose.yml up -d postgres && (node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev & node scripts/dev/run-server-with-env.mjs --filter @synapse/dashboard run dev & wait)",
+    "dev:server": "pnpm --filter @synapse/shared run build && docker compose --env-file server/.env.local -f server/compose.yml up -d postgres && (node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev & (node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-3001}/healthz --timeout-ms 60000 && node scripts/dev/run-server-with-env.mjs --filter @synapse/dashboard run dev) & wait)",
     "quit": "node scripts/dev/quit.mjs",
     "quit:website": "node scripts/dev/quit-processes.mjs dev:website",
     "quit:desktop": "node scripts/dev/quit-processes.mjs dev:desktop",

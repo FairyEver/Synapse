@@ -86,6 +86,31 @@ describe('adminApi.drive', () => {
       expect.objectContaining({ credentials: 'include', method: 'POST' })
     )
   })
+
+  it('includes admin public asset filters and sorting in list queries', async () => {
+    const fetchMock = mockJsonResponse({ data: [], total: 0, page: 3, pageSize: 50 })
+
+    await adminApi.listDrivePublicAssets({
+      page: 3,
+      pageSize: 50,
+      sortBy: 'lastAccessedAt',
+      sortOrder: 'asc',
+      search: 'owner@example.com',
+      userId: 'user-1',
+      lifecycleStatus: 'hidden',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/drive/public-assets?page=3&pageSize=50&sortBy=lastAccessedAt&sortOrder=asc&search=owner%40example.com&userId=user-1&lifecycleStatus=hidden',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+
+  it('encodes admin public asset revision download URLs', () => {
+    expect(adminApi.downloadDrivePublicAssetRevisionUrl('asset/id', 'revision/id')).toBe(
+      '/api/admin/drive/public-assets/asset%2Fid/revisions/revision%2Fid/download'
+    )
+  })
 })
 
 describe('adminApi.cleanupLogs', () => {

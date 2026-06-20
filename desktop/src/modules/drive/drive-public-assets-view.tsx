@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react"
-import { FileText, LoaderCircle, RefreshCw } from "lucide-react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react"
+import { LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
 
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from "@/types/bridge"
+import { DriveItemIcon } from "./drive-item-icon"
 
 const DRIVE_PUBLIC_ASSET_PAGE_SIZE = 50
 const DRIVE_PUBLIC_ASSET_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
@@ -69,13 +70,27 @@ type DrivePublicAssetConfirmState =
     readonly asset: DrivePublicAssetDto
   }
 
-function DrivePublicAssetsView({
-  onBack,
-  onUsageChange,
-}: {
-  readonly onBack?: () => void
+type DrivePublicAssetsViewActionState = {
+  readonly loading: boolean
+  readonly uploading: boolean
+}
+
+type DrivePublicAssetsViewHandle = {
+  readonly openUploadDialog: () => void
+  readonly refresh: () => void
+}
+
+type DrivePublicAssetsViewProps = {
+  readonly inlineToolbar?: boolean
+  readonly onActionStateChange?: (state: DrivePublicAssetsViewActionState) => void
   readonly onUsageChange?: () => void
-}) {
+}
+
+const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePublicAssetsViewProps>(function DrivePublicAssetsView({
+  inlineToolbar = true,
+  onActionStateChange,
+  onUsageChange,
+}, ref) {
   const [page, setPage] = useState<DrivePublicAssetListPageDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -131,15 +146,28 @@ function DrivePublicAssetsView({
     void loadAssets()
   }, [loadAssets])
 
+  useImperativeHandle(ref, () => ({
+    openUploadDialog: () => {
+      uploadInputRef.current?.click()
+    },
+    refresh: () => {
+      void loadAssets()
+    },
+  }), [loadAssets])
+
+  useEffect(() => {
+    onActionStateChange?.({ loading, uploading })
+  }, [loading, onActionStateChange, uploading])
+
   const handleUploadSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = publicAssetLocalFilesFromSelection(Array.from(event.currentTarget.files ?? []))
     event.currentTarget.value = ""
+    setUploadResults([])
     if (files.length === 0) {
       toast("没有可上传的文件")
       return
     }
     setUploading(true)
-    setUploadResults([])
     try {
       const result = await requireSynapseBridge().account.uploadDrivePublicAssets({ files })
       setUploadResults(result.results)
@@ -156,11 +184,16 @@ function DrivePublicAssetsView({
   }, [loadAssets, onUsageChange])
 
   const handleReplaceSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const [file] = publicAssetLocalFilesFromSelection(Array.from(event.currentTarget.files ?? []))
+    const selectedFiles = Array.from(event.currentTarget.files ?? [])
+    const [file] = publicAssetLocalFilesFromSelection(selectedFiles)
     event.currentTarget.value = ""
     const target = replaceTargetRef.current
     replaceTargetRef.current = null
-    if (!target || !file) return
+    if (!target) return
+    if (!file) {
+      if (selectedFiles.length > 0) toast("没有可替换的文件")
+      return
+    }
     setBusyAssetId(target.assetId)
     try {
       await requireSynapseBridge().account.replaceDrivePublicAssetFile({
@@ -308,39 +341,38 @@ function DrivePublicAssetsView({
 
   return (
     <div className="flex min-h-full flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {onBack ? (
-            <Button type="button" size="sm" variant="outline" onClick={onBack}>返回</Button>
-          ) : null}
-          <h2 className="truncate text-base font-medium">公开素材</h2>
-          {uploading ? <Badge variant="outline">上传中</Badge> : null}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
+        className="hidden"
+        onChange={handleUploadSelected}
+      />
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
+        className="hidden"
+        data-testid="drive-public-asset-replace-input"
+        onChange={handleReplaceSelected}
+      />
+      {inlineToolbar ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-base font-medium">公开素材</h2>
+            {uploading ? <Badge variant="outline">上传中</Badge> : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>
+              上传公开素材
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadAssets() }}>
+              刷新
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            ref={uploadInputRef}
-            type="file"
-            multiple
-            accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
-            className="hidden"
-            onChange={handleUploadSelected}
-          />
-          <input
-            ref={replaceInputRef}
-            type="file"
-            accept={DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT}
-            className="hidden"
-            data-testid="drive-public-asset-replace-input"
-            onChange={handleReplaceSelected}
-          />
-          <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>
-            上传公开素材
-          </Button>
-          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadAssets() }}>
-            刷新
-          </Button>
-        </div>
-      </div>
+      ) : null}
       {uploadResults.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {uploadResults.map((result, index) => (
@@ -428,7 +460,7 @@ function DrivePublicAssetsView({
       </AlertDialog>
     </div>
   )
-}
+})
 
 function updateRenameValue(
   value: string,
@@ -442,11 +474,11 @@ function DrivePublicAssetTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-24 text-right">大小</TableHead>
-        <TableHead className="w-36">类型</TableHead>
-        <TableHead className="w-36 text-right">访问</TableHead>
-        <TableHead className="w-40 text-right">创建时间</TableHead>
-        <TableHead className="w-56 text-right" aria-label="操作" />
+        <TableHead className="w-16 text-right">大小</TableHead>
+        <TableHead className="w-24">类型</TableHead>
+        <TableHead className="w-14 text-right">访问</TableHead>
+        <TableHead className="w-44 whitespace-nowrap text-right">创建时间</TableHead>
+        <TableHead className="w-24 text-right" aria-label="操作" />
       </TableRow>
     </TableHeader>
   )
@@ -461,11 +493,11 @@ function DrivePublicAssetTableSkeleton() {
           {DRIVE_PUBLIC_ASSET_SKELETON_ROWS.map((row) => (
             <TableRow key={row}>
               <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-28" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-7 w-40" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-4 w-12" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-4 w-8" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-4 w-36" /></TableCell>
+              <TableCell><Skeleton className="ml-auto h-7 w-20" /></TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -502,7 +534,7 @@ function DrivePublicAssetRow({
           {busy ? (
             <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
           ) : (
-            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <DriveItemIcon kind="file" />
           )}
           <span className="min-w-0 truncate font-medium" title={asset.name}>{asset.name}</span>
           {trashed ? <Badge variant="outline">回收站</Badge> : null}
@@ -510,27 +542,29 @@ function DrivePublicAssetRow({
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">{formatBytes(asset.size)}</TableCell>
-      <TableCell className="truncate text-muted-foreground" title={asset.mimeType}>{asset.mimeType}</TableCell>
+      <TableCell className="whitespace-nowrap text-muted-foreground" title={asset.mimeType}>{asset.mimeType}</TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
         <span title={formatDriveDateTime(asset.lastAccessedAt)}>{asset.accessCount}</span>
       </TableCell>
-      <TableCell className="truncate text-right tabular-nums text-muted-foreground">{formatDriveDateTime(asset.createdAt)}</TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">{formatDriveDateTime(asset.createdAt)}</TableCell>
       <TableCell className="text-right">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-1">
           <Button type="button" variant="ghost" size="xs" disabled={busy || unavailable || trashed} aria-label={`复制 ${asset.name}`} onClick={onCopy}>
             复制链接
           </Button>
           {unavailable ? null : trashed ? (
             <>
               <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onRestore}>恢复</Button>
-              <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onDelete}>删除</Button>
+              <DrivePublicAssetMenu asset={asset} disabled={busy} onDelete={onDelete} />
             </>
           ) : (
-            <>
-              <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onReplace}>替换文件</Button>
-              <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onTrash}>移到回收站</Button>
-              <DrivePublicAssetMenu asset={asset} disabled={busy} onRename={onRename} />
-            </>
+            <DrivePublicAssetMenu
+              asset={asset}
+              disabled={busy}
+              onRename={onRename}
+              onReplace={onReplace}
+              onTrash={onTrash}
+            />
           )}
         </div>
       </TableCell>
@@ -541,22 +575,31 @@ function DrivePublicAssetRow({
 function DrivePublicAssetMenu({
   asset,
   disabled,
+  onDelete,
   onRename,
+  onReplace,
+  onTrash,
 }: {
   readonly asset: DrivePublicAssetDto
   readonly disabled: boolean
-  readonly onRename: () => void
+  readonly onDelete?: () => void
+  readonly onRename?: () => void
+  readonly onReplace?: () => void
+  readonly onTrash?: () => void
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="xs" disabled={disabled} aria-label={`更多 ${asset.name}`}>
-          更多
+        <Button type="button" variant="ghost" size="icon-xs" disabled={disabled} aria-label={`更多 ${asset.name}`}>
+          <MoreHorizontal aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
+          {onReplace ? <DropdownMenuItem onClick={onReplace}>替换文件</DropdownMenuItem> : null}
+          {onTrash ? <DropdownMenuItem onClick={onTrash}>移到回收站</DropdownMenuItem> : null}
+          {onRename ? <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem> : null}
+          {onDelete ? <DropdownMenuItem variant="destructive" onClick={onDelete}>删除</DropdownMenuItem> : null}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -622,3 +665,4 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export { DrivePublicAssetsView }
+export type { DrivePublicAssetsViewActionState, DrivePublicAssetsViewHandle }

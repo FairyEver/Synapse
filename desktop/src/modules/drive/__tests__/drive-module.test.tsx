@@ -239,6 +239,10 @@ describe("DriveModule", () => {
 
     expect(mocks.listDrivePublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
     expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("公开素材")
+    expect(queryExactButton("上传")).toBeNull()
+    expect(queryButton("新建文件夹")).toBeNull()
+    expect(queryButton("我的分享")).toBeNull()
+    expect(queryButton("上传公开素材")).not.toBeNull()
   })
 
   it("opens public link management from one top-bar action", async () => {
@@ -697,7 +701,7 @@ describe("DriveModule", () => {
     expect(document.querySelector<HTMLInputElement>("#drive-item-name")?.value).toBe("cui.md")
   })
 
-  it("uses file type icons, table columns, and a grouped breadcrumb trail", async () => {
+  it("uses distinct drive item icons, table columns, and a grouped breadcrumb trail", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
         createDriveItem({ id: "file-1", name: "2.png", type: "file" }),
@@ -710,8 +714,12 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(document.querySelector(".lucide-file-text")).not.toBeNull()
-    expect(document.querySelector(".lucide-folder")).not.toBeNull()
+    expect(document.querySelector(".lucide-archive")).not.toBeNull()
+    expect(document.querySelector(".lucide-trash-2")).not.toBeNull()
+    expect(document.querySelector(".lucide-file")).not.toBeNull()
+    expect(document.querySelector(".lucide-folder-closed")).not.toBeNull()
+    expect(driveItemNameElement("公开素材").closest("tr")?.querySelector(".lucide-folder-closed")).toBeNull()
+    expect(driveItemNameElement("回收站").closest("tr")?.querySelector(".lucide-folder-closed")).toBeNull()
     expect(driveItemNameElement("作业范文").className).toContain("select-text")
     expect(document.querySelector("table")).not.toBeNull()
     expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
@@ -1682,6 +1690,12 @@ function getButton(name: string): HTMLButtonElement {
 function queryButton(name: string): HTMLButtonElement | null {
   const button = Array.from(document.querySelectorAll("button"))
     .find((element) => element.textContent?.includes(name))
+  return button instanceof HTMLButtonElement ? button : null
+}
+
+function queryExactButton(name: string): HTMLButtonElement | null {
+  const button = Array.from(document.querySelectorAll("button"))
+    .find((element) => element.textContent?.trim() === name)
   return button instanceof HTMLButtonElement ? button : null
 }
 

@@ -5,7 +5,6 @@ import {
   CircleUserRound,
   Copy,
   ExternalLink,
-  FileText,
   Folder,
   KeyRound,
   LoaderCircle,
@@ -28,8 +27,8 @@ import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
-import { DrivePublicAssetsView } from "./drive-public-assets-view"
-import { DriveTrashView } from "./drive-trash-view"
+import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
+import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
 import {
   DRIVE_PUBLIC_ASSETS_ENTRY_ID,
   DRIVE_TRASH_ENTRY_ID,
@@ -101,6 +100,7 @@ import {
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { DriveItemIcon } from "./drive-item-icon"
 
 type DrivePathEntry = {
   readonly id: string | null
@@ -202,8 +202,12 @@ function DriveModule() {
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
+  const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
+  const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const publicAssetsViewRef = useRef<DrivePublicAssetsViewHandle>(null)
+  const trashViewRef = useRef<DriveTrashViewHandle>(null)
   const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
   const currentParentIdRef = useRef<string | null>(null)
 
@@ -514,6 +518,63 @@ function DriveModule() {
     }
   }, [loadItems])
 
+  const activePath: readonly DrivePathEntry[] = (() => {
+    if (activeView === "public-assets") {
+      return [{ id: null, name: "根目录" }, { id: DRIVE_PUBLIC_ASSETS_ENTRY_ID, name: "公开素材" }]
+    }
+    if (activeView === "trash") {
+      return [{ id: null, name: "根目录" }, { id: DRIVE_TRASH_ENTRY_ID, name: "回收站" }]
+    }
+    return path
+  })()
+
+  const activeStatusBadge: DriveStatusBadge | null = (() => {
+    if (activeView === "files" && uploading) {
+      return { key: "uploading", label: uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`, variant: "outline" }
+    }
+    if (activeView === "public-assets" && publicAssetActionState.uploading) {
+      return { key: "public-asset-uploading", label: "上传中", variant: "outline" }
+    }
+    return null
+  })()
+
+  const toolbarActions = (() => {
+    if (activeView === "public-assets") {
+      return (
+        <DrivePublicAssetToolbarActions
+          uploadDisabled={!accountAuthenticated || publicAssetActionState.uploading}
+          refreshDisabled={!accountAuthenticated || publicAssetActionState.loading}
+          onUpload={() => publicAssetsViewRef.current?.openUploadDialog()}
+          onRefresh={() => publicAssetsViewRef.current?.refresh()}
+        />
+      )
+    }
+    if (activeView === "trash") {
+      return (
+        <DriveTrashToolbarActions
+          refreshDisabled={!accountAuthenticated || trashActionState.loading}
+          onRefresh={() => trashViewRef.current?.refresh()}
+        />
+      )
+    }
+    return (
+      <DriveToolbarActions
+        uploadDisabled={uploadActionsDisabled}
+        createDisabled={actionsDisabled}
+        publicLinksDisabled={!accountAuthenticated || loading}
+        refreshDisabled={!accountAuthenticated || loading || openingFolderId !== null}
+        onUploadFiles={() => fileInputRef.current?.click()}
+        onUploadFolder={() => folderInputRef.current?.click()}
+        onCreateFolder={handleCreateFolder}
+        onOpenPublicLinks={() => setPublicLinksOpen(true)}
+        onRefresh={() => { void refreshDriveView() }}
+      >
+        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
+        <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
+      </DriveToolbarActions>
+    )
+  })()
+
   const content = (() => {
     if (!accountAuthenticated) {
       if (accountState.status === "authenticating") {
@@ -574,27 +635,21 @@ function DriveModule() {
     }
     if (activeView === "public-assets") {
       return (
-        <div className="flex min-h-full flex-col gap-3">
-          <DriveBreadcrumbs
-            path={[{ id: null, name: "根目录" }, { id: DRIVE_PUBLIC_ASSETS_ENTRY_ID, name: "公开素材" }]}
-            onJumpToPath={jumpToPath}
-          />
-          <DrivePublicAssetsView
-            onBack={() => setActiveView("files")}
-            onUsageChange={() => { void loadDriveUsage() }}
-          />
-        </div>
+        <DrivePublicAssetsView
+          ref={publicAssetsViewRef}
+          inlineToolbar={false}
+          onActionStateChange={setPublicAssetActionState}
+          onUsageChange={() => { void loadDriveUsage() }}
+        />
       )
     }
     if (activeView === "trash") {
       return (
-        <div className="flex min-h-full flex-col gap-3">
-          <DriveBreadcrumbs
-            path={[{ id: null, name: "根目录" }, { id: DRIVE_TRASH_ENTRY_ID, name: "回收站" }]}
-            onJumpToPath={jumpToPath}
-          />
-          <DriveTrashView onBack={() => setActiveView("files")} />
-        </div>
+        <DriveTrashView
+          ref={trashViewRef}
+          inlineToolbar={false}
+          onActionStateChange={setTrashActionState}
+        />
       )
     }
     return (
@@ -604,7 +659,6 @@ function DriveModule() {
         loading={loading}
         openingFolderId={openingFolderId}
         path={path}
-        onJumpToPath={jumpToPath}
         onOpenFolder={openFolder}
         onOpenSystemEntry={openSystemEntry}
         onRename={handleRename}
@@ -616,8 +670,6 @@ function DriveModule() {
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
-        uploadItemCount={uploadItemCount}
-        uploading={uploading}
       />
     )
   })()
@@ -627,22 +679,7 @@ function DriveModule() {
       <ModulePage
         title="云盘"
         titleAddon={accountAuthenticated ? <DriveUsageIndicator state={usageState} /> : undefined}
-        actions={(
-          <DriveToolbarActions
-            uploadDisabled={uploadActionsDisabled}
-            createDisabled={actionsDisabled}
-            publicLinksDisabled={!accountAuthenticated || loading}
-            refreshDisabled={!accountAuthenticated || loading || openingFolderId !== null}
-            onUploadFiles={() => fileInputRef.current?.click()}
-            onUploadFolder={() => folderInputRef.current?.click()}
-            onCreateFolder={handleCreateFolder}
-            onOpenPublicLinks={() => setPublicLinksOpen(true)}
-            onRefresh={() => { void refreshDriveView() }}
-          >
-            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
-            <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
-          </DriveToolbarActions>
-        )}
+        actions={toolbarActions}
         afterContent={(
           <>
             <Dialog open={nameDialog !== null} onOpenChange={(open) => {
@@ -744,7 +781,12 @@ function DriveModule() {
           </>
         )}
       >
-        {content}
+        {accountAuthenticated ? (
+          <div className="flex min-h-full flex-col gap-3">
+            <DriveViewNavigation path={activePath} statusBadge={activeStatusBadge} onJumpToPath={jumpToPath} />
+            {content}
+          </div>
+        ) : content}
       </ModulePage>
     </TooltipProvider>
   )
@@ -1070,7 +1112,6 @@ function DriveFileList({
   loading,
   openingFolderId,
   path,
-  onJumpToPath,
   onOpenFolder,
   onOpenSystemEntry,
   onRename,
@@ -1082,15 +1123,12 @@ function DriveFileList({
   onDisableShare,
   onUploadDroppedFiles,
   uploadDisabled,
-  uploadItemCount,
-  uploading,
 }: {
   readonly items: readonly DriveItemDto[]
   readonly systemEntries: readonly DriveSystemEntry[]
   readonly loading: boolean
   readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
-  readonly onJumpToPath: (index: number) => void
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onOpenSystemEntry: (entry: DriveSystemEntry) => void
   readonly onRename: (item: DriveItemDto) => void
@@ -1102,8 +1140,6 @@ function DriveFileList({
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly uploadDisabled: boolean
-  readonly uploadItemCount: number | null
-  readonly uploading: boolean
 }) {
   const [dragDepth, setDragDepth] = useState(0)
   const currentFolderName = path.at(-1)?.name ?? "根目录"
@@ -1145,13 +1181,6 @@ function DriveFileList({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {uploading ? <Badge variant="outline">{uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`}</Badge> : null}
-        </div>
-      </div>
-
       {loading ? (
         <ModuleContentPanel>
           <DriveFileTableSkeleton />
@@ -1316,6 +1345,64 @@ function DriveToolbarActions({
   )
 }
 
+function DrivePublicAssetToolbarActions({
+  uploadDisabled,
+  refreshDisabled,
+  onUpload,
+  onRefresh,
+}: {
+  readonly uploadDisabled: boolean
+  readonly refreshDisabled: boolean
+  readonly onUpload: () => void
+  readonly onRefresh: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button type="button" size="sm" variant="outline" disabled={uploadDisabled} onClick={onUpload}>
+        上传公开素材
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
+        刷新
+      </Button>
+    </div>
+  )
+}
+
+function DriveTrashToolbarActions({
+  refreshDisabled,
+  onRefresh,
+}: {
+  readonly refreshDisabled: boolean
+  readonly onRefresh: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button type="button" size="sm" variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
+        刷新
+      </Button>
+    </div>
+  )
+}
+
+function DriveViewNavigation({
+  path,
+  statusBadge,
+  onJumpToPath,
+}: {
+  readonly path: readonly DrivePathEntry[]
+  readonly statusBadge: DriveStatusBadge | null
+  readonly onJumpToPath: (index: number) => void
+}) {
+  return (
+    <div className="flex min-h-7 flex-wrap items-center justify-between gap-2">
+      <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
+      <div className="flex h-7 items-center justify-end">
+        {statusBadge ? <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge> : null}
+      </div>
+    </div>
+  )
+}
+
 function DriveBreadcrumbs({
   path,
   onJumpToPath,
@@ -1410,7 +1497,7 @@ function DriveSystemEntryRow({
     <TableRow className="cursor-pointer" onClick={() => onOpen(entry)}>
       <TableCell className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <DriveItemIcon kind={entry.kind === "public_assets" ? "public-assets" : "trash"} />
           <span
             className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
             data-drive-item-name="true"
@@ -1479,9 +1566,9 @@ function DriveFileListRow({
           {opening ? (
             <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
           ) : isFolder ? (
-            <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <DriveItemIcon kind="folder" />
           ) : (
-            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <DriveItemIcon kind="file" />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <DriveItemNameContextMenu

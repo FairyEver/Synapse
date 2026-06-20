@@ -100,6 +100,25 @@ describe("DrivePublicAssetsView", () => {
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
   })
 
+  it("shows a toast when public asset link copying fails", async () => {
+    mocks.writeClipboardText.mockRejectedValue(new Error("clipboard denied"))
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({
+        assetId: "asset_public",
+        name: "brand.png",
+        url: "https://synapse.test/files/asset_public",
+      }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    await clickButtonByLabel("复制 brand.png")
+
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/asset_public")
+    expect(mocks.toast).toHaveBeenCalledWith("clipboard denied")
+  })
+
   it("loads more public assets from the next page", async () => {
     mocks.listDrivePublicAssets
       .mockResolvedValueOnce(createPublicAssetPage(
@@ -155,6 +174,31 @@ describe("DrivePublicAssetsView", () => {
     expect(document.body.textContent).toContain("trashed.png")
     expect(document.body.textContent).toContain("回收站")
     expect(requireButtonByLabel("复制 trashed.png").disabled).toBe(true)
+  })
+
+  it("shows initial and load-more failures without dropping the current public asset list", async () => {
+    mocks.listDrivePublicAssets
+      .mockRejectedValueOnce(new Error("网络断开"))
+      .mockResolvedValueOnce(createPublicAssetPage(
+        [createPublicAsset({ assetId: "asset_first", name: "first.png" })],
+        { hasMore: true, nextOffset: 50, total: 2 },
+      ))
+      .mockRejectedValueOnce(new Error("下一页失败"))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).not.toContain("first.png")
+
+    await clickButtonText("重试")
+    expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({ offset: 0, limit: 50 })
+    expect(document.body.textContent).toContain("first.png")
+
+    await clickButtonText("加载更多")
+    expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain("first.png")
+    expect(document.body.textContent).toContain("下一页失败")
   })
 
   it("uploads selected images and keeps ordered partial results visible", async () => {
@@ -242,6 +286,43 @@ describe("DrivePublicAssetsView", () => {
     expect(onUsageChange).toHaveBeenCalledTimes(3)
   })
 
+  it("does not upload files without local paths and clears stale upload results", async () => {
+    mocks.uploadDrivePublicAssets.mockResolvedValueOnce({
+      results: [
+        { status: "fulfilled", fileName: "old.png", asset: createPublicAsset({ assetId: "asset_old", name: "old.png" }) },
+      ],
+    })
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    const input = requireUploadInput()
+    const oldFile = new File(["old"], "old.png", { type: "image/png" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [oldFile],
+    })
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    expect(uploadResultTexts()).toEqual(["old.png 已上传"])
+
+    mocks.filePathForDroppedFile.mockReturnValueOnce(null)
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["blocked"], "blocked.png", { type: "image/png" })],
+    })
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.uploadDrivePublicAssets).toHaveBeenCalledTimes(1)
+    expect(mocks.toast).toHaveBeenCalledWith("没有可上传的文件")
+    expect(uploadResultTexts()).toEqual([])
+  })
+
   it("uses the shared public asset image MIME list for file pickers", async () => {
     await render(<DrivePublicAssetsView />)
     await flushAct()
@@ -268,7 +349,8 @@ describe("DrivePublicAssetsView", () => {
     await clickButtonText("保存")
     expect(mocks.renameDrivePublicAsset).toHaveBeenCalledWith({ assetId: "asset_active", name: "brand.png" })
 
-    await clickRowButtonText("active.png", "替换文件")
+    await openRowMenu("active.png")
+    await clickText("替换文件")
     const replaceInput = document.querySelector<HTMLInputElement>('input[data-testid="drive-public-asset-replace-input"]')
     if (!replaceInput) throw new Error("Replace input not found")
     const replacement = new File(["next"], "next.png", { type: "image/png" })
@@ -287,7 +369,8 @@ describe("DrivePublicAssetsView", () => {
       mimeType: "image/png",
     })
 
-    await clickRowButtonText("active.png", "移到回收站")
+    await openRowMenu("active.png")
+    await clickText("移到回收站")
     expect(mocks.trashDrivePublicAsset).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("确认移到回收站")
     await clickAlertDialogButtonText("移到回收站")
@@ -296,11 +379,119 @@ describe("DrivePublicAssetsView", () => {
     await clickRowButtonText("trashed.png", "恢复")
     expect(mocks.restoreDrivePublicAsset).toHaveBeenCalledWith({ assetId: "asset_trashed" })
 
-    await clickRowButtonText("trashed.png", "删除")
+    await openRowMenu("trashed.png")
+    await clickText("删除")
     expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("普通用户将不再看到")
     await clickAlertDialogButtonText("删除")
     expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "item-trashed" })
+  })
+
+  it("cancels rename, trash, and delete actions without mutating assets", async () => {
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({ assetId: "asset_active", itemId: "item-active", name: "active.png" }),
+      createPublicAsset({ assetId: "asset_trashed", itemId: "item-trashed", name: "trashed.png", lifecycleStatus: "trashed" }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    await openRowMenu("active.png")
+    await clickText("重命名")
+    expect(document.body.textContent).toContain("重命名")
+    await clickButtonText("取消")
+    expect(mocks.renameDrivePublicAsset).not.toHaveBeenCalled()
+    expect(document.querySelector("#drive-public-asset-name")).toBeNull()
+
+    await openRowMenu("active.png")
+    await clickText("移到回收站")
+    expect(document.body.textContent).toContain("确认移到回收站")
+    await clickAlertDialogButtonText("取消")
+    expect(mocks.trashDrivePublicAsset).not.toHaveBeenCalled()
+
+    await openRowMenu("trashed.png")
+    await clickText("删除")
+    expect(document.body.textContent).toContain("确认删除")
+    await clickAlertDialogButtonText("取消")
+    expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
+  })
+
+  it("keeps blank rename submissions disabled until the name is valid", async () => {
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({ assetId: "asset_active", name: "active.png" }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    await openRowMenu("active.png")
+    await clickText("重命名")
+    const saveButton = requireButtonText("保存")
+    expect(saveButton.disabled).toBe(false)
+
+    setInputValue("#drive-public-asset-name", "   ")
+    expect(requireButtonText("保存").disabled).toBe(true)
+
+    setInputValue("#drive-public-asset-name", "brand.png")
+    expect(requireButtonText("保存").disabled).toBe(false)
+  })
+
+  it("shows replacement failures without mutating the visible row", async () => {
+    mocks.replaceDrivePublicAssetFile.mockRejectedValue(new Error("替换接口失败"))
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({ assetId: "asset_active", name: "active.png" }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    await openRowMenu("active.png")
+    await clickText("替换文件")
+    const replaceInput = requireReplaceInput()
+    const replacement = new File(["next"], "next.png", { type: "image/png" })
+    Object.defineProperty(replaceInput, "files", {
+      configurable: true,
+      value: [replacement],
+    })
+    await act(async () => {
+      replaceInput.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.replaceDrivePublicAssetFile).toHaveBeenCalledWith({
+      assetId: "asset_active",
+      path: "/tmp/next.png",
+      name: "next.png",
+      mimeType: "image/png",
+    })
+    expect(mocks.toast).toHaveBeenCalledWith("替换接口失败")
+    expect(document.body.textContent).toContain("active.png")
+  })
+
+  it("does not replace when selected replacement files have no local path", async () => {
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({ assetId: "asset_active", name: "active.png" }),
+    ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    await openRowMenu("active.png")
+    await clickText("替换文件")
+    mocks.filePathForDroppedFile.mockReturnValueOnce(null)
+    const replaceInput = requireReplaceInput()
+    Object.defineProperty(replaceInput, "files", {
+      configurable: true,
+      value: [new File(["blocked"], "blocked.png", { type: "image/png" })],
+    })
+    await act(async () => {
+      replaceInput.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.replaceDrivePublicAssetFile).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith("没有可替换的文件")
+    expect(document.body.textContent).toContain("active.png")
   })
 })
 
@@ -326,13 +517,18 @@ async function flushAct(): Promise<void> {
 }
 
 async function clickButtonText(text: string): Promise<void> {
-  const button = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
-    .find((candidate) => candidate.textContent?.trim() === text)
-  if (!button) throw new Error(`Button not found: ${text}`)
+  const button = requireButtonText(text)
   await act(async () => {
     button.click()
     await flushPromises()
   })
+}
+
+function requireButtonText(text: string): HTMLButtonElement {
+  const button = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!button) throw new Error(`Button not found: ${text}`)
+  return button
 }
 
 async function clickAlertDialogButtonText(text: string): Promise<void> {
@@ -409,6 +605,18 @@ function getTableRow(text: string): HTMLTableRowElement {
 function uploadResultTexts(): string[] {
   return Array.from(document.querySelectorAll<HTMLElement>("[data-testid='drive-public-asset-upload-result']"))
     .map((element) => element.textContent?.trim() ?? "")
+}
+
+function requireUploadInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>('input[type="file"][multiple]')
+  if (!input) throw new Error("Upload input not found")
+  return input
+}
+
+function requireReplaceInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>('input[data-testid="drive-public-asset-replace-input"]')
+  if (!input) throw new Error("Replace input not found")
+  return input
 }
 
 function createPublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {

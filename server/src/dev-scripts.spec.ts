@@ -39,6 +39,9 @@ describe("server dev scripts", () => {
       "--filter @synapse/server run dev",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
+      "node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-3001}/healthz",
+    )
+    expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/dashboard run dev",
     )
     expect(workspacePackage.scripts?.["dev:dashboard"]).toBeUndefined()

@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
-import { DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
+import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveService } from "./drive.service"
 import { LocalDriveStorage } from "./drive-storage"
@@ -39,7 +41,10 @@ describe("Drive share and edit E2E", () => {
   let app: INestApplication | null = null
   let prisma: ReturnType<typeof createPrismaMemory>
   let tempRoot = ""
-  const originalEnv = { ...process.env }
+  const originalEnv = {
+    APP_PUBLIC_URL: process.env.APP_PUBLIC_URL,
+    USER_ACCESS_JWT_SECRET: process.env.USER_ACCESS_JWT_SECRET,
+  }
 
   beforeEach(async () => {
     process.env.USER_ACCESS_JWT_SECRET = "drive-e2e-user-secret-with-32-chars"
@@ -83,7 +88,8 @@ describe("Drive share and edit E2E", () => {
   afterEach(async () => {
     await app?.close()
     app = null
-    process.env = { ...originalEnv }
+    restoreProcessEnv("APP_PUBLIC_URL", originalEnv.APP_PUBLIC_URL)
+    restoreProcessEnv("USER_ACCESS_JWT_SECRET", originalEnv.USER_ACCESS_JWT_SECRET)
     if (tempRoot) await rm(tempRoot, { recursive: true, force: true })
   })
 
@@ -525,6 +531,616 @@ describe("Drive share and edit E2E", () => {
   })
 })
 
+describe("Drive public asset user journeys", () => {
+  let app: INestApplication | null = null
+  let prisma: ReturnType<typeof createPrismaMemory>
+  let localStorage: LocalDriveStorage
+  let tempRoot = ""
+  const originalEnv = {
+    APP_PUBLIC_URL: process.env.APP_PUBLIC_URL,
+    USER_ACCESS_JWT_SECRET: process.env.USER_ACCESS_JWT_SECRET,
+  }
+
+  beforeEach(async () => {
+    process.env.USER_ACCESS_JWT_SECRET = "drive-e2e-user-secret-with-32-chars"
+    process.env.APP_PUBLIC_URL = "http://synapse.test"
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-public-asset-e2e-"))
+    prisma = createPrismaMemory()
+    await prisma.user.create({ data: ownerUser })
+    await prisma.user.create({ data: editorUser })
+
+    localStorage = new LocalDriveStorage({ publicAppUrl: "http://synapse.test", root: tempRoot })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController, DrivePublicController, DriveLocalStorageController, DriveAdminController],
+      providers: [
+        DriveService,
+        DrivePublicAssetService,
+        DriveLifecycleService,
+        { provide: "DriveStoragePort", useValue: localStorage },
+        { provide: LocalDriveStorage, useValue: localStorage },
+        { provide: PrismaService, useValue: prisma },
+        { provide: AuditLogService, useValue: { record: vi.fn(async () => undefined) } },
+      ],
+    })
+      .overrideProvider(PrismaService)
+      .useValue(prisma)
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          const req = context.switchToHttp().getRequest()
+          const userId = req.headers["x-test-user-id"]
+          if (typeof userId !== "string") throw new UnauthorizedException("未登录或登录已过期。")
+          req.user = { id: userId }
+          return true
+        }),
+      })
+      .overrideGuard(AdminAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          const req = context.switchToHttp().getRequest()
+          const email = req.headers["x-test-admin-email"]
+          if (typeof email !== "string") throw new UnauthorizedException("未登录或登录已过期。")
+          req.admin = { id: "admin-1", email }
+          return true
+        }),
+      })
+      .compile()
+
+    app = moduleRef.createNestApplication()
+    app.use(cookieParser())
+    await app.init()
+  })
+
+  afterEach(async () => {
+    await app?.close()
+    app = null
+    restoreProcessEnv("APP_PUBLIC_URL", originalEnv.APP_PUBLIC_URL)
+    restoreProcessEnv("USER_ACCESS_JWT_SECRET", originalEnv.USER_ACCESS_JWT_SECRET)
+    if (tempRoot) await rm(tempRoot, { recursive: true, force: true })
+  })
+
+  it("covers upload, public serving, replacement, rename, trash, restore, final hide, and admin observability", async () => {
+    await request(app!.getHttpServer())
+      .post("/api/drive/public-assets/uploads/prepare")
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "notes.txt", size: "4", mimeType: "text/plain" })
+      .expect(400)
+
+    const uploaded = await uploadPublicAssetFile({
+      app: app!,
+      userId: ownerUser.id,
+      name: "logo.png",
+      mimeType: "image/png",
+      body: pngBytes("first"),
+    })
+    const assetId = uploaded.asset.assetId
+    const itemId = uploaded.asset.itemId
+    expect(uploaded.asset.url).toBe(`http://synapse.test/files/${assetId}`)
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/items")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body).toEqual([])
+      })
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets?offset=0&limit=10")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.items[0]).toMatchObject({
+          assetId,
+          itemId,
+          name: "logo.png",
+          lifecycleStatus: "active",
+          accessCount: "0",
+        })
+      })
+
+    await request(app!.getHttpServer())
+      .get(`/files/${assetId}`)
+      .set("Referer", "https://example.test/page")
+      .expect(200)
+      .then((response) => {
+        expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toContain("first")
+        expect(response.headers["content-type"]).toContain("image/png")
+        expect(response.headers["cache-control"]).toBe("public, max-age=300")
+      })
+
+    await request(app!.getHttpServer())
+      .head(`/files/${assetId}`)
+      .expect(200)
+      .then((response) => {
+        expect(response.headers["content-length"]).toBe(String(pngBytes("first").length))
+      })
+
+    await flushPublicAssetAccessWrites()
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.accessCount).toBe("1")
+        expect(response.body.responseBytes).toBe(String(pngBytes("first").length))
+      })
+
+    const replacement = await preparePublicAssetReplace({
+      app: app!,
+      userId: ownerUser.id,
+      assetId,
+      name: "logo.webp",
+      mimeType: "image/webp",
+      body: webpBytes("second"),
+    })
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${assetId}/replace/${replacement.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(201)
+      .then((response) => {
+        expect(response.body).toMatchObject({
+          assetId,
+          itemId,
+          name: "logo.webp",
+          mimeType: "image/webp",
+          lifecycleStatus: "active",
+        })
+      })
+
+    await request(app!.getHttpServer())
+      .patch(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "brand.png" })
+      .expect(400)
+
+    await request(app!.getHttpServer())
+      .patch(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "brand.webp" })
+      .expect(200)
+      .then((response) => {
+        expect(response.body).toMatchObject({ assetId, itemId, name: "brand.webp" })
+        expect(response.body.url).toBe(`http://synapse.test/files/${assetId}`)
+      })
+
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${assetId}/revisions?page=1&pageSize=10`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.data[0]).toMatchObject({
+          assetId,
+          itemId,
+          name: "logo.png",
+          mimeType: "image/png",
+        })
+      })
+
+    await request(app!.getHttpServer())
+      .delete(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.lifecycleStatus).toBe("trashed")
+      })
+
+    await request(app!.getHttpServer()).get(`/files/${assetId}`).expect(404)
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/trash")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.items[0]).toMatchObject({
+          id: itemId,
+          assetId,
+          kind: "public_asset",
+          name: "brand.webp",
+          originalPath: "brand.webp",
+        })
+      })
+
+    await request(app!.getHttpServer())
+      .post(`/api/drive/items/${itemId}/restore`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(404)
+
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${assetId}/restore`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(201)
+      .then((response) => {
+        expect(response.body.lifecycleStatus).toBe("active")
+      })
+    await request(app!.getHttpServer()).get(`/files/${assetId}`).expect(200)
+
+    await request(app!.getHttpServer())
+      .delete(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+    await request(app!.getHttpServer())
+      .delete(`/api/drive/trash/${itemId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.items).toEqual([])
+      })
+    await request(app!.getHttpServer())
+      .get("/api/drive/trash")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.items).toEqual([])
+      })
+    await request(app!.getHttpServer()).get(`/files/${assetId}`).expect(404)
+
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets?lifecycleStatus=hidden&search=${assetId}`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.data[0]).toMatchObject({
+          assetId,
+          itemId,
+          name: "brand.webp",
+          lifecycleStatus: "hidden",
+        })
+      })
+
+    await flushPublicAssetAccessWrites()
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${assetId}/access-logs?page=1&pageSize=10`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBeGreaterThanOrEqual(3)
+        expect(response.body.data.map((entry: { readonly statusCode: number }) => entry.statusCode)).toContain(404)
+        expect(response.body.data.map((entry: { readonly method: string }) => entry.method)).toContain("HEAD")
+      })
+
+    await request(app!.getHttpServer())
+      .post(`/api/admin/drive/items/${itemId}/restore`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(201)
+      .then((response) => {
+        expect(response.body).toMatchObject({ id: itemId, name: "brand.webp" })
+      })
+    await request(app!.getHttpServer()).get(`/files/${assetId}`).expect(200)
+  })
+
+  it("covers cancellation, invalid image bytes, and cross-user public asset boundaries", async () => {
+    const uploaded = await uploadPublicAssetFile({
+      app: app!,
+      userId: ownerUser.id,
+      name: "owner.png",
+      mimeType: "image/png",
+      body: pngBytes("owner"),
+    })
+    const assetId = uploaded.asset.assetId
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets")
+      .set("x-test-user-id", editorUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.items).toEqual([])
+      })
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", editorUser.id)
+      .expect(404)
+    await request(app!.getHttpServer())
+      .delete(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", editorUser.id)
+      .expect(404)
+    await request(app!.getHttpServer()).get(`/files/${assetId}`).expect(200)
+
+    const cancelled = await request(app!.getHttpServer())
+      .post("/api/drive/public-assets/uploads/prepare")
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "cancelled.png", size: String(pngBytes("cancelled").length), mimeType: "image/png" })
+      .expect(201)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/uploads/${cancelled.body.sessionId}/cancel`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(201)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/uploads/${cancelled.body.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(404)
+
+    const badBytes = Buffer.from("notimage")
+    const invalid = await request(app!.getHttpServer())
+      .post("/api/drive/public-assets/uploads/prepare")
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "bad.png", size: String(badBytes.length), mimeType: "image/png" })
+      .expect(201)
+    const invalidToken = new URL(invalid.body.upload.url).pathname.split("/").pop()
+    await request(app!.getHttpServer())
+      .put(`/api/drive/local-upload/${invalidToken}`)
+      .set("Content-Type", "image/png")
+      .send(badBytes)
+      .expect(200)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/uploads/${invalid.body.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(400)
+
+    const replacement = await preparePublicAssetReplace({
+      app: app!,
+      userId: ownerUser.id,
+      assetId,
+      name: "owner.webp",
+      mimeType: "image/webp",
+      body: webpBytes("cancel-replace"),
+    })
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${assetId}/replace/${replacement.sessionId}/cancel`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(201)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${assetId}/replace/${replacement.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(404)
+
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body).toMatchObject({
+          assetId,
+          name: "owner.png",
+          mimeType: "image/png",
+          lifecycleStatus: "active",
+        })
+      })
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${assetId}/revisions?page=1&pageSize=10`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(0)
+      })
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.items.map((item: { readonly name: string }) => item.name)).toEqual(["owner.png"])
+      })
+    await request(app!.getHttpServer())
+      .get("/api/drive/trash")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.items).toEqual([])
+      })
+  })
+
+  it("covers pagination, downloads, admin filters, revision downloads, cache revalidation, expired sessions, and missing objects", async () => {
+    const alpha = await uploadPublicAssetFile({
+      app: app!,
+      userId: ownerUser.id,
+      name: "alpha.png",
+      mimeType: "image/png",
+      body: pngBytes("alpha"),
+    })
+    const beta = await uploadPublicAssetFile({
+      app: app!,
+      userId: ownerUser.id,
+      name: "beta.gif",
+      mimeType: "image/gif",
+      body: gifBytes("beta"),
+    })
+    const gamma = await uploadPublicAssetFile({
+      app: app!,
+      userId: editorUser.id,
+      name: "gamma.webp",
+      mimeType: "image/webp",
+      body: webpBytes("gamma"),
+    })
+
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets?offset=0&limit=1")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(2)
+        expect(response.body.items).toHaveLength(1)
+        expect(response.body.page).toMatchObject({ offset: 0, limit: 1, hasMore: true, nextOffset: 1 })
+      })
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets?offset=1&limit=1")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.items).toHaveLength(1)
+        expect(response.body.page).toMatchObject({ offset: 1, limit: 1, hasMore: false, nextOffset: null })
+      })
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets?offset=-1")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(400)
+    await request(app!.getHttpServer())
+      .get("/api/drive/public-assets?limit=abc")
+      .set("x-test-user-id", ownerUser.id)
+      .expect(400)
+
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${alpha.asset.assetId}/download`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toContain("alpha")
+        expect(response.headers["content-type"]).toContain("image/png")
+        expect(response.headers["content-disposition"]).toContain("alpha.png")
+        expect(response.headers["content-length"]).toBe(alpha.asset.size)
+      })
+
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets?userId=${editorUser.id}`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.data[0]).toMatchObject({
+          assetId: gamma.asset.assetId,
+          owner: {
+            userId: editorUser.id,
+            email: editorUser.email,
+          },
+        })
+      })
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets?search=${encodeURIComponent(editorUser.email)}`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.data[0].assetId).toBe(gamma.asset.assetId)
+      })
+    await request(app!.getHttpServer())
+      .get("/api/admin/drive/public-assets?sortBy=unknown")
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(400)
+
+    const replacement = await preparePublicAssetReplace({
+      app: app!,
+      userId: ownerUser.id,
+      assetId: alpha.asset.assetId,
+      name: "alpha-next.png",
+      mimeType: "image/png",
+      body: pngBytes("alpha-next"),
+    })
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${alpha.asset.assetId}/replace/${replacement.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(201)
+    const revisions = await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${alpha.asset.assetId}/revisions?page=1&pageSize=10&sortBy=size&sortOrder=asc`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+    expect(revisions.body.total).toBe(1)
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${alpha.asset.assetId}/revisions/${revisions.body.data[0].id}/download`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toContain("alpha")
+        expect(response.headers["content-disposition"]).toContain("alpha.png")
+        expect(response.headers["content-length"]).toBe(revisions.body.data[0].size)
+      })
+    const revisionRecord = prisma.__debug.publicAssetRevisions.get(revisions.body.data[0].id)!
+    await localStorage.deleteObject(revisionRecord.storageKey)
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${alpha.asset.assetId}/revisions/${revisions.body.data[0].id}/download`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(404)
+
+    const alphaRecord = findPublicAssetDebugRecord(prisma, alpha.asset.assetId)
+    alphaRecord.etag = "\"alpha-etag\""
+    await request(app!.getHttpServer())
+      .get(`/files/${alpha.asset.assetId}`)
+      .set("If-None-Match", "\"alpha-etag\"")
+      .expect(304)
+      .then((response) => {
+        expect(response.headers.etag).toBe("\"alpha-etag\"")
+      })
+    await flushPublicAssetAccessWrites()
+    await request(app!.getHttpServer())
+      .get(`/api/admin/drive/public-assets/${alpha.asset.assetId}/access-logs?page=1&pageSize=10&sortBy=statusCode&sortOrder=desc`)
+      .set("x-test-admin-email", "admin@example.com")
+      .expect(200)
+      .then((response) => {
+        expect(response.body.data.map((entry: { readonly statusCode: number }) => entry.statusCode)).toContain(304)
+      })
+
+    const expired = await request(app!.getHttpServer())
+      .post("/api/drive/public-assets/uploads/prepare")
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "expired.png", size: String(pngBytes("expired").length), mimeType: "image/png" })
+      .expect(201)
+    prisma.__debug.sessions.get(expired.body.sessionId)!.expiresAt = new Date(Date.now() - 1000)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/uploads/${expired.body.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(400)
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/uploads/${expired.body.sessionId}/complete`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(404)
+
+    const betaRecord = findPublicAssetDebugRecord(prisma, beta.asset.assetId)
+    await localStorage.deleteObject(betaRecord.storageKey)
+    await request(app!.getHttpServer()).get(`/files/${beta.asset.assetId}`).expect(404)
+    await flushPublicAssetAccessWrites()
+    expect(prisma.__debug.items.get(beta.asset.itemId)!.objectMissing).toBe(true)
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${beta.asset.assetId}/download`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(404)
+  })
+
+  it("keeps existing public assets available when upload and replace are rejected by quota", async () => {
+    const uploaded = await uploadPublicAssetFile({
+      app: app!,
+      userId: ownerUser.id,
+      name: "quota.png",
+      mimeType: "image/png",
+      body: pngBytes("quota"),
+    })
+    const assetId = uploaded.asset.assetId
+    const usedSize = BigInt(uploaded.asset.size)
+    await prisma.driveUsage.update({
+      where: { userId: ownerUser.id },
+      data: { quotaBytes: usedSize },
+    })
+
+    await request(app!.getHttpServer())
+      .post("/api/drive/public-assets/uploads/prepare")
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "over-quota.png", size: String(pngBytes("over-quota").length), mimeType: "image/png" })
+      .expect(400)
+
+    await request(app!.getHttpServer())
+      .post(`/api/drive/public-assets/${assetId}/replace/prepare`)
+      .set("x-test-user-id", ownerUser.id)
+      .send({ name: "larger.png", size: String(pngBytes("larger-than-current").length), mimeType: "image/png" })
+      .expect(400)
+
+    await request(app!.getHttpServer())
+      .get(`/files/${assetId}`)
+      .expect(200)
+      .then((response) => {
+        expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toContain("quota")
+      })
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets/${assetId}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body).toMatchObject({
+          assetId,
+          name: "quota.png",
+          size: uploaded.asset.size,
+          lifecycleStatus: "active",
+        })
+      })
+  })
+})
+
 describe("Drive public asset routes", () => {
   let app: INestApplication | null = null
   const publicAssets = {
@@ -576,7 +1192,7 @@ describe("Drive public asset routes", () => {
       publicAssetId: "public-asset-1",
       userId: "user-1",
       storageKey: "drive/item-1",
-      name: "logo.png",
+      name: "标志 logo.png",
       mimeType: "image/png",
       size: 8n,
       etag: "\"etag-1\"",
@@ -587,6 +1203,9 @@ describe("Drive public asset routes", () => {
     expect((response.body ?? Buffer.from(response.text ?? "")).toString("utf8")).toBe("png-data")
     expect(response.headers["cache-control"]).toBe("public, max-age=300")
     expect(response.headers["content-disposition"]).toContain("inline;")
+    expect(response.headers["content-disposition"]).toContain('filename="__ logo.png"')
+    expect(response.headers["content-disposition"]).toContain("filename*=UTF-8''%E6%A0%87%E5%BF%97%20logo.png")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
     expect(response.headers.etag).toBe("\"etag-1\"")
     expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
@@ -697,6 +1316,102 @@ async function uploadTextFile(input: {
   return { id: completed.body.id, versionId: versions.body.items[0].id }
 }
 
+async function uploadPublicAssetFile(input: {
+  readonly app: INestApplication
+  readonly userId: string
+  readonly name: string
+  readonly mimeType: string
+  readonly body: Buffer
+}): Promise<{ readonly asset: any }> {
+  const prepared = await request(input.app.getHttpServer())
+    .post("/api/drive/public-assets/uploads/prepare")
+    .set("x-test-user-id", input.userId)
+    .send({
+      name: input.name,
+      size: String(input.body.length),
+      mimeType: input.mimeType,
+    })
+    .expect(201)
+  const token = new URL(prepared.body.upload.url).pathname.split("/").pop()
+  await request(input.app.getHttpServer())
+    .put(`/api/drive/local-upload/${token}`)
+    .set("Content-Type", input.mimeType)
+    .send(input.body)
+    .expect(200)
+  const completed = await request(input.app.getHttpServer())
+    .post(`/api/drive/public-assets/uploads/${prepared.body.sessionId}/complete`)
+    .set("x-test-user-id", input.userId)
+    .expect(201)
+  return { asset: completed.body }
+}
+
+async function preparePublicAssetReplace(input: {
+  readonly app: INestApplication
+  readonly userId: string
+  readonly assetId: string
+  readonly name: string
+  readonly mimeType: string
+  readonly body: Buffer
+}): Promise<{ readonly sessionId: string }> {
+  const prepared = await request(input.app.getHttpServer())
+    .post(`/api/drive/public-assets/${input.assetId}/replace/prepare`)
+    .set("x-test-user-id", input.userId)
+    .send({
+      name: input.name,
+      size: String(input.body.length),
+      mimeType: input.mimeType,
+    })
+    .expect(201)
+  const token = new URL(prepared.body.upload.url).pathname.split("/").pop()
+  await request(input.app.getHttpServer())
+    .put(`/api/drive/local-upload/${token}`)
+    .set("Content-Type", input.mimeType)
+    .send(input.body)
+    .expect(200)
+  return { sessionId: prepared.body.sessionId }
+}
+
+function pngBytes(label: string): Buffer {
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from(label),
+  ])
+}
+
+function webpBytes(label: string): Buffer {
+  return Buffer.concat([
+    Buffer.from("RIFF", "ascii"),
+    Buffer.alloc(4),
+    Buffer.from("WEBP", "ascii"),
+    Buffer.from(label),
+  ])
+}
+
+function gifBytes(label: string): Buffer {
+  return Buffer.concat([
+    Buffer.from("GIF89a", "ascii"),
+    Buffer.from(label),
+  ])
+}
+
+function flushPublicAssetAccessWrites(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+function findPublicAssetDebugRecord(prisma: ReturnType<typeof createPrismaMemory>, assetId: string): any {
+  const asset = [...prisma.__debug.publicAssets.values()].find((row) => row.assetId === assetId)
+  if (!asset) throw new Error(`Public asset not found in test memory: ${assetId}`)
+  return asset
+}
+
+function restoreProcessEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+  process.env[name] = value
+}
+
 function readFirstCookie(response: SupertestResponse): string {
   const header = response.headers["set-cookie"]
   const value = Array.isArray(header) ? header[0] : header
@@ -713,12 +1428,21 @@ function createPrismaMemory() {
   const shares = new Map<string, any>()
   const shareEditors = new Map<string, any>()
   const versions = new Map<string, any>()
+  const publicAssets = new Map<string, any>()
+  const publicAssetRevisions = new Map<string, any>()
+  const publicAssetAccessLogs = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
     ...item,
+    publicAsset: item?.publicAsset ?? [...publicAssets.values()].find((asset) => asset.itemId === item.id) ?? null,
     user: users.get(item.userId) ? { email: users.get(item.userId)!.email } : null,
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
+  })
+  const includePublicAsset = (asset: any, include: any) => ({
+    ...asset,
+    ...(include?.item ? { item: withShares(items.get(asset.itemId)) } : {}),
+    ...(include?.user ? { user: users.get(asset.userId) ? { email: users.get(asset.userId)!.email } : null } : {}),
   })
   const withShareIncludes = (share: any, include: any) => {
     if (!include?.item && !include?.editors) return share
@@ -747,6 +1471,9 @@ function createPrismaMemory() {
           [shares, cloneMap(shares)],
           [shareEditors, cloneMap(shareEditors)],
           [versions, cloneMap(versions)],
+          [publicAssets, cloneMap(publicAssets)],
+          [publicAssetRevisions, cloneMap(publicAssetRevisions)],
+          [publicAssetAccessLogs, cloneMap(publicAssetAccessLogs)],
         ] as const
         try {
           return await input(prisma)
@@ -778,10 +1505,7 @@ function createPrismaMemory() {
       update: async ({ where, data }: any) => {
         const usage = usages.get(where.userId)
         if (!usage) throw new Error("usage not found")
-        if (data.reservedBytes?.increment) usage.reservedBytes += data.reservedBytes.increment
-        if (data.reservedBytes?.decrement) usage.reservedBytes -= data.reservedBytes.decrement
-        if (data.usedBytes?.increment) usage.usedBytes += data.usedBytes.increment
-        if (data.usedBytes?.decrement) usage.usedBytes -= data.usedBytes.decrement
+        applyNumericUpdates(usage, data)
         usage.updatedAt = now()
         return usage
       },
@@ -851,10 +1575,11 @@ function createPrismaMemory() {
         if (!item) return null
         return select ? selectFields(item, select) : item
       },
-      findUniqueOrThrow: async ({ where }: any) => {
+      findUniqueOrThrow: async ({ where, include, select }: any) => {
         const item = items.get(where.id)
         if (!item) throw new Error("item not found")
-        return item
+        if (select) return selectFields(item, select)
+        return include ? withShares(item) : item
       },
       count: async ({ where }: any = {}) => [...items.values()].filter((item) => matchesWhere(item, where ?? {})).length,
     },
@@ -1016,8 +1741,112 @@ function createPrismaMemory() {
         return { count }
       },
     },
+    publicAsset: {
+      create: async ({ data, include }: any) => {
+        if ([...publicAssets.values()].some((asset) => asset.assetId === data.assetId)) throw uniqueConstraintError(["assetId"])
+        const asset = {
+          id: data.id ?? id("public-asset"),
+          lifecycleStatus: "active",
+          trashedAt: null,
+          trashedBy: null,
+          hiddenAt: null,
+          hiddenBy: null,
+          deletedAt: null,
+          deletedBy: null,
+          accessCount: 0n,
+          responseBytes: 0n,
+          lastAccessedAt: null,
+          createdAt: now(),
+          updatedAt: now(),
+          ...data,
+        }
+        publicAssets.set(asset.id, asset)
+        asset.user = users.get(asset.userId) ? { email: users.get(asset.userId)!.email } : null
+        const item = items.get(asset.itemId)
+        if (item) item.publicAsset = { assetId: asset.assetId }
+        return includePublicAsset(asset, include)
+      },
+      findFirst: async ({ where, include }: any) => {
+        const asset = [...publicAssets.values()].find((row) => matchesWhere(row, where))
+        return asset ? includePublicAsset(asset, include) : null
+      },
+      findMany: async (args: any = {}) => {
+        const { where, include, select, orderBy, skip, take } = args
+        const found = paginateRows(
+          orderRows([...publicAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})), orderBy),
+          { skip, take },
+        )
+        if (select) return found.map((asset) => selectFields(asset, select))
+        return found.map((asset) => includePublicAsset(asset, include))
+      },
+      update: async ({ where, data, include }: any) => {
+        const asset = publicAssets.get(where.id)
+        if (!asset) throw new Error("public asset not found")
+        applyNumericUpdates(asset, data)
+        asset.updatedAt = now()
+        const item = items.get(asset.itemId)
+        if (item) item.publicAsset = { assetId: asset.assetId }
+        return includePublicAsset(asset, include)
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const asset of publicAssets.values()) {
+          if (matchesWhere(asset, where)) {
+            applyNumericUpdates(asset, data)
+            asset.updatedAt = now()
+            const item = items.get(asset.itemId)
+            if (item) item.publicAsset = { assetId: asset.assetId }
+            count += 1
+          }
+        }
+        return { count }
+      },
+      count: async ({ where }: any = {}) => [...publicAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})).length,
+    },
+    publicAssetRevision: {
+      create: async ({ data }: any) => {
+        const revision = { id: data.id ?? id("public-asset-revision"), createdAt: now(), replacedAt: now(), ...data }
+        publicAssetRevisions.set(revision.id, revision)
+        return revision
+      },
+      findFirst: async ({ where }: any) => [...publicAssetRevisions.values()].find((row) => matchesWhere(row, where ?? {})) ?? null,
+      findMany: async (args: any = {}) => {
+        const { where, select, orderBy, skip, take } = args
+        const found = paginateRows(
+          orderRows([...publicAssetRevisions.values()].filter((revision) => matchesWhere(revision, where ?? {})), orderBy),
+          { skip, take },
+        )
+        return select ? found.map((revision) => selectFields(revision, select)) : found
+      },
+      count: async ({ where }: any = {}) => [...publicAssetRevisions.values()].filter((revision) => matchesWhere(revision, where ?? {})).length,
+    },
+    publicAssetAccessLog: {
+      create: async ({ data }: any) => {
+        const log = { id: data.id ?? id("public-asset-access"), accessedAt: now(), ...data }
+        publicAssetAccessLogs.set(log.id, log)
+        return log
+      },
+      findMany: async (args: any = {}) => {
+        const { where, select, orderBy, skip, take } = args
+        const found = paginateRows(
+          orderRows([...publicAssetAccessLogs.values()].filter((log) => matchesWhere(log, where ?? {})), orderBy),
+          { skip, take },
+        )
+        return select ? found.map((log) => selectFields(log, select)) : found
+      },
+      count: async ({ where }: any = {}) => [...publicAssetAccessLogs.values()].filter((log) => matchesWhere(log, where ?? {})).length,
+    },
   }
-  return prisma
+  return Object.assign(prisma, {
+    __debug: {
+      items,
+      publicAssets,
+      publicAssetRevisions,
+      publicAssetAccessLogs,
+      sessions,
+      usages,
+    },
+  })
 }
 
 function matchesWhere(row: any, where: any): boolean {
@@ -1032,6 +1861,7 @@ function matchesWhere(row: any, where: any): boolean {
     if (value && typeof value === "object" && "lt" in value) return row[key] < value.lt
     if (value && typeof value === "object" && "lte" in value) return row[key] <= value.lte
     if (value && typeof value === "object" && "contains" in value) return String(row[key]).toLowerCase().includes(String(value.contains).toLowerCase())
+    if (value && typeof value === "object" && !(value instanceof Date)) return matchesWhere(row[key], value)
     return row[key] === value
   })
 }
@@ -1042,6 +1872,19 @@ function selectFields(row: any, select: any) {
     if (select[key]) result[key] = row[key]
   }
   return result
+}
+
+function applyNumericUpdates(row: any, data: any): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue
+    if (value && typeof value === "object" && "increment" in value) {
+      row[key] += (value as { readonly increment: bigint }).increment
+    } else if (value && typeof value === "object" && "decrement" in value) {
+      row[key] -= (value as { readonly decrement: bigint }).decrement
+    } else {
+      row[key] = value
+    }
+  }
 }
 
 function cloneMap<T>(value: Map<string, T>): Map<string, T> {

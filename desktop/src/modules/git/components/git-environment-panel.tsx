@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType, type FormEvent } from "react"
+import { useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 import {
   AlertCircle,
   CheckCircle2,
@@ -23,7 +23,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Item,
   ItemContent,
@@ -34,14 +33,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitEnvironmentState, SynapseGitRepositorySummary } from "@/types/git"
 import { getGitActionPlan, needsGitAttention } from "../lib/git-status-view"
@@ -191,8 +182,8 @@ function buildDiagnosticsText(
 
 function StatusBlock({ title, value, detail, tone, icon: Icon }: StatusBlockProps) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border bg-background p-3">
-      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg bg-muted/50 p-3">
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-background">
         <Icon className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -200,7 +191,7 @@ function StatusBlock({ title, value, detail, tone, icon: Icon }: StatusBlockProp
           <span className="text-sm font-medium">{title}</span>
           <Badge variant={statusVariant(tone)}>{value}</Badge>
         </div>
-        <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
+        <p className="mt-1 min-w-0 break-all text-xs text-muted-foreground">{detail}</p>
       </div>
     </div>
   )
@@ -208,10 +199,10 @@ function StatusBlock({ title, value, detail, tone, icon: Icon }: StatusBlockProp
 
 function FieldRow({ label, value, mono = false }: FieldRowProps) {
   return (
-    <div className="grid gap-1 border-b py-2 last:border-b-0 md:grid-cols-[9rem_minmax(0,1fr)] md:gap-3">
-      <div className="text-sm font-medium">{label}</div>
+    <div className="grid min-w-0 gap-1 py-1.5 md:grid-cols-[8rem_minmax(0,1fr)] md:gap-3">
+      <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <div
-        className={mono ? "break-all font-mono text-xs text-muted-foreground" : "break-all text-sm text-muted-foreground"}
+        className={mono ? "min-w-0 break-all font-mono text-xs text-foreground" : "min-w-0 break-all text-sm text-foreground"}
         data-allow-select="true"
       >
         {fallbackValue(value)}
@@ -266,7 +257,7 @@ function IdentityForm({
 function RepositoryDiagnosticsTable({ summaries }: { readonly summaries: readonly SynapseGitRepositorySummary[] }) {
   if (summaries.length === 0) {
     return (
-      <Item variant="muted">
+      <Item variant="muted" className="min-w-0">
         <ItemMedia variant="icon">
           <FolderGit2 />
         </ItemMedia>
@@ -279,42 +270,63 @@ function RepositoryDiagnosticsTable({ summaries }: { readonly summaries: readonl
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>仓库</TableHead>
-          <TableHead>分支</TableHead>
-          <TableHead>上游</TableHead>
-          <TableHead className="text-right">同步</TableHead>
-          <TableHead className="text-right">改动</TableHead>
-          <TableHead>状态</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {summaries.map((summary) => {
-          const snapshot = summary.snapshot
-          const actionPlan = getGitActionPlan(snapshot, summary.error)
-          const hasAttention = needsGitAttention(snapshot, summary.error)
-          return (
-            <TableRow key={summary.repository.id}>
-              <TableCell className="min-w-52">
-                <div className="font-medium">{summary.repository.name}</div>
-                <div className="mt-1 max-w-96 break-all font-mono text-xs text-muted-foreground" data-allow-select="true">
-                  {summary.repository.localPath}
-                </div>
-              </TableCell>
-              <TableCell>{snapshot?.currentBranch ?? "无分支"}</TableCell>
-              <TableCell>{snapshot?.upstream ?? "无"}</TableCell>
-              <TableCell className="text-right">↑{snapshot?.ahead ?? 0} ↓{snapshot?.behind ?? 0}</TableCell>
-              <TableCell className="text-right">{snapshot?.changes.length ?? 0}</TableCell>
-              <TableCell>
+    <div className="grid min-w-0 gap-2" data-git-environment-repository-list="true">
+      {summaries.map((summary) => {
+        const snapshot = summary.snapshot
+        const actionPlan = getGitActionPlan(snapshot, summary.error)
+        const hasAttention = needsGitAttention(snapshot, summary.error)
+        return (
+          <div
+            key={summary.repository.id}
+            className="grid min-w-0 gap-3 rounded-lg bg-muted/50 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-start"
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{summary.repository.name}</span>
                 <Badge variant={hasAttention ? "outline" : "secondary"}>{actionPlan.statusText}</Badge>
-              </TableCell>
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
+              </div>
+              <div className="mt-1 min-w-0 break-all font-mono text-xs text-muted-foreground" data-allow-select="true">
+                {summary.repository.localPath}
+              </div>
+            </div>
+            <div className="grid min-w-0 gap-1 text-xs">
+              <div className="grid min-w-0 gap-1 sm:grid-cols-[3rem_minmax(0,1fr)]">
+                <span className="text-muted-foreground">分支</span>
+                <span className="min-w-0 break-all" data-allow-select="true">{snapshot?.currentBranch ?? "无分支"}</span>
+              </div>
+              <div className="grid min-w-0 gap-1 sm:grid-cols-[3rem_minmax(0,1fr)]">
+                <span className="text-muted-foreground">上游</span>
+                <span className="min-w-0 break-all" data-allow-select="true">{snapshot?.upstream ?? "无"}</span>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground md:justify-end">
+              <Badge variant="outline">↑{snapshot?.ahead ?? 0} ↓{snapshot?.behind ?? 0}</Badge>
+              <Badge variant="outline">{snapshot?.changes.length ?? 0} 个改动</Badge>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function EnvironmentSection({
+  title,
+  action,
+  children,
+}: {
+  readonly title: string
+  readonly action?: ReactNode
+  readonly children: ReactNode
+}) {
+  return (
+    <section className="min-w-0 rounded-lg bg-background p-4" data-git-environment-section={title}>
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {action ? <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{action}</div> : null}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   )
 }
 
@@ -379,8 +391,8 @@ export function GitEnvironmentPanel({
   }
 
   return (
-    <ScrollArea className="h-full bg-surface">
-      <div className="space-y-4 p-4">
+    <ScrollArea className="h-full min-w-0 bg-surface" viewportClassName="overflow-x-hidden">
+      <div className="grid min-w-0 gap-4 p-4">
         <AlertDialog open={pendingIdentity !== null} onOpenChange={(open) => {
           if (!open && !busy) setPendingIdentity(null)
         }}
@@ -405,11 +417,10 @@ export function GitEnvironmentPanel({
           </AlertDialogContent>
         </AlertDialog>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Git 环境</CardTitle>
-            <CardAction>
-              <div className="flex flex-wrap justify-end gap-2">
+        <EnvironmentSection
+          title="Git 环境"
+          action={(
+            <>
                 <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void onRefresh()}>
                   <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
                   重新检测
@@ -418,10 +429,10 @@ export function GitEnvironmentPanel({
                   <ClipboardCheck data-icon="inline-start" />
                   复制诊断信息
                 </Button>
-              </div>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </>
+          )}
+        >
+          <div className="grid min-w-0 gap-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <StatusBlock title="Git" value={git.label} detail={git.detail} tone={git.tone} icon={Terminal} />
               <StatusBlock title="身份" value={identity.label} detail={identity.detail} tone={identity.tone} icon={UserRound} />
@@ -450,15 +461,12 @@ export function GitEnvironmentPanel({
               </Alert>
             ) : null}
             {copyMessage ? <p className="text-sm text-muted-foreground">{copyMessage}</p> : null}
-          </CardContent>
-        </Card>
+          </div>
+        </EnvironmentSection>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Git 运行环境</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <EnvironmentSection title="Git 运行环境">
+            <div className="grid min-w-0 gap-1">
               <FieldRow label="版本" value={environment?.gitVersion} />
               <FieldRow label="最终 git" value={environment?.effectiveGitPath ?? environment?.gitPath} mono />
               <FieldRow label="App PATH git" value={environment?.processGitPath} mono />
@@ -466,15 +474,12 @@ export function GitEnvironmentPanel({
               <FieldRow label="App PATH" value={environment?.processPath} mono />
               <FieldRow label="Login Shell PATH" value={environment?.shellPath} mono />
               <FieldRow label="最终 PATH" value={environment?.effectivePath} mono />
-            </CardContent>
-          </Card>
+            </div>
+          </EnvironmentSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Git 身份</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
+          <EnvironmentSection title="Git 身份">
+            <div className="grid min-w-0 gap-4">
+              <div className="grid min-w-0 gap-1">
                 <FieldRow label="用户名" value={environment?.userName} />
                 <FieldRow label="用户名来源" value={environment?.userNameSource} mono />
                 <FieldRow label="邮箱" value={environment?.userEmail} />
@@ -491,34 +496,23 @@ export function GitEnvironmentPanel({
                 />
               ) : null}
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            </CardContent>
-          </Card>
+            </div>
+          </EnvironmentSection>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>SSH</CardTitle>
-            <CardAction>
-              <CopySshPublicKeyButton />
-            </CardAction>
-          </CardHeader>
-          <CardContent>
+        <EnvironmentSection title="SSH" action={<CopySshPublicKeyButton />}>
+          <div className="grid min-w-0 gap-1">
             <FieldRow label="状态" value={environment ? (environment.sshAvailable ? "可用" : "不可用") : null} />
             <FieldRow label="公钥路径" value={environment?.sshPublicKeyPath} mono />
             <FieldRow label="公钥类型" value={environment?.sshPublicKeyType} />
             <FieldRow label="公钥备注" value={environment?.sshPublicKeyComment} />
             <FieldRow label="公钥指纹" value={environment?.sshPublicKeyFingerprint} mono />
-          </CardContent>
-        </Card>
+          </div>
+        </EnvironmentSection>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>仓库状态</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RepositoryDiagnosticsTable summaries={repositorySummaries} />
-          </CardContent>
-        </Card>
+        <EnvironmentSection title="仓库状态">
+          <RepositoryDiagnosticsTable summaries={repositorySummaries} />
+        </EnvironmentSection>
       </div>
     </ScrollArea>
   )
@@ -547,7 +541,7 @@ export function CopySshPublicKeyButton() {
   }
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <span className="inline-flex min-w-0 flex-wrap items-center justify-end gap-2">
       <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void copy()}>
         <Copy data-icon="inline-start" />
         复制公钥

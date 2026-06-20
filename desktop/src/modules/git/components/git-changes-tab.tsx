@@ -160,7 +160,10 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
           </div>
         </ScrollArea>
       </div>
-      <div className="grid gap-3 bg-background p-4">
+      <div
+        className="grid min-w-0 max-w-full gap-3 overflow-hidden bg-background p-4"
+        data-git-changes-commit-panel="true"
+      >
         {status.error || error ? (
           <Alert variant="destructive">
             <AlertTitle>操作失败</AlertTitle>
@@ -187,9 +190,12 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
           </Alert>
         ) : null}
         {changes.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 text-sm"
+            data-git-changes-selection-bar="true"
+          >
             <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
-            <span className="flex gap-2">
+            <span className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
                 全选
               </Button>
@@ -199,16 +205,16 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
             </span>
           </div>
         ) : null}
-        <div className="grid gap-2">
+        <div className="grid min-w-0 gap-2">
           <Label htmlFor="git-commit-message">提交说明</Label>
           <Textarea
             id="git-commit-message"
-            className="min-h-24"
+            className="min-h-24 min-w-0 max-w-full"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
           />
         </div>
-        <div className="flex justify-end">
+        <div className="flex min-w-0 justify-end">
           <Button type="button" disabled={commitDisabled} onClick={() => void commit()}>
             {busy ? "提交中" : "提交选中文件"}
           </Button>

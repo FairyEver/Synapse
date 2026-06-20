@@ -105,6 +105,31 @@ describe("DriveTrashView", () => {
     expect(document.body.textContent).toContain("second.txt")
   })
 
+  it("shows initial and load-more failures without dropping current trash entries", async () => {
+    mocks.listDriveTrash
+      .mockRejectedValueOnce(new Error("回收站网络错误"))
+      .mockResolvedValueOnce(createTrashPage(
+        [createTrashItem({ id: "file-1", name: "first.txt" })],
+        { hasMore: true, nextOffset: 50, total: 2 },
+      ))
+      .mockRejectedValueOnce(new Error("下一页失败"))
+
+    await render(<DriveTrashView />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).not.toContain("first.txt")
+
+    await clickButtonText("重试")
+    expect(mocks.listDriveTrash).toHaveBeenLastCalledWith({ offset: 0, limit: 50 })
+    expect(document.body.textContent).toContain("first.txt")
+
+    await clickButtonText("加载更多")
+    expect(mocks.listDriveTrash).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain("first.txt")
+    expect(document.body.textContent).toContain("下一页失败")
+  })
+
   it("restores and deletes trash entries after confirmation", async () => {
     mocks.listDriveTrash.mockResolvedValue(createTrashPage([
       createTrashItem({ id: "file-1", kind: "normal", name: "normal.txt" }),
@@ -131,6 +156,35 @@ describe("DriveTrashView", () => {
     await clickAlertDialogButtonText("删除")
     expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "asset-item-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
+  })
+
+  it("cancels deletion and keeps entries visible when restore or delete fails", async () => {
+    mocks.listDriveTrash.mockResolvedValue(createTrashPage([
+      createTrashItem({ id: "file-1", kind: "normal", name: "normal.txt" }),
+      createTrashItem({ id: "asset-item-1", assetId: "asset_public", kind: "public_asset", name: "public.png" }),
+    ]))
+    mocks.restoreDriveTrashItem.mockRejectedValue(new Error("恢复接口失败"))
+    mocks.deleteDriveTrashItem.mockRejectedValue(new Error("删除接口失败"))
+
+    await render(<DriveTrashView />)
+    await flushAct()
+
+    await clickRowButtonText("public.png", "删除")
+    expect(document.body.textContent).toContain("确认删除")
+    await clickAlertDialogButtonText("取消")
+    expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("public.png")
+
+    await clickRowButtonText("normal.txt", "恢复")
+    expect(mocks.restoreDriveTrashItem).toHaveBeenCalledWith({ itemId: "file-1", kind: "normal" })
+    expect(mocks.toast).toHaveBeenCalledWith("恢复接口失败")
+    expect(document.body.textContent).toContain("normal.txt")
+
+    await clickRowButtonText("public.png", "删除")
+    await clickAlertDialogButtonText("删除")
+    expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "asset-item-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("删除接口失败")
+    expect(document.body.textContent).toContain("public.png")
   })
 })
 

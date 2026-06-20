@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { runPnpm } from "./process-utils.mjs"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, "../..")
 const envPath = path.join(repoRoot, "server/.env.local")
+const localServerPublicAppUrl = "http://localhost:3000"
 
 function parseEnvFile(raw) {
   const env = {}
@@ -56,23 +57,46 @@ async function loadServerEnv() {
   }
 }
 
-const args = process.argv.slice(2)
-if (args.length === 0) {
-  console.error("[run-server-with-env] Missing pnpm arguments.")
-  process.exit(1)
+function isServerDevCommand(args) {
+  return args.includes("@synapse/server") && args.includes("run") && args.includes("dev")
 }
 
-try {
-  const result = await runPnpm(args, {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      ...await loadServerEnv(),
-    },
-  })
-  if (result.signal) process.exit(1)
-  process.exit(result.code)
-} catch (error) {
-  console.error("[run-server-with-env] Failed to start pnpm.", error)
-  process.exit(1)
+function resolveDevCommandEnv(args, processEnv, serverEnv) {
+  const env = {
+    ...processEnv,
+    ...serverEnv,
+  }
+
+  if (isServerDevCommand(args)) {
+    const explicitPublicAppUrl = processEnv.APP_PUBLIC_URL?.trim()
+    env.APP_PUBLIC_URL = explicitPublicAppUrl || localServerPublicAppUrl
+  }
+
+  return env
 }
+
+async function main() {
+  const args = process.argv.slice(2)
+  if (args.length === 0) {
+    console.error("[run-server-with-env] Missing pnpm arguments.")
+    process.exit(1)
+  }
+
+  try {
+    const result = await runPnpm(args, {
+      cwd: repoRoot,
+      env: resolveDevCommandEnv(args, process.env, await loadServerEnv()),
+    })
+    if (result.signal) process.exit(1)
+    process.exit(result.code)
+  } catch (error) {
+    console.error("[run-server-with-env] Failed to start pnpm.", error)
+    process.exit(1)
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main()
+}
+
+export { isServerDevCommand, parseEnvFile, resolveDevCommandEnv }
