@@ -173,6 +173,19 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects Drive reorganization moves without an explicit target parent", async () => {
+    const accountService = createAccountService({
+      previewDriveReorganization: vi.fn(),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.reorganization.preview", {
+      moves: [{ itemId: "file-1" }],
+    }, { source: "mcp-stdio" })).rejects.toThrow("targetParentId is required")
+
+    expect(accountService.previewDriveReorganization).not.toHaveBeenCalled()
+  })
+
   it("authorizes and audits Drive item reads", async () => {
     const accountService = createAccountService({
       listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),

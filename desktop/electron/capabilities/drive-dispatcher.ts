@@ -1037,6 +1037,9 @@ function parseReorganizationPreviewInput(params: Record<string, unknown>): Drive
         throw new Error(`moves[${index}] must be an object.`)
       }
       const input = move as Record<string, unknown>
+      if (!Object.hasOwn(input, "targetParentId")) {
+        throw new Error(`moves[${index}].targetParentId is required. Use null only when moving to Drive root.`)
+      }
       return {
         itemId: requireString(input, "itemId"),
         targetParentId: optionalNullableString(input.targetParentId),
