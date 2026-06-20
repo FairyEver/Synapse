@@ -2539,6 +2539,55 @@ describe("DriveService", () => {
     await expect(service.getItem("user-1", second.id)).resolves.toMatchObject({ parentId: sourceB.id })
   })
 
+  it("rejects reorganization plans that move same-name files into one target", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const sourceA = await service.createFolder("user-1", { parentId: null, name: "Source A" })
+    const sourceB = await service.createFolder("user-1", { parentId: null, name: "Source B" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
+    const first = await createCompletedUpload(service, "user-1", { parentId: sourceA.id, name: "report.txt", mimeType: "text/plain" })
+    const second = await createCompletedUpload(service, "user-1", { parentId: sourceB.id, name: "report.txt", mimeType: "text/plain" })
+
+    await expect(service.previewReorganization("user-1", {
+      moves: [
+        { itemId: first.id, targetParentId: target.id },
+        { itemId: second.id, targetParentId: target.id },
+      ],
+    })).rejects.toThrow("目标位置已有同名文件。")
+
+    const planId = "drive-reorg-same-name-files"
+    const plans = (service as unknown as {
+      readonly reorganizationPlans: Map<string, {
+        readonly userId: string
+        readonly planId: string
+        readonly expiresAt: Date
+        readonly moves: Array<{
+          readonly itemId: string
+          readonly name: string
+          readonly fromParentId: string | null
+          readonly targetParentId: string | null
+          readonly updatedAt: string
+        }>
+        readonly skipped: readonly []
+      }>
+    }).reorganizationPlans
+    plans.set(planId, {
+      userId: "user-1",
+      planId,
+      expiresAt: new Date(Date.now() + 60_000),
+      moves: [
+        { itemId: first.id, name: first.name, fromParentId: sourceA.id, targetParentId: target.id, updatedAt: first.updatedAt },
+        { itemId: second.id, name: second.name, fromParentId: sourceB.id, targetParentId: target.id, updatedAt: second.updatedAt },
+      ],
+      skipped: [],
+    })
+
+    await expect(service.applyReorganization("user-1", { planId })).rejects.toThrow("目标位置已有同名文件。")
+    await expect(service.getItem("user-1", first.id)).resolves.toMatchObject({ parentId: sourceA.id })
+    await expect(service.getItem("user-1", second.id)).resolves.toMatchObject({ parentId: sourceB.id })
+  })
+
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async (_input: any) => undefined) }

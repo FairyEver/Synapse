@@ -119,7 +119,9 @@ type DriveReorganizationPlan = {
   readonly skipped: readonly { readonly itemId: string; readonly reason: string }[]
 }
 
-type DriveReorganizationFolderMove = Pick<DriveReorganizationPlannedMoveDto, "itemId" | "name" | "targetParentId">
+type DriveReorganizationTargetMove = Pick<DriveReorganizationPlannedMoveDto, "itemId" | "name" | "targetParentId"> & {
+  readonly type: string
+}
 
 type DrivePublicAccessResult<T> =
   | { readonly status: "ok"; readonly value: T; readonly cookie?: string }
@@ -1861,7 +1863,7 @@ export class DriveService implements OnApplicationBootstrap {
     const planned: DriveReorganizationPlannedMoveDto[] = []
     const skipped: Array<{ readonly itemId: string; readonly reason: string }> = []
     const movedFolders: string[] = []
-    const plannedFolderMoves: DriveReorganizationFolderMove[] = []
+    const plannedTargetMoves: DriveReorganizationTargetMove[] = []
 
     for (const move of input.moves) {
       const item = await this.requireOwnedItem(userId, move.itemId)
@@ -1872,12 +1874,19 @@ export class DriveService implements OnApplicationBootstrap {
         skipped.push({ itemId: item.id, reason: "already-in-target" })
         continue
       }
+      await this.assertNoSameTypeNameConflict({
+        excludeItemId: item.id,
+        message: item.type === DRIVE_ITEM_TYPE.folder ? "目标位置已有同名文件夹。" : "目标位置已有同名文件。",
+        name: item.name,
+        parentId: targetParentId,
+        type: item.type,
+        userId,
+      })
       if (item.type === DRIVE_ITEM_TYPE.folder) {
         await this.assertNoFolderCycle(item.id, targetParentId)
-        await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, targetParentId)
         movedFolders.push(item.id)
-        plannedFolderMoves.push({ itemId: item.id, name: item.name, targetParentId })
       }
+      plannedTargetMoves.push({ itemId: item.id, name: item.name, targetParentId, type: item.type })
       planned.push({
         itemId: item.id,
         name: item.name,
@@ -1888,7 +1897,7 @@ export class DriveService implements OnApplicationBootstrap {
     }
 
     await this.assertNoRelatedFoldersInReorganization(movedFolders)
-    this.assertNoDuplicateFolderMovesInPlan(plannedFolderMoves)
+    this.assertNoDuplicateReorganizationMovesInPlan(plannedTargetMoves)
     return { planned, skipped }
   }
 
@@ -1897,7 +1906,7 @@ export class DriveService implements OnApplicationBootstrap {
     plan: DriveReorganizationPlan,
   ): Promise<DriveReorganizationPlannedMoveDto[]> {
     const movedFolders: string[] = []
-    const plannedFolderMoves: DriveReorganizationFolderMove[] = []
+    const plannedTargetMoves: DriveReorganizationTargetMove[] = []
     for (const move of plan.moves) {
       const item = await this.requireOwnedItem(userId, move.itemId)
       if (item.parentId !== move.fromParentId || item.updatedAt.toISOString() !== move.updatedAt || item.name !== move.name) {
@@ -1905,39 +1914,35 @@ export class DriveService implements OnApplicationBootstrap {
       }
       if (move.targetParentId === item.id) throw new BadRequestException("不能移动到自身。")
       if (move.targetParentId) await this.requireOwnedFolder(userId, move.targetParentId)
+      await this.assertNoSameTypeNameConflict({
+        excludeItemId: item.id,
+        message: item.type === DRIVE_ITEM_TYPE.folder ? "目标位置已有同名文件夹。" : "目标位置已有同名文件。",
+        name: item.name,
+        parentId: move.targetParentId,
+        type: item.type,
+        userId,
+      })
       if (item.type === DRIVE_ITEM_TYPE.folder) {
         await this.assertNoFolderCycle(item.id, move.targetParentId)
-        await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, move.targetParentId)
         movedFolders.push(item.id)
-        plannedFolderMoves.push({ itemId: item.id, name: item.name, targetParentId: move.targetParentId })
       }
+      plannedTargetMoves.push({ itemId: item.id, name: item.name, targetParentId: move.targetParentId, type: item.type })
     }
     await this.assertNoRelatedFoldersInReorganization(movedFolders)
-    this.assertNoDuplicateFolderMovesInPlan(plannedFolderMoves)
+    this.assertNoDuplicateReorganizationMovesInPlan(plannedTargetMoves)
     return [...plan.moves]
   }
 
-  private assertNoDuplicateFolderMovesInPlan(moves: readonly DriveReorganizationFolderMove[]): void {
+  private assertNoDuplicateReorganizationMovesInPlan(moves: readonly DriveReorganizationTargetMove[]): void {
     const seenTargets = new Map<string, string>()
     for (const move of moves) {
-      const key = `${move.targetParentId ?? "root"}\u0000${move.name}`
+      const key = `${move.targetParentId ?? "root"}\u0000${move.type}\u0000${move.name}`
       const existingItemId = seenTargets.get(key)
-      if (existingItemId && existingItemId !== move.itemId) throw new BadRequestException("目标位置已有同名文件夹。")
+      if (existingItemId && existingItemId !== move.itemId) {
+        throw new BadRequestException(move.type === DRIVE_ITEM_TYPE.folder ? "目标位置已有同名文件夹。" : "目标位置已有同名文件。")
+      }
       seenTargets.set(key, move.itemId)
     }
-  }
-
-  private async assertNoDuplicateFolderAtTarget(
-    userId: string,
-    itemId: string,
-    name: string,
-    targetParentId: string | null,
-  ): Promise<void> {
-    const duplicate = await this.prisma.driveItem.findFirst({
-      where: { userId, parentId: targetParentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, id: { not: itemId } },
-      select: { id: true },
-    })
-    if (duplicate) throw new BadRequestException("目标位置已有同名文件夹。")
   }
 
   private async assertNoRelatedFoldersInReorganization(folderIds: readonly string[]): Promise<void> {
