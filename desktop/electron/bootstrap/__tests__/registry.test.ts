@@ -105,6 +105,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "git.access-service",
         "git.branch-service",
         "git.clone-service",
         "git.command-runner",
@@ -138,6 +139,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
+    expect(byId.get("git.access-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
     expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.clone-service")?.dependsOn).toEqual(["git.command-runner", "git.repository-registry"])
@@ -285,6 +287,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("repo.pending-pushes")).toBeLessThan(idx("repo.sync-coordinator"))
     expect(idx("core.database")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.app-icon")).toBeLessThan(idx("ui.tray"))
+    expect(idx("git.command-runner")).toBeLessThan(idx("git.access-service"))
+    expect(idx("core.process-environment")).toBeLessThan(idx("git.access-service"))
   })
 
   it("fatal services include runtime foundations", async () => {
