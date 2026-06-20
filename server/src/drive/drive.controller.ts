@@ -1151,9 +1151,9 @@ function requirePublicAssetService(publicAssets: DrivePublicAssetService | undef
   return publicAssets
 }
 
-function parseAccessSettings(body: unknown): DriveAccessSettingsInput {
+function parseAccessSettings(body: unknown): DriveAccessSettingsInput | undefined {
   if (body === undefined || body === null || (isRecord(body) && Object.keys(body).length === 0)) {
-    return DRIVE_DEFAULT_ACCESS_SETTINGS
+    return undefined
   }
   const parsed = parseBody(driveAccessSettingsSchema, body, "访问设置无效。")
   return {

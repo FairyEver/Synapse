@@ -300,7 +300,9 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
-            const settings = parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
+            const settings = hasDriveAccessSettingsInput(params)
+              ? parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
+              : undefined
             return {
               ok: true,
               data: await deps.accountService.shareDriveItem(
@@ -1074,6 +1076,10 @@ function parseDriveAccessSettings(
     accessMode,
     editorEmails,
   }
+}
+
+function hasDriveAccessSettingsInput(params: Record<string, unknown>): boolean {
+  return ["passwordEnabled", "expiresIn", "accessMode", "editorEmails"].some((key) => params[key] !== undefined && params[key] !== null)
 }
 
 function optionalStringArray(value: unknown, key: string): string[] | undefined {

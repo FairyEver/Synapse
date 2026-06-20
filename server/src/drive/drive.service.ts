@@ -1008,23 +1008,29 @@ export class DriveService implements OnApplicationBootstrap {
     userId: string,
     itemId: string,
     publicAppUrl: string,
-    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+    settings?: DriveAccessSettingsInput,
     auditContext: DriveAuditContext = {},
   ): Promise<DriveShareDto> {
-    const normalizedSettings = normalizeDriveAccessSettings(settings)
     const item = await this.requireOwnedItem(userId, itemId)
     if (item.storageStatus !== DRIVE_STORAGE_STATUS.active || item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) {
       throw new BadRequestException("文件尚不可分享。")
     }
-    const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
     const existing = await this.prisma.driveShare.findFirst({
       where: { itemId: item.id, userId, enabled: true },
       include: driveShareWithEditors,
     })
-    const share = existing
-      ? await this.updateShareAccessSettings(existing.id, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
-      : await this.createUniqueShare(item.id, userId, item.type, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
-    const dto = toDriveShareDto(share, publicAppUrl, material.password)
+    const reusedExisting = Boolean(existing && settings === undefined)
+    let share = existing
+    let password = existing?.passwordEnabled ? this.decryptStoredPassword(existing.passwordEncrypted) : null
+    if (!share || settings !== undefined) {
+      const normalizedSettings = normalizeDriveAccessSettings(settings ?? DRIVE_DEFAULT_ACCESS_SETTINGS)
+      const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
+      share = existing
+        ? await this.updateShareAccessSettings(existing.id, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
+        : await this.createUniqueShare(item.id, userId, item.type, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
+      password = material.password
+    }
+    const dto = toDriveShareDto(share, publicAppUrl, password)
     await this.recordDriveAudit({
       userId,
       action: "drive.share.create",
@@ -1040,6 +1046,8 @@ export class DriveService implements OnApplicationBootstrap {
         expiresAt: dto.expiresAt,
         accessMode: dto.accessMode,
         editorCount: dto.editorEmails.length,
+        reusedExisting,
+        settingsUpdated: Boolean(existing && settings !== undefined),
       },
       ipAddress: auditContext.ipAddress,
     })

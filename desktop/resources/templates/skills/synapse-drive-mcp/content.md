@@ -59,9 +59,10 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 8. If the user asks to replace an existing public asset, call `drive_direct_link_update` with `assetId` and `filePath`. The `/files/<assetId>` URL is preserved.
 9. If the user asks to rename an existing public asset, call `drive_direct_link_rename` with `assetId` and `name`. The `/files/<assetId>` URL is preserved.
 10. If the user asks to share an existing Drive file or folder, call `drive_share_create` for the item and return the `/share/...` public URL.
-   - Pass `passwordEnabled: false` only when the user asks for a no-password link. Omit it to keep the default password requirement.
-   - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
-   - Pass `accessMode: "link_read"` for the default read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
+   - When a share already exists, omit access settings unless the user explicitly asks to change password, expiry, or edit access. Reusing an existing share preserves its current settings.
+   - Pass `passwordEnabled: false` only when the user asks for a no-password link. For a new share, omitting it keeps the default password requirement.
+   - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; for a new share, omitting it uses `3d`.
+   - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `drive_share_create` result when the user needs the password for a specific share. `drive_share_list` lists existing shares without returning passwords.
 11. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.

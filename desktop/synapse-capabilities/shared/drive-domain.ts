@@ -21,7 +21,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
   { id: "drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
   { id: "drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
-  { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link.", mutates: true },
+  { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
   { id: "drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
   { id: "drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
   { id: "drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
@@ -290,7 +290,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. accessMode controls read/edit permission without changing the existing share link.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
       inputSchema: {
         type: "object",
         properties: {

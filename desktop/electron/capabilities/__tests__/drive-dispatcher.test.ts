@@ -1012,7 +1012,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
   })
 
-  it("creates shares with the default access settings when omitted", async () => {
+  it("creates or reuses shares without changing access settings when omitted", async () => {
     const accountService = createAccountService({
       shareDriveItem: vi.fn(async () => driveShare({ id: "share-1" })),
     })
@@ -1022,12 +1022,7 @@ describe("createDriveCapabilityDispatcher", () => {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
-    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
-      passwordEnabled: true,
-      expiresIn: "3d",
-      accessMode: "link_read",
-      editorEmails: [],
-    })
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", undefined)
   })
 
   it("deletes Drive items", async () => {
