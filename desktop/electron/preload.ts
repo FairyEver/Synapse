@@ -982,7 +982,7 @@ const synapseBridge: SynapseBridge = {
     databaseImport: invoke(DATABASE_CHANNELS.databaseImport),
     databaseTableExport: (table) => invoke(DATABASE_CHANNELS.databaseTableExport)(table),
     databaseTableImportInspect: invoke(DATABASE_CHANNELS.databaseTableImportInspect),
-    databaseTableImport: (sourcePath) => invoke(DATABASE_CHANNELS.databaseTableImport)(sourcePath),
+    databaseTableImport: (input) => invoke(DATABASE_CHANNELS.databaseTableImport)(input),
     databaseMcpHttpStatusGet: invoke(DATABASE_CHANNELS.databaseMcpHttpStatusGet),
     databaseMcpStatusGet: invoke(DATABASE_CHANNELS.databaseMcpStatusGet),
     databaseMcpServersGet: invoke(DATABASE_CHANNELS.databaseMcpServersGet),

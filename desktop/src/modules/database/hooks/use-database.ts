@@ -235,8 +235,8 @@ async function databaseTableImportInspect(): Promise<
   return requireSynapseBridge().database.databaseTableImportInspect()
 }
 
-async function databaseTableImport(sourcePath: string): Promise<{ success: boolean; tableName?: string }> {
-  return requireSynapseBridge().database.databaseTableImport(sourcePath)
+async function databaseTableImport(input: { sourcePath: string; sourceDigest: string }): Promise<{ success: boolean; tableName?: string }> {
+  return requireSynapseBridge().database.databaseTableImport(input)
 }
 
 async function databaseMcpHttpStatusGet(): Promise<DatabaseMcpHttpStatus> {

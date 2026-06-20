@@ -1358,8 +1358,8 @@ class DatabaseService {
     return this.getImportExportManager().inspectTableImport(sourcePath)
   }
 
-  importTable(sourcePath: string): string {
-    return this.getImportExportManager().importTable(sourcePath)
+  importTable(sourcePath: string, sourceDigest?: string): string {
+    return this.getImportExportManager().importTable(sourcePath, sourceDigest)
   }
 
   getDbPath(): string {

@@ -1106,7 +1106,7 @@ export type SynapseBridge = {
       { success: false }
       | ({ success: true } & DatabaseTableImportInspection)
     >
-    databaseTableImport: (sourcePath: string) => Promise<{ success: boolean; tableName?: string }>
+    databaseTableImport: (input: { sourcePath: string; sourceDigest: string }) => Promise<{ success: boolean; tableName?: string }>
     databaseMcpHttpStatusGet: () => Promise<DatabaseMcpHttpStatus>
     databaseMcpStatusGet: () => Promise<DatabaseMcpStatus>
     databaseMcpServersGet: () => Promise<DatabaseMcpServerInfo[]>

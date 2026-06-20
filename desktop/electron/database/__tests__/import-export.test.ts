@@ -1,4 +1,5 @@
 import { copyFileSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import type { DatabaseSync } from "node:sqlite"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -183,4 +184,61 @@ describe("ImportExportManager", () => {
     expect(() => manager.inspectTableImport("/tmp/large.sql")).toThrow("数据表导入文件超过大小限制")
     expect(readFileSync).not.toHaveBeenCalled()
   })
+
+  it("binds table import confirmation to the inspected file digest", () => {
+    const originalSql = tableExportSql("notes")
+    const changedSql = tableExportSql("other_notes")
+    vi.mocked(statSync).mockReturnValue({
+      isFile: () => true,
+      size: originalSql.length,
+    } as never)
+    vi.mocked(readFileSync)
+      .mockReturnValueOnce(originalSql)
+      .mockReturnValueOnce(changedSql)
+    const db = {
+      prepare: vi.fn(() => ({ get: vi.fn(() => ({ count: 0 })) })),
+    } as unknown as DatabaseSync
+    const manager = new ImportExportManager(
+      () => db,
+      () => "/tmp/source.db",
+      vi.fn(),
+      vi.fn(),
+      vi.fn() as never,
+    )
+
+    const inspection = manager.inspectTableImport("/tmp/import.sql")
+
+    expect(inspection).toMatchObject({
+      tableName: "notes",
+      sourcePath: "/tmp/import.sql",
+      sourceDigest: sha256(originalSql),
+    })
+    expect(() => manager.importTable("/tmp/import.sql", inspection.sourceDigest)).toThrow("导入文件已变化，请重新选择")
+  })
 })
+
+function tableExportSql(tableName: string): string {
+  const payload = {
+    format: "synapse-table-sql",
+    version: 1,
+    exportedAt: "2026-06-20T00:00:00.000Z",
+    table: {
+      name: tableName,
+      description: "",
+      columns: [{ name: "title", kind: "text" }],
+      createdAt: "2026-06-20T00:00:00.000Z",
+      updatedAt: "2026-06-20T00:00:00.000Z",
+    },
+    rows: [],
+  }
+  const base64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64")
+  return [
+    "-- synapse-table-export-b64",
+    `-- ${base64}`,
+    "-- synapse-table-export-end",
+  ].join("\n")
+}
+
+function sha256(contents: string): string {
+  return createHash("sha256").update(contents, "utf8").digest("hex")
+}

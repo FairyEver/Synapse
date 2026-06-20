@@ -1,4 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
+import { createHash } from "node:crypto"
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -68,6 +69,11 @@ type WalCheckpointResult = {
 type CollectedExportRows = {
   readonly payloadRows: SerializedTableRow[]
   readonly insertSqlRows: string[]
+}
+
+type TableExportReadResult = {
+  readonly payload: TableExportPayload
+  readonly sourceDigest: string
 }
 
 // ---------------------------------------------------------------------------
@@ -467,23 +473,27 @@ export class ImportExportManager {
   }
 
   inspectTableImport(sourcePath: string): DatabaseTableImportInspection {
-    const payload = this.readTableExportPayload(sourcePath)
+    const { payload, sourceDigest } = this.readTableExportPayload(sourcePath)
     const tableName = payload.table.name
     return {
       tableName,
       exists: this.tableExists(tableName),
       sourcePath,
+      sourceDigest,
     }
   }
 
-  importTable(sourcePath: string): string {
-    const payload = this.readTableExportPayload(sourcePath)
+  importTable(sourcePath: string, expectedSourceDigest?: string): string {
+    const { payload, sourceDigest } = this.readTableExportPayload(sourcePath)
+    if (expectedSourceDigest && sourceDigest !== expectedSourceDigest) {
+      throw new Error("导入文件已变化，请重新选择")
+    }
     this.replaceTableFromExport(payload)
     logger.info("Table imported.", { table: payload.table.name, sourcePath: sanitizeDatabaseLogPath(sourcePath) })
     return payload.table.name
   }
 
-  private readTableExportPayload(sourcePath: string): TableExportPayload {
+  private readTableExportPayload(sourcePath: string): TableExportReadResult {
     let contents: string
     try {
       const info = statSync(sourcePath)
@@ -500,7 +510,10 @@ export class ImportExportManager {
       }
       throw new Error("无法读取导入文件，文件可能已被移动或删除")
     }
-    return parsePayloadFromSql(contents)
+    return {
+      payload: parsePayloadFromSql(contents),
+      sourceDigest: createHash("sha256").update(contents, "utf8").digest("hex"),
+    }
   }
 
   private tableExists(name: string): boolean {

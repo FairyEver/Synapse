@@ -103,6 +103,7 @@ type DatabaseTableImportInspection = {
   tableName: string
   exists: boolean
   sourcePath: string
+  sourceDigest: string
 }
 
 type DatabaseMcpStatus = Record<string, boolean>

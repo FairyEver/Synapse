@@ -104,6 +104,7 @@ type DatabaseTableImportInspection = {
   tableName: string
   exists: boolean
   sourcePath: string
+  sourceDigest: string
 }
 
 type DatabaseServerInfo = {

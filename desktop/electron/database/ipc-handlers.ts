@@ -402,14 +402,16 @@ function registerDatabaseHandlers(): void {
     }
   })
 
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImport, async (event, sourcePath: string) => {
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImport, async (event, input: { sourcePath: string; sourceDigest: string }) => {
+    const sourcePath = input.sourcePath
+    const sourceDigest = input.sourceDigest
     const permission = await checkFilePermission(event, "import", sourcePath)
     if (!permission.allowed) {
       return { success: false, error: permission.reason }
     }
 
     try {
-      const tableName = databaseService.importTable(sourcePath)
+      const tableName = databaseService.importTable(sourcePath, sourceDigest)
       recordAudit(event, "import", sourcePath, "allowed")
       return { success: true, tableName }
     } catch (error) {

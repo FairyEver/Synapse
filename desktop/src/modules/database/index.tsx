@@ -184,6 +184,7 @@ function DatabaseTablesView() {
         tableName: result.tableName,
         exists: result.exists,
         sourcePath: result.sourcePath,
+        sourceDigest: result.sourceDigest,
       })
     } catch (error) {
       logger.error("Table import inspection failed.", { error })
@@ -197,7 +198,7 @@ function DatabaseTablesView() {
     try {
       await promise(
         async () => {
-          const result = await databaseTableImport(sourcePath)
+          const result = await databaseTableImport({ sourcePath, sourceDigest: pendingImport.sourceDigest })
           if (!result.success || !result.tableName) {
             throw new Error("导入失败")
           }
