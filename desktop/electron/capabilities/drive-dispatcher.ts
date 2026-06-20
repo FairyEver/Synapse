@@ -421,7 +421,7 @@ async function uploadFile(
 
   try {
     await putPreparedUploadFromPath(fetchImpl, fileSystem, prepared.upload, filePath, fileStat.size)
-    const item = await deps.accountService.completeDriveUpload(prepared.sessionId)
+    const item = await completeDriveUploadWithRetry(deps.accountService, prepared.sessionId)
     return { ok: true, data: item }
   } catch (error) {
     await deps.accountService.cancelDriveUpload(prepared.sessionId).catch(() => undefined)
@@ -467,7 +467,7 @@ async function uploadFolder(
     }
     try {
       await putPreparedUploadFromPath(fetchImpl, fileSystem, preparedEntry.upload, entry.absolutePath, entry.sizeBytes)
-      await deps.accountService.completeDriveUpload(preparedEntry.sessionId)
+      await completeDriveUploadWithRetry(deps.accountService, preparedEntry.sessionId)
       completed += 1
     } catch (error) {
       await deps.accountService.cancelDriveUpload(preparedEntry.sessionId).catch(() => undefined)
@@ -506,6 +506,21 @@ async function uploadFolder(
   return {
     ok: true,
     data,
+  }
+}
+
+async function completeDriveUploadWithRetry(
+  accountService: Pick<DriveAccountServicePort, "completeDriveUpload">,
+  sessionId: string,
+): Promise<DriveItemDto> {
+  try {
+    return await accountService.completeDriveUpload(sessionId)
+  } catch (firstError) {
+    try {
+      return await accountService.completeDriveUpload(sessionId)
+    } catch {
+      throw firstError
+    }
   }
 }
 

@@ -239,6 +239,39 @@ describe("AccountService", () => {
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
   })
 
+  it("retries completed local drive file sessions before cancelling", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-complete-retry-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "file-1", name: "report.txt", size: "5" }),
+      sessionId: "session-file-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/plain" },
+        method: "PUT",
+        url: "https://upload.example.test/file-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload")
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(driveItem({ id: "file-1", name: "report.txt", size: "5" }))
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(2)
+    expect(service.completeDriveUpload).toHaveBeenNthCalledWith(1, "session-file-1")
+    expect(service.completeDriveUpload).toHaveBeenNthCalledWith(2, "session-file-1")
+    expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
   it("keeps existing Drive download output when the response stream fails", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-download-"))
     const outputPath = path.join(dir, "report.txt")

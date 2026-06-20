@@ -689,6 +689,33 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("retries completed MCP file upload sessions before cancelling", async () => {
+    const item = driveItem({ id: "item-1", name: "report.md" })
+    const accountService = createAccountService({
+      completeDriveUpload: vi.fn()
+        .mockRejectedValueOnce(new Error("response lost"))
+        .mockResolvedValueOnce(item),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem: {
+        stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
+        createReadStream: vi.fn(() => Readable.from(["test"])),
+        readdir: vi.fn(),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: vi.fn(async () => ({ ok: true }) as Response),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "/tmp/report.md",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: item })
+
+    expect(accountService.completeDriveUpload).toHaveBeenCalledTimes(2)
+    expect(accountService.completeDriveUpload).toHaveBeenNthCalledWith(1, "session-1")
+    expect(accountService.completeDriveUpload).toHaveBeenNthCalledWith(2, "session-1")
+    expect(accountService.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
   it("audits failed Drive file read permission checks without raw error text", async () => {
     const accountService = createAccountService()
     const auditSink = createAuditSink()

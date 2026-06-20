@@ -666,7 +666,7 @@ export class AccountService {
 
     try {
       await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size)
-      await this.completeDriveUpload(prepared.sessionId)
+      await this.completeDriveUploadWithRetry(prepared.sessionId)
       return { completed: 1, failed: 0, skipped: 0 }
     } catch {
       await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveLocalFile")
@@ -760,7 +760,7 @@ export class AccountService {
 
       try {
         await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes)
-        await this.completeDriveUpload(preparedEntry.sessionId)
+        await this.completeDriveUploadWithRetry(preparedEntry.sessionId)
         completed += 1
       } catch {
         failed += 1
@@ -781,6 +781,18 @@ export class AccountService {
       failed,
       skipped,
       ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
+  private async completeDriveUploadWithRetry(sessionId: string): Promise<DriveItemDto> {
+    try {
+      return await this.completeDriveUpload(sessionId)
+    } catch (firstError) {
+      try {
+        return await this.completeDriveUpload(sessionId)
+      } catch {
+        throw firstError
+      }
     }
   }
 
