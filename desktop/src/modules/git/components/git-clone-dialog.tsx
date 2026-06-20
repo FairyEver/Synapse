@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitEnvironmentState, SynapseGitRemoteKind } from "@/types/git"
+import type { GitOperationFailure } from "../hooks/use-git-operations"
+import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { CopySshPublicKeyButton } from "./git-environment-panel"
 
 type CloneInput = {
@@ -29,7 +31,8 @@ type GitCloneDialogProps = {
   readonly busy: boolean
   readonly environment: SynapseGitEnvironmentState | null
   readonly onOpenChange: (open: boolean) => void
-  readonly onSubmit: (input: CloneInput) => Promise<string | null>
+  readonly onSubmit: (input: CloneInput) => Promise<string | { readonly error: string; readonly failure?: GitOperationFailure | null } | null>
+  readonly onFailureAction?: (input: { readonly cloneInput: CloneInput; readonly failure: GitOperationFailure }) => void
 }
 
 type GitAddLocalDialogProps = {
@@ -58,24 +61,28 @@ function remoteKindLabel(kind: SynapseGitRemoteKind): string {
   return "无法识别"
 }
 
-export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit }: GitCloneDialogProps) {
+export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit, onFailureAction }: GitCloneDialogProps) {
   const [remoteUrl, setRemoteUrl] = useState("")
   const [targetPath, setTargetPath] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<GitOperationFailure | null>(null)
   const name = useMemo(() => basename(targetPath || remoteUrl), [remoteUrl, targetPath])
   const remoteKind = useMemo(() => detectRemoteKind(remoteUrl), [remoteUrl])
+  const failureActionLabel = canHandleGitFailureAction(failure) ? getGitFailureActionLabel(failure) : null
 
   useEffect(() => {
     if (!open) {
       setRemoteUrl("")
       setTargetPath("")
       setError(null)
+      setFailure(null)
     }
   }, [open])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
+    setFailure(null)
     if (!remoteUrl.trim()) {
       setError("请输入仓库地址。")
       return
@@ -84,12 +91,21 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
       setError("请输入保存位置。")
       return
     }
-    const submitError = await onSubmit({ remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name })
-    if (submitError) setError(submitError)
+    const cloneInput = { remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name }
+    const submitError = await onSubmit(cloneInput)
+    if (!submitError) return
+    if (typeof submitError === "string") {
+      setError(submitError)
+      return
+    }
+    setError(submitError.failure?.message ?? submitError.error)
+    setFailure(submitError.failure ?? null)
+    if (submitError.failure) onFailureAction?.({ cloneInput, failure: submitError.failure })
   }
 
   const chooseTargetPath = async () => {
     setError(null)
+    setFailure(null)
     try {
       const selectedPath = await getSynapseBridge()?.repository?.chooseDirectory()
 
@@ -143,7 +159,25 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
               </Button>
             </div>
           </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-destructive">{error}</p>
+              {failure && failureActionLabel ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => onFailureAction?.({
+                    cloneInput: { remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name },
+                    failure,
+                  })}
+                >
+                  {failureActionLabel}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
               取消

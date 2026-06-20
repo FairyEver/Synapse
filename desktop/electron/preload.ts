@@ -25,10 +25,19 @@ import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
+import type { SynapseGitUserFacingFailure } from "../src/types/git"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
 const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
+const IPC_ERROR_ENVELOPE_KEY = "__synapseIpcError"
+
+type IpcErrorEnvelope = {
+  readonly [IPC_ERROR_ENVELOPE_KEY]: true
+  readonly message: string
+  readonly name?: string
+  readonly userFacingFailure?: SynapseGitUserFacingFailure
+}
 
 const IPC_CHANNELS = {
   "content": {
@@ -491,6 +500,14 @@ const SENSITIVE_IPC_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
 const SENSITIVE_IPC_TEXT_FIELD_PATTERN =
   /(content|prompt|message|body|text|params|definition|payload)/i
+const URL_LIKE_IPC_FIELD_PATTERN =
+  /(url|uri|remote|href|link)/i
+const URL_TEXT_PATTERN =
+  /\b(?:https?|ssh|git):\/\/[^\s"'<>]+/gi
+const URL_CREDENTIAL_PATTERN =
+  /(\/\/)([^/\s:@]+):([^/\s@]+)@/g
+const SENSITIVE_URL_QUERY_PATTERN =
+  /([?&](?:access[-_]?token|auth|authorization|credential|password|secret|token|api[-_]?key|key)=)[^&\s]+/gi
 const SENSITIVE_ERROR_VALUE_PATTERN =
   /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
@@ -504,7 +521,10 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
   if (typeof value === "string") {
     if (SENSITIVE_IPC_FIELD_PATTERN.test(fieldName)) return "[redacted]"
     if (SENSITIVE_IPC_TEXT_FIELD_PATTERN.test(fieldName)) return textFieldSummary(value)
-    return value.length > 300 ? `${value.slice(0, 120)}...[truncated ${value.length} chars]` : value
+    const sanitizedValue = sanitizeIpcUrlValue(fieldName, value)
+    return sanitizedValue.length > 300
+      ? `${sanitizedValue.slice(0, 120)}...[truncated ${sanitizedValue.length} chars]`
+      : sanitizedValue
   }
   if (Array.isArray(value)) {
     if (SENSITIVE_IPC_TEXT_FIELD_PATTERN.test(fieldName)) {
@@ -529,6 +549,30 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
 
 function textFieldSummary(value: string): { type: "text"; length: number } {
   return { type: "text", length: value.length }
+}
+
+function sanitizeIpcUrlValue(fieldName: string, value: string): string {
+  if (!URL_LIKE_IPC_FIELD_PATTERN.test(fieldName) && !URL_TEXT_PATTERN.test(value)) return value
+  return value
+    .replace(URL_TEXT_PATTERN, (match) => sanitizeSingleIpcUrl(match))
+    .replace(URL_CREDENTIAL_PATTERN, "$1[redacted]:[redacted]@")
+    .replace(SENSITIVE_URL_QUERY_PATTERN, "$1[redacted]")
+}
+
+function sanitizeSingleIpcUrl(value: string): string {
+  try {
+    const parsed = new URL(value)
+    if (parsed.username) parsed.username = "redacted"
+    if (parsed.password) parsed.password = "redacted"
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (SENSITIVE_IPC_FIELD_PATTERN.test(key)) {
+        parsed.searchParams.set(key, "redacted")
+      }
+    }
+    return parsed.toString()
+  } catch {
+    return value
+  }
 }
 
 function describeIpcError(error: unknown): string {
@@ -582,7 +626,7 @@ function summarizeDriveLocalUploadRequest(input: unknown): unknown {
 const invoke = (channel: string) => async (args?: unknown) => {
   const startedAt = performance.now()
   try {
-    return await ipcRenderer.invoke(channel, args)
+    return unwrapIpcResult(await ipcRenderer.invoke(channel, args))
   } catch (error) {
     if (channel !== IPC_CHANNELS.log.write) {
       writeRendererIpcFailureLog(channel, args, error, Math.round(performance.now() - startedAt))
@@ -597,13 +641,34 @@ const invokeWithFailureLogRequest = (
 ) => async (args?: unknown) => {
   const startedAt = performance.now()
   try {
-    return await ipcRenderer.invoke(channel, args)
+    return unwrapIpcResult(await ipcRenderer.invoke(channel, args))
   } catch (error) {
     if (channel !== IPC_CHANNELS.log.write) {
       writeRendererIpcFailureLog(channel, describeRequest(args), error, Math.round(performance.now() - startedAt))
     }
     throw error
   }
+}
+
+function unwrapIpcResult(result: Awaited<ReturnType<typeof ipcRenderer.invoke>>) {
+  if (!isIpcErrorEnvelope(result)) return result
+  const error = new Error(result.message)
+  error.name = result.name ?? "Error"
+  if (result.userFacingFailure) {
+    Object.defineProperty(error, "userFacingFailure", {
+      configurable: true,
+      enumerable: true,
+      value: result.userFacingFailure,
+      writable: false,
+    })
+  }
+  throw error
+}
+
+function isIpcErrorEnvelope(value: unknown): value is IpcErrorEnvelope {
+  if (!value || typeof value !== "object") return false
+  const record = value as Partial<IpcErrorEnvelope>
+  return record[IPC_ERROR_ENVELOPE_KEY] === true && typeof record.message === "string"
 }
 
 // Helper to create subscription

@@ -196,6 +196,68 @@ describe("preload bridge", () => {
     )
   })
 
+  it("rethrows structured IPC error envelopes with user-facing failure", async () => {
+    const bridge = await loadPreloadBridge()
+    electronMock.ipcRenderer.invoke.mockResolvedValue(undefined)
+    electronMock.ipcRenderer.invoke.mockResolvedValueOnce({
+      __synapseIpcError: true,
+      message: [
+        "Authentication failed for https://github.com/acme/docs.git?token=[redacted]",
+        "Authorization: Basic [redacted]",
+        "Authorization=Basic [redacted]",
+        "Authorization: Bearer [redacted]",
+        "Authorization=Bearer [redacted]",
+        "Cookie: [redacted]",
+        "Cookie=[redacted]",
+        "cwd: /Users/alice/work/docs",
+      ].join("\n"),
+      name: "Error",
+      userFacingFailure: {
+        category: "github-auth",
+        detail: "Authentication failed. Authorization=Basic [redacted]\nCookie: [redacted]\ncwd: /Users/alice/work/docs",
+        host: "github.com",
+        message: "请处理 GitHub 访问 token=[redacted]",
+        primaryAction: "handle-github-auth",
+        protocol: "https",
+        title: "GitHub 需要登录 Authorization: Bearer [redacted]",
+      },
+    })
+
+    let caught: unknown
+    try {
+      await bridge.git.cloneRepository({
+        name: "docs",
+        remoteUrl: "https://github.com/acme/docs.git",
+        targetPath: "/work/docs",
+      })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught).toMatchObject({
+      userFacingFailure: {
+        category: "github-auth",
+        host: "github.com",
+        primaryAction: "handle-github-auth",
+      },
+    })
+    const message = caught instanceof Error ? caught.message : ""
+    expect(message).toContain("https://github.com/acme/docs.git?token=[redacted]")
+    expect(message).toContain("Authorization: Basic [redacted]")
+    expect(message).toContain("Authorization=Basic [redacted]")
+    expect(message).toContain("Authorization: Bearer [redacted]")
+    expect(message).toContain("Authorization=Bearer [redacted]")
+    expect(message).toContain("Cookie: [redacted]")
+    expect(message).toContain("Cookie=[redacted]")
+    expect(message).toContain("/Users/alice/work/docs")
+    expect(message).not.toContain("token:secret")
+    expect(message).not.toContain("raw-token")
+    expect(message).not.toContain("dXNlcjpzZWNyZXQ=")
+    expect(message).not.toContain("raw.bearer.payload")
+    expect(JSON.stringify(caught)).not.toContain("raw-cookie")
+  })
+
   it("maps account webhook list to the account IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 
@@ -752,6 +814,31 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("/Users/liyang/LocalUploadCanary")
     expect(serializedLog).not.toContain("docs/b.md")
     expect(serializedLog).not.toContain("root.txt")
+  })
+
+  it("redacts Git remote URL credentials when clone IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("clone unavailable")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:git:repositories:clone") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.git.cloneRepository({
+      name: "docs",
+      remoteUrl: "https://writer:raw-password@git.example.com/team/docs.git?token=raw-token",
+      targetPath: "/work/docs",
+    })).rejects.toThrow("clone unavailable")
+
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
+      channel === "synapse:log:write")
+    const serializedLog = JSON.stringify(logCall?.[1])
+    expect(serializedLog).toContain("git.example.com")
+    expect(serializedLog).not.toContain("writer:raw-password")
+    expect(serializedLog).not.toContain("raw-password")
+    expect(serializedLog).not.toContain("raw-token")
   })
 
   it("redacts Agent message content when send IPC fails", async () => {

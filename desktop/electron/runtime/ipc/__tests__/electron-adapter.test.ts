@@ -39,7 +39,7 @@ describe("createElectronTransportInstall", () => {
     })
 
     const handler = electronMock.handlers.get("synapse:test:fail")
-    await expect(handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+    const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       token: "secret",
       value: "ok",
       body: "raw HTTP body with bearer sample",
@@ -51,9 +51,13 @@ describe("createElectronTransportInstall", () => {
       metadata: {
         message: "approval says include customer names",
       },
-    })).rejects.toThrow(
-      "SDK failed for secret prompt text token=sk-live",
-    )
+    })
+
+    expect(result).toMatchObject({
+      __synapseIpcError: true,
+      message: "SDK failed for secret prompt text token=[redacted]",
+      name: "Error",
+    })
 
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
@@ -100,7 +104,7 @@ describe("createElectronTransportInstall", () => {
     })
 
     const handler = electronMock.handlers.get("synapse:account:drive:uploads:local-items")
-    await expect(handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+    const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       parentId: "folder-1",
       items: [
         {
@@ -122,7 +126,13 @@ describe("createElectronTransportInstall", () => {
         },
       ],
       itemPaths: ["/Users/alice/Secrets/report.txt"],
-    })).rejects.toThrow("Local drive upload pipeline is unavailable.")
+    })
+
+    expect(result).toMatchObject({
+      __synapseIpcError: true,
+      message: "Local drive upload pipeline is unavailable.",
+      name: "Error",
+    })
 
     expect(logger.error).toHaveBeenCalledWith(
       "IPC invoke failed.",
@@ -142,5 +152,112 @@ describe("createElectronTransportInstall", () => {
     expect(serializedLog).not.toContain("nested/report.txt")
     expect(serializedLog).not.toContain("report.txt")
     expect(serializedLog).not.toContain("Secrets")
+  })
+
+  it("returns sanitized user-facing failure envelopes without logging secrets", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    const install = createElectronTransportInstall({ logger })
+    const error = new Error([
+      "Authentication failed for https://token:secret@github.com/team/docs.git?token=raw-token",
+      "Authorization: Basic dXNlcjpzZWNyZXQ=",
+      "Authorization=Basic ZXF1YWxzOnNlY3JldA==",
+      "Authorization: Bearer raw.bearer.payload",
+      "Authorization=Bearer raw.equals.bearer",
+      "Cookie: sid=raw-cookie; session=secret-cookie",
+      "Cookie=sid=equals-cookie; session=equals-secret",
+      "cwd: /Users/alice/work/docs",
+    ].join("\n"))
+    Object.defineProperty(error, "userFacingFailure", {
+      enumerable: false,
+      value: {
+        category: "github-auth",
+        detail: "fatal: Authorization=Basic detail-basic\nCookie: sid=detail-cookie; session=detail-secret\ncwd: /Users/alice/work/docs",
+        extra: "extra-secret",
+        host: "github.com",
+        message: "请处理 GitHub 访问 token=message-token",
+        primaryAction: "handle-github-auth",
+        protocol: "https",
+        title: "GitHub 需要登录 Authorization: Bearer title-token",
+        token: "failure-token",
+        cookie: "failure-cookie",
+        authorization: "Bearer failure-auth",
+      },
+    })
+
+    install("synapse:git:repositories:clone", async () => {
+      throw error
+    })
+
+    const handler = electronMock.handlers.get("synapse:git:repositories:clone")
+    const result = await handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+      remoteUrl: "https://token:secret@github.com/team/docs.git?token=raw-token",
+      targetPath: "/Users/alice/Secrets/docs",
+      name: "docs",
+    })
+
+    expect(result).toMatchObject({
+      __synapseIpcError: true,
+      name: "Error",
+      message: expect.stringContaining("https://[redacted]@github.com/team/docs.git?token=[redacted]"),
+      userFacingFailure: {
+        category: "github-auth",
+        detail: expect.stringContaining("fatal: Authorization=Basic [redacted]"),
+        host: "github.com",
+        message: "请处理 GitHub 访问 token=[redacted]",
+        primaryAction: "handle-github-auth",
+        protocol: "https",
+        title: "GitHub 需要登录 Authorization: Bearer [redacted]",
+      },
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Authorization: Basic [redacted]"),
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Authorization=Basic [redacted]"),
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Authorization: Bearer [redacted]"),
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Authorization=Bearer [redacted]"),
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Cookie: [redacted]"),
+    })
+    expect(result).toMatchObject({
+      message: expect.stringContaining("Cookie=[redacted]"),
+    })
+    const serializedResult = JSON.stringify(result)
+    expect(serializedResult).not.toContain("token:secret")
+    expect(serializedResult).not.toContain("raw-token")
+    expect(serializedResult).not.toContain("dXNlcjpzZWNyZXQ=")
+    expect(serializedResult).not.toContain("ZXF1YWxzOnNlY3JldA==")
+    expect(serializedResult).not.toContain("raw.bearer.payload")
+    expect(serializedResult).not.toContain("raw.equals.bearer")
+    expect(serializedResult).not.toContain("raw-cookie")
+    expect(serializedResult).not.toContain("secret-cookie")
+    expect(serializedResult).not.toContain("equals-cookie")
+    expect(serializedResult).not.toContain("equals-secret")
+    expect(serializedResult).not.toContain("detail-basic")
+    expect(serializedResult).not.toContain("detail-cookie")
+    expect(serializedResult).not.toContain("detail-secret")
+    expect(serializedResult).not.toContain("message-token")
+    expect(serializedResult).not.toContain("title-token")
+    expect(serializedResult).not.toContain("failure-token")
+    expect(serializedResult).not.toContain("failure-cookie")
+    expect(serializedResult).not.toContain("failure-auth")
+    expect(serializedResult).not.toContain("extra-secret")
+    expect(serializedResult).not.toContain("\"extra\"")
+    expect(serializedResult).not.toContain("\"token\"")
+    expect(serializedResult).not.toContain("\"cookie\"")
+    expect(serializedResult).not.toContain("\"authorization\"")
+    expect(serializedResult).toContain("Cookie: [redacted]")
+    expect(serializedResult).toContain("/Users/alice/work/docs")
+
+    const serializedLog = JSON.stringify(logger.error.mock.calls)
+    expect(serializedLog).not.toContain("token:secret")
+    expect(serializedLog).not.toContain("raw-token")
+    expect(serializedLog).not.toContain("/Users/alice")
   })
 })

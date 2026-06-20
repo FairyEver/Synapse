@@ -1,23 +1,83 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { FolderGit2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
-import type { SynapseGitEnvironmentState, SynapseGitRepository } from "@/types/git"
+import type { SynapseGitEnvironmentState, SynapseGitProvider, SynapseGitRepository } from "@/types/git"
+import { GitAccessPanel } from "./components/git-access-panel"
 import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog"
 import { GitEnvironmentPanel } from "./components/git-environment-panel"
+import { GitInstallPanel } from "./components/git-install-panel"
 import { GitRepositoryList } from "./components/git-repository-list"
 import { GitWorkbench } from "./components/git-workbench"
+import type { GitOperationFailure } from "./hooks/use-git-operations"
+import { useGitAccess } from "./hooks/use-git-access"
 import { useGitOperations } from "./hooks/use-git-operations"
+import { usePendingGitAction, type PendingGitAction, type PendingGitRepositoryOperation } from "./hooks/use-pending-git-action"
 import { useGitRepositories } from "./hooks/use-git-repositories"
+import { shouldRouteFailureToAccess } from "./lib/git-failure-view"
+import { parseGitRemote } from "./lib/git-remote"
 
-type GitAppViewId = "repositories" | "environment"
+type GitAppViewId = "repositories" | "environment" | "install" | "access"
 
 const GIT_APP_TABS: readonly { readonly id: GitAppViewId; readonly label: string }[] = [
   { id: "repositories", label: "仓库" },
   { id: "environment", label: "环境" },
+  { id: "install", label: "安装 Git" },
+  { id: "access", label: "访问" },
 ]
+
+function isAccessProtocol(protocol: string): protocol is "https" | "ssh" {
+  return protocol === "https" || protocol === "ssh"
+}
+
+function providerFromHost(host: string, protocol: "https" | "ssh"): SynapseGitProvider {
+  const remote = protocol === "ssh" ? `git@${host}:owner/repo.git` : `https://${host}/owner/repo.git`
+  return parseGitRemote(remote).provider
+}
+
+function buildClonePendingAction(
+  input: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string },
+  failure: GitOperationFailure,
+): PendingGitAction | null {
+  if (!shouldRouteFailureToAccess(failure)) return null
+  const descriptor = parseGitRemote(input.remoteUrl)
+  const host = failure.host ?? descriptor.host
+  const protocol = isAccessProtocol(failure.protocol) ? failure.protocol : isAccessProtocol(descriptor.protocol) ? descriptor.protocol : null
+  if (!host || !protocol) return null
+  return {
+    type: "clone",
+    host,
+    protocol,
+    provider: descriptor.provider !== "generic" ? descriptor.provider : providerFromHost(host, protocol),
+    input,
+  }
+}
+
+function buildRepositoryPendingAction(failure: GitOperationFailure): PendingGitAction | null {
+  if (!shouldRouteFailureToAccess(failure)) return null
+  if (!failure.repositoryId || !failure.repositoryOperation) return null
+  const operation = failure.repositoryOperation
+  if (operation !== "pull" && operation !== "push" && operation !== "sync") return null
+  if (!failure.host || !isAccessProtocol(failure.protocol)) return null
+  return {
+    type: operation as PendingGitRepositoryOperation,
+    repositoryId: failure.repositoryId,
+    host: failure.host,
+    protocol: failure.protocol,
+    provider: providerFromHost(failure.host, failure.protocol),
+  }
+}
+
+function pendingActionHosts(pendingAction: PendingGitAction | null) {
+  if (!pendingAction) return []
+  return [{
+    host: pendingAction.host,
+    protocol: pendingAction.protocol,
+    provider: pendingAction.provider,
+  }]
+}
 
 export function GitModule() {
   const [view, setView] = useState<GitAppViewId>("repositories")
@@ -27,8 +87,16 @@ export function GitModule() {
   const [environment, setEnvironment] = useState<SynapseGitEnvironmentState | null>(null)
   const [environmentLoading, setEnvironmentLoading] = useState(false)
   const [environmentError, setEnvironmentError] = useState<string | null>(null)
+  const [retryPendingBusy, setRetryPendingBusy] = useState(false)
+  const retryPendingBusyRef = useRef(false)
   const repositoriesState = useGitRepositories()
   const operations = useGitOperations(repositoriesState.refresh)
+  const access = useGitAccess()
+  const {
+    pendingAction,
+    setPendingAction,
+    clearPendingAction,
+  } = usePendingGitAction()
 
   const refreshEnvironment = useCallback(async () => {
     setEnvironmentLoading(true)
@@ -53,6 +121,114 @@ export function GitModule() {
       cancelled = true
     }
   }, [refreshEnvironment])
+
+  useEffect(() => {
+    if (environment && !environment.gitAvailable) {
+      setView("install")
+    }
+  }, [environment])
+
+  useEffect(() => {
+    if (view !== "access" && !pendingAction) return
+    void access.refresh(pendingActionHosts(pendingAction))
+  }, [access.refresh, pendingAction, view])
+
+  const routeFailure = useCallback((failure: GitOperationFailure) => {
+    if (failure.category === "git-missing" || failure.primaryAction === "install-git") {
+      setView("install")
+      return
+    }
+    if (failure.category === "missing-identity" || failure.primaryAction === "set-identity") {
+      setView("environment")
+      return
+    }
+    if (shouldRouteFailureToAccess(failure)) {
+      setView("access")
+      return
+    }
+    setView("repositories")
+  }, [])
+
+  const updatePendingActionFromFailure = useCallback((
+    failure: GitOperationFailure,
+    fallbackInput?: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string },
+  ) => {
+    const pending = fallbackInput ? buildClonePendingAction(fallbackInput, failure) : buildRepositoryPendingAction(failure)
+    if (pending) {
+      setPendingAction(pending)
+      return
+    }
+    clearPendingAction()
+  }, [clearPendingAction, setPendingAction])
+
+  useEffect(() => {
+    const failure = operations.lastFailure
+    if (!failure) return
+    if (failure.globalOperation === "clone") {
+      if (!shouldRouteFailureToAccess(failure)) clearPendingAction()
+    } else {
+      updatePendingActionFromFailure(failure)
+    }
+    routeFailure(failure)
+  }, [clearPendingAction, operations.lastFailure, routeFailure, updatePendingActionFromFailure])
+
+  const retryPendingAction = useCallback(async () => {
+    if (retryPendingBusyRef.current) return
+    if (!pendingAction) return
+    retryPendingBusyRef.current = true
+    setRetryPendingBusy(true)
+    try {
+      if (pendingAction.type === "clone") {
+        const result = await operations.cloneRepository(pendingAction.input)
+        if (result.ok) {
+          clearPendingAction()
+          setCloneOpen(false)
+          return
+        }
+        if (result.failure) {
+          updatePendingActionFromFailure(result.failure, pendingAction.input)
+          routeFailure(result.failure)
+          return
+        }
+        clearPendingAction()
+        return
+      }
+
+      const runRepositoryOperation: Record<PendingGitRepositoryOperation, (repositoryId: string) => ReturnType<typeof operations.pull>> = {
+        pull: operations.pull,
+        push: operations.push,
+        sync: operations.sync,
+      }
+      const result = await runRepositoryOperation[pendingAction.type](pendingAction.repositoryId)
+      if (result.ok) {
+        clearPendingAction()
+        return
+      }
+      if (result.failure) {
+        updatePendingActionFromFailure(result.failure)
+        routeFailure(result.failure)
+        return
+      }
+      clearPendingAction()
+    } finally {
+      retryPendingBusyRef.current = false
+      setRetryPendingBusy(false)
+    }
+  }, [clearPendingAction, operations, pendingAction, routeFailure, updatePendingActionFromFailure])
+
+  const handleCloneFailure = useCallback((input: { readonly cloneInput: { readonly name: string; readonly remoteUrl: string; readonly targetPath: string }; readonly failure: GitOperationFailure }) => {
+    setCloneOpen(false)
+    updatePendingActionFromFailure(input.failure, input.cloneInput)
+    routeFailure(input.failure)
+  }, [routeFailure, updatePendingActionFromFailure])
+
+  const handleWorkbenchOperationFailure = useCallback((failure: GitOperationFailure | null) => {
+    if (failure) {
+      updatePendingActionFromFailure(failure)
+      return
+    }
+    clearPendingAction()
+  }, [clearPendingAction, updatePendingActionFromFailure])
 
   return (
     <>
@@ -90,18 +266,22 @@ export function GitModule() {
               <GitWorkbench
                 repository={selectedRepository}
                 onBack={() => setSelectedRepository(null)}
+                onOperationFailure={handleWorkbenchOperationFailure}
+                onHandleFailure={routeFailure}
               />
             ) : (
               <GitRepositoryList
                 summaries={repositoriesState.summaries}
                 loading={repositoriesState.loading}
                 error={repositoriesState.error ?? operations.error}
+                failure={operations.lastFailure}
                 busy={operations.busy}
                 onOpenRepository={setSelectedRepository}
                 onPull={(repositoryId) => void operations.pull(repositoryId)}
                 onPush={(repositoryId) => void operations.push(repositoryId)}
                 onSync={(repositoryId) => void operations.sync(repositoryId)}
                 onRemoveRepository={(input) => operations.removeRepository(input)}
+                onHandleFailure={routeFailure}
               />
             )}
           </TabsContent>
@@ -116,6 +296,33 @@ export function GitModule() {
               />
             </div>
           </TabsContent>
+          <TabsContent value="install" className="m-0 h-full data-[state=inactive]:hidden">
+            <GitInstallPanel
+              environment={environment}
+              repositorySummaries={repositoriesState.summaries}
+              loading={environmentLoading}
+              error={environmentError}
+              onRefresh={refreshEnvironment}
+            />
+          </TabsContent>
+          <TabsContent value="access" className="m-0 h-full data-[state=inactive]:hidden">
+            <GitAccessPanel
+              access={access.access}
+              loading={access.loading}
+              error={access.error}
+              pendingAction={pendingAction}
+              platform={environment?.platform}
+              userEmail={environment?.userEmail}
+              onRefresh={() => access.refresh(pendingActionHosts(pendingAction)).then(() => undefined)}
+              onConfigureCredentialHelper={(input) => access.configureCredentialHelper(input, { hosts: pendingActionHosts(pendingAction) })}
+              onSaveHttpsCredential={(input) => access.saveHttpsCredential(input, { hosts: pendingActionHosts(pendingAction) })}
+              onClearHttpsCredential={(input) => access.clearHttpsCredential(input, { hosts: pendingActionHosts(pendingAction) })}
+              onGenerateSshKey={(input) => access.generateSshKey(input, { hosts: pendingActionHosts(pendingAction) })}
+              onTestSshConnection={access.testSshConnection}
+              retrying={retryPendingBusy}
+              onRetryPendingAction={retryPendingAction}
+            />
+          </TabsContent>
         </Tabs>
       </SystemAppWindowShell>
       <GitCloneDialog
@@ -129,8 +336,9 @@ export function GitModule() {
             setCloneOpen(false)
             return null
           }
-          return result.error
+          return { error: result.error, failure: result.failure }
         }}
+        onFailureAction={handleCloneFailure}
       />
       <GitAddLocalDialog
         open={addLocalOpen}

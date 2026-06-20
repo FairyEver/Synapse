@@ -130,7 +130,7 @@ function buildIssueList(
   return issues
 }
 
-function buildDiagnosticsText(
+export function buildGitDiagnosticsText(
   environment: SynapseGitEnvironmentState | null,
   summaries: readonly SynapseGitRepositorySummary[],
 ): string {
@@ -371,7 +371,7 @@ export function GitEnvironmentPanel({
   const copyDiagnostics = async () => {
     setCopyMessage(null)
     try {
-      await navigator.clipboard.writeText(buildDiagnosticsText(environment, repositorySummaries))
+      await navigator.clipboard.writeText(buildGitDiagnosticsText(environment, repositorySummaries))
       setCopyMessage("已复制诊断信息。")
     } catch (err) {
       setCopyMessage(err instanceof Error ? err.message : "复制失败。")

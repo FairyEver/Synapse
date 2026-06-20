@@ -26,7 +26,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SynapseGitRepository, SynapseGitRepositoryRemoveInput, SynapseGitRepositoryRemoveMode, SynapseGitRepositorySummary } from "@/types/git"
-import type { GitOperationBusyState, GitRepositoryOperation } from "../hooks/use-git-operations"
+import type { GitOperationBusyState, GitOperationFailure, GitRepositoryOperation } from "../hooks/use-git-operations"
+import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import {
   getGitChangeCount,
   getGitActionPlan,
@@ -38,12 +39,14 @@ type GitRepositoryListProps = {
   readonly summaries: readonly SynapseGitRepositorySummary[]
   readonly loading: boolean
   readonly error: string | null
+  readonly failure?: GitOperationFailure | null
   readonly busy: GitOperationBusyState
   readonly onOpenRepository: (repository: SynapseGitRepository) => void
   readonly onPull: (repositoryId: string) => void
   readonly onPush: (repositoryId: string) => void
   readonly onSync: (repositoryId: string) => void
   readonly onRemoveRepository: (input: SynapseGitRepositoryRemoveInput) => Promise<boolean>
+  readonly onHandleFailure?: (failure: GitOperationFailure) => void
 }
 
 function stopAction(
@@ -81,14 +84,17 @@ export function GitRepositoryList({
   summaries,
   loading,
   error,
+  failure,
   busy,
   onOpenRepository,
   onPull,
   onPush,
   onSync,
   onRemoveRepository,
+  onHandleFailure,
 }: GitRepositoryListProps) {
   const globalActionDisabled = isGlobalBusy(busy)
+  const failureActionLabel = canHandleGitFailureAction(failure) ? getGitFailureActionLabel(failure) : null
   const [filter, setFilter] = useState<"all" | "attention" | "clean" | "unavailable">("all")
   const [removalTarget, setRemovalTarget] = useState<SynapseGitRepository | null>(null)
   const [removalMode, setRemovalMode] = useState<SynapseGitRepositoryRemoveMode>("keep-local")
@@ -194,8 +200,23 @@ export function GitRepositoryList({
           <div className="space-y-3 p-4">
             {error ? (
               <Alert variant="destructive">
-                <AlertTitle>操作失败</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
+                <AlertTitle>{failure?.title ?? "操作失败"}</AlertTitle>
+                <AlertDescription>
+                  <div className="flex flex-col gap-2">
+                    <span>{failure?.message ?? error}</span>
+                    {failure && failureActionLabel ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                        onClick={() => onHandleFailure?.(failure)}
+                      >
+                        {failureActionLabel}
+                      </Button>
+                    ) : null}
+                  </div>
+                </AlertDescription>
               </Alert>
             ) : null}
             {loading ? (
@@ -234,6 +255,7 @@ export function GitRepositoryList({
                       const branch = snapshot?.currentBranch ?? "无分支"
                       const isClean = !needsGitAttention(snapshot, summary.error)
                       const runningOperation = busy.repositories[repository.id]
+                      const rowFailure = failure?.repositoryId === repository.id ? failure : null
                       const runPrimaryAction = () => {
                         if (actionPlan.primaryAction === "pull") {
                           onPull(repository.id)
@@ -278,6 +300,7 @@ export function GitRepositoryList({
                             <span>↑{snapshot.ahead} ↓{snapshot.behind}</span>
                           ) : null}
                           {summary.error ? <span className="text-destructive">{summary.error}</span> : null}
+                          {rowFailure ? <span className="text-destructive">{rowFailure.title}</span> : null}
                         </span>
                       </span>
                       <span className="flex flex-wrap gap-2 md:justify-end">

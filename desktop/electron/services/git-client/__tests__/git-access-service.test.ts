@@ -274,6 +274,23 @@ describe("git access service", () => {
     })
   })
 
+  it("does not clear HTTPS credentials without a safe credential helper", async () => {
+    const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createService({
+      commandRunner: {
+        run: vi.fn().mockResolvedValue({ stdout: "store\n", stderr: "" }),
+      },
+      runGitCredential,
+    })
+
+    await expect(service.clearHttpsCredential({
+      host: "github.com",
+      protocol: "https",
+      username: "writer",
+    })).rejects.toThrow("请先设置安全的凭证保存方式。")
+    expect(runGitCredential).not.toHaveBeenCalled()
+  })
+
   it("rejects credential values with control characters before clearing", async () => {
     const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const service = createService({ runGitCredential })
@@ -393,12 +410,20 @@ describe("git access service", () => {
 
   it("builds process environment with effective PATH", () => {
     const env = buildAccessProcessEnvironment({
-      baseEnv: { PATH: "/usr/bin", Path: "C:\\Windows" },
+      baseEnv: {
+        HOME: "/Users/writer",
+        PATH: "/usr/bin",
+        Path: "C:\\Windows",
+        ANTHROPIC_AUTH_TOKEN: "secret-token",
+      },
       effectivePath: "/opt/homebrew/bin:/usr/bin",
       platform: "darwin",
     })
 
+    expect(env.HOME).toBe("/Users/writer")
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin")
+    expect(env.Path).toBeUndefined()
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
     expect(env.GIT_TERMINAL_PROMPT).toBe("0")
     expect(env.LANG).toBe("C")
     expect(env.LC_ALL).toBe("C")
@@ -406,14 +431,23 @@ describe("git access service", () => {
 
   it("builds Windows process environment with effective Path", () => {
     const env = buildAccessProcessEnvironment({
-      baseEnv: { PATH: "/usr/bin", path: "C:\\lower", PaTh: "C:\\mixed", Path: "C:\\Windows" },
+      baseEnv: {
+        PATH: "/usr/bin",
+        path: "C:\\lower",
+        PaTh: "C:\\mixed",
+        Path: "C:\\Windows",
+        USERPROFILE: "C:\\Users\\writer",
+        TOKEN: "raw-token",
+      },
       effectivePath: "C:\\Git\\cmd;C:\\Windows",
       platform: "win32",
     })
 
     expect(env.Path).toBe("C:\\Git\\cmd;C:\\Windows")
+    expect(env.USERPROFILE).toBe("C:\\Users\\writer")
     expect(env.PATH).toBeUndefined()
     expect(env.path).toBeUndefined()
     expect(env.PaTh).toBeUndefined()
+    expect(env.TOKEN).toBeUndefined()
   })
 })

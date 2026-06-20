@@ -97,6 +97,17 @@ const PROVIDER_LINKS: Readonly<Record<SynapseGitProvider, SynapseGitProviderLink
 }
 
 const SHARED_SAFE_CREDENTIAL_HELPERS = new Set(["manager", "manager-core"])
+const ACCESS_ENV_ALLOWLIST = [
+  "HOME",
+  "USERPROFILE",
+  "SystemRoot",
+  "WINDIR",
+  "ComSpec",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "SSH_AUTH_SOCK",
+] as const
 const FIRST_CONTROL_CHAR_CODE = 0
 const LAST_CONTROL_CHAR_CODE = 31
 const DELETE_CONTROL_CHAR_CODE = 127
@@ -251,19 +262,17 @@ export function buildAccessProcessEnvironment(input: {
   readonly effectivePath?: string | null
   readonly platform: Platform
 }): NodeJS.ProcessEnv {
+  const sourceEnv = input.baseEnv ?? process.env
   const env: NodeJS.ProcessEnv = {
-    ...(input.baseEnv ?? process.env),
     GIT_TERMINAL_PROMPT: "0",
     LANG: "C",
     LC_ALL: "C",
   }
+  for (const key of ACCESS_ENV_ALLOWLIST) {
+    if (sourceEnv[key]) env[key] = sourceEnv[key]
+  }
   if (input.effectivePath) {
     if (input.platform === "win32") {
-      for (const key of Object.keys(env)) {
-        if (key.toLowerCase() === "path") {
-          delete env[key]
-        }
-      }
       env.Path = input.effectivePath
     } else {
       env.PATH = input.effectivePath
@@ -501,6 +510,10 @@ export function createGitAccessService(deps: GitAccessDeps) {
     },
 
     async clearHttpsCredential(input: SynapseGitClearHttpsCredentialInput): Promise<void> {
+      const helpers = await readCredentialHelpers(deps)
+      if (!isSafeCredentialHelper(helpers, deps.platform)) {
+        throw new Error("请先设置安全的凭证保存方式。")
+      }
       await runGitCredential({
         action: "reject",
         cwd: deps.homeDir,
