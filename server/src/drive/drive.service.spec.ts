@@ -631,6 +631,24 @@ describe("DriveService", () => {
     await expect(service.listShares("user-1", "https://synapse.test")).resolves.toMatchObject({
       items: [expect.objectContaining({ shareId: activeShare.shareId, itemName: "active.txt" })],
     })
+    const items = await service.listItems("user-1", null)
+    expect(items.find((item) => item.id === expiredFile.id)).toMatchObject({
+      shared: false,
+      activeShareId: null,
+    })
+    expect(items.find((item) => item.id === activeFile.id)).toMatchObject({
+      shared: true,
+      activeShareId: activeShare.id,
+    })
+    const tree = await service.listItemTree("user-1", { parentId: null })
+    expect(tree.items.find((item) => item.id === expiredFile.id)).toMatchObject({
+      shared: false,
+      activeShareId: null,
+    })
+    expect(tree.items.find((item) => item.id === activeFile.id)).toMatchObject({
+      shared: true,
+      activeShareId: activeShare.id,
+    })
   })
 
   it("rejects ordinary restore for trashed public asset backing files", async () => {
@@ -2674,7 +2692,9 @@ function createPrismaMemory() {
   const withShares = (item: any) => ({
     ...item,
     user: users.get(item.userId) ? { email: users.get(item.userId)!.email } : null,
-    shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
+    shares: [...shares.values()]
+      .filter((share) => share.itemId === item.id && share.enabled)
+      .map((share) => ({ id: share.id, enabled: share.enabled, expiresAt: share.expiresAt })),
   })
   const withShareIncludes = (share: any, include: any) => {
     if (!include?.item && !include?.editors) return share

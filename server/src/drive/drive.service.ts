@@ -193,7 +193,7 @@ type DriveAuditContext = {
 const driveItemWithShares = {
   shares: {
     where: { enabled: true },
-    select: { id: true, enabled: true },
+    select: { id: true, enabled: true, expiresAt: true },
   },
 } as const
 
@@ -1255,7 +1255,9 @@ export class DriveService implements OnApplicationBootstrap {
       LEFT JOIN LATERAL (
         SELECT ds.id
         FROM "DriveShare" ds
-        WHERE ds."itemId" = counted.id AND ds.enabled = true
+        WHERE ds."itemId" = counted.id
+          AND ds.enabled = true
+          AND (ds."expiresAt" IS NULL OR ds."expiresAt" > NOW())
         ORDER BY ds."createdAt" DESC
         LIMIT 1
       ) share ON true

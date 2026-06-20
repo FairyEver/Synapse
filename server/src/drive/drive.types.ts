@@ -135,10 +135,11 @@ export type DriveItemRecord = {
   readonly storageStatus: string
   readonly createdAt: Date
   readonly updatedAt: Date
-  readonly shares?: readonly { readonly id?: string; readonly enabled: boolean }[]
+  readonly shares?: readonly { readonly id?: string; readonly enabled: boolean; readonly expiresAt?: Date | null }[]
 }
 
 export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
+  const activeShares = item.shares?.filter(isActiveDriveShare) ?? []
   return {
     id: item.id,
     parentId: item.parentId,
@@ -147,11 +148,15 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
     size: item.size.toString(),
     mimeType: item.mimeType,
     storageStatus: item.storageStatus as DriveStorageStatus,
-    shared: item.shares?.some((share) => share.enabled) ?? false,
-    activeShareId: item.shares?.find((share) => share.enabled)?.id ?? null,
+    shared: activeShares.length > 0,
+    activeShareId: activeShares[0]?.id ?? null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   }
+}
+
+function isActiveDriveShare(share: { readonly enabled: boolean; readonly expiresAt?: Date | null }): boolean {
+  return share.enabled && (share.expiresAt === undefined || share.expiresAt === null || share.expiresAt > new Date())
 }
 
 export function toDrivePublicAssetDto(asset: DrivePublicAssetRecord, publicAppUrl: string): DrivePublicAssetDto {
