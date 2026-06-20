@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
 import { Download, Loader2, LogIn, RefreshCw, Save } from 'lucide-react'
@@ -31,6 +31,7 @@ export function DriveCodeRenderer({
 }) {
   const language = getCodeEditorLanguage(current.name)
   const initialText = preview.text ?? ''
+  const savedValueRef = useRef(initialText)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,9 +41,11 @@ export function DriveCodeRenderer({
   const loginUrl = useMemo(() => buildLoginUrl(), [])
 
   useEffect(() => {
+    savedValueRef.current = initialText
     setValue(initialText)
     setDirty(false)
     setError(null)
+    setConflictOpen(false)
   }, [current.id, edit?.currentVersionId, initialText])
 
   const handleSave = async () => {
@@ -50,6 +53,7 @@ export function DriveCodeRenderer({
     setError(null)
     try {
       await editContext.saveText({ text: value, baseVersionId: edit.currentVersionId })
+      savedValueRef.current = value
       setDirty(false)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
@@ -64,8 +68,10 @@ export function DriveCodeRenderer({
     if (!editContext) return
     setError(null)
     try {
-      await editContext.reload()
-      setValue(initialText)
+      const nextSnapshot = await editContext.reload()
+      const nextText = nextSnapshot.preview?.text ?? ''
+      savedValueRef.current = nextText
+      setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
     } catch (reloadError) {
@@ -127,7 +133,7 @@ export function DriveCodeRenderer({
           onChange={(nextValue) => {
             if (!canEdit) return
             setValue(nextValue ?? '')
-            setDirty((nextValue ?? '') !== initialText)
+            setDirty((nextValue ?? '') !== savedValueRef.current)
           }}
           options={{
             minimap: { enabled: false },
