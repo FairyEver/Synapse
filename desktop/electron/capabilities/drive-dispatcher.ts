@@ -456,6 +456,8 @@ async function uploadFolder(
   const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
   const failures: Array<{ readonly relativePath: string; readonly error: string }> = []
   let completed = 0
+  let cleanupRootDeleted = false
+  let cleanupRootDeleteFailed = false
 
   for (const entry of entries) {
     const preparedEntry = preparedByPath.get(entry.relativePath)
@@ -473,11 +475,23 @@ async function uploadFolder(
     }
   }
 
+  if (prepared.rootCreated && completed === 0 && failures.length > 0) {
+    try {
+      await deps.accountService.deleteDriveItem(prepared.root.id)
+      cleanupRootDeleted = true
+    } catch {
+      cleanupRootDeleteFailed = true
+    }
+  }
+
   const data = {
     root: prepared.root,
+    rootCreated: prepared.rootCreated,
     completed,
     failed: failures.length,
     failures,
+    cleanupRootDeleted,
+    cleanupRootDeleteFailed,
   }
   if (failures.length > 0) {
     return {
@@ -756,6 +770,9 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   if (typeof record.id === "string" && !metadata.itemId && !metadata.shareRecordId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
   if (typeof record.failed === "number") metadata.failed = record.failed
+  if (typeof record.rootCreated === "boolean") metadata.rootCreated = record.rootCreated
+  if (typeof record.cleanupRootDeleted === "boolean") metadata.cleanupRootDeleted = record.cleanupRootDeleted
+  if (typeof record.cleanupRootDeleteFailed === "boolean") metadata.cleanupRootDeleteFailed = record.cleanupRootDeleteFailed
   if (typeof record.movedCount === "number") metadata.movedCount = record.movedCount
   if (typeof record.skippedCount === "number") metadata.skippedCount = record.skippedCount
   const moves = driveReorganizationMoveCorrelation(record.moves)

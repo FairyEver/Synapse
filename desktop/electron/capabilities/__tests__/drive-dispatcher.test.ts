@@ -846,6 +846,73 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("deletes a newly created MCP folder upload root when every file upload fails", async () => {
+    const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
+    const accountService = createAccountService({
+      prepareDriveFolderUpload: vi.fn(async () => ({
+        root,
+        rootCreated: true,
+        entries: [{
+          relativePath: "a.txt",
+          sessionId: "session-a",
+          item: driveItem({ id: "file-a", name: "a.txt" }),
+          upload: {
+            method: "PUT" as const,
+            url: "https://cos.example/upload/a",
+            expiresAt: "2026-06-07T00:00:00.000Z",
+            headers: {},
+          },
+        }],
+      })),
+      deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
+    })
+    const fetchImpl = vi.fn(async () => ({ ok: false }) as Response)
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      auditSink,
+      fileSystem: {
+        stat: vi.fn(async (target: string) => ({
+          isFile: () => target !== "/tmp/project",
+          isDirectory: () => target === "/tmp/project",
+          size: 1,
+        })),
+        createReadStream: vi.fn((target: string) => Readable.from([pathBasenameForTest(target)])),
+        readdir: vi.fn(async () => [
+          { name: "a.txt", isDirectory: () => false, isFile: () => true },
+        ]),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: fetchImpl,
+    })
+
+    const result = await dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project",
+    }, { source: "mcp-stdio" })
+
+    expect(result).toMatchObject({
+      ok: false,
+      data: {
+        root,
+        completed: 0,
+        failed: 1,
+        cleanupRootDeleted: true,
+        cleanupRootDeleteFailed: false,
+      },
+    })
+    expect(accountService.cancelDriveUpload).toHaveBeenCalledWith("session-a")
+    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("folder-root")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        rootCreated: true,
+        rootItemId: "folder-root",
+        cleanupRootDeleted: true,
+        cleanupRootDeleteFailed: false,
+      }),
+    }))
+  })
+
   it("rejects MCP folder uploads that exceed the local upload file limit before preparing sessions", async () => {
     const accountService = createAccountService()
     const dispatcher = createDriveCapabilityDispatcher({
