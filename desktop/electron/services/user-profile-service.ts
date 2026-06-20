@@ -270,6 +270,7 @@ class UserProfileService {
     }
 
     const existingProfile = await readProfileFile(repository, userId)
+    let rollbackProfile = existingProfile
     const profilePath = resolveUserProfilePath(repository.localPath, userId)
     const auditMetadata = {
       operation: "user-profile.updateDisplayName",
@@ -282,6 +283,7 @@ class UserProfileService {
     if (repositoryState.isGitRepository) {
       if (existingProfile) {
         await pullWithRebase(repository)
+        rollbackProfile = await readProfileFile(repository, userId)
       }
 
       await ensureBotIdentity(repositoryState.gitRootPath ?? repository.localPath)
@@ -310,7 +312,7 @@ class UserProfileService {
         await stageProfilePath(gitRootPath, repository, userId)
         commitHash = await commitProfileChange(gitRootPath, userId, action)
       } catch (error) {
-        await restoreProfileFile(profilePath, existingProfile).catch((rollbackError: unknown) => {
+        await restoreProfileFile(profilePath, rollbackProfile).catch((rollbackError: unknown) => {
           logger.warn("Failed to roll back profile after git commit failure.", {
             errorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
             repoId,

@@ -258,4 +258,47 @@ describe("UserProfileService security", () => {
     const rawProfile = JSON.parse(await readFile(profilePath, "utf8")) as { displayName: string }
     expect(rawProfile.displayName).toBe("Old Name")
   })
+
+  it("restores the post-pull profile when git commit fails after a remote update", async () => {
+    const root = await createTempRoot()
+    const repository = createRepository(root)
+    const auditSink = new InMemoryAuditSink()
+    const profilePath = resolveUserProfilePath(root, testUserId)
+    await mkdir(path.dirname(profilePath), { recursive: true })
+    await writeFile(profilePath, `${JSON.stringify({
+      schemaVersion: 1,
+      userId: testUserId,
+      displayName: "Old Name",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    }, null, 2)}\n`, "utf8")
+    mockRepository(repository, root)
+    mocks.runGitTextCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args[0] === "pull") {
+        await writeFile(profilePath, `${JSON.stringify({
+          schemaVersion: 1,
+          userId: testUserId,
+          displayName: "Remote Name",
+          updatedAt: "2026-06-02T00:00:00.000Z",
+        }, null, 2)}\n`, "utf8")
+      }
+      if (input.args[0] === "commit") {
+        throw new Error("commit rejected")
+      }
+      return ""
+    })
+
+    await expect(userProfileService.updateDisplayName(
+      repository.uuid,
+      testUserId,
+      "Alice",
+      {
+        actor: { kind: "user", id: testUserId },
+        auditSink,
+        permissionGuard: createPermissionGuard(),
+      },
+    )).rejects.toThrow("commit rejected")
+
+    const rawProfile = JSON.parse(await readFile(profilePath, "utf8")) as { displayName: string }
+    expect(rawProfile.displayName).toBe("Remote Name")
+  })
 })
