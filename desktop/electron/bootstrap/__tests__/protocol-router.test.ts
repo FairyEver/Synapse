@@ -2,8 +2,18 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   createProtocolUrlRouter,
+  isSynapseProtocolUrl,
   shouldFocusMainForSecondInstance,
 } from "../protocol-router"
+
+describe("isSynapseProtocolUrl", () => {
+  it("accepts protocol arguments with case-insensitive schemes", () => {
+    expect(isSynapseProtocolUrl("synapse://content-install?session=session-1")).toBe(true)
+    expect(isSynapseProtocolUrl("Synapse://auth/desktop/callback?code=auth-code")).toBe(true)
+    expect(isSynapseProtocolUrl("SYNAPSE://content-install?session=session-1")).toBe(true)
+    expect(isSynapseProtocolUrl("/Electron")).toBe(false)
+  })
+})
 
 describe("createProtocolUrlRouter", () => {
   it("routes auth callbacks and valid install URLs while draining multiple pending URLs", async () => {
@@ -179,6 +189,10 @@ describe("shouldFocusMainForSecondInstance", () => {
     expect(shouldFocusMainForSecondInstance([
       "/Electron",
       "synapse://unknown",
+    ])).toBe(false)
+    expect(shouldFocusMainForSecondInstance([
+      "/Electron",
+      "Synapse://auth/desktop/callback?code=auth-code",
     ])).toBe(false)
   })
 })

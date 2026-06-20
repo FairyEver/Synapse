@@ -58,6 +58,7 @@ export {
 
 export {
   createProtocolUrlRouter,
+  isSynapseProtocolUrl,
   shouldFocusMainForSecondInstance,
 } from "./protocol-router"
 

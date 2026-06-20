@@ -12,6 +12,16 @@ type ProtocolUrlRouterDeps = {
   openInstallWindow: (request: SynapseContentStoreInstallWindowRequest) => Promise<void>
 }
 
+function isSynapseProtocolUrl(rawUrl: string): boolean {
+  const value = rawUrl.trim()
+  if (!value) return false
+  try {
+    return new URL(value).protocol === "synapse:"
+  } catch {
+    return value.toLowerCase().startsWith("synapse://")
+  }
+}
+
 function isAccountAuthCallbackUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl)
@@ -39,7 +49,7 @@ function isContentInstallUrlCandidate(rawUrl: string): boolean {
 }
 
 function shouldFocusMainForSecondInstance(argv: string[]): boolean {
-  return !argv.some((item) => item.startsWith("synapse://"))
+  return !argv.some(isSynapseProtocolUrl)
 }
 
 function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: string[] = []) {
@@ -139,5 +149,6 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
 
 export {
   createProtocolUrlRouter,
+  isSynapseProtocolUrl,
   shouldFocusMainForSecondInstance,
 }

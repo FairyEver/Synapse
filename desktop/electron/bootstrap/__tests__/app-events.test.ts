@@ -160,4 +160,19 @@ describe("app event bootstrap", () => {
     expect(handleUrl).toHaveBeenNthCalledWith(1, "synapse://auth/desktop/callback?code=auth-code")
     expect(handleUrl).toHaveBeenNthCalledWith(2, "synapse://content-install?session=session-1")
   })
+
+  it("routes protocol URLs with case-insensitive schemes from a second-instance launch", () => {
+    const handleUrl = vi.fn()
+
+    attachSecondInstanceProtocolHandler(handleUrl)
+    const handler = electronMock.app.on.mock.calls.find(([event]) => event === "second-instance")?.[1]
+    handler?.({}, [
+      "/Electron",
+      "Synapse://auth/desktop/callback?code=auth-code",
+      "SYNAPSE://content-install?session=session-1",
+    ])
+
+    expect(handleUrl).toHaveBeenNthCalledWith(1, "Synapse://auth/desktop/callback?code=auth-code")
+    expect(handleUrl).toHaveBeenNthCalledWith(2, "SYNAPSE://content-install?session=session-1")
+  })
 })

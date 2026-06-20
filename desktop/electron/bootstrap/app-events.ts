@@ -9,6 +9,7 @@
 import { app } from "electron"
 import { createMainLogger } from "../services/log-store"
 import type { MainWindowState } from "./main-window"
+import { isSynapseProtocolUrl } from "./protocol-router"
 
 const logger = createMainLogger("bootstrap.app-events")
 const WINDOWS_APP_USER_MODEL_ID = "com.fairyever.synapse"
@@ -112,7 +113,7 @@ export function attachOpenUrlHandler(handleUrl: (url: string) => void): void {
 
 export function attachSecondInstanceProtocolHandler(handleUrl: (url: string) => void): void {
   app.on("second-instance", (_event, argv) => {
-    for (const url of argv.filter((item) => item.startsWith("synapse://"))) {
+    for (const url of argv.filter(isSynapseProtocolUrl)) {
       handleUrl(url)
     }
   })

@@ -16,6 +16,7 @@ import {
   createMainWindowState,
   createProtocolUrlRouter,
   initializeReadyApp,
+  isSynapseProtocolUrl,
   registerAuthProtocol,
   shouldFocusMainForSecondInstance,
   showOrCreateMainWindow,
@@ -44,7 +45,7 @@ const protocolRouter = createProtocolUrlRouter({
   handleAuthCallback: (url) => accountService.handleAuthCallback(url),
   logger,
   openInstallWindow: (request) => contentStoreInstallWindowService.open(request),
-}, process.argv.filter((item) => item.startsWith("synapse://")))
+}, process.argv.filter(isSynapseProtocolUrl))
 
 attachProcessLevelLogging({
   cleanupBeforeExit: () => processLevelCleanup?.(),
