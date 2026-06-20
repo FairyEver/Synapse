@@ -284,6 +284,28 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it("shows safe storage recovery errors when creating a knowledge base fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("知识库存储位置不可用。请在设置中重新检测。"))
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("知识库存储位置不可用。请在设置中重新检测。")
+    expect(document.body.textContent).not.toContain("创建知识库失败。")
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
   it("cleans up managed knowledge base runtime when project save fails", async () => {
     const onSave = vi.fn().mockRejectedValue(new Error("config save failed"))
     renderEditor([], onSave)

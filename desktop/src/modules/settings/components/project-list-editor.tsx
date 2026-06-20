@@ -36,6 +36,13 @@ import type { SynapseProjectConfig } from "@/types/config"
 
 const logger = createRendererLogger("settings.projects")
 
+const SAFE_KNOWLEDGE_BASE_CREATE_ERRORS = new Set([
+  "知识库存储位置不可用。",
+  "知识库存储位置不可用。请在设置中重新检测。",
+  "知识库存储迁移正在进行。",
+  "知识库存储迁移正在进行，请稍后再试。",
+])
+
 type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
@@ -54,6 +61,11 @@ function formatDeleteProjectDescription(target: { project: SynapseProjectConfig;
     return `确认删除「${target.project.name}」？`
   }
   return `「${target.project.name}」下有 ${target.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。`
+}
+
+function formatKnowledgeBaseCreateError(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : ""
+  return SAFE_KNOWLEDGE_BASE_CREATE_ERRORS.has(message) ? message : "创建知识库失败。"
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
@@ -210,7 +222,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         })
       }
       logger.error("Failed to create managed knowledge base project.", { error, projectId })
-      setKnowledgeBaseError("创建知识库失败。")
+      setKnowledgeBaseError(formatKnowledgeBaseCreateError(error))
     } finally {
       setIsCreatingKnowledgeBase(false)
     }
