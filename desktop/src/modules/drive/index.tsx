@@ -579,7 +579,10 @@ function DriveModule() {
             path={[{ id: null, name: "根目录" }, { id: DRIVE_PUBLIC_ASSETS_ENTRY_ID, name: "公开素材" }]}
             onJumpToPath={jumpToPath}
           />
-          <DrivePublicAssetsView onBack={() => setActiveView("files")} />
+          <DrivePublicAssetsView
+            onBack={() => setActiveView("files")}
+            onUsageChange={() => { void loadDriveUsage() }}
+          />
         </div>
       )
     }

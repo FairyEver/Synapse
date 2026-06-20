@@ -178,6 +178,53 @@ describe("DrivePublicAssetsView", () => {
     expect(uploadResultTexts()).toEqual(["a.png 已上传", "b.jpg 上传失败", "c.webp 已上传"])
   })
 
+  it("notifies the parent after public asset operations that change usage", async () => {
+    const onUsageChange = vi.fn()
+    mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
+      createPublicAsset({ assetId: "asset_active", itemId: "item-active", name: "active.png" }),
+      createPublicAsset({ assetId: "asset_trashed", itemId: "item-trashed", name: "trashed.png", lifecycleStatus: "trashed" }),
+    ]))
+    mocks.uploadDrivePublicAssets.mockResolvedValue({
+      results: [
+        { status: "fulfilled", fileName: "new.png", asset: createPublicAsset({ assetId: "asset_new", name: "new.png" }) },
+      ],
+    })
+
+    await render(<DrivePublicAssetsView onUsageChange={onUsageChange} />)
+    await flushAct()
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')
+    if (!input) throw new Error("Upload input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["new"], "new.png", { type: "image/png" })],
+    })
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    expect(onUsageChange).toHaveBeenCalledTimes(1)
+
+    await openRowMenu("active.png")
+    await clickText("替换文件")
+    const replaceInput = document.querySelector<HTMLInputElement>('input[data-testid="drive-public-asset-replace-input"]')
+    if (!replaceInput) throw new Error("Replace input not found")
+    Object.defineProperty(replaceInput, "files", {
+      configurable: true,
+      value: [new File(["next"], "next.png", { type: "image/png" })],
+    })
+    await act(async () => {
+      replaceInput.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    expect(onUsageChange).toHaveBeenCalledTimes(2)
+
+    await openRowMenu("trashed.png")
+    await clickText("删除")
+    await clickAlertDialogButtonText("删除")
+    expect(onUsageChange).toHaveBeenCalledTimes(3)
+  })
+
   it("uses the shared public asset image MIME list for file pickers", async () => {
     await render(<DrivePublicAssetsView />)
     await flushAct()

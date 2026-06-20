@@ -69,7 +69,13 @@ type DrivePublicAssetConfirmState =
     readonly asset: DrivePublicAssetDto
   }
 
-function DrivePublicAssetsView({ onBack }: { readonly onBack?: () => void }) {
+function DrivePublicAssetsView({
+  onBack,
+  onUsageChange,
+}: {
+  readonly onBack?: () => void
+  readonly onUsageChange?: () => void
+}) {
   const [page, setPage] = useState<DrivePublicAssetListPageDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -139,12 +145,15 @@ function DrivePublicAssetsView({ onBack }: { readonly onBack?: () => void }) {
       setUploadResults(result.results)
       toast(publicAssetUploadToast(result.results))
       await loadAssets()
+      if (result.results.some((item) => item.status === "fulfilled")) {
+        onUsageChange?.()
+      }
     } catch (rawError) {
       toast(errorMessage(rawError, "上传失败"))
     } finally {
       setUploading(false)
     }
-  }, [loadAssets])
+  }, [loadAssets, onUsageChange])
 
   const handleReplaceSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const [file] = publicAssetLocalFilesFromSelection(Array.from(event.currentTarget.files ?? []))
@@ -160,12 +169,13 @@ function DrivePublicAssetsView({ onBack }: { readonly onBack?: () => void }) {
       })
       toast("已替换")
       await loadAssets()
+      onUsageChange?.()
     } catch (rawError) {
       toast(errorMessage(rawError, "替换失败"))
     } finally {
       setBusyAssetId(null)
     }
-  }, [loadAssets])
+  }, [loadAssets, onUsageChange])
 
   const handleRenameSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -188,18 +198,25 @@ function DrivePublicAssetsView({ onBack }: { readonly onBack?: () => void }) {
     }
   }, [loadAssets, renameState])
 
-  const runAssetMutation = useCallback(async (asset: DrivePublicAssetDto, action: () => Promise<unknown>, successMessage: string, fallback: string) => {
+  const runAssetMutation = useCallback(async (
+    asset: DrivePublicAssetDto,
+    action: () => Promise<unknown>,
+    successMessage: string,
+    fallback: string,
+    options: { readonly refreshUsage?: boolean } = {},
+  ) => {
     setBusyAssetId(asset.assetId)
     try {
       await action()
       toast(successMessage)
       await loadAssets()
+      if (options.refreshUsage) onUsageChange?.()
     } catch (rawError) {
       toast(errorMessage(rawError, fallback))
     } finally {
       setBusyAssetId(null)
     }
-  }, [loadAssets])
+  }, [loadAssets, onUsageChange])
 
   const confirmPublicAssetAction = useCallback(async () => {
     const target = confirmState
@@ -219,6 +236,7 @@ function DrivePublicAssetsView({ onBack }: { readonly onBack?: () => void }) {
       () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: target.asset.itemId }),
       "已删除",
       "删除失败",
+      { refreshUsage: true },
     )
   }, [confirmState, runAssetMutation])
 
