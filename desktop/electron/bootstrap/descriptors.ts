@@ -101,6 +101,7 @@ import {
 import { pathExists } from "../services/fs-utils"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import { configureGitCommandSecurity } from "../services/git-command"
+import { createGitAccessService, type GitAccessService } from "../services/git-client/git-access-service"
 import { createGitBranchService, type GitBranchService } from "../services/git-client/git-branch-service"
 import { createGitClientCommandRunner, type GitClientCommandRunner } from "../services/git-client/git-command-runner"
 import { createGitCloneService, type GitCloneService } from "../services/git-client/git-clone-service"
@@ -1570,6 +1571,23 @@ export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryReg
       logger: ctx.logger.child("git.registry"),
       userDataPath: app.getPath("userData"),
       trashItem: (targetPath) => shell.trashItem(targetPath),
+    })
+  },
+}
+
+export const gitAccessServiceDescriptor: ServiceDescriptor<GitAccessService> = {
+  id: "git.access-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "core.process-environment"],
+  create(ctx) {
+    return createGitAccessService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      effectivePath: ctx.registry.get<ProcessEnvironmentService>("core.process-environment").shell.effectivePath,
+      homeDir: os.homedir(),
+      logger: ctx.logger.child("git.access"),
+      pathExists,
+      readFile: (filePath) => readFile(filePath, "utf8"),
+      platform: process.platform,
     })
   },
 }

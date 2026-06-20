@@ -154,6 +154,14 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })
 
+  it("gitAccessServiceDescriptor is degraded and depends on Git access foundations", async () => {
+    const { gitAccessServiceDescriptor } = await importBootstrap()
+    expect(gitAccessServiceDescriptor.id).toBe("git.access-service")
+    expect(gitAccessServiceDescriptor.criticality).toBe("degraded")
+    expect(gitAccessServiceDescriptor.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
+    expect(gitAccessServiceDescriptor.create).toBeTypeOf("function")
+  })
+
   it("coreAutomationDescriptor is degraded and depends on automation runtime infrastructure", async () => {
     const { coreAutomationDescriptor } = await importBootstrap()
     expect(coreAutomationDescriptor.id).toBe("core.automation")

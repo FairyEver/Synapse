@@ -72,6 +72,7 @@ export function createGitCloneService(deps: CloneDeps) {
           operation,
           operationId,
           repoPath: targetPath,
+          remoteUrl,
           timeoutMs: 300_000,
         })
         const repository = await deps.registry.addLocal({ name: input.name, localPath: targetPath })

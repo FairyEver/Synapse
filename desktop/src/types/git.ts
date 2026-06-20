@@ -1,5 +1,105 @@
 export type SynapseGitRemoteKind = "https" | "ssh" | "unknown"
 
+export type SynapseGitProtocol = "https" | "ssh" | "file" | "unknown"
+export type SynapseGitProvider = "github" | "gitee" | "gitlab" | "generic"
+export type SynapseGitProviderLinks = {
+  readonly credentialHelpUrl: string | null
+  readonly sshKeysUrl: string | null
+  readonly tokenUrl: string | null
+}
+export type SynapseGitRemoteDescriptor = {
+  readonly host: string | null
+  readonly normalizedUrl: string
+  readonly protocol: SynapseGitProtocol
+  readonly provider: SynapseGitProvider
+  readonly remoteKind: SynapseGitRemoteKind
+}
+export type SynapseGitFailureCategory =
+  | "git-missing"
+  | "missing-identity"
+  | "https-auth"
+  | "github-auth"
+  | "ssh-auth"
+  | "credential-helper-missing"
+  | "repository-not-found"
+  | "network"
+  | "path"
+  | "dirty"
+  | "conflict"
+  | "non-fast-forward"
+  | "timeout"
+  | "not-git-repository"
+  | "unknown"
+export type SynapseGitFailurePrimaryAction =
+  | "install-git"
+  | "set-identity"
+  | "login-host"
+  | "handle-github-auth"
+  | "handle-ssh"
+  | "configure-credential-helper"
+  | "retry"
+  | "choose-directory"
+  | "open-workbench"
+  | "copy-diagnostics"
+  | null
+export type SynapseGitUserFacingFailure = {
+  readonly category: SynapseGitFailureCategory
+  readonly detail: string | null
+  readonly host: string | null
+  readonly message: string
+  readonly primaryAction: SynapseGitFailurePrimaryAction
+  readonly protocol: SynapseGitProtocol
+  readonly title: string
+}
+export type SynapseGitCredentialHelperState = {
+  readonly helper: string | null
+  readonly safe: boolean
+  readonly source: string | null
+}
+export type SynapseGitAccessHostState = {
+  readonly host: string
+  readonly lastFailure: SynapseGitUserFacingFailure | null
+  readonly protocol: SynapseGitProtocol
+  readonly provider: SynapseGitProvider
+}
+export type SynapseGitAccessState = {
+  readonly checkedAt: string
+  readonly credentialHelper: SynapseGitCredentialHelperState
+  readonly hosts: readonly SynapseGitAccessHostState[]
+  readonly providerLinks: Readonly<Record<SynapseGitProvider, SynapseGitProviderLinks>>
+  readonly ssh: {
+    readonly available: boolean
+    readonly publicKeyComment: string | null
+    readonly publicKeyFingerprint: string | null
+    readonly publicKeyPath: string | null
+    readonly publicKeyType: string | null
+  }
+}
+export type SynapseGitSaveHttpsCredentialInput = {
+  readonly host: string
+  readonly password: string
+  readonly protocol: "https"
+  readonly username: string
+}
+export type SynapseGitClearHttpsCredentialInput = {
+  readonly host: string
+  readonly protocol: "https"
+  readonly username?: string | null
+}
+export type SynapseGitGenerateSshKeyInput = {
+  readonly email: string
+}
+export type SynapseGitTestSshConnectionInput = {
+  readonly host: string
+  readonly provider?: SynapseGitProvider
+}
+export type SynapseGitSshTestResult = {
+  readonly detail: string | null
+  readonly host: string
+  readonly ok: boolean
+  readonly title: string
+}
+
 export type SynapseGitRepositoryRemoveMode = "keep-local" | "trash-local"
 
 export type SynapseGitRepositoryRemoveInput = {

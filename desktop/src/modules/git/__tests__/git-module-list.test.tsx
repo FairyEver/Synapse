@@ -11,6 +11,12 @@ import { GitModule } from "../index"
 const bridge = vi.hoisted(() => ({
   git: {
     checkEnvironment: vi.fn(),
+    checkAccess: vi.fn(),
+    configureCredentialHelper: vi.fn(),
+    saveHttpsCredential: vi.fn(),
+    clearHttpsCredential: vi.fn(),
+    generateSshKey: vi.fn(),
+    testSshConnection: vi.fn(),
     configureIdentity: vi.fn(),
     getSshPublicKey: vi.fn(),
     listRepositories: vi.fn(),
@@ -19,12 +25,22 @@ const bridge = vi.hoisted(() => ({
     cloneRepository: vi.fn(),
     removeRepository: vi.fn(),
     getSnapshot: vi.fn(),
+    getDiff: vi.fn(),
+    commit: vi.fn(),
+    listBranches: vi.fn(),
+    checkoutBranch: vi.fn(),
+    createBranch: vi.fn(),
+    listHistory: vi.fn(),
+    getCommit: vi.fn(),
     sync: vi.fn(),
     pull: vi.fn(),
     push: vi.fn(),
   },
   repository: {
     chooseDirectory: vi.fn(),
+  },
+  shell: {
+    openExternal: vi.fn(),
   },
 }))
 
@@ -110,6 +126,48 @@ function gitEnvironment(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function gitAccess(overrides: Record<string, unknown> = {}) {
+  return {
+    checkedAt: "2026-06-18T10:00:00.000Z",
+    credentialHelper: {
+      helper: "osxkeychain",
+      safe: true,
+      source: "global",
+    },
+    hosts: [],
+    providerLinks: {
+      github: {
+        credentialHelpUrl: "https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git",
+        sshKeysUrl: "https://github.com/settings/keys",
+        tokenUrl: "https://github.com/settings/tokens",
+      },
+      gitee: {
+        credentialHelpUrl: null,
+        sshKeysUrl: "https://gitee.com/profile/sshkeys",
+        tokenUrl: null,
+      },
+      gitlab: {
+        credentialHelpUrl: null,
+        sshKeysUrl: "https://gitlab.com/-/user_settings/ssh_keys",
+        tokenUrl: null,
+      },
+      generic: {
+        credentialHelpUrl: null,
+        sshKeysUrl: null,
+        tokenUrl: null,
+      },
+    },
+    ssh: {
+      available: true,
+      publicKeyComment: "writer@example.com",
+      publicKeyFingerprint: "SHA256:abc",
+      publicKeyPath: "/Users/writer/.ssh/id_ed25519.pub",
+      publicKeyType: "ssh-ed25519",
+    },
+    ...overrides,
+  }
+}
+
 describe("GitModule repository list", () => {
   const roots: Root[] = []
 
@@ -125,9 +183,42 @@ describe("GitModule repository list", () => {
     bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment())
     bridge.git.listRepositories.mockResolvedValue([])
     bridge.git.listRepositorySummaries.mockResolvedValue([])
+    bridge.git.checkAccess.mockResolvedValue(gitAccess())
+    bridge.git.configureCredentialHelper.mockResolvedValue(undefined)
+    bridge.git.saveHttpsCredential.mockResolvedValue(undefined)
+    bridge.git.clearHttpsCredential.mockResolvedValue(undefined)
+    bridge.git.generateSshKey.mockResolvedValue(undefined)
+    bridge.git.testSshConnection.mockResolvedValue({
+      detail: "Hi writer! You've successfully authenticated.",
+      host: "github.com",
+      ok: true,
+      title: "SSH 可用",
+    })
+    bridge.git.getSnapshot.mockResolvedValue({
+      repositoryId: "repo-1",
+      pathExists: true,
+      isGitRepository: true,
+      currentBranch: "main",
+      upstream: "origin/main",
+      ahead: 0,
+      behind: 0,
+      hasConflicts: false,
+      changes: [],
+    })
+    bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, text: "" })
+    bridge.git.commit.mockResolvedValue({ completedAt: "now", message: "已提交。" })
+    bridge.git.listBranches.mockResolvedValue([{ name: "main", current: true }])
+    bridge.git.checkoutBranch.mockResolvedValue(undefined)
+    bridge.git.createBranch.mockResolvedValue(undefined)
+    bridge.git.listHistory.mockResolvedValue([])
+    bridge.git.getCommit.mockResolvedValue(null)
     bridge.git.configureIdentity.mockResolvedValue(undefined)
-    bridge.git.getSshPublicKey.mockResolvedValue(null)
+    bridge.git.getSshPublicKey.mockResolvedValue({
+      path: "/Users/writer/.ssh/id_ed25519.pub",
+      content: "ssh-ed25519 AAAATEST writer@example.com",
+    })
     bridge.repository.chooseDirectory.mockResolvedValue(null)
+    bridge.shell.openExternal.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -153,6 +244,8 @@ describe("GitModule repository list", () => {
     expect(document.querySelector("[data-system-app-window-left-spacer]")).toBeTruthy()
     expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("仓库")
     expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("环境")
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("安装 Git")
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("访问")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("添加本地仓库")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("克隆仓库")
   })
@@ -167,6 +260,494 @@ describe("GitModule repository list", () => {
 
     expect(document.body.textContent).toContain("Git 环境")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).not.toContain("克隆仓库")
+  })
+
+  it("switches to install panel when Git is missing and opens the Windows download", async () => {
+    bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment({
+      platform: "win32",
+      gitAvailable: false,
+      gitVersion: null,
+      gitPath: null,
+      processGitPath: null,
+      shellGitPath: null,
+      effectiveGitPath: null,
+      installHint: "运行 winget install Git.Git",
+    }))
+    await renderGitModule(roots)
+
+    expect(document.body.textContent).toContain("安装 Git")
+    expect(document.body.textContent).toContain("未检测到")
+    expect(document.body.textContent).toContain("检测系统")
+    expect(document.body.textContent).toContain("打开下载页面")
+    expect(document.body.textContent).toContain("完成安装")
+    expect(document.body.textContent).not.toContain("winget")
+    await click(findButton("Git for Windows"))
+
+    expect(bridge.shell.openExternal).toHaveBeenCalledWith("https://git-scm.com/download/win")
+  })
+
+  it("shows Linux install boundary with diagnostics copy", async () => {
+    bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment({
+      platform: "linux",
+      gitAvailable: false,
+      gitVersion: null,
+      gitPath: null,
+      processGitPath: null,
+      shellGitPath: null,
+      effectiveGitPath: null,
+      installHint: "sudo apt install git",
+    }))
+    await renderGitModule(roots)
+
+    expect(document.body.textContent).toContain("当前系统暂不支持图形化引导")
+    expect(document.body.textContent).not.toContain("sudo apt install git")
+    expect(countButtons("Git for Windows")).toBe(0)
+
+    await click(findButton("复制诊断信息"))
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("Git 环境诊断"))
+    expect(document.body.textContent).toContain("已复制诊断信息。")
+  })
+
+  it("shows credential helper and SSH actions in access tab", async () => {
+    await renderGitModule(roots)
+
+    await click(findButton("访问"))
+
+    expect(document.body.textContent).toContain("凭据助手")
+    expect(document.body.textContent).toContain("osxkeychain")
+    expect(document.body.textContent).toContain("SSH 公钥")
+    expect(countButtons("登录仓库")).toBe(0)
+    expect(findButton("生成 SSH 密钥")).toBeTruthy()
+    expect(findButton("复制公钥")).toBeTruthy()
+
+    await changeInput("主机", "git.company.com")
+    expect(findButton("登录仓库")).toBeTruthy()
+    await click(findButton("登录仓库"))
+    await changeInput("账号", "writer")
+    await changeInput("密码", "company-password")
+    await click(findButton("保存"))
+
+    expect(bridge.git.saveHttpsCredential).toHaveBeenCalledWith({
+      host: "git.company.com",
+      password: "company-password",
+      protocol: "https",
+      username: "writer",
+    })
+
+    await click(findButton("复制公钥"))
+
+    expect(bridge.git.getSshPublicKey).toHaveBeenCalled()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("ssh-ed25519 AAAATEST writer@example.com")
+    expect(document.body.textContent).toContain("已复制公钥。")
+  })
+
+  it("confirms before clearing HTTPS credentials", async () => {
+    await renderGitModule(roots)
+
+    await click(findButton("访问"))
+    await changeInput("主机", "git.company.com")
+    await click(findButton("清除凭据"))
+
+    const dialog = findAlertDialog()
+    expect(dialog.textContent).toContain("清除凭据？")
+    expect(dialog.textContent).toContain("主机：git.company.com")
+    expect(bridge.git.clearHttpsCredential).not.toHaveBeenCalled()
+
+    await click(findAlertDialogButton("清除"))
+
+    expect(bridge.git.clearHttpsCredential).toHaveBeenCalledWith({
+      host: "git.company.com",
+      protocol: "https",
+    })
+  })
+
+  it("does not offer credential helper configuration on Linux", async () => {
+    bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment({
+      platform: "linux",
+    }))
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      credentialHelper: {
+        helper: null,
+        safe: false,
+        source: null,
+      },
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("访问"))
+
+    expect(countButtons("配置凭据助手")).toBe(0)
+    expect(bridge.git.configureCredentialHelper).not.toHaveBeenCalled()
+  })
+
+  it("routes clone auth failure to access and keeps retry context", async () => {
+    const error = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    error.userFacingFailure = {
+      category: "github-auth",
+      detail: "Authentication failed.",
+      host: "github.com",
+      message: "请处理 GitHub 访问。",
+      primaryAction: "handle-github-auth",
+      protocol: "https",
+      title: "GitHub 访问失败",
+    }
+    bridge.git.cloneRepository.mockRejectedValue(error)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: error.userFacingFailure,
+        protocol: "https",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://github.com/acme/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.body.textContent).toContain("GitHub 访问失败")
+    expect(inputByLabel("主机").value).toBe("github.com")
+    expect(findButton("重试克隆")).toBeTruthy()
+    expect(findButton("浏览器登录")).toBeTruthy()
+    expect(findButton("使用访问令牌")).toBeTruthy()
+    expect(findButton("改用 SSH")).toBeTruthy()
+    await click(findButton("浏览器登录"))
+    expect(bridge.shell.openExternal).toHaveBeenCalledWith("https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git")
+
+    await click(findButton("改用 SSH"))
+    expect(bridge.shell.openExternal).toHaveBeenCalledWith("https://github.com/settings/keys")
+
+    await click(findButton("使用访问令牌"))
+    expect(document.body.textContent).toContain("访问令牌")
+  })
+
+  it("opens credential dialog for generic HTTPS clone auth failures", async () => {
+    const error = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    error.userFacingFailure = {
+      category: "https-auth",
+      detail: "Authentication failed.",
+      host: "git.company.com",
+      message: "git.company.com 需要登录。",
+      primaryAction: "login-host",
+      protocol: "https",
+      title: "认证失败",
+    }
+    bridge.git.cloneRepository.mockRejectedValue(error)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "git.company.com",
+        lastFailure: error.userFacingFailure,
+        protocol: "https",
+        provider: "generic",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://git.company.com/team/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("登录仓库")
+    expect(inputByLabel("主机").value).toBe("git.company.com")
+    await changeInput("账号", "writer")
+    await changeInput("密码", "company-password")
+    await click(findButton("保存"))
+
+    expect(bridge.git.saveHttpsCredential).toHaveBeenCalledWith({
+      host: "git.company.com",
+      password: "company-password",
+      protocol: "https",
+      username: "writer",
+    })
+  })
+
+  it("routes clone identity failures to the environment identity form", async () => {
+    const error = new Error("缺少 Git 身份。") as Error & { userFacingFailure: unknown }
+    error.userFacingFailure = {
+      category: "missing-identity",
+      detail: "Author identity unknown.",
+      host: null,
+      message: "请设置 Git 用户名和邮箱后重试。",
+      primaryAction: "set-identity",
+      protocol: "unknown",
+      title: "缺少 Git 身份",
+    }
+    bridge.git.checkEnvironment.mockResolvedValue(gitEnvironment({
+      userName: null,
+      userEmail: null,
+      userNameSource: null,
+      userEmailSource: null,
+    }))
+    bridge.git.cloneRepository.mockRejectedValue(error)
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://git.company.com/team/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.body.textContent).toContain("Git 身份")
+    expect(document.body.textContent).toContain("需要配置 Git 身份")
+    expect(findButton("保存身份")).toBeTruthy()
+  })
+
+  it("prevents duplicate pending retries", async () => {
+    const authError = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    authError.userFacingFailure = {
+      category: "github-auth",
+      detail: "Authentication failed.",
+      host: "github.com",
+      message: "请处理 GitHub 访问。",
+      primaryAction: "handle-github-auth",
+      protocol: "https",
+      title: "GitHub 访问失败",
+    }
+    const retry = deferred<void>()
+    bridge.git.cloneRepository
+      .mockRejectedValueOnce(authError)
+      .mockReturnValueOnce(retry.promise)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: authError.userFacingFailure,
+        protocol: "https",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://github.com/acme/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    const retryButton = findButton("重试克隆")
+    await click(retryButton)
+    await click(retryButton)
+
+    expect(bridge.git.cloneRepository).toHaveBeenCalledTimes(2)
+    expect(retryButton.disabled).toBe(true)
+    expect(retryButton.textContent).toContain("重试中")
+
+    retry.resolve()
+    await flush()
+  })
+
+  it("clears stale clone retry context when retry fails with a non-access failure", async () => {
+    const authError = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    authError.userFacingFailure = {
+      category: "github-auth",
+      detail: "Authentication failed.",
+      host: "github.com",
+      message: "请处理 GitHub 访问。",
+      primaryAction: "handle-github-auth",
+      protocol: "https",
+      title: "GitHub 访问失败",
+    }
+    const pathError = new Error("目标目录已存在。") as Error & { userFacingFailure: unknown }
+    pathError.userFacingFailure = {
+      category: "path",
+      detail: "/work/docs",
+      host: null,
+      message: "请选择其他目录。",
+      primaryAction: "choose-directory",
+      protocol: "unknown",
+      title: "目录不可用",
+    }
+    bridge.git.cloneRepository
+      .mockRejectedValueOnce(authError)
+      .mockRejectedValueOnce(pathError)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: authError.userFacingFailure,
+        protocol: "https",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://github.com/acme/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+    expect(findButton("重试克隆")).toBeTruthy()
+
+    await click(findButton("重试克隆"))
+
+    expect(document.body.textContent).toContain("目录不可用")
+    expect(countButtons("重试克隆")).toBe(0)
+    expect(document.body.textContent).not.toContain("github.com重试克隆")
+
+    await click(findButton("访问"))
+
+    expect(document.body.textContent).not.toContain("GitHub 访问失败")
+    expect(document.body.textContent).not.toContain("github.com")
+    expect(countButtons("重试克隆")).toBe(0)
+  })
+
+  it("does not create clone pending access for path failures with parsable remotes", async () => {
+    const pathError = new Error("目标目录已存在。") as Error & { userFacingFailure: unknown }
+    pathError.userFacingFailure = {
+      category: "path",
+      detail: "/work/docs",
+      host: null,
+      message: "请选择其他目录。",
+      primaryAction: "choose-directory",
+      protocol: "unknown",
+      title: "目录不可用",
+    }
+    bridge.git.cloneRepository.mockRejectedValue(pathError)
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://github.com/acme/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    expect(document.body.textContent).toContain("目录不可用")
+    expect(countButtons("重试克隆")).toBe(0)
+
+    await click(findButton("访问"))
+
+    expect(document.body.textContent).not.toContain("github.com")
+    expect(countButtons("重试克隆")).toBe(0)
+  })
+
+  it("does not show HTTPS credential actions for SSH pending access", async () => {
+    const sshError = new Error("SSH 访问失败。") as Error & { userFacingFailure: unknown }
+    sshError.userFacingFailure = {
+      category: "ssh-auth",
+      detail: "Permission denied.",
+      host: "github.com",
+      message: "请处理 SSH 访问。",
+      primaryAction: "handle-ssh",
+      protocol: "ssh",
+      title: "SSH 访问失败",
+    }
+    bridge.git.cloneRepository.mockRejectedValue(sshError)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: sshError.userFacingFailure,
+        protocol: "ssh",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "git@github.com:acme/docs.git")
+    await changeInput("保存到", "/work/docs")
+    await click(findButton("开始克隆"))
+
+    expect(document.body.textContent).toContain("SSH 访问失败")
+    expect(countButtons("登录仓库")).toBe(0)
+    expect(countButtons("打开令牌页面")).toBe(0)
+    expect(countButtons("清除凭据")).toBe(0)
+    expect(findButton("生成 SSH 密钥")).toBeTruthy()
+    expect(findButton("复制公钥")).toBeTruthy()
+    expect(findButton("打开 SSH 设置")).toBeTruthy()
+    expect(findButton("测试 SSH")).toBeTruthy()
+  })
+
+  it("routes workbench access failures and clears stale pending after non-access retry", async () => {
+    const repository = { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }
+    const authError = new Error("需要登录。") as Error & { userFacingFailure: unknown }
+    authError.userFacingFailure = {
+      category: "github-auth",
+      detail: "Authentication failed.",
+      host: "github.com",
+      message: "请处理 GitHub 访问。",
+      primaryAction: "handle-github-auth",
+      protocol: "https",
+      title: "GitHub 访问失败",
+    }
+    const pathError = new Error("目录不可访问。") as Error & { userFacingFailure: unknown }
+    pathError.userFacingFailure = {
+      category: "path",
+      detail: "/work/docs",
+      host: null,
+      message: "请检查仓库目录。",
+      primaryAction: "open-workbench",
+      protocol: "unknown",
+      title: "目录不可用",
+    }
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary(repository, { behind: 1 }),
+    ])
+    bridge.git.getSnapshot.mockResolvedValue(summary(repository, { behind: 1 }).snapshot)
+    bridge.git.pull
+      .mockRejectedValueOnce(authError)
+      .mockRejectedValueOnce(pathError)
+    bridge.git.checkAccess.mockResolvedValue(gitAccess({
+      hosts: [{
+        host: "github.com",
+        lastFailure: authError.userFacingFailure,
+        protocol: "https",
+        provider: "github",
+      }],
+    }))
+    await renderGitModule(roots)
+
+    await click(findButton("进入"))
+    await click(findButton("拉取远程更新"))
+
+    expect(document.body.textContent).toContain("GitHub 访问失败")
+    expect(document.body.textContent).toContain("请处理 GitHub 访问。")
+
+    await click(findButton("处理 GitHub 访问"))
+
+    expect(inputByLabel("主机").value).toBe("github.com")
+    expect(findButton("重试拉取")).toBeTruthy()
+    expect(findButton("浏览器登录")).toBeTruthy()
+    expect(findButton("使用访问令牌")).toBeTruthy()
+    expect(findButton("改用 SSH")).toBeTruthy()
+
+    await click(findButton("重试拉取"))
+    await click(findButton("访问"))
+
+    expect(document.body.textContent).not.toContain("github.com")
+    expect(countButtons("重试拉取")).toBe(0)
+  })
+
+  it("does not render failure action buttons for unhandled retry failures", async () => {
+    const repository = { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }
+    const networkError = new Error("网络不可用。") as Error & { userFacingFailure: unknown }
+    networkError.userFacingFailure = {
+      category: "network",
+      detail: "Could not resolve host.",
+      host: "github.com",
+      message: "请稍后重试。",
+      primaryAction: "retry",
+      protocol: "https",
+      title: "网络不可用",
+    }
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary(repository, { behind: 1 }),
+    ])
+    bridge.git.getSnapshot.mockResolvedValue(summary(repository, { behind: 1 }).snapshot)
+    bridge.git.pull.mockReset()
+    bridge.git.pull.mockRejectedValue(networkError)
+    await renderGitModule(roots)
+
+    await click(findButton("拉取远程更新"))
+
+    expect(document.body.textContent).toContain("网络不可用")
+    expect(countButtons("重试")).toBe(0)
+
+    await click(findButton("进入"))
+    await click(findButton("拉取远程更新"))
+
+    expect(document.body.textContent).toContain("网络不可用")
+    expect(countButtons("重试")).toBe(0)
   })
 
   it("shows environment diagnostics and repository issues", async () => {
@@ -502,6 +1083,23 @@ function buttonsByLabel(label: string): HTMLButtonElement[] {
 function exactButtonsByLabel(label: string): HTMLButtonElement[] {
   return Array.from(document.querySelectorAll("button"))
     .filter((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && item.textContent === label)
+}
+
+function findAlertDialog(): HTMLElement {
+  const dialog = document.querySelector('[role="alertdialog"]')
+  if (!(dialog instanceof HTMLElement)) {
+    throw new Error("Alert dialog not found")
+  }
+  return dialog
+}
+
+function findAlertDialogButton(label: string): HTMLButtonElement {
+  const button = Array.from(findAlertDialog().querySelectorAll("button"))
+    .find((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && item.textContent?.includes(label))
+  if (!button) {
+    throw new Error(`Alert dialog button not found: ${label}`)
+  }
+  return button
 }
 
 function inputByLabel(label: string): HTMLInputElement {

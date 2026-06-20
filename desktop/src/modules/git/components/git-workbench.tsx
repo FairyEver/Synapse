@@ -17,22 +17,28 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository } from "@/types/git"
+import type { GitOperationFailure } from "../hooks/use-git-operations"
+import { readOperationFailure } from "../hooks/use-git-operations"
 import { useGitHistory } from "../hooks/use-git-history"
 import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
 import { GitHistoryTab } from "./git-history-tab"
+import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { getGitActionPlan, getGitErrorAdvice } from "../lib/git-status-view"
 
 type GitWorkbenchProps = {
   readonly repository: SynapseGitRepository
   readonly onBack: () => void
+  readonly onOperationFailure?: (failure: GitOperationFailure | null) => void
+  readonly onHandleFailure?: (failure: GitOperationFailure) => void
 }
 
-export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
+export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleFailure }: GitWorkbenchProps) {
   const [view, setView] = useState("changes")
   const [busy, setBusy] = useState<"sync" | "pull" | "push" | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
+  const [operationFailure, setOperationFailure] = useState<GitOperationFailure | null>(null)
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository, { enabled: view === "history" })
@@ -55,11 +61,15 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const run = async (kind: "sync" | "pull" | "push", action: () => Promise<unknown>) => {
     setBusy(kind)
     setOperationError(null)
+    setOperationFailure(null)
     try {
       await action()
       await refreshAll()
     } catch (err) {
+      const failure = readOperationFailure(err, undefined, repository.id, kind)
       setOperationError(err instanceof Error ? err.message : "操作失败。")
+      setOperationFailure(failure)
+      onOperationFailure?.(failure)
     } finally {
       setBusy(null)
     }
@@ -85,6 +95,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const statusLabel = statusStateLabel(actionPlan.statusText, status.snapshot?.ahead, status.snapshot?.behind)
   const showContextNote = Boolean(actionPlan.blockerText || actionPlan.recoveryText)
   const canRunGitOperation = busy === null
+  const failureActionLabel = canHandleGitFailureAction(operationFailure) ? getGitFailureActionLabel(operationFailure) : null
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
@@ -206,9 +217,22 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
       {operationError ? (
         <div className="shrink-0 px-4 py-3">
           <Alert variant="destructive">
-            <AlertTitle>操作失败</AlertTitle>
+            <AlertTitle>{operationFailure?.title ?? "操作失败"}</AlertTitle>
             <AlertDescription>
-              {operationError} {getGitErrorAdvice(operationError)}
+              <div className="flex flex-col gap-2">
+                <span>{operationFailure?.message ?? `${operationError} ${getGitErrorAdvice(operationError)}`}</span>
+                {operationFailure && failureActionLabel ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    onClick={() => onHandleFailure?.(operationFailure)}
+                  >
+                    {failureActionLabel}
+                  </Button>
+                ) : null}
+              </div>
             </AlertDescription>
           </Alert>
         </div>

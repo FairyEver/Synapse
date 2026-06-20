@@ -40,6 +40,7 @@ describe("git clone service", () => {
       args: ["clone", "--progress", "https://user:secret@git.example.com/team/docs.git?token=raw-token", targetPath],
       operation: "git.clone",
       operationId: expect.any(String),
+      remoteUrl: "https://user:secret@git.example.com/team/docs.git?token=raw-token",
       timeoutMs: 300000,
     }))
     expect(result.repository.id).toBe("repo-1")

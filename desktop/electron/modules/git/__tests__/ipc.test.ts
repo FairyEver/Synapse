@@ -22,6 +22,15 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.commit.channel).toBe("synapse:git:commit:create")
   })
 
+  it("declares access channels", () => {
+    expect(gitIpcModule.methods.checkAccess.channel).toBe("synapse:git:access:check")
+    expect(gitIpcModule.methods.configureCredentialHelper.channel).toBe("synapse:git:access:configure-credential-helper")
+    expect(gitIpcModule.methods.saveHttpsCredential.channel).toBe("synapse:git:access:save-https-credential")
+    expect(gitIpcModule.methods.clearHttpsCredential.channel).toBe("synapse:git:access:clear-https-credential")
+    expect(gitIpcModule.methods.generateSshKey.channel).toBe("synapse:git:access:generate-ssh-key")
+    expect(gitIpcModule.methods.testSshConnection.channel).toBe("synapse:git:access:test-ssh-connection")
+  })
+
   it("rejects arbitrary git command payloads", () => {
     expect(gitIpcModule.methods.getSnapshot.request.safeParse({ repositoryId: "repo-1", args: ["status"] }).success).toBe(false)
   })
@@ -31,6 +40,28 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "trash-local" }).success).toBe(true)
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "delete-local" }).success).toBe(false)
     expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local", extra: true }).success).toBe(false)
+  })
+
+  it("rejects unsafe access payloads", () => {
+    expect(gitIpcModule.methods.saveHttpsCredential.request.safeParse({
+      host: "github.com",
+      password: "token",
+      protocol: "https",
+      username: "writer",
+    }).success).toBe(true)
+    expect(gitIpcModule.methods.saveHttpsCredential.request.safeParse({
+      host: "github.com",
+      password: "token",
+      protocol: "ssh",
+      username: "writer",
+    }).success).toBe(false)
+    expect(gitIpcModule.methods.saveHttpsCredential.request.safeParse({
+      host: "github.com",
+      password: "token",
+      persistInSynapse: true,
+      protocol: "https",
+      username: "writer",
+    }).success).toBe(false)
   })
 
   it("returns extended Git environment diagnostics", () => {
@@ -123,5 +154,53 @@ describe("gitIpcModule", () => {
     )
 
     expect(registry.remove).toHaveBeenCalledWith({ repositoryId: "repo-1", mode: "trash-local" })
+  })
+
+  it("routes access calls through git access service", async () => {
+    const access = {
+      check: vi.fn().mockResolvedValue({
+        checkedAt: "2026-06-19T10:00:00.000Z",
+        credentialHelper: { helper: "osxkeychain", safe: true, source: "global" },
+        hosts: [],
+        providerLinks: {
+          generic: { credentialHelpUrl: null, sshKeysUrl: null, tokenUrl: null },
+          gitee: { credentialHelpUrl: null, sshKeysUrl: "https://gitee.com/profile/sshkeys", tokenUrl: null },
+          github: { credentialHelpUrl: "https://docs.github.com", sshKeysUrl: "https://github.com/settings/keys", tokenUrl: "https://github.com/settings/tokens" },
+          gitlab: { credentialHelpUrl: null, sshKeysUrl: "https://gitlab.com/-/user_settings/ssh_keys", tokenUrl: null },
+        },
+        ssh: {
+          available: true,
+          publicKeyComment: "writer@example.com",
+          publicKeyFingerprint: "SHA256:test",
+          publicKeyPath: "/Users/writer/.ssh/id_ed25519.pub",
+          publicKeyType: "ssh-ed25519",
+        },
+      }),
+      clearHttpsCredential: vi.fn().mockResolvedValue(undefined),
+      configureCredentialHelper: vi.fn().mockResolvedValue(undefined),
+      generateSshKey: vi.fn().mockResolvedValue(undefined),
+      saveHttpsCredential: vi.fn().mockResolvedValue(undefined),
+      testSshConnection: vi.fn().mockResolvedValue({
+        detail: null,
+        host: "github.com",
+        ok: true,
+        title: "SSH 可用",
+      }),
+    }
+    const ctx = createContext({ "git.access-service": access })
+
+    await gitIpcModule.methods.checkAccess.handler(ctx, { hosts: [{ host: "github.com", protocol: "https", provider: "github" }] })
+    await gitIpcModule.methods.configureCredentialHelper.handler(ctx, { helper: "osxkeychain" })
+    await gitIpcModule.methods.saveHttpsCredential.handler(ctx, { host: "github.com", password: "token", protocol: "https", username: "writer" })
+    await gitIpcModule.methods.clearHttpsCredential.handler(ctx, { host: "github.com", protocol: "https", username: "writer" })
+    await gitIpcModule.methods.generateSshKey.handler(ctx, { email: "writer@example.com" })
+    await gitIpcModule.methods.testSshConnection.handler(ctx, { host: "github.com", provider: "github" })
+
+    expect(access.check).toHaveBeenCalledWith({ hosts: [{ host: "github.com", protocol: "https", provider: "github" }] })
+    expect(access.configureCredentialHelper).toHaveBeenCalledWith({ helper: "osxkeychain" })
+    expect(access.saveHttpsCredential).toHaveBeenCalledWith({ host: "github.com", password: "token", protocol: "https", username: "writer" })
+    expect(access.clearHttpsCredential).toHaveBeenCalledWith({ host: "github.com", protocol: "https", username: "writer" })
+    expect(access.generateSshKey).toHaveBeenCalledWith({ email: "writer@example.com" })
+    expect(access.testSshConnection).toHaveBeenCalledWith({ host: "github.com", provider: "github" })
   })
 })

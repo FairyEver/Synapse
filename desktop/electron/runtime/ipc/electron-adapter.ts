@@ -6,7 +6,9 @@
  */
 
 import { ipcMain } from "electron"
+import type { SynapseGitUserFacingFailure } from "../../../src/types/git"
 import { assertTrustedIpcSender } from "../../ipc/validated-ipc"
+import { sanitizeGitDiagnosticText } from "../../services/git-client/git-sanitize"
 
 type IpcTransportLogger = {
   info?: (message: string, meta?: unknown) => void
@@ -21,11 +23,19 @@ type ElectronTransportInstallOptions = {
 const SENSITIVE_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
 const BODY_FIELD_PATTERN = /^(prompt|message|content|body|text|requestbody|responsebody|requesttext|responsetext)$/
-const PATH_FIELD_PATTERN = /^(path|paths|filepath|filepaths|folderpath|folderpaths|relativepath|relativepaths|fullpath|fullpaths|targetpath|targetpaths|sourcepath|sourcepaths|itempath|itempaths|foldername|filename)$/
+const PATH_FIELD_PATTERN = /^(path|paths|url|urls|uri|uris|remoteurl|remoteurls|filepath|filepaths|folderpath|folderpaths|relativepath|relativepaths|fullpath|fullpaths|targetpath|targetpaths|sourcepath|sourcepaths|itempath|itempaths|foldername|filename)$/
 const MAX_STRING_LENGTH = 300
 const MAX_STACK_LENGTH = 1200
 const MAX_ARRAY_LENGTH = 20
 const PATH_REDACTED = "[path redacted]"
+const IPC_ERROR_ENVELOPE_KEY = "__synapseIpcError"
+
+type IpcErrorEnvelope = {
+  readonly [IPC_ERROR_ENVELOPE_KEY]: true
+  readonly message: string
+  readonly name: string
+  readonly userFacingFailure?: SynapseGitUserFacingFailure
+}
 
 function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value
@@ -94,6 +104,47 @@ function sanitizeErrorForLog(error: unknown): Record<string, unknown> {
   }
 }
 
+function createIpcErrorEnvelope(error: unknown): IpcErrorEnvelope {
+  const message = sanitizeGitDiagnosticText(error instanceof Error ? error.message : String(error))
+  const name = error instanceof Error ? error.name : typeof error
+  const userFacingFailure = readSafeUserFacingFailure(error)
+  return {
+    [IPC_ERROR_ENVELOPE_KEY]: true,
+    message,
+    name,
+    ...(userFacingFailure ? { userFacingFailure } : {}),
+  }
+}
+
+function readSafeUserFacingFailure(error: unknown): SynapseGitUserFacingFailure | null {
+  if (!error || typeof error !== "object") return null
+  const failure = (error as { readonly userFacingFailure?: unknown }).userFacingFailure
+  if (!isSafeUserFacingFailure(failure)) return null
+  return {
+    category: sanitizeGitDiagnosticText(failure.category) as SynapseGitUserFacingFailure["category"],
+    detail: failure.detail === null ? null : sanitizeGitDiagnosticText(failure.detail),
+    host: failure.host === null ? null : sanitizeGitDiagnosticText(failure.host),
+    message: sanitizeGitDiagnosticText(failure.message),
+    primaryAction: failure.primaryAction === null
+      ? null
+      : sanitizeGitDiagnosticText(failure.primaryAction) as SynapseGitUserFacingFailure["primaryAction"],
+    protocol: sanitizeGitDiagnosticText(failure.protocol) as SynapseGitUserFacingFailure["protocol"],
+    title: sanitizeGitDiagnosticText(failure.title),
+  }
+}
+
+function isSafeUserFacingFailure(value: unknown): value is SynapseGitUserFacingFailure {
+  if (!value || typeof value !== "object") return false
+  const record = value as Partial<Record<keyof SynapseGitUserFacingFailure, unknown>>
+  return typeof record.category === "string"
+    && (record.detail === null || typeof record.detail === "string")
+    && (record.host === null || typeof record.host === "string")
+    && typeof record.message === "string"
+    && (record.primaryAction === null || typeof record.primaryAction === "string")
+    && typeof record.protocol === "string"
+    && typeof record.title === "string"
+}
+
 function sanitizeErrorStack(error: Error): string | undefined {
   if (!error.stack) return undefined
   const [, ...frames] = error.stack.split("\n")
@@ -134,7 +185,7 @@ export function createElectronTransportInstall(options: ElectronTransportInstall
           error: sanitizeErrorForLog(error),
           request: sanitizeIpcValue("request", request),
         })
-        throw error
+        return createIpcErrorEnvelope(error)
       }
     })
     return () => {

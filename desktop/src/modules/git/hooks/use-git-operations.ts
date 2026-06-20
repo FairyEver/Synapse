@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitRepositoryRemoveInput } from "@/types/git"
+import type { SynapseGitRepositoryRemoveInput, SynapseGitUserFacingFailure } from "@/types/git"
 
 type CloneRepositoryInput = {
   readonly remoteUrl: string
@@ -16,7 +16,19 @@ type AddLocalRepositoryInput = {
 type GitGlobalOperation = "clone" | "add-local"
 export type GitRepositoryOperation = "sync" | "pull" | "push" | "remove"
 
-export type GitGlobalOperationResult = { readonly ok: true } | { readonly ok: false; readonly error: string }
+export type GitOperationFailure = SynapseGitUserFacingFailure & {
+  readonly globalOperation?: GitGlobalOperation
+  readonly repositoryId?: string
+  readonly repositoryOperation?: GitRepositoryOperation
+}
+
+export type GitGlobalOperationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: string; readonly failure: GitOperationFailure | null }
+
+export type GitRepositoryOperationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: string; readonly failure: GitOperationFailure | null }
 
 export type GitOperationBusyState = {
   readonly global: GitGlobalOperation | null
@@ -28,21 +40,45 @@ const EMPTY_BUSY_STATE: GitOperationBusyState = {
   repositories: {},
 }
 
+function isUserFacingFailure(value: unknown): value is SynapseGitUserFacingFailure {
+  if (!value || typeof value !== "object") return false
+  const record = value as Partial<Record<keyof SynapseGitUserFacingFailure, unknown>>
+  return typeof record.category === "string"
+    && typeof record.message === "string"
+    && typeof record.title === "string"
+}
+
+export function readOperationFailure(
+  err: unknown,
+  globalOperation?: GitGlobalOperation,
+  repositoryId?: string,
+  repositoryOperation?: GitRepositoryOperation,
+): GitOperationFailure | null {
+  if (!err || typeof err !== "object") return null
+  const failure = (err as { readonly userFacingFailure?: unknown }).userFacingFailure
+  if (!isUserFacingFailure(failure)) return null
+  return { ...failure, globalOperation, repositoryId, repositoryOperation }
+}
+
 export function useGitOperations(onCompleted: () => void | Promise<void>) {
   const [busy, setBusy] = useState<GitOperationBusyState>(EMPTY_BUSY_STATE)
   const [error, setError] = useState<string | null>(null)
+  const [lastFailure, setLastFailure] = useState<GitOperationFailure | null>(null)
 
   async function runGlobal(label: GitGlobalOperation, action: () => Promise<unknown>): Promise<GitGlobalOperationResult> {
     setBusy((current) => ({ ...current, global: label }))
     setError(null)
+    setLastFailure(null)
     try {
       await action()
       await onCompleted()
       return { ok: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : "操作失败。"
+      const failure = readOperationFailure(err, label)
       setError(message)
-      return { ok: false, error: message }
+      setLastFailure(failure)
+      return { ok: false, error: message, failure }
     } finally {
       setBusy((current) => ({ ...current, global: null }))
     }
@@ -52,7 +88,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     repositoryId: string,
     operation: GitRepositoryOperation,
     action: () => Promise<unknown>,
-  ): Promise<boolean> {
+  ): Promise<GitRepositoryOperationResult> {
     setBusy((current) => ({
       ...current,
       repositories: {
@@ -61,16 +97,21 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
       },
     }))
     setError(null)
+    setLastFailure(null)
     try {
       await action()
       await onCompleted()
-      return true
+      return { ok: true }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败。")
-      return false
+      const message = err instanceof Error ? err.message : "操作失败。"
+      const failure = readOperationFailure(err, undefined, repositoryId, operation)
+      setLastFailure(failure)
+      setError(message)
+      return { ok: false, error: message, failure }
     } finally {
       setBusy((current) => {
-        const { [repositoryId]: _completedOperation, ...repositories } = current.repositories
+        const repositories = { ...current.repositories }
+        delete repositories[repositoryId]
         return { ...current, repositories }
       })
     }
@@ -79,6 +120,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
   return {
     busy,
     error,
+    lastFailure,
     cloneRepository: (input: CloneRepositoryInput) =>
       runGlobal("clone", () => requireSynapseBridge().git.cloneRepository(input)),
     addLocalRepository: (input: AddLocalRepositoryInput) =>
@@ -90,6 +132,6 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     push: (repositoryId: string) =>
       runRepository(repositoryId, "push", () => requireSynapseBridge().git.push(repositoryId)),
     removeRepository: (input: SynapseGitRepositoryRemoveInput) =>
-      runRepository(input.repositoryId, "remove", () => requireSynapseBridge().git.removeRepository(input)),
+      runRepository(input.repositoryId, "remove", () => requireSynapseBridge().git.removeRepository(input)).then((result) => result.ok),
   }
 }
