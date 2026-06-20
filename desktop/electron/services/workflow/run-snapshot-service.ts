@@ -91,6 +91,7 @@ export class RunSnapshotService {
       )).filter((f): f is string => f !== null)
       await Promise.all([
         ...stale.map(({ file }) => rm(path.join(dir, file), { force: true })),
+        this.deleteRunArtifactDirectories(s.workflowId, stale.map(({ snapshot }) => snapshot.runId)),
         ...staleTmpFiles.map((file) => rm(path.join(dir, file), { force: true })),
       ])
     } catch (err) {
