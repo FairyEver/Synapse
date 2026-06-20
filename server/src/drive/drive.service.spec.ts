@@ -109,6 +109,32 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("cleans up copied version objects when upload completion transaction fails", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("db unavailable"))
+
+    await expect(service.completeUpload("user-1", prepared.sessionId)).rejects.toThrow("db unavailable")
+
+    const copiedKey = vi.mocked(storage.copyObject).mock.calls.at(-1)?.[0].toKey
+    expect(copiedKey).toContain(`/versions/`)
+    expect(deleteObject).toHaveBeenCalledWith(copiedKey)
+  })
+
   it("builds admin storage summary from database aggregates", async () => {
     const forbiddenFindMany = vi.fn(() => {
       throw new Error("storage summary must not materialize rows")

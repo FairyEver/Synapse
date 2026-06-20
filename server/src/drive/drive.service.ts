@@ -753,6 +753,7 @@ export class DriveService implements OnApplicationBootstrap {
       throw error
     }
 
+    let committed = false
     const result = await this.prisma.$transaction(async (tx) => {
       const isOverwrite = isOverwriteUploadSession(session)
       const transitioned = await tx.driveUploadSession.updateMany({
@@ -805,6 +806,12 @@ export class DriveService implements OnApplicationBootstrap {
         include: driveItemWithShares,
       })
       return { item, completedNow: true }
+    }).then((transactionResult) => {
+      committed = true
+      return transactionResult
+    }).catch(async (error) => {
+      if (!committed) await this.deleteTemporaryUploadObject(versionStorageKey)
+      throw error
     })
     if (!result.completedNow) {
       await this.deleteTemporaryUploadObject(versionStorageKey)
