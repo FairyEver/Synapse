@@ -111,10 +111,10 @@ describe("agent tool IPC methods", () => {
     }))
   })
 
-  it("uses cmd.exe for Windows editor shim line jumps", async () => {
+  it("quotes Windows editor shim line jump targets before cmd parses them", async () => {
     const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32")
     const auditSink = fakeAuditSink()
-    const expectedPath = path.resolve("/repo", "src/app.ts")
+    const expectedPath = path.resolve("/repo", "src/a&b.ts")
     childProcessMock.execFile.mockImplementation((cmd: string, _args: readonly string[], _opts: unknown, cb?: (err: Error | null) => void) => {
       if (cb) {
         cb(cmd === "cmd.exe" ? null : new Error("ENOENT"))
@@ -124,7 +124,7 @@ describe("agent tool IPC methods", () => {
     try {
       await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
         projectId: "project-1",
-        reference: "src/app.ts:12",
+        reference: "src/a&b.ts:12",
       })).resolves.toEqual({ ok: true, path: expectedPath })
     } finally {
       platform.mockRestore()
@@ -132,7 +132,7 @@ describe("agent tool IPC methods", () => {
 
     expect(childProcessMock.execFile).toHaveBeenCalledWith(
       "cmd.exe",
-      ["/d", "/s", "/c", "cursor.cmd", "--goto", `${expectedPath}:12`],
+      ["/d", "/s", "/c", `"cursor.cmd" --goto "${expectedPath}:12"`],
       { timeout: 5000, windowsHide: true },
       expect.any(Function),
     )

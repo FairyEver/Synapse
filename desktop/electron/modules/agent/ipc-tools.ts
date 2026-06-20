@@ -930,7 +930,8 @@ async function openFileWithLine(filePath: string, line: number): Promise<boolean
   for (const editor of editors) {
     try {
       if (process.platform === "win32") {
-        await execFileAsync("cmd.exe", ["/d", "/s", "/c", `${editor}.cmd`, "--goto", target], {
+        const command = `${quoteCmdArgument(`${editor}.cmd`)} --goto ${quoteCmdArgument(target)}`
+        await execFileAsync("cmd.exe", ["/d", "/s", "/c", command], {
           timeout: 5000,
           windowsHide: true,
         })
@@ -943,6 +944,10 @@ async function openFileWithLine(filePath: string, line: number): Promise<boolean
     }
   }
   return false
+}
+
+function quoteCmdArgument(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
 }
 
 function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
