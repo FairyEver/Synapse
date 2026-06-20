@@ -994,8 +994,10 @@ function wrapWindowsBatchCommand(
 function quoteWindowsCommandArg(value: string): string {
   if (value.length === 0) return "\"\""
   const escaped = value
-    .replace(/"/g, "\\\"")
+    .replace(/\^/g, "^^")
+    .replace(/"/g, "\"\"")
     .replace(/%/g, "%%")
+    .replace(/[&()|<>]/g, "^$&")
 
   return /[\s&()^|<>"]/.test(value) ? `"${escaped}"` : escaped
 }

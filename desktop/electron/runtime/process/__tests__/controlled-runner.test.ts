@@ -177,6 +177,61 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     ])
   })
 
+  it("escapes quotes and cmd metacharacters for Windows cmd shims", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const stdout = new PassThrough()
+    const stderr = new PassThrough()
+    const child = new EventEmitter() as ChildProcessWithoutNullStreams
+    Object.assign(child, {
+      stdout,
+      stderr,
+      stdin: new PassThrough(),
+      kill: vi.fn(),
+    })
+    const spawnImpl = vi.fn(() => {
+      queueMicrotask(() => {
+        stdout.end()
+        stderr.end()
+        child.emit("close", 0, null)
+      })
+      return child
+    })
+    const runner = createControlledProcessRunner({
+      permissionGuard: guard,
+      auditSink,
+      spawnImpl,
+      platform: "win32",
+      fileExists: (candidate) => candidate === "C:\\Tools\\claude.cmd",
+    })
+
+    await expect(runner.run({
+      actor: { kind: "user" },
+      action: "shell.exec",
+      command: "claude",
+      args: ["-p", "Use {\"mode\":\"fast\"} & keep \"quotes\""],
+      env: {
+        PATH: "C:\\Tools",
+        ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      },
+      pathStrategy: "replace",
+    })).resolves.toMatchObject({ exitCode: 0 })
+
+    expect(spawnImpl).toHaveBeenCalledWith(
+      "C:\\Windows\\System32\\cmd.exe",
+      [
+        "/d",
+        "/s",
+        "/c",
+        "C:\\Tools\\claude.cmd -p \"Use {\"\"mode\"\":\"\"fast\"\"} ^& keep \"\"quotes\"\"\"",
+      ],
+      expect.objectContaining({
+        shell: false,
+        windowsHide: true,
+      }),
+    )
+  })
+
   it("denies non-user actors by default, records audit, and does not spawn", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
