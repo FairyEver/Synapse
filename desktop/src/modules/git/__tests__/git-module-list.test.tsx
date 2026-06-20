@@ -408,6 +408,12 @@ describe("GitModule repository list", () => {
     await changeInput("保存到", "/work/docs")
     await click(findButton("开始克隆"))
 
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("请处理 GitHub 访问。")
+    expect(inputByLabel("仓库地址").value).toBe("https://github.com/acme/docs.git")
+    expect(findButton("处理 GitHub 访问")).toBeTruthy()
+
+    await click(findButton("处理 GitHub 访问"))
+
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.body.textContent).toContain("GitHub 访问失败")
     expect(inputByLabel("主机").value).toBe("github.com")
@@ -453,7 +459,14 @@ describe("GitModule repository list", () => {
     await click(findButton("开始克隆"))
 
     const dialog = document.querySelector('[role="dialog"]')
-    expect(dialog?.textContent).toContain("登录仓库")
+    expect(dialog?.textContent).toContain("git.company.com 需要登录。")
+    expect(dialog?.textContent).toContain("登录访问")
+    expect(inputByLabel("仓库地址").value).toBe("https://git.company.com/team/docs.git")
+
+    await click(findButton("登录访问"))
+
+    const credentialDialog = document.querySelector('[role="dialog"]')
+    expect(credentialDialog?.textContent).toContain("登录仓库")
     expect(inputByLabel("主机").value).toBe("git.company.com")
     await changeInput("账号", "writer")
     await changeInput("密码", "company-password")
@@ -492,6 +505,11 @@ describe("GitModule repository list", () => {
     await changeInput("保存到", "/work/docs")
     await click(findButton("开始克隆"))
 
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("请设置 Git 用户名和邮箱后重试。")
+    expect(findButton("配置身份")).toBeTruthy()
+
+    await click(findButton("配置身份"))
+
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.body.textContent).toContain("Git 身份")
     expect(document.body.textContent).toContain("需要配置 Git 身份")
@@ -527,6 +545,7 @@ describe("GitModule repository list", () => {
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
     await changeInput("保存到", "/work/docs")
     await click(findButton("开始克隆"))
+    await click(findButton("处理 GitHub 访问"))
 
     const retryButton = findButton("重试克隆")
     await click(retryButton)
@@ -578,6 +597,7 @@ describe("GitModule repository list", () => {
     await changeInput("仓库地址", "https://github.com/acme/docs.git")
     await changeInput("保存到", "/work/docs")
     await click(findButton("开始克隆"))
+    await click(findButton("处理 GitHub 访问"))
     expect(findButton("重试克隆")).toBeTruthy()
 
     await click(findButton("重试克隆"))
@@ -647,6 +667,8 @@ describe("GitModule repository list", () => {
     await changeInput("仓库地址", "git@github.com:acme/docs.git")
     await changeInput("保存到", "/work/docs")
     await click(findButton("开始克隆"))
+
+    await click(findButton("处理 SSH"))
 
     expect(document.body.textContent).toContain("SSH 访问失败")
     expect(countButtons("登录仓库")).toBe(0)

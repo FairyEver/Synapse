@@ -340,7 +340,7 @@ describe("AccountService", () => {
 
     await expect(service.uploadDriveLocalItems({
       parentId: "folder-1",
-      items: [{ kind: "folder", path: dir, folderName: "docs", files: [{ path: filePath, relativePath: "report.txt", mimeType: "text/plain" }] }],
+      items: [{ kind: "folder", folderName: "docs", files: [{ path: filePath, relativePath: "report.txt", mimeType: "text/plain" }] }],
     })).resolves.toEqual({
       completed: 0,
       failed: 1,

@@ -61,6 +61,47 @@ function remoteKindLabel(kind: SynapseGitRemoteKind): string {
   return "无法识别"
 }
 
+function hostFromRemoteUrl(remoteUrl: string): string | null {
+  try {
+    const url = new URL(remoteUrl)
+    return url.hostname.toLowerCase() || null
+  } catch {
+    const match = remoteUrl.match(/^[^@\s]+@([^:\s]+):/)
+    return match?.[1]?.toLowerCase() ?? null
+  }
+}
+
+function inferCloneAccessFailure(error: string, remoteUrl: string): GitOperationFailure | null {
+  const kind = detectRemoteKind(remoteUrl)
+  const host = hostFromRemoteUrl(remoteUrl)
+  if (kind === "ssh" && /publickey|permission denied|could not read from remote repository/i.test(error)) {
+    return {
+      category: "ssh-auth",
+      detail: error,
+      globalOperation: "clone",
+      host,
+      message: "请检查 SSH Key 或远程仓库访问权限。",
+      primaryAction: "handle-ssh",
+      protocol: "ssh",
+      title: "SSH 访问失败",
+    }
+  }
+  if (kind === "https" && /authentication failed|could not read username|invalid username or password|access denied|terminal prompts disabled|认证失败/i.test(error)) {
+    const github = host === "github.com"
+    return {
+      category: github ? "github-auth" : "https-auth",
+      detail: error,
+      globalOperation: "clone",
+      host,
+      message: github ? "请登录 GitHub 后重试。" : `${host ?? "仓库"} 需要登录。`,
+      primaryAction: github ? "handle-github-auth" : "login-host",
+      protocol: "https",
+      title: github ? "GitHub 需要登录" : "认证失败",
+    }
+  }
+  return null
+}
+
 export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit, onFailureAction }: GitCloneDialogProps) {
   const [remoteUrl, setRemoteUrl] = useState("")
   const [targetPath, setTargetPath] = useState("")
@@ -98,9 +139,9 @@ export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit
       setError(submitError)
       return
     }
-    setError(submitError.failure?.message ?? submitError.error)
-    setFailure(submitError.failure ?? null)
-    if (submitError.failure) onFailureAction?.({ cloneInput, failure: submitError.failure })
+    const nextFailure = submitError.failure ?? inferCloneAccessFailure(submitError.error, cloneInput.remoteUrl)
+    setError(nextFailure?.message ?? submitError.error)
+    setFailure(nextFailure)
   }
 
   const chooseTargetPath = async () => {
