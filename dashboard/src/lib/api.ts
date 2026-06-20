@@ -417,10 +417,16 @@ export function shouldNotifyAuthExpired(path: string, status: number) {
 
 function isProtectedDriveApiPath(path: string) {
   if (!path.startsWith(`${driveApiBasePath}/`)) return false
-  if (path.startsWith(`${driveBrowserApiBasePath}/shares/`)) return false
+  if (path.startsWith(`${driveBrowserApiBasePath}/shares/`)) {
+    return isProtectedDriveShareBrowserPath(path)
+  }
   if (path.startsWith(`${driveApiBasePath}/local-upload/`)) return false
   if (path.startsWith(`${driveApiBasePath}/local-download/`)) return false
   return true
+}
+
+function isProtectedDriveShareBrowserPath(path: string) {
+  return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
 }
 
 type PaginationOptions = {

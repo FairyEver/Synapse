@@ -427,7 +427,7 @@ describe('driveBrowserApi', () => {
     )
   })
 
-  it('notifies auth expiration for protected owner browser requests only', async () => {
+  it('notifies auth expiration for protected browser write requests only', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -444,6 +444,27 @@ describe('driveBrowserApi', () => {
       authExpired.mockClear()
       await expect(driveBrowserApi.getShareRoot('shr/id')).rejects.toMatchObject({ status: 401 })
       expect(authExpired).not.toHaveBeenCalled()
+
+      authExpired.mockClear()
+      await expect(driveBrowserApi.updateShareText('shr/id', null, {
+        baseVersionId: 'version-1',
+        contentType: 'text',
+        text: 'updated',
+      })).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+
+      authExpired.mockClear()
+      await expect(driveBrowserApi.updateShareText('shr/id', 'child/id', {
+        baseVersionId: 'version-1',
+        contentType: 'text',
+        text: 'updated',
+      })).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid', 401)).toBe(false)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/access', 401)).toBe(false)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/content', 401)).toBe(true)
     } finally {
       unsubscribe()
     }
