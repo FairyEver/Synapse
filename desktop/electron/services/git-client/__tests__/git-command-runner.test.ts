@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { categorizeGitError, createGitClientCommandRunner } from "../git-command-runner"
+import { categorizeGitError, createGitClientCommandRunner, getGitUserFacingFailure } from "../git-command-runner"
 
 describe("categorizeGitError", () => {
   it("maps common Git failures to product categories", () => {
@@ -35,8 +35,8 @@ describe("createGitClientCommandRunner", () => {
     const logger = { error: vi.fn() }
     const error = Object.assign(new Error("Authentication failed for https://user:secret@git.example.com/team/docs.git?token=raw-token"), {
       exitCode: 128,
-      output: "Authorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token",
-      stderr: "Authorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token GIT_AUTH_TOKEN=env-secret https://user:secret@git.example.com/team/docs.git",
+      output: "Authorization: Basic dXNlcjpzZWNyZXQ=\nAuthorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token\ncwd: /Users/writer/work/repo",
+      stderr: "Authorization: Basic dXNlcjpzZWNyZXQ=\nAuthorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token GIT_AUTH_TOKEN=env-secret https://user:secret@git.example.com/team/docs.git\ncwd: /Users/writer/work/repo",
       stdout: "",
       timedOut: false,
     })
@@ -61,10 +61,155 @@ describe("createGitClientCommandRunner", () => {
       stderrPreview: expect.stringContaining("[redacted]"),
     }))
     const serialized = JSON.stringify(logger.error.mock.calls)
+    expect(serialized).toContain("/Users/writer/work/repo")
+    expect(serialized).not.toContain("dXNlcjpzZWNyZXQ")
     expect(serialized).not.toContain("raw-token")
     expect(serialized).not.toContain("raw.bearer.token")
     expect(serialized).not.toContain("raw-cookie")
     expect(serialized).not.toContain("env-secret")
     expect(serialized).not.toContain("user:secret")
+  })
+
+  it("attaches a non-enumerable sanitized user-facing failure to command errors", async () => {
+    const logger = { error: vi.fn() }
+    const error = Object.assign(new Error("Authentication failed for https://token:secret@git.company.com/team/docs.git?token=raw-token"), {
+      exitCode: 128,
+      output: "fatal: Authentication failed for https://token:secret@git.company.com/team/docs.git?token=raw-token",
+      stderr: "fatal: could not read Username for 'https://git.company.com': terminal prompts disabled",
+      stdout: "",
+    })
+    const run = vi.fn().mockRejectedValue(error)
+    const runner = createGitClientCommandRunner({ logger, runGitCommand: run })
+
+    let caught: unknown
+    try {
+      await runner.run({
+        cwd: "/repo",
+        args: ["fetch", "https://token:secret@git.company.com/team/docs.git?token=raw-token"],
+        remoteUrl: "https://token:secret@git.company.com/team/docs.git?token=raw-token",
+      })
+    } catch (runError) {
+      caught = runError
+    }
+
+    const failure = getGitUserFacingFailure(caught)
+    expect(failure).toMatchObject({
+      category: "https-auth",
+      host: "git.company.com",
+      primaryAction: "login-host",
+      title: "认证失败",
+    })
+    expect(Object.keys(caught as Record<string, unknown>)).not.toContain("userFacingFailure")
+    const serialized = JSON.stringify(caught)
+    expect(serialized).not.toContain("raw-token")
+    expect(serialized).not.toContain("token:secret")
+  })
+
+  it("wraps non-Error rejections and attaches a sanitized user-facing failure", async () => {
+    const run = vi.fn().mockRejectedValue({
+      message: "fatal: unable to access 'https://github.com/team/docs.git/': The requested URL returned error: 403",
+      output: "Authorization: Basic dXNlcjpzZWNyZXQ=",
+      stderr: "Authorization: Bearer raw.bearer.payload",
+    })
+    const runner = createGitClientCommandRunner({ runGitCommand: run })
+
+    let caught: unknown
+    try {
+      await runner.run({
+        cwd: "/repo",
+        args: ["fetch", "origin"],
+        logFailure: false,
+        remoteUrl: "https://github.com/team/docs.git",
+      })
+    } catch (runError) {
+      caught = runError
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    const failure = getGitUserFacingFailure(caught)
+    expect(failure).toMatchObject({
+      category: "github-auth",
+      host: "github.com",
+      primaryAction: "handle-github-auth",
+      title: "GitHub 需要登录",
+    })
+    const serializedFailure = JSON.stringify(failure)
+    expect(serializedFailure).not.toContain("dXNlcjpzZWNyZXQ")
+    expect(serializedFailure).not.toContain("raw.bearer.payload")
+  })
+
+  it("attaches failure when Git command diagnostics are read-only", async () => {
+    const error = new Error("fatal: unable to access 'https://github.com/team/docs.git/': The requested URL returned error: 403")
+    Object.defineProperties(error, {
+      code: {
+        enumerable: false,
+        value: "GIT_EXIT",
+        writable: false,
+      },
+      exitCode: {
+        enumerable: false,
+        value: 128,
+        writable: false,
+      },
+      output: {
+        enumerable: false,
+        value: "Authorization: Basic dXNlcjpzZWNyZXQ=",
+        writable: false,
+      },
+      signal: {
+        enumerable: false,
+        value: "SIGTERM",
+        writable: false,
+      },
+      stderr: {
+        enumerable: false,
+        value: "Authorization: Bearer raw.bearer.payload",
+        writable: false,
+      },
+      stdout: {
+        enumerable: false,
+        value: "",
+        writable: false,
+      },
+      timedOut: {
+        enumerable: false,
+        value: true,
+        writable: false,
+      },
+    })
+    const run = vi.fn().mockRejectedValue(error)
+    const runner = createGitClientCommandRunner({ runGitCommand: run })
+
+    let caught: unknown
+    try {
+      await runner.run({
+        cwd: "/repo",
+        args: ["fetch", "origin"],
+        logFailure: false,
+        remoteUrl: "https://github.com/team/docs.git",
+      })
+    } catch (runError) {
+      caught = runError
+    }
+
+    expect(caught).not.toBeInstanceOf(TypeError)
+    const failure = getGitUserFacingFailure(caught)
+    expect(failure).toMatchObject({
+      category: "github-auth",
+      host: "github.com",
+      primaryAction: "handle-github-auth",
+      title: "GitHub 需要登录",
+    })
+    expect(getGitUserFacingFailure(error)).toEqual(failure)
+    expect(caught).toMatchObject({
+      code: "GIT_EXIT",
+      exitCode: 128,
+      signal: "SIGTERM",
+      timedOut: true,
+    })
+    expect(Object.keys(caught as Record<string, unknown>)).not.toContain("userFacingFailure")
+    const serialized = JSON.stringify(caught)
+    expect(serialized).not.toContain("dXNlcjpzZWNyZXQ")
+    expect(serialized).not.toContain("raw.bearer.payload")
   })
 })

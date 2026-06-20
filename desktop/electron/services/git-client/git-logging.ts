@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import type { SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
-import { errorLogMeta, sanitizeErrorPreservingPaths } from "../error-sanitize"
+import { errorLogMeta } from "../error-sanitize"
+import { sanitizeGitDiagnosticText } from "./git-sanitize"
 
 const MAX_OUTPUT_PREVIEW_LENGTH = 1200
 const MAX_ARG_PREVIEW_LENGTH = 200
@@ -37,7 +38,7 @@ function elapsedMs(startedAt: number | undefined): number | undefined {
 }
 
 function sanitizeGitLogText(value: string): string {
-  return sanitizeErrorPreservingPaths(value)
+  return sanitizeGitDiagnosticText(value)
 }
 
 function truncateText(value: string, limit = MAX_OUTPUT_PREVIEW_LENGTH): string {
@@ -139,7 +140,7 @@ function gitErrorMeta(error: unknown): Record<string, unknown> {
       includeCode: true,
       includeMessage: true,
       messageLimit: 600,
-      sanitizeMessage: sanitizeErrorPreservingPaths,
+      sanitizeMessage: sanitizeGitDiagnosticText,
     }),
     category: categorizeGitErrorForLog(error),
     ...(diagnostics.exitCode !== undefined ? { exitCode: diagnostics.exitCode } : {}),
