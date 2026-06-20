@@ -70,6 +70,7 @@ export default function DriveAdminPage() {
     mutationFn: adminApi.deleteDriveItem,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-drive-items'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-drive-storage-summary'] })
       setDeleteTarget(null)
       toast.success('已删除')
     },
