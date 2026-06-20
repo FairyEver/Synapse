@@ -24,6 +24,12 @@ describe("drive browser helpers", () => {
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "photo.bin", mimeType: "image/png" })).toBe("image")
   })
 
+  it("falls back to image preview by filename when mime type is missing", () => {
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "photo.png", mimeType: null })).toBe("image")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "photo.jpg", mimeType: null })).toBe("image")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "photo.webp", mimeType: null })).toBe("image")
+  })
+
   it("classifies markdown files by extension and mime type", () => {
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "notes.md", mimeType: null })).toBe("markdown")
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "guide.markdown", mimeType: null })).toBe("markdown")

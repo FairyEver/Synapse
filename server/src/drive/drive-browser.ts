@@ -46,6 +46,7 @@ export function resolveDriveBrowserPreviewKind(item: Pick<DriveBrowserSourceItem
   const mimeType = item.mimeType?.toLowerCase() ?? ""
   const lowerName = item.name.toLowerCase()
   if (mimeType.startsWith("image/")) return "image"
+  if (isKnownImageName(lowerName)) return "image"
   if (mimeType === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) return "html-source"
   if (isMarkdownDriveItem(lowerName, mimeType)) return "markdown"
   if (mimeType.startsWith("text/")) return "text"
@@ -151,6 +152,10 @@ function buildBrowserUrl(route: DriveBrowserRouteContext, item: DriveBrowserSour
       : buildConsoleDriveItemBrowserUrl(item.id)
   }
   return buildShareDriveBrowserUrl(route.shareId, item.id === route.rootItemId ? null : item.id)
+}
+
+function isKnownImageName(name: string): boolean {
+  return /\.(?:png|jpe?g|webp|gif|avif|ico)$/i.test(name)
 }
 
 function buildDownloadUrl(route: DriveBrowserRouteContext, item: DriveBrowserSourceItem): string | null {
