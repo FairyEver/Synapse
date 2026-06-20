@@ -335,6 +335,17 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(lstat(unsafeTarget)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("rejects raw export targets with names that start with dot-dot", async () => {
+    const rawRoot = await tempDir()
+    await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
+    const unsafeTarget = path.join(rawRoot, "..backup")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    await expect(manager.exportEntries(rawRoot, ["brief.md"], unsafeTarget))
+      .rejects.toThrow("导出目标不能位于知识库资料目录内。")
+    await expect(lstat(unsafeTarget)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("exports a folder shell and merges destination folder collisions", async () => {
     const rawRoot = await tempDir()
     const exportRoot = await tempDir()
