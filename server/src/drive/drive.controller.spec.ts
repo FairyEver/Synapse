@@ -991,6 +991,41 @@ describe("DriveController", () => {
     expect(response.text).toContain('aria-describedby="drive-password-error"')
   })
 
+  it("renders password pages for protected direct downloads opened without a cookie", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/download")
+      .expect(200)
+
+    expect(response.text).toContain("输入密码")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/share/shr_file/download"')
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: undefined,
+      cookie: undefined,
+    })
+    expect(drive.openShareBrowserItemDownload).not.toHaveBeenCalled()
+  })
+
+  it("renders password pages for protected direct renders opened without a cookie", async () => {
+    drive.resolveShareRenderAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/render")
+      .expect(200)
+
+    expect(response.text).toContain("输入密码")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/share/shr_file/render"')
+    expect(drive.resolveShareRenderAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      itemId: undefined,
+      cookie: undefined,
+    })
+  })
+
   it("streams canonical public file downloads", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
