@@ -394,6 +394,54 @@ describe("AgentRuntimeService", () => {
     }
   })
 
+  it("escapes embedded double quotes for explicit cmd custom commands", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const customCommands = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    await customCommands.addExec({
+      name: "echo-user",
+      exec: "echo",
+      shell: "cmd",
+      createdBy: "user-1",
+    })
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }))
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "C:\\repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      customCommands,
+      commandRunner: { run },
+      now: fixedNow,
+    })
+
+    await service.send({
+      ...baseMessage('/echo-user "quoted \\"value\\" & still one arg"'),
+      platform: "local-renderer",
+    })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "cmd.exe",
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        'echo "quoted ""value"" & still one arg"',
+      ],
+    }))
+  })
+
   it("passes side-channel reply environment into custom command execution", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")

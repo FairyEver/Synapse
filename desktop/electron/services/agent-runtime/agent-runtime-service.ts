@@ -1479,9 +1479,9 @@ function escapeShellArg(arg: string, shell: string): string {
     return `'${arg.replace(/'/g, "''")}'`
   }
   if (shell === "cmd") {
-    // cmd.exe: wrap in quotes if contains special chars, escape inner quotes
+    // cmd.exe keeps embedded quotes inside a quoted argument when they are doubled.
     if (/[\s&|<>^()"]/.test(arg)) {
-      return `"${arg.replace(/"/g, '\\"')}"`
+      return `"${arg.replace(/"/g, '""')}"`
     }
     return arg
   }
