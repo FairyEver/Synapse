@@ -124,5 +124,15 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `drive.folder_path.ensure` | `drive_folder_path_ensure` | `drive.folder_path.ensure` | `driveFolderPathEnsure` |
 | `drive.reorganization.preview` | `drive_reorganization_preview` | `drive.reorganization.preview` | `driveReorganizationPreview` |
 | `drive.reorganization.apply` | `drive_reorganization_apply` | `drive.reorganization.apply` | `driveReorganizationApply` |
+| `drive.direct_link.upload` | `drive_direct_link_upload` | `drive.direct_link.upload` | `uploadDrivePublicAssets` |
+| `drive.direct_link.list` | `drive_direct_link_list` | `drive.direct_link.list` | `listDrivePublicAssets` |
+| `drive.direct_link.get` | `drive_direct_link_get` | `drive.direct_link.get` | `getDrivePublicAsset` |
+| `drive.direct_link.update` | `drive_direct_link_update` | `drive.direct_link.update` | `replaceDrivePublicAssetFile` |
+| `drive.direct_link.rename` | `drive_direct_link_rename` | `drive.direct_link.rename` | `renameDrivePublicAsset` |
+| `drive.direct_link.delete` | `drive_direct_link_delete` | `drive.direct_link.delete` | `trashDrivePublicAsset` |
+| `drive.direct_link.restore` | `drive_direct_link_restore` | `drive.direct_link.restore` | `restoreDrivePublicAsset` |
+| `drive.trash.list` | `drive_trash_list` | `drive.trash.list` | `listDriveTrash` |
+| `drive.trash.delete` | `drive_trash_delete` | `drive.trash.delete` | `deleteDriveTrashItem` |
+| `drive.item.restore` | `drive_item_restore` | `drive.item.restore` | `restoreDriveTrashItem` |
 
 Legacy public names are intentionally not aliases; only the canonical names in this matrix are supported.
