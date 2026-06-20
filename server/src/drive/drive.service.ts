@@ -1834,7 +1834,8 @@ export class DriveService implements OnApplicationBootstrap {
       select: { id: true, userId: true, reservedBytes: true, itemId: true, storageKey: true },
     })
     for (const session of sessions) {
-      await this.failUploadSession(session.userId, session.id, session.itemId, session.reservedBytes, DRIVE_UPLOAD_STATUS.expired, now, session.storageKey)
+      const transitioned = await this.failUploadSession(session.userId, session.id, session.itemId, session.reservedBytes, DRIVE_UPLOAD_STATUS.expired, now, session.storageKey)
+      if (transitioned) this.lifecycle?.cleanupUploadSessionState(session.id)
     }
     return { expired: sessions.length }
   }

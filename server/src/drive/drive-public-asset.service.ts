@@ -355,7 +355,7 @@ export class DrivePublicAssetService {
 
     try {
       const asset = await this.createAssetWithRetry(userId, session)
-      this.publicAppUrlsBySessionId.delete(session.id)
+      this.forgetPublicAppUrl(session.id)
       await this.recordAuditSafely({
         userId,
         action: "drive.public_asset.upload.complete",
@@ -506,7 +506,7 @@ export class DrivePublicAssetService {
         detail: { userId, sessionId: session.id, assetId: asset.assetId, itemId: asset.itemId, name: replaced.name },
         ipAddress: auditContext.ipAddress,
       })
-      this.publicAppUrlsBySessionId.delete(session.id)
+      this.forgetPublicAppUrl(session.id)
       return toDrivePublicAssetDto(replaced, publicAppUrl)
     } catch (error) {
       const transitioned = await this.failSession(userId, session, DRIVE_UPLOAD_STATUS.failed, { preserveItem: true })
@@ -705,7 +705,16 @@ export class DrivePublicAssetService {
   }
 
   private rememberPublicAppUrl(sessionId: string, publicAppUrl: string | undefined): void {
-    if (publicAppUrl) this.publicAppUrlsBySessionId.set(sessionId, publicAppUrl)
+    if (!publicAppUrl) return
+    this.publicAppUrlsBySessionId.set(sessionId, publicAppUrl)
+    this.lifecycle?.registerUploadSessionCleanup(sessionId, () => {
+      this.publicAppUrlsBySessionId.delete(sessionId)
+    })
+  }
+
+  private forgetPublicAppUrl(sessionId: string): void {
+    this.publicAppUrlsBySessionId.delete(sessionId)
+    this.lifecycle?.forgetUploadSessionCleanup(sessionId)
   }
 
   private async createAssetWithRetry(userId: string, session: PublicAssetUploadSession): Promise<PublicAssetWithItem> {
@@ -860,7 +869,7 @@ export class DrivePublicAssetService {
       }
     })
     if (!transitioned) return false
-    this.publicAppUrlsBySessionId.delete(session.id)
+    this.forgetPublicAppUrl(session.id)
     if (await this.isStorageKeyPublished(session.storageKey)) return true
     await this.deleteObjectSafely(session.storageKey)
     return true

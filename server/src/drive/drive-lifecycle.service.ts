@@ -57,12 +57,36 @@ const DRIVE_TRASH_MAX_LIMIT = 200
 @Injectable()
 export class DriveLifecycleService {
   private readonly logger = new Logger(DriveLifecycleService.name)
+  private readonly uploadSessionCleanups = new Map<string, () => void>()
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
+
+  registerUploadSessionCleanup(sessionId: string, cleanup: () => void): void {
+    this.uploadSessionCleanups.set(sessionId, cleanup)
+  }
+
+  forgetUploadSessionCleanup(sessionId: string): void {
+    this.uploadSessionCleanups.delete(sessionId)
+  }
+
+  cleanupUploadSessionState(sessionId: string): void {
+    const cleanup = this.uploadSessionCleanups.get(sessionId)
+    if (!cleanup) return
+    this.uploadSessionCleanups.delete(sessionId)
+    try {
+      cleanup()
+    } catch (error) {
+      this.logger.warn({
+        sessionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Drive upload session cleanup failed")
+    }
+  }
 
   async trashItem(input: DriveLifecycleInput): Promise<DriveItemDto> {
     void this.storage

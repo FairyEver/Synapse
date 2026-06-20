@@ -1991,7 +1991,8 @@ describe("DriveService", () => {
       ...storageMock,
       deleteObject: vi.fn(async () => undefined),
     }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    const lifecycle = { cleanupUploadSessionState: vi.fn() }
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, lifecycle as never)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const prepared = await service.prepareUpload("user-1", {
       parentId: null,
@@ -2008,6 +2009,7 @@ describe("DriveService", () => {
     const result = await service.expirePendingUploadSessions(new Date("2026-06-07T00:00:00.000Z"))
     expect(result.expired).toBe(1)
     expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+    expect(lifecycle.cleanupUploadSessionState).toHaveBeenCalledWith(prepared.sessionId)
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.reservedBytes).toBe(0n)
   })

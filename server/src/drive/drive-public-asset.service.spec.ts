@@ -12,12 +12,14 @@ describe("DrivePublicAssetService", () => {
   let storage: DriveStoragePort
   let objects: Map<string, { readonly body: Buffer; readonly contentType?: string | null }>
   let service: DrivePublicAssetService
+  let lifecycle: ReturnType<typeof createLifecycleMemory>
 
   beforeEach(async () => {
     prisma = createPrismaMemory()
     objects = new Map()
     storage = createStorageMemory(objects)
-    service = new DrivePublicAssetService(prisma as unknown as PrismaService, storage, undefined, createLifecycleMemory(prisma))
+    lifecycle = createLifecycleMemory(prisma)
+    service = new DrivePublicAssetService(prisma as unknown as PrismaService, storage, undefined, lifecycle as never)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
   })
 
@@ -34,6 +36,21 @@ describe("DrivePublicAssetService", () => {
 
     expect(completed.url).toMatch(/^https:\/\/synapse\.example\/files\/asset_[0-9A-Za-z]{32}$/u)
     expect(completed.name).toBe("logo.png")
+  })
+
+  it("cleans public app URL cache through upload session lifecycle cleanup", async () => {
+    const prepared = await service.prepareUpload("user-1", {
+      name: "logo.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+
+    expect(publicAppUrlCacheSize(service)).toBe(1)
+
+    lifecycle.cleanupUploadSessionState(prepared.sessionId)
+
+    expect(publicAppUrlCacheSize(service)).toBe(0)
   })
 
   it("creates a public asset with a display name that has no image extension", async () => {
@@ -730,7 +747,19 @@ async function seedPublicAsset(input: {
 }
 
 function createLifecycleMemory(prisma: ReturnType<typeof createPrismaMemory>) {
+  const uploadSessionCleanups = new Map<string, () => void>()
   return {
+    registerUploadSessionCleanup: vi.fn((sessionId: string, cleanup: () => void) => {
+      uploadSessionCleanups.set(sessionId, cleanup)
+    }),
+    forgetUploadSessionCleanup: vi.fn((sessionId: string) => {
+      uploadSessionCleanups.delete(sessionId)
+    }),
+    cleanupUploadSessionState: vi.fn((sessionId: string) => {
+      const cleanup = uploadSessionCleanups.get(sessionId)
+      uploadSessionCleanups.delete(sessionId)
+      cleanup?.()
+    }),
     trashItem: vi.fn(async (input: { readonly itemId: string; readonly actorId: string }) => {
       const item = await prisma.driveItem.update({
         where: { id: input.itemId },
