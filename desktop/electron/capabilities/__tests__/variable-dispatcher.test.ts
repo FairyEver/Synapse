@@ -123,18 +123,18 @@ describe("variable capability dispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "secret.read",
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-      resource: "variable:user:TOKEN",
+      resource: "variable:user:token",
       context: {
         source: "api",
         variableAction: "variable.item.get",
-        variableName: "TOKEN",
+        variableName: "token",
         includeValue: false,
       },
     })
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.read",
       outcome: "allowed",
-      resource: "variable:user:TOKEN",
+      resource: "variable:user:token",
     }))
   })
 
@@ -447,5 +447,36 @@ describe("variable capability dispatcher", () => {
     await expect(
       dispatcher.dispatch("variable.item.get", { name: "TOKEN", includeValue: true }, { source: "mcp-http" }),
     ).rejects.toThrow("denied by test")
+  })
+
+  it("checks secret permissions before variable inventory probes", async () => {
+    const { auditEvents, dispatcher, permissionGuard, updateConfig } = createHarness(baseConfig)
+    vi.mocked(permissionGuard.check).mockResolvedValue({
+      allowed: false,
+      reason: "denied before inventory",
+      policyId: "test",
+    })
+
+    await expect(dispatcher.dispatch("variable.item.get", { name: "missing" }, { source: "mcp-http" })).rejects.toThrow("denied before inventory")
+    await expect(dispatcher.dispatch("variable.item.create", { name: "TOKEN", value: "x" }, { source: "mcp-http" })).rejects.toThrow("denied before inventory")
+    await expect(dispatcher.dispatch("variable.item.update", { name: "missing", value: "x" }, { source: "mcp-http" })).rejects.toThrow("denied before inventory")
+    await expect(dispatcher.dispatch("variable.item.upsert", { name: "NEW_ONE" }, { source: "mcp-http" })).rejects.toThrow("denied before inventory")
+    await expect(dispatcher.dispatch("variable.item.delete", { name: "missing" }, { source: "mcp-http" })).rejects.toThrow("denied before inventory")
+
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledTimes(5)
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "denied",
+      resource: "variable:user:missing",
+      metadata: expect.objectContaining({ variableAction: "variable.item.get" }),
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "denied",
+      resource: "variable:user:TOKEN",
+      metadata: expect.objectContaining({ variableAction: "variable.item.create" }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("\"value\":\"x\"")
   })
 })

@@ -354,9 +354,9 @@ async function getVariable(
   rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const includeValue = params.includeValue === true
+  const audit = await authorizeSecret(deps, "secret.read", action, context, name, includeValue)
   const config = await deps.loadConfig()
   const { variable } = requireExistingVariable(config.global.variables, name)
-  const audit = await authorizeSecret(deps, "secret.read", action, context, variable.name, includeValue)
   recordSecretAudit(deps, audit, "allowed")
   return {
     ok: true,
@@ -377,6 +377,7 @@ async function createVariable(
   const name = requireVariableName(params, "name")
   const value = requireString(params, "value")
   const description = optionalDescription(params)
+  const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
   return mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     assertNoDuplicate(variables, name)
@@ -385,7 +386,6 @@ async function createVariable(
       value,
       ...(description ? { description } : undefined),
     }
-    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
     await persistVariablesWithAudit(deps, [...variables, variable], audit)
     return { ok: true, data: { ...variableResponse(variable), created: true } }
   })
@@ -403,10 +403,15 @@ async function updateVariable(
   const hasValue = Object.prototype.hasOwnProperty.call(params, "value")
   const hasDescription = Object.prototype.hasOwnProperty.call(params, "description")
   if (!hasNewName && !hasValue && !hasDescription) throw new Error("No variable fields provided for update")
+  const requestedNewName = hasNewName ? requireVariableName(params, "newName") : name
+  const sourceAudit = await authorizeSecret(deps, "secret.write", action, context, name, false)
+  const targetAudit = requestedNewName.toLowerCase() === name.toLowerCase()
+    ? sourceAudit
+    : await authorizeSecret(deps, "secret.write", action, context, requestedNewName, false)
   return mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
-    const newName = hasNewName ? requireVariableName(params, "newName") : variable.name
+    const newName = hasNewName ? requestedNewName : variable.name
     assertNoDuplicate(variables, newName, variable.name)
     const description = hasDescription ? optionalDescription(params) : variable.description
     const updated: SynapseVariable = {
@@ -420,15 +425,12 @@ async function updateVariable(
         fromVariableName: variable.name,
         toVariableName: updated.name,
       }
-      const fromAudit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
-      const toAudit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
       await persistVariablesWithAudits(deps, variables, [
-        { audit: fromAudit, metadata: renameMetadata },
-        { audit: toAudit, metadata: renameMetadata },
+        { audit: sourceAudit, metadata: renameMetadata },
+        { audit: targetAudit, metadata: renameMetadata },
       ])
     } else {
-      const audit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
-      await persistVariablesWithAudit(deps, variables, audit)
+      await persistVariablesWithAudit(deps, variables, sourceAudit)
     }
     return { ok: true, data: { ...variableResponse(updated), updated: true } }
   })
@@ -442,6 +444,7 @@ async function upsertVariable(
 ): Promise<DispatchResult> {
   rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
+  const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
   return mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const index = findVariableIndex(variables, name)
@@ -455,7 +458,6 @@ async function upsertVariable(
         value: requireString(params, "value"),
         ...(description ? { description } : undefined),
       }
-      const audit = await authorizeSecret(deps, "secret.write", action, context, created.name, false)
       await persistVariablesWithAudit(deps, [...variables, created], audit)
       return { ok: true, data: { ...variableResponse(created), created: true, updated: false } }
     }
@@ -471,7 +473,6 @@ async function upsertVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    const audit = await authorizeSecret(deps, "secret.write", action, context, current.name, false)
     await persistVariablesWithAudit(deps, variables, audit)
     return { ok: true, data: { ...variableResponse(updated), created: false, updated: true } }
   })
@@ -485,10 +486,10 @@ async function deleteVariable(
 ): Promise<DispatchResult> {
   rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
+  const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
   return mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
-    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
     variables.splice(index, 1)
     await persistVariablesWithAudit(deps, variables, audit)
     return { ok: true, data: { ...variableResponse(variable), deleted: true } }
