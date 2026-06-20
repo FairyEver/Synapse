@@ -412,16 +412,19 @@ export class DriveService implements OnApplicationBootstrap {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
-    await this.prisma.$transaction(async (tx) => {
-      await tx.driveFileVersion.update({
-        where: { id: version.id },
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.driveFileVersion.updateMany({
+        where: { id: version.id, itemId: item.id, userId, deletedAt: null },
         data: { deletedAt: new Date(), deletePending: false },
       })
+      if (updated.count === 0) return false
       await tx.driveUsage.update({
         where: { userId },
         data: { usedBytes: { decrement: version.size } },
       })
+      return true
     })
+    if (!deleted) return { ok: true }
     try {
       await this.storage.deleteObject(version.storageKey)
     } catch (error) {
