@@ -3,6 +3,7 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { GitBranchService } from "../../services/git-client/git-branch-service"
 import type { GitCloneService } from "../../services/git-client/git-clone-service"
 import type { GitCommitService } from "../../services/git-client/git-commit-service"
+import type { GitAccessService } from "../../services/git-client/git-access-service"
 import type { GitEnvironmentService } from "../../services/git-client/git-environment-service"
 import type { GitHistoryService } from "../../services/git-client/git-history-service"
 import type { GitRepositoryRegistry } from "../../services/git-client/git-repository-registry"
@@ -58,6 +59,119 @@ const environmentStateSchema = z.object({
 const sshPublicKeySchema = z.object({
   path: z.string(),
   content: z.string(),
+})
+
+const protocolSchema = z.enum(["https", "ssh", "file", "unknown"])
+
+const providerSchema = z.enum(["github", "gitee", "gitlab", "generic"])
+
+const providerLinksSchema = z.object({
+  credentialHelpUrl: z.string().nullable(),
+  sshKeysUrl: z.string().nullable(),
+  tokenUrl: z.string().nullable(),
+})
+
+const userFacingFailureSchema = z.object({
+  category: z.enum([
+    "git-missing",
+    "missing-identity",
+    "https-auth",
+    "github-auth",
+    "ssh-auth",
+    "credential-helper-missing",
+    "repository-not-found",
+    "network",
+    "path",
+    "dirty",
+    "conflict",
+    "non-fast-forward",
+    "timeout",
+    "not-git-repository",
+    "unknown",
+  ]),
+  detail: z.string().nullable(),
+  host: z.string().nullable(),
+  message: z.string(),
+  primaryAction: z.enum([
+    "install-git",
+    "set-identity",
+    "login-host",
+    "handle-github-auth",
+    "handle-ssh",
+    "configure-credential-helper",
+    "retry",
+    "choose-directory",
+    "open-workbench",
+    "copy-diagnostics",
+  ]).nullable(),
+  protocol: protocolSchema,
+  title: z.string(),
+})
+
+const checkAccessSchema = z.object({
+  hosts: z.array(z.object({
+    host: z.string(),
+    protocol: protocolSchema,
+    provider: providerSchema,
+  }).strict()).optional(),
+}).strict()
+
+const credentialHelperSchema = z.object({
+  helper: z.string().nullable(),
+  safe: z.boolean(),
+  source: z.string().nullable(),
+})
+
+const accessStateSchema = z.object({
+  checkedAt: z.string(),
+  credentialHelper: credentialHelperSchema,
+  hosts: z.array(z.object({
+    host: z.string(),
+    lastFailure: userFacingFailureSchema.nullable(),
+    protocol: protocolSchema,
+    provider: providerSchema,
+  })),
+  providerLinks: z.record(providerSchema, providerLinksSchema),
+  ssh: z.object({
+    available: z.boolean(),
+    publicKeyComment: z.string().nullable(),
+    publicKeyFingerprint: z.string().nullable(),
+    publicKeyPath: z.string().nullable(),
+    publicKeyType: z.string().nullable(),
+  }),
+})
+
+const configureCredentialHelperSchema = z.object({
+  helper: z.string(),
+}).strict()
+
+const saveHttpsCredentialSchema = z.object({
+  host: z.string(),
+  password: z.string(),
+  protocol: z.literal("https"),
+  username: z.string(),
+}).strict()
+
+const clearHttpsCredentialSchema = z.object({
+  host: z.string(),
+  protocol: z.literal("https"),
+  username: z.string().nullable().optional(),
+}).strict()
+
+const generateSshKeySchema = z.object({
+  email: z.string(),
+}).strict()
+
+const testSshConnectionSchema = z.object({
+  host: z.string(),
+  provider: providerSchema.optional(),
+}).strict()
+
+const sshTestResultSchema = z.object({
+  detail: z.string().nullable(),
+  host: z.string(),
+  ok: z.boolean(),
+  title: z.string(),
 })
 
 const configureIdentitySchema = z.object({
@@ -172,6 +286,12 @@ type CommitRequest = z.infer<typeof commitRequestSchema>
 type BranchRequest = z.infer<typeof branchRequestSchema>
 type HistoryListRequest = z.infer<typeof historyListRequestSchema>
 type CommitDetailRequest = z.infer<typeof commitDetailRequestSchema>
+type CheckAccessRequest = z.infer<typeof checkAccessSchema>
+type ConfigureCredentialHelperRequest = z.infer<typeof configureCredentialHelperSchema>
+type SaveHttpsCredentialRequest = z.infer<typeof saveHttpsCredentialSchema>
+type ClearHttpsCredentialRequest = z.infer<typeof clearHttpsCredentialSchema>
+type GenerateSshKeyRequest = z.infer<typeof generateSshKeySchema>
+type TestSshConnectionRequest = z.infer<typeof testSshConnectionSchema>
 
 async function resolveRepository(ctx: IpcHandlerContext, repositoryId: string): Promise<SynapseGitRepository> {
   const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
@@ -210,6 +330,48 @@ export const gitIpcModule: IpcModule = {
       request: z.void(),
       response: sshPublicKeySchema.nullable(),
       handler: async (ctx) => ctx.resolve<GitEnvironmentService>("git.environment-service").getSshPublicKey(),
+    },
+    checkAccess: {
+      channel: "synapse:git:access:check",
+      kind: "invoke",
+      request: checkAccessSchema,
+      response: accessStateSchema,
+      handler: async (ctx, input: CheckAccessRequest) => ctx.resolve<GitAccessService>("git.access-service").check(input),
+    },
+    configureCredentialHelper: {
+      channel: "synapse:git:access:configure-credential-helper",
+      kind: "invoke",
+      request: configureCredentialHelperSchema,
+      response: z.void(),
+      handler: async (ctx, input: ConfigureCredentialHelperRequest) => ctx.resolve<GitAccessService>("git.access-service").configureCredentialHelper(input),
+    },
+    saveHttpsCredential: {
+      channel: "synapse:git:access:save-https-credential",
+      kind: "invoke",
+      request: saveHttpsCredentialSchema,
+      response: z.void(),
+      handler: async (ctx, input: SaveHttpsCredentialRequest) => ctx.resolve<GitAccessService>("git.access-service").saveHttpsCredential(input),
+    },
+    clearHttpsCredential: {
+      channel: "synapse:git:access:clear-https-credential",
+      kind: "invoke",
+      request: clearHttpsCredentialSchema,
+      response: z.void(),
+      handler: async (ctx, input: ClearHttpsCredentialRequest) => ctx.resolve<GitAccessService>("git.access-service").clearHttpsCredential(input),
+    },
+    generateSshKey: {
+      channel: "synapse:git:access:generate-ssh-key",
+      kind: "invoke",
+      request: generateSshKeySchema,
+      response: z.void(),
+      handler: async (ctx, input: GenerateSshKeyRequest) => ctx.resolve<GitAccessService>("git.access-service").generateSshKey(input),
+    },
+    testSshConnection: {
+      channel: "synapse:git:access:test-ssh-connection",
+      kind: "invoke",
+      request: testSshConnectionSchema,
+      response: sshTestResultSchema,
+      handler: async (ctx, input: TestSshConnectionRequest) => ctx.resolve<GitAccessService>("git.access-service").testSshConnection(input),
     },
     listRepositories: {
       channel: "synapse:git:repositories:list",

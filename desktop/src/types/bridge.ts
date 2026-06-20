@@ -264,18 +264,26 @@ import type {
   SynapseRepositoryValidationResult,
 } from "./repository"
 import type {
+  SynapseGitAccessState,
   SynapseGitBranch,
+  SynapseGitClearHttpsCredentialInput,
   SynapseGitCommitDetail,
   SynapseGitCommitSummary,
   SynapseGitDiffResult,
   SynapseGitEnvironmentState,
+  SynapseGitGenerateSshKeyInput,
   SynapseGitOperationResult,
+  SynapseGitProvider,
+  SynapseGitProtocol,
   SynapseGitRemoteKind,
   SynapseGitRepository,
   SynapseGitRepositoryRemoveInput,
   SynapseGitRepositorySummary,
   SynapseGitRepositorySnapshot,
+  SynapseGitSaveHttpsCredentialInput,
   SynapseGitSshPublicKey,
+  SynapseGitSshTestResult,
+  SynapseGitTestSshConnectionInput,
 } from "./git"
 import type { SynapseAppUpdateState } from "./update"
 import type {
@@ -783,6 +791,12 @@ export type SynapseBridge = {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>
     configureIdentity: (input: { userName: string; userEmail: string }) => Promise<void>
     getSshPublicKey: () => Promise<SynapseGitSshPublicKey | null>
+    checkAccess: (input?: { hosts?: { host: string; protocol: SynapseGitProtocol; provider: SynapseGitProvider }[] }) => Promise<SynapseGitAccessState>
+    configureCredentialHelper: (input: { helper: string }) => Promise<void>
+    saveHttpsCredential: (input: SynapseGitSaveHttpsCredentialInput) => Promise<void>
+    clearHttpsCredential: (input: SynapseGitClearHttpsCredentialInput) => Promise<void>
+    generateSshKey: (input: SynapseGitGenerateSshKeyInput) => Promise<void>
+    testSshConnection: (input: SynapseGitTestSshConnectionInput) => Promise<SynapseGitSshTestResult>
     listRepositories: () => Promise<SynapseGitRepository[]>
     listRepositorySummaries: () => Promise<SynapseGitRepositorySummary[]>
     addLocalRepository: (input: { name: string; localPath: string }) => Promise<SynapseGitRepository>

@@ -346,6 +346,12 @@ const IPC_CHANNELS = {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",
     "getSshPublicKey": "synapse:git:environment:get-ssh-public-key",
+    "checkAccess": "synapse:git:access:check",
+    "configureCredentialHelper": "synapse:git:access:configure-credential-helper",
+    "saveHttpsCredential": "synapse:git:access:save-https-credential",
+    "clearHttpsCredential": "synapse:git:access:clear-https-credential",
+    "generateSshKey": "synapse:git:access:generate-ssh-key",
+    "testSshConnection": "synapse:git:access:test-ssh-connection",
     "listRepositories": "synapse:git:repositories:list",
     "listRepositorySummaries": "synapse:git:repositories:list-summaries",
     "addLocalRepository": "synapse:git:repositories:add-local",
@@ -629,6 +635,18 @@ const synapseBridge: SynapseBridge = {
     configureIdentity: (input) =>
       invoke(IPC_CHANNELS.git.configureIdentity)(input),
     getSshPublicKey: invoke(IPC_CHANNELS.git.getSshPublicKey),
+    checkAccess: (input = {}) =>
+      invoke(IPC_CHANNELS.git.checkAccess)(input),
+    configureCredentialHelper: (input) =>
+      invoke(IPC_CHANNELS.git.configureCredentialHelper)(input),
+    saveHttpsCredential: (input) =>
+      invoke(IPC_CHANNELS.git.saveHttpsCredential)(input),
+    clearHttpsCredential: (input) =>
+      invoke(IPC_CHANNELS.git.clearHttpsCredential)(input),
+    generateSshKey: (input) =>
+      invoke(IPC_CHANNELS.git.generateSshKey)(input),
+    testSshConnection: (input) =>
+      invoke(IPC_CHANNELS.git.testSshConnection)(input),
     listRepositories: invoke(IPC_CHANNELS.git.listRepositories),
     listRepositorySummaries: invoke(IPC_CHANNELS.git.listRepositorySummaries),
     addLocalRepository: (input) =>
