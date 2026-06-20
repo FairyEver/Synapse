@@ -13,6 +13,57 @@ const EMPTY_RESULT: SynapseGitStatusParseResult = {
   changes: [],
 }
 
+const gitPathTextDecoder = new TextDecoder()
+const gitPathTextEncoder = new TextEncoder()
+
+function appendText(bytes: number[], value: string): void {
+  bytes.push(...gitPathTextEncoder.encode(value))
+}
+
+function decodeGitPath(rawPath: string): string {
+  const value = rawPath.trim()
+  if (value.length < 2 || value[0] !== "\"" || value[value.length - 1] !== "\"") return value
+  const bytes: number[] = []
+  const body = value.slice(1, -1)
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index]
+    if (character !== "\\") {
+      appendText(bytes, character ?? "")
+      continue
+    }
+    const escaped = body[index + 1]
+    if (!escaped) {
+      bytes.push("\\".charCodeAt(0))
+      continue
+    }
+    if (/[0-7]/.test(escaped)) {
+      let octal = escaped
+      let consumed = 1
+      while (consumed < 3 && /[0-7]/.test(body[index + 1 + consumed] ?? "")) {
+        octal += body[index + 1 + consumed]
+        consumed += 1
+      }
+      bytes.push(Number.parseInt(octal, 8))
+      index += consumed
+      continue
+    }
+    const mapped = escaped === "n"
+      ? "\n"
+      : escaped === "t"
+        ? "\t"
+        : escaped === "r"
+          ? "\r"
+          : escaped === "b"
+            ? "\b"
+            : escaped === "f"
+              ? "\f"
+              : escaped
+    appendText(bytes, mapped)
+    index += 1
+  }
+  return gitPathTextDecoder.decode(Uint8Array.from(bytes))
+}
+
 function parseAheadBehind(line: string): Pick<SynapseGitStatusParseResult, "ahead" | "behind"> {
   const match = line.match(/^# branch\.ab \+(\d+) -(\d+)$/)
   if (!match) return { ahead: 0, behind: 0 }
@@ -37,7 +88,7 @@ function parseOrdinaryChange(line: string): SynapseGitFileChange | null {
   const xy = fields[1] ?? ".."
   const indexCode = xy[0] ?? "."
   const worktreeCode = xy[1] ?? "."
-  const path = fields.slice(8).join(" ").trim()
+  const path = decodeGitPath(fields.slice(8).join(" "))
   if (!path) return null
   const status = statusFromCodes(indexCode, worktreeCode)
   return {
@@ -52,11 +103,11 @@ function parseOrdinaryChange(line: string): SynapseGitFileChange | null {
 function parseRenamedChange(line: string): SynapseGitFileChange | null {
   const tabIndex = line.indexOf("\t")
   const beforeTab = tabIndex >= 0 ? line.slice(0, tabIndex) : line
-  const originalPath = tabIndex >= 0 ? line.slice(tabIndex + 1).trim() : null
+  const originalPath = tabIndex >= 0 ? decodeGitPath(line.slice(tabIndex + 1)) : null
   const fields = beforeTab.split(" ")
   if (fields.length < 10) return null
   const xy = fields[1] ?? ".."
-  const path = fields.slice(9).join(" ").trim()
+  const path = decodeGitPath(fields.slice(9).join(" "))
   if (!path) return null
   return {
     path,
@@ -68,7 +119,7 @@ function parseRenamedChange(line: string): SynapseGitFileChange | null {
 }
 
 function parseUntrackedChange(line: string): SynapseGitFileChange | null {
-  const path = line.slice(2).trim()
+  const path = decodeGitPath(line.slice(2))
   if (!path) return null
   return {
     path,
@@ -81,7 +132,7 @@ function parseUntrackedChange(line: string): SynapseGitFileChange | null {
 
 function parseConflictChange(line: string): SynapseGitFileChange | null {
   const fields = line.split(" ")
-  const path = fields.slice(11).join(" ").trim()
+  const path = decodeGitPath(fields.slice(11).join(" "))
   if (!path) return null
   return {
     path,

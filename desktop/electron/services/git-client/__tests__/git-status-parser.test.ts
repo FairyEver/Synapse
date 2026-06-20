@@ -36,4 +36,18 @@ describe("parseGitStatusPorcelainV2", () => {
       { path: "docs/new-name.md", originalPath: "docs/old-name.md", status: "renamed", staged: true, conflicted: false },
     ])
   })
+
+  it("decodes Git quoted paths before returning changes", () => {
+    const snapshot = parseGitStatusPorcelainV2([
+      "1 .M N... 100644 100644 100644 abc abc \"docs/\\344\\270\\255\\346\\226\\207 file.ts\"",
+      "? \"docs/line\\nname.txt\"",
+      "2 R. N... 100644 100644 100644 abc abc R100 \"docs/\\346\\226\\260 name.md\"\t\"docs/old\\040name.md\"",
+    ].join("\n"))
+
+    expect(snapshot.changes).toEqual([
+      { path: "docs/中文 file.ts", originalPath: null, status: "modified", staged: false, conflicted: false },
+      { path: "docs/line\nname.txt", originalPath: null, status: "untracked", staged: false, conflicted: false },
+      { path: "docs/新 name.md", originalPath: "docs/old name.md", status: "renamed", staged: true, conflicted: false },
+    ])
+  })
 })
