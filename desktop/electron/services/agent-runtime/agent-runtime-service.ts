@@ -86,6 +86,10 @@ import type {
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
 import { sanitizeError } from "../error-sanitize"
+import {
+  KnowledgeBaseLintPreflightService,
+  formatKnowledgeBaseLintPreflightAppendix,
+} from "../knowledge-base"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 import {
   sanitizePermissionRawInput,
@@ -128,6 +132,7 @@ export interface AgentRuntimeServiceDeps {
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
+  readonly knowledgeBaseLintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
@@ -239,6 +244,8 @@ export class AgentRuntimeService {
       listCommands: (message) => this.listPublishedCommands(message.platform),
       runCustomCommand: (command, args, message) =>
         this.runCustomCommand(command, args, message),
+      buildSkillPromptAppendix: (input) =>
+        this.buildSkillPromptAppendix(input.name),
       compressSession: (message, conversation) =>
         this.conversationRouter.compressSession(message, conversation),
     })
@@ -293,6 +300,33 @@ export class AgentRuntimeService {
     return Array.from(this.states.values()).some((state) =>
       state.busy || state.activeTurns > 0 || state.queue.length > 0 || state.liveSession?.alive() === true
     )
+  }
+
+  private async buildSkillPromptAppendix(name: string): Promise<string | null> {
+    if (this.deps.managedKnowledgeBase !== true || name !== "wiki-lint") {
+      return null
+    }
+    if (!this.deps.workDir) {
+      return null
+    }
+    try {
+      const preflight = this.deps.knowledgeBaseLintPreflight ?? new KnowledgeBaseLintPreflightService()
+      const result = await preflight.run(this.deps.workDir)
+      return formatKnowledgeBaseLintPreflightAppendix(result)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.deps.logger?.warn("Knowledge base lint preflight failed.", {
+        boundary: "agent-runtime.knowledge-base-lint-preflight",
+        projectId: this.deps.projectId,
+        error: sanitizeError(message),
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+      return [
+        "## Synapse 确定性预检",
+        "- 状态：预检失败",
+        "- 说明：Synapse 未能完成内部预检；不要重新运行 DragonScale 脚本，也不要编造地址或 tiling 结果。",
+      ].join("\n")
+    }
   }
 
   async sendSideSessionWithTimeout(

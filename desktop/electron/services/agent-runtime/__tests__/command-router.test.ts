@@ -488,6 +488,38 @@ describe("AgentCommandRouter", () => {
       .resolves.toEqual({ kind: "prompt", content: "registered prompt" })
   })
 
+  it("appends runtime context to skill prompts when configured", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      skills: new StaticSkillRegistry({
+        name: "wiki-lint",
+        prompt: "skill prompt",
+        source: "/skills/wiki-lint/SKILL.md",
+      }),
+      buildSkillPromptAppendix: ({ name, args, context }) =>
+        `runtime appendix: ${name} ${args.join(" ")} ${context.turnId}`,
+      resetSession: async () => baseConversation(),
+    })
+
+    const prompt = await router.handle(
+      baseMessage("/wiki-lint --fast"),
+      baseConversation(),
+      { turnId: "turn-1" },
+    )
+
+    expect(prompt).toEqual({
+      kind: "prompt",
+      content: expect.stringContaining("skill prompt"),
+    })
+    expect(prompt).toEqual({
+      kind: "prompt",
+      content: expect.stringContaining("runtime appendix: wiki-lint --fast turn-1"),
+    })
+  })
+
   it("returns native slash routes only for explicit allowlist or callback matches", async () => {
     const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({

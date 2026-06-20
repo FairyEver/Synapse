@@ -12,6 +12,7 @@ import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
 import { AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE } from "../agent-error-messages"
 import { CustomCommandRegistry } from "../command-registry"
+import { SkillRegistry, type AgentSkill } from "../skill-registry"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -126,6 +127,57 @@ describe("AgentRuntimeService", () => {
     })
 
     expect(managedService.hasActiveKnowledgeBaseSession()).toBe(true)
+  })
+
+  it("adds deterministic knowledge base lint preflight to managed wiki-lint skills", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new ScriptedSession([
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const preflight = {
+      run: vi.fn(async () => ({
+        generatedDate: "2026-04-26",
+        pagesScanned: 3,
+        issues: [],
+        address: {
+          counter: 4,
+          highestCAddress: "c-000003",
+          postRolloutPagesChecked: 3,
+          legacyPagesPendingBackfill: 0,
+          issues: [],
+        },
+        tiling: {
+          status: "ok" as const,
+          reportPath: "wiki/meta/tiling-report-2026-04-26.md",
+          errors: 0,
+          reviews: 1,
+          calibrated: true,
+        },
+      })),
+    }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/kb",
+      conversations,
+      managedKnowledgeBase: true,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      skills: new StaticSkillRegistry({
+        name: "wiki-lint",
+        prompt: "Use the Synapse preflight appendix.",
+        source: "/kb/skills/wiki-lint/SKILL.md",
+      }),
+      knowledgeBaseLintPreflight: preflight,
+      now: fixedNow,
+    })
+
+    await service.send(baseMessage("/wiki-lint"))
+
+    expect(preflight.run).toHaveBeenCalledWith("/kb")
+    expect(session.sent[0]).toContain("Use the Synapse preflight appendix.")
+    expect(session.sent[0]).toContain("## Synapse 确定性预检")
+    expect(session.sent[0]).toContain("不要重新运行 DragonScale 脚本")
+    expect(session.sent[0]).toContain("Report: wiki/meta/tiling-report-2026-04-26.md")
   })
 
   it("passes side-channel reply environment into live SDK sessions", async () => {
@@ -1904,6 +1956,16 @@ class ScriptedSession implements AgentLiveSession {
 
   async close(): Promise<void> {
     this.closed = true
+  }
+}
+
+class StaticSkillRegistry extends SkillRegistry {
+  constructor(private readonly skill: AgentSkill) {
+    super({})
+  }
+
+  override async resolve(name: string): Promise<AgentSkill | null> {
+    return name === this.skill.name ? this.skill : null
   }
 }
 

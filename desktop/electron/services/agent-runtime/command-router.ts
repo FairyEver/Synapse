@@ -19,6 +19,7 @@ import {
 } from "./command-registry"
 import {
   buildSkillInvocationPrompt,
+  type AgentSkill,
   type SkillRegistry,
 } from "./skill-registry"
 import {
@@ -37,6 +38,9 @@ export interface AgentCommandRouterDeps {
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
+  buildSkillPromptAppendix?(
+    input: AgentSkillPromptAppendixInput,
+  ): Promise<string | null | undefined> | string | null | undefined
   readonly logger?: Pick<StructuredLogger, "warn">
   listCommands?(message: AgentMessage): Promise<readonly PublishedAgentCommand[]>
   runCustomCommand?(
@@ -72,6 +76,15 @@ export interface RegisteredPromptCommand {
 
 export interface AgentCommandRouteContext {
   readonly turnId: string
+}
+
+export interface AgentSkillPromptAppendixInput {
+  readonly name: string
+  readonly args: readonly string[]
+  readonly skill: AgentSkill
+  readonly message: AgentMessage
+  readonly conversation: ConversationEntryV1
+  readonly context: AgentCommandRouteContext
 }
 
 export type RegisteredPromptCommandOutput =
@@ -193,9 +206,18 @@ export class AgentCommandRouter {
 
     const skill = await this.deps.skills?.resolve(name)
     if (skill) {
+      const prompt = buildSkillInvocationPrompt(skill, parsed.args)
+      const appendix = await Promise.resolve(this.deps.buildSkillPromptAppendix?.({
+        name,
+        args: parsed.args,
+        skill,
+        message,
+        conversation,
+        context,
+      }))
       return {
         kind: "prompt",
-        content: buildSkillInvocationPrompt(skill, parsed.args),
+        content: appendix ? `${prompt}\n\n${appendix}` : prompt,
       }
     }
 

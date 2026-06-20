@@ -244,44 +244,16 @@ Lint only observes. Do NOT auto-assign missing addresses during lint. Assignment
 
 **Opt-in feature.** Semantic tiling flags candidate duplicate *pages* (not just concept pages — see Scope below) using embedding cosine similarity. Local ollama only by default; remote endpoints require an explicit override flag.
 
-### Detection and delegation
+### Synapse preflight appendix
 
-```bash
-if [ -x ./scripts/tiling-check.py ] && command -v python3 >/dev/null 2>&1; then
-  ./scripts/tiling-check.py --peek > /tmp/tiling-peek.json 2>/dev/null
-  PEEK_EXIT=$?
-  case $PEEK_EXIT in
-    0)  TILING_READY=1 ;;                                  # ready
-    2)  TILING_READY=0 ; echo "tiling ERROR: usage error (exit 2); inspect /tmp/tiling-peek.json" ;;
-    3)  TILING_READY=0 ; echo "tiling ERROR: cache corrupt (exit 3); inspect .vault-meta/tiling-cache.json" ;;
-    4)  TILING_READY=0 ; echo "tiling ERROR: vault exceeds scale hard-fail (exit 4); batching required" ;;
-    10) TILING_READY=0 ; echo "tiling skipped: ollama not reachable (exit 10)" ;;
-    11) TILING_READY=0 ; echo "tiling skipped: run 'ollama pull nomic-embed-text' to enable (exit 11)" ;;
-    *)  TILING_READY=0 ; echo "tiling ERROR: unexpected exit code $PEEK_EXIT from tiling-check.py --peek" ;;
-  esac
-else
-  TILING_READY=0
-  echo "tiling skipped: scripts/tiling-check.py or python3 not available"
-fi
-```
+Synapse runs the deterministic preflight before this skill is invoked and appends the results under
+`## Synapse 确定性预检`. Treat that appendix as the source of truth for address validation,
+tiling status, report path, issue counts, and skip/error messages.
 
-Inspect `/tmp/tiling-peek.json` (structured diagnostics: script path, python interpreter, ollama URL, cache state, thresholds state) whenever the status is ambiguous. Never collapse unknown exits into "unknown status" silently.
-
-When `TILING_READY=1`:
-
-```bash
-./scripts/tiling-check.py --report wiki/meta/tiling-report-YYYY-MM-DD.md
-REPORT_EXIT=$?
-case $REPORT_EXIT in
-  0)  echo "tiling report written" ;;
-  2)  echo "tiling ERROR: usage error during --report" ;;
-  3)  echo "tiling ERROR: cache corrupt during --report" ;;
-  4)  echo "tiling ERROR: scale hard-fail during --report" ;;
-  10) echo "tiling ERROR: ollama became unreachable between --peek and --report" ;;
-  11) echo "tiling ERROR: model became unavailable between --peek and --report" ;;
-  *)  echo "tiling ERROR: unexpected exit code $REPORT_EXIT from tiling-check.py --report" ;;
-esac
-```
+Do not rerun `scripts/tiling-check.py`, do not create a second tiling report, and do not invent
+address or tiling results when the appendix reports that preflight failed or was unavailable. If the
+appendix is missing, report that Synapse did not provide preflight data and continue only with
+checks that can be performed from already-read wiki files.
 
 ### Scope (what the helper scans)
 
@@ -317,17 +289,17 @@ If you place a real concept under `wiki/meta/` it will be excluded by path regar
 
 ### Calibration procedure (manual, one-time per vault)
 
-1. Run the helper with defaults. Capture the **Review** band pairs.
+1. Run `/wiki-lint` and use the Synapse preflight appendix to capture the **Review** band pairs.
 2. Temporarily lower `bands.review` to `0.70` in `.vault-meta/tiling-thresholds.json` to surface a wider sample. Aim for >=50 pairs spanning 0.70-0.95.
 3. Label each pair: `duplicate`, `similar`, `distinct`.
 4. Pick bands such that: (a) the `error` band contains >= 95% true duplicates; (b) the `review` band captures `similar` pairs without swamping the report with `distinct` ones.
 5. Edit `.vault-meta/tiling-thresholds.json`: set new `bands.error` and `bands.review`, set `calibrated: true`, set `calibration_pairs_labeled` to the label count.
-6. Re-run lint. Report footer now says `calibrated: true`.
+6. Re-run `/wiki-lint`. The Synapse preflight appendix should report `Calibrated: true`.
 
 ### Scale
 
-- Cold-cache cost is O(N) POSTs to ollama. Warm-cache cost is O(N^2) cosines in pure Python.
-- Helper prints a warning at > 500 pages and hard-fails (exit 4) at > 5000. Revisit the implementation (batching, vectorized cosine, or external tooling) before exceeding either limit.
+- Cold-cache cost is O(N) POSTs to ollama. Warm-cache cost is O(N^2) cosine comparisons.
+- Synapse preflight reports scale warnings or hard-fail status in the appendix. Surface that status instead of retrying locally.
 
 ### Lint report embed
 
@@ -341,10 +313,10 @@ See [[tiling-report-YYYY-MM-DD]] for the full pair listing.
 
 ### Invariants
 
-- Read-only. `tiling-check.py` never modifies wiki pages.
+- Synapse preflight never modifies wiki pages; it may refresh tiling cache/report artifacts.
 - No auto-merge. Duplicates are listed, never resolved.
 - Cache is incremental and model-scoped. Unchanged pages are not re-embedded.
-- Exit codes: `0` ok, `2` usage error, `3` cache corrupt, `4` scale hard-fail, `10` ollama unreachable, `11` model missing. Surface all of them; do not collapse into a single "unknown" bucket.
+- Surface the `Status` and `Message` fields from the Synapse preflight appendix; do not collapse them into a single "unknown" bucket.
 
 ---
 
