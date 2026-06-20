@@ -349,6 +349,7 @@ function isArrayBufferLike(value: unknown): value is ArrayBuffer {
 
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
 type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUploadSchema>
+type DriveFileVersionDownloadRequestForIpc = z.infer<typeof driveFileVersionDownloadSchema>
 
 function driveLocalUploadRelativePathDepth(relativePath: string): number {
   return Math.max(0, relativePath.split("/").filter(Boolean).length - 1)
@@ -373,15 +374,17 @@ async function checkAccountPermission(options: {
   action: PermissionAction
   resource: string
   source: string
+  context?: Record<string, unknown>
 }): Promise<void> {
   const actor = { kind: "user" } as const
   const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
   const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const metadata = { source: options.source, ...options.context }
   const permission = await permissionGuard.check({
     action: options.action,
     actor,
     resource: options.resource,
-    context: { source: options.source },
+    context: metadata,
   })
   if (!permission.allowed) {
     auditSink.record({
@@ -389,7 +392,7 @@ async function checkAccountPermission(options: {
       actor,
       resource: options.resource,
       outcome: "denied",
-      metadata: { source: options.source, reason: permission.reason, policyId: permission.policyId },
+      metadata: { ...metadata, reason: permission.reason, policyId: permission.policyId },
     })
     throw new Error(permission.reason)
   }
@@ -398,7 +401,7 @@ async function checkAccountPermission(options: {
     actor,
     resource: options.resource,
     outcome: "allowed",
-    metadata: { source: options.source },
+    metadata,
   })
 }
 
@@ -474,6 +477,45 @@ async function runGuardedDrivePreparedUpload<T>(options: {
       },
     })
     throw new Error(safeMessage)
+  }
+}
+
+async function runGuardedDriveFileVersionDownload<T>(options: {
+  ctx: IpcHandlerContext
+  request: DriveFileVersionDownloadRequestForIpc
+  run(): Promise<T>
+}): Promise<T> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  const metadata = {
+    itemId: options.request.itemId,
+    versionId: options.request.versionId,
+  }
+  await checkAccountPermission({
+    ctx: options.ctx,
+    action: "fs.write",
+    resource: options.request.outputPath,
+    source: "account.driveFileVersionDownload.write",
+    context: metadata,
+  })
+  try {
+    return await options.run()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: options.request.outputPath,
+      outcome: "failed",
+      metadata: {
+        source: "account.driveFileVersionDownload.write",
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        error: sanitizeError(message),
+        errorLength: message.length,
+      },
+    })
+    throw error
   }
 }
 
@@ -643,7 +685,14 @@ export const accountIpcModule: IpcModule = {
       channel: "synapse:account:drive:file-versions:download",
       request: driveFileVersionDownloadSchema,
       response: okSchema.extend({ path: z.string() }),
-      handler: async (_ctx, input) => accountService.downloadDriveFileVersion(driveFileVersionDownloadSchema.parse(input)),
+      handler: async (ctx, input) => {
+        const parsed = driveFileVersionDownloadSchema.parse(input)
+        return runGuardedDriveFileVersionDownload({
+          ctx,
+          request: parsed,
+          run: () => accountService.downloadDriveFileVersion(parsed),
+        })
+      },
     },
     restoreDriveFileVersion: {
       kind: "invoke",

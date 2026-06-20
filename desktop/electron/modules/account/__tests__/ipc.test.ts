@@ -58,6 +58,24 @@ vi.mock("../../../services/account-service", () => ({
 import { accountService } from "../../../services/account-service"
 import { accountIpcModule } from "../ipc"
 
+type PermissionResultForTest =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly reason: string; readonly policyId?: string }
+
+function createAccountSecurityContext(permissionResult: PermissionResultForTest = { allowed: true }) {
+  const permissionGuard = { check: vi.fn(async () => permissionResult) }
+  const auditSink = { record: vi.fn() }
+  const ctx: IpcHandlerContext = {
+    moduleId: "account",
+    resolve: ((id: string) => {
+      if (id === "core.permission-guard") return permissionGuard
+      if (id === "core.audit-sink") return auditSink
+      throw new Error(`unexpected service ${id}`)
+    }) as IpcHandlerContext["resolve"],
+  }
+  return { auditSink, ctx, permissionGuard }
+}
+
 describe("accountIpcModule", () => {
   it("declares account invoke channels", () => {
     expect(accountIpcModule.id).toBe("account")
@@ -481,12 +499,14 @@ describe("accountIpcModule", () => {
   })
 
   it("passes drive file version requests through handlers", async () => {
+    const { ctx } = createAccountSecurityContext()
+
     await accountIpcModule.methods.listDriveFileVersions.handler({} as IpcHandlerContext, {
       itemId: "item-1",
       offset: 10,
       limit: 5,
     })
-    await accountIpcModule.methods.downloadDriveFileVersion.handler({} as IpcHandlerContext, {
+    await accountIpcModule.methods.downloadDriveFileVersion.handler(ctx, {
       itemId: "item-1",
       versionId: "version-1",
       outputPath: "/tmp/report-v1.md",
@@ -514,6 +534,96 @@ describe("accountIpcModule", () => {
     expect(accountService.restoreDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.deleteDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
+  })
+
+  it("guards drive file version downloads with fs write permission and audit", async () => {
+    const { auditSink, ctx, permissionGuard } = createAccountSecurityContext()
+
+    await accountIpcModule.methods.downloadDriveFileVersion.handler(ctx, {
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/report-v1.md",
+      context: {
+        source: "account.driveFileVersionDownload.write",
+        itemId: "item-1",
+        versionId: "version-1",
+      },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/report-v1.md",
+      metadata: {
+        source: "account.driveFileVersionDownload.write",
+        itemId: "item-1",
+        versionId: "version-1",
+      },
+    }))
+    expect(accountService.downloadDriveFileVersion).toHaveBeenCalledWith({
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    })
+  })
+
+  it("stops drive file version downloads when fs write permission is denied", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+    vi.mocked(accountService.downloadDriveFileVersion).mockClear()
+
+    await expect(accountIpcModule.methods.downloadDriveFileVersion.handler(ctx, {
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "/tmp/report-v1.md",
+      metadata: expect.objectContaining({
+        source: "account.driveFileVersionDownload.write",
+        itemId: "item-1",
+        versionId: "version-1",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(accountService.downloadDriveFileVersion).not.toHaveBeenCalled()
+  })
+
+  it("audits failed drive file version downloads without leaking secrets", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext()
+    vi.mocked(accountService.downloadDriveFileVersion).mockClear()
+    vi.mocked(accountService.downloadDriveFileVersion).mockRejectedValueOnce(new Error("write failed token=sk-secret"))
+
+    await expect(accountIpcModule.methods.downloadDriveFileVersion.handler(ctx, {
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    })).rejects.toThrow("write failed")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: "/tmp/report-v1.md",
+      metadata: expect.objectContaining({
+        source: "account.driveFileVersionDownload.write",
+        itemId: "item-1",
+        versionId: "version-1",
+        error: "write failed token=[redacted]",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
   })
 
   it("validates drive share bridge schemas", () => {
