@@ -10,6 +10,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   configLoad: vi.fn(),
+  prepareRuleFileContent: vi.fn(),
   readRuleProjectFormValues: vi.fn(),
   resolveTarget: vi.fn(),
 }))
@@ -63,7 +64,7 @@ vi.mock("../definitions/generated/main-registry", () => ({
   ]),
   editorInstallStrategyById: new Map([
     ["test-editor", {
-      prepareRuleFileContent: vi.fn(),
+      prepareRuleFileContent: mocks.prepareRuleFileContent,
       readRuleProjectFormValues: mocks.readRuleProjectFormValues,
     }],
   ]),
@@ -76,6 +77,7 @@ vi.mock("../config-store", () => ({
 }))
 
 import { contentInstallService } from "../content-install-service"
+import { contentService } from "../content-service"
 
 const tempRoots: string[] = []
 
@@ -110,6 +112,7 @@ function mockConfiguredProjects(paths: string[]) {
 describe("ContentInstallService path security", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.prepareRuleFileContent.mockImplementation(async ({ ruleBody }: { ruleBody: string }) => ruleBody)
     mockConfiguredProjects([])
   })
 
@@ -162,5 +165,40 @@ describe("ContentInstallService path security", () => {
     })).rejects.toThrow("安装目标不在已配置编辑器路径中。")
 
     expect(mocks.readRuleProjectFormValues).not.toHaveBeenCalled()
+  })
+
+  it("rejects Rule install targets outside configured editor rule roots", async () => {
+    const configuredRoot = await createTempRoot()
+    mockConfiguredProjects([configuredRoot])
+    vi.mocked(contentService.getContent).mockResolvedValue({
+      content: "# Escaped Rule\n",
+    } as Awaited<ReturnType<typeof contentService.getContent>>)
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "rule",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "project",
+      status: "ready",
+      targetExists: false,
+      targetKind: "file",
+      targetPath: path.join(configuredRoot, ".test-editor", "settings.md"),
+    })
+
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "foo/../../settings",
+      contentType: "rule",
+      editorId: "test-editor",
+      projectPath: configuredRoot,
+      scope: "project",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("安装目标不在已配置编辑器路径中。")
+
+    expect(contentService.getContent).not.toHaveBeenCalled()
   })
 })

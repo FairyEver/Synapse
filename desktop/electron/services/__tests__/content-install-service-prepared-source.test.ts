@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   getContent: vi.fn(),
   getSkillDetail: vi.fn(),
+  getGlobalRulesPath: vi.fn(),
   prepareRuleFileContent: vi.fn(),
   prepareSkillDirectory: vi.fn(),
   resolveTarget: vi.fn(),
@@ -36,6 +37,23 @@ vi.mock("../editor-adapter-service", () => ({
   editorAdapterService: {
     resolveTarget: mocks.resolveTarget,
   },
+}))
+
+vi.mock("../editor-adapters", () => ({
+  editorAdapterById: new Map([
+    ["test-editor", {
+      getScanPathConfig: () => ({
+        detectionDir: os.tmpdir(),
+        globalRulesPath: mocks.getGlobalRulesPath(),
+        globalSkillsPath: null,
+        projectPaths: (projectPath: string) => ({
+          rulesPath: path.join(projectPath, "rules"),
+          skillsPath: path.join(projectPath, "skills"),
+        }),
+        rulesSupported: true,
+      }),
+    }],
+  ]),
 }))
 
 vi.mock("../definitions/generated/main-registry", () => ({
@@ -69,6 +87,7 @@ async function createTempRoot(): Promise<string> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getGlobalRulesPath.mockReturnValue(null)
 })
 
 afterEach(async () => {
@@ -79,6 +98,7 @@ describe("ContentInstallService prepared source", () => {
   it("reads a prepared Rule while preserving the existing editor install strategy", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "rules", "store-rule.md")
+    mocks.getGlobalRulesPath.mockReturnValue(path.join(root, "rules"))
     const provider = {
       readPreparedRule: vi.fn().mockResolvedValue("# Store Rule\n"),
       readPreparedSkill: vi.fn(),

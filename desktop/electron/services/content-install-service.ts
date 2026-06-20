@@ -263,6 +263,23 @@ function isPathInsideDirectory(targetPath: string, directoryPath: string): boole
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
+type TrustedRuleTargetPath = {
+  kind: "directory" | "file"
+  targetPath: string
+}
+
+function inferRuleTargetKind(targetPath: string): TrustedRuleTargetPath["kind"] {
+  return path.basename(targetPath) === "rules" ? "directory" : "file"
+}
+
+function isTrustedRuleTargetPath(targetPath: string, trusted: TrustedRuleTargetPath): boolean {
+  if (trusted.kind === "file") {
+    return isSamePath(targetPath, trusted.targetPath)
+  }
+
+  return isSamePath(targetPath, trusted.targetPath) || isPathInsideDirectory(targetPath, trusted.targetPath)
+}
+
 async function assertConfiguredProjectPath(
   payload: SynapseResolveEditorTargetPayload,
 ): Promise<void> {
@@ -278,28 +295,55 @@ async function assertConfiguredProjectPath(
   }
 }
 
-async function getTrustedRuleDirectories(editorId: string): Promise<string[]> {
+async function getTrustedRuleTargets(editorId: string): Promise<TrustedRuleTargetPath[]> {
   const adapter = editorAdapterById.get(editorId)
   if (!adapter) return []
 
-  const directories: string[] = []
-  const globalRulesPath = adapter.resolveGlobalDirectoryPaths().rulesPath
-  if (globalRulesPath) directories.push(globalRulesPath)
-
-  const config = await configStore.load()
+  const targets: TrustedRuleTargetPath[] = []
   const scanConfig = adapter.getScanPathConfig()
-  for (const project of config.global.projects) {
-    directories.push(scanConfig.projectPaths(project.path).rulesPath)
+  if (scanConfig.globalRulesPath) {
+    targets.push({
+      kind: inferRuleTargetKind(scanConfig.globalRulesPath),
+      targetPath: scanConfig.globalRulesPath,
+    })
   }
 
-  return Array.from(new Set(directories))
+  const config = await configStore.load()
+  for (const project of config.global.projects) {
+    const rulesPath = scanConfig.projectPaths(project.path).rulesPath
+    targets.push({
+      kind: inferRuleTargetKind(rulesPath),
+      targetPath: rulesPath,
+    })
+  }
+
+  const seen = new Set<string>()
+  return targets.filter((target) => {
+    const key = `${target.kind}:${path.resolve(target.targetPath)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 async function assertTrustedInstallFormTarget(
   payload: SynapseReadEditorInstallFormValuesPayload,
 ): Promise<void> {
-  const directories = await getTrustedRuleDirectories(payload.editorId)
-  const isTrusted = directories.some((directory) => isPathInsideDirectory(payload.targetPath, directory))
+  const targets = await getTrustedRuleTargets(payload.editorId)
+  const isTrusted = targets.some((target) => isTrustedRuleTargetPath(payload.targetPath, target))
+  if (!isTrusted) {
+    throw new Error(UNTRUSTED_INSTALL_TARGET_ERROR)
+  }
+}
+
+async function assertTrustedResolvedRuleTarget(
+  payload: SynapseInstallToEditorPayload,
+  target: SynapseEditorResolvedTarget,
+): Promise<void> {
+  if (payload.contentType !== "rule") return
+  if (target.status !== "ready" && target.status !== "conflict") return
+  const targets = await getTrustedRuleTargets(payload.editorId)
+  const isTrusted = targets.some((trusted) => isTrustedRuleTargetPath(target.targetPath, trusted))
   if (!isTrusted) {
     throw new Error(UNTRUSTED_INSTALL_TARGET_ERROR)
   }
@@ -335,6 +379,8 @@ export class ContentInstallService {
     if (target.status !== "ready" && !isConfirmedConflict) {
       throw new Error(target.message ?? "当前编辑器暂时不能安装到这个位置。")
     }
+
+    await assertTrustedResolvedRuleTarget(payload, target)
 
     const auditMetadata = {
       contentId: payload.contentId,
