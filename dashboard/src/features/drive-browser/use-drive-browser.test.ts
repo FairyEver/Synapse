@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { driveBrowserApi } from '@/lib/api'
 
-import { loadDriveBrowser, toDriveBrowserQueryKey, useDriveBrowser } from './use-drive-browser'
+import { loadDriveBrowser, toDriveBrowserQueryKey, useDriveBrowser, type DriveBrowserInput } from './use-drive-browser'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -176,6 +176,44 @@ describe('toDriveBrowserQueryKey', () => {
       childrenLimit: 50,
     })
   })
+
+  it('does not reuse unlocked share snapshots after share route changes', async () => {
+    const unlockedSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },
+    })
+    vi.mocked(driveBrowserApi.getShareRoot)
+      .mockResolvedValueOnce({ passwordRequired: true, message: '请输入密码。' })
+      .mockImplementationOnce(() => new Promise(() => {}))
+    vi.mocked(driveBrowserApi.unlockShare).mockResolvedValueOnce(unlockedSnapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, { context: 'share', shareId: 'share-a' })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'passwordRequired') throw new Error('browser is not password protected')
+      hook.result.current.unlock('letmein')
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.current.id : null)
+        .toBe('share-a-file')
+    })
+
+    hook.rerender({ context: 'share', shareId: 'share-b' })
+
+    expect(hook.history.some((entry) => (
+      entry.input.context === 'share'
+      && entry.input.shareId === 'share-b'
+      && entry.state.status === 'ready'
+      && entry.state.snapshot.current.id === 'share-a-file'
+    ))).toBe(false)
+  })
 })
 
 function baseCurrent(): DriveBrowserSnapshotDto['current'] {
@@ -221,15 +259,20 @@ function createChild(id: string): DriveBrowserSnapshotDto['children'][number] {
   }
 }
 
-function createDriveBrowserHookRenderer(queryClient: QueryClient, initialItemId: string) {
+function createDriveBrowserHookRenderer(queryClient: QueryClient, initialInput: string | DriveBrowserInput) {
   host ??= document.createElement('div')
   if (!host.parentElement) document.body.append(host)
   root ??= createRoot(host)
   const result: { current: ReturnType<typeof useDriveBrowser> } = { current: { status: 'loading' } }
-  let currentItemId = initialItemId
+  const history: Array<{
+    readonly input: DriveBrowserInput
+    readonly state: ReturnType<typeof useDriveBrowser>
+  }> = []
+  let currentInput = normalizeDriveBrowserInput(initialInput)
 
   function Harness() {
-    result.current = useDriveBrowser({ context: 'owner', surface: 'console', itemId: currentItemId })
+    result.current = useDriveBrowser(currentInput)
+    history.push({ input: currentInput, state: result.current })
     return null
   }
 
@@ -246,14 +289,21 @@ function createDriveBrowserHookRenderer(queryClient: QueryClient, initialItemId:
   })
 
   return {
+    history,
     result,
-    rerender: (itemId: string) => {
-      currentItemId = itemId
+    rerender: (input: string | DriveBrowserInput) => {
+      currentInput = normalizeDriveBrowserInput(input)
       act(() => {
         render()
       })
     },
   }
+}
+
+function normalizeDriveBrowserInput(input: string | DriveBrowserInput): DriveBrowserInput {
+  return typeof input === 'string'
+    ? { context: 'owner', surface: 'console', itemId: input }
+    : input
 }
 
 async function waitFor(read: () => void): Promise<void> {

@@ -51,13 +51,20 @@ type DriveBrowserLoadOptions = {
   childrenLimit?: number
 }
 
+type KeyedDriveBrowserSnapshot = {
+  keySignature: string
+  snapshot: DriveBrowserSnapshotDto
+}
+
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
-  const [unlockedSnapshot, setUnlockedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
-  const [pagedSnapshot, setPagedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
+  const [unlockedSnapshotState, setUnlockedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
+  const [pagedSnapshotState, setPagedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
   const loadingChildrenPageKeyRef = useRef<string | null>(null)
   const queryKeyPayload = useMemo(() => toDriveBrowserQueryKey(input), [input])
   const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
+  const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, queryKeySignature)
+  const pagedSnapshot = keyedSnapshotForSignature(pagedSnapshotState, queryKeySignature)
 
   const query = useQuery({
     queryKey,
@@ -71,10 +78,11 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       return requireDriveBrowserSnapshot(result)
     },
     onSuccess: (snapshot) => {
-      setUnlockedSnapshot(snapshot)
-      setPagedSnapshot(null)
+      setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot })
+      setPagedSnapshotState(null)
     },
   })
+  const querySnapshot = toDriveBrowserSnapshot(query.data)
   const loadMoreMutation = useMutation({
     mutationFn: async (variables: { readonly snapshot: DriveBrowserSnapshotDto; readonly pageKey: string }) => {
       const snapshot = variables.snapshot
@@ -93,31 +101,39 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     },
     onSuccess: (nextSnapshot) => {
       if (unlockedSnapshot) {
-        setUnlockedSnapshot((current) => current ? mergeDriveBrowserSnapshots(current, nextSnapshot) : nextSnapshot)
+        setUnlockedSnapshotState((current) => ({
+          keySignature: queryKeySignature,
+          snapshot: mergeDriveBrowserSnapshots(
+            keyedSnapshotForSignature(current, queryKeySignature) ?? unlockedSnapshot,
+            nextSnapshot
+          ),
+        }))
         return
       }
-      setPagedSnapshot((current) => {
-        const baseSnapshot = current ?? toDriveBrowserSnapshot(query.data) ?? nextSnapshot
-        return mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot)
+      setPagedSnapshotState((current) => {
+        const baseSnapshot = keyedSnapshotForSignature(current, queryKeySignature) ?? querySnapshot ?? nextSnapshot
+        return {
+          keySignature: queryKeySignature,
+          snapshot: mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot),
+        }
       })
     },
   })
   useEffect(() => {
-    setUnlockedSnapshot(null)
-    setPagedSnapshot(null)
+    setUnlockedSnapshotState(null)
+    setPagedSnapshotState(null)
     loadingChildrenPageKeyRef.current = null
     loadMoreMutation.reset()
   }, [queryKeySignature])
 
-  const querySnapshot = toDriveBrowserSnapshot(query.data)
   const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
   const reloadMutation = useMutation({
     mutationFn: async () => requireDriveBrowserSnapshot(await loadDriveBrowser(input)),
     onSuccess: (nextSnapshot) => {
       if (input.context === 'share') {
-        setUnlockedSnapshot(nextSnapshot)
+        setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       } else {
-        setPagedSnapshot(nextSnapshot)
+        setPagedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       }
     },
   })
@@ -133,9 +149,9 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       })
       const nextSnapshot = requireDriveBrowserSnapshot(await loadDriveBrowser(input))
       if (input.context === 'share') {
-        setUnlockedSnapshot(nextSnapshot)
+        setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       } else {
-        setPagedSnapshot(nextSnapshot)
+        setPagedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       }
       return result
     },
@@ -242,6 +258,13 @@ function toDriveBrowserSnapshot(
 ): DriveBrowserSnapshotDto | null {
   if (!value || isDriveBrowserPasswordRequired(value)) return null
   return value
+}
+
+function keyedSnapshotForSignature(
+  value: KeyedDriveBrowserSnapshot | null,
+  keySignature: string
+): DriveBrowserSnapshotDto | null {
+  return value?.keySignature === keySignature ? value.snapshot : null
 }
 
 function requireDriveBrowserSnapshot(
