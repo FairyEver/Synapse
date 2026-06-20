@@ -726,6 +726,11 @@ function KnowledgeBaseSourceManagerWindow() {
     setCurrentDirectory(directoryPath)
   }, [])
 
+  const updateQuery = useCallback((nextQuery: string) => {
+    setEntryPage(0)
+    setQuery(nextQuery)
+  }, [])
+
   const setTreeDirectoryLoading = useCallback((directoryPath: string, loading: boolean) => {
     const nextRef = new Set(loadingDirectoriesRef.current)
     if (loading) {
@@ -857,10 +862,6 @@ function KnowledgeBaseSourceManagerWindow() {
   useEffect(() => {
     setSelectedPaths(new Set())
   }, [currentDirectory])
-
-  useEffect(() => {
-    setEntryPage(0)
-  }, [currentDirectory, query])
 
   const pruneTreeDirectories = useCallback((directoryPaths: readonly string[]) => {
     const stalePaths = uniqueDirectoryPaths(directoryPaths.filter(Boolean))
@@ -1490,7 +1491,7 @@ function KnowledgeBaseSourceManagerWindow() {
         <SourceManagerToolbar
           breadcrumbs={breadcrumbs}
           query={query}
-          onQueryChange={setQuery}
+          onQueryChange={updateQuery}
           onNavigate={openDirectory}
           onAddUrl={() => {
             setSourceUrl("")

@@ -415,6 +415,64 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     }))
   })
 
+  it("resets raw directory pagination before searching", async () => {
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async (payload) => {
+      if (payload.entryKind === "directory") {
+        return {
+          projectId: payload.projectId,
+          directoryPath: payload.directoryPath,
+          entries: [],
+          totalCount: 0,
+          offset: 0,
+          hasMore: false,
+        }
+      }
+      const offset = payload.offset ?? 0
+      const query = payload.query ?? ""
+      const entryName = query ? "file-001.md" : offset === 0 ? "file-001.md" : "file-201.md"
+      return {
+        projectId: payload.projectId,
+        directoryPath: payload.directoryPath,
+        entries: [{
+          relativePath: entryName,
+          name: entryName,
+          kind: "file",
+          size: 12,
+          modifiedAt: "2026-05-23T14:20:00.000Z",
+        }],
+        totalCount: query ? 1 : 201,
+        offset,
+        limit: payload.limit,
+        hasMore: !query && offset === 0,
+      }
+    })
+
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("file-001.md")
+    })
+    await act(async () => {
+      buttonByLabel("下一页").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("file-201.md")
+    })
+
+    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="搜索当前文件夹"]')
+    if (!searchInput) throw new Error("Search input not found.")
+    await act(async () => {
+      changeInput(searchInput, "file-001")
+      await Promise.resolve()
+    })
+
+    const searchedCalls = bridgeMocks.knowledgeBase.listRawDirectory.mock.calls
+      .map(([payload]) => payload)
+      .filter((payload) => payload.entryKind === "all" && payload.query === "file-001")
+    expect(searchedCalls.map((payload) => payload.offset)).toEqual([0])
+  })
+
   it("keeps batch actions visible and disabled until entries are selected", async () => {
     renderWindow()
 
