@@ -744,6 +744,13 @@ export class DrivePublicController {
       })
     } catch (error) {
       if (response.headersSent) {
+        void publicAssets.recordAccessSafely({
+          ...accessBase,
+          publicAssetId: resolved.publicAssetId,
+          userId: resolved.userId,
+          statusCode: 500,
+          bytes: 0n,
+        })
         if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
         return
       }

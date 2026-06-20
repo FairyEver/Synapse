@@ -1088,6 +1088,56 @@ describe("DriveController", () => {
   })
 })
 
+describe("DrivePublicController public asset streaming", () => {
+  it("records failed public asset access when streaming fails after headers are sent", async () => {
+    const publicAssets = {
+      resolvePublicAsset: vi.fn(async () => ({
+        status: "ok",
+        assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+        publicAssetId: "public-asset-1",
+        userId: "user-1",
+        storageKey: "drive/item-1",
+        name: "logo.png",
+        mimeType: "image/png",
+        size: 8n,
+        etag: "\"etag-1\"",
+      })),
+      recordAccessSafely: vi.fn(async () => undefined),
+    }
+    const storage = {
+      getObjectStream: vi.fn(async () => ({
+        stream: createPartiallyFailingReadable("object stream failed token=secret"),
+        size: 8n,
+        contentType: "image/png",
+      })),
+    }
+    const controller = new DrivePublicController({} as DriveService, storage as never, publicAssets as never)
+    const response = createHeadersSentResponse()
+
+    await controller.sendPublicAsset(
+      "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      {
+        headers: {
+          referer: "https://example.test/image?token=secret",
+          "user-agent": "Image Browser",
+        },
+        ip: "127.0.0.1",
+        method: "GET",
+      } as never,
+      response as never,
+    )
+
+    expect(publicAssets.recordAccessSafely).toHaveBeenCalledWith(expect.objectContaining({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      publicAssetId: "public-asset-1",
+      userId: "user-1",
+      method: "GET",
+      statusCode: 500,
+      bytes: 0n,
+    }))
+  })
+})
+
 function createBrowserSnapshot(): DriveBrowserSnapshotDto {
   return {
     context: "share",
@@ -1164,6 +1214,44 @@ function createFailingReadable(message: string): Readable {
       this.destroy(new Error(message))
     },
   })
+}
+
+function createPartiallyFailingReadable(message: string): Readable {
+  let sent = false
+  return new Readable({
+    read() {
+      if (sent) return
+      sent = true
+      this.push(Buffer.from("partial"))
+      process.nextTick(() => {
+        this.destroy(new Error(message))
+      })
+    },
+  })
+}
+
+function createHeadersSentResponse() {
+  let headersSent = false
+  const response = new Writable({
+    write(_chunk, _encoding, callback) {
+      headersSent = true
+      callback()
+    },
+  }) as Writable & {
+    headersSent: boolean
+    removeHeader: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
+    setHeader: ReturnType<typeof vi.fn>
+    status: ReturnType<typeof vi.fn>
+  }
+  Object.defineProperty(response, "headersSent", {
+    get: () => headersSent,
+  })
+  response.setHeader = vi.fn()
+  response.removeHeader = vi.fn()
+  response.status = vi.fn(() => response)
+  response.send = vi.fn(() => response)
+  return response
 }
 
 function restoreEnv(name: string, value: string | undefined): void {
