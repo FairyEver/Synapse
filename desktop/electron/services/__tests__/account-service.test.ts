@@ -83,6 +83,10 @@ function textResponse(body: string, status = 500): Response {
   })
 }
 
+function httpError(message: string, status = 400): Error & { readonly status: number } {
+  return Object.assign(new Error(message), { status })
+}
+
 function failingDownloadResponse(): Response {
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -305,6 +309,67 @@ describe("AccountService", () => {
     })
 
     expect(service.prepareDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("keeps sanitized server upload prepare errors in local upload results", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-prepare-error-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+    const prepareError = httpError("上传准备失败。 (POST /api/drive/uploads/prepare HTTP 400): 云盘空间不足。")
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveUpload").mockRejectedValueOnce(prepareError)
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
+    })).resolves.toEqual({
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+      message: "上传准备失败。 (POST /api/drive/uploads/prepare HTTP 400): 云盘空间不足。",
+    })
+  })
+
+  it("keeps sanitized server folder prepare errors in local upload results", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-folder-prepare-error-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+    const prepareError = httpError("上传准备失败。 (POST /api/drive/uploads/folder/prepare HTTP 400): 云盘空间不足。")
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockRejectedValueOnce(prepareError)
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "folder", path: dir, folderName: "docs", files: [{ path: filePath, relativePath: "report.txt", mimeType: "text/plain" }] }],
+    })).resolves.toEqual({
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+      message: "上传准备失败。 (POST /api/drive/uploads/folder/prepare HTTP 400): 云盘空间不足。",
+    })
+  })
+
+  it("keeps sanitized server public asset prepare errors in local upload results", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-prepare-error-"))
+    const filePath = path.join(dir, "quota.png")
+    await writeFile(filePath, "hello")
+    const prepareError = httpError("上传准备失败。 (POST /api/drive/public-assets/uploads/prepare HTTP 400): 云盘空间不足。")
+    const { service } = await createTestAccountService()
+    vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson").mockRejectedValueOnce(prepareError)
+
+    await expect(service.uploadDrivePublicAssets({
+      files: [{ path: filePath, name: "quota.png", mimeType: null }],
+    })).resolves.toEqual({
+      results: [
+        {
+          status: "rejected",
+          fileName: "quota.png",
+          message: "上传准备失败。 (POST /api/drive/public-assets/uploads/prepare HTTP 400): 云盘空间不足。",
+        },
+      ],
+    })
   })
 
   it("preserves existing prepared upload content-length headers", async () => {

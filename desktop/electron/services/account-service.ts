@@ -660,17 +660,17 @@ export class AccountService {
         size: String(fileStat.size),
         mimeType: item.mimeType ?? null,
       })
-    } catch {
-      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage() }
+    } catch (error) {
+      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage(error) }
     }
 
     try {
       await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size)
       await this.completeDriveUploadWithRetry(prepared.sessionId)
       return { completed: 1, failed: 0, skipped: 0 }
-    } catch {
+    } catch (error) {
       await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveLocalFile")
-      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage() }
+      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage(error) }
     }
   }
 
@@ -741,8 +741,8 @@ export class AccountService {
           mimeType: file.mimeType,
         })),
       })
-    } catch {
-      return { completed: 0, failed: files.length, skipped, message: localUploadErrorMessage() }
+    } catch (error) {
+      return { completed: 0, failed: files.length, skipped, message: localUploadErrorMessage(error) }
     }
 
     const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
@@ -762,9 +762,9 @@ export class AccountService {
         await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes)
         await this.completeDriveUploadWithRetry(preparedEntry.sessionId)
         completed += 1
-      } catch {
+      } catch (error) {
         failed += 1
-        firstError ??= localUploadErrorMessage()
+        firstError ??= localUploadErrorMessage(error)
         await this.cancelPreparedDriveUpload(preparedEntry.sessionId, "uploadDriveLocalFolder")
       }
     }
@@ -988,8 +988,8 @@ export class AccountService {
         { name: file.name, size: String(fileStat.size), mimeType },
         "上传准备失败。",
       )
-    } catch {
-      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage() }
+    } catch (error) {
+      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage(error) }
     }
 
     try {
@@ -1001,9 +1001,9 @@ export class AccountService {
         "上传确认失败。",
       )
       return { status: "fulfilled", fileName: file.name, asset }
-    } catch {
+    } catch (error) {
       await this.cancelDrivePublicAssetUpload(prepared.sessionId)
-      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage() }
+      return { status: "rejected", fileName: file.name, message: localUploadErrorMessage(error) }
     }
   }
 
@@ -1778,7 +1778,8 @@ async function writeResponseBodyToFile(response: Response, outputPath: string): 
   }
 }
 
-function localUploadErrorMessage(): string {
+function localUploadErrorMessage(error?: unknown): string {
+  if (isAccountHttpError(error) && error.message.trim()) return error.message
   return "上传失败。"
 }
 
