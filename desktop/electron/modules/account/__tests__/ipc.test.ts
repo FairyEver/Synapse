@@ -52,6 +52,10 @@ vi.mock("../../../services/account-service", () => ({
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
     listDriveShares: async () => [],
+    listDrivePublicAssets: async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 }),
+    getDrivePublicAsset: async () => ({}),
+    uploadDrivePublicAssets: vi.fn(async () => ({ results: [] })),
+    replaceDrivePublicAssetFile: vi.fn(async () => ({})),
   },
 }))
 
@@ -454,6 +458,82 @@ describe("accountIpcModule", () => {
     }))
     expect(permissionGuard.check).toHaveBeenCalledTimes(1)
     expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+  })
+
+  it("guards public asset upload file reads", async () => {
+    const { auditSink, ctx, permissionGuard } = createAccountSecurityContext()
+    const uploadDrivePublicAssets = vi.mocked(accountService.uploadDrivePublicAssets)
+    uploadDrivePublicAssets.mockResolvedValueOnce({ results: [] })
+
+    await expect(accountIpcModule.methods.uploadDrivePublicAssets.handler(ctx, {
+      files: [
+        { path: "/tmp/logo.png", name: "logo.png", mimeType: "image/png" },
+        { path: "/tmp/banner.webp", name: "banner.webp", mimeType: "image/webp" },
+      ],
+    })).resolves.toEqual({ results: [] })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/logo.png",
+      context: { source: "account.drivePublicAssetUpload.read" },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/banner.webp",
+      context: { source: "account.drivePublicAssetUpload.read" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/tmp/logo.png",
+    }))
+    expect(uploadDrivePublicAssets).toHaveBeenCalledWith({
+      files: [
+        { path: "/tmp/logo.png", name: "logo.png", mimeType: "image/png" },
+        { path: "/tmp/banner.webp", name: "banner.webp", mimeType: "image/webp" },
+      ],
+    })
+  })
+
+  it("stops public asset replacement when file read permission is denied", async () => {
+    const { auditSink, ctx, permissionGuard } = createAccountSecurityContext({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+    const replaceDrivePublicAssetFile = vi.mocked(accountService.replaceDrivePublicAssetFile)
+    replaceDrivePublicAssetFile.mockClear()
+
+    await expect(accountIpcModule.methods.replaceDrivePublicAssetFile.handler(ctx, {
+      assetId: "asset_123",
+      path: "/tmp/replacement.png",
+      name: "replacement.png",
+      mimeType: "image/png",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/replacement.png",
+      context: {
+        source: "account.drivePublicAssetReplace.read",
+        assetId: "asset_123",
+      },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "denied",
+      resource: "/tmp/replacement.png",
+      metadata: expect.objectContaining({
+        source: "account.drivePublicAssetReplace.read",
+        assetId: "asset_123",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(replaceDrivePublicAssetFile).not.toHaveBeenCalled()
   })
 
   it("preserves active drive share ids in item responses", () => {

@@ -350,6 +350,8 @@ function isArrayBufferLike(value: unknown): value is ArrayBuffer {
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
 type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUploadSchema>
 type DriveFileVersionDownloadRequestForIpc = z.infer<typeof driveFileVersionDownloadSchema>
+type DrivePublicAssetUploadRequestForIpc = z.infer<typeof drivePublicAssetUploadSchema>
+type DrivePublicAssetReplaceRequestForIpc = z.infer<typeof drivePublicAssetReplaceSchema>
 
 function driveLocalUploadRelativePathDepth(relativePath: string): number {
   return Math.max(0, relativePath.split("/").filter(Boolean).length - 1)
@@ -367,6 +369,10 @@ function driveLocalUploadPaths(request: DriveLocalUploadRequestForIpc): string[]
       ? [item.path]
       : item.files.map((file) => file.path)
   ))
+}
+
+function drivePublicAssetUploadPaths(request: DrivePublicAssetUploadRequestForIpc): string[] {
+  return request.files.map((file) => file.path)
 }
 
 async function checkAccountPermission(options: {
@@ -477,6 +483,47 @@ async function runGuardedDrivePreparedUpload<T>(options: {
       },
     })
     throw new Error(safeMessage)
+  }
+}
+
+async function runGuardedDrivePublicAssetRead<T>(options: {
+  ctx: IpcHandlerContext
+  paths: readonly string[]
+  source: string
+  context?: Record<string, unknown>
+  run(): Promise<T>
+}): Promise<T> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  for (const filePath of options.paths) {
+    await checkAccountPermission({
+      ctx: options.ctx,
+      action: "fs.read.outside-userdata",
+      resource: filePath,
+      source: options.source,
+      context: options.context,
+    })
+  }
+  try {
+    return await options.run()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    for (const filePath of options.paths) {
+      auditSink.record({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: filePath,
+        outcome: "failed",
+        metadata: {
+          source: options.source,
+          ...options.context,
+          errorName: error instanceof Error ? error.name : typeof error,
+          error: sanitizeError(message),
+          errorLength: message.length,
+        },
+      })
+    }
+    throw error
   }
 }
 
@@ -784,14 +831,31 @@ export const accountIpcModule: IpcModule = {
           z.object({ status: z.literal("rejected"), fileName: z.string(), message: z.string() }),
         ])),
       }),
-      handler: async (_ctx, input) => accountService.uploadDrivePublicAssets(drivePublicAssetUploadSchema.parse(input)),
+      handler: async (ctx, input) => {
+        const request = drivePublicAssetUploadSchema.parse(input)
+        return runGuardedDrivePublicAssetRead({
+          ctx,
+          paths: drivePublicAssetUploadPaths(request),
+          source: "account.drivePublicAssetUpload.read",
+          run: () => accountService.uploadDrivePublicAssets(request),
+        })
+      },
     },
     replaceDrivePublicAssetFile: {
       kind: "invoke",
       channel: "synapse:account:drive:public-assets:replace-file",
       request: drivePublicAssetReplaceSchema,
       response: drivePublicAssetSchema,
-      handler: async (_ctx, input) => accountService.replaceDrivePublicAssetFile(drivePublicAssetReplaceSchema.parse(input)),
+      handler: async (ctx, input) => {
+        const request: DrivePublicAssetReplaceRequestForIpc = drivePublicAssetReplaceSchema.parse(input)
+        return runGuardedDrivePublicAssetRead({
+          ctx,
+          paths: [request.path],
+          source: "account.drivePublicAssetReplace.read",
+          context: { assetId: request.assetId },
+          run: () => accountService.replaceDrivePublicAssetFile(request),
+        })
+      },
     },
     renameDrivePublicAsset: {
       kind: "invoke",
