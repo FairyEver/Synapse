@@ -7,7 +7,9 @@ import { BadRequestException, type INestApplication, NotFoundException, Unauthor
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
+import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveService } from "./drive.service"
 import { LocalDriveStorage } from "./drive-storage"
@@ -63,6 +65,20 @@ describe("DriveController", () => {
     listAdminRevisions: vi.fn(),
     openAdminRevisionDownload: vi.fn(),
   }
+  const annotations = {
+    listOwnerAnnotations: vi.fn(),
+    createOwnerAnnotation: vi.fn(),
+    replyOwnerAnnotation: vi.fn(),
+    updateOwnerComment: vi.fn(),
+    deleteOwnerComment: vi.fn(),
+    deleteOwnerThread: vi.fn(),
+    listShareAnnotations: vi.fn(),
+    createShareAnnotation: vi.fn(),
+    replyShareAnnotation: vi.fn(),
+    updateShareComment: vi.fn(),
+    deleteShareComment: vi.fn(),
+    deleteShareThread: vi.fn(),
+  }
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
   }
@@ -98,6 +114,18 @@ describe("DriveController", () => {
     publicAssets.listAdminAccessLogs.mockReset()
     publicAssets.listAdminRevisions.mockReset()
     publicAssets.openAdminRevisionDownload.mockReset()
+    annotations.listOwnerAnnotations.mockReset()
+    annotations.createOwnerAnnotation.mockReset()
+    annotations.replyOwnerAnnotation.mockReset()
+    annotations.updateOwnerComment.mockReset()
+    annotations.deleteOwnerComment.mockReset()
+    annotations.deleteOwnerThread.mockReset()
+    annotations.listShareAnnotations.mockReset()
+    annotations.createShareAnnotation.mockReset()
+    annotations.replyShareAnnotation.mockReset()
+    annotations.updateShareComment.mockReset()
+    annotations.deleteShareComment.mockReset()
+    annotations.deleteShareThread.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
@@ -106,6 +134,7 @@ describe("DriveController", () => {
       controllers: [DriveUserController, DrivePublicController],
       providers: [
         { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
         { provide: "DriveStoragePort", useValue: storage },
       ],
     })
@@ -168,6 +197,59 @@ describe("DriveController", () => {
         surface: "standalone",
         childrenPage: undefined,
       })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("routes owner annotation requests through the annotation service", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      annotations.listOwnerAnnotations.mockResolvedValue([])
+      annotations.createOwnerAnnotation.mockResolvedValue(createAnnotationThread())
+      annotations.replyOwnerAnnotation.mockResolvedValue(createAnnotationComment())
+      annotations.updateOwnerComment.mockResolvedValue(createAnnotationComment())
+      annotations.deleteOwnerComment.mockResolvedValue({ ok: true })
+      annotations.deleteOwnerThread.mockResolvedValue({ ok: true })
+
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/item-1/annotations").expect(200)
+      await request(userApp.getHttpServer())
+        .post("/api/drive/browser/owner/items/item-1/annotations")
+        .send(createAnnotationInput())
+        .expect(201)
+      await request(userApp.getHttpServer())
+        .post("/api/drive/browser/owner/items/item-1/annotations/thread-1/comments")
+        .send({ parentCommentId: null, body: "Reply body" })
+        .expect(201)
+      await request(userApp.getHttpServer())
+        .patch("/api/drive/browser/owner/items/item-1/annotations/comments/comment-1")
+        .send({ body: "Updated body" })
+        .expect(200)
+      await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/comments/comment-1").expect(200)
+      await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/thread-1").expect(200)
+
+      expect(annotations.listOwnerAnnotations).toHaveBeenCalledWith("user-1", "item-1")
+      expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", expect.objectContaining({ body: "Comment body" }))
+      expect(annotations.replyOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply body" })
+      expect(annotations.updateOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", { body: "Updated body" })
+      expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1")
+      expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1")
     } finally {
       await userApp.close()
     }
@@ -661,6 +743,135 @@ describe("DriveController", () => {
       password: undefined,
       cookie: "folder-cookie",
     })
+  })
+
+  it("routes share annotation reads publicly and writes through authenticated users", async () => {
+    annotations.listShareAnnotations.mockResolvedValue([])
+    annotations.createShareAnnotation.mockResolvedValue(createAnnotationThread())
+    annotations.replyShareAnnotation.mockResolvedValue(createAnnotationComment())
+    annotations.updateShareComment.mockResolvedValue(createAnnotationComment())
+    annotations.deleteShareComment.mockResolvedValue({ ok: true })
+    annotations.deleteShareThread.mockResolvedValue({ ok: true })
+
+    const cookieHeader = `${driveAccessCookieName("share", "shr_file")}=file-cookie`
+    await request(app!.getHttpServer())
+      .get("/api/drive/browser/shares/shr_file/items/file-1/annotations")
+      .set("Cookie", cookieHeader)
+      .expect(200)
+
+    expect(annotations.listShareAnnotations).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      itemId: "file-1",
+      cookie: "file-cookie",
+      actorUserId: null,
+    })
+
+    const dashboardAuth = {
+      verifyDashboardSession: vi.fn(async () => ({
+        id: "reader-1",
+        email: "reader@example.com",
+        displayName: "Reader",
+        role: "user" as const,
+      })),
+    }
+    const readModuleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: AdminAuthService, useValue: dashboardAuth },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn(() => { throw new UnauthorizedException("未登录或登录已过期。") }) })
+      .compile()
+    const readApp = readModuleRef.createNestApplication()
+    await readApp.init()
+    try {
+      await request(readApp.getHttpServer())
+        .get("/api/drive/browser/shares/shr_file/items/file-1/annotations")
+        .set("Cookie", `${cookieHeader}; synapse_admin=dashboard-cookie`)
+        .expect(200)
+
+      expect(dashboardAuth.verifyDashboardSession).toHaveBeenCalledWith("dashboard-cookie")
+      expect(annotations.listShareAnnotations).toHaveBeenLastCalledWith({
+        shareId: "shr_file",
+        itemId: "file-1",
+        cookie: "file-cookie",
+        actorUserId: "reader-1",
+      })
+    } finally {
+      await readApp.close()
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const shareApp = moduleRef.createNestApplication()
+    await shareApp.init()
+    try {
+      await request(shareApp.getHttpServer())
+        .post("/api/drive/browser/shares/shr_file/items/file-1/annotations")
+        .set("Cookie", cookieHeader)
+        .send(createAnnotationInput())
+        .expect(201)
+      await request(shareApp.getHttpServer())
+        .post("/api/drive/browser/shares/shr_file/items/file-1/annotations/thread-1/comments")
+        .set("Cookie", cookieHeader)
+        .send({ parentCommentId: "comment-1", body: "Reply body" })
+        .expect(201)
+      await request(shareApp.getHttpServer())
+        .patch("/api/drive/browser/shares/shr_file/items/file-1/annotations/comments/comment-1")
+        .set("Cookie", cookieHeader)
+        .send({ body: "Updated body" })
+        .expect(200)
+      await request(shareApp.getHttpServer())
+        .delete("/api/drive/browser/shares/shr_file/items/file-1/annotations/comments/comment-1")
+        .set("Cookie", cookieHeader)
+        .expect(200)
+      await request(shareApp.getHttpServer())
+        .delete("/api/drive/browser/shares/shr_file/items/file-1/annotations/thread-1")
+        .set("Cookie", cookieHeader)
+        .expect(200)
+
+      expect(annotations.createShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
+        actorUserId: "user-1",
+        shareId: "shr_file",
+        itemId: "file-1",
+        cookie: "file-cookie",
+        body: expect.objectContaining({ body: "Comment body" }),
+      }))
+      expect(annotations.replyShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
+        actorUserId: "user-1",
+        shareId: "shr_file",
+        itemId: "file-1",
+        threadId: "thread-1",
+        body: { parentCommentId: "comment-1", body: "Reply body" },
+      }))
+      expect(annotations.updateShareComment).toHaveBeenCalledWith(expect.objectContaining({
+        actorUserId: "user-1",
+        commentId: "comment-1",
+        body: { body: "Updated body" },
+      }))
+      expect(annotations.deleteShareComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: "comment-1" }))
+      expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({ threadId: "thread-1" }))
+    } finally {
+      await shareApp.close()
+    }
   })
 
   it("unlocks share browser access and returns the browser snapshot", async () => {
@@ -1218,6 +1429,52 @@ function createDriveItem(input: Partial<DriveItemDto> = {}): DriveItemDto {
     createdAt: "2026-06-09T00:00:00.000Z",
     updatedAt: "2026-06-09T00:00:00.000Z",
     ...input,
+  }
+}
+
+function createAnnotationInput() {
+  return {
+    targetKind: "textRange",
+    target: {
+      schemaVersion: 1,
+      kind: "textRange",
+      surface: "markdownRenderedText",
+      range: { start: 0, end: 4 },
+      quote: { exact: "Note", prefix: "", suffix: "" },
+    },
+    body: "Comment body",
+  }
+}
+
+function createAnnotationThread() {
+  return {
+    id: "thread-1",
+    itemId: "item-1",
+    baseVersionId: "version-1",
+    targetKind: "textRange",
+    target: createAnnotationInput().target,
+    anchorStatus: "attached",
+    author: { id: "user-1", email: "user@example.com", displayName: null },
+    comments: [createAnnotationComment()],
+    createdAt: "2026-06-21T00:00:00.000Z",
+    updatedAt: "2026-06-21T00:00:00.000Z",
+    permissions: { canDelete: true },
+  }
+}
+
+function createAnnotationComment() {
+  return {
+    id: "comment-1",
+    threadId: "thread-1",
+    parentCommentId: null,
+    body: "Comment body",
+    author: { id: "user-1", email: "user@example.com", displayName: null },
+    createdAt: "2026-06-21T00:00:00.000Z",
+    updatedAt: "2026-06-21T00:00:00.000Z",
+    editedAt: null,
+    deletedAt: null,
+    deleted: false,
+    permissions: { canEdit: true, canDelete: true },
   }
 }
 

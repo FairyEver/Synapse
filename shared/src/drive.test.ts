@@ -22,6 +22,11 @@ import {
   buildShareDriveRenderUrl,
   inferDrivePublicAssetMimeType,
   isDrivePublicAssetId,
+  type DriveAnnotationAnchorStatus,
+  type DriveAnnotationCommentDto,
+  type DriveAnnotationCreateInput,
+  type DriveAnnotationTargetKind,
+  type DriveAnnotationThreadDto,
   type DriveBrowserPreviewKind,
   maskDriveBrowserUrl,
   maskDriveShareUrl,
@@ -155,6 +160,55 @@ describe("drive URL helpers", () => {
     const kind: DriveBrowserPreviewKind = "markdown"
 
     expect(kind).toBe("markdown")
+  })
+
+  it("defines drive annotation DTOs for text range comments", () => {
+    const targetKind: DriveAnnotationTargetKind = "textRange"
+    const anchorStatus: DriveAnnotationAnchorStatus = "attached"
+    const comment: DriveAnnotationCommentDto = {
+      id: "comment-1",
+      threadId: "thread-1",
+      parentCommentId: null,
+      body: "Use the shorter term.",
+      author: {
+        id: "user-1",
+        email: "reader@example.com",
+        displayName: "Reader",
+      },
+      createdAt: "2026-06-21T00:00:00.000Z",
+      updatedAt: "2026-06-21T00:00:00.000Z",
+      editedAt: null,
+      deletedAt: null,
+      deleted: false,
+      permissions: { canEdit: true, canDelete: true },
+    }
+    const thread: DriveAnnotationThreadDto = {
+      id: "thread-1",
+      itemId: "item-1",
+      baseVersionId: "version-1",
+      targetKind,
+      target: {
+        schemaVersion: 1,
+        kind: "textRange",
+        surface: "markdownRenderedText",
+        range: { start: 3, end: 9 },
+        quote: { exact: "重点", prefix: "这是 ", suffix: " 内容" },
+      },
+      anchorStatus,
+      author: comment.author,
+      comments: [comment],
+      createdAt: "2026-06-21T00:00:00.000Z",
+      updatedAt: "2026-06-21T00:00:00.000Z",
+      permissions: { canDelete: true },
+    }
+    const input: DriveAnnotationCreateInput = {
+      targetKind,
+      target: thread.target,
+      body: "Comment body",
+    }
+
+    expect(thread.comments[0]?.body).toBe("Use the shorter term.")
+    expect(input.target.kind).toBe("textRange")
   })
 
   it("uses the share public prefix", () => {

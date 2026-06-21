@@ -1,0 +1,99 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  DriveAnnotationCommentUpdateInput,
+  DriveAnnotationCreateInput,
+  DriveAnnotationReplyInput,
+  DriveAnnotationThreadDto,
+} from '@synapse/shared'
+import { driveAnnotationApi } from '@/lib/api'
+
+export type DriveAnnotationContext =
+  | { readonly context: 'owner'; readonly itemId: string }
+  | { readonly context: 'share'; readonly shareId: string; readonly itemId?: string | null }
+
+export function driveAnnotationsQueryKey(input: DriveAnnotationContext) {
+  return input.context === 'owner'
+    ? ['drive-annotations', 'owner', input.itemId] as const
+    : ['drive-annotations', 'share', input.shareId, input.itemId ?? null] as const
+}
+
+export function useDriveAnnotations(input: DriveAnnotationContext | null | undefined) {
+  const queryClient = useQueryClient()
+  const queryKey = input ? driveAnnotationsQueryKey(input) : ['drive-annotations', 'disabled'] as const
+  const query = useQuery({
+    queryKey,
+    enabled: Boolean(input),
+    queryFn: () => {
+      if (!input) return Promise.resolve([] as DriveAnnotationThreadDto[])
+      return input.context === 'owner'
+        ? driveAnnotationApi.listOwner(input.itemId)
+        : driveAnnotationApi.listShare(input.shareId, input.itemId)
+    },
+  })
+  const invalidate = async () => {
+    if (!input) return
+    await queryClient.invalidateQueries({ queryKey })
+  }
+  const createMutation = useMutation({
+    mutationFn: (body: DriveAnnotationCreateInput) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      return input.context === 'owner'
+        ? driveAnnotationApi.createOwner(input.itemId, body)
+        : driveAnnotationApi.createShare(input.shareId, input.itemId, body)
+    },
+    onSuccess: invalidate,
+  })
+  const replyMutation = useMutation({
+    mutationFn: (variables: { readonly threadId: string } & DriveAnnotationReplyInput) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      return input.context === 'owner'
+        ? driveAnnotationApi.replyOwner(input.itemId, variables.threadId, variables)
+        : driveAnnotationApi.replyShare(input.shareId, input.itemId, variables.threadId, variables)
+    },
+    onSuccess: invalidate,
+  })
+  const updateMutation = useMutation({
+    mutationFn: (variables: { readonly commentId: string } & DriveAnnotationCommentUpdateInput) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      return input.context === 'owner'
+        ? driveAnnotationApi.updateOwnerComment(input.itemId, variables.commentId, variables)
+        : driveAnnotationApi.updateShareComment(input.shareId, input.itemId, variables.commentId, variables)
+    },
+    onSuccess: invalidate,
+  })
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      return input.context === 'owner'
+        ? driveAnnotationApi.deleteOwnerComment(input.itemId, commentId)
+        : driveAnnotationApi.deleteShareComment(input.shareId, input.itemId, commentId)
+    },
+    onSuccess: invalidate,
+  })
+  const deleteThreadMutation = useMutation({
+    mutationFn: (threadId: string) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      return input.context === 'owner'
+        ? driveAnnotationApi.deleteOwnerThread(input.itemId, threadId)
+        : driveAnnotationApi.deleteShareThread(input.shareId, input.itemId, threadId)
+    },
+    onSuccess: invalidate,
+  })
+
+  return {
+    threads: query.data ?? [] satisfies readonly DriveAnnotationThreadDto[],
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refresh: query.refetch,
+    createThread: createMutation.mutateAsync,
+    creatingThread: createMutation.isPending,
+    reply: replyMutation.mutateAsync,
+    replying: replyMutation.isPending,
+    updateComment: updateMutation.mutateAsync,
+    updatingComment: updateMutation.isPending,
+    deleteComment: deleteCommentMutation.mutateAsync,
+    deletingComment: deleteCommentMutation.isPending,
+    deleteThread: deleteThreadMutation.mutateAsync,
+    deletingThread: deleteThreadMutation.isPending,
+  }
+}

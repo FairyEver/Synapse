@@ -12,7 +12,7 @@ describe("DrivePublicAssetService", () => {
   let storage: DriveStoragePort
   let objects: Map<string, { readonly body: Buffer; readonly contentType?: string | null }>
   let service: DrivePublicAssetService
-  let lifecycle: ReturnType<typeof createLifecycleMemory>
+  let lifecycle: LifecycleMemory
 
   beforeEach(async () => {
     prisma = createPrismaMemory()
