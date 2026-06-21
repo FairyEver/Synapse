@@ -138,12 +138,19 @@ export function AdminPublicAssets() {
               <Eye />
               详情
             </Button>
-            <Button asChild variant='ghost' className='h-8 px-2'>
-              <a href={row.original.url} target='_blank' rel='noreferrer'>
+            {canOpenPublicAsset(row.original) ? (
+              <Button asChild variant='ghost' className='h-8 px-2'>
+                <a href={row.original.url} target='_blank' rel='noreferrer'>
+                  <Download />
+                  打开
+                </a>
+              </Button>
+            ) : (
+              <Button type='button' variant='ghost' className='h-8 px-2' disabled>
                 <Download />
                 打开
-              </a>
-            </Button>
+              </Button>
+            )}
           </div>
         ),
         enableSorting: false,
@@ -506,4 +513,8 @@ function driveLifecycleLabel(status: AdminDrivePublicAssetRow['lifecycleStatus']
     legacy_missing: '不可用',
   }
   return labels[status]
+}
+
+function canOpenPublicAsset(asset: AdminDrivePublicAssetRow) {
+  return asset.lifecycleStatus === 'active'
 }

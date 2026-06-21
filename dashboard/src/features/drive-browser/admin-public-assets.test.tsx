@@ -140,6 +140,34 @@ describe('AdminPublicAssets', () => {
     expect(document.body.textContent).not.toContain('暂无历史版本')
     expect(document.body.textContent).toContain('重试')
   })
+
+  it('does not render public open links for inactive public assets', async () => {
+    mockedAdminApi.listDrivePublicAssets.mockResolvedValueOnce({
+      data: [
+        createPublicAsset({ assetId: 'active-asset', name: 'active.png', url: 'https://assets.example/files/active-asset' }),
+        createPublicAsset({
+          assetId: 'trashed-asset',
+          lifecycleStatus: 'trashed',
+          name: 'trashed.png',
+          url: 'https://assets.example/files/trashed-asset',
+        }),
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 2,
+    })
+    renderView()
+
+    await waitForText('trashed.png')
+
+    const openLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('a'))
+      .filter((item) => item.textContent?.trim() === '打开')
+    expect(openLinks).toHaveLength(1)
+    expect(openLinks[0]?.getAttribute('href')).toBe('https://assets.example/files/active-asset')
+    const disabledOpenButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button:disabled'))
+      .filter((item) => item.textContent?.trim() === '打开')
+    expect(disabledOpenButtons).toHaveLength(1)
+  })
 })
 
 function renderView() {
