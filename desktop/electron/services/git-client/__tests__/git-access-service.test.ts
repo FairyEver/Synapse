@@ -337,17 +337,31 @@ describe("git access service", () => {
     expect(runSshKeygen).not.toHaveBeenCalled()
   })
 
-  it("does not overwrite an existing ed25519 private key when the public key is missing", async () => {
-    const runSshKeygen = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+  it("restores the public key from an existing ed25519 private key", async () => {
+    const runSshKeygen = vi.fn().mockResolvedValue({
+      stdout: "ssh-ed25519 AAAAC3NzaRecovered writer@example.com\n",
+      stderr: "",
+    })
+    const writeFile = vi.fn().mockResolvedValue(undefined)
     const privateKeyPath = path.join("/Users/writer", ".ssh", "id_ed25519")
+    const publicKeyPath = path.join("/Users/writer", ".ssh", "id_ed25519.pub")
     const service = createService({
       pathExists: async (filePath) => filePath === privateKeyPath,
       runSshKeygen,
+      writeFile,
     })
 
     await service.generateSshKey({ email: "writer@example.com" })
 
-    expect(runSshKeygen).not.toHaveBeenCalled()
+    expect(runSshKeygen).toHaveBeenCalledWith({
+      args: ["-y", "-f", privateKeyPath],
+      cwd: "/Users/writer",
+    })
+    expect(writeFile).toHaveBeenCalledWith(
+      publicKeyPath,
+      "ssh-ed25519 AAAAC3NzaRecovered writer@example.com\n",
+      "utf8",
+    )
   })
 
   it("tests SSH host connectivity", async () => {

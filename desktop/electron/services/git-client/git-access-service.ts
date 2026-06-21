@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdir } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseGitAccessState,
@@ -30,6 +30,7 @@ type ProcessRunInput = {
 }
 type ProcessRunner = (input: ProcessRunInput) => Promise<ProcessRunResult>
 type EnsureDirectory = (directoryPath: string, options: { readonly mode: number; readonly recursive: true }) => Promise<void>
+type WriteFile = (filePath: string, content: string, encoding: BufferEncoding) => Promise<void>
 type GitCredentialAction = "approve" | "reject"
 type GitCredentialRunInput = {
   readonly action: GitCredentialAction
@@ -71,6 +72,7 @@ type GitAccessDeps = {
   readonly runGitCredential?: (input: GitCredentialRunInput) => Promise<ProcessRunResult>
   readonly runSshKeygen?: (input: SshKeygenRunInput) => Promise<ProcessRunResult>
   readonly runSshTest?: (input: SshTestRunInput) => Promise<SshTestRunResult>
+  readonly writeFile?: WriteFile
 }
 
 const PROVIDER_LINKS: Readonly<Record<SynapseGitProvider, SynapseGitProviderLinks>> = {
@@ -422,6 +424,7 @@ async function runDefaultSshTest(input: SshTestRunInput, processRunner: ProcessR
 export function createGitAccessService(deps: GitAccessDeps) {
   const now = deps.now ?? (() => new Date())
   const ensureDirectory = deps.ensureDirectory ?? ((directoryPath, options) => mkdir(directoryPath, options))
+  const writePublicKey = deps.writeFile ?? ((filePath, content, encoding) => writeFile(filePath, content, encoding))
   const processRunner = deps.runProcess ?? ((input) => runProcess(input, {
     effectivePath: deps.effectivePath,
     platform: deps.platform,
@@ -528,7 +531,19 @@ export function createGitAccessService(deps: GitAccessDeps) {
     async generateSshKey(input: SynapseGitGenerateSshKeyInput): Promise<void> {
       const publicKeyPath = getEd25519PublicKeyPath(deps.homeDir)
       const privateKeyPath = getEd25519PrivateKeyPath(deps.homeDir)
-      if (await deps.pathExists(publicKeyPath) || await deps.pathExists(privateKeyPath)) return
+      if (await deps.pathExists(publicKeyPath)) return
+      if (await deps.pathExists(privateKeyPath)) {
+        const restored = await runSshKeygen({
+          cwd: deps.homeDir,
+          args: ["-y", "-f", privateKeyPath],
+        })
+        const publicKey = restored.stdout.trim()
+        if (!publicKey) {
+          throw new Error("无法从已有 SSH 私钥恢复公钥。")
+        }
+        await writePublicKey(publicKeyPath, `${publicKey}\n`, "utf8")
+        return
+      }
       await ensureDirectory(getSshDirectoryPath(deps.homeDir), { recursive: true, mode: 0o700 })
       await runSshKeygen({
         cwd: deps.homeDir,
