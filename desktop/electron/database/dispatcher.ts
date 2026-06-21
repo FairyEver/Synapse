@@ -34,7 +34,8 @@ type DatabaseDispatchSecurityDeps = {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
 }
-type DatabaseMutationSecurity = {
+type DatabaseActionSecurity = {
+  readonly action: "database.read" | "database.mutate"
   readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
@@ -395,8 +396,8 @@ async function dispatchDatabaseAction(
 ): Promise<DispatchResult> {
   const handler = ACTION_HANDLERS[action]
   if (!handler) throw new Error(`Unknown action: ${action}`)
-  const security = databaseMutationSecurity(action, params, context)
-  if (security) await authorizeDatabaseMutation(securityDeps, security)
+  const security = databaseActionSecurity(action, params, context)
+  await authorizeDatabaseAction(securityDeps, security)
 
   try {
     const result = handler(params)
@@ -434,7 +435,7 @@ async function dispatchDatabaseAction(
     }
     if (security) {
       securityDeps.auditSink?.record({
-        action: "database.mutate",
+        action: security.action,
         actor: security.actor,
         resource: security.resource,
         outcome: "allowed",
@@ -445,7 +446,7 @@ async function dispatchDatabaseAction(
   } catch (error) {
     if (security) {
       securityDeps.auditSink?.record({
-        action: "database.mutate",
+        action: security.action,
         actor: security.actor,
         resource: security.resource,
         outcome: "failed",
@@ -460,19 +461,20 @@ async function dispatchDatabaseAction(
   }
 }
 
-async function authorizeDatabaseMutation(
+async function authorizeDatabaseAction(
   deps: DatabaseDispatchSecurityDeps,
-  security: DatabaseMutationSecurity,
+  security: DatabaseActionSecurity | null,
 ): Promise<void> {
+  if (!security) return
   const permission = await deps.permissionGuard?.check({
-    action: "database.mutate",
+    action: security.action,
     actor: security.actor,
     resource: security.resource,
     context: security.metadata,
   })
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
-      action: "database.mutate",
+      action: security.action,
       actor: security.actor,
       resource: security.resource,
       outcome: "denied",
@@ -486,23 +488,24 @@ async function authorizeDatabaseMutation(
   }
 }
 
-function databaseMutationSecurity(
+function databaseActionSecurity(
   action: string,
   params: Record<string, unknown>,
   context: DispatchContext,
-): DatabaseMutationSecurity | null {
-  if (!MUTATING_ACTIONS.has(action)) return null
+): DatabaseActionSecurity | null {
   const source = context.source ?? "api"
   const table = extractAuditTableName(action, params)
   const dryRun = params.dryRun === true
+  const securityAction = MUTATING_ACTIONS.has(action) ? "database.mutate" : "database.read"
   return {
+    action: securityAction,
     actor: context.actor ?? { kind: "user", id: `database-dispatch:${source}` },
     resource: `database:${table ?? action}`,
     metadata: {
       source,
       databaseAction: action,
       ...(table ? { table } : {}),
-      dryRun,
+      ...(MUTATING_ACTIONS.has(action) ? { dryRun } : {}),
     },
   }
 }

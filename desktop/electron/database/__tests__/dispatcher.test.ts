@@ -11,6 +11,7 @@ import { dispatchDatabaseAction, setDatabaseChangeListener } from "../dispatcher
 const mocks = vi.hoisted(() => ({
   databaseService: {
     databaseLogList: vi.fn(),
+    databaseRowList: vi.fn(),
     databaseRowCreate: vi.fn(),
     recordOperation: vi.fn(),
   },
@@ -31,6 +32,7 @@ describe("database dispatcher", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.databaseService.databaseLogList.mockReturnValue([])
+    mocks.databaseService.databaseRowList.mockReturnValue({ rows: [], total: 0 })
     mocks.databaseService.databaseRowCreate.mockReturnValue({ id: 1 })
   })
 
@@ -176,6 +178,125 @@ describe("database dispatcher", () => {
       action: "database.mutate",
       outcome: "failed",
       resource: "database:database.row.create",
+      metadata: expect.not.objectContaining({ table: unsafeTableName }),
+    }))
+    const serialized = JSON.stringify([
+      checkPermission.mock.calls,
+      recordAudit.mock.calls,
+    ])
+    expect(serialized).not.toContain("secret-value")
+    expect(serialized).not.toContain("/Users/example/private")
+  })
+
+  it("authorizes and audits database read actions without recording result data", async () => {
+    mocks.databaseService.databaseRowList.mockReturnValueOnce({
+      rows: [{ id: 1, token: "sk-test-secret" }],
+      total: 1,
+    })
+    const checkPermission = vi.fn(async () => ({ allowed: true as const }))
+    const recordAudit = vi.fn((_event: Parameters<AuditSink["record"]>[0]) => undefined)
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(() => vi.fn()),
+      check: checkPermission,
+    }
+    const auditSink: AuditSink = {
+      record: recordAudit,
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+
+    const result = await dispatchDatabaseAction("database.row.list", {
+      tableName: "tasks",
+      limit: 10,
+    }, { source: "mcp-http" }, { permissionGuard, auditSink })
+
+    expect(result).toEqual({ ok: true, data: [{ id: 1, token: "sk-test-secret" }], total: 1 })
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      resource: "database:tasks",
+      context: expect.objectContaining({
+        databaseAction: "database.row.list",
+        source: "mcp-http",
+        table: "tasks",
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      outcome: "allowed",
+      resource: "database:tasks",
+      metadata: expect.objectContaining({
+        databaseAction: "database.row.list",
+        source: "mcp-http",
+        table: "tasks",
+      }),
+    }))
+    const serializedAudit = JSON.stringify(recordAudit.mock.calls)
+    expect(serializedAudit).not.toContain("sk-test-secret")
+  })
+
+  it("denies database reads before calling the read handler", async () => {
+    const checkPermission = vi.fn(async () => ({
+      allowed: false as const,
+      reason: "read denied",
+      policyId: "database-read-test",
+    }))
+    const recordAudit = vi.fn((_event: Parameters<AuditSink["record"]>[0]) => undefined)
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(() => vi.fn()),
+      check: checkPermission,
+    }
+    const auditSink: AuditSink = {
+      record: recordAudit,
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+
+    await expect(dispatchDatabaseAction("database.log.list", {}, { source: "mcp-http" }, { permissionGuard, auditSink }))
+      .rejects.toThrow("read denied")
+
+    expect(mocks.databaseService.databaseLogList).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      outcome: "denied",
+      resource: "database:database.log.list",
+      metadata: expect.objectContaining({
+        databaseAction: "database.log.list",
+        policyId: "database-read-test",
+        reason: "read denied",
+        source: "mcp-http",
+      }),
+    }))
+  })
+
+  it("sanitizes database read permission checks and failed audits", async () => {
+    const checkPermission = vi.fn(async () => ({ allowed: true as const }))
+    const recordAudit = vi.fn((_event: Parameters<AuditSink["record"]>[0]) => undefined)
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(() => vi.fn()),
+      check: checkPermission,
+    }
+    const auditSink: AuditSink = {
+      record: recordAudit,
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+    const unsafeTableName = "tasks-token=secret-value-/Users/example/private"
+
+    await expect(dispatchDatabaseAction("database.row.list", {
+      tableName: unsafeTableName,
+      limit: "abc",
+    }, { source: "mcp-http" }, { permissionGuard, auditSink }))
+      .rejects.toThrow("Missing or invalid 'limit': expected number")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      resource: "database:database.row.list",
+      context: expect.not.objectContaining({ table: unsafeTableName }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      outcome: "failed",
+      resource: "database:database.row.list",
       metadata: expect.not.objectContaining({ table: unsafeTableName }),
     }))
     const serialized = JSON.stringify([
