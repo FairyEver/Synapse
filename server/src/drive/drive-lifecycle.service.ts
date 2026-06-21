@@ -239,6 +239,7 @@ export class DriveLifecycleService {
     const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, root.lifecycleStatus))
     const itemIds = items.map((item) => item.id)
     const restoredBytes = restoringHidden ? currentFileBytes(items) : 0n
+    if (restoringHidden) assertHiddenTreeCanRestore(items)
 
     const parentId = await this.resolveRestoreParent(root)
     const name = root.publicAsset ? root.name : await this.resolveRestoreName({
@@ -491,6 +492,15 @@ function currentFileBytes(items: readonly DriveLifecycleItemRecord[]): bigint {
   return items
     .filter((item) => item.type === DRIVE_ITEM_TYPE.file && item.storageStatus === DRIVE_STORAGE_STATUS.active && item.storageKey)
     .reduce((sum, item) => sum + item.size, 0n)
+}
+
+function assertHiddenTreeCanRestore(items: readonly DriveLifecycleItemRecord[]): void {
+  const invalidFile = items.find((item) =>
+    item.type === DRIVE_ITEM_TYPE.file
+    && (item.storageStatus !== DRIVE_STORAGE_STATUS.active
+      || item.uploadStatus !== DRIVE_UPLOAD_STATUS.completed
+      || !item.storageKey))
+  if (invalidFile) throw new BadRequestException("上传未完成的文件无法恢复。")
 }
 
 function isActiveLifecycleItem(item: DriveLifecycleItemRecord): boolean {

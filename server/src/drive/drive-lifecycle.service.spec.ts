@@ -1,5 +1,5 @@
 import { Readable } from "node:stream"
-import { NotFoundException } from "@nestjs/common"
+import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
@@ -99,6 +99,30 @@ describe("DriveLifecycleService", () => {
     })
   })
 
+  it("rejects admin restore for hidden uploads whose session was cancelled", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const { item, session } = await seedTrashedPendingDriveFile(prisma, { userId: "user-1", name: "pending.png", size: 12n })
+    await lifecycle.hideTrashedItem({ userId: "user-1", itemId: item.id, actorId: "admin@example.com", ipAddress: "127.0.0.1" })
+
+    await expect(lifecycle.restoreItemAsAdmin({
+      userId: "user-1",
+      itemId: item.id,
+      actorId: "admin@example.com",
+      ipAddress: "127.0.0.1",
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    expect(await readDriveItem(prisma, item.id)).toMatchObject({
+      lifecycleStatus: "hidden",
+      storageStatus: "pending",
+      uploadStatus: "cancelled",
+      deleteRootId: item.id,
+    })
+    expect(await readUploadSession(prisma, session.id)).toMatchObject({ status: "cancelled" })
+    expect(await usedBytes(prisma, "user-1")).toBe(0n)
+    expect(await reservedBytes(prisma, "user-1")).toBe(0n)
+  })
+
   it("restores to root and auto-renames when original parent is unavailable and name conflicts", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
@@ -154,7 +178,7 @@ describe("DriveLifecycleService", () => {
     expect(trash.items).toHaveLength(1)
     expect(trash.items.map((item) => item.id)).not.toContain(child.id)
     expect(trash.total).toBe(3)
-    const queryRawCalls = prisma.__queryRawCalls()
+    const queryRawCalls = prisma.__queryRawCalls() as Array<{ readonly sql: string; readonly values: readonly unknown[] }>
     expect(queryRawCalls).toHaveLength(2)
     expect(queryRawCalls[0]?.sql).toContain('di."deleteRootId" = di.id')
     expect(queryRawCalls[0]?.values).toEqual(expect.arrayContaining(["user-1", 2, 1]))
@@ -180,7 +204,7 @@ describe("DriveLifecycleService", () => {
       total: 1,
     })
 
-    const queryRawCalls = prisma.__queryRawCalls()
+    const queryRawCalls = prisma.__queryRawCalls() as Array<{ readonly sql: string; readonly values: readonly unknown[] }>
     expect(queryRawCalls.some((call) => call.sql.includes("ESCAPE"))).toBe(true)
     expect(queryRawCalls.some((call) => call.values.includes("%100\\%%"))).toBe(true)
     expect(queryRawCalls.some((call) => call.values.includes("%\\_draft%"))).toBe(true)
