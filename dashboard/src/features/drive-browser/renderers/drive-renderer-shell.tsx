@@ -21,6 +21,7 @@ import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
+import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { DriveCodeRenderer } from './code-renderer'
 import {
   findDriveRendererOption,
@@ -107,6 +108,7 @@ export function DriveRendererShell({
   rendererId,
   onRendererChange,
   editContext,
+  annotationContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly body?: boolean
@@ -114,6 +116,7 @@ export function DriveRendererShell({
   readonly rendererId?: DriveRendererId | null
   readonly onRendererChange?: (id: DriveRendererId) => void
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
 }) {
   const options = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
   const initialRenderer = findDriveRendererOption(snapshot, initialRendererId)
@@ -149,7 +152,13 @@ export function DriveRendererShell({
           onSelect={setRenderer}
         />
       ) : null}
-      <DriveRendererContent snapshot={snapshot} selected={selected} body={body} editContext={editContext} />
+      <DriveRendererContent
+        snapshot={snapshot}
+        selected={selected}
+        body={body}
+        editContext={editContext}
+        annotationContext={annotationContext}
+      />
     </section>
   )
 }
@@ -159,11 +168,13 @@ export function DriveRendererContent({
   selected,
   body = false,
   editContext,
+  annotationContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly selected: DriveRendererOption
   readonly body?: boolean
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
 }) {
   const preview = snapshot.preview
   const containerClassName = selected.container === 'media'
@@ -185,7 +196,7 @@ export function DriveRendererContent({
     return renderContent(<DriveDownloadRenderer current={snapshot.current} />)
   }
   if (selected.id === 'markdown') {
-    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} />)
+    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} annotationContext={annotationContext} />)
   }
   if (selected.id === 'mdxeditor') {
     return renderContent(<DriveMDXeditorRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)

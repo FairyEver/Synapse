@@ -15,6 +15,7 @@ import { DriveRendererShell } from './renderers/drive-renderer-shell'
 import type { DriveRendererEditContext } from './renderers/drive-renderer-shell'
 import type { DriveRendererId } from './renderers/drive-renderer-registry'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
+import type { DriveAnnotationContext } from './use-drive-annotations'
 import { useDriveBrowser } from './use-drive-browser'
 
 export type DriveBrowserPageProps =
@@ -53,7 +54,10 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready' && state.status !== 'loading'
   if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
-    return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} />
+    const annotationContext: DriveAnnotationContext = props.context === 'owner'
+      ? { context: 'owner', itemId: state.snapshot.current.id }
+      : { context: 'share', shareId: props.shareId, itemId: state.snapshot.current.id }
+    return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} annotationContext={annotationContext} />
   }
 
   const content = (
@@ -156,16 +160,24 @@ export function DriveSingleFileReaderView({
   embedded = false,
   initialRendererId = null,
   editContext,
+  annotationContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly embedded?: boolean
   readonly initialRendererId?: DriveRendererId | null
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
 }) {
   void embedded
   return (
     <div className='h-svh min-h-0 overflow-hidden bg-background'>
-      <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} editContext={editContext} />
+      <DriveRendererShell
+        snapshot={snapshot}
+        body
+        initialRendererId={initialRendererId}
+        editContext={editContext}
+        annotationContext={annotationContext}
+      />
     </div>
   )
 }
