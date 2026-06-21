@@ -342,10 +342,9 @@ export class KnowledgeBaseService {
       const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "moveRawEntries")
       const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
       const movedEntriesByPath = new Map(result.entries.map((entry) => [entry.relativePath, entry]))
-      const changes = payload.relativePaths.flatMap((relativePath) => {
-        const targetRelativePath = joinRawPath(payload.targetDirectoryPath, path.posix.basename(normalizeRawRelativePath(relativePath)))
-        const entry = movedEntriesByPath.get(targetRelativePath)
-        return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
+      const changes = result.moved.flatMap((move) => {
+        const entry = movedEntriesByPath.get(move.to)
+        return entry ? [{ from: move.from, to: entry.relativePath, kind: entry.kind }] : []
       })
       try {
         await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "moveRawEntries", changes)

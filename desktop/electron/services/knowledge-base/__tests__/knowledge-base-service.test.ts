@@ -679,6 +679,46 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("# Brief\n")
   })
 
+  it("keeps skipped same-name raw move sources in the manifest", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    const rawRoot = path.join(projectPath, ".raw")
+    await mkdir(path.join(rawRoot, "a"), { recursive: true })
+    await mkdir(path.join(rawRoot, "b"), { recursive: true })
+    await mkdir(path.join(rawRoot, "archive"), { recursive: true })
+    await writeFile(path.join(rawRoot, "a", "report.md"), "alpha\n")
+    await writeFile(path.join(rawRoot, "b", "report.md"), "bravo\n")
+    await writeFile(path.join(rawRoot, ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/a/report.md": { hash: "hash-a" },
+        ".raw/b/report.md": { hash: "hash-b" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
+
+    const result = await service.moveRawEntries({
+      projectId,
+      relativePaths: ["a/report.md", "b/report.md"],
+      targetDirectoryPath: "archive",
+    })
+
+    expect(result.entries).toEqual([expect.objectContaining({
+      relativePath: "archive/report.md",
+      kind: "file",
+    })])
+    expect(result.skipped).toEqual([{ path: "b/report.md", reason: "collision" }])
+    await expect(readFile(path.join(rawRoot, "archive", "report.md"), "utf8")).resolves.toBe("alpha\n")
+    await expect(readFile(path.join(rawRoot, "b", "report.md"), "utf8")).resolves.toBe("bravo\n")
+
+    const manifest = JSON.parse(await readFile(path.join(rawRoot, ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+    }
+    expect(manifest.sources).toEqual({
+      ".raw/archive/report.md": { hash: "hash-a" },
+      ".raw/b/report.md": { hash: "hash-b" },
+    })
+  })
+
   it("serializes manifest-tracked raw moves per knowledge base", async () => {
     const firstMove = deferred<void>()
     const realRawFileManager = new KnowledgeBaseRawFileManager({ trashItem: vi.fn(async () => undefined) })

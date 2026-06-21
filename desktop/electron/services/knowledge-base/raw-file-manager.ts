@@ -54,6 +54,12 @@ type RawEntryListPage = {
   readonly limit?: number
   readonly hasMore: boolean
 }
+export type SynapseKnowledgeBaseRawMoveResult = Omit<SynapseKnowledgeBaseRawMutationResult, "projectId"> & {
+  readonly moved: Array<{
+    readonly from: string
+    readonly to: string
+  }>
+}
 
 export interface RawFileManagerDeps {
   readonly trashItem: TrashItem
@@ -330,13 +336,14 @@ export class KnowledgeBaseRawFileManager {
     rawRoot: string,
     relativePaths: readonly string[],
     targetDirectoryPath: string,
-  ): Promise<Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">> {
+  ): Promise<SynapseKnowledgeBaseRawMoveResult> {
     const targetDirectory = resolveRawPath(rawRoot, targetDirectoryPath)
     await assertNoSymlinkInRawPath(rawRoot, targetDirectoryPath)
     const targetStat = await lstat(targetDirectory)
     if (!targetStat.isDirectory()) throw new Error("目标不是文件夹。")
     const entries: SynapseKnowledgeBaseRawEntry[] = []
     const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
+    const moved: SynapseKnowledgeBaseRawMoveResult["moved"] = []
     for (const relativePath of relativePaths) {
       try {
         const source = resolveRawPath(rawRoot, relativePath)
@@ -362,7 +369,9 @@ export class KnowledgeBaseRawFileManager {
           continue
         }
         await rename(source, target)
-        entries.push(await entryForPath(rawRoot, target, sourceStat.isDirectory() ? "directory" : "file"))
+        const entry = await entryForPath(rawRoot, target, sourceStat.isDirectory() ? "directory" : "file")
+        entries.push(entry)
+        moved.push({ from: relativePath, to: entry.relativePath })
       } catch (error) {
         const reason = isInvalidRawPathError(error) ? "invalid-path" : "read-error"
         knowledgeBaseLogger.warn("Knowledge Base raw entry move skipped.", {
@@ -376,7 +385,7 @@ export class KnowledgeBaseRawFileManager {
         })
       }
     }
-    return { entries: sortEntries(entries), skipped }
+    return { entries: sortEntries(entries), skipped, moved }
   }
 
   async trashEntries(
