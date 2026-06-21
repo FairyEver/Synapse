@@ -384,7 +384,11 @@ function AgentComposer({
     if (files.length === 0) return
 
     event.preventDefault()
-    void addDroppedFiles(files, addAttachments).catch((error) => {
+    void addDroppedFiles(files, addAttachments).then((unresolvedCount) => {
+      if (unresolvedCount > 0) {
+        toast("无法读取文件完整路径")
+      }
+    }).catch((error) => {
       logger.warn("Agent attachment drop failed.", { error })
     })
   }
@@ -666,20 +670,28 @@ async function addImageFiles(
 async function addDroppedFiles(
   files: readonly File[],
   addAttachments: (attachments: readonly AgentDraftAttachment[]) => void,
-) {
-  const next = await Promise.all(files.map(async (file) => {
+): Promise<number> {
+  const next: AgentDraftAttachment[] = []
+  let unresolvedCount = 0
+  for (const file of files) {
     if (isSupportedImageMimeType(file.type)) {
-      return createImageAttachmentFromFile(file)
+      next.push(await createImageAttachmentFromFile(file))
+      continue
     }
     const path = droppedFilePath(file)
-    return createPathAttachment({
+    if (!path || !isAbsolutePathLine(path)) {
+      unresolvedCount += 1
+      continue
+    }
+    next.push(createPathAttachment({
       id: createDraftAttachmentId(),
       path,
       entryType: inferDroppedEntryType(file),
       name: file.name || path,
-    })
-  }))
+    }))
+  }
   addAttachments(next)
+  return unresolvedCount
 }
 
 function pathAttachmentsFromPastedFiles(files: readonly File[]): {
@@ -714,12 +726,12 @@ async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImag
   })
 }
 
-function droppedFilePath(file: File): string {
+function droppedFilePath(file: File): string | null {
   return requireSynapseBridge().shell.filePathForDroppedFile(file) || legacyFilePath(file)
 }
 
-function legacyFilePath(file: File): string {
-  return (file as File & { readonly path?: string }).path || file.name
+function legacyFilePath(file: File): string | null {
+  return (file as File & { readonly path?: string }).path || null
 }
 
 function inferDroppedEntryType(file: File): "file" | "directory" {

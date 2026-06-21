@@ -765,6 +765,45 @@ describe("AgentComposer", () => {
     expect(container.textContent).not.toContain("/legacy/bridge.md")
   })
 
+  it("does not create dropped path attachments from unresolved file names", async () => {
+    const filePathForDroppedFile = installShellBridge(() => null)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const file = new File(["content"], "brief.md", { type: "text/markdown" })
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form!.dispatchEvent(createDropEvent([file]))
+      await wait(0)
+    })
+
+    expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
+    expect(toast).toHaveBeenCalledWith("无法读取文件完整路径")
+    expect(container.textContent).not.toContain("brief.md")
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
+  })
+
   it("submits attachment-only drafts when canSend is false because text is empty", async () => {
     const onSubmit = vi.fn((
       event: FormEvent,
