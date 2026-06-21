@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -213,5 +213,61 @@ describe("KnowledgeBaseLintPreflightService", () => {
         path: "wiki/Home.md",
       }),
     ]))
+  })
+
+  it("reports unreadable and oversized pages instead of treating them as empty pages", async () => {
+    const root = await tempDir()
+    const unreadablePath = path.join(root, "wiki", "concepts", "Unreadable.md")
+    await writePage(root, "wiki/concepts/Good.md", "---\ntype: concept\ntitle: Good\ncreated: 2026-05-01\nupdated: 2026-05-24\ntags: []\nstatus: active\n---\n\n# Good\n")
+    await writePage(root, "wiki/concepts/TooLarge.md", "x".repeat(128 * 1024 + 1))
+    await writePage(root, "wiki/concepts/Unreadable.md", "---\ntype: concept\n---\n\n# Unreadable\n")
+    await chmod(unreadablePath, 0o000)
+
+    try {
+      const result = await new KnowledgeBaseLintPreflightService({
+        addressLint: {
+          lint: async () => ({
+            counter: 1,
+            highestCAddress: null,
+            postRolloutPagesChecked: 0,
+            legacyPagesPendingBackfill: 0,
+            issues: [],
+          }),
+        },
+        tilingService: {
+          peek: async () => ({
+            status: "ollama-unreachable",
+            vaultPath: root,
+            ollamaUrl: "http://127.0.0.1:11434",
+            ollamaReachable: false,
+            modelRequested: "nomic-embed-text",
+            modelPresent: false,
+            cachePresent: false,
+            cacheReadable: false,
+            cacheEntries: 0,
+            cacheModel: null,
+            thresholdsPresent: false,
+            thresholdsReadable: false,
+          }) satisfies DragonScaleTilingPeekResult,
+          check: async () => {
+            throw new Error("should not check")
+          },
+        },
+      }).run(root)
+
+      expect(result.pagesScanned).toBe(1)
+      expect(result.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          code: "preflight.page-too-large",
+          path: "wiki/concepts/TooLarge.md",
+        }),
+        expect.objectContaining({
+          code: "preflight.page-unreadable",
+          path: "wiki/concepts/Unreadable.md",
+        }),
+      ]))
+    } finally {
+      await chmod(unreadablePath, 0o600).catch(() => undefined)
+    }
   })
 })

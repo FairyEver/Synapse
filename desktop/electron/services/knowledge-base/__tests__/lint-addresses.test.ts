@@ -54,6 +54,7 @@ describe("KnowledgeBaseAddressLintService", () => {
 
     expect(result.counter).toBe(10)
     expect(result.highestCAddress).toBe("c-000010")
+    expect(result.postRolloutPagesChecked).toBe(7)
     expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
       "address.invalid-format",
       "address.duplicate",

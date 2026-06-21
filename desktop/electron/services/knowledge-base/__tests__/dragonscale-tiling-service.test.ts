@@ -19,6 +19,10 @@ import {
   type DragonScaleEmbeddingProvider,
   type DragonScaleTilingCheckResult,
 } from "../index"
+import {
+  DRAGONSCALE_TILING_MAX_PAIR_COMPARISONS,
+  DRAGONSCALE_TILING_MAX_REPORT_PAIRS_PER_BAND,
+} from "../dragonscale/tiling-types"
 
 const roots: string[] = []
 
@@ -289,6 +293,58 @@ describe("DragonScaleTilingService", () => {
       ["wiki/concepts/Alpha.md", "wiki/concepts/Review.md", 0.85],
       ["wiki/concepts/Beta.md", "wiki/concepts/Review.md", 0.85],
     ])
+  })
+
+  it("stops warm-cache pair scoring when comparison budget is exceeded", async () => {
+    const root = await tempDir()
+    const provider = new FakeEmbeddingProvider()
+    const pageCount = Math.floor((1 + Math.sqrt(1 + 8 * DRAGONSCALE_TILING_MAX_PAIR_COMPARISONS)) / 2) + 1
+    const embeddings: Record<string, { hash: string; embedding: readonly number[]; computed_at: string }> = {}
+    for (let index = 0; index < pageCount; index += 1) {
+      const body = `\nBody ${index}\n`
+      const relativePath = `wiki/concepts/Page-${String(index).padStart(4, "0")}.md`
+      await writePage(root, relativePath, `---\ntype: concept\n---\n${body}`)
+      embeddings[relativePath] = {
+        hash: dragonScaleTilingBodyHash(body, "nomic-embed-text"),
+        embedding: [1, 0],
+        computed_at: "2026-05-24T00:00:00Z",
+      }
+    }
+    await mkdir(path.join(root, ".vault-meta"), { recursive: true })
+    await writeFile(path.join(root, ".vault-meta", "tiling-cache.json"), `${JSON.stringify({
+      version: 1,
+      model: "nomic-embed-text",
+      embeddings,
+    })}\n`)
+
+    const result = await new DragonScaleTilingService({ embeddingProvider: provider }).check(root)
+
+    expect(result).toMatchObject({
+      status: "scale-exceeded",
+      scanned: pageCount,
+      embedded: pageCount,
+      cacheHits: pageCount,
+      recomputed: 0,
+      message: expect.stringContaining("pair comparisons"),
+    })
+    expect(provider.embedCalls).toHaveLength(0)
+  })
+
+  it("keeps only the top pairs per report band", async () => {
+    const root = await tempDir()
+    const provider = new FakeEmbeddingProvider()
+    const pageCount = 21
+    for (let index = 0; index < pageCount; index += 1) {
+      const body = `\nSame ${index}\n`
+      provider.embeddings.set(body, [1, 0])
+      await writePage(root, `wiki/concepts/Same-${String(index).padStart(2, "0")}.md`, `---\ntype: concept\n---\n${body}`)
+    }
+
+    const result = await new DragonScaleTilingService({ embeddingProvider: provider }).check(root)
+
+    expect(result.status).toBe("ok")
+    expect(result.errors).toHaveLength(DRAGONSCALE_TILING_MAX_REPORT_PAIRS_PER_BAND)
+    expect(result.reviews).toHaveLength(0)
   })
 
   it("records embed failures and dimension mismatch warnings", async () => {

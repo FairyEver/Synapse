@@ -13,6 +13,8 @@ import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import {
   DRAGONSCALE_TILING_DEFAULT_MODEL,
   DRAGONSCALE_TILING_MAX_BODY_BYTES,
+  DRAGONSCALE_TILING_MAX_PAIR_COMPARISONS,
+  DRAGONSCALE_TILING_MAX_REPORT_PAIRS_PER_BAND,
   DRAGONSCALE_TILING_SCALE_HARD_FAIL_PAGES,
   DRAGONSCALE_TILING_SCALE_WARN_PAGES,
   defaultDragonScaleTilingThresholds,
@@ -262,6 +264,23 @@ export class DragonScaleTilingService {
       }
 
       await saveCache(root, cache)
+      const pairComparisons = pairCount(embeddedPages.length)
+      if (pairComparisons > DRAGONSCALE_TILING_MAX_PAIR_COMPARISONS) {
+        return emptyCheckResult({
+          status: "scale-exceeded",
+          generated,
+          model,
+          ollamaUrl,
+          thresholds: thresholdsResult.thresholds,
+          scanned: scan.scanned,
+          embedded: embeddedPages.length,
+          skipped,
+          cacheHits,
+          recomputed,
+          orphansPruned,
+          message: `${embeddedPages.length} embedded pages require ${pairComparisons} pair comparisons, exceeding limit ${DRAGONSCALE_TILING_MAX_PAIR_COMPARISONS}.`,
+        })
+      }
       const { errors, reviews, pairWarnings } = scorePairs(embeddedPages, thresholdsResult.thresholds)
       warnings.push(...pairWarnings)
       const reportMarkdown = formatReport({
@@ -556,7 +575,8 @@ function scorePairs(
   readonly reviews: readonly DragonScaleTilingPair[]
   readonly pairWarnings: readonly string[]
 } {
-  const pairs: DragonScaleTilingPair[] = []
+  const errors: DragonScaleTilingPair[] = []
+  const reviews: DragonScaleTilingPair[] = []
   const pairWarnings: string[] = []
   for (let i = 0; i < pages.length; i += 1) {
     for (let j = i + 1; j < pages.length; j += 1) {
@@ -565,22 +585,48 @@ function scorePairs(
       if (!left || !right) continue
       const similarity = cosine(left.embedding, right.embedding)
       if (similarity === null) {
-        pairWarnings.push(`cosine skip (${left.path}, ${right.path}): dimension mismatch`)
+        pushPairWarning(pairWarnings, `cosine skip (${left.path}, ${right.path}): dimension mismatch`)
         continue
       }
-      if (similarity >= thresholds.bands.review) {
-        pairs.push({ similarity, leftPath: left.path, rightPath: right.path })
+      const pair = { similarity, leftPath: left.path, rightPath: right.path }
+      if (similarity >= thresholds.bands.error) {
+        pushRankedPair(errors, pair)
+      } else if (similarity >= thresholds.bands.review) {
+        pushRankedPair(reviews, pair)
       }
     }
   }
-  pairs.sort((left, right) =>
-    right.similarity - left.similarity
-    || left.leftPath.localeCompare(right.leftPath)
-    || left.rightPath.localeCompare(right.rightPath))
   return {
-    errors: pairs.filter((pair) => pair.similarity >= thresholds.bands.error),
-    reviews: pairs.filter((pair) => pair.similarity >= thresholds.bands.review && pair.similarity < thresholds.bands.error),
+    errors,
+    reviews,
     pairWarnings,
+  }
+}
+
+function pairCount(count: number): number {
+  return count <= 1 ? 0 : (count * (count - 1)) / 2
+}
+
+function comparePairs(left: DragonScaleTilingPair, right: DragonScaleTilingPair): number {
+  return right.similarity - left.similarity
+    || left.leftPath.localeCompare(right.leftPath)
+    || left.rightPath.localeCompare(right.rightPath)
+}
+
+function pushRankedPair(pairs: DragonScaleTilingPair[], pair: DragonScaleTilingPair): void {
+  pairs.push(pair)
+  pairs.sort(comparePairs)
+  if (pairs.length > DRAGONSCALE_TILING_MAX_REPORT_PAIRS_PER_BAND) pairs.pop()
+}
+
+function pushPairWarning(warnings: string[], warning: string): void {
+  const limit = 50
+  if (warnings.length < limit) {
+    warnings.push(warning)
+    return
+  }
+  if (!warnings.includes("Additional cosine warnings omitted.")) {
+    warnings.push("Additional cosine warnings omitted.")
   }
 }
 
@@ -773,7 +819,11 @@ function emptyCheckResult(input: {
   readonly ollamaUrl: string
   readonly thresholds: DragonScaleTilingThresholds
   readonly scanned?: number
+  readonly embedded?: number
   readonly skipped?: Record<string, number>
+  readonly cacheHits?: number
+  readonly recomputed?: number
+  readonly orphansPruned?: number
   readonly message?: string
 }): DragonScaleTilingCheckResult {
   return {
@@ -783,11 +833,11 @@ function emptyCheckResult(input: {
     ollamaUrl: input.ollamaUrl,
     thresholds: input.thresholds,
     scanned: input.scanned ?? 0,
-    embedded: 0,
+    embedded: input.embedded ?? 0,
     skipped: input.skipped ?? {},
-    cacheHits: 0,
-    recomputed: 0,
-    orphansPruned: 0,
+    cacheHits: input.cacheHits ?? 0,
+    recomputed: input.recomputed ?? 0,
+    orphansPruned: input.orphansPruned ?? 0,
     errors: [],
     reviews: [],
     warnings: [],

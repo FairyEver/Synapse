@@ -77,6 +77,7 @@ export class KnowledgeBaseAddressLintService {
     for (const page of pages) {
       if (isAddressExcluded(page)) continue
       const legacyPage = isLegacyPage(page, legacy)
+      if (!legacyPage) postRolloutPagesChecked += 1
       if (page.address) {
         if (!/^(c|l)-[0-9]{6}$/.test(page.address)) {
           issues.push({
@@ -104,7 +105,6 @@ export class KnowledgeBaseAddressLintService {
           message: "Legacy page has no address and is pending optional backfill.",
         })
       } else {
-        postRolloutPagesChecked += 1
         issues.push({
           severity: "error",
           code: "address.missing-post-rollout",

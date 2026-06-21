@@ -41,8 +41,17 @@ interface WikiPage {
   readonly system: boolean
 }
 
+interface WikiPageReadResult {
+  readonly pages: readonly WikiPage[]
+  readonly issues: readonly KnowledgeBaseLintIssue[]
+}
+
 const SYSTEM_FILENAMES = new Set(["_index.md", "index.md", "log.md", "hot.md", "overview.md", "dashboard.md"])
 const REQUIRED_FIELDS = ["type", "title", "created", "updated", "tags", "status"] as const
+const LINT_PREFLIGHT_MAX_MARKDOWN_PAGES = 1000
+const LINT_PREFLIGHT_MAX_PAGE_BYTES = 128 * 1024
+const LINT_PREFLIGHT_MAX_TOTAL_BODY_BYTES = 4 * 1024 * 1024
+const LINT_PREFLIGHT_MAX_BASIC_ISSUES = 500
 
 export class KnowledgeBaseLintPreflightService {
   private readonly addressLint: Pick<KnowledgeBaseAddressLintService, "lint">
@@ -58,13 +67,14 @@ export class KnowledgeBaseLintPreflightService {
   async run(projectPath: string): Promise<KnowledgeBaseLintPreflightResult> {
     const root = path.resolve(projectPath)
     const generatedDate = localDateString(this.now())
-    const [pages, address, manifest] = await Promise.all([
+    const [wiki, address, manifest] = await Promise.all([
       readWikiPages(root),
       this.addressLint.lint(root),
       readKnowledgeBaseManifest(root),
     ])
     const issues: KnowledgeBaseLintIssue[] = [
-      ...basicWikiIssues(pages),
+      ...wiki.issues,
+      ...basicWikiIssues(wiki.pages),
       ...manifestIssues(manifest),
       ...address.issues,
     ]
@@ -78,7 +88,7 @@ export class KnowledgeBaseLintPreflightService {
     }
     return {
       generatedDate,
-      pagesScanned: pages.length,
+      pagesScanned: wiki.pages.length,
       issues,
       address,
       tiling,
@@ -142,13 +152,59 @@ export function formatKnowledgeBaseLintPreflightAppendix(result: KnowledgeBaseLi
   ].join("\n")
 }
 
-async function readWikiPages(root: string): Promise<readonly WikiPage[]> {
+async function readWikiPages(root: string): Promise<WikiPageReadResult> {
   const rootRealPath = await resolveExistingPath(root)
-  const paths = await walkMarkdown(root, rootRealPath, path.join(root, "wiki"))
+  const scan = createMarkdownScanState()
+  await walkMarkdown(root, rootRealPath, path.join(root, "wiki"), scan)
   const pages: WikiPage[] = []
-  for (const absolutePath of paths) {
+  const issues: KnowledgeBaseLintIssue[] = [...scan.issues]
+  let totalBodyBytes = 0
+  for (const absolutePath of scan.paths.sort((left, right) => left.localeCompare(right))) {
     const relativePath = normalizeRelativePath(path.relative(root, absolutePath))
-    const content = await readFile(absolutePath, "utf8").catch(() => "")
+    let stat: Awaited<ReturnType<typeof lstat>>
+    try {
+      stat = await lstat(absolutePath)
+    } catch (error) {
+      issues.push({
+        severity: "error",
+        code: "preflight.page-unreadable",
+        path: relativePath,
+        message: error instanceof Error ? error.message : "Page could not be read.",
+      })
+      continue
+    }
+    if (stat.size > LINT_PREFLIGHT_MAX_PAGE_BYTES) {
+      issues.push({
+        severity: "warning",
+        code: "preflight.page-too-large",
+        path: relativePath,
+        message: `Page exceeds ${LINT_PREFLIGHT_MAX_PAGE_BYTES} bytes and was skipped.`,
+      })
+      continue
+    }
+    let content: string
+    try {
+      content = await readFile(absolutePath, "utf8")
+    } catch (error) {
+      issues.push({
+        severity: "error",
+        code: "preflight.page-unreadable",
+        path: relativePath,
+        message: error instanceof Error ? error.message : "Page could not be read.",
+      })
+      continue
+    }
+    const contentBytes = Buffer.byteLength(content, "utf8")
+    if (totalBodyBytes + contentBytes > LINT_PREFLIGHT_MAX_TOTAL_BODY_BYTES) {
+      issues.push({
+        severity: "error",
+        code: "preflight.scale-exceeded",
+        path: relativePath,
+        message: `Wiki preflight stopped after reaching ${LINT_PREFLIGHT_MAX_TOTAL_BODY_BYTES} retained body bytes.`,
+      })
+      break
+    }
+    totalBodyBytes += contentBytes
     const { frontmatter, body } = parseFrontmatter(content)
     pages.push({
       relativePath,
@@ -158,7 +214,7 @@ async function readWikiPages(root: string): Promise<readonly WikiPage[]> {
       system: isSystemPage(relativePath),
     })
   }
-  return pages
+  return { pages, issues }
 }
 
 function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
@@ -171,7 +227,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
     for (const link of extractWikilinks(page.body)) {
       const targets = pagesByStem.get(link) ?? []
       if (targets.length === 0) {
-        issues.push({
+        pushBasicIssue(issues, {
           severity: "warning",
           code: "wikilink.dead",
           path: page.relativePath,
@@ -180,7 +236,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
         continue
       }
       if (targets.length > 1) {
-        issues.push({
+        pushBasicIssue(issues, {
           severity: "warning",
           code: "wikilink.ambiguous",
           path: page.relativePath,
@@ -197,7 +253,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
     if (!page.system) {
       for (const field of REQUIRED_FIELDS) {
         if (!new RegExp(`^${field}:\\s*`, "m").test(page.frontmatter)) {
-          issues.push({
+          pushBasicIssue(issues, {
             severity: "warning",
             code: "frontmatter.missing-field",
             path: page.relativePath,
@@ -206,7 +262,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
         }
       }
       for (const heading of emptyHeadings(page.body)) {
-        issues.push({
+        pushBasicIssue(issues, {
           severity: "warning",
           code: "section.empty",
           path: page.relativePath,
@@ -218,7 +274,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
 
   for (const page of pages) {
     if (!page.system && (inbound.get(page.relativePath) ?? 0) === 0) {
-      issues.push({
+      pushBasicIssue(issues, {
         severity: "info",
         code: "page.orphan",
         path: page.relativePath,
@@ -227,6 +283,19 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
     }
   }
   return issues
+}
+
+function pushBasicIssue(issues: KnowledgeBaseLintIssue[], issue: KnowledgeBaseLintIssue): void {
+  if (issues.length < LINT_PREFLIGHT_MAX_BASIC_ISSUES) {
+    issues.push(issue)
+    return
+  }
+  if (issues.some((item) => item.code === "preflight.issue-limit")) return
+  issues.push({
+    severity: "warning",
+    code: "preflight.issue-limit",
+    message: `Basic wiki lint stopped after ${LINT_PREFLIGHT_MAX_BASIC_ISSUES} issues.`,
+  })
 }
 
 function groupPagesByStem(pages: readonly WikiPage[]): Map<string, WikiPage[]> {
@@ -253,20 +322,31 @@ function manifestIssues(manifest: Awaited<ReturnType<typeof readKnowledgeBaseMan
   return issues
 }
 
-async function walkMarkdown(root: string, rootRealPath: string, directoryPath: string): Promise<string[]> {
+interface MarkdownScanState {
+  readonly paths: string[]
+  readonly issues: KnowledgeBaseLintIssue[]
+  stopped: boolean
+}
+
+function createMarkdownScanState(): MarkdownScanState {
+  return { paths: [], issues: [], stopped: false }
+}
+
+async function walkMarkdown(root: string, rootRealPath: string, directoryPath: string, state: MarkdownScanState): Promise<void> {
+  if (state.stopped) return
   let entries: Dirent[]
   try {
     entries = await readdir(directoryPath, { withFileTypes: true })
   } catch (error) {
-    if (isMissingPathError(error)) return []
+    if (isMissingPathError(error)) return
     throw error
   }
-  const paths: string[] = []
-  for (const entry of entries) {
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (state.stopped) return
     const entryPath = path.join(directoryPath, entry.name)
     if (entry.isSymbolicLink()) continue
     if (entry.isDirectory()) {
-      paths.push(...await walkMarkdown(root, rootRealPath, entryPath))
+      await walkMarkdown(root, rootRealPath, entryPath, state)
       continue
     }
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue
@@ -274,9 +354,18 @@ async function walkMarkdown(root: string, rootRealPath: string, directoryPath: s
     if (stat.isSymbolicLink()) continue
     const resolved = await resolveExistingPath(entryPath)
     if (!isInside(rootRealPath, resolved) || !isInside(root, entryPath)) continue
-    paths.push(entryPath)
+    if (state.paths.length >= LINT_PREFLIGHT_MAX_MARKDOWN_PAGES) {
+      state.issues.push({
+        severity: "error",
+        code: "preflight.scale-exceeded",
+        path: normalizeRelativePath(path.relative(root, entryPath)),
+        message: `Wiki preflight stopped after ${LINT_PREFLIGHT_MAX_MARKDOWN_PAGES} Markdown pages.`,
+      })
+      state.stopped = true
+      return
+    }
+    state.paths.push(entryPath)
   }
-  return paths.sort((left, right) => left.localeCompare(right))
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {
