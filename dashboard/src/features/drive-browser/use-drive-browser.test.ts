@@ -361,6 +361,57 @@ describe('toDriveBrowserQueryKey', () => {
     expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'link-password', undefined, {})
     expect(driveBrowserApi.getShareRoot).not.toHaveBeenCalled()
   })
+
+  it('keeps a password-unlocked share ready after loading more children', async () => {
+    const unlockedSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-1')],
+      childrenPage: { hasMore: true, limit: 50, nextOffset: 50 },
+    })
+    const nextSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-2')],
+      childrenPage: { hasMore: false, limit: 50, nextOffset: null },
+    })
+    vi.mocked(driveBrowserApi.getShareRoot)
+      .mockResolvedValueOnce({ passwordRequired: true, message: '请输入密码。' })
+      .mockResolvedValueOnce(nextSnapshot)
+    vi.mocked(driveBrowserApi.unlockShare).mockResolvedValueOnce(unlockedSnapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, { context: 'share', shareId: 'share-1' })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'passwordRequired') throw new Error('browser is not password protected')
+      hook.result.current.unlock('letmein')
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.children.map((child) => child.id) : [])
+        .toEqual(['file-1'])
+    })
+
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      hook.result.current.loadMoreChildren?.()
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.children.map((child) => child.id) : [])
+        .toEqual(['file-1', 'file-2'])
+    })
+
+    expect(hook.result.current.status).toBe('ready')
+    expect(driveBrowserApi.getShareRoot).toHaveBeenLastCalledWith('share-1', {
+      childrenOffset: 50,
+      childrenLimit: 50,
+    })
+  })
 })
 
 function baseCurrent(): DriveBrowserSnapshotDto['current'] {

@@ -111,10 +111,10 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       if (variables.queryKeySignature !== queryKeySignatureRef.current) return
       if (unlockedSnapshot) {
         setUnlockedSnapshotState((current) => {
-          const baseSnapshot = keyedSnapshotForSignature(current, queryKeySignature) ?? unlockedSnapshot
+          const baseSnapshot = keyedSnapshotForSignature(current, unlockedKeySignature) ?? unlockedSnapshot
           if (driveBrowserChildrenPageKey(baseSnapshot) !== variables.pageKey) return current
           return {
-            keySignature: queryKeySignature,
+            keySignature: unlockedKeySignature,
             snapshot: mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot),
           }
         })
