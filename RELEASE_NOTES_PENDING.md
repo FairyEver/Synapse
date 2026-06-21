@@ -104,6 +104,7 @@
 - 知识库存储迁移会正确拒绝当前 `knowledge-bases` 目录下以 `..` 开头的目标子目录，避免迁移复制阶段递归复制自身。
 - Provider 密钥并发保存会串行写入加密存储，避免多个窗口或重复提交同时保存时互相覆盖 API key。
 - Agent 文件夹附件会在发送前拒绝包含符号链接的目录，避免通过文件夹附件把未授权的外部路径暴露给 Agent。
+- Git 工作台提交选中文件时只会提交勾选路径，避免把用户提前暂存的其它文件一起带进提交。
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
 - 工作流 Claude Code 节点的运行历史会脱敏指令中的 token、Authorization 和本地路径，避免节点 prompt 原文进入快照文件。
 - 诊断报告中的日志样本会先脱敏再写入详情和 `diagnostics.json`，避免排障包或设置页复制内容泄露 token、Cookie、Authorization 等敏感信息。
