@@ -453,9 +453,10 @@ function parseTriggerRef(value: Record<string, unknown>, triggers: AutomationTri
 function parseExecutorRef(value: Record<string, unknown>, actions: MainActionRegistry) {
   const type = requireRecordString(value, "type", "executor.type")
   const config = requireRecord(value.config, "executor.config")
+  const action = actions.get(type)
   return {
     type,
-    config: actions.parseConfig(type, config),
+    config: action.manifest.configSchema.parse({ ...action.manifest.defaultConfig, ...config }),
   }
 }
 

@@ -54,7 +54,7 @@ Returns one public item summary or `null`.
 
 ### automation_item_create
 
-For command or script executors, start from the `defaultConfig` returned by `automation_executor_type_list`, then override the user-requested command, script, timeout, or environment fields. Do not set `shell` unless the user explicitly requests a non-default shell.
+For command or script executors, the dispatcher applies the `defaultConfig` returned by `automation_executor_type_list` before validation. Provide the user-requested command, script, timeout, or environment fields, and include `shell` only when the user explicitly requests a non-default shell.
 
 Input:
 

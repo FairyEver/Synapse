@@ -76,7 +76,7 @@ function intervalTrigger(): AutomationTriggerDefinition {
   }
 }
 
-const commandActionSchema = z.object({ command: z.string().min(1) })
+const commandActionSchema = z.object({ command: z.string().min(1), shell: z.enum(["posix", "cmd", "powershell"]) })
 type CommandActionConfig = z.infer<typeof commandActionSchema>
 
 function commandAction(): MainActionDefinition<CommandActionConfig> {
@@ -85,7 +85,7 @@ function commandAction(): MainActionDefinition<CommandActionConfig> {
       id: "builtin.command",
       title: "Command",
       permissions: ["shell.exec"],
-      defaultConfig: { command: "date" },
+      defaultConfig: { command: "date", shell: "posix" },
       configFields: [{ name: "command", kind: "string", required: true, defaultValue: "" }],
       configSchema: commandActionSchema,
     },
@@ -435,7 +435,7 @@ describe("automation capability dispatcher", () => {
     expect(service.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: "New automation",
       trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
-      executor: { type: "builtin.command", config: { command: "echo ok" } },
+      executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
     }))
     expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { name: "Updated automation" })
     expect(service.automationEnable).toHaveBeenCalledWith("automation:1")
