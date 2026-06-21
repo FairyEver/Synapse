@@ -59,7 +59,17 @@ export function buildWorkflowCallParams(input: BuildWorkflowCallParamsInput): Bu
       continue
     }
 
-    const numberValue = Number(rendered.trim())
+    const trimmed = rendered.trim()
+    if (trimmed.length === 0) {
+      if (paramHasDefault(param)) {
+        params[param.name] = param.default
+      } else {
+        errors.push(`子工作流参数「${param.name}」缺少必填值`)
+      }
+      continue
+    }
+
+    const numberValue = Number(trimmed)
     if (!Number.isFinite(numberValue)) {
       errors.push(`子工作流参数「${param.name}」必须是数字`)
       continue

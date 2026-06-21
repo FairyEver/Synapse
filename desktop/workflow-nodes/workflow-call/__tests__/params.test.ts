@@ -78,6 +78,17 @@ describe("workflow call params", () => {
     expect(result.errors).toEqual(["子工作流参数「limit」必须是数字"])
   })
 
+  it("reports blank required number params", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "limit", type: "number", default: null }]),
+      paramTemplates: { limit: "{{empty_limit}}" },
+      resolvedVariables: { empty_limit: "   " },
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual(["子工作流参数「limit」缺少必填值"])
+  })
+
   it("reports template interpolation errors", () => {
     const result = buildWorkflowCallParams({
       childDefinition: child([{ name: "topic", type: "text", default: null }]),
