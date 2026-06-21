@@ -212,21 +212,33 @@ const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
 const DRIVE_REORGANIZATION_AUDIT_MOVE_LIMIT = 100
 
 type DriveItemTreeQueryRow = {
-  readonly id: string
+  readonly id: string | null
   readonly parentId: string | null
+  readonly type: string | null
+  readonly name: string | null
+  readonly size: bigint | null
+  readonly mimeType: string | null
+  readonly storageStatus: string | null
+  readonly createdAt: Date | null
+  readonly updatedAt: Date | null
+  readonly path: string | null
+  readonly depth: number | null
+  readonly activeShareId: string | null
+  readonly total: bigint | number
+  readonly fileCount: bigint | number
+  readonly folderCount: bigint | number
+}
+
+type DriveItemTreeEntryQueryRow = DriveItemTreeQueryRow & {
+  readonly id: string
   readonly type: string
   readonly name: string
   readonly size: bigint
-  readonly mimeType: string | null
   readonly storageStatus: string
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly path: string
   readonly depth: number
-  readonly activeShareId: string | null
-  readonly total: bigint | number
-  readonly fileCount: bigint | number
-  readonly folderCount: bigint | number
 }
 
 @Injectable()
@@ -1245,50 +1257,56 @@ export class DriveService implements OnApplicationBootstrap {
               AND dus.status = ${DRIVE_UPLOAD_STATUS.pending}
           )
       ),
-      counted AS (
+      stats AS (
         SELECT
-          tree.*,
-          count(*) OVER () AS total,
-          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.file}) OVER () AS "fileCount",
-          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.folder}) OVER () AS "folderCount"
+          count(*) AS total,
+          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.file}) AS "fileCount",
+          count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.folder}) AS "folderCount"
         FROM tree
+      ),
+      paged AS (
+        SELECT *
+        FROM tree
+        ORDER BY tree.sort_path
+        OFFSET ${page.offset}
+        LIMIT ${page.limit + 1}
       )
       SELECT
-        counted.id,
-        counted."parentId",
-        counted.type,
-        counted.name,
-        counted.size,
-        counted."mimeType",
-        counted."storageStatus",
-        counted."createdAt",
-        counted."updatedAt",
-        counted.path,
-        counted.depth,
-        counted.total,
-        counted."fileCount",
-        counted."folderCount",
+        paged.id,
+        paged."parentId",
+        paged.type,
+        paged.name,
+        paged.size,
+        paged."mimeType",
+        paged."storageStatus",
+        paged."createdAt",
+        paged."updatedAt",
+        paged.path,
+        paged.depth,
+        stats.total,
+        stats."fileCount",
+        stats."folderCount",
         share.id AS "activeShareId"
-      FROM counted
+      FROM stats
+      LEFT JOIN paged ON true
       LEFT JOIN LATERAL (
         SELECT ds.id
         FROM "DriveShare" ds
-        WHERE ds."itemId" = counted.id
+        WHERE ds."itemId" = paged.id
           AND ds.enabled = true
           AND (ds."expiresAt" IS NULL OR ds."expiresAt" > NOW())
         ORDER BY ds."createdAt" DESC
         LIMIT 1
       ) share ON true
-      ORDER BY counted.sort_path
-      OFFSET ${page.offset}
-      LIMIT ${page.limit + 1}
+      ORDER BY paged.sort_path
     `
-    const pageRows = rows.slice(0, page.limit)
+    const entryRows = rows.filter(isDriveItemTreeEntryQueryRow)
+    const pageRows = entryRows.slice(0, page.limit)
     const statsRow = rows[0]
     const total = statsRow ? numericCount(statsRow.total) : 0
     const fileCount = statsRow ? numericCount(statsRow.fileCount) : 0
     const folderCount = statsRow ? numericCount(statsRow.folderCount) : 0
-    const hasMore = rows.length > page.limit
+    const hasMore = entryRows.length > page.limit
     return {
       items: pageRows.map(toDriveItemTreeEntryDto),
       total,
@@ -2941,6 +2959,18 @@ function numericCount(value: bigint | number): number {
   return typeof value === "bigint" ? Number(value) : value
 }
 
+function isDriveItemTreeEntryQueryRow(row: DriveItemTreeQueryRow): row is DriveItemTreeEntryQueryRow {
+  return row.id !== null
+    && row.type !== null
+    && row.name !== null
+    && row.size !== null
+    && row.storageStatus !== null
+    && row.createdAt !== null
+    && row.updatedAt !== null
+    && row.path !== null
+    && row.depth !== null
+}
+
 function ordinaryDriveItemWhere(input: {
   readonly userId: string
   readonly id?: string
@@ -2966,7 +2996,7 @@ function ordinaryDriveItemWhere(input: {
   }
 }
 
-function toDriveItemTreeEntryDto(row: DriveItemTreeQueryRow): DriveItemTreeEntryDto {
+function toDriveItemTreeEntryDto(row: DriveItemTreeEntryQueryRow): DriveItemTreeEntryDto {
   return {
     ...toDriveItemDto({
       id: row.id,

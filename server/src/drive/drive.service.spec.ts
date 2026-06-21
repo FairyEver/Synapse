@@ -2585,6 +2585,45 @@ describe("DriveService", () => {
     ])
   })
 
+  it("keeps recursive item tree stats when the requested page is empty", async () => {
+    const rows = [{
+      id: null,
+      parentId: null,
+      type: null,
+      name: null,
+      size: null,
+      mimeType: null,
+      storageStatus: null,
+      createdAt: null,
+      updatedAt: null,
+      path: null,
+      depth: null,
+      activeShareId: null,
+      total: 3n,
+      fileCount: 1n,
+      folderCount: 2n,
+    }]
+    const prisma = {
+      $queryRaw: vi.fn(async () => rows),
+      driveItem: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+      },
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+
+    const tree = await service.listItemTree("user-1", { parentId: null, offset: 50, limit: 10 })
+
+    expect(tree).toEqual({
+      items: [],
+      total: 3,
+      fileCount: 1,
+      folderCount: 2,
+      hasMore: false,
+      nextOffset: null,
+    })
+  })
+
   it("ensures nested folder paths by reusing existing folders and creating missing folders", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
