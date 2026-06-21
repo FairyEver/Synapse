@@ -562,7 +562,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.read.outside-userdata",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.listRawDirectory",
-        run: () => service(ctx).listRawDirectory(request),
+        run: () => {
+          assertStorageMigrationInactive(ctx)
+          return service(ctx).listRawDirectory(request)
+        },
       }),
     },
     uploadRawFiles: {

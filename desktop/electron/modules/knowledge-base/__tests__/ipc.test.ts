@@ -673,6 +673,18 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("blocks raw directory listing during storage migration", async () => {
+    const listRawDirectory = vi.fn().mockResolvedValue({ projectId: "kb-1", directoryPath: "", entries: [] })
+    const { harness } = createHarness({ migrationActive: true, service: { listRawDirectory } })
+
+    await expect(harness.invoke("synapse:knowledge-base:list-raw-directory", {
+      projectId: "kb-1",
+      directoryPath: "",
+    })).rejects.toThrow("知识库存储迁移正在进行")
+
+    expect(listRawDirectory).not.toHaveBeenCalled()
+  })
+
   it("uploads raw files through guarded read and write permissions", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
