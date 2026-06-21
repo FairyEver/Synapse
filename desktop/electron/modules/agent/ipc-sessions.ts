@@ -23,6 +23,7 @@ import {
   sessionSummarySchema,
   resolveProjectAgent,
   assertKnowledgeBaseStorageMigrationInactive,
+  isRecoverableManagedKnowledgeBaseWorkspaceError,
 } from "./ipc-shared"
 
 const logger = createMainLogger("agent.ipc")
@@ -297,6 +298,9 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
           boundary: "agent.ipc.create-session",
           ...errorDiagnostic(rawError),
         })
+        if (isRecoverableManagedKnowledgeBaseWorkspaceError(rawError)) {
+          throw rawError
+        }
         throw new Error("创建 Agent 会话失败。", { cause: rawError })
       }
     },

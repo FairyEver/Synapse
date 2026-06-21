@@ -426,7 +426,7 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ERROR", error: "创建失败" })
+      dispatch({ type: "SET_ERROR", error: recoverableAgentSessionCreateErrorMessage(rawError) ?? "创建失败" })
       return undefined
     }
     // Separate error boundary for post-creation refresh. A refresh failure
@@ -1014,6 +1014,16 @@ function sessionSnapshotForLog(
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return typeof error === "string" ? error : "Unknown error"
+}
+
+function recoverableAgentSessionCreateErrorMessage(error: unknown): string | null {
+  const message = errorMessage(error)
+  return isRecoverableKnowledgeBaseWorkspaceErrorMessage(message) ? message : null
+}
+
+function isRecoverableKnowledgeBaseWorkspaceErrorMessage(message: string): boolean {
+  return message === "知识库运行目录不存在。请重新创建知识库或从备份恢复。"
+    || message === "无法访问知识库运行目录。请检查磁盘权限后重试。"
 }
 
 function sendFailureDisplayMessage(error: unknown): string {

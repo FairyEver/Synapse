@@ -31,10 +31,18 @@ export const KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR = "知识库存储迁移正�
 const logger = createMainLogger("agent.ipc-shared")
 const MANAGED_KNOWLEDGE_BASE_WORKSPACE_MISSING_ERROR = "知识库运行目录不存在。请重新创建知识库或从备份恢复。"
 const MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR = "无法访问知识库运行目录。请检查磁盘权限后重试。"
+const RECOVERABLE_MANAGED_KNOWLEDGE_BASE_WORKSPACE_ERRORS = new Set([
+  MANAGED_KNOWLEDGE_BASE_WORKSPACE_MISSING_ERROR,
+  MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR,
+])
 
 // ─── Shared request schemas ───────────────────────────────────────────────────
 
 export { projectRequestSchema }
+
+export function isRecoverableManagedKnowledgeBaseWorkspaceError(error: unknown): boolean {
+  return error instanceof Error && RECOVERABLE_MANAGED_KNOWLEDGE_BASE_WORKSPACE_ERRORS.has(error.message)
+}
 
 export function assertKnowledgeBaseStorageMigrationInactive(
   resolve: <T>(serviceId: string) => T,

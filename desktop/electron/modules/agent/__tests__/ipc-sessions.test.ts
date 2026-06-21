@@ -179,6 +179,48 @@ describe("agent session IPC methods", () => {
     expect(ctx.projectContainers.open).not.toHaveBeenCalled()
   })
 
+  it("preserves recoverable managed knowledge base workspace errors during session creation", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              managed: true,
+              runtimeId: "kb-1",
+            },
+          },
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    fsPromisesMock.stat.mockRejectedValueOnce(Object.assign(new Error("missing"), { code: "ENOENT" }))
+    const createSession = vi.fn()
+    const storageMigration = { isActive: vi.fn(() => false) }
+    const ctx = createContext({
+      agent: { createSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+      storageMigration,
+    })
+
+    await expect(sessionMethods.createSession.handler(ctx, {
+      projectId: "kb-1",
+      agentType: "claude-code",
+    })).rejects.toThrow("知识库运行目录不存在。请重新创建知识库或从备份恢复。")
+
+    expect(createSession).not.toHaveBeenCalled()
+    expect(ctx.projectContainers.open).not.toHaveBeenCalled()
+  })
+
   it("creates sessions in the built-in local conversation workspace", async () => {
     const workspacePath = path.join("/user-data", "agent-workspaces", "default")
     vi.mocked(configStore.load).mockResolvedValue({

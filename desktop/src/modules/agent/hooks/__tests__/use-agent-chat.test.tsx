@@ -1372,6 +1372,38 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/liyang")
   })
 
+  it("shows recoverable knowledge base storage errors when session creation fails", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.createSession.mockRejectedValue(new Error("知识库运行目录不存在。请重新创建知识库或从备份恢复。"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.createSession("project-1", "provider-1", "bypassPermissions")
+    })
+
+    expect(chat?.error).toBe("知识库运行目录不存在。请重新创建知识库或从备份恢复。")
+  })
+
   it("logs session mutation failures with sanitized target context", async () => {
     const bridge = (window as unknown as {
       synapse: {
