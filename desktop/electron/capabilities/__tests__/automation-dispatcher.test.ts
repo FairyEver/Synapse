@@ -99,7 +99,7 @@ function commandAction(): MainActionDefinition<CommandActionConfig> {
   }
 }
 
-const scriptActionSchema = z.object({ script: z.string().min(1) })
+const scriptActionSchema = z.object({ script: z.string().min(1), shell: z.enum(["posix", "cmd", "powershell"]) })
 type ScriptActionConfig = z.infer<typeof scriptActionSchema>
 
 function scriptAction(): MainActionDefinition<ScriptActionConfig> {
@@ -108,7 +108,7 @@ function scriptAction(): MainActionDefinition<ScriptActionConfig> {
       id: "builtin.script",
       title: "Script",
       permissions: ["shell.exec"],
-      defaultConfig: { script: "date" },
+      defaultConfig: { script: "date", shell: "posix" },
       configFields: [{ name: "script", kind: "string", required: true, defaultValue: "" }],
       configSchema: scriptActionSchema,
     },
@@ -325,6 +325,43 @@ describe("automation capability dispatcher", () => {
         defaultConfig: expect.objectContaining({ shell: "cmd" }),
       }),
     ]))
+  })
+
+  it("uses Windows-aware shell defaults when creating and updating Automation executors", async () => {
+    const { dispatcher, service } = createHarness({ platform: "win32" })
+    vi.mocked(service.automationCreate)
+      .mockResolvedValueOnce({ ...baseItem, id: "automation:new" })
+      .mockResolvedValueOnce({ ...baseItem, id: "automation:powershell" })
+    vi.mocked(service.automationUpdate).mockResolvedValueOnce({ ...baseItem, executor: { type: "builtin.script", config: { script: "echo ok", shell: "cmd" } } })
+
+    await dispatcher.dispatch("automation.item.create", {
+      name: "Windows command",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      executor: { type: "builtin.command", config: { command: "echo ok" } },
+    }, { source: "mcp-http" })
+    await dispatcher.dispatch("automation.item.update", {
+      automationId: "automation:1",
+      patch: {
+        executor: { type: "builtin.script", config: { script: "echo ok" } },
+      },
+    }, { source: "mcp-http" })
+    await dispatcher.dispatch("automation.item.create", {
+      name: "PowerShell command",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      executor: { type: "builtin.command", config: { command: "Get-Date", shell: "powershell" } },
+    }, { source: "mcp-http" })
+
+    expect(service.automationCreate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      executor: { type: "builtin.command", config: { command: "echo ok", shell: "cmd" } },
+    }))
+    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", {
+      executor: { type: "builtin.script", config: { script: "echo ok", shell: "cmd" } },
+    })
+    expect(service.automationCreate).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      executor: { type: "builtin.command", config: { command: "Get-Date", shell: "powershell" } },
+    }))
   })
 
   it("checks read permission when listing and getting public item summaries without raw configs", async () => {

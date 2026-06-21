@@ -119,6 +119,7 @@
 - Content MCP 读取 Rule、Skill 和 Prompt 列表或详情时会经过权限检查并写入审计记录，避免内容资源被静默读取。
 - Workflow MCP 创建节点时会在工具契约层要求提供节点配置，不再先接受空配置再在保存时失败。
 - Automation MCP 创建命令或脚本自动化时会先合并执行器默认配置，按内置参考省略默认 shell 也能创建成功。
+- Automation MCP 在 Windows 创建或更新命令/脚本自动化时会保存 Windows 默认 shell，不再把省略 shell 的配置落成 POSIX。
 - 知识库添加 URL 资料时，缺少 Content-Type 且看起来像二进制的响应会被明确跳过，不再把乱码内容写成 Markdown 资料。
 - 知识库 `/wiki-lint` 预检增加页面和语义分组规模边界；页面读取失败会明确报告，地址校验数量也会正确包含已带地址的页面。
 - MCP 工具返回 `ok:false` 时会标记为工具调用失败，不再把 Drive、Workflow 等调度失败包装成成功响应。

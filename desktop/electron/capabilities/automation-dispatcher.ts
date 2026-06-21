@@ -130,14 +130,14 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           }
 
           case "automation.item.create": {
-            const input = parseCreateParams(params, deps.triggers, deps.actions)
+            const input = parseCreateParams(params, deps.triggers, deps.actions, deps.platform ?? process.platform)
             const item = await deps.service.automationCreate(input)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
           }
 
           case "automation.item.update": {
-            const input = parseUpdateParams(params, deps.triggers, deps.actions)
+            const input = parseUpdateParams(params, deps.triggers, deps.actions, deps.platform ?? process.platform)
             const item = await deps.service.automationUpdate(input.automationId, input.patch)
             result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
             break
@@ -380,6 +380,7 @@ function parseCreateParams(
   params: Record<string, unknown>,
   triggers: AutomationTriggerRegistry,
   actions: MainActionRegistry,
+  platform: string,
 ): AutomationCreateInput {
   const name = params.name
   const scope = params.scope
@@ -393,7 +394,7 @@ function parseCreateParams(
     name,
     scope: parseScope(scope),
     trigger: parseTriggerRef(trigger, triggers),
-    executor: parseExecutorRef(executor, actions),
+    executor: parseExecutorRef(executor, actions, platform),
   }
   assignIfDefined(input, "description", optionalString(params.description, "description"))
   assignIfDefined(input, "enabled", optionalBoolean(params.enabled, "enabled"))
@@ -406,6 +407,7 @@ function parseUpdateParams(
   params: Record<string, unknown>,
   triggers: AutomationTriggerRegistry,
   actions: MainActionRegistry,
+  platform: string,
 ): { automationId: string; patch: AutomationUpdateInput } {
   const { automationId } = parseAutomationIdParams(params)
   const patchRecord = requireRecord(params.patch, "patch")
@@ -432,7 +434,7 @@ function parseUpdateParams(
   assignIfDefined(
     patch,
     "executor",
-    patchRecord.executor === undefined ? undefined : parseExecutorRef(requireRecord(patchRecord.executor, "patch.executor"), actions),
+    patchRecord.executor === undefined ? undefined : parseExecutorRef(requireRecord(patchRecord.executor, "patch.executor"), actions, platform),
   )
   assignIfDefined(patch, "policy", parseOptionalPolicy(patchRecord.policy))
   if (Object.keys(patch).length === 0) {
@@ -450,13 +452,14 @@ function parseTriggerRef(value: Record<string, unknown>, triggers: AutomationTri
   }
 }
 
-function parseExecutorRef(value: Record<string, unknown>, actions: MainActionRegistry) {
+function parseExecutorRef(value: Record<string, unknown>, actions: MainActionRegistry, platform: string) {
   const type = requireRecordString(value, "type", "executor.type")
   const config = requireRecord(value.config, "executor.config")
   const action = actions.get(type)
+  const defaultConfig = createPlatformActionDefaultConfig(type, action.manifest.defaultConfig, platform)
   return {
     type,
-    config: action.manifest.configSchema.parse({ ...action.manifest.defaultConfig, ...config }),
+    config: action.manifest.configSchema.parse({ ...defaultConfig, ...config }),
   }
 }
 
