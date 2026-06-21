@@ -149,6 +149,7 @@ export type SynapseKnowledgeBaseRawSkipReason =
   | "not-directory"
   | "read-error"
   | "invalid-path"
+  | "invalid-name"
   | "collision"
   | "trash-error"
   | "symlink"

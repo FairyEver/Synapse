@@ -171,6 +171,15 @@ export class KnowledgeBaseRawFileManager {
           skipped.push({ path: filePath, reason: "not-file" })
           continue
         }
+        const sourceName = path.basename(sourcePath)
+        if (!isValidUploadEntryName(sourceName)) {
+          knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
+            fileName: sourceName,
+            reason: "invalid-name",
+          })
+          skipped.push({ path: filePath, reason: "invalid-name" })
+          continue
+        }
         const nextBudget = { ...budget }
         const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, nextBudget, this.uploadLimits)
         if (budgetFailure) {
@@ -184,7 +193,7 @@ export class KnowledgeBaseRawFileManager {
           skipped.push({ path: filePath, reason: budgetFailure })
           continue
         }
-        const targetPath = await copyFileToAvailablePath(sourcePath, targetDirectory, path.basename(sourcePath))
+        const targetPath = await copyFileToAvailablePath(sourcePath, targetDirectory, sourceName)
         commitRawUploadBudget(budget, nextBudget)
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
       } catch (error) {
@@ -236,9 +245,10 @@ export class KnowledgeBaseRawFileManager {
       }
       const resolvedSource = path.resolve(sourcePath)
       const sourceStat = await lstat(resolvedSource)
-      if (isSystemNoiseFile(path.basename(resolvedSource))) {
+      const sourceName = path.basename(resolvedSource)
+      if (isSystemNoiseFile(sourceName)) {
         knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
-          itemName: path.basename(sourcePath),
+          itemName: sourceName,
           reason: "system-noise",
         })
         skipped.push({ path: sourcePath, reason: "system-noise" })
@@ -246,10 +256,18 @@ export class KnowledgeBaseRawFileManager {
       }
       if (sourceStat.isSymbolicLink()) {
         knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
-          itemName: path.basename(sourcePath),
+          itemName: sourceName,
           reason: "symlink",
         })
         skipped.push({ path: sourcePath, reason: "symlink" })
+        return
+      }
+      if (!isValidUploadEntryName(sourceName)) {
+        knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+          itemName: sourceName,
+          reason: "invalid-name",
+        })
+        skipped.push({ path: sourcePath, reason: "invalid-name" })
         return
       }
       if (sourceStat.isFile()) {
@@ -266,7 +284,7 @@ export class KnowledgeBaseRawFileManager {
           skipped.push({ path: sourcePath, reason: budgetFailure })
           return
         }
-        const targetPath = await copyFileToAvailablePath(resolvedSource, targetDirectory, path.basename(resolvedSource))
+        const targetPath = await copyFileToAvailablePath(resolvedSource, targetDirectory, sourceName)
         commitRawUploadBudget(budget, nextBudget)
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
         return
@@ -566,6 +584,10 @@ function joinRawPath(parent: string, name: string): string {
 
 function isSystemNoiseFile(name: string): boolean {
   return name === ".DS_Store" || name === "Thumbs.db" || name === "desktop.ini"
+}
+
+function isValidUploadEntryName(name: string): boolean {
+  return validateKnowledgeBaseRawEntryNameInput(name) === null
 }
 
 function reserveRawUploadFileBudget(size: number, budget: RawUploadBudget, limits: RawUploadLimits): RawUploadSkipReason | null {

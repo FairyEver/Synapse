@@ -248,6 +248,8 @@ function skippedReasonLabel(reason: string): string {
       return "不支持"
     case "invalid-path":
       return "路径无效"
+    case "invalid-name":
+      return "名称无效"
     case "collision":
       return "目标已存在"
     case "trash-error":
