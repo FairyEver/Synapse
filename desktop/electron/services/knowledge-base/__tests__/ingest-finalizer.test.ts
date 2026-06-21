@@ -268,6 +268,39 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     const result = await readKnowledgeBaseManifest(root)
     expect(result.manifest.sources).toEqual({})
   })
+
+  it("skips malformed processed source report entries without throwing", async () => {
+    const root = await createKnowledgeBaseRoot()
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+
+    await expect(coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [null],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })).resolves.toBeUndefined()
+
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.manifest.sources).toEqual({})
+  })
 })
 
 function baseMessage(content: string) {

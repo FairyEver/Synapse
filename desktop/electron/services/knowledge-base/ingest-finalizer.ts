@@ -160,7 +160,22 @@ function parseReport(text: string): IngestReport | null {
 function isReport(value: unknown): value is IngestReport {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
-  return record.schema === REPORT_SCHEMA && Array.isArray(record.processed_sources)
+  return record.schema === REPORT_SCHEMA
+    && Array.isArray(record.processed_sources)
+    && record.processed_sources.every(isReportProcessedSource)
+}
+
+function isReportProcessedSource(value: unknown): value is IngestReport["processed_sources"][number] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return typeof record.source === "string"
+    && record.source.trim().length > 0
+    && isOptionalStringArray(record.pages_created)
+    && isOptionalStringArray(record.pages_updated)
+}
+
+function isOptionalStringArray(value: unknown): value is readonly string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"))
 }
 
 async function buildFinalManifest(
