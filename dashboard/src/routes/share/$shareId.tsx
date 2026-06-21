@@ -23,7 +23,7 @@ function RouteComponent() {
       context='share'
       shareId={shareId}
       initialPassword={password}
-      onInitialPasswordAccepted={clearPasswordSearch}
+      onInitialPasswordConsumed={clearPasswordSearch}
     />
   )
 }

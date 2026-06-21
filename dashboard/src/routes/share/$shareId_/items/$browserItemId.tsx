@@ -24,7 +24,7 @@ function RouteComponent() {
       shareId={shareId}
       itemId={browserItemId}
       initialPassword={password}
-      onInitialPasswordAccepted={clearPasswordSearch}
+      onInitialPasswordConsumed={clearPasswordSearch}
     />
   )
 }

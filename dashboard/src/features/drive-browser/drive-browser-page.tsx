@@ -29,7 +29,7 @@ export type DriveBrowserPageProps =
       shareId: string
       itemId?: string
       initialPassword?: string
-      onInitialPasswordAccepted?: () => void
+      onInitialPasswordConsumed?: () => void
     }
 
 type DriveBrowserLayoutMode = 'auto' | 'fixed'
@@ -38,14 +38,15 @@ type DriveBrowserLoadingMode = 'card' | 'reader'
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
   const initialPassword = props.context === 'share' ? props.initialPassword : undefined
-  const onInitialPasswordAccepted = props.context === 'share'
-    ? props.onInitialPasswordAccepted
+  const onInitialPasswordConsumed = props.context === 'share'
+    ? props.onInitialPasswordConsumed
     : undefined
 
   useEffect(() => {
-    if (!initialPassword || state.status !== 'ready') return
-    onInitialPasswordAccepted?.()
-  }, [initialPassword, onInitialPasswordAccepted, state.status])
+    if (!initialPassword) return
+    if (state.status !== 'ready' && state.status !== 'passwordRequired') return
+    onInitialPasswordConsumed?.()
+  }, [initialPassword, onInitialPasswordConsumed, state.status])
 
   const framed = props.context === 'share' || props.surface === 'standalone'
   const loadingMode: DriveBrowserLoadingMode = framed
