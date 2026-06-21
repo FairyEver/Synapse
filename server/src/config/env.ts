@@ -70,6 +70,7 @@ const envSchema = z
     DRIVE_COS_SECRET_KEY: optionalEnvString,
     DRIVE_COS_BUCKET: optionalEnvString,
     DRIVE_COS_REGION: optionalEnvString,
+    SYNAPSE_DRIVE_LOCAL_ROOT: optionalEnvString,
     CONTENT_STORE_COS_SECRET_ID: optionalEnvString,
     CONTENT_STORE_COS_SECRET_KEY: optionalEnvString,
     CONTENT_STORE_COS_BUCKET: optionalEnvString,
@@ -102,6 +103,14 @@ const envSchema = z
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL is required in production",
   })
+  .refine((env) => {
+    if (env.NODE_ENV !== "production") return true
+    const hasDriveCos = !!(env.DRIVE_COS_SECRET_ID && env.DRIVE_COS_SECRET_KEY && env.DRIVE_COS_BUCKET && env.DRIVE_COS_REGION)
+    return hasDriveCos || !!env.SYNAPSE_DRIVE_LOCAL_ROOT
+  }, {
+    path: ["SYNAPSE_DRIVE_LOCAL_ROOT"],
+    message: "SYNAPSE_DRIVE_LOCAL_ROOT is required in production when Drive COS is not configured",
+  })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL must be the public app root, not the /api URL",
@@ -123,6 +132,7 @@ export interface ServerEnv {
   readonly driveCosSecretKey?: string
   readonly driveCosBucket?: string
   readonly driveCosRegion?: string
+  readonly driveLocalRoot?: string
   readonly contentStoreCosSecretId?: string
   readonly contentStoreCosSecretKey?: string
   readonly contentStoreCosBucket?: string
@@ -156,6 +166,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosSecretKey: result.data.DRIVE_COS_SECRET_KEY,
     driveCosBucket: result.data.DRIVE_COS_BUCKET,
     driveCosRegion: result.data.DRIVE_COS_REGION,
+    driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
     contentStoreCosSecretId: result.data.CONTENT_STORE_COS_SECRET_ID,
     contentStoreCosSecretKey: result.data.CONTENT_STORE_COS_SECRET_KEY,
     contentStoreCosBucket: result.data.CONTENT_STORE_COS_BUCKET,
