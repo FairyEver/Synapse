@@ -22,6 +22,11 @@ import {
   getDriveFloatingMenuNewWindowUrl,
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
+import {
+  getDrivePreviewFileIdentity,
+  getDrivePreviewSystemActions,
+  getDrivePreviewSystemMenuSections,
+} from './renderers/drive-preview-actions'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -174,6 +179,52 @@ describe('drive browser view model', () => {
     expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
     expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')
     expect(driveBrowserKindLabel('markdown')).toBe('Markdown')
+  })
+
+  it('builds shared preview identity and system actions for owner files', () => {
+    const consoleFile = createSnapshot({
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        name: 'notes.md',
+        size: '2048',
+        previewKind: 'markdown',
+        browserUrl: '/console/drive/items/file?surface=console',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+    const standaloneFile = createSnapshot({
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        name: 'notes.md',
+        size: '2048',
+        previewKind: 'markdown',
+        browserUrl: '/drive/items/file?surface=standalone',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+
+    expect(getDrivePreviewFileIdentity(consoleFile)).toMatchObject({
+      name: 'notes.md',
+      sizeLabel: '2.0 KB',
+      kindLabel: 'Markdown',
+    })
+    expect(getDrivePreviewSystemActions(consoleFile).map((action) => action.id)).toEqual([
+      'download',
+      'open-new-window',
+      'versions',
+      'renderer-select',
+    ])
+    expect(getDrivePreviewSystemActions(standaloneFile).map((action) => action.id)).toEqual([
+      'download',
+      'open-in-drive',
+      'versions',
+      'renderer-select',
+    ])
+    expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
   })
 
   it('keeps finder actions limited to browser actions', () => {
