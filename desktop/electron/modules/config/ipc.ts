@@ -22,6 +22,7 @@ import { repositoryStore } from "../../services/repository-store"
 import { shutdownDatabase } from "../../database"
 
 const logger = createMainLogger("ipc.config")
+let isConfigImportRunning = false
 
 // 重置应用时需要保留的文件前缀
 const PRESERVED_FILE_PREFIXES = ["synapse-database.db", "synapse-data.db"]
@@ -205,68 +206,77 @@ export const configIpcModule: IpcModule = {
       handler: async (ctx) => {
         logger.info("Handling config.importBackup request.")
 
-        const filePath = await configBackupService.selectImportSource({
-          getParentWindow,
-        })
-        if (!filePath) {
-          return null
+        if (isConfigImportRunning) {
+          throw new Error("已有配置导入正在进行，请稍后再试。")
         }
+        isConfigImportRunning = true
 
-        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-        const actor = { kind: "user" } as const
-        const permission = await permissionGuard.check({
-          action: "fs.read.outside-userdata",
-          actor,
-          resource: filePath,
-          context: { source: "config.importBackup" },
-        })
-        if (!permission.allowed) {
+        try {
+          const filePath = await configBackupService.selectImportSource({
+            getParentWindow,
+          })
+          if (!filePath) {
+            return null
+          }
+
+          const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+          const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+          const actor = { kind: "user" } as const
+          const permission = await permissionGuard.check({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: filePath,
+            context: { source: "config.importBackup" },
+          })
+          if (!permission.allowed) {
+            auditSink.record({
+              action: "fs.read.outside-userdata",
+              actor,
+              resource: filePath,
+              outcome: "denied",
+              metadata: {
+                source: "config.importBackup",
+                reason: permission.reason,
+                policyId: permission.policyId,
+              },
+            })
+            throw new Error(permission.reason)
+          }
+
           auditSink.record({
             action: "fs.read.outside-userdata",
             actor,
             resource: filePath,
-            outcome: "denied",
-            metadata: {
-              source: "config.importBackup",
-              reason: permission.reason,
-              policyId: permission.policyId,
-            },
-          })
-          throw new Error(permission.reason)
-        }
-
-        auditSink.record({
-          action: "fs.read.outside-userdata",
-          actor,
-          resource: filePath,
-          outcome: "allowed",
-          metadata: { source: "config.importBackup" },
-        })
-
-        try {
-          const result = await configBackupService.readImport(filePath)
-          auditSink.record({
-            action: "fs.write",
-            actor,
-            resource: "config+identity",
             outcome: "allowed",
-            metadata: { operation: "config.import", source: "config.importBackup" },
+            metadata: { source: "config.importBackup" },
           })
-          return result
-        } catch (error) {
-          auditSink.record({
-            action: "fs.write",
-            actor,
-            resource: "config+identity",
-            outcome: "failed",
-            metadata: {
-              operation: "config.import",
-              source: "config.importBackup",
-              errorName: error instanceof Error ? error.name : typeof error,
-            },
-          })
-          throw error
+
+          try {
+            const result = await configBackupService.readImport(filePath)
+            auditSink.record({
+              action: "fs.write",
+              actor,
+              resource: "config+identity",
+              outcome: "allowed",
+              metadata: { operation: "config.import", source: "config.importBackup" },
+            })
+            return result
+          } catch (error) {
+            auditSink.record({
+              action: "fs.write",
+              actor,
+              resource: "config+identity",
+              outcome: "failed",
+              metadata: {
+                operation: "config.import",
+                source: "config.importBackup",
+                errorName: error instanceof Error ? error.name : typeof error,
+              },
+            })
+            throw error
+          }
+        } finally {
+          isConfigImportRunning = false
         }
       },
     },

@@ -300,6 +300,28 @@ describe("configIpcModule", () => {
     expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
   })
 
+  it("rejects concurrent config backup imports before opening another file picker", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    let resolveImport: (value: { filePath: string }) => void = () => {}
+    vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/synapse-backup.json")
+    vi.mocked(configBackupService.readImport).mockReturnValue(new Promise((resolve) => {
+      resolveImport = resolve
+    }))
+    const harness = createHarness()
+
+    const firstImport = harness.invoke("synapse:config:import-backup", undefined)
+    await vi.waitFor(() => {
+      expect(configBackupService.readImport).toHaveBeenCalledTimes(1)
+    })
+
+    await expect(harness.invoke("synapse:config:import-backup", undefined))
+      .rejects.toThrow("已有配置导入正在进行")
+    expect(configBackupService.selectImportSource).toHaveBeenCalledTimes(1)
+
+    resolveImport({ filePath: "/tmp/synapse-backup.json" })
+    await expect(firstImport).resolves.toEqual({ filePath: "/tmp/synapse-backup.json" })
+  })
+
   it("does not record successful config writes when backup import is rejected", async () => {
     const { configBackupService } = await import("../../../services/config-backup-service")
     vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/large-synapse-backup.json")

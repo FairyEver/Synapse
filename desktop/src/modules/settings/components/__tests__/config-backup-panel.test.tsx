@@ -84,6 +84,44 @@ describe("ConfigBackupPanel", () => {
 
     expect(exportButton.disabled).toBe(false)
   })
+
+  it("disables import confirmation while a backup import is running", async () => {
+    let resolveImport: (value: unknown) => void = () => {}
+    mocks.importConfigBackup.mockReturnValue(new Promise((resolve) => {
+      resolveImport = resolve
+    }))
+
+    renderPanel()
+    const importButton = findButton("导入")
+
+    await act(async () => {
+      importButton.click()
+      await Promise.resolve()
+    })
+
+    const confirmButton = findButton("确认导入")
+
+    await act(async () => {
+      confirmButton.click()
+      await Promise.resolve()
+    })
+
+    expect(confirmButton.disabled).toBe(true)
+
+    await act(async () => {
+      confirmButton.click()
+      await Promise.resolve()
+    })
+    expect(mocks.importConfigBackup).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveImport(null)
+      await Promise.resolve()
+    })
+
+    expect(Array.from(document.querySelectorAll("button"))
+      .some((item) => item.textContent === "确认导入")).toBe(false)
+  })
 })
 
 function renderPanel(): void {

@@ -20,6 +20,7 @@ function ConfigBackupPanel() {
   const logger = createRendererLogger("settings.backup")
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
 
   return (
     <>
@@ -63,7 +64,13 @@ function ConfigBackupPanel() {
         </div>
       </SettingsGroup>
 
-      <AlertDialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+      <AlertDialog
+        open={isImportOpen}
+        onOpenChange={(open) => {
+          if (isImporting) return
+          setIsImportOpen(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>导入配置</AlertDialogTitle>
@@ -72,11 +79,14 @@ function ConfigBackupPanel() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={isImporting}>取消</AlertDialogCancel>
             <AlertDialogAction
+              disabled={isImporting}
               onClick={(event) => {
                 event.preventDefault()
+                if (isImporting) return
                 logger.info("Config backup import confirmed.")
+                setIsImporting(true)
                 void promise(
                   () => importConfigBackup(),
                   {
@@ -96,6 +106,7 @@ function ConfigBackupPanel() {
                     setIsImportOpen(false)
                   })
                   .catch((err) => { logger.warn("config import close dialog failed", err) })
+                  .finally(() => { setIsImporting(false) })
               }}
             >
               确认导入
