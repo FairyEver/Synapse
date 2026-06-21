@@ -663,6 +663,43 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("rejects relative Drive download output paths before fs.write authorization", async () => {
+    const accountService = createAccountService({
+      downloadDriveFile: vi.fn(async () => ({ ok: true as const })),
+      downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
+      downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const })),
+    })
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
+    const cases = [
+      {
+        action: "drive.file_download.create",
+        params: { itemId: "item-1", outputPath: "downloads/report.md" },
+      },
+      {
+        action: "drive.file_version_download.create",
+        params: { itemId: "item-1", versionId: "version-1", outputPath: "report-v1.md" },
+      },
+      {
+        action: "drive.folder_zip.create",
+        params: { itemId: "folder-1", outputPath: "project.zip" },
+      },
+    ] as const
+
+    for (const item of cases) {
+      await expect(dispatcher.dispatch(item.action, item.params, { source: "mcp-stdio" }))
+        .rejects.toThrow("expected absolute local output path")
+    }
+
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({ action: "fs.write" }))
+    expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
+    expect(accountService.downloadDriveFileVersion).not.toHaveBeenCalled()
+    expect(accountService.downloadDriveFolderZip).not.toHaveBeenCalled()
+  })
+
   it("uploads a local file without returning the presigned URL", async () => {
     const accountService = createAccountService()
     const fileStream = Readable.from(["test"])

@@ -233,7 +233,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.file_download.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
-            const outputPath = requireString(params, "outputPath")
+            const outputPath = requireAbsoluteOutputPath(params)
             await authorizeFileWrite(deps, action, itemId, outputPath, context)
             return {
               ok: true,
@@ -250,7 +250,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
             const versionId = requireString(params, "versionId")
-            const outputPath = requireString(params, "outputPath")
+            const outputPath = requireAbsoluteOutputPath(params)
             await authorizeFileWrite(deps, action, itemId, outputPath, context)
             return {
               ok: true,
@@ -285,7 +285,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.folder_zip.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
-            const outputPath = requireString(params, "outputPath")
+            const outputPath = requireAbsoluteOutputPath(params)
             await authorizeFileWrite(deps, action, itemId, outputPath, context)
             return {
               ok: true,
@@ -938,6 +938,14 @@ function requireString(params: Record<string, unknown>, key: string): string {
     throw new Error(`Missing or invalid '${key}': expected non-empty string`)
   }
   return value.trim()
+}
+
+function requireAbsoluteOutputPath(params: Record<string, unknown>): string {
+  const outputPath = requireString(params, "outputPath")
+  if (!path.isAbsolute(outputPath)) {
+    throw new Error("Missing or invalid 'outputPath': expected absolute local output path")
+  }
+  return outputPath
 }
 
 function optionalString(value: unknown): string | undefined {
