@@ -1223,6 +1223,30 @@ describe("createDriveCapabilityDispatcher", () => {
       }),
     }))
   })
+
+  it("redacts public share ids in share disable audit events", async () => {
+    const auditSink = createAuditSink()
+    const accountService = createAccountService({
+      disableDriveShare: vi.fn(async () => ({ ok: true as const })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.share.disable", {
+      shareId: "shr_public_secret",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.disableDriveShare).toHaveBeenCalledWith("shr_public_secret")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "synapse-drive:public-share:[redacted]",
+      metadata: expect.objectContaining({
+        driveAction: "drive.share.disable",
+        shareId: "public-share:[redacted]",
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("shr_public_secret")
+  })
 })
 
 function createAccountService(overrides: Partial<DriveAccountService> & Record<string, unknown> = {}): DriveAccountService {

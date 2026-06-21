@@ -744,9 +744,17 @@ function driveParamCorrelation(params: Record<string, unknown>): Record<string, 
   const metadata: Record<string, unknown> = {}
   for (const key of ["itemId", "assetId", "versionId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
-    if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
+    if (typeof value === "string" || typeof value === "boolean" || value === null) {
+      metadata[key] = key === "shareId" && typeof value === "string"
+        ? driveShareIdForAudit(value)
+        : value
+    }
   }
   return metadata
+}
+
+function driveShareIdForAudit(value: string): string {
+  return /^shr_[A-Za-z0-9_-]+$/.test(value) ? "public-share:[redacted]" : value
 }
 
 function driveReadResultCorrelation(result: DispatchResult): Record<string, unknown> {
