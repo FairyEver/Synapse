@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { homedir } from "node:os"
+import { randomUUID } from "node:crypto"
 import { shell } from "electron"
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { createMainLogger } from "../services/log-store"
@@ -97,6 +98,39 @@ function ensureParentDirectory(settingsPath: string): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
+}
+
+function writeSettingsFileSafely(settingsPath: string, content: string): void {
+  ensureParentDirectory(settingsPath)
+  const backupPath = backupExistingSettingsFile(settingsPath)
+  const temporaryPath = path.join(
+    path.dirname(settingsPath),
+    `.${path.basename(settingsPath)}.${process.pid}.${randomUUID()}.tmp`,
+  )
+  try {
+    writeFileSync(temporaryPath, content, "utf-8")
+    renameSync(temporaryPath, settingsPath)
+    if (backupPath) {
+      logger.info("MCP settings backup created before write.", {
+        settingsPath,
+        backupPath,
+      })
+    }
+  } catch (error) {
+    rmSync(temporaryPath, { force: true })
+    throw error
+  }
+}
+
+function backupExistingSettingsFile(settingsPath: string): string | null {
+  if (!existsSync(settingsPath)) return null
+  const parsed = path.parse(settingsPath)
+  const backupPath = path.join(
+    parsed.dir,
+    `${parsed.name}.synapse-backup-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID()}${parsed.ext}`,
+  )
+  copyFileSync(settingsPath, backupPath)
+  return backupPath
 }
 
 function buildMcpWriteAudit(
@@ -229,7 +263,7 @@ function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
 
   servers[SYNAPSE_MCP_SERVER_NAME] = { type: "http", url: mcpUrl }
   settings.mcpServers = servers
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  writeSettingsFileSafely(settingsPath, JSON.stringify(settings, null, 2))
 }
 
 function escapeTomlString(value: string): string {
@@ -347,7 +381,7 @@ function detectCodexRegistration(raw: string): { registered: boolean; mode: McpR
 function registerCodexMcp(settingsPath: string, mcpUrl: string): void {
   const raw = existsSync(settingsPath) ? readFileSync(settingsPath, "utf-8") : ""
   const nextConfig = upsertCodexServerConfig(raw, mcpUrl)
-  writeFileSync(settingsPath, nextConfig, "utf-8")
+  writeSettingsFileSafely(settingsPath, nextConfig)
 }
 
 function readHermesYamlSettings(settingsPath: string): Record<string, unknown> {
@@ -416,8 +450,7 @@ function registerHermesYamlMcp(settingsPath: string, mcpUrl: string): void {
   servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
   settings.mcp_servers = servers
 
-  ensureParentDirectory(settingsPath)
-  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+  writeSettingsFileSafely(settingsPath, stringifyYaml(settings, { lineWidth: 0 }))
 }
 
 function removeAuthorizationKeys(headers: Record<string, unknown>): boolean {
@@ -443,7 +476,7 @@ function cleanupJsonStaticAuthorization(settingsPath: string): boolean {
   if (Object.keys(server.headers).length === 0) {
     delete server.headers
   }
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  writeSettingsFileSafely(settingsPath, JSON.stringify(settings, null, 2))
   return true
 }
 
@@ -455,7 +488,7 @@ function cleanupCodexStaticAuthorization(settingsPath: string, mcpUrl: string): 
 
   const nextConfig = upsertCodexServerConfig(raw, mcpUrl)
   if (nextConfig === raw) return false
-  writeFileSync(settingsPath, nextConfig, "utf-8")
+  writeSettingsFileSafely(settingsPath, nextConfig)
   return true
 }
 
@@ -471,7 +504,7 @@ function cleanupHermesStaticAuthorization(settingsPath: string): boolean {
   if (Object.keys(server.headers).length === 0) {
     delete server.headers
   }
-  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+  writeSettingsFileSafely(settingsPath, stringifyYaml(settings, { lineWidth: 0 }))
   return true
 }
 
@@ -510,7 +543,7 @@ function removeHermesYamlMcp(settingsPath: string, serverName: string): boolean 
   if (!isRecord(servers) || !(serverName in servers)) return false
   delete servers[serverName]
   settings.mcp_servers = servers
-  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+  writeSettingsFileSafely(settingsPath, stringifyYaml(settings, { lineWidth: 0 }))
   return true
 }
 
@@ -562,7 +595,7 @@ function removeJsonMcp(settingsPath: string, serverName: string): boolean {
   if (!isRecord(servers) || !(serverName in servers)) return false
   delete servers[serverName]
   settings.mcpServers = servers
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  writeSettingsFileSafely(settingsPath, JSON.stringify(settings, null, 2))
   return true
 }
 
@@ -583,7 +616,7 @@ function removeLegacyClaudePermissionAllowlistEntries(settingsPath: string): boo
 
   permissions.allow = nextAllow
   settings.permissions = permissions
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  writeSettingsFileSafely(settingsPath, JSON.stringify(settings, null, 2))
   return true
 }
 
@@ -596,7 +629,7 @@ function removeCodexMcp(settingsPath: string, serverName: string): boolean {
   const lineEnding = getLineEnding(raw)
   const nextLines = [...lines.slice(0, range.start), ...lines.slice(range.end)]
   const next = `${nextLines.join(lineEnding).replace(/[ \t]+$/gm, "").trimEnd()}${lineEnding}`
-  writeFileSync(settingsPath, next, "utf-8")
+  writeSettingsFileSafely(settingsPath, next)
   return true
 }
 
