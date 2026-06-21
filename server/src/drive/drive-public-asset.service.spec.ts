@@ -204,6 +204,45 @@ describe("DrivePublicAssetService", () => {
     expect([...prisma.__debug.publicAssetRevisions.values()]).toHaveLength(1)
   })
 
+  it("does not treat a concurrently cancelled replace session as a successful retry", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+    objects.set(asset.storageKey, { body: pngSignatureBuffer(), contentType: "image/png" })
+    const prepared = await service.prepareReplace("user-1", asset.assetId, {
+      name: "logo.webp",
+      size: "12",
+      mimeType: "image/webp",
+      publicAppUrl: "https://assets.example",
+    })
+    const newStorageKey = await storageKeyForSession(prisma, prepared.sessionId)
+    await storage.putObject({ key: newStorageKey, body: webpSignatureBuffer(), contentType: "image/webp" })
+    const updateMany = prisma.driveUploadSession.updateMany
+    prisma.driveUploadSession.updateMany = vi.fn(async (input: any) => {
+      if (input.where?.id === prepared.sessionId && input.where?.status === "pending") {
+        await prisma.driveUploadSession.update({
+          where: { id: prepared.sessionId },
+          data: { status: "cancelled", failedAt: new Date("2026-06-21T00:00:00.000Z") },
+        })
+      }
+      return updateMany(input)
+    })
+
+    await expect(service.completeReplace("user-1", asset.assetId, prepared.sessionId, {
+      ipAddress: "127.0.0.1",
+      publicAppUrl: "https://assets.example",
+    })).rejects.toThrow("上传会话不存在。")
+
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    const current = await prisma.publicAsset.findFirst({ where: { id: asset.id }, include: { item: true } })
+    expect(session.status).toBe("cancelled")
+    expect(current?.storageKey).toBe(asset.storageKey)
+    expect([...prisma.__debug.publicAssetRevisions.values()]).toHaveLength(0)
+  })
+
   it("returns a trashed DTO without changing the public URL after trashing", async () => {
     const asset = await seedPublicAsset({
       prisma,

@@ -513,8 +513,11 @@ export class DrivePublicAssetService {
     } catch (error) {
       const transitioned = await this.failSession(userId, session, DRIVE_UPLOAD_STATUS.failed, { preserveItem: true })
       if (!transitioned) {
-        const current = await this.findAssetDtoForSession(userId, session, publicAppUrl)
-        if (current) return current
+        const latestSession = await this.findUploadSession(userId, session.id, DRIVE_UPLOAD_PURPOSE.publicAssetReplace)
+        if (latestSession?.status === DRIVE_UPLOAD_STATUS.completed) {
+          const current = await this.findAssetDtoForSession(userId, session, publicAppUrl)
+          if (current) return current
+        }
       }
       throw error
     }
@@ -893,6 +896,12 @@ export class DrivePublicAssetService {
       include: { item: true },
     }) as PublicAssetWithItem | null
     return asset ? toDrivePublicAssetDto(asset, publicAppUrl) : null
+  }
+
+  private async findUploadSession(userId: string, sessionId: string, purpose: string): Promise<PublicAssetUploadSession | null> {
+    return this.prisma.driveUploadSession.findFirst({
+      where: { id: sessionId, userId, purpose },
+    }) as Promise<PublicAssetUploadSession | null>
   }
 
   private async isStorageKeyPublished(storageKey: string): Promise<boolean> {
