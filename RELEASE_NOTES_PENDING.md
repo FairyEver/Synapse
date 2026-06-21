@@ -142,6 +142,7 @@
 - Automation MCP 停止不存在或已不活跃运行时会明确失败，不再返回一个看似成功但没有停止任何运行的空结果。
 - 管理后台网盘存储摘要会把“配额计入”和“管理员可见”总量单独展示，不再放进“正常/回收站/隐藏”生命周期列里。
 - 发版前的 packaged asar 校验会检查解包 Electron JavaScript 的 `.js.map` 同步存在，避免 release 包遗漏运行时 sourcemap 仍通过校验。
+- 本地 mac 发布脚本会在上传前执行 packaged asar 校验，避免绕过启动关键文件检查直接发布。
 - Windows 上导出的 Agent 对话、诊断、日志和 Skill zip 会保留与 macOS/Linux 一致的顶层文件夹，不再把文件散到解压目录根部。
 - Windows 上点击 Agent 消息里的文件行号引用时，会通过编辑器 `.cmd` 启动器打开到目标行，不再静默降级成只打开文件。
 - Windows Agent 自定义 exec 命令显式使用 cmd 时，会正确保留参数中的双引号，不再把带 `&` 等字符的普通参数误解释成额外命令。
