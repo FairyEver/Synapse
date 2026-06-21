@@ -596,6 +596,95 @@ describe("workflowIpcModule", () => {
     expect(engine.run).not.toHaveBeenCalled()
   })
 
+  it("blocks rerun when only a redacted HTTP or script history definition is available", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = {
+      save: vi.fn(async () => undefined),
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: "workflow-1",
+        version: "v1",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definition: redactedHttpAndScriptWorkflowDefinition(),
+      })),
+    }
+    const workflow = { get: vi.fn(async () => null) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+
+    expect(result).toEqual({
+      errors: [{
+        type: "invalid_config",
+        message: "历史运行记录中的工作流配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。",
+      }],
+    })
+    expect(workflow.get).toHaveBeenCalledWith("workflow-1")
+    expect(engine.run).not.toHaveBeenCalled()
+  })
+
+  it("uses the current workflow definition when rerun history has redacted HTTP or script config", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const currentDefinition = httpAndScriptWorkflowDefinition("raw-bearer-token", "raw-script-token")
+    const snapshots = {
+      save: vi.fn(async () => undefined),
+      findByRunId: vi.fn(async () => ({
+        runId: "previous-run",
+        workflowId: "workflow-1",
+        version: "v1",
+        status: "completed" as const,
+        startedAt: 1,
+        endedAt: 2,
+        params: {},
+        nodeResults: {},
+        definition: redactedHttpAndScriptWorkflowDefinition(),
+      })),
+    }
+    const workflow = { get: vi.fn(async () => currentDefinition) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
+
+    expect(result).toEqual({ runId: expect.any(String) })
+    expect(workflow.get).toHaveBeenCalledWith("workflow-1")
+    expect(engine.run).toHaveBeenCalledWith(
+      currentDefinition,
+      {},
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      "rerun",
+      expect.anything(),
+    )
+  })
+
   it("blocks workflow delete when the active run does not finish after abort timeout", async () => {
     vi.useFakeTimers()
     let finishActiveRun: (() => void) | undefined
@@ -1598,5 +1687,46 @@ function codexWorkflowDefinition(configOverrideValue: string) {
         configOverrides: [{ key: "model_reasoning_effort", value: configOverrideValue }],
       },
     }],
+  }
+}
+
+function redactedHttpAndScriptWorkflowDefinition() {
+  return httpAndScriptWorkflowDefinition("[redacted]", "[redacted]")
+}
+
+function httpAndScriptWorkflowDefinition(bearerToken: string, scriptToken: string) {
+  return {
+    ...workflowDefinition(),
+    nodes: [
+      {
+        id: "http-1",
+        name: "HTTP",
+        type: "http_request",
+        position: { x: 100, y: 100 },
+        config: {
+          method: "GET",
+          url: "https://example.com",
+          auth: {
+            type: "bearer",
+            bearerToken,
+          },
+          variables: [],
+        },
+      },
+      {
+        id: "script-1",
+        name: "Script",
+        type: "script",
+        position: { x: 200, y: 100 },
+        config: {
+          shell: "posix",
+          script: "echo ok",
+          env: {
+            API_TOKEN: scriptToken,
+          },
+          variables: [],
+        },
+      },
+    ],
   }
 }

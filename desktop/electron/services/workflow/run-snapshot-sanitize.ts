@@ -36,17 +36,38 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 }
 
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
-  if (node.type !== "codex") return node
+  const sanitizedConfig = sanitizeWorkflowNodeConfigForSnapshot(node)
+  if (node.type !== "codex") {
+    return {
+      ...node,
+      config: sanitizedConfig,
+    }
+  }
   const configOverrides = node.config.configOverrides
   const prompt = node.config.prompt
   return {
     ...node,
     config: {
-      ...node.config,
+      ...sanitizedConfig,
       ...(typeof prompt === "string" ? { prompt: sanitizeError(prompt) } : {}),
       ...(Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
     },
   }
+}
+
+function sanitizeWorkflowNodeConfigForSnapshot(node: WorkflowNode): WorkflowNode["config"] {
+  const sanitizedConfig = sanitizeSnapshotValue(node.config) as WorkflowNode["config"]
+  if (node.type !== "script" || !isRecord(node.config.env)) return sanitizedConfig
+  return {
+    ...sanitizedConfig,
+    env: redactScriptEnv(node.config.env),
+  }
+}
+
+function redactScriptEnv(env: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [key, value ? "[redacted]" : value]),
+  )
 }
 
 function redactConfigOverrideValue(entry: unknown): unknown {

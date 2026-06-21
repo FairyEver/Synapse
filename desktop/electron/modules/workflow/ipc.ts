@@ -31,6 +31,7 @@ const WORKFLOW_PACKAGE_MAX_BYTES = 1024 * 1024
 const runCompletions = new Map<string, Promise<unknown>>()
 const deletedWorkflows = new Set<string>()
 const REDACTED_WORKFLOW_CONFIG_VALUE = "[redacted]"
+const REDACTED_WORKFLOW_SENSITIVE_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
 
 /**
  * Maximum number of terminal (completed/failed/cancelled) run statuses to keep
@@ -181,6 +182,48 @@ function hasRedactedCodexConfigOverrides(definition: WorkflowDefinition): boolea
       && entry !== null
       && (entry as { value?: unknown }).value === REDACTED_WORKFLOW_CONFIG_VALUE
     )
+  })
+}
+
+function getRedactedWorkflowConfigKind(definition: WorkflowDefinition): "codex" | "workflow" | null {
+  if (hasRedactedCodexConfigOverrides(definition)) return "codex"
+  if (hasRedactedHttpOrScriptConfig(definition)) return "workflow"
+  return null
+}
+
+function hasRedactedHttpOrScriptConfig(definition: WorkflowDefinition): boolean {
+  return definition.nodes.some((node) => {
+    if (node.type === "script") {
+      const env = node.config.env
+      return typeof env === "object"
+        && env !== null
+        && Object.values(env).some((value) => value === REDACTED_WORKFLOW_CONFIG_VALUE)
+    }
+    if (node.type === "http_request") {
+      return hasRedactedSensitiveConfigValue(node.config)
+    }
+    return false
+  })
+}
+
+function hasRedactedSensitiveConfigValue(value: unknown, key = ""): boolean {
+  if (typeof value === "string") {
+    return value === REDACTED_WORKFLOW_CONFIG_VALUE
+      && REDACTED_WORKFLOW_SENSITIVE_KEY_PATTERN.test(key)
+  }
+  if (value === null || value === undefined || typeof value !== "object") return false
+  if (Array.isArray(value)) {
+    return value.some((item) => hasRedactedSensitiveConfigValue(item, key))
+  }
+  return Object.entries(value).some(([entryKey, entryValue]) => {
+    if (
+      entryKey === "body"
+      && typeof entryValue === "string"
+      && entryValue.includes(REDACTED_WORKFLOW_CONFIG_VALUE)
+    ) {
+      return true
+    }
+    return hasRedactedSensitiveConfigValue(entryValue, entryKey)
   })
 }
 
@@ -1249,14 +1292,22 @@ export const workflowIpcModule: IpcModule = {
           logger.error("workflow:rerun — cannot find definition for previous run", { previousRunId })
           return { errors: [{ type: "invalid_config", message: "无法找到上次运行使用的工作流定义" }] }
         }
-        if (hasRedactedCodexConfigOverrides(def)) {
+        const redactedConfigKind = getRedactedWorkflowConfigKind(def)
+        if (redactedConfigKind) {
           const currentDefinition = await ctx.resolve<WorkflowService>("core.workflow").get(workflowId)
-          if (currentDefinition && !hasRedactedCodexConfigOverrides(currentDefinition)) {
+          if (currentDefinition && !getRedactedWorkflowConfigKind(currentDefinition)) {
             def = currentDefinition
             logger.info("workflow:rerun using current definition because history definition is redacted", { previousRunId, workflowId })
           } else {
-            logger.warn("workflow:rerun blocked by redacted Code X config overrides", { previousRunId, workflowId })
-            return { errors: [{ type: "invalid_config", message: "历史运行记录中的 Code X 配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。" }] }
+            logger.warn("workflow:rerun blocked by redacted workflow config", { previousRunId, workflowId })
+            return {
+              errors: [{
+                type: "invalid_config",
+                message: redactedConfigKind === "codex"
+                  ? "历史运行记录中的 Code X 配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。"
+                  : "历史运行记录中的工作流配置已脱敏，无法直接重新运行。请从当前工作流重新运行，或恢复原始配置后再试。",
+              }],
+            }
           }
         }
 

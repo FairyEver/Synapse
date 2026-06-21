@@ -244,6 +244,89 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
     expect(raw).not.toContain("abc123")
     expect(raw).not.toContain("/Users/liyang/private.txt")
   })
+
+  it("redacts HTTP auth and script env from persisted definitions", () => {
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Secret workflow",
+      version: "1.0.0",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [],
+      edges: [],
+      nodes: [
+        {
+          id: "http-1",
+          name: "HTTP",
+          type: "http_request",
+          position: { x: 0, y: 0 },
+          config: {
+            method: "POST",
+            url: "https://example.com",
+            headers: {
+              authorization: "Bearer raw-header-token",
+              accept: "application/json",
+              "x-api-key": "sk-header-secret",
+            },
+            auth: {
+              type: "bearer",
+              bearerToken: "raw-bearer-token",
+              basicPassword: "raw-basic-password",
+            },
+            bodyType: "json",
+            body: "{\"message\":\"ok\"}",
+            variables: [],
+          },
+        },
+        {
+          id: "script-1",
+          name: "Script",
+          type: "script",
+          position: { x: 100, y: 0 },
+          config: {
+            shell: "posix",
+            script: "echo ok",
+            env: {
+              API_TOKEN: "raw-script-token",
+              SAFE_FLAG: "plain-env-value",
+            },
+            variables: [],
+          },
+        },
+      ],
+    }
+
+    const sanitized = sanitizeWorkflowDefinitionForSnapshot(definition)
+    const httpNode = sanitized.nodes[0]
+    const scriptNode = sanitized.nodes[1]
+    const raw = JSON.stringify(sanitized)
+
+    expect(httpNode?.config.headers).toEqual({
+      authorization: "[redacted]",
+      accept: "application/json",
+      "x-api-key": "[redacted]",
+    })
+    expect(httpNode?.config.auth).toEqual({
+      type: "bearer",
+      bearerToken: "[redacted]",
+      basicPassword: "[redacted]",
+    })
+    expect(httpNode?.config.body).toBe("{\"message\":\"ok\"}")
+    expect(scriptNode?.config.env).toEqual({
+      API_TOKEN: "[redacted]",
+      SAFE_FLAG: "[redacted]",
+    })
+    expect(raw).not.toContain("raw-header-token")
+    expect(raw).not.toContain("sk-header-secret")
+    expect(raw).not.toContain("raw-bearer-token")
+    expect(raw).not.toContain("raw-basic-password")
+    expect(raw).not.toContain("raw-script-token")
+    expect(raw).not.toContain("plain-env-value")
+    expect(definition.nodes[1]?.config.env).toEqual({
+      API_TOKEN: "raw-script-token",
+      SAFE_FLAG: "plain-env-value",
+    })
+  })
 })
 
 describe("sanitizeWorkflowRunSnapshot", () => {
