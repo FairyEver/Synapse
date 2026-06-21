@@ -523,10 +523,36 @@ export class KnowledgeBaseStorageMigrationService {
   private async restoreDefaultTargetBackupIfNeeded(journal: MigrationJournal): Promise<void> {
     if (!journal.defaultTargetBackupPath) return
     const targetKnowledgeBasesPath = path.join(journal.newRoot, "knowledge-bases")
-    if (await pathExists(targetKnowledgeBasesPath)) return
     if (!await pathExists(journal.defaultTargetBackupPath)) return
 
-    await rename(journal.defaultTargetBackupPath, targetKnowledgeBasesPath)
+    let failedTargetPath: string | null = null
+    if (await pathExists(targetKnowledgeBasesPath)) {
+      failedTargetPath = await uniqueFailedKnowledgeBasesPath(journal.newRoot)
+      await rename(targetKnowledgeBasesPath, failedTargetPath)
+    }
+
+    try {
+      await rename(journal.defaultTargetBackupPath, targetKnowledgeBasesPath)
+    } catch (error) {
+      if (failedTargetPath) {
+        await rename(failedTargetPath, targetKnowledgeBasesPath)
+          .catch((restoreError) => logger.warn("Failed to restore failed migration target after rollback error.", {
+            failedTargetPath,
+            targetKnowledgeBasesPath,
+            ...knowledgeBaseErrorMeta(restoreError),
+          }))
+      }
+      throw error
+    }
+
+    if (failedTargetPath) {
+      await rm(failedTargetPath, { recursive: true, force: true })
+        .catch((error) => logger.warn("Failed to clean up failed migration target copy.", {
+          failedTargetPath,
+          ...knowledgeBaseErrorMeta(error),
+        }))
+    }
+
     logger.info("Existing default Knowledge Base storage restored after migration rollback.", {
       backupPath: journal.defaultTargetBackupPath,
       targetKnowledgeBasesPath,
@@ -1082,4 +1108,16 @@ async function uniqueKnowledgeBasesBackupPath(rootPath: string): Promise<string>
     }
   }
   throw new Error("无法创建旧知识库备份目录。")
+}
+
+async function uniqueFailedKnowledgeBasesPath(rootPath: string): Promise<string> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? "" : `-${index}`
+    const candidate = path.join(rootPath, `knowledge-bases.failed-migration-${stamp}${suffix}`)
+    if (!await pathExists(candidate)) {
+      return candidate
+    }
+  }
+  throw new Error("无法创建失败迁移临时目录。")
 }

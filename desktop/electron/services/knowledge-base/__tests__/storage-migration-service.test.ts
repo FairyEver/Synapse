@@ -246,6 +246,26 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       .resolves.toBe("# Preserved old data\n")
   })
 
+  it("restores the preserved default copy when restore-to-default fails after the new target is placed", async () => {
+    const harness = await migrationHarness({ failRestoreOldConfigAfterSwitch: true })
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+    await harness.seedRuntime("kb-1", harness.newRoot, { content: "# Current custom data\n" })
+    await harness.seedRuntime("kb-1", harness.oldRoot, { content: "# Preserved old data\n" })
+
+    await expect(harness.service.startMigration({
+      target: { mode: "default" },
+      requestedBy: "test",
+    })).rejects.toThrow("restore config failed")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Preserved old data\n")
+    const backupNames = (await fsReaddir(harness.oldRoot)).filter((entry) =>
+      entry.startsWith("knowledge-bases.backup-before-migration-")
+    )
+    expect(backupNames).toHaveLength(0)
+  })
+
   it("cancels during copy and keeps the old config", async () => {
     const harness = await migrationHarness({ pauseAfterFirstCopy: true })
     await harness.seedRuntime("kb-1")
