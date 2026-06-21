@@ -764,6 +764,65 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("DeepSeek")
   })
 
+  it("keeps the selected CC Switch source when scanning again", async () => {
+    const customSource = { kind: "json" as const, path: "/Users/test/custom-cc-switch.json" }
+    const previewCcSwitchClaudeProviders = vi.fn()
+      .mockResolvedValueOnce({ source: null, items: [] })
+      .mockResolvedValue({
+        source: customSource,
+        items: [{
+          id: "custom",
+          name: "Custom",
+          category: "custom",
+          baseUrl: "https://api.example.com",
+          apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+          model: "claude",
+          haikuModel: "claude-haiku",
+          sonnetModel: "claude-sonnet",
+          opusModel: "claude-opus",
+          status: "ready",
+          selectedByDefault: true,
+        }],
+      })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          previewCcSwitchClaudeProviders,
+          importCcSwitchClaudeProviders: vi.fn(),
+          chooseCcSwitchClaudeImportSource: vi.fn().mockResolvedValue({ source: customSource }),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "从 CCS 导入").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(document.body, "选择配置").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(document.body, "扫描").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(previewCcSwitchClaudeProviders).toHaveBeenNthCalledWith(1, { source: undefined })
+    expect(previewCcSwitchClaudeProviders).toHaveBeenNthCalledWith(2, { source: customSource })
+    expect(previewCcSwitchClaudeProviders).toHaveBeenNthCalledWith(3, { source: customSource })
+  })
+
   it("logs CC Switch preview failures without raw secret messages", async () => {
     const previewCcSwitchClaudeProviders = vi.fn()
       .mockRejectedValue(new Error("sqlite read failed token=sk-secret"))
