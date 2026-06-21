@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   disableDriveShare: vi.fn(),
   filePathForDroppedFile: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
+  getDriveShare: vi.fn(),
   getDriveUsage: vi.fn(),
   listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
@@ -99,6 +100,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       disableDriveShare: mocks.disableDriveShare,
       filePathForDroppedFile: mocks.filePathForDroppedFile,
       getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
+      getDriveShare: mocks.getDriveShare,
       getDriveUsage: mocks.getDriveUsage,
       listDrivePublicAssets: mocks.listDrivePublicAssets,
       listDriveItems: mocks.listDriveItems,
@@ -135,6 +137,7 @@ beforeEach(() => {
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
+  mocks.getDriveShare.mockResolvedValue(createDriveShare())
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
@@ -1085,25 +1088,24 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", name: "文档", type: "folder", shared: true, activeShareId: "share-row-1" }),
     ])
-    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
-      createDriveShare({
-        id: "share-row-1",
-        itemId: "folder-1",
-        itemName: "文档",
-        itemType: "folder",
-        shareId: "shr_folder",
-        url: "https://synapse.test/share/shr_folder",
-        urlWithPassword: "https://synapse.test/share/shr_folder?password=FolderPwd",
-        password: "FolderPwd",
-        expiresAt: "2026-06-20T05:18:52.000Z",
-      }),
-    ]))
+    mocks.getDriveShare.mockResolvedValue(createDriveShare({
+      id: "share-row-1",
+      itemId: "folder-1",
+      itemName: "文档",
+      itemType: "folder",
+      shareId: "shr_folder",
+      url: "https://synapse.test/share/shr_folder",
+      urlWithPassword: "https://synapse.test/share/shr_folder?password=FolderPwd",
+      password: "FolderPwd",
+      expiresAt: "2026-06-20T05:18:52.000Z",
+    }))
     await render(<DriveModule />)
     await flushAct()
 
     await clickRowButtonText("文档", "已分享")
 
-    expect(mocks.listDriveShares).toHaveBeenCalledWith({ offset: 0, limit: 100 })
+    expect(mocks.getDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
+    expect(mocks.listDriveShares).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("文件夹已分享")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder?password=FolderPwd")
     expect(document.body.textContent).toContain("FolderPwd")

@@ -51,6 +51,7 @@ vi.mock("../../../services/account-service", () => ({
     shareDriveItem: vi.fn(async () => ({})),
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
+    getDriveShare: vi.fn(async () => ({})),
     listDriveShares: async () => [],
     listDrivePublicAssets: async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 }),
     getDrivePublicAsset: async () => ({}),
@@ -576,6 +577,14 @@ describe("accountIpcModule", () => {
       accessMode: "specified_users_edit",
       editorEmails: ["writer@example.com"],
     })
+  })
+
+  it("passes drive share detail requests through handlers", async () => {
+    await accountIpcModule.methods.getDriveShare.handler({} as IpcHandlerContext, {
+      shareId: "share-row-1",
+    })
+
+    expect(accountService.getDriveShare).toHaveBeenCalledWith("share-row-1")
   })
 
   it("passes drive file version requests through handlers", async () => {

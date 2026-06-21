@@ -856,6 +856,14 @@ export class AccountService {
     }
   }
 
+  async getDriveShare(shareId: string): Promise<DriveShareListItemDto> {
+    const share = await this.getAuthenticatedJson<DriveShareListItemDto>(
+      `${apiBaseUrl()}/drive/shares/${encodeURIComponent(shareId)}`,
+      "分享信息加载失败。",
+    )
+    return withCurrentDriveShareUrl(share)
+  }
+
   async listDrivePublicAssets(input?: { readonly offset?: number; readonly limit?: number; readonly search?: string }): Promise<DrivePublicAssetListPageDto> {
     return this.getAuthenticatedJson<DrivePublicAssetListPageDto>(
       `${apiBaseUrl()}/drive/public-assets${drivePageQuery(input)}`,

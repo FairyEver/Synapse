@@ -318,5 +318,6 @@
 - Model Price MCP 内置 skill 会明确使用 `model_price_rule_enable` 启用已有规则，Agent 不再误把启用当成价格更新。
 - 打开带密码的网盘分享链接时，即使初始密码已失效并回到密码输入页，也会从地址栏清理 `password` 参数。
 - 知识库 `/wiki-ingest` 遇到结构异常的 Agent report 时会跳过并保留清单一致性，不再让 after-turn finalizer 直接抛错。
+- 网盘文件列表打开“已分享”详情时会按分享记录直接读取，不再从第一页开始分页扫描全部分享。
 
 ## 技术调整

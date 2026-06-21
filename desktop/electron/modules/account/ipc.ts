@@ -808,6 +808,13 @@ export const accountIpcModule: IpcModule = {
       response: drivePublicLinksPageSchema(driveShareListItemSchema),
       handler: async (_ctx, input) => accountService.listDriveShares(drivePublicLinksPageInputSchema.parse(input)),
     },
+    getDriveShare: {
+      kind: "invoke",
+      channel: "synapse:account:drive:shares:get",
+      request: driveShareIdSchema,
+      response: driveShareListItemSchema,
+      handler: async (_ctx, input) => accountService.getDriveShare(driveShareIdSchema.parse(input).shareId),
+    },
     listDrivePublicAssets: {
       kind: "invoke",
       channel: "synapse:account:drive:public-assets:list",

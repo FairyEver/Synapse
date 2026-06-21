@@ -34,6 +34,7 @@ export const IPC_CHANNELS = {
     "disableDriveShare": "synapse:account:drive:shares:disable",
     "getDriveUsage": "synapse:account:drive:usage:get",
     "listDriveShares": "synapse:account:drive:shares:list",
+    "getDriveShare": "synapse:account:drive:shares:get",
     "listDrivePublicAssets": "synapse:account:drive:public-assets:list",
     "getDrivePublicAsset": "synapse:account:drive:public-assets:get",
     "uploadDrivePublicAssets": "synapse:account:drive:public-assets:upload",

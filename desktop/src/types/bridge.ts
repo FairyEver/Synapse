@@ -859,6 +859,7 @@ export type SynapseBridge = {
     shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>
+    getDriveShare: (input: { shareId: string }) => Promise<DriveShareListItemDto>
     listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
     listDrivePublicAssets: (input?: { offset?: number; limit?: number; search?: string }) => Promise<DrivePublicAssetListPageDto>
     getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>

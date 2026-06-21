@@ -515,6 +515,8 @@ describe("DriveService", () => {
     expect(await service.listShares("user-1", "https://synapse.test")).toMatchObject({
       items: [expect.objectContaining({ shareId: share.shareId, itemName: "report.txt" })],
     })
+    await expect(service.getShare("user-1", share.id, "https://synapse.test"))
+      .resolves.toMatchObject({ id: share.id, shareId: share.shareId, itemName: "report.txt" })
     expect(deleteObject).not.toHaveBeenCalledWith(originalStorageKey)
   })
 

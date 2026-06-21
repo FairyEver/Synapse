@@ -1609,6 +1609,7 @@ describe("AccountService", () => {
             page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
           })
         }
+        if (String(url).endsWith("/drive/shares/share-row-1")) return jsonResponse(share)
         if (String(url).endsWith("/drive/items/item-1")) return jsonResponse({ ok: true })
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -1644,6 +1645,7 @@ describe("AccountService", () => {
       items: [expectedShare],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
     })
+    await expect(service.getDriveShare("share-row-1")).resolves.toEqual(expectedShare)
     await expect(service.deleteDriveItem("item-1")).resolves.toEqual({ ok: true })
 
     expect(calls).toEqual([
@@ -1658,6 +1660,7 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "PATCH", body: { isPinned: true } },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "DELETE", body: undefined },
       { url: expectedApiUrl("/drive/shares"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/shares/share-row-1"), method: "GET", body: undefined },
       {
         url: expectedApiUrl("/drive/items/item-1"),
         method: "DELETE",

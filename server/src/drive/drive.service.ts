@@ -1098,29 +1098,61 @@ export class DriveService implements OnApplicationBootstrap {
       skip: pageInput.offset,
       take: pageInput.limit + 1,
     })
-    const items: DriveShareListItemDto[] = shares.slice(0, pageInput.limit).map((share) => {
-      const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
-      const password = share.passwordEnabled ? this.decryptStoredPassword(share.passwordEncrypted) : null
-      return {
-        id: share.id,
-        shareId: share.shareId,
-        itemId: share.itemId,
-        itemName: share.item.name,
-        itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
-        sourceDeleted: share.item.deletedAt !== null || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active,
-        url,
-        urlWithPassword: buildDriveUrlWithPassword(url, password),
-        passwordEnabled: share.passwordEnabled,
-        password,
-        expiresAt: share.expiresAt?.toISOString() ?? null,
-        accessMode: normalizeDriveShareAccessMode(share.accessMode),
-        editorEmails: share.editors.map((editor) => editor.email),
-        createdAt: share.createdAt.toISOString(),
-      }
-    })
+    const items: DriveShareListItemDto[] = shares.slice(0, pageInput.limit).map((share) => this.toDriveShareListItemDto(share, publicAppUrl))
     return {
       items,
       page: buildDrivePublicLinksPage(pageInput, shares.length),
+    }
+  }
+
+  async getShare(userId: string, shareId: string, publicAppUrl: string): Promise<DriveShareListItemDto> {
+    const now = new Date()
+    const share = await this.prisma.driveShare.findFirst({
+      where: {
+        userId,
+        enabled: true,
+        OR: [{ id: shareId }, { shareId }],
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }],
+        item: { is: { publicAsset: null } },
+      },
+      include: { item: { select: { id: true, name: true, type: true, deletedAt: true, lifecycleStatus: true } }, ...driveShareWithEditors },
+    })
+    if (!share) throw new NotFoundException("分享不存在。")
+    return this.toDriveShareListItemDto(share, publicAppUrl)
+  }
+
+  private toDriveShareListItemDto(
+    share: {
+      id: string
+      shareId: string
+      itemId: string
+      item: { readonly name: string; readonly type: string; readonly deletedAt: Date | null; readonly lifecycleStatus: string }
+      passwordEnabled: boolean
+      passwordEncrypted: string | null
+      expiresAt: Date | null
+      accessMode: string
+      editors: readonly { readonly email: string }[]
+      createdAt: Date
+    },
+    publicAppUrl: string,
+  ): DriveShareListItemDto {
+    const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
+    const password = share.passwordEnabled ? this.decryptStoredPassword(share.passwordEncrypted) : null
+    return {
+      id: share.id,
+      shareId: share.shareId,
+      itemId: share.itemId,
+      itemName: share.item.name,
+      itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+      sourceDeleted: share.item.deletedAt !== null || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      url,
+      urlWithPassword: buildDriveUrlWithPassword(url, password),
+      passwordEnabled: share.passwordEnabled,
+      password,
+      expiresAt: share.expiresAt?.toISOString() ?? null,
+      accessMode: normalizeDriveShareAccessMode(share.accessMode),
+      editorEmails: share.editors.map((editor) => editor.email),
+      createdAt: share.createdAt.toISOString(),
     }
   }
 

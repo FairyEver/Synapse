@@ -451,15 +451,11 @@ function DriveModule() {
   const handleOpenShareDetails = useCallback(async (item: DriveItemDto) => {
     if (!item.activeShareId) return
     try {
-      const share = await findDriveShareListItem(item.activeShareId)
-      if (!share) {
-        toast("分享信息已失效")
-        await loadItems()
-        return
-      }
+      const share = await requireSynapseBridge().account.getDriveShare({ shareId: item.activeShareId })
       setShareSuccess(driveShareSuccessFromListItem(item, share))
     } catch (rawError) {
       toast(errorMessage(rawError, "分享信息加载失败"))
+      await loadItems()
     }
   }, [loadItems])
 
@@ -2740,20 +2736,6 @@ function normalizeDriveEditorEmailForUi(value: string): string | null {
   const email = value.trim().toLowerCase()
   if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) return null
   return email
-}
-
-async function findDriveShareListItem(shareId: string): Promise<DriveShareListItemDto | null> {
-  let offset = 0
-  for (;;) {
-    const result = await requireSynapseBridge().account.listDriveShares({
-      offset,
-      limit: DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE,
-    })
-    const share = result.items.find((item) => item.id === shareId)
-    if (share) return share
-    if (!result.page.hasMore || result.page.nextOffset === null) return null
-    offset = result.page.nextOffset
-  }
 }
 
 function driveShareSuccessFromListItem(item: DriveItemDto, share: DriveShareListItemDto): DriveShareSuccessState {

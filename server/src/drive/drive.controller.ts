@@ -360,6 +360,11 @@ export class DriveUserController {
     return this.drive.disableShare(request.user!.id, id, driveAuditContext(request))
   }
 
+  @Get("/shares/:id")
+  getShare(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.getShare(request.user!.id, id, resolveRequestPublicAppUrl(request))
+  }
+
   @Get("/shares")
   listShares(
     @Query("offset") offset: string | undefined,
