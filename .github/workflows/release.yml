@@ -251,7 +251,7 @@ jobs:
 
           while IFS= read -r url; do
             curl --fail --silent --show-error --location --head "$url"
-          done < <(node -e "const manifest=require('./cdn-release/manifest.json'); for (const url of manifest.assetUrls.filter((item) => item.endsWith('.exe') || item.endsWith('.dmg'))) console.log(url)")
+          done < <(node -e "const manifest=require('./cdn-release/manifest.json'); for (const url of manifest.assetUrls) console.log(url)")
 
       - name: Publish release notes
         env:
