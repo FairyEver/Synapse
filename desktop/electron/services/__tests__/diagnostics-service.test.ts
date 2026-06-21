@@ -352,7 +352,7 @@ describe("DiagnosticsService.collect", () => {
     const execFileMock = vi.fn((file, args, options, callback) => {
       callback(null, JSON.stringify({
         pid: 4512,
-        command: "C:\\Users\\Ada Lovelace\\AppData\\Local\\Programs\\Codex\\Codex.exe apiKey=plain-secret",
+        command: "C:\\Users\\Ada Lovelace\\AppData\\Local\\Programs\\Codex\\Codex.exe exec \"review my private acquisition plan\" --prompt secret-prompt apiKey=plain-secret",
         startedAt: "2026-06-14T07:00:00.000Z",
       }), "")
     })
@@ -372,10 +372,55 @@ describe("DiagnosticsService.collect", () => {
     expect(result.processes).toHaveLength(1)
     expect(result.processes[0]).toMatchObject({
       pid: 4512,
+      command: "C:\\Users\\Ada Lovelace\\AppData\\Local\\Programs\\Codex\\Codex.exe [args redacted]",
       startedAt: "2026-06-14T07:00:00.000Z",
       startedAtMs: Date.parse("2026-06-14T07:00:00.000Z"),
     })
-    expect(result.processes[0]?.command).toContain("[redacted]")
+    expect(result.processes[0]?.command).not.toContain("private acquisition")
+    expect(result.processes[0]?.command).not.toContain("secret-prompt")
+    expect(result.processes[0]?.command).not.toContain("plain-secret")
+  })
+
+  it("redacts Codex process prompt arguments on POSIX", async () => {
+    const diagnosticsModule = await import("../diagnostics-service")
+    const collectCodexProcesses = (diagnosticsModule as {
+      collectCodexProcesses?: (input: {
+        readonly platform: NodeJS.Platform
+        readonly execFile: (
+          file: string,
+          args: readonly string[],
+          options: { readonly timeout: number },
+          callback: (error: Error | null, stdout: string, stderr: string) => void,
+        ) => void
+      }) => Promise<{ processes: Array<{ pid: number; command: string; startedAtText?: string }> }>
+    }).collectCodexProcesses
+
+    const stdout = [
+      "19501 Sun Jun 14 07:00:00 2026 /opt/homebrew/bin/codex exec \"summarize my private roadmap\" --prompt secret-prompt",
+      "19502 Sun Jun 14 07:01:00 2026 /Applications/Codex.app/Contents/MacOS/Codex",
+    ].join("\n")
+    const execFileMock = vi.fn((file, args, options, callback) => {
+      callback(null, stdout, "")
+    })
+
+    const result = await collectCodexProcesses!({
+      platform: "darwin",
+      execFile: execFileMock,
+    })
+
+    expect(result.processes).toEqual([
+      expect.objectContaining({
+        pid: 19501,
+        command: "/opt/homebrew/bin/codex [args redacted]",
+        startedAtText: "Sun Jun 14 07:00:00 2026",
+      }),
+      expect.objectContaining({
+        pid: 19502,
+        command: "/Applications/Codex.app/Contents/MacOS/Codex",
+      }),
+    ])
+    expect(JSON.stringify(result.processes)).not.toContain("private roadmap")
+    expect(JSON.stringify(result.processes)).not.toContain("secret-prompt")
   })
 
   it("reports App PATH, login shell PATH, and node visibility", async () => {

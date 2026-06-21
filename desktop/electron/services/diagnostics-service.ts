@@ -1669,7 +1669,7 @@ function parseCodexProcessList(stdout: string): CodexRuntimeProcessDiagnostics[]
     const startedAtMs = Date.parse(startedAtText)
     processes.push({
       pid: Number(match[1]),
-      command: redactSensitiveText(match[3]),
+      command: sanitizeCodexProcessCommand(match[3]),
       startedAtText,
       ...(Number.isFinite(startedAtMs)
         ? { startedAt: new Date(startedAtMs).toISOString(), startedAtMs }
@@ -1699,7 +1699,7 @@ function parseWindowsCodexProcessList(stdout: string): CodexRuntimeProcessDiagno
     const startedAtMs = startedAtText ? parseWindowsProcessStartedAtMs(startedAtText) : undefined
     processes.push({
       pid,
-      command: redactSensitiveText(command),
+      command: sanitizeCodexProcessCommand(command),
       ...(startedAtText ? { startedAtText } : {}),
       ...(startedAtMs !== undefined
         ? { startedAt: new Date(startedAtMs).toISOString(), startedAtMs }
@@ -1708,6 +1708,49 @@ function parseWindowsCodexProcessList(stdout: string): CodexRuntimeProcessDiagno
   }
 
   return processes
+}
+
+function sanitizeCodexProcessCommand(command: string): string {
+  const redacted = redactSensitiveText(command).trim()
+  const executable = extractCodexProcessExecutable(redacted)
+  if (!executable) return "codex [args redacted]"
+
+  const suffix = redacted.slice(executable.endIndex).trim()
+  return suffix ? `${executable.label} [args redacted]` : executable.label
+}
+
+function extractCodexProcessExecutable(command: string): { label: string; endIndex: number } | null {
+  const quoted = /^"([^"]*\bcodex(?:\.(?:exe|cmd|bat))?)"(?=\s|$)/iu.exec(command)
+  if (quoted?.[1]) {
+    return {
+      label: quoted[1],
+      endIndex: quoted[0].length,
+    }
+  }
+
+  const appPath = /\/Applications\/Codex\.app\/Contents\/MacOS\/Codex(?=\s|$)/iu.exec(command)
+  if (appPath) {
+    return {
+      label: appPath[0],
+      endIndex: appPath.index + appPath[0].length,
+    }
+  }
+
+  const pathExecutable = /^[^\r\n]*?\bcodex(?:\.(?:exe|cmd|bat))?(?=\s|$)/iu.exec(command)
+  if (pathExecutable) {
+    return {
+      label: pathExecutable[0],
+      endIndex: pathExecutable[0].length,
+    }
+  }
+
+  const token = /\bcodex(?:\.(?:exe|cmd|bat))?(?=\s|$)/iu.exec(command)
+  if (!token) return null
+
+  return {
+    label: token[0],
+    endIndex: token.index + token[0].length,
+  }
 }
 
 function stringOrNull(value: unknown): string | null {
