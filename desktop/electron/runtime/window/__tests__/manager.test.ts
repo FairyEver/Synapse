@@ -142,6 +142,33 @@ describe("WindowManager (T3.12)", () => {
     expect(manager.broadcast("synapse:test", { v: 1 })).toBe(0)
   })
 
+  it("detach() releases attached dynamic descriptors from the broadcast table", () => {
+    const manager = createWindowManager()
+    const detail = makeFakeWindow(1)
+    manager.attach({ id: "detail:1", role: "detail" }, detail)
+
+    manager.detach("detail:1")
+
+    manager.register({ id: "detail:1", role: "detail", create: () => makeFakeWindow(2) })
+    expect(manager.list()).toEqual([])
+  })
+
+  it("detach() keeps registered descriptors reusable", () => {
+    const manager = createWindowManager()
+    const first = makeFakeWindow(1)
+    const second = makeFakeWindow(2)
+    const factory = vi.fn(() => (factory.mock.calls.length === 1 ? first : second))
+    manager.register({ id: "detail", role: "detail", create: factory })
+    manager.open("detail")
+
+    manager.detach("detail")
+    const reopened = manager.open("detail")
+
+    expect(first.destroyed).toBe(false)
+    expect(reopened).toBe(second)
+    expect(factory).toHaveBeenCalledTimes(2)
+  })
+
   it("broadcast() filter excludes destroyed windows automatically", () => {
     const manager = createWindowManager()
     const a = makeFakeWindow(1)

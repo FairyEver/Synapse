@@ -51,8 +51,7 @@ export class WorkflowWindowManager {
 
     win.on("closed", () => {
       logger.info("workflow editor window closed", { workflowId })
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
       this.editorWindows.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
@@ -60,8 +59,7 @@ export class WorkflowWindowManager {
       await win.loadURL(url)
     } catch (err) {
       logger.error("workflow editor window URL load failed", { workflowId, url, error: err instanceof Error ? err.message : String(err) })
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
       this.editorWindows.delete(workflowId)
       if (!win.isDestroyed()) win.destroy()
       throw err
@@ -100,8 +98,7 @@ export class WorkflowWindowManager {
 
     win.on("closed", () => {
       logger.info("workflow runner window closed", { workflowId })
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
       this.runnerWindows.delete(workflowId)
     })
     this.runnerWindows.set(workflowId, win)
@@ -109,8 +106,7 @@ export class WorkflowWindowManager {
       await win.loadURL(url)
     } catch (err) {
       logger.error("workflow runner window URL load failed", { workflowId, runId, url, error: err instanceof Error ? err.message : String(err) })
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
       this.runnerWindows.delete(workflowId)
       if (!win.isDestroyed()) win.destroy()
       throw err
@@ -156,8 +152,7 @@ export class WorkflowWindowManager {
       }
       logger.info(message, { workflowId })
       const windowId = `workflow-editor:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
     }
     this.editorWindows.delete(workflowId)
   }
@@ -167,11 +162,16 @@ export class WorkflowWindowManager {
     if (runner && !runner.isDestroyed()) {
       logger.info(message, { workflowId })
       const windowId = `workflow-runner:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
+      this.detachManagedWindow(windowId)
       runner.destroy()
     }
     this.runnerWindows.delete(workflowId)
+  }
+
+  private detachManagedWindow(windowId: string): void {
+    this.healthServices.get(windowId)?.detach()
+    this.healthServices.delete(windowId)
+    this.mainWindowManager?.detach(windowId)
   }
 
   private createHealthService(loggerName: string): RendererHealthService {

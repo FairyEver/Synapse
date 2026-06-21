@@ -1,5 +1,6 @@
 import Module from "node:module"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import type { WindowManager } from "../../runtime/window"
 
 type FakeBrowserWindow = {
   readonly id: number
@@ -202,6 +203,26 @@ describe("WorkflowWindowManager", () => {
     expect(healthMock.detach).toHaveBeenCalled()
   })
 
+  it("detaches editor windows from the main WindowManager when they close", async () => {
+    const mainWindowManager = createMainWindowManager()
+    const manager = new WorkflowWindowManager(mainWindowManager)
+
+    const editor = await manager.open("workflow-1", "app://-") as unknown as FakeBrowserWindow
+    editor.close()
+
+    expect(mainWindowManager.detach).toHaveBeenCalledWith("workflow-editor:workflow-1")
+  })
+
+  it("detaches editor windows from the main WindowManager when URL loading fails", async () => {
+    const mainWindowManager = createMainWindowManager()
+    const manager = new WorkflowWindowManager(mainWindowManager)
+    electronMock.setNextLoadError(new Error("load failed"))
+
+    await expect(manager.open("workflow-1", "app://-")).rejects.toThrow("load failed")
+
+    expect(mainWindowManager.detach).toHaveBeenCalledWith("workflow-editor:workflow-1")
+  })
+
   it("closes the runner window when opening the editor for the same workflow", async () => {
     const manager = new WorkflowWindowManager()
 
@@ -212,6 +233,16 @@ describe("WorkflowWindowManager", () => {
     expect(runner.isDestroyed()).toBe(true)
     expect(editor.isDestroyed()).toBe(false)
     expect(manager.getOpenEditorIds()).toEqual(["workflow-1"])
+  })
+
+  it("detaches runner windows from the main WindowManager when they are closed by an editor", async () => {
+    const mainWindowManager = createMainWindowManager()
+    const manager = new WorkflowWindowManager(mainWindowManager)
+
+    await manager.openRunner("workflow-1", "run-1", "app://-")
+    await manager.open("workflow-1", "app://-")
+
+    expect(mainWindowManager.detach).toHaveBeenCalledWith("workflow-runner:workflow-1")
   })
 
   it("keeps the editor open when runner URL loading fails", async () => {
@@ -238,3 +269,22 @@ describe("WorkflowWindowManager", () => {
     expect(runner.focused).toBe(true)
   })
 })
+
+function createMainWindowManager(): WindowManager & {
+  attach: ReturnType<typeof vi.fn>
+  detach: ReturnType<typeof vi.fn>
+} {
+  return {
+    register: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    open: vi.fn(),
+    close: vi.fn(),
+    list: vi.fn(() => []),
+    getAllWindows: vi.fn(() => []),
+    broadcast: vi.fn(() => 1),
+  } as unknown as WindowManager & {
+    attach: ReturnType<typeof vi.fn>
+    detach: ReturnType<typeof vi.fn>
+  }
+}

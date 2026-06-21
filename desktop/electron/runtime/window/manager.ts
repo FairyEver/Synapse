@@ -88,6 +88,7 @@ export interface WindowManager {
 
 interface InternalWindow {
   readonly descriptor: WindowDescriptor
+  readonly attached: boolean
   handle: ManagedWindow | null
 }
 
@@ -98,7 +99,7 @@ export class WindowManagerImpl implements WindowManager {
     if (this.windows.has(descriptor.id)) {
       throw new Error(`Window descriptor "${descriptor.id}" already registered`)
     }
-    this.windows.set(descriptor.id, { descriptor, handle: null })
+    this.windows.set(descriptor.id, { descriptor, attached: false, handle: null })
   }
 
   attach(descriptor: Pick<WindowDescriptor, "id" | "role">, handle: ManagedWindow): void {
@@ -107,6 +108,7 @@ export class WindowManagerImpl implements WindowManager {
         ...descriptor,
         create: () => handle,
       },
+      attached: true,
       handle,
     })
   }
@@ -114,6 +116,10 @@ export class WindowManagerImpl implements WindowManager {
   detach(id: string): void {
     const entry = this.windows.get(id)
     if (!entry) return
+    if (entry.attached) {
+      this.windows.delete(id)
+      return
+    }
     entry.handle = null
   }
 
