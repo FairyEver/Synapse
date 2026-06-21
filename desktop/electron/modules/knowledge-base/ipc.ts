@@ -642,6 +642,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       }),
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await showOpenDialog({
           properties: ["openFile", "multiSelections"],
         })
@@ -668,6 +669,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: selectAndUploadRawDirectoryPayloadSchema,
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory"],
         })
@@ -695,6 +697,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: exportRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[] }) => trackRawMutation(async () => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory", "createDirectory"],
         })
