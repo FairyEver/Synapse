@@ -68,6 +68,8 @@ model User {
   driveUsage                  DriveUsage?
   driveUploadSessions         DriveUploadSession[]
   driveFileVersions           DriveFileVersion[]
+  driveAnnotationThreads      DriveAnnotationThread[]
+  driveAnnotationComments     DriveAnnotationComment[]
   publicAssets                PublicAsset[]
   contentStoreItems           ContentStoreItem[]
   contentStoreDrafts          ContentStoreDraft[]
@@ -298,6 +300,7 @@ model DriveItem {
   shares               DriveShare[]
   uploadSessions       DriveUploadSession[]
   fileVersions         DriveFileVersion[]
+  annotationThreads    DriveAnnotationThread[]
   publicAsset          PublicAsset?
   publicAssetRevisions PublicAssetRevision[]
 
@@ -405,6 +408,46 @@ model DriveFileVersion {
   @@index([itemId, deletedAt, versionNumber])
   @@index([userId, createdAt])
   @@index([deletePending])
+}
+
+model DriveAnnotationThread {
+  id              String                   @id @default(cuid())
+  itemId          String
+  item            DriveItem                @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  baseVersionId   String?
+  targetKind      String                   @db.VarChar(64)
+  target          Json
+  anchorStatus    String                   @default("attached") @db.VarChar(32)
+  createdByUserId String
+  createdByUser   User                     @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
+  comments        DriveAnnotationComment[]
+
+  @@index([itemId, deletedAt, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([anchorStatus])
+}
+
+model DriveAnnotationComment {
+  id              String                   @id @default(cuid())
+  threadId        String
+  thread          DriveAnnotationThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parentCommentId String?
+  parentComment   DriveAnnotationComment?  @relation("DriveAnnotationCommentReplies", fields: [parentCommentId], references: [id], onDelete: Restrict)
+  replies         DriveAnnotationComment[] @relation("DriveAnnotationCommentReplies")
+  body            String
+  createdByUserId String
+  createdByUser   User                     @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  editedAt        DateTime?
+  deletedAt       DateTime?
+
+  @@index([threadId, createdAt])
+  @@index([parentCommentId])
+  @@index([createdByUserId, createdAt])
 }
 
 model PublicAsset {
