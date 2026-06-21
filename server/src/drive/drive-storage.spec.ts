@@ -57,6 +57,22 @@ describe("LocalDriveStorage", () => {
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
   })
 
+  it("recovers local upload tokens from disk after storage restart", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const firstStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    const upload = await firstStorage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+
+    const restartedStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await restartedStorage.acceptUpload(token, Readable.from(["hello"]))
+
+    await expect(streamToText((await restartedStorage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
+    await expect(restartedStorage.acceptUpload(token, Readable.from(["again"]))).rejects.toThrow("Drive storage token expired.")
+  })
+
   it("rejects local uploads when content length exceeds the expected size", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)

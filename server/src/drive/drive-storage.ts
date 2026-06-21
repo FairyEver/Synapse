@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream, statSync } from "node:fs"
-import { copyFile, mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Transform } from "node:stream"
@@ -41,6 +41,14 @@ type LocalStorageToken = {
   readonly expiresAt: Date
 }
 
+type PersistedLocalStorageToken = {
+  readonly key: string
+  readonly contentType?: string | null
+  readonly expectedSize?: string
+  readonly filename?: string
+  readonly expiresAt: string
+}
+
 export class DriveUploadTooLargeError extends Error {
   readonly code = "DRIVE_UPLOAD_TOO_LARGE"
 
@@ -75,7 +83,9 @@ export class LocalDriveStorage implements DriveStoragePort {
     this.cleanupExpiredTokens()
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
     const token = randomUUID()
-    this.uploadTokens.set(token, { key: input.key, contentType: input.contentType ?? null, expectedSize: input.expectedSize, expiresAt })
+    const entry = { key: input.key, contentType: input.contentType ?? null, expectedSize: input.expectedSize, expiresAt }
+    this.uploadTokens.set(token, entry)
+    await this.persistUploadToken(token, entry)
     return {
       method: "PUT",
       url: `${this.publicAppUrl.replace(/\/+$/u, "")}/api/drive/local-upload/${encodeURIComponent(token)}`,
@@ -140,7 +150,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
-    const entry = this.readToken(this.uploadTokens, token)
+    const entry = await this.readUploadToken(token)
     const contentLength = readContentLength(stream)
     if (entry.expectedSize !== undefined && contentLength !== undefined && contentLength > entry.expectedSize) {
       throw new DriveUploadTooLargeError()
@@ -158,6 +168,7 @@ export class LocalDriveStorage implements DriveStoragePort {
       throw error
     }
     this.uploadTokens.delete(token)
+    await this.deletePersistedUploadToken(token)
     this.contentTypes.set(entry.key, entry.contentType ?? null)
   }
 
@@ -183,6 +194,19 @@ export class LocalDriveStorage implements DriveStoragePort {
     return entry
   }
 
+  private async readUploadToken(token: string): Promise<LocalStorageToken> {
+    this.cleanupExpiredTokenMap(this.uploadTokens)
+    const memoryEntry = this.uploadTokens.get(token)
+    const entry = memoryEntry ?? await this.readPersistedUploadToken(token)
+    if (!entry || entry.expiresAt.getTime() <= Date.now()) {
+      this.uploadTokens.delete(token)
+      await this.deletePersistedUploadToken(token)
+      throw new Error("Drive storage token expired.")
+    }
+    this.uploadTokens.set(token, entry)
+    return entry
+  }
+
   private cleanupExpiredTokens(): void {
     this.cleanupExpiredTokenMap(this.uploadTokens)
     this.cleanupExpiredTokenMap(this.downloadTokens)
@@ -193,6 +217,55 @@ export class LocalDriveStorage implements DriveStoragePort {
     for (const [token, entry] of tokens) {
       if (entry.expiresAt.getTime() <= now) tokens.delete(token)
     }
+  }
+
+  private async persistUploadToken(token: string, entry: LocalStorageToken): Promise<void> {
+    const tokenPath = this.uploadTokenPath(token)
+    await mkdir(path.dirname(tokenPath), { recursive: true })
+    const payload: PersistedLocalStorageToken = {
+      key: entry.key,
+      contentType: entry.contentType ?? null,
+      expectedSize: entry.expectedSize?.toString(),
+      filename: entry.filename,
+      expiresAt: entry.expiresAt.toISOString(),
+    }
+    await writeFile(tokenPath, JSON.stringify(payload), { encoding: "utf8", mode: 0o600 })
+  }
+
+  private async readPersistedUploadToken(token: string): Promise<LocalStorageToken | null> {
+    const tokenPath = this.uploadTokenPath(token)
+    let raw: string
+    try {
+      raw = await readFile(tokenPath, "utf8")
+    } catch (error) {
+      if (isMissingLocalDriveObjectError(error)) return null
+      throw error
+    }
+    try {
+      const parsed = JSON.parse(raw) as PersistedLocalStorageToken
+      if (typeof parsed.key !== "string" || typeof parsed.expiresAt !== "string") return null
+      const expiresAt = new Date(parsed.expiresAt)
+      if (!Number.isFinite(expiresAt.getTime())) return null
+      return {
+        key: parsed.key,
+        contentType: typeof parsed.contentType === "string" ? parsed.contentType : null,
+        expectedSize: typeof parsed.expectedSize === "string" ? BigInt(parsed.expectedSize) : undefined,
+        filename: typeof parsed.filename === "string" ? parsed.filename : undefined,
+        expiresAt,
+      }
+    } catch {
+      await this.deletePersistedUploadToken(token)
+      return null
+    }
+  }
+
+  private async deletePersistedUploadToken(token: string): Promise<void> {
+    await rm(this.uploadTokenPath(token), { force: true })
+  }
+
+  private uploadTokenPath(token: string): string {
+    const encodedToken = Buffer.from(token, "utf8").toString("base64url")
+    return this.resolveUnderRoot(path.join(".tokens", "uploads", `${encodedToken}.json`))
   }
 
   private objectPathForKey(key: string): string {
