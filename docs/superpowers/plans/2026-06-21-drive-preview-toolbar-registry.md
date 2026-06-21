@@ -115,7 +115,7 @@ it('builds shared preview identity and system actions for owner files', () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: FAIL because `./renderers/drive-preview-actions` does not exist.
@@ -284,7 +284,7 @@ export function getDrivePreviewDriveBrowserUrl(snapshot: DriveBrowserSnapshotDto
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: PASS.
@@ -391,7 +391,7 @@ function render(element: React.ReactElement) {
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
 ```
 
 Expected: FAIL because the context file does not exist.
@@ -505,7 +505,7 @@ export function useDriveRendererToolbar(): DriveRendererToolbarContextValue {
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
 ```
 
 Expected: PASS.
@@ -582,7 +582,7 @@ import { DrivePreviewHeader } from './renderers/drive-preview-header'
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: FAIL because the chrome components do not exist.
@@ -781,7 +781,7 @@ Use only existing `DropdownMenu*`, `Button`, `DriveBrowserItemIcon`, `MoreHorizo
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: PASS.
@@ -843,7 +843,7 @@ expect(html).not.toContain('文件操作')
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: FAIL because shell still renders the old floating menu for all `body` mode and Finder still renders its own file header.
@@ -952,7 +952,7 @@ The file-selected branch becomes:
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: PASS.
@@ -1025,7 +1025,7 @@ function toolbarItems(): HTMLElement {
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/code-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/code-renderer.test.tsx
 ```
 
 Expected: FAIL because Code renderer still renders its own top bar and does not register toolbar items.
@@ -1089,7 +1089,7 @@ Use `useCallback` for `handleSave` and `handleReload` before the effect so depen
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/code-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/code-renderer.test.tsx
 ```
 
 Expected: PASS.
@@ -1132,7 +1132,7 @@ expect(editor().dataset.toolbarPlugin).toBe('true')
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx
 ```
 
 Expected: FAIL because MDXeditor still renders file-level edit actions inside the renderer.
@@ -1210,7 +1210,7 @@ The body structure becomes:
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx
 ```
 
 Expected: PASS.
@@ -1249,7 +1249,7 @@ Keep body assertions for comment rail and selected-text comment creation.
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/markdown-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/markdown-renderer.test.tsx
 ```
 
 Expected: FAIL because Markdown renderer still renders the sticky header and does not register toolbar toggles.
@@ -1306,7 +1306,7 @@ Keep the pending comment form and rails inside the renderer body.
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/renderers/markdown-renderer.test.tsx
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/renderers/markdown-renderer.test.tsx
 ```
 
 Expected: PASS.
@@ -1349,7 +1349,7 @@ it('does not duplicate download actions for download-only files', () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: FAIL because both header and renderer body include download.
@@ -1376,7 +1376,7 @@ export function DriveDownloadRenderer({ current }: { readonly current: DriveBrow
 Run:
 
 ```bash
-pnpm --filter @synapse/dashboard exec vitest run dashboard/src/features/drive-browser/drive-browser-page.test.ts
+pnpm --filter @synapse/dashboard exec vitest run src/features/drive-browser/drive-browser-page.test.ts
 ```
 
 Expected: PASS.
@@ -1409,11 +1409,11 @@ Run:
 
 ```bash
 pnpm --filter @synapse/dashboard exec vitest run \
-  dashboard/src/features/drive-browser/drive-browser-page.test.ts \
-  dashboard/src/features/drive-browser/renderers/code-renderer.test.tsx \
-  dashboard/src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx \
-  dashboard/src/features/drive-browser/renderers/markdown-renderer.test.tsx \
-  dashboard/src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
+  src/features/drive-browser/drive-browser-page.test.ts \
+  src/features/drive-browser/renderers/code-renderer.test.tsx \
+  src/features/drive-browser/renderers/mdxeditor-renderer.test.tsx \
+  src/features/drive-browser/renderers/markdown-renderer.test.tsx \
+  src/features/drive-browser/renderers/drive-renderer-toolbar-context.test.tsx
 ```
 
 Expected: PASS.
