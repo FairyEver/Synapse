@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Folder } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -86,6 +86,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
   const [openingKnowledgeBaseProjectId, setOpeningKnowledgeBaseProjectId] = useState<string | null>(null)
+  const isKnowledgeBaseCreateInFlightRef = useRef(false)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -179,6 +180,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   const handleCreateKnowledgeBase = async () => {
+    if (isKnowledgeBaseCreateInFlightRef.current) return
     const name = knowledgeBaseName.trim()
     if (!name) {
       setKnowledgeBaseError("知识库名称不能为空。")
@@ -191,6 +193,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
 
     const projectId = crypto.randomUUID()
     let shouldCleanupRuntime = false
+    isKnowledgeBaseCreateInFlightRef.current = true
     setIsCreatingKnowledgeBase(true)
     setKnowledgeBaseError(null)
     try {
@@ -224,6 +227,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       logger.error("Failed to create managed knowledge base project.", { error, projectId })
       setKnowledgeBaseError(formatKnowledgeBaseCreateError(error))
     } finally {
+      isKnowledgeBaseCreateInFlightRef.current = false
       setIsCreatingKnowledgeBase(false)
     }
   }

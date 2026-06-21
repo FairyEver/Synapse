@@ -262,6 +262,45 @@ describe("ProjectListEditor knowledge base actions", () => {
     })
   })
 
+  it("ignores duplicate knowledge base create clicks while the first create is pending", async () => {
+    const pendingCreate = deferred<SynapseKnowledgeBaseCreateManagedResult>()
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.createManaged.mockReturnValue(pendingCreate.promise)
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+
+    await act(async () => {
+      const createButton = buttonByText("创建")
+      createButton.click()
+      createButton.click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.createManaged).toHaveBeenCalledTimes(1)
+    expect(bridgeMocks.knowledgeBase.createManaged).toHaveBeenCalledWith({
+      projectId: "new-project-id",
+      name: "Knowledge",
+    })
+
+    await act(async () => {
+      pendingCreate.resolve({
+        projectId: "new-project-id",
+        projectPath: "synapse-kb://new-project-id",
+        templateVersion: "2026-05-24",
+      })
+      await pendingCreate.promise
+      await Promise.resolve()
+    })
+
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
   it("does not show raw filesystem errors when creating a knowledge base fails", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("EACCES: permission denied, mkdir '/Users/test/secret-path'"))
