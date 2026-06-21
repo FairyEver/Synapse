@@ -233,6 +233,13 @@ describe("DatabaseService table descriptions", () => {
     expect(result.rows).toEqual([{ note: "contains _not_a_table in text" }])
   })
 
+  it("rejects raw SQL statements that write database snapshots to local files", () => {
+    expect(() => service.databaseSqlExecute("VACUUM INTO '/tmp/synapse-copy.sqlite'"))
+      .toThrow("VACUUM INTO statements are not allowed")
+    expect(() => service.databaseSqlExecute("VACUUM main INTO '/tmp/synapse-copy.sqlite'"))
+      .toThrow("VACUUM INTO statements are not allowed")
+  })
+
   it("treats malformed multi-choice JSON as not matching CONTAINS filters", () => {
     service.databaseTableCreate("tasks", [
       { name: "labels", kind: "multi_choice", choices: ["bug", "feature"] },
