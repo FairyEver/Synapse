@@ -178,7 +178,8 @@ The node passes the prompt as the `claude -p` query argument and returns only Cl
 
 ### end
 
-- `outputTemplate` (string) — final output template with `{{variable}}` placeholders
+- `outputType` (`"text"`) — end node output mode
+- `template` (string) — final output template with `{{variable}}` placeholders
 - `variables` (array) — variable bindings
 
 ---

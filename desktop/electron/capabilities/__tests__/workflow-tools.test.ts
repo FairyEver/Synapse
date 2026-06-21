@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { buildWorkflowTools } from "../../../synapse-capabilities/shared/workflow-domain"
@@ -30,6 +32,17 @@ function stringProperty(source: unknown, key: string): string {
 }
 
 describe("workflow MCP tool definitions", () => {
+  it("keeps the built-in workflow MCP API reference aligned with the end node schema", async () => {
+    const reference = await readFile(
+      path.join(process.cwd(), "resources", "templates", "skills", "synapse-workflow-mcp", "files", "api-reference.md"),
+      "utf8",
+    )
+
+    expect(reference).not.toContain("outputTemplate")
+    expect(reference).toContain("`outputType`")
+    expect(reference).toContain("`template`")
+  })
+
   it("teaches agents that workflow_call, codex, and claude_code are supported node types", () => {
     expect(toolByName("workflow_node_type_list").description).toContain("workflow_call")
     expect(toolByName("workflow_node_type_list").description).toContain("codex")
