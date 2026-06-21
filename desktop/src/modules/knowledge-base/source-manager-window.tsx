@@ -1084,6 +1084,7 @@ function KnowledgeBaseSourceManagerWindow() {
       async () => {
         const result = await bridge.knowledgeBase.addUrlSource({
           projectId: payload.projectId,
+          targetDirectoryPath: currentDirectory,
           url,
         })
         await refreshDirectory()
@@ -1099,7 +1100,7 @@ function KnowledgeBaseSourceManagerWindow() {
       setSourceUrl("")
       setAddUrlOpen(false)
     }
-  }, [bridge, payload, promise, refreshDirectory, sourceUrl])
+  }, [bridge, currentDirectory, payload, promise, refreshDirectory, sourceUrl])
 
   const createFolder = useCallback(async () => {
     if (!payload || !bridge) return

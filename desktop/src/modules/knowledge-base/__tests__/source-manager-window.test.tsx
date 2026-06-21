@@ -141,7 +141,7 @@ function createBridgeMocks() {
         .mockResolvedValue(emptyMutation),
       uploadRawItems: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
-      addUrlSource: vi.fn<(payload: { projectId: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+      addUrlSource: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
           projectId: "project-1",
           uploaded: [{
@@ -687,6 +687,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
       projectId: "project-1",
+      targetDirectoryPath: "",
       url: "https://example.com/notes",
     })
     expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
@@ -726,6 +727,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
         projectId: "project-1",
+        targetDirectoryPath: "",
         url: "https://example.com/missing",
       })
     })

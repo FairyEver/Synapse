@@ -293,11 +293,13 @@ describe("knowledgeBaseIpcModule", () => {
 
     const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/article?token=secret-token",
     }) as { uploaded: unknown[] }
 
     expect(addUrlSource).toHaveBeenCalledWith({
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/article?token=secret-token",
     }, expect.objectContaining({
       fetchUrl: expect.any(Function),
@@ -342,6 +344,7 @@ describe("knowledgeBaseIpcModule", () => {
 
     await harness.invoke("synapse:knowledge-base:add-url-source", {
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/redirect-source?token=initial-secret",
     })
 

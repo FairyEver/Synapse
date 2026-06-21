@@ -115,6 +115,7 @@ const exportRawEntriesPayloadSchema = z.object({
 
 const addUrlSourcePayloadSchema = z.object({
   projectId: z.string().min(1),
+  targetDirectoryPath: z.string().optional(),
   url: z.string().min(1),
 })
 
@@ -618,7 +619,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:add-url-source",
       request: addUrlSourcePayloadSchema,
       response: uploadSourcesResultSchema,
-      handler: async (ctx, request: { projectId: string; url: string }) => {
+      handler: async (ctx, request: { projectId: string; targetDirectoryPath?: string; url: string }) => {
         const checkedNetworkResources = new Set<string>()
         await checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(request.url), checkedNetworkResources)
         return runGuardedKnowledgeBaseOperation({

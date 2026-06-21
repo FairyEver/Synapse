@@ -53,6 +53,7 @@ export type SynapseKnowledgeBaseListSourcesResult = {
 
 export type SynapseKnowledgeBaseAddUrlSourcePayload = {
   projectId: string
+  targetDirectoryPath?: string
   url: string
 }
 
