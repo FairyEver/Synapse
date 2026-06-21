@@ -25,6 +25,10 @@ vi.mock("../log-store", () => ({
 }))
 
 import { ContentCapabilityError } from "../content-capability-errors"
+import {
+  CONTENT_SKILL_SOURCE_MAX_DEPTH,
+  CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
+} from "../content-skill-attachment-constraints"
 import { readSkillDraftFromDirectory, resolveSkillMainFile } from "../content-skill-source-service"
 
 const tempRoots: string[] = []
@@ -131,6 +135,28 @@ describe("content skill source service", () => {
     await truncate(mainFilePath, 10 * 1024 * 1024 + 1)
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("Skill 主文件超过 10MB。")
+  })
+
+  it("rejects source directories that exceed the attachment directory count budget", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    for (let index = 0; index <= CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT; index += 1) {
+      await mkdir(path.join(root, `empty-${index}`))
+    }
+
+    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(`Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
+  })
+
+  it("rejects source directories that exceed the attachment directory depth budget", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    let current = root
+    for (let depth = 0; depth <= CONTENT_SKILL_SOURCE_MAX_DEPTH; depth += 1) {
+      current = path.join(current, `level-${depth}`)
+      await mkdir(current)
+    }
+
+    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(`Skill 附件目录深度超过 ${CONTENT_SKILL_SOURCE_MAX_DEPTH} 层。`)
   })
 
   it.skipIf(process.platform === "win32")("rejects unreadable attachments instead of returning an incomplete draft", async () => {

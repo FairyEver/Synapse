@@ -37,6 +37,8 @@ describe("Content capability domain", () => {
     })
     expect(create?.description).toContain("inline")
     expect(create?.description).toContain("sourceDirectoryPath")
+    expect(create?.description).toContain("200 attachment directories")
+    expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain("depth 8")
     expect(update?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname"],
     })

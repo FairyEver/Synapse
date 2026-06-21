@@ -29,6 +29,8 @@ describe("content capability validator", () => {
     expect(description.appearance.icons.some((icon) => icon.value === "wrench")).toBe(true)
     expect(description.appearance.backgroundColors).toBe(SYNAPSE_CONTENT_COLOR_OPTIONS)
     expect(description.constraints.skillAttachmentMaxCount).toBeGreaterThan(0)
+    expect(description.constraints.skillSourceMaxDirectoryCount).toBe(200)
+    expect(description.constraints.skillSourceMaxDepth).toBe(8)
   })
 
   it("describes type-specific content name constraints", () => {

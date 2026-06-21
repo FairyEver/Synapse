@@ -13,6 +13,8 @@ import {
   CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
   CONTENT_SKILL_ATTACHMENT_MAX_SIZE,
   CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
+  CONTENT_SKILL_SOURCE_MAX_DEPTH,
+  CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
 } from "./content-skill-attachment-constraints"
 import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
@@ -54,6 +56,7 @@ type ContentSkillSourceDraft = {
 }
 
 type SkillFileCollectionState = {
+  directoryCount: number
   fileCount: number
   files: SynapseCreateSkillFilePayload[]
   totalSize: number
@@ -140,8 +143,8 @@ async function readSkillDraftFromDirectory(
     }
 
     const skip = new Set<string>([path.basename(mainFilePath), SYNAPSE_SKILL_ID_FILE])
-    const state: SkillFileCollectionState = { fileCount: 0, totalSize: mainFileSize, files: [] }
-    await collectSkillFiles(dirPath, dirPath, skip, state)
+    const state: SkillFileCollectionState = { directoryCount: 0, fileCount: 0, totalSize: mainFileSize, files: [] }
+    await collectSkillFiles(dirPath, dirPath, skip, state, 0)
     state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
     assertUniqueSkillAttachmentPaths(state.files)
     recordSkillSourceAudit(security, dirPath, "allowed", auditMetadata)
@@ -183,6 +186,7 @@ async function collectSkillFiles(
   currentDir: string,
   skip: Set<string>,
   state: SkillFileCollectionState,
+  depth: number,
 ): Promise<void> {
   let children: string[]
   try {
@@ -214,7 +218,15 @@ async function collectSkillFiles(
     if (fileStat.isSymbolicLink()) continue
 
     if (fileStat.isDirectory()) {
-      await collectSkillFiles(baseDir, fullPath, skip, state)
+      const nextDepth = depth + 1
+      if (nextDepth > CONTENT_SKILL_SOURCE_MAX_DEPTH) {
+        throwInvalid("files", `Skill 附件目录深度超过 ${CONTENT_SKILL_SOURCE_MAX_DEPTH} 层。`)
+      }
+      state.directoryCount += 1
+      if (state.directoryCount > CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT) {
+        throwInvalid("files", `Skill 附件目录数量超过 ${CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT} 个。`)
+      }
+      await collectSkillFiles(baseDir, fullPath, skip, state, nextDepth)
       continue
     }
 

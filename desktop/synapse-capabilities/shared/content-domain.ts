@@ -10,6 +10,7 @@ type ContentResourceType = "rule" | "skill" | "prompt"
 const RULE_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$"
 const SKILL_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
 const CONTENT_NAME_MAX_LENGTH = 64
+const SKILL_SOURCE_DIRECTORY_LIMITS = "Imports non-hidden attachments up to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total."
 
 const contentCapabilities: readonly CapabilityDefinition[] = [
   { id: "content.type.describe" as CapabilityId, title: "Describe content types", description: "Return content fields, categories, appearance options, and publishing constraints.", mutates: false },
@@ -186,14 +187,14 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       items: skillFileSchema,
       description: "Attachment files. Mutually exclusive with sourceDirectoryPath. Paths are relative to the Skill root and cannot be SKILL.md or .synapse.json.",
     }
-    properties.sourceDirectoryPath = stringField("Local Skill directory to import. Mutually exclusive with files.")
+    properties.sourceDirectoryPath = stringField(`Local Skill directory to import. Mutually exclusive with files. ${SKILL_SOURCE_DIRECTORY_LIMITS}`)
   }
 
   return {
     name: `content_${type}_create`,
     description:
       type === "skill"
-        ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive.`
+        ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS}`
         : `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints.`,
     inputSchema: {
       type: "object",
@@ -211,7 +212,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
     name: `content_${type}_update`,
     description:
       type === "skill"
-        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. Force update is not supported.`
+        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS} Force update is not supported.`
         : `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
     inputSchema: {
       type: "object",

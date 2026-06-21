@@ -90,6 +90,8 @@ To import an existing Skill directory:
 }
 ```
 
+`sourceDirectoryPath` imports the Skill main file and non-hidden attachments. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total.
+
 `content_prompt_create`
 
 ```json

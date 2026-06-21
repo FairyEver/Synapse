@@ -32,6 +32,8 @@ import {
   CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
   CONTENT_SKILL_ATTACHMENT_MAX_SIZE,
   CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
+  CONTENT_SKILL_SOURCE_MAX_DEPTH,
+  CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
 } from "./content-skill-attachment-constraints"
 
 type ContentToolParams = Record<string, unknown>
@@ -53,6 +55,8 @@ type ContentTypeDescription = {
     skillAttachmentMaxBytes: number
     skillAttachmentMaxCount: number
     skillAttachmentTotalMaxBytes: number
+    skillSourceMaxDepth: number
+    skillSourceMaxDirectoryCount: number
   }
   types: Array<{
     categories: Array<{
@@ -138,6 +142,8 @@ function describeContentTypes(contentType?: unknown): ContentTypeDescription {
       skillAttachmentMaxBytes: CONTENT_SKILL_ATTACHMENT_MAX_SIZE,
       skillAttachmentMaxCount: CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
       skillAttachmentTotalMaxBytes: CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
+      skillSourceMaxDepth: CONTENT_SKILL_SOURCE_MAX_DEPTH,
+      skillSourceMaxDirectoryCount: CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
     },
   }
 }
