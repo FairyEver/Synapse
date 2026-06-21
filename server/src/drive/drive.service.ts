@@ -152,7 +152,7 @@ type DriveFolderZipEntry = {
 
 type DriveFolderZipBrowserResult = {
   readonly filename: string
-  readonly entries: readonly DriveFolderZipEntry[]
+  readonly entries: AsyncIterable<DriveFolderZipEntry>
 }
 
 type DriveBrowserDownloadResult = {
@@ -1499,7 +1499,7 @@ export class DriveService implements OnApplicationBootstrap {
       return {
         kind: "zip",
         filename: `${current.name}.zip`,
-        entries: await this.createFolderZipEntries(current.userId, current.id),
+        entries: this.createFolderZipEntries(current.userId, current.id),
       }
     }
     const storageKey = this.requireActiveFileStorage(current)
@@ -1592,7 +1592,7 @@ export class DriveService implements OnApplicationBootstrap {
       return {
         kind: "zip",
         filename: `${current.name}.zip`,
-        entries: await this.createFolderZipEntries(share.ownerId, current.id),
+        entries: this.createFolderZipEntries(share.ownerId, current.id),
       }
     }
     const storageKey = this.requireActiveFileStorage(current)
@@ -2588,8 +2588,7 @@ export class DriveService implements OnApplicationBootstrap {
     return user?.email ?? userId
   }
 
-  private async createFolderZipEntries(userId: string, folderId: string): Promise<DriveFolderZipEntry[]> {
-    const entries: DriveFolderZipEntry[] = []
+  private async *createFolderZipEntries(userId: string, folderId: string): AsyncIterable<DriveFolderZipEntry> {
     const usedPaths = new Set<string>()
     const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: folderId, prefix: "" }]
 
@@ -2603,11 +2602,9 @@ export class DriveService implements OnApplicationBootstrap {
           continue
         }
         if (!child.storageKey) continue
-        entries.push({ path: createUniqueDriveZipEntryPath(childPath, usedPaths), storageKey: child.storageKey })
+        yield { path: createUniqueDriveZipEntryPath(childPath, usedPaths), storageKey: child.storageKey }
       }
     }
-
-    return entries
   }
 
   private decryptStoredPassword(value: string | null | undefined): string | null {
