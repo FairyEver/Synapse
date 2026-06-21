@@ -205,10 +205,10 @@ export class DrivePublicAssetService {
       ...(input.search
         ? {
           OR: [
-            { name: { contains: input.search } },
-            { assetId: { contains: input.search } },
-            { itemId: { contains: input.search } },
-            { user: { email: { contains: input.search } } },
+            { name: { contains: input.search, mode: "insensitive" } },
+            { assetId: { contains: input.search, mode: "insensitive" } },
+            { itemId: { contains: input.search, mode: "insensitive" } },
+            { user: { email: { contains: input.search, mode: "insensitive" } } },
           ],
         }
         : {}),

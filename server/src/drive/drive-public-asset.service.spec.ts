@@ -432,6 +432,32 @@ describe("DrivePublicAssetService", () => {
     })
   })
 
+  it("searches admin public assets case-insensitively", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "Report.PNG",
+      size: 8n,
+    })
+
+    const byName = await service.listAdminAssets("https://assets.example", {
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+      search: "report.png",
+    })
+    const byAssetId = await service.listAdminAssets("https://assets.example", {
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+      search: asset.assetId.toUpperCase(),
+    })
+    const byItemId = await service.listAdminAssets("https://assets.example", {
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+      search: asset.itemId.toUpperCase(),
+    })
+
+    expect(byName.data).toEqual([expect.objectContaining({ assetId: asset.assetId, name: "Report.PNG" })])
+    expect(byAssetId.data).toEqual([expect.objectContaining({ assetId: asset.assetId })])
+    expect(byItemId.data).toEqual([expect.objectContaining({ itemId: asset.itemId })])
+  })
+
   it("paginates public asset access logs and revision downloads for admins", async () => {
     const asset = await seedPublicAsset({
       prisma,
@@ -1105,9 +1131,16 @@ function matchesWhere(row: any, where: any): boolean {
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
-    if (value && typeof value === "object" && "contains" in value) return String(row[key] ?? "").includes(value.contains)
+    if (value && typeof value === "object" && "contains" in value) return containsValue(row[key], value)
     return row[key] === value
   })
+}
+
+function containsValue(source: unknown, filter: { readonly contains: string; readonly mode?: string }): boolean {
+  const sourceText = String(source ?? "")
+  const searchText = String(filter.contains)
+  if (filter.mode === "insensitive") return sourceText.toLowerCase().includes(searchText.toLowerCase())
+  return sourceText.includes(searchText)
 }
 
 function orderRows<T extends Record<string, any>>(rows: T[], orderBy: Record<string, "asc" | "desc"> | undefined): T[] {
