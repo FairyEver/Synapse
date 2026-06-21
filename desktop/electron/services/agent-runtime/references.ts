@@ -113,7 +113,7 @@ async function renderDirectory(
   options: ReferenceViewOptions,
 ): Promise<string> {
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
-  const entries = await readReferenceDirectory(reference)
+  const entries = await readReferenceDirectory(reference, maxEntries)
   const lines = entries
     .sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
@@ -169,9 +169,21 @@ async function statReference(reference: LocalReference): Promise<Stats> {
 
 async function readReferenceDirectory(
   reference: LocalReference,
+  maxEntries: number,
 ): Promise<Dirent[]> {
+  const entries: Dirent[] = []
   try {
-    return await fs.readdir(reference.path, { withFileTypes: true })
+    const directory = await fs.opendir(reference.path)
+    try {
+      while (entries.length < maxEntries) {
+        const entry = await directory.read()
+        if (!entry) break
+        entries.push(entry)
+      }
+    } finally {
+      await directory.close().catch(() => undefined)
+    }
+    return entries
   } catch (error) {
     throw referenceReadError(reference, "read", error)
   }

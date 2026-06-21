@@ -1,8 +1,9 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import type { Dirent } from "node:fs"
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   renderReferenceView,
@@ -10,6 +11,10 @@ import {
 } from "../references"
 
 describe("agent local references", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("resolves references inside the workspace and rejects outside paths", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-ref-"))
     await fs.mkdir(path.join(workspace, "src"))
@@ -45,6 +50,22 @@ describe("agent local references", () => {
       .resolves.toContain("   2 | two")
   })
 
+  it("stops reading directory previews at the configured entry limit", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-show-dir-"))
+    const entries = Array.from({ length: 100 }, (_value, index) => fakeDirent(`file-${String(index).padStart(3, "0")}.txt`))
+    const read = vi.fn(async () => entries.shift() ?? null)
+    const close = vi.fn(async () => undefined)
+    vi.spyOn(fs, "opendir").mockResolvedValue({ read, close } as never)
+
+    const rendered = await renderReferenceView(".", workspace, { maxEntries: 5 })
+
+    expect(read).toHaveBeenCalledTimes(5)
+    expect(close).toHaveBeenCalledOnce()
+    expect(rendered).toContain("file file-000.txt")
+    expect(rendered).toContain("file file-004.txt")
+    expect(rendered).not.toContain("file-005.txt")
+  })
+
   it("does not expose absolute workspace paths when a reference is missing", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-show-missing-"))
 
@@ -65,3 +86,16 @@ describe("agent local references", () => {
       .resolves.toBe("Reference is outside the workspace or invalid.")
   })
 })
+
+function fakeDirent(name: string): Dirent {
+  return {
+    name,
+    isBlockDevice: () => false,
+    isCharacterDevice: () => false,
+    isDirectory: () => false,
+    isFIFO: () => false,
+    isFile: () => true,
+    isSocket: () => false,
+    isSymbolicLink: () => false,
+  } as Dirent
+}
