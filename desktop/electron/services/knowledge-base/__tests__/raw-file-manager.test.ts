@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, lstat, mkdir, readFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -7,6 +7,7 @@ import { knowledgeBaseLogger } from "../logging"
 import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
 
 const roots: string[] = []
+const itSupportsPosixModeBits = process.platform === "win32" ? it.skip : it
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-raw-manager-"))
@@ -228,6 +229,25 @@ describe("KnowledgeBaseRawFileManager", () => {
       .resolves.toBe("old\n")
     await expect(readFile(path.join(rawRoot, "项目A", "会议资料-2", "01.pdf"), "utf8"))
       .resolves.toBe("new\n")
+  })
+
+  itSupportsPosixModeBits("does not leave an empty raw folder when the source directory cannot be read", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "locked")
+    await mkdir(folder, { recursive: true })
+    await chmod(folder, 0)
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    try {
+      const result = await manager.uploadItems(rawRoot, "", [folder])
+
+      expect(result.entries).toEqual([])
+      expect(result.skipped).toEqual([{ path: folder, reason: "read-error" }])
+      await expect(lstat(path.join(rawRoot, "locked"))).rejects.toMatchObject({ code: "ENOENT" })
+    } finally {
+      await chmod(folder, 0o700)
+    }
   })
 
   it("skips symlinks during recursive upload", async () => {

@@ -307,9 +307,9 @@ export class KnowledgeBaseRawFileManager {
     budget: RawUploadBudget,
     depth: number,
   ): Promise<void> {
+    const children = await readdir(sourceDirectory, { withFileTypes: true })
     const targetPath = await createAvailableDirectoryPath(targetDirectory, path.basename(sourceDirectory))
     entries.push(await entryForPath(rawRoot, targetPath, "directory"))
-    const children = await readdir(sourceDirectory, { withFileTypes: true })
     for (const child of children) {
       const childPath = path.join(sourceDirectory, child.name)
       if (budget.stopped) {
