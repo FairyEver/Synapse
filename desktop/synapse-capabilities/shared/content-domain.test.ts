@@ -51,4 +51,48 @@ describe("Content capability domain", () => {
       ]),
     })
   })
+
+  it("expresses validator-enforced mutual exclusions in schemas", () => {
+    const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
+    const ruleCreateSchema = tools.get("content_rule_create")?.inputSchema
+    const skillCreateSchema = tools.get("content_skill_create")?.inputSchema
+    const skillUpdateSchema = tools.get("content_skill_update")?.inputSchema
+    const filesProperty = skillCreateSchema?.properties?.files as { readonly items?: unknown } | undefined
+
+    expect(ruleCreateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        { not: { required: ["iconImagePath", "iconImageBase64"] } },
+      ]),
+    })
+    expect(skillCreateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        { not: { required: ["iconImagePath", "iconImageBase64"] } },
+        {
+          not: {
+            properties: {
+              files: { type: "array", minItems: 1 },
+            },
+            required: ["files", "sourceDirectoryPath"],
+          },
+        },
+      ]),
+    })
+    expect(skillUpdateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        {
+          not: {
+            properties: {
+              files: { type: "array", minItems: 1 },
+            },
+            required: ["files", "sourceDirectoryPath"],
+          },
+        },
+      ]),
+    })
+    expect(filesProperty?.items).toMatchObject({
+      allOf: [
+        { not: { required: ["contentText", "contentBase64"] } },
+      ],
+    })
+  })
 })

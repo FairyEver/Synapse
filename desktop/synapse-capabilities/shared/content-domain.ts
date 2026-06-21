@@ -67,10 +67,30 @@ const skillFileSchema = {
     contentBase64: stringField("Base64 file bytes. Mutually exclusive with contentText."),
   },
   required: ["path"],
+  allOf: [
+    {
+      not: {
+        required: ["contentText", "contentBase64"],
+      },
+    },
+  ],
 }
 
 const skillInlineFields = "name/title/description/category/content"
 const inlineRequiredFields = ["title", "description", "category", "content"] as const
+const iconImageSourceMutualExclusion = {
+  not: {
+    required: ["iconImagePath", "iconImageBase64"],
+  },
+} as const
+const skillInputSourceMutualExclusion = {
+  not: {
+    properties: {
+      files: { type: "array", minItems: 1 },
+    },
+    required: ["files", "sourceDirectoryPath"],
+  },
+} as const
 const appearanceRequirements = [
   {
     properties: {
@@ -117,6 +137,12 @@ function createSchemaAlternatives(type: ContentResourceType): readonly unknown[]
     ...appearanceRequirements.map((requirement) => withRequiredFields(inlineFields, requirement)),
     ...appearanceRequirements.map((requirement) => withRequiredFields(["sourceDirectoryPath"], requirement)),
   ]
+}
+
+function schemaConstraints(type: ContentResourceType): readonly unknown[] {
+  return type === "skill"
+    ? [iconImageSourceMutualExclusion, skillInputSourceMutualExclusion]
+    : [iconImageSourceMutualExclusion]
 }
 
 function updateSchemaAlternatives(type: ContentResourceType): readonly unknown[] {
@@ -189,6 +215,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       properties,
       ...(type === "skill" ? {} : { required }),
       anyOf: createSchemaAlternatives(type),
+      allOf: schemaConstraints(type),
     },
   }
 }
@@ -213,6 +240,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
         ? ["id", "baseHistoryDirname"]
         : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
       anyOf: updateSchemaAlternatives(type),
+      allOf: schemaConstraints(type),
     },
   }
 }
