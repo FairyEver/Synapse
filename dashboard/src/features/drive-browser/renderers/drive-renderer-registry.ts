@@ -22,7 +22,7 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (snapshot.current.type === 'folder') return []
   const preview = snapshot.preview
   if (!preview || preview.kind === 'download-only') return [RENDERERS.download]
-  if (preview.kind === 'markdown') return [RENDERERS.mdxeditor, RENDERERS.markdown, RENDERERS.code]
+  if (preview.kind === 'markdown') return [RENDERERS.markdown, RENDERERS.mdxeditor, RENDERERS.code]
   if (preview.kind === 'image') return [RENDERERS.image]
   if (preview.kind === 'html-source') {
     return preview.visitUrl

@@ -18,11 +18,17 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 let annotationsMock: ReturnType<typeof createAnnotationsMock>
 let scrollIntoViewMock: ReturnType<typeof vi.fn>
+let scrollContainerScrollToMock: ReturnType<typeof vi.fn>
+let rangeRects: DOMRect[]
 
 beforeEach(() => {
   annotationsMock = createAnnotationsMock()
   scrollIntoViewMock = vi.fn()
+  scrollContainerScrollToMock = vi.fn()
+  rangeRects = [domRect({ left: 80, top: 120, width: 48, height: 20 })]
   Element.prototype.scrollIntoView = scrollIntoViewMock
+  Range.prototype.getBoundingClientRect = vi.fn(() => rangeRects[0] ?? domRect())
+  Range.prototype.getClientRects = vi.fn(() => rangeRects as unknown as DOMRectList)
   useAuthStore.getState().auth.reset()
 })
 
@@ -35,6 +41,38 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
+  it('aligns the outline rail with the markdown content top padding', () => {
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    const outlineNav = document.querySelector('nav[aria-label="目录"]')
+    expect(outlineNav?.className).toContain('top-6')
+    expect(outlineNav?.className).not.toContain('top-16')
+  })
+
+  it('keeps markdown rails pinned to the viewport edges while only the document body has a max width', () => {
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    const layout = document.querySelector('[data-testid="markdown-layout"]')
+    const outlineRail = document.querySelector('nav[aria-label="目录"]')?.closest('aside')
+    const documentColumn = document.querySelector('[data-testid="markdown-body"]')?.parentElement
+
+    expect(layout?.className).toContain('w-full')
+    expect(layout?.className).not.toContain('px-4')
+    expect(layout?.className).not.toContain('py-6')
+    expect(layout?.className).not.toContain('md:px-6')
+    expect(layout?.className).not.toContain('mx-auto')
+    expect(layout?.className).not.toContain('max-w-7xl')
+    expect(outlineRail?.className).toContain('w-52')
+    expect(outlineRail?.className).toContain('px-4')
+    expect(outlineRail?.className).toContain('py-6')
+    expect(outlineRail?.className).not.toContain('hidden')
+    expect(outlineRail?.className).not.toContain('xl:block')
+    expect(documentColumn?.parentElement?.className).toContain('px-4')
+    expect(documentColumn?.parentElement?.className).toContain('py-6')
+    expect(documentColumn?.className).toContain('mx-auto')
+    expect(documentColumn?.className).toContain('max-w-3xl')
+  })
+
   it('opens the comment rail by default when comments exist', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
@@ -45,7 +83,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('Comment body')
   })
 
-  it('creates a comment from selected rendered text', async () => {
+  it('opens a selection action before creating a comment from selected rendered text', async () => {
     renderMarkdown()
     const strongText = document.querySelector('strong')?.firstChild
     if (!strongText) throw new Error('missing strong text')
@@ -59,6 +97,18 @@ describe('DriveMarkdownRenderer', () => {
     await act(async () => {
       document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
     })
+
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(buttonWithText('添加评论')).not.toBeNull()
+    expect(buttonWithText('添加评论').className).toContain('shadow-md')
+    expect(selectionAction()?.className).not.toContain('bg-popover')
+    expect(selectionAction()?.className).not.toContain('border')
+    expect(pendingOverlay()).not.toBeNull()
+    expect(pendingOverlay()?.className).toContain('mix-blend-multiply')
+    expect(pendingMarker()).toBeNull()
+
+    await click(buttonWithText('添加评论'))
+    expect(pendingOverlay()).not.toBeNull()
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
@@ -70,6 +120,25 @@ describe('DriveMarkdownRenderer', () => {
         quote: expect.objectContaining({ exact: '重点' }),
       }),
     }))
+    expect(pendingOverlay()).toBeNull()
+  })
+
+  it('clears the pending marker when the add comment dialog is cancelled', async () => {
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(pendingOverlay()).not.toBeNull()
+    expect(pendingMarker()).toBeNull()
+
+    await click(buttonWithText('添加评论'))
+    await click(buttonWithText('取消'))
+
+    expect(pendingOverlay()).toBeNull()
+    expect(document.body.textContent).not.toContain('添加评论')
   })
 
   it('does not open the composer for logged-out share viewers', async () => {
@@ -81,6 +150,8 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     expect(document.querySelector('textarea')).toBeNull()
+    expect(document.body.textContent).not.toContain('添加评论')
+    expect(pendingOverlay()).toBeNull()
   })
 
   it('does not open the composer for read-only share viewers', async () => {
@@ -103,6 +174,8 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     expect(document.querySelector('textarea')).toBeNull()
+    expect(document.body.textContent).not.toContain('添加评论')
+    expect(pendingOverlay()).toBeNull()
   })
 
   it('hides reply actions for logged-out share viewers', async () => {
@@ -124,17 +197,99 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('添加评论')
     expect(document.querySelector('textarea')).toBeNull()
+    expect(pendingOverlay()).toBeNull()
   })
 
-  it('scrolls to the rendered marker when a thread is focused from the rail', async () => {
+  it('scrolls the preview container to the measured overlay rect when a thread is focused from the rail', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
 
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'center', inline: 'nearest' })
+    expect(scrollIntoViewMock).not.toHaveBeenCalled()
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
+    expect(host?.scrollTop).toBe(80)
+  })
+
+  it('renders existing comments as overlay rectangles and focuses them by click position', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    const overlay = threadOverlay('thread-1')
+    expect(overlay).not.toBeNull()
+    expect(overlay?.className).toContain('mix-blend-multiply')
+    expect(document.querySelector('[data-drive-annotation-thread-id]')).toBeNull()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: 96,
+        clientY: 128,
+      }))
+    })
+
+    expect(document.body.textContent).toContain('评论 1')
+    expect(scrollIntoViewMock).not.toHaveBeenCalled()
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
+  })
+
+  it('uses the precise overlay rect for focus scrolling across table and inline code ranges', async () => {
+    rangeRects = [
+      domRect({ left: 20, top: 40, width: 520, height: 96 }),
+      domRect({ left: 48, top: 58, width: 120, height: 24 }),
+    ]
+    annotationsMock.threads = [
+      thread({ range: { start: 0, end: 4 }, quote: '重点代码' }),
+    ]
+    renderMarkdown({
+      previewData: preview({
+        text: '重点代码',
+        html: '<table><tbody><tr><td><strong>重点</strong><code>代码</code></td></tr></tbody></table>',
+      }),
+    })
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+
+    expect(scrollIntoViewMock).not.toHaveBeenCalled()
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 20, behavior: 'smooth' })
+  })
+
+  it('filters narrow empty overlay rectangles from cross-structure selections', async () => {
+    rangeRects = [
+      domRect({ left: 20, top: 40, width: 1, height: 20 }),
+      domRect({ left: 32, top: 40, width: 120, height: 20 }),
+    ]
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(document.querySelectorAll('[data-drive-annotation-overlay-kind="pending"]')).toHaveLength(1)
+  })
+
+  it('drops broad container overlay rectangles when precise text rectangles overlap them', async () => {
+    rangeRects = [
+      domRect({ left: 20, top: 40, width: 520, height: 96 }),
+      domRect({ left: 48, top: 58, width: 120, height: 24 }),
+    ]
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    const overlays = document.querySelectorAll<HTMLElement>('[data-drive-annotation-overlay-kind="pending"]')
+    expect(overlays).toHaveLength(1)
+    expect(overlays[0]?.style.width).toBe('120px')
   })
 
   it('sorts attached comments by current rendered position', async () => {
@@ -164,12 +319,23 @@ describe('DriveMarkdownRenderer', () => {
 
 function renderMarkdown({
   currentItem = current(),
+  previewData = preview(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
 }: {
   readonly currentItem?: ReturnType<typeof current>
+  readonly previewData?: ReturnType<typeof preview>
   readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
 } = {}) {
   host = document.createElement('div')
+  host.style.overflow = 'auto'
+  Object.defineProperty(host, 'clientHeight', { configurable: true, value: 100 })
+  Object.defineProperty(host, 'scrollTo', {
+    configurable: true,
+    value: vi.fn(function scrollTo(this: HTMLDivElement, options?: ScrollToOptions) {
+      scrollContainerScrollToMock(options)
+      if (typeof options?.top === 'number') this.scrollTop = options.top
+    }),
+  })
   document.body.append(host)
   root = createRoot(host)
   act(() => {
@@ -178,7 +344,7 @@ function renderMarkdown({
         <ToolbarHost />
         <DriveMarkdownRenderer
           current={currentItem}
-          preview={preview()}
+          preview={previewData}
           annotationContext={annotationContext}
         />
       </DriveRendererToolbarProvider>
@@ -209,15 +375,32 @@ function current({ name = 'notes.md' }: { readonly name?: string } = {}) {
   }
 }
 
-function preview() {
+function preview({
+  outline = [],
+  html = '<p>这是 <strong>重点</strong> 内容</p>',
+  text = '这是 重点 内容',
+}: {
+  readonly outline?: ReturnType<typeof outlineItem>[]
+  readonly html?: string
+  readonly text?: string
+} = {}) {
   return {
     kind: 'markdown' as const,
-    text: '这是 重点 内容',
-    html: '<p>这是 <strong>重点</strong> 内容</p>',
-    outline: [],
+    text,
+    html,
+    outline,
     truncated: false,
     imageUrl: null,
     visitUrl: null,
+  }
+}
+
+function outlineItem() {
+  return {
+    id: 'heading-1',
+    text: '标题',
+    depth: 1,
+    children: [],
   }
 }
 
@@ -298,6 +481,10 @@ function buttonWithText(text: string) {
   return button as HTMLButtonElement
 }
 
+function selectionAction() {
+  return document.querySelector('[data-drive-annotation-selection-action]')
+}
+
 function elementWithText(text: string) {
   const element = Array.from(document.querySelectorAll('section, article, p')).find((item) => item.textContent?.includes(text))
   if (!element) throw new Error(`Missing element ${text}`)
@@ -308,6 +495,42 @@ function textarea() {
   const element = document.querySelector('textarea')
   if (!element) throw new Error('Missing textarea')
   return element as HTMLTextAreaElement
+}
+
+function pendingMarker() {
+  return document.querySelector('[data-drive-annotation-pending="true"]')
+}
+
+function pendingOverlay() {
+  return document.querySelector('[data-drive-annotation-overlay-kind="pending"]')
+}
+
+function threadOverlay(threadId: string) {
+  return document.querySelector(`[data-drive-annotation-overlay-thread-id="${threadId}"]`)
+}
+
+function domRect({
+  left = 80,
+  top = 120,
+  width = 48,
+  height = 20,
+}: {
+  readonly left?: number
+  readonly top?: number
+  readonly width?: number
+  readonly height?: number
+} = {}): DOMRect {
+  return {
+    x: left,
+    y: top,
+    width,
+    height,
+    top,
+    right: left + width,
+    bottom: top + height,
+    left,
+    toJSON: () => ({}),
+  } as DOMRect
 }
 
 function selectStrongText() {

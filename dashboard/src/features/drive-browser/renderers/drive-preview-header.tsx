@@ -29,6 +29,7 @@ export function DrivePreviewHeader({
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
   const systemActions = getDrivePreviewSystemActions(snapshot, selectedRendererId)
+  const showActionSeparator = rendererItems.length > 0 && systemActions.length > 0
 
   return (
     <header data-drive-preview-header='true' className='flex shrink-0 flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
@@ -45,6 +46,13 @@ export function DrivePreviewHeader({
       </div>
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
         {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+        {showActionSeparator ? (
+          <span
+            aria-hidden='true'
+            data-drive-preview-action-separator='true'
+            className='h-6 border-l border-border'
+          />
+        ) : null}
         {systemActions.map((action) => {
           if (action.kind === 'link') {
             return (

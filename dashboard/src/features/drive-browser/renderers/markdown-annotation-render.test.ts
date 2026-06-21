@@ -4,12 +4,42 @@ import { describe, expect, it } from 'vitest'
 import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
 
 describe('renderMarkdownAnnotationHtml', () => {
-  it('wraps attached annotation ranges in rendered markdown html', () => {
-    const result = renderMarkdownAnnotationHtml('<p>这是 <strong>重点</strong> 内容</p>', [thread()])
+  it('resolves attached annotation ranges without changing rendered markdown html', () => {
+    const html = '<p>这是 <strong>重点</strong> 内容</p>'
+    const result = renderMarkdownAnnotationHtml(html, [thread()])
 
-    expect(result.html).toContain('data-drive-annotation-thread-id="thread-1"')
-    expect(result.html).toContain('重点')
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('data-drive-annotation-thread-id')
+    expect(result.html).not.toContain('bg-amber')
+    expect(result.html).not.toContain('underline')
     expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'attached' })
+  })
+
+  it('keeps markdown element structure unchanged for ranges across table and inline code', () => {
+    const html = '<table><tbody><tr><td><strong>重点</strong><code>代码</code></td></tr></tbody></table>'
+    const result = renderMarkdownAnnotationHtml(html, [thread({
+      range: { start: 0, end: 4 },
+      quote: { exact: '重点代码', prefix: '', suffix: '' },
+    })])
+
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('<span')
+  })
+
+  it('does not write pending annotation markup into markdown html', () => {
+    const html = '<p>这是 <strong>重点</strong> 内容</p>'
+    const result = renderMarkdownAnnotationHtml(html, [], {
+      schemaVersion: 1,
+      kind: 'textRange',
+      surface: 'markdownRenderedText',
+      range: { start: 3, end: 5 },
+      quote: { exact: '重点', prefix: '这是 ', suffix: ' 内容' },
+    })
+
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('data-drive-annotation-pending')
+    expect(result.html).not.toContain('data-drive-annotation-thread-id')
+    expect(result.html).not.toContain('bg-amber')
   })
 
   it('reattaches shifted ranges by quote context', () => {
@@ -18,7 +48,7 @@ describe('renderMarkdownAnnotationHtml', () => {
       quote: { exact: '重点', prefix: '这是', suffix: '内容' },
     })])
 
-    expect(result.html).toContain('data-drive-annotation-thread-id="thread-1"')
+    expect(result.html).toBe('<p>新增段落。这是重点内容。</p>')
     expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'shifted', range: { start: 7, end: 9 } })
   })
 

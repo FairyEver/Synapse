@@ -40,12 +40,41 @@ describe('MarkdownCommentsRail', () => {
     expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: 'comment-1', body: 'Reply body' })
   })
 
+  it('shows reply failures instead of silently leaving the composer unchanged', async () => {
+    const onReply = vi.fn(async () => {
+      throw new Error('回复失败')
+    })
+    renderRail({ onReply })
+
+    await click(buttonWithText('回复'))
+    await inputValue(textarea(), 'Reply body')
+    await click(buttonWithText('发送'))
+
+    expect(document.body.textContent).toContain('回复失败')
+    expect(textarea().value).toBe('Reply body')
+  })
+
+  it('does not focus the thread when reply actions are clicked', async () => {
+    const onFocusThread = vi.fn()
+    const onReply = vi.fn(async () => undefined)
+    renderRail({ onFocusThread, onReply })
+
+    await click(buttonWithText('回复'))
+    await inputValue(textarea(), 'Reply body')
+    await click(buttonWithText('发送'))
+
+    expect(onReply).toHaveBeenCalled()
+    expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
   it('hides edit and delete actions when permissions are false', () => {
     renderRail({ threads: [thread({ canEdit: false, canDelete: false, canDeleteThread: false })] })
 
     expect(document.body.textContent).toContain('回复')
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除')
+    expect(buttonWithLabel('评论操作')).toBeNull()
+    expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
   it('hides reply actions when commenting is not allowed', () => {
@@ -59,6 +88,99 @@ describe('MarkdownCommentsRail', () => {
 
     expect(document.body.textContent).toContain('评论者')
     expect(document.body.textContent).not.toContain('user@example.com')
+  })
+
+  it('uses restrained product styling for active cards and comment actions', () => {
+    renderRail({ activeThreadId: 'thread-1' })
+
+    expect(threadCard('thread-1').className).toContain('border-ring')
+    expect(threadCard('thread-1').className).not.toContain('border-foreground')
+    expect(buttonWithText('回复').className).toContain('text-xs')
+    expect(buttonWithText('回复').className).toContain('h-7')
+  })
+
+  it('keeps the composer compact and marks async errors as status text', async () => {
+    const onReply = vi.fn(async () => {
+      throw new Error('回复失败')
+    })
+    renderRail({ onReply })
+
+    await click(buttonWithText('回复'))
+    expect(textarea().className).toContain('shadow-none')
+    await inputValue(textarea(), 'Reply body')
+    await click(buttonWithText('发送'))
+
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
+  })
+
+  it('positions attached comments by their markdown anchor', () => {
+    renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })] })
+
+    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 48px')
+  })
+
+  it('keeps the rail title above positioned comment cards', () => {
+    renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })] })
+
+    expect(railTitle().className).toContain('sticky')
+    expect(railTitle().className).toContain('z-10')
+  })
+
+  it('keeps nearby anchored comments from overlapping', () => {
+    renderRail({
+      threads: [
+        thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
+        thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+      ],
+    })
+
+    expect(threadTop('thread-2')).toBeGreaterThan(threadTop('thread-1') + 12)
+  })
+
+  it('keeps own comment deletion in the comment action menu and confirms before deleting', async () => {
+    const onDeleteComment = vi.fn(async () => undefined)
+    renderRail({
+      onDeleteComment,
+      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: false })],
+    })
+
+    expect(document.body.textContent).toContain('编辑')
+    expect(document.body.textContent).not.toContain('删除评论')
+
+    await click(requiredButtonWithLabel('评论操作'))
+    await click(actionElementWithText('删除评论'))
+
+    expect(document.body.textContent).toContain('删除评论？')
+    expect(onDeleteComment).not.toHaveBeenCalled()
+
+    await click(buttonWithText('删除评论'))
+
+    expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
+  })
+
+  it('keeps owner discussion deletion in the thread action menu without single-comment deletion', async () => {
+    const onDeleteThread = vi.fn(async () => undefined)
+    renderRail({
+      onDeleteThread,
+      threads: [thread({ canEdit: false, canDelete: false, canDeleteThread: true })],
+    })
+
+    expect(document.body.textContent).not.toContain('编辑')
+    expect(document.body.textContent).not.toContain('删除讨论')
+    expect(buttonWithLabel('评论操作')).toBeNull()
+
+    await click(requiredButtonWithLabel('讨论操作'))
+
+    expect(document.body.textContent).toContain('删除讨论')
+    expect(document.body.textContent).not.toContain('删除评论')
+
+    await click(actionElementWithText('删除讨论'))
+    expect(document.body.textContent).toContain('删除讨论？')
+    expect(onDeleteThread).not.toHaveBeenCalled()
+
+    await click(buttonWithText('删除讨论'))
+
+    expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
   })
 })
 
@@ -86,47 +208,56 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
 const canReply = true
 
 function thread(input: {
+  readonly id?: string
+  readonly body?: string
+  readonly anchorStatus?: 'attached' | 'shifted' | 'orphaned'
+  readonly anchorTop?: number | null
   readonly canEdit?: boolean
   readonly canDelete?: boolean
   readonly canDeleteThread?: boolean
   readonly displayName?: string | null
 } = {}) {
   const displayName = 'displayName' in input ? input.displayName : 'User'
+  const id = input.id ?? 'thread-1'
   return {
-    id: 'thread-1',
-    itemId: 'item-1',
-    baseVersionId: 'version-1',
-    targetKind: 'textRange' as const,
-    target: {
-      schemaVersion: 1 as const,
-      kind: 'textRange' as const,
-      surface: 'markdownRenderedText' as const,
-      range: { start: 0, end: 4 },
-      quote: { exact: 'Note', prefix: '', suffix: '' },
-    },
-    anchorStatus: 'orphaned' as const,
-    author: { id: 'user-1', email: 'user@example.com', displayName },
-    comments: [{
-      id: 'comment-1',
-      threadId: 'thread-1',
-      parentCommentId: null,
-      body: 'First line\nSecond line\n<strong>unsafe</strong>',
+    thread: {
+      id,
+      itemId: 'item-1',
+      baseVersionId: 'version-1',
+      targetKind: 'textRange' as const,
+      target: {
+        schemaVersion: 1 as const,
+        kind: 'textRange' as const,
+        surface: 'markdownRenderedText' as const,
+        range: { start: 0, end: 4 },
+        quote: { exact: 'Note', prefix: '', suffix: '' },
+      },
+      anchorStatus: input.anchorStatus ?? 'orphaned' as const,
       author: { id: 'user-1', email: 'user@example.com', displayName },
+      comments: [{
+        id: 'comment-1',
+        threadId: id,
+        parentCommentId: null,
+        body: input.body ?? 'First line\nSecond line\n<strong>unsafe</strong>',
+        author: { id: 'user-1', email: 'user@example.com', displayName },
+        createdAt: '2026-06-21T00:00:00.000Z',
+        updatedAt: '2026-06-21T00:00:00.000Z',
+        editedAt: null,
+        deletedAt: null,
+        deleted: false,
+        permissions: { canEdit: input.canEdit ?? true, canDelete: input.canDelete ?? true },
+      }],
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: '2026-06-21T00:00:00.000Z',
-      editedAt: null,
-      deletedAt: null,
-      deleted: false,
-      permissions: { canEdit: input.canEdit ?? true, canDelete: input.canDelete ?? true },
-    }],
-    createdAt: '2026-06-21T00:00:00.000Z',
-    updatedAt: '2026-06-21T00:00:00.000Z',
-    permissions: { canDelete: input.canDeleteThread ?? true },
+      permissions: { canDelete: input.canDeleteThread ?? true },
+    },
+    anchorTop: input.anchorTop ?? null,
   }
 }
 
 async function click(element: HTMLElement) {
   await act(async () => {
+    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     element.click()
   })
 }
@@ -137,10 +268,50 @@ function buttonWithText(text: string) {
   return button as HTMLButtonElement
 }
 
+function actionElementWithText(text: string) {
+  const element = Array.from(document.querySelectorAll<HTMLElement>('button, [role="menuitem"]'))
+    .find((item) => item.textContent?.includes(text))
+  if (!element) throw new Error(`Missing action ${text}`)
+  return element
+}
+
+function buttonWithLabel(label: string) {
+  return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+}
+
+function requiredButtonWithLabel(label: string) {
+  const button = buttonWithLabel(label)
+  if (!button) throw new Error(`Missing button ${label}`)
+  return button
+}
+
 function textarea() {
   const element = document.querySelector('textarea')
   if (!element) throw new Error('Missing textarea')
   return element as HTMLTextAreaElement
+}
+
+function threadSection(threadId: string) {
+  const element = document.querySelector(`[data-markdown-comment-thread-id="${threadId}"]`)
+  if (!(element instanceof HTMLElement)) throw new Error(`Missing thread ${threadId}`)
+  return element
+}
+
+function threadCard(threadId: string) {
+  const element = threadSection(threadId).querySelector('section')
+  if (!(element instanceof HTMLElement)) throw new Error(`Missing thread card ${threadId}`)
+  return element
+}
+
+function threadTop(threadId: string): number {
+  const top = threadSection(threadId).style.top
+  return Number(top.replace('px', ''))
+}
+
+function railTitle() {
+  const element = document.querySelector('aside > div')
+  if (!(element instanceof HTMLElement)) throw new Error('Missing rail title')
+  return element
 }
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {

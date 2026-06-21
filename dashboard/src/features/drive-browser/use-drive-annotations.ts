@@ -46,18 +46,20 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
   const replyMutation = useMutation({
     mutationFn: (variables: { readonly threadId: string } & DriveAnnotationReplyInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
+      const { threadId, ...body } = variables
       return input.context === 'owner'
-        ? driveAnnotationApi.replyOwner(input.itemId, variables.threadId, variables)
-        : driveAnnotationApi.replyShare(input.shareId, input.itemId, variables.threadId, variables)
+        ? driveAnnotationApi.replyOwner(input.itemId, threadId, body)
+        : driveAnnotationApi.replyShare(input.shareId, input.itemId, threadId, body)
     },
     onSuccess: invalidate,
   })
   const updateMutation = useMutation({
     mutationFn: (variables: { readonly commentId: string } & DriveAnnotationCommentUpdateInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
+      const { commentId, ...body } = variables
       return input.context === 'owner'
-        ? driveAnnotationApi.updateOwnerComment(input.itemId, variables.commentId, variables)
-        : driveAnnotationApi.updateShareComment(input.shareId, input.itemId, variables.commentId, variables)
+        ? driveAnnotationApi.updateOwnerComment(input.itemId, commentId, body)
+        : driveAnnotationApi.updateShareComment(input.shareId, input.itemId, commentId, body)
     },
     onSuccess: invalidate,
   })

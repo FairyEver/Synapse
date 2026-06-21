@@ -28,6 +28,7 @@ describe("DriveAnnotationService", () => {
       where: expect.objectContaining({ id: "item-1", userId: "owner-1" }),
     }))
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
+    expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: false })
     expect(result[0]?.permissions.canDelete).toBe(true)
   })
 
@@ -69,6 +70,25 @@ describe("DriveAnnotationService", () => {
   it("rejects editing another user's comment", async () => {
     await expect(service.updateOwnerComment("owner-1", "item-1", "comment-1", { body: "updated" }))
       .rejects.toBeInstanceOf(ForbiddenException)
+  })
+
+  it("allows authors to delete their own comments", async () => {
+    const ownComment = commentRecord({ createdByUserId: "owner-1" })
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(ownComment)
+
+    await service.deleteOwnerComment("owner-1", "item-1", "comment-1")
+
+    expect(prisma.driveAnnotationComment.update).toHaveBeenCalledWith({
+      where: { id: "comment-1" },
+      data: { deletedAt: expect.any(Date) },
+    })
+  })
+
+  it("rejects file owners deleting another user's single comment", async () => {
+    await expect(service.deleteOwnerComment("owner-1", "item-1", "comment-1"))
+      .rejects.toBeInstanceOf(ForbiddenException)
+
+    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
   })
 
   it("lets the file owner delete any thread", async () => {
@@ -170,6 +190,32 @@ describe("DriveAnnotationService", () => {
 
     expect(result[0]?.author.email).toBeNull()
     expect(result[0]?.comments[0]?.author.email).toBeNull()
+    expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: false })
+    expect(result[0]?.permissions.canDelete).toBe(false)
+  })
+
+  it("does not project single-comment delete permission to the share file owner", async () => {
+    const result = await service.listShareAnnotations({
+      actorUserId: "owner-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+    })
+
+    expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: false })
+    expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("rejects share file owners deleting another user's single comment", async () => {
+    await expect(service.deleteShareComment({
+      actorUserId: "owner-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+    })).rejects.toBeInstanceOf(ForbiddenException)
+
+    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
   })
 })
 
