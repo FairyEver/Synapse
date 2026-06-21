@@ -35,6 +35,15 @@ async function previewForPath(localPath: string) {
   })
 }
 
+function dirent(name: string): Dirent {
+  return {
+    name,
+    isDirectory: () => false,
+    isFile: () => true,
+    isSymbolicLink: () => false,
+  } as Dirent
+}
+
 describe("repository initialization safety", () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -60,5 +69,21 @@ describe("repository initialization safety", () => {
     const preview = await previewForPath("c:\\workspace\\synapse")
 
     expect(preview.dangerFlags).toContain("synapse-source-checkout")
+  })
+
+  it("short-circuits dangerous previews before statting top-level entries", async () => {
+    mockPlatform("darwin")
+    osMock.homedir.mockReturnValue("/Users/test")
+    vi.spyOn(process, "cwd").mockReturnValue("/tmp/synapse")
+
+    const preview = await createRepositoryInitializationPreview({
+      localPath: "/Users/test/Downloads",
+      entries: [dirent("missing-large-file.bin")],
+    })
+
+    expect(preview.dangerFlags).toContain("downloads")
+    expect(preview.isEmpty).toBe(false)
+    expect(preview.nonGitEntries).toEqual([])
+    expect(preview.operationToken).toBe("")
   })
 })

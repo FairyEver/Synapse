@@ -121,9 +121,19 @@ async function createRepositoryInitializationPreview(input: {
   readonly localPath: string
   readonly entries: readonly Dirent[]
 }): Promise<SynapseRepositoryInitializationPreview> {
+  const dangerFlags = detectDangerFlags(input.localPath, input.entries)
   const nonGitEntries = input.entries
     .filter((entry) => entry.name !== ".git")
     .filter((entry) => !isInitializationBackupEntry(entry.name))
+
+  if (dangerFlags.length > 0) {
+    return {
+      isEmpty: nonGitEntries.length === 0,
+      nonGitEntries: [],
+      operationToken: "",
+      dangerFlags,
+    }
+  }
 
   const fingerprints = await Promise.all(nonGitEntries.map(async (entry) => {
     const stats = await lstat(path.join(input.localPath, entry.name))
@@ -144,7 +154,7 @@ async function createRepositoryInitializationPreview(input: {
       localPath: path.resolve(input.localPath),
       repositoryUuid: input.repositoryUuid ?? "",
     }),
-    dangerFlags: detectDangerFlags(input.localPath, input.entries),
+    dangerFlags,
   }
 }
 
