@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { AdminDriveItemRow } from '@/lib/api'
 import {
   canDeleteAdminDriveItem,
+  driveDisplayStatusLabel,
   driveItemTypeLabel,
+  driveLifecycleStatusLabel,
   driveStatusLabel,
   formatDriveBytes,
 } from '.'
@@ -13,6 +15,23 @@ describe('drive admin format helpers', () => {
     expect(driveItemTypeLabel('folder')).toBe('文件夹')
     expect(driveStatusLabel('active')).toBe('正常')
     expect(driveStatusLabel('delete_pending')).toBe('删除中')
+    expect(driveLifecycleStatusLabel('trashed')).toBe('已移到回收站')
+    expect(driveLifecycleStatusLabel('hidden')).toBe('已隐藏')
+  })
+
+  it('prefers lifecycle state for the visible admin drive status', () => {
+    expect(driveDisplayStatusLabel(createDriveItem({
+      storageStatus: 'active',
+      lifecycleStatus: 'trashed',
+    }))).toBe('已移到回收站')
+    expect(driveDisplayStatusLabel(createDriveItem({
+      storageStatus: 'active',
+      lifecycleStatus: 'hidden',
+    }))).toBe('已隐藏')
+    expect(driveDisplayStatusLabel(createDriveItem({
+      storageStatus: 'delete_pending',
+      lifecycleStatus: 'active',
+    }))).toBe('删除中')
   })
 
   it('formats byte values', () => {

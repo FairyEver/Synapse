@@ -121,8 +121,8 @@ export default function DriveAdminPage() {
           <DataTableColumnHeader column={column} title='状态' />
         ),
         cell: ({ row }) => (
-          <Badge variant={row.original.storageStatus === 'active' ? 'default' : 'secondary'}>
-            {driveStatusLabel(row.original.storageStatus)}
+          <Badge variant={isAdminDriveItemNormal(row.original) ? 'default' : 'secondary'}>
+            {driveDisplayStatusLabel(row.original)}
           </Badge>
         ),
       },
@@ -371,6 +371,25 @@ export function driveStatusLabel(status: AdminDriveItemRow['storageStatus']) {
     failed: '失败',
   }
   return labels[status]
+}
+
+export function driveLifecycleStatusLabel(status: AdminDriveItemRow['lifecycleStatus']) {
+  const labels: Record<AdminDriveItemRow['lifecycleStatus'], string> = {
+    active: '正常',
+    trashed: '已移到回收站',
+    hidden: '已隐藏',
+    legacy_missing: '不可用',
+  }
+  return labels[status]
+}
+
+export function driveDisplayStatusLabel(item: AdminDriveItemRow) {
+  if (item.lifecycleStatus !== 'active') return driveLifecycleStatusLabel(item.lifecycleStatus)
+  return driveStatusLabel(item.storageStatus)
+}
+
+function isAdminDriveItemNormal(item: AdminDriveItemRow) {
+  return item.lifecycleStatus === 'active' && item.storageStatus === 'active'
 }
 
 export function canDeleteAdminDriveItem(item: AdminDriveItemRow) {
