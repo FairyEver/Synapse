@@ -494,6 +494,53 @@ describe("LiveConnectionService", () => {
     expect(timers.timers).toHaveLength(1)
   })
 
+  it("schedules reconnect when startup fails before socket creation", async () => {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const eventBus = { emit: vi.fn() }
+    const clientIdStore = {
+      getOrCreate: vi.fn()
+        .mockRejectedValueOnce(new Error("client id unavailable"))
+        .mockResolvedValueOnce("client-a"),
+    }
+    const createSocket = vi.fn(() => socket as never)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: clientIdStore as never,
+      createSocket,
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+    service.setEventBus(eventBus as never)
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      lastError: "连接失败",
+    })
+    expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 2_000)
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "live",
+      type: "live.stateChanged",
+    }))
+
+    timers.timers[0]?.callback()
+    await flushPromises()
+
+    expect(createSocket).toHaveBeenCalledWith("ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer access-token" },
+    })
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      clientInstanceId: "client-a",
+      lastError: null,
+    })
+  })
+
   it("does not reset reconnect attempts before welcome", async () => {
     const firstSocket = new FakeSocket()
     const secondSocket = new FakeSocket()

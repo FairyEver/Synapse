@@ -99,7 +99,7 @@ export class LiveConnectionService {
       return
     }
 
-    void this.connect()
+    this.startConnect()
   }
 
   async connect(): Promise<void> {
@@ -325,8 +325,11 @@ export class LiveConnectionService {
     this.startHeartbeat(intervalMs)
   }
 
-  private scheduleReconnect(error: string): void {
-    if (this.closedIntentionally || this.state.status === "unauthenticated") {
+  private scheduleReconnect(error: string, options: { readonly allowUnauthenticatedState?: boolean } = {}): void {
+    if (
+      this.closedIntentionally
+      || (this.state.status === "unauthenticated" && !options.allowUnauthenticatedState)
+    ) {
       return
     }
 
@@ -342,8 +345,29 @@ export class LiveConnectionService {
     })
     this.reconnectTimer = this.setTimer(() => {
       this.reconnectTimer = null
-      void this.connect()
+      this.startConnect()
     }, delay)
+  }
+
+  private startConnect(): void {
+    const generation = this.connectionGeneration + 1
+    void this.connect().catch((error: unknown) => {
+      this.handleConnectStartupFailure(error, generation)
+    })
+  }
+
+  private handleConnectStartupFailure(error: unknown, generation: number): void {
+    if (!this.isCurrentGeneration(generation)) return
+    logger.warn("Live connection startup failed.", {
+      ...this.liveErrorMetadata(error),
+    })
+    const socket = this.socket
+    this.socket = null
+    this.clearHeartbeat()
+    this.clearServerTimeout()
+    if (socket) socket.close(1000, "connect_failed")
+    this.closedIntentionally = false
+    this.scheduleReconnect("连接失败", { allowUnauthenticatedState: true })
   }
 
   private closeSocket(reason: string): void {
@@ -406,7 +430,7 @@ export class LiveConnectionService {
           })
           return
         }
-        void this.connect()
+        this.startConnect()
       })
       .catch((error: unknown) => {
         logger.warn("Live auth refresh failed.", {
