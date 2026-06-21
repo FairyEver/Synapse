@@ -10,11 +10,11 @@ const SENSITIVE_NON_OBJECT_LINE =
   "ANTHROPIC_AUTH_TOKEN=sk-live-secret Authorization: Bearer sk-live-bearer " +
   '{"token":"data-server-token"} /Users/liyang/project/file.ts'
 
-function writeJsonl(lines: readonly string[]): string {
+function writeJsonl(lines: readonly string[], newline = "\n"): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-conversation-parser-"))
   tempDirs.push(dir)
   const file = path.join(dir, "session-1.jsonl")
-  fs.writeFileSync(file, `${lines.join("\n")}\n`, "utf8")
+  fs.writeFileSync(file, `${lines.join(newline)}${newline}`, "utf8")
   return file
 }
 
@@ -154,6 +154,25 @@ describe("parseCcConversationFile", () => {
 })
 
 describe("parseCcConversationFileChunk", () => {
+  it("resumes CRLF transcripts from the correct byte cursor", async () => {
+    const lines = [
+      JSON.stringify({ type: "user", sessionId: "s1", uuid: "u1", message: { role: "user", content: "one" } }),
+      JSON.stringify({ type: "assistant", sessionId: "s1", uuid: "a1", message: { role: "assistant", content: "two" } }),
+      JSON.stringify({ type: "user", sessionId: "s1", uuid: "u2", message: { role: "user", content: "three" } }),
+    ]
+    const file = writeJsonl(lines, "\r\n")
+
+    const first = await parseCcConversationFileChunk(file, { limit: 2 })
+    const second = await parseCcConversationFileChunk(file, { cursor: first.nextCursor, limit: 2 })
+
+    expect(first.events.map((event) => event.uuid)).toEqual(["u1", "a1"])
+    expect(first.parseErrors).toEqual([])
+    expect(first.nextCursor).toBeDefined()
+    expect(second.events.map((event) => event.uuid)).toEqual(["u2"])
+    expect(second.parseErrors).toEqual([])
+    expect(second.nextCursor).toBeUndefined()
+  })
+
   it("redacts non-object JSON parse error raw lines", async () => {
     const file = writeJsonl([JSON.stringify(SENSITIVE_NON_OBJECT_LINE)])
 
