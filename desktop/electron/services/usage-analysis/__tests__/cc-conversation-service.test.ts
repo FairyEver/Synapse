@@ -242,6 +242,56 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     }))
   })
 
+  it("returns batched conversation aggregates for visible sessions", () => {
+    const { db } = setupFixture()
+    const prepareSpy = vi.spyOn(db, "prepare")
+    const service = new CcConversationService({ db, logger })
+    insertUsage(db, {
+      id: "usage-2",
+      sessionId: "session-1",
+      timestampMs: Date.parse("2026-05-27T01:02:00.000Z"),
+      input: 20,
+      output: 5,
+      cost: 0.02,
+    })
+    insertSession(db, { sessionId: "session-2", filePath: "/tmp/session-2.jsonl", workspaceLabel: "/repo/two" })
+    db.prepare("UPDATE cc_sessions SET ended_at = ? WHERE session_id = ?").run("2026-05-27T02:10:00.000Z", "session-2")
+    insertUsage(db, {
+      id: "usage-3",
+      sessionId: "session-2",
+      timestampMs: Date.parse("2026-05-27T02:05:00.000Z"),
+      input: 7,
+      output: 3,
+      cost: 0.03,
+    })
+
+    const result = service.listConversations({ preset: "all", limit: 2 })
+    const preparedSql = prepareSpy.mock.calls.map(([sql]) => String(sql))
+
+    expect(result.total).toBe(2)
+    expect(result.items.map((item) => item.sessionId)).toEqual(["session-2", "session-1"])
+    expect(result.items.find((item) => item.sessionId === "session-1")).toEqual(expect.objectContaining({
+      tokens: 40,
+      estimatedCost: 0.03,
+      lastUsedAt: "2026-05-27T01:02:00.000Z",
+    }))
+    expect(result.items.find((item) => item.sessionId === "session-2")).toEqual(expect.objectContaining({
+      tokens: 10,
+      estimatedCost: 0.03,
+      lastUsedAt: "2026-05-27T02:05:00.000Z",
+    }))
+    expect(preparedSql.filter((sql) =>
+      sql.includes("FROM cc_usage_events")
+      && sql.includes("WHERE session_id IN")
+      && sql.includes("GROUP BY session_id")
+    )).toHaveLength(1)
+    expect(preparedSql.some((sql) =>
+      sql.includes("FROM cc_usage_events")
+      && sql.includes("WHERE session_id = ?")
+      && sql.includes("GROUP BY session_id")
+    )).toBe(false)
+  })
+
   it("allows record batches beyond the initial 200 rows", () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db, logger })

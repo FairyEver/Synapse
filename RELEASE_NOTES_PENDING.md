@@ -25,6 +25,7 @@
 - Git 仓库列表在 Windows 上会识别大小写不同但指向同一目录的路径，避免同一个仓库被重复登记。
 - Workflow MCP 内置 Skill 会正确说明脚本节点的默认 shell：Windows 留空时使用 `cmd`，macOS/Linux 使用 `posix`。
 - Usage Analysis 的原文搜索加载更多会从下一批会话继续扫描，并对输入做短暂去抖，减少重复读取历史 JSONL 的开销。
+- Usage Analysis 的 Claude Code 原文搜索和会话列表会批量汇总候选会话用量，历史会话较多时减少大量重复数据库查询。
 - Workflow MCP 指南补齐 Claude Code 节点说明，Agent 通过指南创建本机 Claude Code 工作流时不再误以为只有 Codex 节点可用。
 - 内容商店 Skill 编辑器会在选择文件时立即拦截超出大小上限的附件，避免先读入大文件再到保存阶段失败。
 - Git 环境页改为更轻量的诊断布局。长路径、PATH 和远端分支会在页面内换行展示，不再把右侧内容挤出屏幕。
