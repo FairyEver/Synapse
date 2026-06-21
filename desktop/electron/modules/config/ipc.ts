@@ -10,6 +10,7 @@ import { app, BrowserWindow } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { EventBus } from "../../runtime/event-bus"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
 import { sanitizeConfigPatchForLog } from "../../../src/lib/config-log-redaction"
@@ -115,6 +116,7 @@ export const configIpcModule: IpcModule = {
           }
 
           recordVariableAudits(ctx, variableAudits, "allowed")
+          emitVariablesUpdated(ctx, variableAudits)
 
           logger.info(
             `Config updated. activeRepoUuid: ${config.activeRepoUuid}, repositoryCount: ${config.repositories.length}`
@@ -503,6 +505,24 @@ function recordVariableAudits(
       metadata: metadata ? { ...audit.metadata, ...metadata } : audit.metadata,
     })
   }
+}
+
+function emitVariablesUpdated(ctx: IpcHandlerContext, audits: readonly VariableAuditEntry[]): void {
+  if (audits.length === 0) {
+    return
+  }
+  const timestamp = new Date().toISOString()
+  const eventBus = ctx.resolve<EventBus>("core.event-bus")
+  eventBus.emit({
+    domain: "repository",
+    type: "repository.updated",
+    payload: {
+      operation: "variables",
+      completedAt: timestamp,
+      message: "变量已更新",
+    },
+    timestamp,
+  })
 }
 
 async function flushAuditSink(auditSink: AuditSink): Promise<void> {

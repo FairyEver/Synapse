@@ -192,6 +192,43 @@ describe("configIpcModule", () => {
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("phone-secret")
   })
 
+  it("broadcasts repository variable refresh after settings variable patches", async () => {
+    const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    previousConfig.global.variables = [{ name: "TOKEN", value: "old-secret" }]
+    const nextConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    nextConfig.global.variables = [{ name: "TOKEN", value: "new-secret" }]
+    vi.mocked(configStore.load).mockResolvedValue(previousConfig)
+    vi.mocked(configStore.update).mockResolvedValue(nextConfig)
+    const eventBus = { emit: vi.fn() }
+    const harness = createHarness({ eventBus })
+
+    await harness.invoke("synapse:config:update", {
+      global: { variables: nextConfig.global.variables },
+    })
+
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "repository",
+      type: "repository.updated",
+      payload: expect.objectContaining({
+        operation: "variables",
+        message: "变量已更新",
+      }),
+    }))
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("new-secret")
+  })
+
+  it("does not broadcast repository variable refresh for unrelated config patches", async () => {
+    vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
+    const eventBus = { emit: vi.fn() }
+    const harness = createHarness({ eventBus })
+
+    await harness.invoke("synapse:config:update", {
+      agent: { defaultPermissionMode: "plan" },
+    })
+
+    expect(eventBus.emit).not.toHaveBeenCalled()
+  })
+
   it("records failed secret write audits when variable patch persistence fails", async () => {
     const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
     previousConfig.global.variables = [{ name: "TOKEN", value: "old-secret" }]
@@ -372,6 +409,9 @@ function createHarness(options: {
     readonly list: ReturnType<typeof vi.fn>
     readonly record: ReturnType<typeof vi.fn>
   }
+  readonly eventBus?: {
+    readonly emit: ReturnType<typeof vi.fn>
+  }
 } = {}) {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -387,6 +427,9 @@ function createHarness(options: {
         list: vi.fn(() => []),
         record: vi.fn(),
       }) as T
+    }
+    if (serviceId === "core.event-bus") {
+      return (options.eventBus ?? { emit: vi.fn() }) as T
     }
     throw new Error(`Unexpected service id: ${serviceId}`)
   }
