@@ -552,11 +552,14 @@ export function maskDriveShareUrl(value: string): string {
 export function maskDriveBrowserUrl(value: string): string {
   try {
     const parsed = new URL(value)
+    const userinfoChanged = parsed.username !== "" || parsed.password !== ""
+    parsed.username = ""
+    parsed.password = ""
     const maskedPathname = maskDriveBrowserPath(parsed.pathname)
     const pathChanged = maskedPathname !== parsed.pathname
     parsed.pathname = maskedPathname
     const queryChanged = maskSensitiveDriveSearchParams(parsed.searchParams)
-    return pathChanged || queryChanged ? parsed.toString() : value
+    return userinfoChanged || pathChanged || queryChanged ? parsed.toString() : value
   } catch {
     return maskSensitiveDriveQuery(maskDriveBrowserPath(value))
   }

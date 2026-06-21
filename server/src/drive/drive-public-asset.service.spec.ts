@@ -370,11 +370,12 @@ describe("DrivePublicAssetService", () => {
       method: "GET",
       statusCode: 200,
       bytes: 8n,
-      referer: "https://synapse.example/share/shr_secret/items/item_secret?password=secret&token=tok_123",
+      referer: "https://reader:secret-token@synapse.example/share/shr_secret/items/item_secret?password=secret&token=tok_123",
     })
 
     const stored = [...prisma.__debug.publicAssetAccessLogs.values()][0]
     expect(stored.referer).toBe("https://synapse.example/share/***/items/***?password=***&token=***")
+    expect(stored.referer).not.toContain("secret-token")
   })
 
   it("sanitizes existing public asset access referers for admin responses", async () => {
@@ -392,13 +393,14 @@ describe("DrivePublicAssetService", () => {
         method: "GET",
         statusCode: 200,
         bytes: 8n,
-        referer: "https://synapse.example/files/asset_secret?Password=secret&token=tok_123",
+        referer: "https://reader:secret-token@synapse.example/files/asset_secret?Password=secret&token=tok_123",
       },
     })
 
     const logs = await service.listAdminAccessLogs(asset.assetId, { page: 1, pageSize: 20, sortBy: "accessedAt", sortOrder: "desc" })
 
     expect(logs.data[0].referer).toBe("https://synapse.example/files/***?Password=***&token=***")
+    expect(logs.data[0].referer).not.toContain("secret-token")
   })
 
   it("lists hidden and trashed public assets for admins with owner metadata", async () => {

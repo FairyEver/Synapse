@@ -142,6 +142,13 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.d2.pub/files/***?password=***&token=***&name=logo.png")
   })
 
+  it("removes URL userinfo while masking drive browser URLs", () => {
+    expect(maskDriveBrowserUrl("https://reader:secret-token@synapse.d2.pub/share/shr_secret?password=AbC234xy"))
+      .toBe("https://synapse.d2.pub/share/***?password=***")
+    expect(maskDriveBrowserUrl("https://reader:secret-token@example.test/external/page"))
+      .toBe("https://example.test/external/page")
+  })
+
   it("defines the default drive access settings", () => {
     expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({
       passwordEnabled: true,
