@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 export type DriveRendererToolbarItem =
@@ -50,6 +50,7 @@ export type DriveRendererToolbarContextValue = {
 }
 
 const DriveRendererToolbarContext = createContext<DriveRendererToolbarContextValue | null>(null)
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 export function DriveRendererToolbarProvider({ children }: { readonly children: ReactNode }) {
   const [itemsByScope, setItemsByScope] = useState<ReadonlyMap<string, readonly DriveRendererToolbarItem[]>>(() => new Map())
@@ -94,4 +95,20 @@ export function useDriveRendererToolbar(): DriveRendererToolbarContextValue {
   const value = useContext(DriveRendererToolbarContext)
   if (!value) throw new Error('useDriveRendererToolbar must be used inside DriveRendererToolbarProvider')
   return value
+}
+
+export function useOptionalDriveRendererToolbar(): DriveRendererToolbarContextValue | null {
+  return useContext(DriveRendererToolbarContext)
+}
+
+export function useRegisterDriveRendererToolbarItems(
+  scope: string,
+  items: readonly DriveRendererToolbarItem[],
+): void {
+  const toolbar = useOptionalDriveRendererToolbar()
+  const registerItems = toolbar?.registerItems
+  useIsoLayoutEffect(() => {
+    if (!registerItems) return undefined
+    return registerItems(scope, items)
+  }, [items, registerItems, scope])
 }

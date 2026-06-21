@@ -38,7 +38,7 @@ import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
-import { useDriveRendererToolbar, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
+import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 export function DriveMDXeditorRenderer({
   current,
@@ -64,7 +64,6 @@ export function DriveMDXeditorRenderer({
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
-  const { registerItems } = useDriveRendererToolbar()
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
     externalMarkdownTargetRef.current = null
@@ -210,7 +209,7 @@ export function DriveMDXeditorRenderer({
     loginUrl,
   ])
 
-  useEffect(() => registerItems('mdxeditor', toolbarItems), [registerItems, toolbarItems])
+  useRegisterDriveRendererToolbarItems('mdxeditor', toolbarItems)
 
   return (
     <div

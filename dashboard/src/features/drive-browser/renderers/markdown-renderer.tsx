@@ -16,7 +16,7 @@ import { DriveCodeRenderer } from './code-renderer'
 import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
 import { createMarkdownAnnotationTargetFromSelection } from './markdown-annotation-target'
 import { MarkdownCommentsRail } from './markdown-comments-rail'
-import { useDriveRendererToolbar, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
+import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = 'max-w-full space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc'
 
@@ -38,7 +38,6 @@ export function DriveMarkdownRenderer({
   const annotationsEnabled = current.name.toLowerCase().endsWith('.md')
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
-  const { registerItems } = useDriveRendererToolbar()
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -133,7 +132,7 @@ export function DriveMarkdownRenderer({
     setCommentPanelOpen,
   ])
 
-  useEffect(() => registerItems('markdown', toolbarItems), [registerItems, toolbarItems])
+  useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
 
   const focusThread = (threadId: string) => {
     setActiveThreadId(threadId)
