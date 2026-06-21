@@ -1552,6 +1552,41 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("暂无分享")
   })
 
+  it("ignores stale share load-more responses after reopening the public links dialog", async () => {
+    const oldLoadMore = createDeferred<DrivePublicLinksPageDto<DriveShareListItemDto>>()
+    mocks.listDriveShares
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-1", itemName: "first-round.txt", shareId: "shr_first" }),
+      ], { hasMore: true, nextOffset: 1 }))
+      .mockReturnValueOnce(oldLoadMore.promise)
+      .mockResolvedValueOnce(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-2", itemName: "second-round.txt", shareId: "shr_second" }),
+      ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("我的分享")
+    await flushAct()
+    await clickButtonText("加载更多")
+    await clickButtonText("关闭")
+    await clickButtonText("我的分享")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("second-round.txt")
+
+    await act(async () => {
+      oldLoadMore.resolve(createDrivePublicLinksPage([
+        createDriveShare({ id: "share-old", itemName: "stale-page.txt", shareId: "shr_stale" }),
+      ]))
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(document.body.textContent).toContain("second-round.txt")
+    expect(document.body.textContent).not.toContain("stale-page.txt")
+  })
+
   it("moves an item to a nested folder selected from the tree", async () => {
     mocks.listDriveItems.mockImplementation(async ({ parentId }: { parentId?: string | null }) => {
       if (parentId === "folder-1") {

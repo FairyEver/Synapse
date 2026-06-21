@@ -1946,15 +1946,18 @@ function DrivePublicLinksDialog({
   readonly onDriveItemsChanged: () => Promise<void>
 }) {
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
+  const shareLoadGenerationRef = useRef(0)
 
-  const loadShares = useCallback(async (input: { readonly offset?: number; readonly append?: boolean } = {}) => {
+  const loadShares = useCallback(async (input: { readonly offset?: number; readonly append?: boolean; readonly generation?: number } = {}) => {
     const append = input.append ?? false
+    const generation = input.generation ?? shareLoadGenerationRef.current
     setShareState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
     try {
       const result = await requireSynapseBridge().account.listDriveShares({
         offset: input.offset ?? 0,
         limit: DRIVE_PUBLIC_LINKS_PAGE_SIZE,
       })
+      if (shareLoadGenerationRef.current !== generation) return
       setShareState((current) => ({
         items: append ? [...current.items, ...result.items] : [...result.items],
         page: result.page,
@@ -1964,6 +1967,7 @@ function DrivePublicLinksDialog({
         loaded: true,
       }))
     } catch (rawError) {
+      if (shareLoadGenerationRef.current !== generation) return
       const message = errorMessage(rawError, "公开链接加载失败")
       setShareState((current) => ({
         ...current,
@@ -1977,10 +1981,13 @@ function DrivePublicLinksDialog({
   }, [])
 
   useEffect(() => {
-    if (open) {
-      setShareState(createEmptyDrivePublicLinksPageState<DriveShareListItemDto>())
-      void loadShares()
+    const generation = shareLoadGenerationRef.current + 1
+    shareLoadGenerationRef.current = generation
+    if (!open) {
+      return
     }
+    setShareState(createEmptyDrivePublicLinksPageState<DriveShareListItemDto>())
+    void loadShares({ generation })
   }, [loadShares, open])
 
   const reloadAfterPublicLinkChange = useCallback(async () => {
@@ -2015,7 +2022,7 @@ function DrivePublicLinksDialog({
                 shares={shareState.items}
                 onLoadMore={async () => {
                   if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
-                  await loadShares({ offset: shareState.page.nextOffset, append: true })
+                  await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
                 }}
                 onRetry={loadShares}
                 onReload={reloadAfterPublicLinkChange}
