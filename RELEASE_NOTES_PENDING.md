@@ -24,6 +24,7 @@
 - Git 工作台会在进入历史页后再加载提交列表，并且只在选择提交时读取完整 patch，打开改动页更轻量。
 - Database MCP 的操作日志读取会限制单次返回数量，避免长期使用后一次请求拉取过多历史记录拖慢本地进程。
 - Git 仓库列表在 Windows 上会识别大小写不同但指向同一目录的路径，避免同一个仓库被重复登记。
+- Windows 上 Git SSH 检测会使用唯一有效的 `Path`，不再被旧的 `PATH` / `path` 环境变量干扰而误报 SSH 不可用。
 - Workflow MCP 内置 Skill 会正确说明脚本节点的默认 shell：Windows 留空时使用 `cmd`，macOS/Linux 使用 `posix`。
 - Usage Analysis 的原文搜索加载更多会从下一批会话继续扫描，并对输入做短暂去抖，减少重复读取历史 JSONL 的开销。
 - Workflow MCP 指南补齐 Claude Code 节点说明，Agent 通过指南创建本机 Claude Code 工作流时不再误以为只有 Codex 节点可用。

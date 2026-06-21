@@ -67,16 +67,19 @@ function runDefaultSshVersion(deps: Pick<EnvironmentDeps, "homeDir" | "platform"
   })
 }
 
-function buildSshProbeEnvironment(
-  deps: Pick<EnvironmentDeps, "platform" | "shellEnvironment">,
+export function buildSshProbeEnvironment(
+  deps: Pick<EnvironmentDeps, "platform" | "shellEnvironment"> & { readonly baseEnv?: NodeJS.ProcessEnv },
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...(deps.baseEnv ?? process.env),
     LANG: "C",
     LC_ALL: "C",
   }
   if (deps.shellEnvironment.effectivePath) {
     if (deps.platform === "win32") {
+      for (const key of Object.keys(env)) {
+        if (key.toLowerCase() === "path") delete env[key]
+      }
       env.Path = deps.shellEnvironment.effectivePath
     } else {
       env.PATH = deps.shellEnvironment.effectivePath

@@ -1,6 +1,6 @@
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
-import { createGitEnvironmentService } from "../git-environment-service"
+import { buildSshProbeEnvironment, createGitEnvironmentService } from "../git-environment-service"
 
 const shellEnvironment = {
   processPath: "/usr/bin",
@@ -16,6 +16,31 @@ const shellEnvironment = {
 }
 
 describe("git environment service", () => {
+  it("builds Windows SSH probe environment with a single effective Path key", () => {
+    const env = buildSshProbeEnvironment({
+      baseEnv: {
+        PATH: "/usr/bin",
+        path: "C:\\lower",
+        PaTh: "C:\\mixed",
+        Path: "C:\\Windows",
+        USERPROFILE: "C:\\Users\\writer",
+      },
+      platform: "win32",
+      shellEnvironment: {
+        ...shellEnvironment,
+        effectivePath: "C:\\Git\\cmd;C:\\Windows",
+      },
+    })
+
+    expect(env.Path).toBe("C:\\Git\\cmd;C:\\Windows")
+    expect(env.USERPROFILE).toBe("C:\\Users\\writer")
+    expect(env.PATH).toBeUndefined()
+    expect(env.path).toBeUndefined()
+    expect(env.PaTh).toBeUndefined()
+    expect(env.LANG).toBe("C")
+    expect(env.LC_ALL).toBe("C")
+  })
+
   it("reports Git and identity state", async () => {
     const run = vi.fn()
       .mockResolvedValueOnce({ stdout: "git version 2.50.0\n", stderr: "" })
