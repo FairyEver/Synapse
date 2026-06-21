@@ -393,6 +393,36 @@ describe("knowledgeBaseIpcModule", () => {
     }])
   })
 
+  it("does not request network permission before deterministic URL validation failures", async () => {
+    const addUrlSource = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      uploaded: [],
+      skipped: [{
+        path: "file:///tmp/source.html",
+        reason: "unsupported_protocol",
+      }],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
+
+    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectId: "kb-1",
+      url: "file:///tmp/source.html",
+    }) as { skipped: Array<{ reason: string }> }
+
+    expect(result.skipped).toEqual([{
+      path: "file:///tmp/source.html",
+      reason: "unsupported_protocol",
+    }])
+    expect(addUrlSource).toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "managed-knowledge-base:kb-1",
+    }))
+  })
+
   it("does not audit network failure when URL source write is denied", async () => {
     const addUrlSource = vi.fn()
     const { auditSink, harness } = createHarness({

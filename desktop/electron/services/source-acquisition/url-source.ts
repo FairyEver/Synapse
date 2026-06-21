@@ -236,6 +236,15 @@ function sourceMarkdownForContent(input: {
   }
 }
 
+export function validateUrlSourceCandidate(
+  rawUrl: string,
+  options: { readonly allowLocalOrPrivateHosts?: boolean } = {},
+): { readonly ok: true } | { readonly ok: false; readonly code: Extract<UrlSourceErrorCode, "invalid_url" | "unsupported_protocol" | "url_credentials" | "local_or_private_host">; readonly message: string } {
+  const originalUrl = normalizeUrl(rawUrl)
+  if (!originalUrl.ok) return originalUrl
+  return validateAllowedUrl(originalUrl.url, options.allowLocalOrPrivateHosts === true)
+}
+
 function normalizeContentType(value: string | null): string | null {
   return value?.split(";")[0]?.trim().toLowerCase() || null
 }

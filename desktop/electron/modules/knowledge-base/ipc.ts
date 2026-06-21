@@ -7,7 +7,7 @@ import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { createGuardedFetchUrl } from "../../services/source-acquisition/guarded-fetch-url"
-import type { FetchUrl } from "../../services/source-acquisition/url-source"
+import { validateUrlSourceCandidate, type FetchUrl } from "../../services/source-acquisition/url-source"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { sanitizeError } from "../../services/error-sanitize"
 import { KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES } from "../../../config"
@@ -670,7 +670,9 @@ export const knowledgeBaseIpcModule: IpcModule = {
       response: uploadSourcesResultSchema,
       handler: async (ctx, request: { projectId: string; url: string }) => {
         const checkedNetworkResources = new Set<string>()
-        await checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(request.url), checkedNetworkResources)
+        if (validateUrlSourceCandidate(request.url).ok) {
+          await checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(request.url), checkedNetworkResources)
+        }
         return runGuardedKnowledgeBaseOperation({
           ctx,
           action: "fs.write",
