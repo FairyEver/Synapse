@@ -16,6 +16,7 @@ export type FetchUrl = (url: string, init: { readonly signal: AbortSignal }) => 
   readonly url: string
   readonly status: number
   readonly headers: { get(name: string): string | null }
+  discard?(): void
   text(options?: { readonly maxBytes?: number }): Promise<string>
 }>
 
@@ -89,12 +90,19 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
   }
 
   const finalUrl = normalizeUrl(response.url || originalUrl.url.toString())
-  if (!finalUrl.ok) return finalUrl
+  if (!finalUrl.ok) {
+    discardUrlResponse(response)
+    return finalUrl
+  }
 
   const allowedFinal = validateAllowedUrl(finalUrl.url, input.allowLocalOrPrivateHosts === true)
-  if (!allowedFinal.ok) return allowedFinal
+  if (!allowedFinal.ok) {
+    discardUrlResponse(response)
+    return allowedFinal
+  }
 
   if (response.status < 200 || response.status >= 300) {
+    discardUrlResponse(response)
     return {
       ok: false,
       code: "http_error",
@@ -106,6 +114,7 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
   const contentLength = response.headers.get("content-length")
   const maxBytes = input.maxBytes ?? DEFAULT_MAX_BYTES
   if (contentLength && Number.isFinite(Number(contentLength)) && Number(contentLength) > maxBytes) {
+    discardUrlResponse(response)
     return {
       ok: false,
       code: "size_limit_exceeded",
@@ -162,6 +171,14 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
       markdown: markdown.markdown,
       hash: createHash("sha256").update(markdown.markdown).digest("hex"),
     },
+  }
+}
+
+function discardUrlResponse(response: Awaited<ReturnType<FetchUrl>>): void {
+  try {
+    response.discard?.()
+  } catch {
+    // Discard is best-effort cleanup for failure paths; preserve the original user-facing error.
   }
 }
 

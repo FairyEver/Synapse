@@ -9,6 +9,7 @@ function response(input: {
   readonly contentType?: string
   readonly body?: string
   readonly contentLength?: string
+  readonly discard?: () => void
 } = {}): Awaited<ReturnType<FetchUrl>> {
   return {
     url: input.url ?? "https://example.com/a",
@@ -21,6 +22,7 @@ function response(input: {
         return null
       },
     },
+    discard: input.discard,
     text: async () => input.body ?? "<html><body><article><h1>Title</h1><p>Hello <strong>world</strong>.</p></article></body></html>",
   }
 }
@@ -145,27 +147,49 @@ describe("acquireUrlSource", () => {
   })
 
   it("rejects private final URLs returned by the injected fetch", async () => {
+    const discard = vi.fn()
     const result = await acquireUrlSource({
       url: "https://example.com/a",
-      fetchUrl: async () => response({ url: "http://192.168.0.2/a" }),
+      fetchUrl: async () => response({ url: "http://192.168.0.2/a", discard }),
       now: () => new Date("2026-05-24T00:00:00.000Z"),
     })
 
     expect(result).toMatchObject({ ok: false, code: "local_or_private_host" })
+    expect(discard).toHaveBeenCalledTimes(1)
   })
 
   it("rejects oversized responses", async () => {
+    const discard = vi.fn()
     const result = await acquireUrlSource({
       url: "https://example.com/large",
       fetchUrl: async () => response({
         contentLength: "6",
         body: "abcdef",
+        discard,
       }),
       maxBytes: 5,
       now: () => new Date("2026-05-24T00:00:00.000Z"),
     })
 
     expect(result).toMatchObject({ ok: false, code: "size_limit_exceeded" })
+    expect(discard).toHaveBeenCalledTimes(1)
+  })
+
+  it("discards HTTP error response bodies without reading them", async () => {
+    const discard = vi.fn()
+    const text = vi.fn(async () => "not found")
+    const result = await acquireUrlSource({
+      url: "https://example.com/missing",
+      fetchUrl: async () => ({
+        ...response({ status: 404, discard }),
+        text,
+      }),
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toMatchObject({ ok: false, code: "http_error" })
+    expect(discard).toHaveBeenCalledTimes(1)
+    expect(text).not.toHaveBeenCalled()
   })
 
   it("rejects oversized bodies without content-length", async () => {

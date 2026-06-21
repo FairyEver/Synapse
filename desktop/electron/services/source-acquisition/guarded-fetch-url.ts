@@ -40,6 +40,7 @@ async function fetchWithRedirects(
   const response = await requestUrl(url, options)
   if (isRedirect(response.status)) {
     if (options.redirectsRemaining <= 0) {
+      response.discard?.()
       logger.warn("Guarded URL fetch redirect limit exceeded.", {
         url: safeUrlForLog(url),
         maxRedirects: MAX_REDIRECTS,
@@ -48,12 +49,14 @@ async function fetchWithRedirects(
     }
     const location = response.headers.get("location")
     if (!location) {
+      response.discard?.()
       logger.warn("Guarded URL fetch redirect missing location.", {
         url: safeUrlForLog(url),
         status: response.status,
       })
       throw new Error("URL redirect response did not include a Location header.")
     }
+    response.discard?.()
     return fetchWithRedirects(new URL(location, url), {
       ...options,
       redirectsRemaining: options.redirectsRemaining - 1,
@@ -167,6 +170,7 @@ function responseFromMessage(url: string, message: IncomingMessage): Awaited<Ret
         return headers.get(name.toLowerCase()) ?? null
       },
     },
+    discard: () => discardResponse(message),
     text: (options) => readResponseText(message, options?.maxBytes),
   }
 }
@@ -208,6 +212,11 @@ function readResponseText(message: IncomingMessage, maxBytes?: number): Promise<
       if (!rejected) resolve(Buffer.concat(chunks).toString("utf8"))
     })
   })
+}
+
+function discardResponse(message: IncomingMessage): void {
+  if (message.destroyed || message.readableEnded) return
+  message.destroy()
 }
 
 function isRedirect(status: number): boolean {
