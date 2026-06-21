@@ -1784,35 +1784,20 @@ ${renderDrivePublicPageCss()}
 function renderDrivePublicPageCss(): string {
   return `
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  color-scheme: light dark;
+  --background: Canvas;
+  --foreground: CanvasText;
+  --card: Canvas;
+  --card-foreground: CanvasText;
+  --primary: CanvasText;
+  --primary-foreground: Canvas;
+  --muted: Field;
+  --muted-foreground: GrayText;
+  --destructive: CanvasText;
+  --border: ButtonBorder;
+  --input: ButtonBorder;
+  --ring: Highlight;
   --radius: 0.625rem;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-  }
 }
 * {
   box-sizing: border-box;
@@ -1898,13 +1883,14 @@ body {
 }
 .drive-password-input:focus-visible {
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }
 .drive-password-input[aria-invalid="true"] {
   border-color: var(--destructive);
 }
 .drive-password-input[aria-invalid="true"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 20%, transparent);
+  outline-color: var(--destructive);
 }
 .drive-password-button {
   min-height: 2rem;
@@ -1922,8 +1908,8 @@ body {
   opacity: 0.9;
 }
 .drive-password-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }
 .drive-password-button:active {
   opacity: 0.85;

@@ -1212,6 +1212,10 @@ describe("DriveController", () => {
     expect(response.text).toContain("输入密码")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/share/shr_file/download"')
+    expect(response.text).toContain("--background: Canvas")
+    expect(response.text).toContain("color-scheme: light dark")
+    expect(response.text).not.toContain("oklch(")
+    expect(response.text).not.toContain("color-mix(")
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: undefined,
