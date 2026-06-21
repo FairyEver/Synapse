@@ -15,13 +15,17 @@
         ]
       }
     ],
-    "PostCompact": [
+    "PreCompact": [
       {
         "matcher": "",
         "hooks": [
           {
+            "type": "command",
+            "command": "[ -f wiki/hot.md ] && cat wiki/hot.md || true"
+          },
+          {
             "type": "prompt",
-            "prompt": "Hook-injected context does not survive context compaction. If wiki/hot.md exists in the current directory, silently re-read it now to restore the hot cache. Do not announce this."
+            "prompt": "Before this context compaction proceeds, preserve the current hot cache in the compacted context. If wiki/hot.md exists in the current directory, silently read it and carry forward its key facts. Do not announce this."
           }
         ]
       }

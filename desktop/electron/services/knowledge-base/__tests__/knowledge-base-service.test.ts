@@ -102,6 +102,51 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseService", () => {
+  it("keeps bundled knowledge base hook events aligned with the SDK contract", async () => {
+    const hooksPath = path.join(
+      process.cwd(),
+      "resources",
+      "knowledge-base",
+      "synapse-knowledge-base-template",
+      "hooks",
+      "hooks.json",
+    )
+    const hooksConfig = JSON.parse(await readFile(hooksPath, "utf8")) as {
+      readonly hooks?: Record<string, unknown>
+    }
+    const supportedHookEvents = new Set([
+      "PreToolUse",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "PostToolBatch",
+      "Notification",
+      "UserPromptSubmit",
+      "SessionStart",
+      "SessionEnd",
+      "Stop",
+      "SubagentStart",
+      "SubagentStop",
+      "PreCompact",
+      "PermissionRequest",
+      "Setup",
+      "TeammateIdle",
+      "TaskCompleted",
+      "ConfigChange",
+      "WorktreeCreate",
+      "WorktreeRemove",
+    ])
+
+    expect(Object.keys(hooksConfig.hooks ?? {}).sort()).toEqual([
+      "PostToolUse",
+      "PreCompact",
+      "SessionStart",
+      "Stop",
+    ])
+    for (const eventName of Object.keys(hooksConfig.hooks ?? {})) {
+      expect(supportedHookEvents.has(eventName)).toBe(true)
+    }
+  })
+
   it("keeps bundled skill frontmatter aligned with the Agent Skills contract", async () => {
     const skillsRoot = path.join(
       process.cwd(),

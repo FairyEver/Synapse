@@ -46,7 +46,7 @@ Navigation: [[index]] | [[log]] | [[overview]]
 - **Scripts**: `scripts/allocate-address.sh`, `scripts/tiling-check.py`, `scripts/boundary-score.py` (all opt-in; feature-detected by skills)
 - **Setup**: `bin/setup-vault.sh` (base vault), `bin/setup-dragonscale.sh` (opt-in DragonScale), `bin/setup-multi-agent.sh` (multi-agent bootstrap)
 - **Tests**: `make test` runs `tests/test_allocate_address.sh`, `tests/test_tiling_check.py`, `tests/test_boundary_score.py`. Zero ollama dependency for core tests.
-- **Hooks**: 4 (SessionStart, PostCompact, PostToolUse [stages wiki/, .raw/, .vault-meta/], Stop)
+- **Hooks**: 4 (SessionStart, PreCompact, PostToolUse [stages wiki/, .raw/, .vault-meta/], Stop)
 
 ## DragonScale Mechanisms
 
