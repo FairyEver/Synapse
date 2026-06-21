@@ -397,7 +397,7 @@ export class DrivePublicAssetService {
       throw new NotFoundException("公共资源不存在。")
     }
     const normalized = normalizePublicAssetUploadInput(input)
-    const reservedBytes = normalized.size > asset.size ? normalized.size - asset.size : 0n
+    const reservedBytes = normalized.size
     const sessionId = randomUUID()
     const storageKey = driveOverwriteStorageKeyForSession(asset.itemId, sessionId)
     const result = await this.prisma.$transaction(async (tx) => {
@@ -458,7 +458,7 @@ export class DrivePublicAssetService {
         if (transitioned.count === 0) throw new NotFoundException("上传会话不存在。")
         await updateDriveUsageAfterCompletion(tx, userId, {
           reservedBytes: session.reservedBytes,
-          usedBytesDelta: session.expectedSize - asset.size,
+          usedBytesDelta: session.expectedSize,
         })
         await tx.publicAssetRevision.create({
           data: {
