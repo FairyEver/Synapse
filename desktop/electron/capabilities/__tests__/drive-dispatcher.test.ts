@@ -352,6 +352,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ uploadDrivePublicAssets }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
@@ -380,6 +381,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ uploadDrivePublicAssets }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
@@ -389,6 +391,34 @@ describe("createDriveCapabilityDispatcher", () => {
       error: "仅支持图片。",
       data: { status: "rejected", fileName: "logo.txt", message: "仅支持图片。" },
     })
+  })
+
+  it("rejects public asset upload and replacement when the local file is a symbolic link", async () => {
+    const uploadDrivePublicAssets = vi.fn()
+    const replaceDrivePublicAssetFile = vi.fn()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isFile: true, isSymbolicLink: true, size: 4 })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets, replaceDrivePublicAssetFile }),
+      fileSystem,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo-link.png",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+    await expect(dispatcher.dispatch("drive.direct_link.update", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      filePath: "/tmp/logo-link.png",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+
+    expect(uploadDrivePublicAssets).not.toHaveBeenCalled()
+    expect(replaceDrivePublicAssetFile).not.toHaveBeenCalled()
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.createReadStream).not.toHaveBeenCalled()
   })
 
   it("routes public asset list and get tools", async () => {
@@ -419,6 +449,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ replaceDrivePublicAssetFile }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.update", {
@@ -677,6 +708,7 @@ describe("createDriveCapabilityDispatcher", () => {
       permissionGuard,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         readFile,
         createReadStream: vi.fn(() => fileStream),
@@ -724,6 +756,29 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects MCP file uploads when the requested file is a symbolic link", async () => {
+    const accountService = createAccountService()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isFile: true, isSymbolicLink: true, size: 4 })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "/tmp/report-link.md",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+
+    expect(accountService.prepareDriveUpload).not.toHaveBeenCalled()
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.createReadStream).not.toHaveBeenCalled()
+  })
+
   it("retries completed MCP file upload sessions before cancelling", async () => {
     const item = driveItem({ id: "item-1", name: "report.md" })
     const accountService = createAccountService({
@@ -734,6 +789,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         createReadStream: vi.fn(() => Readable.from(["test"])),
         readdir: vi.fn(),
@@ -801,6 +857,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 1024 * 1024 * 1024 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 1024 * 1024 * 1024 })),
         readFile,
         createReadStream,
@@ -1304,6 +1361,15 @@ function statLikeForTest(input: {
     isSymbolicLink: () => input.isSymbolicLink ?? false,
     size: input.size ?? 0,
   }
+}
+
+function regularFileSystemForTest(): NonNullable<DriveDispatcherDeps["fileSystem"]> {
+  return {
+    lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
+    stat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
+    createReadStream: vi.fn(() => Readable.from(["test"])),
+    readdir: vi.fn(),
+  } as unknown as NonNullable<DriveDispatcherDeps["fileSystem"]>
 }
 
 function pathBasenameForTest(value: string): string {

@@ -349,7 +349,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           }))
         case "drive.direct_link.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
-            uploadPublicAsset(deps, params, context, action))
+            uploadPublicAsset(deps, fileSystem, params, context, action))
         case "drive.direct_link.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const assets = await deps.accountService.listDrivePublicAssets(parsePublicLinksPageInput(params))
@@ -362,7 +362,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           }))
         case "drive.direct_link.update":
           return dispatchDriveMutation(deps, action, params, context, () =>
-            replacePublicAsset(deps, params, context, action))
+            replacePublicAsset(deps, fileSystem, params, context, action))
         case "drive.direct_link.rename":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
@@ -412,8 +412,7 @@ async function uploadFile(
 ): Promise<DispatchResult> {
   const filePath = requireString(params, "filePath")
   await authorizeFileRead(deps, filePath, context)
-  const fileStat = await fileSystem.stat(filePath)
-  if (!fileStat.isFile()) throw new Error("filePath must point to a file.")
+  const fileStat = await requireLocalUploadFile(fileSystem, filePath)
 
   const prepared = await deps.accountService.prepareDriveUpload({
     parentId: optionalNullableString(params.parentId),
@@ -530,6 +529,7 @@ async function completeDriveUploadWithRetry(
 
 async function uploadPublicAsset(
   deps: DriveCapabilityDispatcherDeps,
+  fileSystem: FileSystemPort,
   params: Record<string, unknown>,
   context: DispatchContext,
   action: string,
@@ -537,6 +537,7 @@ async function uploadPublicAsset(
   const filePath = requireString(params, "filePath")
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
+  await requireLocalUploadFile(fileSystem, filePath)
   const result = await deps.accountService.uploadDrivePublicAssets({
     files: [{
       path: filePath,
@@ -556,6 +557,7 @@ async function uploadPublicAsset(
 
 async function replacePublicAsset(
   deps: DriveCapabilityDispatcherDeps,
+  fileSystem: FileSystemPort,
   params: Record<string, unknown>,
   context: DispatchContext,
   action: string,
@@ -564,6 +566,7 @@ async function replacePublicAsset(
   const filePath = requireString(params, "filePath")
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
+  await requireLocalUploadFile(fileSystem, filePath)
   return {
     ok: true,
     data: await deps.accountService.replaceDrivePublicAssetFile({
@@ -573,6 +576,13 @@ async function replacePublicAsset(
       mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
     }),
   }
+}
+
+async function requireLocalUploadFile(fileSystem: FileSystemPort, filePath: string) {
+  const fileStat = await fileSystem.lstat(filePath)
+  if (fileStat.isSymbolicLink()) throw new Error("File upload does not support symbolic links.")
+  if (!fileStat.isFile()) throw new Error("filePath must point to a file.")
+  return fileStat
 }
 
 async function resolvePublicAssetMimeType(name: string, mimeType?: string): Promise<string | null> {
