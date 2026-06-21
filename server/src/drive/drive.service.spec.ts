@@ -1643,12 +1643,34 @@ describe("DriveService", () => {
     })
     const fileItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.entries[0]!.item.id } })
 
-    expect(archive).toEqual({
-      kind: "zip",
-      filename: "交接材料.zip",
-      entries: [{ path: "docs/spec.txt", storageKey: fileItem.storageKey }],
-    })
+    expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
+    expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toEqual([
+      { path: "docs/spec.txt", storageKey: fileItem.storageKey },
+    ])
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("defers folder archive traversal until zip entries are consumed", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "Archive" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    })
+    const findMany = vi.spyOn(prisma.driveItem, "findMany")
+
+    const archive = await service.openOwnerBrowserItemDownload({
+      userId: "user-1",
+      itemId: folder.id,
+    })
+
+    expect(archive).toMatchObject({ kind: "zip", filename: "Archive.zip" })
+    expect(findMany).not.toHaveBeenCalled()
+    expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toHaveLength(1)
+    expect(findMany).toHaveBeenCalled()
   })
 
   it("disambiguates legacy same-name files in owner folder archive entries", async () => {
@@ -1676,7 +1698,7 @@ describe("DriveService", () => {
     const secondItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: second.id } })
 
     expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
-    expect(archive.kind === "zip" ? archive.entries : []).toEqual([
+    expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toEqual([
       { path: "report.pdf", storageKey: firstItem.storageKey },
       { path: "report (2).pdf", storageKey: secondItem.storageKey },
     ])
@@ -1710,7 +1732,7 @@ describe("DriveService", () => {
     const secondItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: second.id } })
 
     expect(archive).toMatchObject({ kind: "zip", filename: "docs.zip" })
-    expect(archive.kind === "zip" ? archive.entries : []).toEqual([
+    expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toEqual([
       { path: "report.pdf", storageKey: firstItem.storageKey },
       { path: "report (2).pdf", storageKey: secondItem.storageKey },
     ])
@@ -2757,6 +2779,26 @@ describe("DriveService", () => {
     await expect(service.getItem("user-1", second.id)).resolves.toMatchObject({ parentId: sourceB.id })
   })
 
+  it("checks reorganization folder relationships with bounded parent lookups", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const source = await service.createFolder("user-1", { parentId: null, name: "Source" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
+    const folders: Array<{ readonly id: string }> = []
+    for (let index = 0; index < 8; index += 1) {
+      folders.push(await service.createFolder("user-1", { parentId: source.id, name: `Folder ${index}` }))
+    }
+    const findUnique = vi.spyOn(prisma.driveItem, "findUnique")
+
+    const preview = await service.previewReorganization("user-1", {
+      moves: folders.map((folder) => ({ itemId: folder.id, targetParentId: target.id })),
+    })
+
+    expect(preview.summary.moveCount).toBe(folders.length)
+    expect(findUnique.mock.calls.length).toBeLessThanOrEqual(folders.length * 3)
+  })
+
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async (_input: any) => undefined) }
@@ -3188,6 +3230,12 @@ function cloneMap<T>(value: Map<string, T>): Map<string, T> {
 function restoreMap<T>(target: Map<string, T>, snapshot: Map<string, T>): void {
   target.clear()
   for (const [key, value] of snapshot.entries()) target.set(key, value)
+}
+
+async function collectAsync<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+  const result: T[] = []
+  for await (const item of iterable) result.push(item)
+  return result
 }
 
 function orderRows(rows: any[], orderBy: any): any[] {

@@ -187,8 +187,11 @@ function ContentInstallDialog({
 
   const runInstall = async (
     installFormValues?: SynapseEditorInstallFormValues,
-    replaceConfirmed?: boolean,
+    options: InstallFlowOptions = {},
   ) => {
+    const overwriteConfirmed = Boolean(options.overwriteConfirmed)
+    const replaceConfirmed = Boolean(options.replaceConfirmed)
+
     if (!editor) {
       return
     }
@@ -213,7 +216,8 @@ function ContentInstallDialog({
       editorId: editor.id,
       hasInstallFormValues: Boolean(installFormValues),
       hasVariableSubstitutions: Boolean(pendingSubstitutionsRef.current),
-      replaceConfirmed: Boolean(replaceConfirmed),
+      overwriteConfirmed,
+      replaceConfirmed,
       scope,
       targetPath: activeTarget.targetPath,
     })
@@ -234,6 +238,7 @@ function ContentInstallDialog({
           skillTitle: item.type === "skill" ? item.title : undefined,
           ruleName: item.type === "rule" ? item.name : undefined,
           installFormValues,
+          overwriteConfirmed,
           replaceConfirmed,
           replacedContentId,
           preparedSourceId,
@@ -281,6 +286,7 @@ function ContentInstallDialog({
         elapsedMs: Math.round(performance.now() - startedAt),
         editorId: editor.id,
         error,
+        overwriteConfirmed,
         replaceConfirmed: Boolean(replaceConfirmed),
         scope,
         targetPath: activeTarget.targetPath,
@@ -443,7 +449,7 @@ function ContentInstallDialog({
       return
     }
 
-    await runInstall(undefined, replaceConfirmed)
+    await runInstall(undefined, { overwriteConfirmed, replaceConfirmed })
   }
 
   if (!editor) {

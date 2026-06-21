@@ -248,6 +248,8 @@ function skippedReasonLabel(reason: string): string {
       return "不支持"
     case "invalid-path":
       return "路径无效"
+    case "invalid-name":
+      return "名称无效"
     case "collision":
       return "目标已存在"
     case "trash-error":
@@ -1084,6 +1086,7 @@ function KnowledgeBaseSourceManagerWindow() {
       async () => {
         const result = await bridge.knowledgeBase.addUrlSource({
           projectId: payload.projectId,
+          targetDirectoryPath: currentDirectory,
           url,
         })
         await refreshDirectory()
@@ -1099,7 +1102,7 @@ function KnowledgeBaseSourceManagerWindow() {
       setSourceUrl("")
       setAddUrlOpen(false)
     }
-  }, [bridge, payload, promise, refreshDirectory, sourceUrl])
+  }, [bridge, currentDirectory, payload, promise, refreshDirectory, sourceUrl])
 
   const createFolder = useCallback(async () => {
     if (!payload || !bridge) return

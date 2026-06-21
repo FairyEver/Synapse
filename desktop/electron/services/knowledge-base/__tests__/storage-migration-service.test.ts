@@ -134,6 +134,7 @@ describe("KnowledgeBaseStorageMigrationService", () => {
 
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
     expect(harness.service.isActive()).toBe(true)
+    expect(harness.service.requiresRestartForRecovery()).toBe(true)
     expect(harness.states.at(-1)).toMatchObject({
       active: true,
       phase: "failed",
@@ -162,6 +163,19 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
         .resolves.toBe("# Knowledge\n")
     }
+  })
+
+  it("rejects custom target roots inside the current knowledge-bases directory when the child name starts with dots", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1")
+    const targetRoot = path.join(harness.oldRoot, "knowledge-bases", "..backup")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: targetRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("目标位置不能位于当前知识库目录内。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
   })
 
   it("keeps new config when trashing the old directory fails", async () => {

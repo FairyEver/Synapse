@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { isFileNotFoundError, pathExists } from "../fs-utils"
 
 const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
@@ -8,6 +9,13 @@ interface SynapseSkillMeta {
   id?: unknown
 }
 const UNIQUE_SUFFIX_LIMIT = 999
+
+function isSamePath(left: string, right: string): boolean {
+  return arePathsEqualForCompare(left, right, {
+    platform: process.platform,
+    resolvePath: path.resolve,
+  })
+}
 
 function parseSkillIdFile(raw: string): string | null {
   try {
@@ -123,12 +131,11 @@ async function resolveSkillTargetPath({
   slug: string
 }): Promise<string> {
   const previous = await findSkillDirectoryByContentId(parentDirectoryPath, contentId)
+  const ideal = path.join(parentDirectoryPath, slug)
 
-  if (previous && path.basename(previous) === slug) {
+  if (previous && isSamePath(previous, ideal)) {
     return previous
   }
-
-  const ideal = path.join(parentDirectoryPath, slug)
 
   // Check for conflict instead of auto-renaming
   const conflict = await checkSkillNameConflict(parentDirectoryPath, slug, contentId)

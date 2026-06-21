@@ -52,6 +52,7 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
   private readonly safeStorage: SafeStorage
   private readonly validate?: (data: unknown) => data is T
   private cache: JsonFileEnvelope<T> | null = null
+  private writeQueue: Promise<void> = Promise.resolve()
 
   constructor(deps: EncryptedJsonBackendDeps<T>) {
     super({ ...deps, backend: "encrypted-json" })
@@ -172,34 +173,44 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     }
   }
 
+  private enqueueWrite(operation: () => Promise<void>): Promise<void> {
+    const run = this.writeQueue.then(operation, operation)
+    this.writeQueue = run.catch(() => {})
+    return run
+  }
+
   async getSingleton(): Promise<T | null> {
     const env = await this.loadEnvelope()
     return env.singleton
   }
 
   async setSingleton(value: T): Promise<void> {
-    this.ensureEncryptionAvailable()
-    const env = await this.loadEnvelope()
-    const previous = env.singleton
-    const next = { ...env, singleton: value }
-    await this.persist(next)
-    this.cache = next
-    this.emit({
-      kind: "replace",
-      value,
-      previous: previous ?? undefined,
+    return this.enqueueWrite(async () => {
+      this.ensureEncryptionAvailable()
+      const env = await this.loadEnvelope()
+      const previous = env.singleton
+      const next = { ...env, singleton: value }
+      await this.persist(next)
+      this.cache = next
+      this.emit({
+        kind: "replace",
+        value,
+        previous: previous ?? undefined,
+      })
     })
   }
 
   async clearSingleton(): Promise<void> {
-    this.ensureEncryptionAvailable()
-    const env = await this.loadEnvelope()
-    if (env.singleton === null) return
-    const previous = env.singleton
-    const next = { ...env, singleton: null }
-    await this.persist(next)
-    this.cache = next
-    this.emit({ kind: "clear", previous })
+    return this.enqueueWrite(async () => {
+      this.ensureEncryptionAvailable()
+      const env = await this.loadEnvelope()
+      if (env.singleton === null) return
+      const previous = env.singleton
+      const next = { ...env, singleton: null }
+      await this.persist(next)
+      this.cache = next
+      this.emit({ kind: "clear", previous })
+    })
   }
 
   async list(filter?: Partial<T>): Promise<T[]> {
@@ -213,33 +224,37 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
   }
 
   async upsert(item: T & { id: string }): Promise<void> {
-    this.ensureEncryptionAvailable()
-    const env = await this.loadEnvelope()
-    const previous = env.items[item.id]
-    const next = {
-      ...env,
-      items: { ...env.items, [item.id]: item },
-    }
-    await this.persist(next)
-    this.cache = next
-    this.emit({
-      kind: "upsert",
-      id: item.id,
-      value: item,
-      previous,
+    return this.enqueueWrite(async () => {
+      this.ensureEncryptionAvailable()
+      const env = await this.loadEnvelope()
+      const previous = env.items[item.id]
+      const next = {
+        ...env,
+        items: { ...env.items, [item.id]: item },
+      }
+      await this.persist(next)
+      this.cache = next
+      this.emit({
+        kind: "upsert",
+        id: item.id,
+        value: item,
+        previous,
+      })
     })
   }
 
   async remove(id: string): Promise<void> {
-    this.ensureEncryptionAvailable()
-    const env = await this.loadEnvelope()
-    if (!(id in env.items)) return
-    const previous = env.items[id]
-    const { [id]: _removed, ...rest } = env.items
-    void _removed
-    const next = { ...env, items: rest }
-    await this.persist(next)
-    this.cache = next
-    this.emit({ kind: "remove", id, previous })
+    return this.enqueueWrite(async () => {
+      this.ensureEncryptionAvailable()
+      const env = await this.loadEnvelope()
+      if (!(id in env.items)) return
+      const previous = env.items[id]
+      const { [id]: _removed, ...rest } = env.items
+      void _removed
+      const next = { ...env, items: rest }
+      await this.persist(next)
+      this.cache = next
+      this.emit({ kind: "remove", id, previous })
+    })
   }
 }

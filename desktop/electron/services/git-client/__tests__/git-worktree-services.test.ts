@@ -152,7 +152,7 @@ describe("git worktree services", () => {
     })
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["add", "--", "docs/a.md"] }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["commit", "-m", "更新文档"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["commit", "-m", "更新文档", "--", "docs/a.md"] }))
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
     expect(started?.operationId).toEqual(expect.any(String))

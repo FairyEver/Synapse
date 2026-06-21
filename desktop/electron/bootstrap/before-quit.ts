@@ -23,6 +23,7 @@ export interface BeforeQuitDeps {
   readonly registry: ServiceRegistryImpl
   readonly knowledgeBaseStorageMigration?: {
     isActive: () => boolean
+    requiresRestartForRecovery?: () => boolean
     focusDialog: () => void
   }
   /** Mutable flag; set to true to allow app.quit() without re-entering this flow. */
@@ -32,7 +33,7 @@ export interface BeforeQuitDeps {
 
 export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
   updateService.setBeforeInstallQuitHandler(() => {
-    if (deps.knowledgeBaseStorageMigration?.isActive()) {
+    if (shouldBlockKnowledgeBaseStorageMigrationQuit(deps.knowledgeBaseStorageMigration)) {
       deps.knowledgeBaseStorageMigration.focusDialog()
       logger.info("Update install blocked by active Knowledge Base storage migration.")
       return false
@@ -70,6 +71,12 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
     }
 
     if (deps.knowledgeBaseStorageMigration?.isActive()) {
+      if (deps.knowledgeBaseStorageMigration.requiresRestartForRecovery?.()) {
+        logger.info("App quit allowed to recover failed Knowledge Base storage migration on restart.")
+        deps.setAllowQuit(true)
+        app.quit()
+        return
+      }
       deps.knowledgeBaseStorageMigration.focusDialog()
       logger.info("App quit blocked by active Knowledge Base storage migration.")
       return
@@ -84,6 +91,12 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
       pendingPushFlowRunning = false
     })
   })
+}
+
+function shouldBlockKnowledgeBaseStorageMigrationQuit(
+  migration: BeforeQuitDeps["knowledgeBaseStorageMigration"],
+): migration is NonNullable<BeforeQuitDeps["knowledgeBaseStorageMigration"]> {
+  return !!migration?.isActive() && !migration.requiresRestartForRecovery?.()
 }
 
 async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {

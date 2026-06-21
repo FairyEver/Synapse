@@ -156,9 +156,12 @@ export function buildDriveTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           itemId: stringField("Drive item id."),
-          parentId: optionalParentId,
+          parentId: {
+            ...optionalParentId,
+            description: "Target folder item id. Pass null to move to Drive root; do not omit.",
+          },
         },
-        required: ["itemId"],
+        required: ["itemId", "parentId"],
       },
     },
     {

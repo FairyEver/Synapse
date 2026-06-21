@@ -68,6 +68,34 @@ describe("knowledge base URL source staging", () => {
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("stages URL sources into the selected raw directory", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/articles/alpha",
+      status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
+      text: async () => "<html><body><h1>Alpha</h1></body></html>",
+    })
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      targetDirectoryPath: "client-a",
+      url: "https://example.com/articles/alpha",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result.uploaded[0]).toMatchObject({
+      relativePath: ".raw/client-a/alpha.md",
+      name: "alpha.md",
+      sourceKind: "url",
+    })
+    await expect(readFile(path.join(projectPath, ".raw", "client-a", "alpha.md"), "utf8"))
+      .resolves.toContain('source_format: "url"')
+  })
+
   it("redacts URL source skipped paths and keeps acquisition failure reasons", async () => {
     const projectPath = await tempDir()
     const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)

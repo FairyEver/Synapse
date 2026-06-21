@@ -197,7 +197,7 @@ describe("DrivePublicAssetService", () => {
 
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(retried).toMatchObject({ assetId: replaced.assetId, name: "logo.webp", url: replaced.url })
-    expect(usage.usedBytes).toBe(12n)
+    expect(usage.usedBytes).toBe(20n)
     expect(usage.reservedBytes).toBe(0n)
     expect(objects.has(newStorageKey)).toBe(true)
     expect(objects.has(oldStorageKey)).toBe(true)
@@ -513,7 +513,7 @@ describe("DrivePublicAssetService", () => {
     expect(download).toMatchObject({ fileName: "logo-old.png", size: 8n, contentType: "image/png" })
   })
 
-  it("replaces content with quota delta and records the previous revision", async () => {
+  it("replaces content with full new object quota and records the previous revision", async () => {
     const asset = await seedPublicAsset({
       prisma,
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
@@ -528,7 +528,7 @@ describe("DrivePublicAssetService", () => {
       mimeType: "image/webp",
       publicAppUrl: "https://assets.example",
     })
-    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).reservedBytes).toBe(4n)
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).reservedBytes).toBe(12n)
     const newStorageKey = await storageKeyForSession(prisma, prepared.sessionId)
     await storage.putObject({ key: newStorageKey, body: webpSignatureBuffer(), contentType: "image/webp" })
 
@@ -540,7 +540,7 @@ describe("DrivePublicAssetService", () => {
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(replaced.assetId).toBe(asset.assetId)
     expect(replaced.url).toBe(`https://assets.example/files/${asset.assetId}`)
-    expect(usage.usedBytes).toBe(12n)
+    expect(usage.usedBytes).toBe(20n)
     expect(usage.reservedBytes).toBe(0n)
     expect(objects.has(oldStorageKey)).toBe(true)
     expect(objects.has(newStorageKey)).toBe(true)

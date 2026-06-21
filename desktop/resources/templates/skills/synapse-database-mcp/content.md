@@ -75,7 +75,7 @@ Supported operators are `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, and `CONTAINS`.
 - Use `database_sql_read` for `SELECT`, `PRAGMA`, and `EXPLAIN`.
 - Use bind params instead of interpolating user values into SQL strings.
 - Use `database_sql_execute` only when structured MCP tools cannot express the requested operation or when the user explicitly requested raw SQL.
-- `database_sql_execute` blocks mutating `PRAGMA`, `ATTACH`, `DETACH`, and system tables prefixed with `_`.
+- `database_sql_execute` blocks mutating `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM INTO`, and system tables prefixed with `_`.
 - Do not use raw SQL as a shortcut for normal table, column, or row operations.
 
 ## Table Folders

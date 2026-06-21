@@ -192,8 +192,11 @@ export class CcConversationService {
         ORDER BY COALESCE(NULLIF(s.ended_at, ''), s.started_at) DESC
         LIMIT ? OFFSET ?
       `).all(...params, limit, offset) as SessionRow[]
+      const aggregates = this.queryRecordAggregates(rows.map((row) => row.session_id))
       const result = {
-        items: rows.map((row) => this.toListItem(row)),
+        items: rows.map((row) => this.toListItem(row, {
+          aggregate: aggregates.get(row.session_id),
+        })),
         total: toNumber(count?.total),
         partial: false,
       }
@@ -245,7 +248,7 @@ export class CcConversationService {
           hasMore: chunk.hasMore,
         })
         return {
-          session: this.toListItem(row, chunk.events.length),
+          session: this.toListItem(row, { eventCount: chunk.events.length }),
           events: chunk.events,
           parseErrors: chunk.parseErrors,
           hasMore: chunk.hasMore,
@@ -262,7 +265,7 @@ export class CcConversationService {
         parseErrorCount: parsed.parseErrors.length,
       })
       return {
-        session: this.toListItem(row, parsed.events.length),
+        session: this.toListItem(row, { eventCount: parsed.events.length }),
         events: parsed.events,
         parseErrors: parsed.parseErrors,
         hasMore: false,
@@ -574,18 +577,14 @@ export class CcConversationService {
     return new Map(rows.map((row) => [row.session_id, row]))
   }
 
-  private toListItem(row: SessionRow, eventCount = 0): CcConversationListItem {
-    const aggregate = this.db.prepare(`
-      SELECT
-        session_id,
-        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
-        SUM(total_cost) AS estimated_cost,
-        MAX(timestamp_ms) AS last_timestamp_ms
-      FROM cc_usage_events
-      WHERE session_id = ?
-      GROUP BY session_id
-    `).get(row.session_id) as AggregateRow | undefined
-
+  private toListItem(
+    row: SessionRow,
+    options: {
+      readonly aggregate?: AggregateRow
+      readonly eventCount?: number
+    } = {},
+  ): CcConversationListItem {
+    const aggregate = options.aggregate
     return {
       sessionId: row.session_id,
       title: titleFromSession(row),
@@ -597,7 +596,7 @@ export class CcConversationService {
       tokens: toNumber(aggregate?.tokens),
       estimatedCost: toCostNumber(aggregate?.estimated_cost),
       toolCalls: toNumber(row.tool_call_count),
-      eventCount,
+      eventCount: options.eventCount ?? 0,
       attachmentCount: 0,
       lastUsedAt: aggregate?.last_timestamp_ms ? new Date(aggregate.last_timestamp_ms).toISOString() : row.ended_at,
       sourceFilePath: row.file_path,

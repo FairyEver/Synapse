@@ -36,11 +36,16 @@ services:
       DRIVE_COS_SECRET_KEY: ${DRIVE_COS_SECRET_KEY:-}
       DRIVE_COS_BUCKET: ${DRIVE_COS_BUCKET:-}
       DRIVE_COS_REGION: ${DRIVE_COS_REGION:-}
+      CONTENT_STORE_COS_SECRET_ID: ${CONTENT_STORE_COS_SECRET_ID:-}
+      CONTENT_STORE_COS_SECRET_KEY: ${CONTENT_STORE_COS_SECRET_KEY:-}
+      CONTENT_STORE_COS_BUCKET: ${CONTENT_STORE_COS_BUCKET:-}
+      CONTENT_STORE_COS_REGION: ${CONTENT_STORE_COS_REGION:-}
       BACKUP_COS_SECRET_ID: ${BACKUP_COS_SECRET_ID:-}
       BACKUP_COS_SECRET_KEY: ${BACKUP_COS_SECRET_KEY:-}
       BACKUP_COS_BUCKET: ${BACKUP_COS_BUCKET:-}
       BACKUP_COS_REGION: ${BACKUP_COS_REGION:-}
       SYNAPSE_DRIVE_LOCAL_ROOT: /app/data/drive
+      SYNAPSE_CONTENT_STORE_LOCAL_ROOT: /app/data/content-store
       PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
@@ -56,6 +61,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data/drive:/app/data/drive
+      - ./data/content-store:/app/data/content-store
     depends_on:
       postgres:
         condition: service_healthy

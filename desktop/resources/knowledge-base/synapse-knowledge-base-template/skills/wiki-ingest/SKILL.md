@@ -1,6 +1,6 @@
 ---
 name: wiki-ingest
-description: "Ingest sources into the Synapse Knowledge Base. Reads a source, extracts entities and concepts, creates or updates wiki pages, cross-references, and logs the operation. Supports files, URLs, and batch mode. Triggers on: ingest, process this source, add this to the wiki, read and file this, batch ingest, ingest all of these, ingest this url."
+description: "Ingest existing Synapse-managed sources into the Synapse Knowledge Base. Reads a real .raw source, extracts entities and concepts, creates or updates wiki pages, cross-references, and logs the operation. Supports files, Synapse-managed URL/image sources, and batch mode. Triggers on: ingest, process this source, add this to the wiki, read and file this, batch ingest, ingest all of these, ingest this url."
 ---
 
 # wiki-ingest: Source Ingestion
@@ -56,19 +56,13 @@ Skip delta checking if the user says "force ingest" or "re-ingest".
 
 Trigger: user passes a URL starting with `https://`.
 
+Synapse owns URL acquisition for Knowledge Base sources. Do not fetch a remote URL yourself and do not write a new `.raw/` file from Agent tools, shell redirects, or manual frontmatter. URL source creation must go through Synapse source management so network permission checks, audit, filename safety, conflict handling, and manifest tracking remain consistent.
+
 Steps:
 
-1. **Fetch** the page using WebFetch.
-2. **Clean** (optional): if `defuddle` is available (`which defuddle 2>/dev/null`), run `defuddle [url]` to strip ads, nav, and clutter. Typically saves 40-60% tokens. Fall back to raw WebFetch output if not installed.
-3. **Derive slug** from the URL path (last segment, lowercased, spaces→hyphens, strip query strings).
-4. **Save** to `.raw/articles/[slug]-[YYYY-MM-DD].md` with a frontmatter header:
-   ```markdown
-   ---
-   source_url: [url]
-   fetched: [YYYY-MM-DD]
-   ---
-   ```
-5. Proceed with **Single Source Ingest** starting at step 2 (file is now in `.raw/`).
+1. If Synapse injected an ingest preflight that already contains the URL's real `.raw/` source path, process that file with **Single Source Ingest**.
+2. If no real `.raw/` source exists yet, ask the user to add the URL through the Synapse Knowledge Base source manager first, then run `/wiki-ingest` again.
+3. Never invent `.raw/articles/...` paths for URLs and never edit `.raw/.manifest.json` yourself.
 
 ---
 
@@ -76,23 +70,13 @@ Steps:
 
 Trigger: user passes an image file path (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`).
 
+Synapse owns raw source creation for local files and images. Do not copy external image files into `.raw/`, do not create `.raw/images/...` descriptions from Agent tools, and do not write `_attachments/` as a substitute for source management.
+
 Steps:
 
-1. **Read** the image file using the Read tool. Claude can process images natively.
-2. **Describe** the image contents: extract all text (OCR), identify key concepts, entities, diagrams, and data visible in the image.
-3. **Save** the description to `.raw/images/[slug]-[YYYY-MM-DD].md`:
-   ```markdown
-   ---
-   source_type: image
-   original_file: [original path]
-   fetched: YYYY-MM-DD
-   ---
-   # Image: [slug]
-
-   [Full description of image contents, transcribed text, entities visible, etc.]
-   ```
-4. Copy the image to `_attachments/images/[slug].[ext]` if it's not already in the vault.
-5. Proceed with **Single Source Ingest** on the saved description file.
+1. If Synapse injected an ingest preflight with a real `.raw/` image or image-description source, process that source path.
+2. If the user supplied an external image path that is not already a `.raw/` source, ask them to upload it through Synapse Knowledge Base source management first, then run `/wiki-ingest` again.
+3. When processing an approved image source, describe the contents in the resulting wiki source summary: extract visible text, identify key concepts, entities, diagrams, and data.
 
 Use cases: whiteboard photos, screenshots, diagrams, infographics, document scans.
 

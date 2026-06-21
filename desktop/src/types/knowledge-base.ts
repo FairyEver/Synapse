@@ -53,6 +53,7 @@ export type SynapseKnowledgeBaseListSourcesResult = {
 
 export type SynapseKnowledgeBaseAddUrlSourcePayload = {
   projectId: string
+  targetDirectoryPath?: string
   url: string
 }
 
@@ -148,6 +149,7 @@ export type SynapseKnowledgeBaseRawSkipReason =
   | "not-directory"
   | "read-error"
   | "invalid-path"
+  | "invalid-name"
   | "collision"
   | "trash-error"
   | "symlink"

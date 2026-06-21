@@ -23,13 +23,16 @@ describe("Content capability domain", () => {
     })
   })
 
-  it("keeps skill schemas strict-client compatible while documenting inline and source directory inputs", () => {
+  it("documents skill inline and source directory schema alternatives", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
     const create = tools.get("content_skill_create")
     const update = tools.get("content_skill_update")
 
     expect(create?.inputSchema.required).toBeUndefined()
-    expect(create?.inputSchema).not.toHaveProperty("anyOf")
+    expect(create?.inputSchema.anyOf).toEqual(expect.arrayContaining([
+      expect.objectContaining({ required: expect.arrayContaining(["name", "title", "description", "category", "content", "icon"]) }),
+      expect.objectContaining({ required: expect.arrayContaining(["sourceDirectoryPath", "icon"]) }),
+    ]))
     expect(create?.inputSchema.properties).toMatchObject({
       name: expect.any(Object),
       files: expect.any(Object),
@@ -41,8 +44,11 @@ describe("Content capability domain", () => {
     expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain("depth 8")
     expect(update?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname"],
+      anyOf: expect.arrayContaining([
+        expect.objectContaining({ required: expect.arrayContaining(["name", "title", "description", "category", "content", "icon"]) }),
+        expect.objectContaining({ required: ["sourceDirectoryPath"] }),
+      ]),
     })
-    expect(update?.inputSchema).not.toHaveProperty("anyOf")
     expect(update?.description).toContain("sourceDirectoryPath")
   })
 
@@ -61,5 +67,49 @@ describe("Content capability domain", () => {
     })
     expect(JSON.stringify(tools.get("content_skill_create")?.inputSchema.properties.name))
       .toContain("dots")
+  })
+
+  it("expresses validator-enforced mutual exclusions in schemas", () => {
+    const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
+    const ruleCreateSchema = tools.get("content_rule_create")?.inputSchema
+    const skillCreateSchema = tools.get("content_skill_create")?.inputSchema
+    const skillUpdateSchema = tools.get("content_skill_update")?.inputSchema
+    const filesProperty = skillCreateSchema?.properties?.files as { readonly items?: unknown } | undefined
+
+    expect(ruleCreateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        { not: { required: ["iconImagePath", "iconImageBase64"] } },
+      ]),
+    })
+    expect(skillCreateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        { not: { required: ["iconImagePath", "iconImageBase64"] } },
+        {
+          not: {
+            properties: {
+              files: { type: "array", minItems: 1 },
+            },
+            required: ["files", "sourceDirectoryPath"],
+          },
+        },
+      ]),
+    })
+    expect(skillUpdateSchema).toMatchObject({
+      allOf: expect.arrayContaining([
+        {
+          not: {
+            properties: {
+              files: { type: "array", minItems: 1 },
+            },
+            required: ["files", "sourceDirectoryPath"],
+          },
+        },
+      ]),
+    })
+    expect(filesProperty?.items).toMatchObject({
+      allOf: [
+        { not: { required: ["contentText", "contentBase64"] } },
+      ],
+    })
   })
 })

@@ -32,6 +32,17 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("requires an explicit parent id for item moves", () => {
+    const moveTool = buildDriveTools().find((tool) => tool.name === "drive_item_move")
+    expect(moveTool?.inputSchema.required).toContain("parentId")
+    expect(moveTool?.inputSchema.properties).toMatchObject({
+      parentId: {
+        anyOf: [{ type: "string" }, { type: "null" }],
+        description: expect.stringContaining("do not omit"),
+      },
+    })
+  })
+
   it("exposes the full Drive MCP tool set without legacy gaps", () => {
     expect(buildDriveTools().map((tool) => tool.name)).toEqual([
       "drive_item_list",
@@ -317,6 +328,27 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.renameDriveItem).toHaveBeenCalledWith("item-1", "after.md")
   })
 
+  it("requires explicit item move targets while preserving null as root", async () => {
+    const accountService = createAccountService({
+      moveDriveItem: vi.fn(async () => driveItem({ id: "item-1", name: "report.md", parentId: null })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.item.move", {
+      itemId: "item-1",
+    }, { source: "mcp-stdio" })).rejects.toThrow("parentId is required")
+    await expect(dispatcher.dispatch("drive.item.move", {
+      itemId: "item-1",
+      parentId: null,
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveItem({ id: "item-1", name: "report.md", parentId: null }),
+    })
+
+    expect(accountService.moveDriveItem).toHaveBeenCalledTimes(1)
+    expect(accountService.moveDriveItem).toHaveBeenCalledWith("item-1", null)
+  })
+
   it("routes public share link management tools", async () => {
     const accountService = createAccountService({
       listDriveShares: vi.fn(async () => ({ items: [driveShareListItem({ id: "share-1" })], page: drivePage() })),
@@ -352,6 +384,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ uploadDrivePublicAssets }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
@@ -380,6 +413,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ uploadDrivePublicAssets }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
@@ -389,6 +423,34 @@ describe("createDriveCapabilityDispatcher", () => {
       error: "仅支持图片。",
       data: { status: "rejected", fileName: "logo.txt", message: "仅支持图片。" },
     })
+  })
+
+  it("rejects public asset upload and replacement when the local file is a symbolic link", async () => {
+    const uploadDrivePublicAssets = vi.fn()
+    const replaceDrivePublicAssetFile = vi.fn()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isFile: true, isSymbolicLink: true, size: 4 })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets, replaceDrivePublicAssetFile }),
+      fileSystem,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo-link.png",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+    await expect(dispatcher.dispatch("drive.direct_link.update", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      filePath: "/tmp/logo-link.png",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+
+    expect(uploadDrivePublicAssets).not.toHaveBeenCalled()
+    expect(replaceDrivePublicAssetFile).not.toHaveBeenCalled()
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.createReadStream).not.toHaveBeenCalled()
   })
 
   it("routes public asset list and get tools", async () => {
@@ -419,6 +481,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService: createAccountService({ replaceDrivePublicAssetFile }),
       permissionGuard,
+      fileSystem: regularFileSystemForTest(),
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.update", {
@@ -714,6 +777,7 @@ describe("createDriveCapabilityDispatcher", () => {
       permissionGuard,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         readFile,
         createReadStream: vi.fn(() => fileStream),
@@ -761,6 +825,59 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects MCP file uploads when the requested file is a symbolic link", async () => {
+    const accountService = createAccountService()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isFile: true, isSymbolicLink: true, size: 4 })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "/tmp/report-link.md",
+    }, { source: "mcp-stdio" })).rejects.toThrow("File upload does not support symbolic links.")
+
+    expect(accountService.prepareDriveUpload).not.toHaveBeenCalled()
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.createReadStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects relative MCP file upload paths before permission checks", async () => {
+    const accountService = createAccountService()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(),
+    }
+    const fileSystem = {
+      lstat: vi.fn(),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "README.md",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
+
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+    }))
+    expect(fileSystem?.lstat).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveUpload).not.toHaveBeenCalled()
+  })
+
   it("retries completed MCP file upload sessions before cancelling", async () => {
     const item = driveItem({ id: "item-1", name: "report.md" })
     const accountService = createAccountService({
@@ -771,6 +888,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         createReadStream: vi.fn(() => Readable.from(["test"])),
         readdir: vi.fn(),
@@ -838,6 +956,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 1024 * 1024 * 1024 })),
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 1024 * 1024 * 1024 })),
         readFile,
         createReadStream,
@@ -898,6 +1017,11 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/project",
+          isDirectory: target === "/tmp/project",
+          size: target.endsWith("b.txt") ? 2 : 1,
+        })),
         stat: vi.fn(async (target: string) => ({
           isFile: () => target !== "/tmp/project",
           isDirectory: () => target === "/tmp/project",
@@ -945,6 +1069,36 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects relative MCP folder upload paths before permission checks", async () => {
+    const accountService = createAccountService()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(),
+    }
+    const fileSystem = {
+      lstat: vi.fn(),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "docs",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
+
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+    }))
+    expect(fileSystem?.lstat).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+  })
+
   it("deletes a newly created MCP folder upload root when every file upload fails", async () => {
     const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
     const accountService = createAccountService({
@@ -971,6 +1125,11 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/project",
+          isDirectory: target === "/tmp/project",
+          size: 1,
+        })),
         stat: vi.fn(async (target: string) => ({
           isFile: () => target !== "/tmp/project",
           isDirectory: () => target === "/tmp/project",
@@ -1012,11 +1171,39 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects MCP folder uploads when the requested folder is a symbolic link", async () => {
+    const accountService = createAccountService()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isDirectory: true, isSymbolicLink: true })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project-link",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Folder upload does not support symbolic links.")
+
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.readdir).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+  })
+
   it("rejects MCP folder uploads that exceed the local upload file limit before preparing sessions", async () => {
     const accountService = createAccountService()
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/large-folder",
+          isDirectory: target === "/tmp/large-folder",
+          size: 1,
+        })),
         stat: vi.fn(async () => ({
           isFile: () => true,
           isDirectory: () => true,
@@ -1049,6 +1236,11 @@ describe("createDriveCapabilityDispatcher", () => {
       (_, index) => `level-${index}`,
     )
     const fileSystem = {
+      lstat: vi.fn(async (target: string) => statLikeForTest({
+        isFile: target.endsWith("too-deep.txt"),
+        isDirectory: !target.endsWith("too-deep.txt"),
+        size: 1,
+      })),
       stat: vi.fn(async () => ({
         isFile: () => true,
         isDirectory: () => true,
@@ -1308,6 +1500,29 @@ function createAuditSink(): DriveAuditSink {
     list: vi.fn(() => []),
     clearForTests: vi.fn(),
   }
+}
+
+function statLikeForTest(input: {
+  readonly isFile?: boolean
+  readonly isDirectory?: boolean
+  readonly isSymbolicLink?: boolean
+  readonly size?: number
+}) {
+  return {
+    isFile: () => input.isFile ?? false,
+    isDirectory: () => input.isDirectory ?? false,
+    isSymbolicLink: () => input.isSymbolicLink ?? false,
+    size: input.size ?? 0,
+  }
+}
+
+function regularFileSystemForTest(): NonNullable<DriveDispatcherDeps["fileSystem"]> {
+  return {
+    lstat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
+    stat: vi.fn(async () => statLikeForTest({ isFile: true, size: 4 })),
+    createReadStream: vi.fn(() => Readable.from(["test"])),
+    readdir: vi.fn(),
+  } as unknown as NonNullable<DriveDispatcherDeps["fileSystem"]>
 }
 
 function pathBasenameForTest(value: string): string {

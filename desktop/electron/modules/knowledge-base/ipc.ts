@@ -115,6 +115,7 @@ const exportRawEntriesPayloadSchema = z.object({
 
 const addUrlSourcePayloadSchema = z.object({
   projectId: z.string().min(1),
+  targetDirectoryPath: z.string().optional(),
   url: z.string().min(1),
 })
 
@@ -668,7 +669,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:add-url-source",
       request: addUrlSourcePayloadSchema,
       response: uploadSourcesResultSchema,
-      handler: async (ctx, request: { projectId: string; url: string }) => {
+      handler: async (ctx, request: { projectId: string; targetDirectoryPath?: string; url: string }) => {
         const checkedNetworkResources = new Set<string>()
         if (validateUrlSourceCandidate(request.url).ok) {
           await checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(request.url), checkedNetworkResources)
@@ -693,6 +694,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       }),
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await showOpenDialog({
           properties: ["openFile", "multiSelections"],
         })
@@ -719,6 +721,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: selectAndUploadRawDirectoryPayloadSchema,
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory"],
         })
@@ -746,6 +749,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: exportRawEntriesPayloadSchema,
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[] }) => trackRawMutation(async () => {
+        await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory", "createDirectory"],
         })

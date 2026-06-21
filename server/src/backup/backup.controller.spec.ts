@@ -80,6 +80,30 @@ describe("BackupController", () => {
     })
   })
 
+  it("answers backup download HEAD checks without opening the backup stream", () => {
+    const service = {
+      downloadBackup: vi.fn(),
+    }
+    const auditLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    }
+    const response = {
+      end: vi.fn(),
+      set: vi.fn(),
+    }
+    const controller = new BackupController(service as unknown as BackupService, auditLog as never)
+
+    controller.checkDownloadBackup("synapse-backup.tar", response as never)
+
+    expect(service.downloadBackup).not.toHaveBeenCalled()
+    expect(response.set).toHaveBeenCalledWith({
+      "Content-Type": "application/x-tar",
+      "Content-Disposition": "attachment; filename=\"synapse-backup.tar\"; filename*=UTF-8''synapse-backup.tar",
+    })
+    expect(response.end).toHaveBeenCalledOnce()
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
   it("rethrows backup stream errors before sending headers", async () => {
     const error = new Error("COS stream failed")
     const stream = new Readable({

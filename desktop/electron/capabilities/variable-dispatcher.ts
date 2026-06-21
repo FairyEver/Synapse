@@ -370,15 +370,23 @@ async function getVariable(
   const name = requireVariableName(params, "name")
   const includeValue = params.includeValue === true
   const audit = await authorizeSecret(deps, "secret.read", action, context, name, includeValue)
-  const config = await deps.loadConfig()
-  const { variable } = requireExistingVariable(config.global.variables, name)
-  recordSecretAudit(deps, audit, "allowed")
-  return {
-    ok: true,
-    data: {
-      ...variableResponse(variable),
-      variable: includeValue ? { ...toSafeVariable(variable), value: variable.value } : toSafeVariable(variable),
-    },
+  try {
+    const config = await deps.loadConfig()
+    const { variable } = requireExistingVariable(config.global.variables, name)
+    recordSecretAudit(deps, audit, "allowed")
+    return {
+      ok: true,
+      data: {
+        ...variableResponse(variable),
+        variable: includeValue ? { ...toSafeVariable(variable), value: variable.value } : toSafeVariable(variable),
+      },
+    }
+  } catch (error) {
+    recordSecretAudit(deps, audit, "failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: String(error).length,
+    })
+    throw error
   }
 }
 

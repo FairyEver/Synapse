@@ -11,6 +11,10 @@ const MAX_REDIRECTS = 5
 const DEFAULT_TIMEOUT_MS = 30_000
 const logger = createMainLogger("source-acquisition.guarded-fetch")
 
+type GuardedFetchResponse = Awaited<ReturnType<FetchUrl>> & {
+  readonly discardBody: () => void
+}
+
 export interface CreateGuardedFetchUrlOptions {
   readonly timeoutMs?: number
   readonly allowLocalOrPrivateHosts?: boolean
@@ -40,7 +44,7 @@ async function fetchWithRedirects(
   const response = await requestUrl(url, options)
   if (isRedirect(response.status)) {
     if (options.redirectsRemaining <= 0) {
-      response.discard?.()
+      response.discardBody()
       logger.warn("Guarded URL fetch redirect limit exceeded.", {
         url: safeUrlForLog(url),
         maxRedirects: MAX_REDIRECTS,
@@ -49,14 +53,14 @@ async function fetchWithRedirects(
     }
     const location = response.headers.get("location")
     if (!location) {
-      response.discard?.()
+      response.discardBody()
       logger.warn("Guarded URL fetch redirect missing location.", {
         url: safeUrlForLog(url),
         status: response.status,
       })
       throw new Error("URL redirect response did not include a Location header.")
     }
-    response.discard?.()
+    response.discardBody()
     return fetchWithRedirects(new URL(location, url), {
       ...options,
       redirectsRemaining: options.redirectsRemaining - 1,
@@ -73,7 +77,7 @@ async function requestUrl(
     readonly timeoutMs: number
     readonly beforeRequest?: (url: URL) => Promise<void> | void
   },
-): ReturnType<FetchUrl> {
+): Promise<GuardedFetchResponse> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     logger.warn("Guarded URL fetch rejected unsupported protocol.", {
       url: safeUrlForLog(url),
@@ -160,7 +164,7 @@ function safeUrlForLog(url: URL): string {
   return sanitizeUrl(url.toString())
 }
 
-function responseFromMessage(url: string, message: IncomingMessage): Awaited<ReturnType<FetchUrl>> {
+function responseFromMessage(url: string, message: IncomingMessage): GuardedFetchResponse {
   const headers = normalizeHeaders(message.headers)
   return {
     url,
@@ -170,8 +174,9 @@ function responseFromMessage(url: string, message: IncomingMessage): Awaited<Ret
         return headers.get(name.toLowerCase()) ?? null
       },
     },
-    discard: () => discardResponse(message),
+    discard: () => discardResponseBody(message),
     text: (options) => readResponseText(message, options?.maxBytes),
+    discardBody: () => discardResponseBody(message),
   }
 }
 
@@ -214,7 +219,7 @@ function readResponseText(message: IncomingMessage, maxBytes?: number): Promise<
   })
 }
 
-function discardResponse(message: IncomingMessage): void {
+function discardResponseBody(message: IncomingMessage): void {
   if (message.destroyed || message.readableEnded) return
   message.destroy()
 }

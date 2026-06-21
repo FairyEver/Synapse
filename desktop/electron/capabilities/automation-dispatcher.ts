@@ -56,6 +56,8 @@ type AutomationDispatchSecurity = {
 }
 
 const READING_AUTOMATION_ACTIONS = new Set([
+  "automation.trigger_type.list",
+  "automation.executor_type.list",
   "automation.item.list",
   "automation.item.get",
   "automation.run.list",

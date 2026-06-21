@@ -219,6 +219,7 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(projectId)
     const result = await stageKnowledgeBaseUrlSource({
       projectPath,
+      targetDirectoryPath: payload.targetDirectoryPath,
       url: payload.url,
       now: this.now,
       fetchUrl: options.fetchUrl ?? this.fetchUrl,

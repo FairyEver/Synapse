@@ -3,6 +3,7 @@ import {
   DRAGONSCALE_TILING_MAX_RESPONSE_BYTES,
   type DragonScaleEmbeddingProvider,
 } from "./tiling-types"
+import { sanitizeUrl } from "../../../../src/lib/url-sanitize"
 import { createMainLogger } from "../../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 
@@ -17,7 +18,7 @@ export class DragonScaleOllamaEmbeddingProvider implements DragonScaleEmbeddingP
       return true
     } catch (error) {
       logger.warn("DragonScale Ollama reachability check failed", {
-        url,
+        url: sanitizeDragonScaleOllamaUrl(url),
         ...errorLogMeta(error),
       })
       return false
@@ -34,7 +35,7 @@ export class DragonScaleOllamaEmbeddingProvider implements DragonScaleEmbeddingP
       })
     } catch (error) {
       logger.warn("DragonScale Ollama model query failed", {
-        url,
+        url: sanitizeDragonScaleOllamaUrl(url),
         model,
         ...errorLogMeta(error),
       })
@@ -65,9 +66,13 @@ export function resolveDragonScaleOllamaUrl(options: {
 } = {}): string {
   const raw = options.ollamaUrl ?? options.env?.OLLAMA_URL ?? process.env.OLLAMA_URL ?? DRAGONSCALE_TILING_DEFAULT_OLLAMA_URL
   if (!isLocalOllamaUrl(raw) && options.allowRemoteOllama !== true) {
-    throw new Error(`OLLAMA_URL=${raw} is not localhost. Pass allowRemoteOllama to override.`)
+    throw new Error(`OLLAMA_URL=${sanitizeDragonScaleOllamaUrl(raw)} is not localhost. Pass allowRemoteOllama to override.`)
   }
   return raw
+}
+
+export function sanitizeDragonScaleOllamaUrl(raw: string): string {
+  return sanitizeUrl(raw)
 }
 
 export function isLocalOllamaUrl(raw: string): boolean {

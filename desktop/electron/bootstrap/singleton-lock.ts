@@ -4,7 +4,9 @@
  * Electron's `requestSingleInstanceLock()` writes lock files to userData; if the
  * previous run crashed without releasing them, a fresh start would be falsely
  * treated as a "second instance". This helper detects a stale lock by reading
- * the symlink target's PID and verifying the process no longer exists.
+ * the symlink target's PID where available and verifying the process no longer
+ * exists. On platforms where Electron uses regular lock files, cleanup remains
+ * best-effort and the caller must retry `requestSingleInstanceLock()`.
  *
  * Extracted from `main.ts` verbatim — Phase 0.6 may re-home this under
  * `runtime/` if other entry points need it, but for now it's main-only.
@@ -17,12 +19,7 @@ import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("bootstrap.singleton-lock")
 
-export function clearStaleSingletonLock(platform: NodeJS.Platform = process.platform): boolean {
-  if (platform === "win32") {
-    logger.debug("Skipping stale singleton lock cleanup on Windows.")
-    return false
-  }
-
+export function clearStaleSingletonLock(): boolean {
   const lockPath = path.join(app.getPath("userData"), "SingletonLock")
 
   if (!existsSync(lockPath)) {

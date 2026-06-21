@@ -293,11 +293,13 @@ describe("knowledgeBaseIpcModule", () => {
 
     const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/article?token=secret-token",
     }) as { uploaded: unknown[] }
 
     expect(addUrlSource).toHaveBeenCalledWith({
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/article?token=secret-token",
     }, expect.objectContaining({
       fetchUrl: expect.any(Function),
@@ -342,6 +344,7 @@ describe("knowledgeBaseIpcModule", () => {
 
     await harness.invoke("synapse:knowledge-base:add-url-source", {
       projectId: "kb-1",
+      targetDirectoryPath: "client-a",
       url: "https://example.com/redirect-source?token=initial-secret",
     })
 
@@ -789,6 +792,31 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("blocks selected raw file upload before opening picker when storage is unavailable", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [],
+    })
+    const { harness, migrationService, permissionGuard } = createHarness({ service: { uploadRawFiles } })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "custom",
+      rootPath: "/Volumes/Missing/Synapse",
+      knowledgeBasesPath: "/Volumes/Missing/Synapse/knowledge-bases",
+      available: false,
+      unavailableReason: "missing volume",
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
+
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(uploadRawFiles).not.toHaveBeenCalled()
+  })
+
   it("does not upload raw files when external file read permission is denied", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
@@ -870,6 +898,27 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("blocks selected raw directory upload before opening picker when storage is unavailable", async () => {
+    const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, migrationService, permissionGuard } = createHarness({ service: { uploadRawItems } })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "custom",
+      rootPath: "/Volumes/Missing/Synapse",
+      knowledgeBasesPath: "/Volumes/Missing/Synapse/knowledge-bases",
+      available: false,
+      unavailableReason: "missing volume",
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
+
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(uploadRawItems).not.toHaveBeenCalled()
+  })
+
   it("exports raw entries to a selected external directory", async () => {
     electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/export"] })
     const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
@@ -918,6 +967,27 @@ describe("knowledgeBaseIpcModule", () => {
       relativePaths: ["brief.md"],
       targetDirectoryPath: "/tmp/export",
     })
+  })
+
+  it("blocks raw export before opening picker when storage is unavailable", async () => {
+    const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, migrationService, permissionGuard } = createHarness({ service: { exportRawEntries } })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "custom",
+      rootPath: "/Volumes/Missing/Synapse",
+      knowledgeBasesPath: "/Volumes/Missing/Synapse/knowledge-bases",
+      available: false,
+      unavailableReason: "missing volume",
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+    })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
+
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(exportRawEntries).not.toHaveBeenCalled()
   })
 
   it("blocks raw export while storage migration blocks source manager operations", async () => {

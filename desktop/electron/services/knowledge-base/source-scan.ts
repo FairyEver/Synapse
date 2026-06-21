@@ -20,6 +20,8 @@ const SUPPORTED_SOURCE_EXTENSIONS = new Set([
 ])
 const DEFAULT_MAX_SOURCE_BYTES = 16 * 1024 * 1024
 const DEFAULT_MAX_SCAN_BYTES = 64 * 1024 * 1024
+const DEFAULT_MAX_DISCOVERY_ENTRIES = 10_000
+const DEFAULT_MAX_DISCOVERY_DEPTH = 32
 
 export type KnowledgeBaseSourceState = "new" | "changed" | "unchanged"
 
@@ -31,7 +33,14 @@ export interface KnowledgeBaseSourceScanItem {
 
 export interface KnowledgeBaseSkippedSource {
   readonly relativePath: string
-  readonly reason: "unsupported-extension" | "symlink" | "read-error" | "too-large" | "scan-size-limit"
+  readonly reason:
+    | "unsupported-extension"
+    | "symlink"
+    | "read-error"
+    | "too-large"
+    | "scan-size-limit"
+    | "scan-entry-limit"
+    | "scan-depth-limit"
 }
 
 export interface KnowledgeBaseSourceScanResult {
@@ -46,6 +55,8 @@ export async function scanKnowledgeBaseSources(
     readonly force?: boolean
     readonly maxScanBytes?: number
     readonly maxSourceBytes?: number
+    readonly maxDiscoveryEntries?: number
+    readonly maxDiscoveryDepth?: number
   } = {},
 ): Promise<KnowledgeBaseSourceScanResult> {
   const manifest = await readKnowledgeBaseManifest(projectPath)
@@ -60,7 +71,10 @@ export async function scanKnowledgeBaseSources(
       skippedSources: rawDirectory === "missing" ? [] : [{ relativePath: ".raw", reason: rawDirectory }],
     }
   }
-  const discovered = await walkRawSources(projectPath, rawPath)
+  const discovered = await walkRawSources(projectPath, rawPath, {
+    maxDiscoveryDepth: options.maxDiscoveryDepth ?? DEFAULT_MAX_DISCOVERY_DEPTH,
+    maxDiscoveryEntries: options.maxDiscoveryEntries ?? DEFAULT_MAX_DISCOVERY_ENTRIES,
+  })
   const sources: KnowledgeBaseSourceScanItem[] = []
   const skippedSources: KnowledgeBaseSkippedSource[] = [...discovered.skippedSources]
   let scannedBytes = 0
@@ -115,7 +129,29 @@ export async function scanKnowledgeBaseSources(
 async function walkRawSources(
   projectPath: string,
   directoryPath: string,
+  options: {
+    readonly maxDiscoveryDepth: number
+    readonly maxDiscoveryEntries: number
+  },
+  state: {
+    discoveredEntries: number
+    stopped: boolean
+  } = { discoveredEntries: 0, stopped: false },
+  depth = 0,
 ): Promise<{ readonly relativePaths: string[]; readonly skippedSources: KnowledgeBaseSkippedSource[] }> {
+  if (state.stopped) {
+    return { relativePaths: [], skippedSources: [] }
+  }
+  if (depth > options.maxDiscoveryDepth) {
+    return {
+      relativePaths: [],
+      skippedSources: [{
+        relativePath: normalizeRelativePath(path.relative(projectPath, directoryPath)),
+        reason: "scan-depth-limit",
+      }],
+    }
+  }
+
   let entries: Dirent[]
   try {
     entries = await readdir(directoryPath, { withFileTypes: true })
@@ -138,12 +174,18 @@ async function walkRawSources(
   for (const entry of entries) {
     const absolutePath = path.join(directoryPath, entry.name)
     const relativePath = normalizeRelativePath(path.relative(projectPath, absolutePath))
+    state.discoveredEntries += 1
+    if (state.discoveredEntries > options.maxDiscoveryEntries) {
+      state.stopped = true
+      skippedSources.push({ relativePath, reason: "scan-entry-limit" })
+      break
+    }
     if (entry.isSymbolicLink()) {
       skippedSources.push({ relativePath, reason: "symlink" })
       continue
     }
     if (entry.isDirectory()) {
-      const nested = await walkRawSources(projectPath, absolutePath)
+      const nested = await walkRawSources(projectPath, absolutePath, options, state, depth + 1)
       relativePaths.push(...nested.relativePaths)
       skippedSources.push(...nested.skippedSources)
       continue

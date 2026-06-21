@@ -14,7 +14,7 @@ Use this skill only for Synapse model price rules:
 - partially update or clear price rules;
 - enable, disable, or delete price rules.
 
-Do not use this skill for Database tables, Scheduler tasks, Workflow definitions, built-in content publishing, provider settings, editor installation, or historical usage repricing.
+Do not use this skill for Database tables, Scheduler tasks, Workflow definitions, built-in content publishing, provider settings, editor installation, or running Usage Analysis refresh jobs.
 
 ## Default Flow
 
@@ -38,12 +38,13 @@ Do not use this skill for Database tables, Scheduler tasks, Workflow definitions
 - Do not clear all rules unless the user explicitly asked for that full reset.
 - Prices are RMB per 1M tokens.
 - `0` is valid for a token type that is not charged.
-- Do not claim that price edits changed historical usage costs.
-- Do not trigger or simulate historical repricing.
+- Do not claim that price edits immediately changed already indexed usage costs.
+- Do not trigger or simulate Usage Analysis refreshes from this skill.
+- If asked about historical totals, explain that a later Usage Analysis refresh can reprocess unchanged CC/Codex usage files when the price-rule hash changes.
 
 ## Matching Notes
 
-`model_price_used_model_list` returns `priceKnown`, `matchedRuleId`, and `matchedRulePattern` based on currently enabled rules. This indicates current rule coverage only. It does not prove that older usage events were priced.
+`model_price_used_model_list` returns `priceKnown`, `matchedRuleId`, and `matchedRulePattern` based on currently enabled rules. This indicates current rule coverage only. It does not prove that older usage events have already been refreshed with the current rules.
 
 ## API Reference
 

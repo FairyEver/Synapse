@@ -327,6 +327,38 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       SAFE_FLAG: "plain-env-value",
     })
   })
+
+  it("sanitizes Claude Code prompts in persisted definitions", () => {
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Claude Code workflow",
+      version: "1.0.0",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [],
+      edges: [],
+      nodes: [
+        {
+          id: "claude-code-1",
+          name: "Claude Code",
+          type: "claude_code",
+          position: { x: 0, y: 0 },
+          config: {
+            prompt: "Use Authorization: Bearer raw-token and /Users/liyang/private.txt",
+            projectId: "project-1",
+          },
+        },
+      ],
+    }
+
+    const sanitized = sanitizeWorkflowDefinitionForSnapshot(definition)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.nodes[0]?.config.prompt).toContain("Authorization=[redacted]")
+    expect(sanitized.nodes[0]?.config.prompt).toContain("[path]")
+    expect(raw).not.toContain("raw-token")
+    expect(raw).not.toContain("/Users/liyang/private.txt")
+  })
 })
 
 describe("sanitizeWorkflowRunSnapshot", () => {

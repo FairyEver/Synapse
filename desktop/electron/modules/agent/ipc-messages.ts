@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat } from "node:fs/promises"
+import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -133,6 +133,9 @@ async function normalizeSendAttachments(
     if (!stat.isFile() && !stat.isDirectory()) {
       throw new Error("附件路径必须是文件或文件夹。")
     }
+    if (stat.isDirectory()) {
+      await assertDirectoryAttachmentHasNoSymlinks(normalizedPath)
+    }
     normalized.push({
       ...attachment,
       path: normalizedPath,
@@ -159,6 +162,25 @@ async function lstatAttachmentPath(attachmentPath: string): Promise<Awaited<Retu
     throw new Error("附件路径不存在。")
   }
   return finalStat
+}
+
+async function assertDirectoryAttachmentHasNoSymlinks(directoryPath: string): Promise<void> {
+  const pending = [directoryPath]
+  while (pending.length > 0) {
+    const currentDirectory = pending.pop()
+    if (!currentDirectory) continue
+    const entries = await readdir(currentDirectory, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryPath = path.join(currentDirectory, entry.name)
+      const entryStat = await lstat(entryPath)
+      if (entryStat.isSymbolicLink()) {
+        throw new Error("文件夹附件不能包含符号链接。")
+      }
+      if (entryStat.isDirectory()) {
+        pending.push(entryPath)
+      }
+    }
+  }
 }
 
 function attachmentPathPrefixes(attachmentPath: string): readonly string[] {

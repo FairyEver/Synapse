@@ -385,10 +385,14 @@ describe("DragonScaleTilingService", () => {
     const service = new DragonScaleTilingService({ embeddingProvider: new FakeEmbeddingProvider() })
 
     await expect(service.check(root)).resolves.toMatchObject({ status: "usage-error" })
-    await expect(service.check(root, { ollamaUrl: "https://example.com" })).resolves.toMatchObject({
+    const remoteResult = await service.check(root, { ollamaUrl: "https://user:secret@example.com?token=sk-secret" })
+    expect(remoteResult).toMatchObject({
       status: "usage-error",
       message: expect.stringContaining("not localhost"),
     })
+    expect(JSON.stringify(remoteResult)).toContain("https://example.com/?token=%5Bredacted%5D")
+    expect(JSON.stringify(remoteResult)).not.toContain("user:secret")
+    expect(JSON.stringify(remoteResult)).not.toContain("sk-secret")
   })
 
   it("reports peek diagnostics without writing cache or reports", async () => {

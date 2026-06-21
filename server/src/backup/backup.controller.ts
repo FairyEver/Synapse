@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, InternalServerErrorException, Optional, Param, Post, Req, Res, UseGuards } from "@nestjs/common"
+import { Controller, Delete, Get, Head, InternalServerErrorException, Optional, Param, Post, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { pipeline } from "node:stream/promises"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -51,6 +51,18 @@ export class BackupController {
       if (!response.headersSent) throw error
       if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
     }
+  }
+
+  @Head("download/:filename")
+  checkDownloadBackup(
+    @Param("filename") filename: string,
+    @Res() response: Response,
+  ) {
+    response.set({
+      "Content-Type": contentType(filename),
+      "Content-Disposition": contentDisposition(filename),
+    })
+    response.end()
   }
 
   @Delete(":filename")

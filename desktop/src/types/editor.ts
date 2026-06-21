@@ -55,6 +55,10 @@ export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & 
    */
   replaceConfirmed?: boolean
   /**
+   * When true, indicates user has confirmed overwriting an existing target directory.
+   */
+  overwriteConfirmed?: boolean
+  /**
    * Content id of the Skill being replaced during a confirmed conflict install.
    * Used to clear stale install-status badges after the target directory changes owner.
    */

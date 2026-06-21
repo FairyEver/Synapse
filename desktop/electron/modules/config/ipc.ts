@@ -10,6 +10,7 @@ import { app, BrowserWindow } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { EventBus } from "../../runtime/event-bus"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
 import { sanitizeConfigPatchForLog } from "../../../src/lib/config-log-redaction"
@@ -21,6 +22,7 @@ import { repositoryStore } from "../../services/repository-store"
 import { shutdownDatabase } from "../../database"
 
 const logger = createMainLogger("ipc.config")
+let isConfigImportRunning = false
 
 // 重置应用时需要保留的文件前缀
 const PRESERVED_FILE_PREFIXES = ["synapse-database.db", "synapse-data.db"]
@@ -115,6 +117,7 @@ export const configIpcModule: IpcModule = {
           }
 
           recordVariableAudits(ctx, variableAudits, "allowed")
+          emitVariablesUpdated(ctx, variableAudits)
 
           logger.info(
             `Config updated. activeRepoUuid: ${config.activeRepoUuid}, repositoryCount: ${config.repositories.length}`
@@ -203,93 +206,102 @@ export const configIpcModule: IpcModule = {
       handler: async (ctx) => {
         logger.info("Handling config.importBackup request.")
 
-        const filePath = await configBackupService.selectImportSource({
-          getParentWindow,
-        })
-        if (!filePath) {
-          return null
+        if (isConfigImportRunning) {
+          throw new Error("已有配置导入正在进行，请稍后再试。")
         }
+        isConfigImportRunning = true
 
-        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-        const actor = { kind: "user" } as const
-        const permission = await permissionGuard.check({
-          action: "fs.read.outside-userdata",
-          actor,
-          resource: filePath,
-          context: { source: "config.importBackup" },
-        })
-        if (!permission.allowed) {
+        try {
+          const filePath = await configBackupService.selectImportSource({
+            getParentWindow,
+          })
+          if (!filePath) {
+            return null
+          }
+
+          const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+          const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+          const actor = { kind: "user" } as const
+          const permission = await permissionGuard.check({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: filePath,
+            context: { source: "config.importBackup" },
+          })
+          if (!permission.allowed) {
+            auditSink.record({
+              action: "fs.read.outside-userdata",
+              actor,
+              resource: filePath,
+              outcome: "denied",
+              metadata: {
+                source: "config.importBackup",
+                reason: permission.reason,
+                policyId: permission.policyId,
+              },
+            })
+            throw new Error(permission.reason)
+          }
+
           auditSink.record({
             action: "fs.read.outside-userdata",
             actor,
             resource: filePath,
-            outcome: "denied",
-            metadata: {
-              source: "config.importBackup",
-              reason: permission.reason,
-              policyId: permission.policyId,
-            },
-          })
-          throw new Error(permission.reason)
-        }
-
-        auditSink.record({
-          action: "fs.read.outside-userdata",
-          actor,
-          resource: filePath,
-          outcome: "allowed",
-          metadata: { source: "config.importBackup" },
-        })
-
-        let importPlan: Awaited<ReturnType<typeof configBackupService.prepareImport>>
-        try {
-          importPlan = await configBackupService.prepareImport(filePath)
-        } catch (error) {
-          auditSink.record({
-            action: "fs.write",
-            actor,
-            resource: "config+identity",
-            outcome: "failed",
-            metadata: {
-              operation: "config.import",
-              source: "config.importBackup",
-              errorName: error instanceof Error ? error.name : typeof error,
-            },
-          })
-          throw error
-        }
-
-        const variableAudits = await authorizeVariableImport(ctx, importPlan.previousConfig.global.variables, importPlan.nextConfig.global.variables)
-
-        try {
-          const result = await configBackupService.commitImport(importPlan)
-          recordVariableAudits(ctx, variableAudits, "allowed")
-          auditSink.record({
-            action: "fs.write",
-            actor,
-            resource: "config+identity",
             outcome: "allowed",
-            metadata: { operation: "config.import", source: "config.importBackup" },
+            metadata: { source: "config.importBackup" },
           })
-          return result
-        } catch (error) {
-          auditSink.record({
-            action: "fs.write",
-            actor,
-            resource: "config+identity",
-            outcome: "failed",
-            metadata: {
-              operation: "config.import",
-              source: "config.importBackup",
+
+          let importPlan: Awaited<ReturnType<typeof configBackupService.prepareImport>>
+          try {
+            importPlan = await configBackupService.prepareImport(filePath)
+          } catch (error) {
+            auditSink.record({
+              action: "fs.write",
+              actor,
+              resource: "config+identity",
+              outcome: "failed",
+              metadata: {
+                operation: "config.import",
+                source: "config.importBackup",
+                errorName: error instanceof Error ? error.name : typeof error,
+              },
+            })
+            throw error
+          }
+
+          const variableAudits = await authorizeVariableImport(ctx, importPlan.previousConfig.global.variables, importPlan.nextConfig.global.variables)
+
+          try {
+            const result = await configBackupService.commitImport(importPlan)
+            recordVariableAudits(ctx, variableAudits, "allowed")
+            auditSink.record({
+              action: "fs.write",
+              actor,
+              resource: "config+identity",
+              outcome: "allowed",
+              metadata: { operation: "config.import", source: "config.importBackup" },
+            })
+            return result
+          } catch (error) {
+            auditSink.record({
+              action: "fs.write",
+              actor,
+              resource: "config+identity",
+              outcome: "failed",
+              metadata: {
+                operation: "config.import",
+                source: "config.importBackup",
+                errorName: error instanceof Error ? error.name : typeof error,
+              },
+            })
+            recordVariableAudits(ctx, variableAudits, "failed", {
               errorName: error instanceof Error ? error.name : typeof error,
-            },
-          })
-          recordVariableAudits(ctx, variableAudits, "failed", {
-            errorName: error instanceof Error ? error.name : typeof error,
-            errorLength: String(error).length,
-          })
-          throw error
+              errorLength: String(error).length,
+            })
+            throw error
+          }
+        } finally {
+          isConfigImportRunning = false
         }
       },
     },
@@ -551,6 +563,24 @@ function recordVariableAudits(
       metadata: metadata ? { ...audit.metadata, ...metadata } : audit.metadata,
     })
   }
+}
+
+function emitVariablesUpdated(ctx: IpcHandlerContext, audits: readonly VariableAuditEntry[]): void {
+  if (audits.length === 0) {
+    return
+  }
+  const timestamp = new Date().toISOString()
+  const eventBus = ctx.resolve<EventBus>("core.event-bus")
+  eventBus.emit({
+    domain: "repository",
+    type: "repository.updated",
+    payload: {
+      operation: "variables",
+      completedAt: timestamp,
+      message: "变量已更新",
+    },
+    timestamp,
+  })
 }
 
 async function flushAuditSink(auditSink: AuditSink): Promise<void> {

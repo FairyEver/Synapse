@@ -10,6 +10,7 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
 import { assertSafeWorkflowRunId } from "../services/workflow/workflow-id"
+import { sanitizeWorkflowRunStatus } from "../services/workflow/run-snapshot-sanitize"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 
@@ -270,7 +271,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.run.get": async (params, deps) => {
     const runId = requireWorkflowRunId(params, "runId")
     const status = await deps.getRunStatus(runId)
-    if (status) return { ok: true, data: status }
+    if (status) return { ok: true, data: sanitizeWorkflowRunStatus(status) }
     const snapshot = await deps.snapshotService.findByRunId(runId)
     return { ok: true, data: snapshot ? snapshotToRunStatus(snapshot) : null }
   },

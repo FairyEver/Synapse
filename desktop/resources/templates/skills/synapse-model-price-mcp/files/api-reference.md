@@ -160,4 +160,4 @@ Clear all rules:
 1. Confirm the user explicitly requested a full reset.
 2. Call `model_price_rule_clear`.
 
-Model price rule changes affect current and future matching. Do not claim they changed historical usage costs or trigger historical repricing.
+Model price rule changes affect current matching immediately, but they do not rewrite already indexed usage totals at save time. A later Usage Analysis refresh can reprocess unchanged CC/Codex usage files when the price-rule hash changes. Do not trigger or simulate that refresh from this skill.

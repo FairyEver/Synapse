@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
@@ -172,6 +172,36 @@ describe("mcp-installer", () => {
     ])
     expect(readFileSync(settingsPath, "utf-8")).not.toContain("Authorization")
     expect(readFileSync(settingsPath, "utf-8")).not.toContain("Bearer")
+  })
+
+  it("backs up existing editor MCP config files before replacing them", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".cursor", "mcp.json")
+    const originalSettings = {
+      mcpServers: {
+        existing: {
+          type: "http",
+          url: "http://127.0.0.1:12345/mcp",
+        },
+      },
+    }
+    writeFileSync(settingsPath, JSON.stringify(originalSettings, null, 2), "utf8")
+
+    const result = await registerMcp("cursor", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    const backups = readdirSync(path.dirname(settingsPath))
+      .filter((name) => name.startsWith("mcp.synapse-backup-") && name.endsWith(".json"))
+    expect(backups).toHaveLength(1)
+    expect(JSON.parse(readFileSync(path.join(path.dirname(settingsPath), backups[0]!), "utf8"))).toEqual(originalSettings)
+    expect(JSON.parse(readFileSync(settingsPath, "utf8")).mcpServers).toMatchObject({
+      existing: originalSettings.mcpServers.existing,
+      "synapse-mcp": {
+        type: "http",
+        url: "http://127.0.0.1:51234/mcp",
+      },
+    })
   })
 
   it("registers Codex MCP without static authorization headers", async () => {

@@ -168,6 +168,7 @@ const resolveEditorTargetPayloadSchema = z.object({
 })
 const installToEditorPayloadSchema = resolveEditorTargetPayloadSchema.extend({
   installFormValues: z.record(z.string(), z.unknown()).optional(),
+  overwriteConfirmed: z.boolean().optional(),
   replaceConfirmed: z.boolean().optional(),
   replacedContentId: z.string().optional(),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),

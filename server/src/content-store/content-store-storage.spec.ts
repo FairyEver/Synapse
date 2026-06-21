@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Readable } from "node:stream"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { LocalContentStoreStorage, shouldUseCosContentStoreStorage } from "./content-store-storage"
 
@@ -11,9 +11,25 @@ const roots: string[] = []
 afterEach(async () => {
   await Promise.all(roots.map((root) => rm(root, { force: true, recursive: true })))
   roots.length = 0
+  vi.unstubAllEnvs()
 })
 
 describe("LocalContentStoreStorage", () => {
+  it("uses the configured persistent local root when options omit a root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-store-local-env-"))
+    roots.push(root)
+    stubServerEnv({ SYNAPSE_CONTENT_STORE_LOCAL_ROOT: root })
+    const storage = new LocalContentStoreStorage()
+
+    await storage.putObject({
+      key: "content-store/drafts/user-1/draft-1/file.txt",
+      body: Buffer.from("hello"),
+      contentType: "text/plain",
+    })
+
+    await expect(readFile(path.join(root, "content-store/drafts/user-1/draft-1/file.txt"), "utf8")).resolves.toBe("hello")
+  })
+
   it("writes and reads objects under the configured root", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-store-local-"))
     roots.push(root)
@@ -97,4 +113,15 @@ async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
   }
   return Buffer.concat(chunks).toString("utf8")
+}
+
+function stubServerEnv(overrides: NodeJS.ProcessEnv = {}): void {
+  vi.stubEnv("DATABASE_URL", "postgresql://synapse:secret@localhost:5432/synapse")
+  vi.stubEnv("ADMIN_EMAIL", "admin@synapse.com")
+  vi.stubEnv("ADMIN_PASSWORD", "admin-password-123")
+  vi.stubEnv("ADMIN_JWT_SECRET", "a".repeat(32))
+  vi.stubEnv("USER_ACCESS_JWT_SECRET", "b".repeat(32))
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) vi.stubEnv(key, value)
+  }
 }

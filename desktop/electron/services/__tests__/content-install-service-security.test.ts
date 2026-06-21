@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getSkillDetail: vi.fn(),
   prepareSkillDirectory: vi.fn(),
   rename: vi.fn(),
+  rm: vi.fn(),
   resolveTarget: vi.fn(),
 }))
 
@@ -22,6 +23,7 @@ vi.mock("node:fs/promises", async () => {
   return {
     ...actual,
     rename: mocks.rename,
+    rm: mocks.rm,
   }
 })
 
@@ -99,11 +101,148 @@ describe("ContentInstallService security", () => {
       const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
       return actual.rename(oldPath, newPath)
     })
+    mocks.rm.mockImplementation(async (
+      targetPath: Parameters<typeof import("node:fs/promises")["rm"]>[0],
+      options?: Parameters<typeof import("node:fs/promises")["rm"]>[1],
+    ) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      return actual.rm(targetPath, options)
+    })
   })
 
   afterEach(async () => {
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
     await rm(testDesktopPath, { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  it("rejects overwriting an existing Skill directory without confirmation", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("覆盖目标目录前需要用户确认。")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    expect(mocks.prepareSkillDirectory).not.toHaveBeenCalled()
+  })
+
+  it("allows reinstalling the same Skill directory without overwrite confirmation", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Updated Skill\n", "utf8")
+    })
+
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Updated Skill\n")
+  })
+
+  it("does not clean up a Windows case-equivalent previous Skill directory after install", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32")
+    const root = await createTempRoot()
+    const previousSkillDirectoryPath = path.join(root, "skills", "ReviewHelper")
+    const targetPath = path.join(root, "skills", "reviewhelper")
+    await mkdir(previousSkillDirectoryPath, { recursive: true })
+    await writeFile(path.join(previousSkillDirectoryPath, ".synapse.json"), JSON.stringify({ id: "skill-1" }), "utf8")
+    await writeFile(path.join(previousSkillDirectoryPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# Updated Skill\n", "utf8")
+    })
+
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
+
+    expect(mocks.rm).not.toHaveBeenCalledWith(
+      previousSkillDirectoryPath,
+      expect.objectContaining({ recursive: true, force: true }),
+    )
   })
 
   it("moves the old Skill to the desktop when replacing it", async () => {
@@ -136,6 +275,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }
@@ -198,6 +338,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }
@@ -249,6 +390,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }
@@ -302,6 +444,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }
@@ -352,6 +495,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }
@@ -424,6 +568,7 @@ describe("ContentInstallService security", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "test-editor",
+      overwriteConfirmed: true,
       replaceConfirmed: true,
       scope: "global",
     }

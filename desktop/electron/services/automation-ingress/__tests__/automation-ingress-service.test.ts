@@ -1188,6 +1188,49 @@ describe("AutomationIngressService", () => {
     }))
   })
 
+  it("defaults webhook exec to cmd on Windows when shell is omitted", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+    }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: { run } as unknown as ControlledProcessRunner,
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "C:\\repo" }],
+      platform: "win32",
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    const response = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: Buffer.from(JSON.stringify({
+        project: "project-1",
+        exec: "echo %USERNAME%",
+        replyMode: "wait",
+      })),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(response.status).toBe(200)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "echo %USERNAME%"],
+      cwd: "C:\\repo",
+    }))
+  })
+
   it("returns a fixed internal error when webhook config loading fails during a request", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

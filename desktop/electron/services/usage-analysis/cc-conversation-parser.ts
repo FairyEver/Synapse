@@ -1,5 +1,4 @@
 import fs from "node:fs"
-import readline from "node:readline"
 import type {
   CcConversationChunk,
   CcConversationParseError,
@@ -131,18 +130,15 @@ function toConversationEvent(
 export async function parseCcConversationFile(filePath: string): Promise<ParsedCcConversationFile> {
   const events: CcRawConversationEvent[] = []
   const parseErrors: CcConversationParseError[] = []
-  const reader = readline.createInterface({
-    input: fs.createReadStream(filePath, { encoding: "utf8" }),
-    crlfDelay: Infinity,
-  })
   let lineNumber = 0
   let byteOffset = 0
 
   try {
-    for await (const line of reader) {
+    for await (const parsedLine of readConversationLines(filePath)) {
       lineNumber += 1
-      const currentOffset = byteOffset
-      byteOffset += Buffer.byteLength(line, "utf8") + 1
+      const line = parsedLine.line
+      const currentOffset = parsedLine.byteOffset
+      byteOffset = parsedLine.nextByteOffset
 
       if (!line.trim()) continue
 
@@ -192,10 +188,6 @@ export async function parseCcConversationFileChunk(
   const parseErrors: CcConversationParseError[] = []
   const limit = normalizeChunkLimit(options.limit)
   const cursor = decodeChunkCursor(options.cursor)
-  const reader = readline.createInterface({
-    input: fs.createReadStream(filePath, { encoding: "utf8", start: cursor.byteOffset }),
-    crlfDelay: Infinity,
-  })
   let lineNumber = cursor.lineNumber
   let byteOffset = cursor.byteOffset
   let emittedCount = 0
@@ -203,16 +195,16 @@ export async function parseCcConversationFileChunk(
   let nextCursor: string | undefined
 
   try {
-    for await (const line of reader) {
+    for await (const parsedLine of readConversationLines(filePath, cursor.byteOffset)) {
       lineNumber += 1
-      const currentOffset = byteOffset
-      byteOffset += Buffer.byteLength(line, "utf8") + 1
+      const line = parsedLine.line
+      const currentOffset = parsedLine.byteOffset
+      byteOffset = parsedLine.nextByteOffset
 
       if (!line.trim()) continue
       if (emittedCount >= limit) {
         hasMore = true
         nextCursor = encodeChunkCursor({ byteOffset: currentOffset, lineNumber: lineNumber - 1 })
-        reader.close()
         break
       }
 
@@ -257,6 +249,46 @@ export async function parseCcConversationFileChunk(
     parseErrors,
     hasMore,
     ...(nextCursor ? { nextCursor } : {}),
+  }
+}
+
+async function* readConversationLines(
+  filePath: string,
+  start = 0,
+): AsyncGenerator<{ readonly line: string; readonly byteOffset: number; readonly nextByteOffset: number }> {
+  const stream = fs.createReadStream(filePath, { start })
+  let pending = Buffer.alloc(0)
+  let pendingOffset = start
+  let streamOffset = start
+
+  for await (const chunk of stream) {
+    const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    const bufferOffset = pending.length > 0 ? pendingOffset : streamOffset
+    const buffer = pending.length > 0 ? Buffer.concat([pending, chunkBuffer]) : chunkBuffer
+    let lineStart = 0
+
+    for (let index = 0; index < buffer.length; index += 1) {
+      if (buffer[index] !== 0x0A) continue
+      const lineEnd = index > lineStart && buffer[index - 1] === 0x0D ? index - 1 : index
+      yield {
+        line: buffer.subarray(lineStart, lineEnd).toString("utf8"),
+        byteOffset: bufferOffset + lineStart,
+        nextByteOffset: bufferOffset + index + 1,
+      }
+      lineStart = index + 1
+    }
+
+    pending = buffer.subarray(lineStart)
+    pendingOffset = bufferOffset + lineStart
+    streamOffset += chunkBuffer.length
+  }
+
+  if (pending.length > 0) {
+    yield {
+      line: pending.toString("utf8"),
+      byteOffset: pendingOffset,
+      nextByteOffset: pendingOffset + pending.length,
+    }
   }
 }
 

@@ -221,6 +221,24 @@ describe("AdminController", () => {
     }))
   })
 
+  it("answers audit export HEAD checks without exporting or writing audit logs", () => {
+    const listForExport = vi.fn()
+    const record = vi.fn()
+    const controller = createController({}, { listForExport, record })
+    const response = {
+      end: vi.fn(),
+      setHeader: vi.fn(),
+    }
+
+    controller.checkExportAuditLogs(response as never)
+
+    expect(listForExport).not.toHaveBeenCalled()
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "text/csv; charset=utf-8")
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Disposition", "attachment; filename=audit-logs.csv")
+    expect(response.end).toHaveBeenCalledOnce()
+    expect(record).not.toHaveBeenCalled()
+  })
+
   it("creates team invitations for administrators", async () => {
     vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
     const createInvitation = vi.fn().mockResolvedValue({

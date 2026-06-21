@@ -57,7 +57,7 @@ export function createGitCommitService(deps: CommitDeps) {
         })
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["commit", "-m", message],
+          args: ["commit", "-m", message, "--", ...input.paths],
           operation,
           operationId,
           repoPath: repository.localPath,

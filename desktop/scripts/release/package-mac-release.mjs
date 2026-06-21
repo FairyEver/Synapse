@@ -60,13 +60,14 @@ export async function packageMacRelease() {
     process.stdout.write([
       ...loadedEnvFiles.map((filePath) => `Loaded env file: ${filePath}`),
       `Desktop public app URL: ${publicAppUrl}`,
-      hasArg("--check") ? "Release package preflight passed." : "Would run: pnpm package:mac",
+      hasArg("--check") ? "Release package preflight passed." : "Would run: pnpm package:mac && pnpm check:packaged-asar",
       "",
     ].join("\n"))
     return
   }
 
   await run("pnpm", ["package:mac"])
+  await run("pnpm", ["check:packaged-asar"])
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

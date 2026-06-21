@@ -76,7 +76,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   constructor(@Optional() @Inject(LOCAL_DRIVE_STORAGE_OPTIONS) options?: LocalDriveStorageOptions) {
     const env = options?.publicAppUrl ? undefined : loadEnv(process.env)
     this.publicAppUrl = options?.publicAppUrl ?? env?.appPublicUrl ?? `http://localhost:${env?.port ?? 3000}`
-    this.root = options?.root ?? process.env.SYNAPSE_DRIVE_LOCAL_ROOT ?? path.join(os.tmpdir(), "synapse-drive-storage")
+    this.root = options?.root ?? env?.driveLocalRoot ?? path.join(os.tmpdir(), "synapse-drive-storage")
   }
 
   async createUploadInstruction(input: { readonly key: string; readonly contentType?: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction> {

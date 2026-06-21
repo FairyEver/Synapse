@@ -489,7 +489,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_sql_execute",
-      description: "Execute raw SQL with optional positional bind params. Prefer database_sql_read for inspection and structured tools for normal writes. Use only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables such as _table_folders and _table_folder_members, ATTACH or DETACH, and mutating PRAGMA statements are blocked.",
+      description: "Execute raw SQL with optional positional bind params. Prefer database_sql_read for inspection and structured tools for normal writes. Use only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables such as _table_folders and _table_folder_members, ATTACH or DETACH, mutating PRAGMA statements, and VACUUM INTO file writes are blocked.",
       inputSchema: {
         type: "object",
         properties: {

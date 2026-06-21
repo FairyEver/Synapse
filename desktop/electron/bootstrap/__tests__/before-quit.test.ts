@@ -110,6 +110,32 @@ describe("attachBeforeQuitHandler", () => {
     expect(storageMigration.focusDialog).toHaveBeenCalled()
   })
 
+  it("allows update install quit when failed knowledge base migration requires restart recovery", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const storageMigration = {
+      isActive: vi.fn(() => true),
+      requiresRestartForRecovery: vi.fn(() => true),
+      focusDialog: vi.fn(),
+    }
+    let allowQuit = false
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll: vi.fn(async () => {}) } as never,
+      knowledgeBaseStorageMigration: storageMigration,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+
+    const canQuit = updateServiceMock.beforeInstallQuitHandler?.()
+
+    expect(canQuit).toBe(true)
+    expect(allowQuit).toBe(true)
+    expect(storageMigration.focusDialog).not.toHaveBeenCalled()
+  })
+
   it("blocks before-quit while knowledge base storage migration is active", async () => {
     const { attachBeforeQuitHandler } = await import("../before-quit")
     const storageMigration = {
@@ -137,6 +163,37 @@ describe("attachBeforeQuitHandler", () => {
     expect(event.preventDefault).toHaveBeenCalled()
     expect(storageMigration.focusDialog).toHaveBeenCalled()
     expect(electronMock.app.quit).not.toHaveBeenCalled()
+  })
+
+  it("allows before-quit to restart when failed knowledge base migration requires restart recovery", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const storageMigration = {
+      isActive: vi.fn(() => true),
+      requiresRestartForRecovery: vi.fn(() => true),
+      focusDialog: vi.fn(),
+    }
+    let allowQuit = false
+    const event = { preventDefault: vi.fn() }
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll: vi.fn(async () => {}) } as never,
+      knowledgeBaseStorageMigration: storageMigration,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+
+    await beforeQuitHandler(event)
+
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(allowQuit).toBe(true)
+    expect(electronMock.app.quit).toHaveBeenCalled()
+    expect(storageMigration.focusDialog).not.toHaveBeenCalled()
   })
 
   it("flushes pending pushes through the coordinator before quit when requested", async () => {

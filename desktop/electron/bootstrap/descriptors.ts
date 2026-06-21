@@ -41,6 +41,10 @@ import { createVariableCapabilityDispatcher } from "../capabilities/variable-dis
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
+import {
+  assertKnowledgeBaseStorageMigrationInactive,
+  KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR,
+} from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
@@ -1747,7 +1751,7 @@ function resolveWorkflowProjectWorkspacePath(
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow", "core.workflow.snapshots"],
+  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow", "core.workflow.snapshots", "knowledge-base.storage-migration-service"],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
@@ -1778,6 +1782,16 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         if (!repo && !proj) {
           throw new Error("Workflow prompt project was not found")
+        }
+        if (proj) {
+          try {
+            assertKnowledgeBaseStorageMigrationInactive(<T>(serviceId: string) => registry.get<T>(serviceId), proj)
+          } catch (error) {
+            if (error instanceof Error && error.message === KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR) {
+              return { status: "failed", response: "", error: KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR, durationMs: 0 }
+            }
+            throw error
+          }
         }
         const effectiveProjectId = repo?.uuid ?? proj?.id ?? projectId
         const workspacePath = resolveWorkflowProjectWorkspacePath(config, repo, proj) ?? os.homedir()

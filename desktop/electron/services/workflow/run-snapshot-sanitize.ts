@@ -1,4 +1,4 @@
-import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
@@ -24,6 +24,16 @@ export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): Work
   }
 }
 
+export function sanitizeWorkflowRunStatus(status: WorkflowRunStatus): WorkflowRunStatus {
+  return {
+    ...status,
+    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults),
+    ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
+    ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
+    ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
+  }
+}
+
 export function sanitizeWorkflowOutputForHistory<T>(output: T): T {
   return sanitizeSnapshotValue(output) as T
 }
@@ -37,7 +47,7 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
   const sanitizedConfig = sanitizeWorkflowNodeConfigForSnapshot(node)
-  if (node.type !== "codex") {
+  if (node.type !== "codex" && node.type !== "claude_code") {
     return {
       ...node,
       config: sanitizedConfig,
@@ -50,7 +60,7 @@ function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
     config: {
       ...sanitizedConfig,
       ...(typeof prompt === "string" ? { prompt: sanitizeError(prompt) } : {}),
-      ...(Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
+      ...(node.type === "codex" && Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
     },
   }
 }

@@ -9,7 +9,7 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
-import type { WorkflowDefinition, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import "../../../workflow-nodes/register.main"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
@@ -158,6 +158,78 @@ describe("createWorkflowDispatcher", () => {
       error: "workflow failed",
     })
     expect(result.data).not.toHaveProperty("version")
+  })
+
+  it("workflow.run.get sanitizes active run status before returning it to MCP callers", async () => {
+    const activeStatus: WorkflowRunStatus = {
+      runId: "run-active",
+      workflowId: "wf-1",
+      status: "running",
+      startedAt: 1000,
+      params: {
+        authorization: "Bearer active-param-secret",
+        apiKey: "sk-active-param-secret",
+      },
+      nodeResults: {
+        codex: {
+          nodeId: "codex",
+          status: "success",
+          input: {
+            variables: {
+              apiKey: "sk-input-secret",
+            },
+            prompt: "token=prompt-secret",
+          },
+          output: "Authorization: Bearer output-secret",
+          outputs: {
+            token: "sk-output-secret",
+          },
+        },
+      },
+      definition: {
+        id: "wf-1",
+        name: "Sensitive workflow",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 2,
+        params: [],
+        nodes: [{
+          id: "codex",
+          name: "Codex",
+          type: "codex",
+          position: { x: 0, y: 0 },
+          config: {
+            prompt: "apiKey=definition-secret",
+            configOverrides: [{ key: "env.SECRET", value: "sk-definition-secret" }],
+          },
+        }],
+        edges: [],
+      },
+      error: "password=active-error-secret",
+    }
+    const deps = makeDeps({
+      getRunStatus: vi.fn(async () => activeStatus),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-active" }, { source: "mcp" })
+
+    expect(result.ok).toBe(true)
+    const serialized = JSON.stringify(result.data)
+    expect(serialized).not.toContain("active-param-secret")
+    expect(serialized).not.toContain("sk-active-param-secret")
+    expect(serialized).not.toContain("sk-input-secret")
+    expect(serialized).not.toContain("prompt-secret")
+    expect(serialized).not.toContain("output-secret")
+    expect(serialized).not.toContain("sk-output-secret")
+    expect(serialized).not.toContain("definition-secret")
+    expect(serialized).not.toContain("sk-definition-secret")
+    expect(serialized).not.toContain("active-error-secret")
+    expect(result.data).toMatchObject({
+      runId: "run-active",
+      workflowId: "wf-1",
+      status: "running",
+    })
   })
 
   it("workflow.run.get rejects unsafe run ids before querying snapshots", async () => {

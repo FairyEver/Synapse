@@ -20,7 +20,7 @@ import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot } from "../../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowOutputForHistory, sanitizeWorkflowRunSnapshot, sanitizeWorkflowRunStatus } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -101,13 +101,7 @@ function sanitizeWorkflowRunResultForRenderer(result: WorkflowRunResult): Workfl
 }
 
 function sanitizeWorkflowRunStatusForRenderer(status: WorkflowRunStatus): WorkflowRunStatus {
-  return {
-    ...status,
-    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults),
-    ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
-    ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
-    ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
-  }
+  return sanitizeWorkflowRunStatus(status)
 }
 
 function sanitizeWorkflowEventForRenderer(event: WorkflowEvent): WorkflowEvent {

@@ -10,6 +10,7 @@ import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 export interface StageKnowledgeBaseUrlSourceInput {
   readonly projectPath: string
+  readonly targetDirectoryPath?: string
   readonly url: string
   readonly now: () => Date
   readonly fetchUrl: FetchUrl
@@ -41,7 +42,9 @@ export async function stageKnowledgeBaseUrlSource(
     }
   }
 
-  const rawRelativeDir = path.join(".raw", "web", ...datePathSegments(new Date(result.source.fetchedAt)))
+  const rawRelativeDir = input.targetDirectoryPath === undefined
+    ? path.join(".raw", "web", ...datePathSegments(new Date(result.source.fetchedAt)))
+    : path.join(".raw", normalizeRawDirectoryPath(input.targetDirectoryPath))
   const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
   await assertNoSymlinkInRelativePath(projectPath, rawRelativeDir)
   await mkdir(rawDir, { recursive: true })
@@ -79,6 +82,18 @@ function datePathSegments(date: Date): string[] {
     String(date.getMonth() + 1).padStart(2, "0"),
     String(date.getDate()).padStart(2, "0"),
   ]
+}
+
+function normalizeRawDirectoryPath(value: string): string {
+  const normalized = value.split("\\").join("/").replace(/^\/+/, "").replace(/\/+$/g, "")
+  if (!normalized) return ""
+  const segments = normalized.split("/").filter(Boolean)
+  for (const segment of segments) {
+    if (segment === "." || segment === ".." || validateKnowledgeBaseRawEntryNameInput(segment) !== null) {
+      throw new Error("目标路径不在资料目录中。")
+    }
+  }
+  return segments.join("/")
 }
 
 async function writeUtf8FileToAvailablePath(directoryPath: string, fileName: string, content: string): Promise<string> {

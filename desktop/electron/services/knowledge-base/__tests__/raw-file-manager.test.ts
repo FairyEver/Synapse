@@ -134,6 +134,23 @@ describe("KnowledgeBaseRawFileManager", () => {
     ))).resolves.toEqual(expect.arrayContaining(["alpha\n", "bravo\n"]))
   })
 
+  it("skips direct file uploads with Windows-incompatible basenames", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const reservedSource = path.join(sourceRoot, "CON.txt")
+    const okSource = path.join(sourceRoot, "ok.md")
+    await writeFile(reservedSource, "reserved\n", "utf8")
+    await writeFile(okSource, "ok\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.uploadFiles(rawRoot, "", [reservedSource, okSource])
+
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual(["ok.md"])
+    expect(result.skipped).toEqual([{ path: reservedSource, reason: "invalid-name" }])
+    await expect(lstat(path.join(rawRoot, "CON.txt"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(rawRoot, "ok.md"), "utf8")).resolves.toBe("ok\n")
+  })
+
   it("stops direct file upload when the file count budget is reached", async () => {
     const rawRoot = await tempDir()
     const sourceRoot = await tempDir()
@@ -178,6 +195,32 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(lstat(path.join(rawRoot, "second.md"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("does not spend direct upload budget when file copy fails", async () => {
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const unreadableSource = path.join(sourceRoot, "unreadable.md")
+    const okSource = path.join(sourceRoot, "ok.md")
+    await writeFile(unreadableSource, "1234", "utf8")
+    await writeFile(okSource, "5678", "utf8")
+    await chmod(unreadableSource, 0o000)
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxTotalBytes: 4 },
+    })
+
+    const result = await manager.uploadFiles(rawRoot, "", [unreadableSource, okSource])
+
+    await chmod(unreadableSource, 0o644).catch(() => undefined)
+    expect(warn).toHaveBeenCalledWith("Knowledge Base raw file upload skipped.", expect.objectContaining({
+      fileName: "unreadable.md",
+      reason: "read-error",
+    }))
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual(["ok.md"])
+    expect(result.skipped).toEqual([{ path: unreadableSource, reason: "read-error" }])
+    await expect(readFile(path.join(rawRoot, "ok.md"), "utf8")).resolves.toBe("5678")
+  })
+
   it("uploads folders recursively while preserving structure and skipping system noise", async () => {
     const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const rawRoot = await tempDir()
@@ -206,6 +249,33 @@ describe("KnowledgeBaseRawFileManager", () => {
     ])
     await expect(readFile(path.join(rawRoot, "项目A", "会议资料", "访谈", ".gitignore"), "utf8"))
       .resolves.toBe("keep\n")
+  })
+
+  it("skips recursive uploads with Windows-incompatible basenames", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const unsafeFolder = path.join(sourceRoot, "AUX")
+    const safeFolder = path.join(sourceRoot, "safe")
+    await mkdir(unsafeFolder, { recursive: true })
+    await writeFile(path.join(unsafeFolder, "ignored.md"), "ignored\n", "utf8")
+    await mkdir(safeFolder, { recursive: true })
+    await writeFile(path.join(safeFolder, "NUL.txt"), "reserved\n", "utf8")
+    await writeFile(path.join(safeFolder, "ok.md"), "ok\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.uploadItems(rawRoot, "", [unsafeFolder, safeFolder])
+
+    expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([
+      "safe",
+      "safe/ok.md",
+    ])
+    expect(result.skipped).toEqual([
+      { path: unsafeFolder, reason: "invalid-name" },
+      { path: path.join(safeFolder, "NUL.txt"), reason: "invalid-name" },
+    ])
+    await expect(lstat(path.join(rawRoot, "AUX"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(lstat(path.join(rawRoot, "safe", "NUL.txt"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(rawRoot, "safe", "ok.md"), "utf8")).resolves.toBe("ok\n")
   })
 
   it("keeps repeated top-level folder uploads separate", async () => {
@@ -307,6 +377,37 @@ describe("KnowledgeBaseRawFileManager", () => {
       { path: path.join(folder, "big.md"), reason: "file-too-large" },
       { path: path.join(folder, "second.md"), reason: "too-large" },
     ])
+  })
+
+  it("does not spend recursive upload budget when file copy fails", async () => {
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "资料")
+    await mkdir(folder, { recursive: true })
+    const unreadableSource = path.join(folder, "a-unreadable.md")
+    const okSource = path.join(folder, "b-ok.md")
+    await writeFile(unreadableSource, "1234", "utf8")
+    await writeFile(okSource, "5678", "utf8")
+    await chmod(unreadableSource, 0o000)
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxTotalBytes: 4 },
+    })
+
+    const result = await manager.uploadItems(rawRoot, "", [folder])
+
+    await chmod(unreadableSource, 0o644).catch(() => undefined)
+    expect(warn).toHaveBeenCalledWith("Knowledge Base raw item upload skipped.", expect.objectContaining({
+      itemName: "a-unreadable.md",
+      reason: "read-error",
+    }))
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual([
+      "资料",
+      "资料/b-ok.md",
+    ])
+    expect(result.skipped).toEqual([{ path: unreadableSource, reason: "read-error" }])
+    await expect(readFile(path.join(rawRoot, "资料", "b-ok.md"), "utf8")).resolves.toBe("5678")
   })
 
   it("stops recursive upload when the directory depth budget is reached", async () => {

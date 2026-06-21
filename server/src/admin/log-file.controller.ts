@@ -1,4 +1,4 @@
-import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, Logger } from "@nestjs/common";
+import { Controller, Get, Head, Delete, Query, Req, Res, UseGuards, BadRequestException, Logger } from "@nestjs/common";
 import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard";
@@ -153,6 +153,24 @@ export class LogFileController {
       targetId: filename,
       detail: { from: range.from, to: range.to, filename, bytes: result.bytes, fileCount: result.fileCount },
     });
+  }
+
+  @Head("download")
+  checkDownload(
+    @Query("from") from: string | undefined,
+    @Query("to") to: string | undefined,
+    @Res() res: Response,
+  ) {
+    const range = parseDownloadDateRange(from, to);
+    const filename = range.from || range.to
+      ? `logs-${range.from ?? "start"}-${range.to ?? "now"}.zip`
+      : "logs-all.zip";
+
+    res.set({
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    });
+    res.end();
   }
 
   @Delete("cleanup")

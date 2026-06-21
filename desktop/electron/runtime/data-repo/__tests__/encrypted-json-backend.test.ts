@@ -176,6 +176,33 @@ describe("EncryptedJsonNamespace (T2.3)", () => {
     }
   })
 
+  it("preserves concurrent collection writes against a cached envelope", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "secrets.bin")
+    try {
+      const ns = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        safeStorage: makeFakeSafeStorage(),
+      })
+      expect(await ns.list()).toEqual([])
+
+      await Promise.all([
+        ns.upsert({ id: "k1", provider: "anthropic", token: "sk-AAA" }),
+        ns.upsert({ id: "k2", provider: "openai", token: "sk-BBB" }),
+      ])
+
+      expect(await ns.list()).toEqual([
+        { id: "k1", provider: "anthropic", token: "sk-AAA" },
+        { id: "k2", provider: "openai", token: "sk-BBB" },
+      ])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps cached collection state unchanged when encrypted persistence fails", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "secrets.bin")

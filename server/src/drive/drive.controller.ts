@@ -1580,7 +1580,7 @@ function decodeCookieValue(value: string): string | undefined {
 async function sendDriveZip(
   response: Response,
   filename: string,
-  entries: readonly { readonly path: string; readonly storageKey: string }[],
+  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }>,
   storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
@@ -1591,7 +1591,7 @@ async function sendDriveZip(
   })
   archive.pipe(response)
   try {
-    for (const entry of entries) {
+    for await (const entry of entries) {
       const object = await storage.getObjectStream({ key: entry.storageKey })
       archive.append(object.stream as unknown as Readable, { name: entry.path })
     }
@@ -1632,7 +1632,7 @@ async function sendDriveTransfer(
   response: Response,
   transfer:
     | ({ readonly kind: "file" } & Parameters<typeof sendDriveFileDownload>[1])
-    | { readonly kind: "zip"; readonly filename: string; readonly entries: readonly { readonly path: string; readonly storageKey: string }[] },
+    | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> },
   storage: DriveStoragePort,
 ): Promise<void> {
   if (transfer.kind === "zip") {

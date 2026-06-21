@@ -11,6 +11,8 @@ describe("loadEnv", () => {
       ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
       PORT: "3000",
     })
 
@@ -18,6 +20,8 @@ describe("loadEnv", () => {
     expect(env.databasePoolSize).toBe(10)
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.appPublicUrl).toBe("https://synapse.test")
+    expect(env.driveLocalRoot).toBe("/app/data/drive")
+    expect(env.contentStoreLocalRoot).toBe("/app/data/content-store")
     expect(env.trustProxy).toBe(false)
   })
 
@@ -57,8 +61,80 @@ describe("loadEnv", () => {
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test/api/",
+        SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+        SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
       }),
     ).toThrow("APP_PUBLIC_URL")
+  })
+
+  it("rejects production Drive storage without COS or explicit local root", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+        ADMIN_EMAIL: "admin@d2.com",
+        ADMIN_PASSWORD: "change-me-now!",
+        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        APP_PUBLIC_URL: "https://synapse.test",
+        SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+      }),
+    ).toThrow("SYNAPSE_DRIVE_LOCAL_ROOT")
+  })
+
+  it("allows production Drive storage with complete COS settings", () => {
+    const env = loadEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_EMAIL: "admin@d2.com",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      APP_PUBLIC_URL: "https://synapse.test",
+      DRIVE_COS_SECRET_ID: "drive-secret-id",
+      DRIVE_COS_SECRET_KEY: "drive-secret-key",
+      DRIVE_COS_BUCKET: "drive-bucket",
+      DRIVE_COS_REGION: "ap-beijing",
+      SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+    })
+
+    expect(isDriveCosConfigured(env)).toBe(true)
+    expect(env.driveLocalRoot).toBeUndefined()
+  })
+
+  it("rejects production Content Store storage without COS or explicit local root", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+        ADMIN_EMAIL: "admin@d2.com",
+        ADMIN_PASSWORD: "change-me-now!",
+        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        APP_PUBLIC_URL: "https://synapse.test",
+        SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      }),
+    ).toThrow("SYNAPSE_CONTENT_STORE_LOCAL_ROOT")
+  })
+
+  it("allows production Content Store storage with complete COS settings", () => {
+    const env = loadEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_EMAIL: "admin@d2.com",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
+      CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
+      CONTENT_STORE_COS_BUCKET: "content-store-bucket",
+      CONTENT_STORE_COS_REGION: "ap-beijing",
+    })
+
+    expect(isContentStoreCosConfigured(env)).toBe(true)
+    expect(env.contentStoreLocalRoot).toBeUndefined()
   })
 
   it("rejects missing required settings", () => {

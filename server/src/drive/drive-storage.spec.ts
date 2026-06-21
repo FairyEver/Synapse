@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -40,6 +40,18 @@ describe("LocalDriveStorage", () => {
 
     expect(moduleRef.get(LocalDriveStorage)).toBeInstanceOf(LocalDriveStorage)
     await moduleRef.close()
+  })
+
+  it("uses the configured persistent local root when options omit a root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-env-"))
+    roots.push(root)
+    stubServerEnv({ SYNAPSE_DRIVE_LOCAL_ROOT: root })
+    const storage = new LocalDriveStorage()
+
+    await storage.putObject({ key: "drive/item-1", body: Buffer.from("hello"), contentType: "text/plain" })
+
+    const objectName = Buffer.from("drive/item-1", "utf8").toString("base64url")
+    await expect(readFile(path.join(root, ".objects", objectName), "utf8")).resolves.toBe("hello")
   })
 
   it("stores uploaded objects on local disk and reports their size", async () => {

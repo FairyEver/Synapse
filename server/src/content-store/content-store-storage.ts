@@ -6,7 +6,6 @@ import path from "node:path"
 import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
 import { isContentStoreCosConfigured, loadEnv } from "../config/env"
-import { contentStoreLocalRootEnvKey } from "./content-store.constants"
 
 export interface ContentStoreStorageObject {
   readonly key: string
@@ -38,7 +37,8 @@ export class LocalContentStoreStorage implements ContentStoreStoragePort {
   private readonly root: string
 
   constructor(@Optional() @Inject(LOCAL_CONTENT_STORE_STORAGE_OPTIONS) options?: LocalContentStoreStorageOptions) {
-    this.root = options?.root ?? process.env[contentStoreLocalRootEnvKey] ?? path.join(os.tmpdir(), "synapse-content-store-storage")
+    const env = options?.root ? undefined : loadEnv(process.env)
+    this.root = options?.root ?? env?.contentStoreLocalRoot ?? path.join(os.tmpdir(), "synapse-content-store-storage")
   }
 
   async putObject(input: {

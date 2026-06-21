@@ -211,9 +211,9 @@ export function AdminPublicAssetDetailsDialog({
   readonly onOpenChange: (open: boolean) => void
 }) {
   const [accessLogPage, setAccessLogPage] = useState(1)
-  const accessLogPageSize = 20
+  const [accessLogPageSize, setAccessLogPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [revisionPage, setRevisionPage] = useState(1)
-  const revisionPageSize = 20
+  const [revisionPageSize, setRevisionPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   useEffect(() => {
     setAccessLogPage(1)
     setRevisionPage(1)
@@ -269,6 +269,7 @@ export function AdminPublicAssetDetailsDialog({
                 pageSize={accessLogPageSize}
                 total={accessLogs.data?.total ?? 0}
                 onPageChange={setAccessLogPage}
+                onPageSizeChange={setAccessLogPageSize}
               />
             </TabsContent>
             <TabsContent value='revisions'>
@@ -282,6 +283,7 @@ export function AdminPublicAssetDetailsDialog({
                 pageSize={revisionPageSize}
                 total={revisions.data?.total ?? 0}
                 onPageChange={setRevisionPage}
+                onPageSizeChange={setRevisionPageSize}
               />
             </TabsContent>
           </Tabs>
@@ -328,6 +330,7 @@ export function AccessLogTable({
   pageSize,
   total,
   onPageChange,
+  onPageSizeChange,
 }: {
   readonly data: readonly AdminDrivePublicAssetAccessLogRow[]
   readonly error: unknown
@@ -337,6 +340,7 @@ export function AccessLogTable({
   readonly pageSize: number
   readonly total: number
   readonly onPageChange: (page: number) => void
+  readonly onPageSizeChange: (pageSize: number) => void
 }) {
   return (
     <ServerDataTable
@@ -347,7 +351,7 @@ export function AccessLogTable({
       isLoading={isLoading}
       loadingRowCount={3}
       onPageChange={onPageChange}
-      onPageSizeChange={ignorePageSizeChange}
+      onPageSizeChange={onPageSizeChange}
       onRetry={onRetry}
       page={page}
       pageSize={pageSize}
@@ -367,6 +371,7 @@ function RevisionTable({
   pageSize,
   total,
   onPageChange,
+  onPageSizeChange,
 }: {
   readonly assetId: string
   readonly data: readonly AdminDrivePublicAssetRevisionRow[]
@@ -377,6 +382,7 @@ function RevisionTable({
   readonly pageSize: number
   readonly total: number
   readonly onPageChange: (page: number) => void
+  readonly onPageSizeChange: (pageSize: number) => void
 }) {
   const columns = useMemo<ColumnDef<AdminDrivePublicAssetRevisionRow>[]>(
     () => [
@@ -441,7 +447,7 @@ function RevisionTable({
       isLoading={isLoading}
       loadingRowCount={3}
       onPageChange={onPageChange}
-      onPageSizeChange={ignorePageSizeChange}
+      onPageSizeChange={onPageSizeChange}
       onRetry={onRetry}
       page={page}
       pageSize={pageSize}
@@ -502,8 +508,6 @@ const accessLogColumns: ColumnDef<AdminDrivePublicAssetAccessLogRow>[] = [
     cell: ({ row }) => formatDriveBrowserDate(row.original.accessedAt),
   },
 ]
-
-function ignorePageSizeChange() {}
 
 function driveLifecycleLabel(status: AdminDrivePublicAssetRow['lifecycleStatus']) {
   const labels: Record<AdminDrivePublicAssetRow['lifecycleStatus'], string> = {

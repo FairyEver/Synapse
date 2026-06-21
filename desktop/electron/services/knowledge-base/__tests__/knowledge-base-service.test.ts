@@ -521,16 +521,17 @@ describe("KnowledgeBaseService", () => {
 
     const result = await service.addUrlSource({
       projectId,
+      targetDirectoryPath: "client-a",
       url: "https://example.com/article",
     })
 
     expect(result.uploaded).toEqual([expect.objectContaining({
       originalPath: "https://example.com/article",
-      relativePath: ".raw/web/2026/05/24/article.md",
+      relativePath: ".raw/client-a/article.md",
       sourceKind: "url",
       sourceUrl: "https://example.com/article",
     })])
-    await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
+    await expect(readFile(path.join(projectPath, ".raw", "client-a", "article.md"), "utf8"))
       .resolves.toContain('source_url: "https://example.com/article"')
   })
 

@@ -92,9 +92,11 @@ describe("RepositoryTemplateService", () => {
     expect(modelPriceSkill?.content).toContain("model_price_used_model_list")
     expect(modelPriceSkill?.content).toContain("ruleId")
     expect(modelPriceSkill?.content).toContain("RMB per 1M tokens")
-    expect(modelPriceSkill?.content).toContain("historical repricing")
+    expect(modelPriceSkill?.content).toContain("Usage Analysis refresh")
+    expect(modelPriceSkill?.content).toContain("price-rule hash changes")
     expect(apiText).toContain("model_price_rule_update")
     expect(apiText).toContain("ruleId")
+    expect(apiText).toContain("already indexed usage totals")
   })
 
 })

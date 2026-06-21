@@ -191,6 +191,11 @@ function isReadOnlySqlStatement(normalizedSql: string): boolean {
   return /^(select|explain)\b/.test(normalizedSql) || isReadOnlyPragma(normalizedSql)
 }
 
+function isVacuumIntoStatement(sql: string): boolean {
+  const normalized = stripSqlLiteralsAndComments(sql).trim().toLowerCase()
+  return /^vacuum\b[\s\S]*\binto\b/u.test(normalized)
+}
+
 function parseLegacyChoices(raw: unknown): string[] {
   if (typeof raw !== "string" || raw.length === 0) return []
   try {
@@ -1134,6 +1139,9 @@ class DatabaseService {
     }
     if (/\b(attach|detach)\b/i.test(normalized)) {
       throw new Error("ATTACH and DETACH statements are not allowed")
+    }
+    if (isVacuumIntoStatement(sql)) {
+      throw new Error("VACUUM INTO statements are not allowed")
     }
 
     const db = this.getDb()

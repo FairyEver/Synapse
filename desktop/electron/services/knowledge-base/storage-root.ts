@@ -37,7 +37,7 @@ export async function assertKnowledgeBaseStorageAvailable(input: KnowledgeBaseSt
 
 export function isPathInside(candidatePath: string, parentPath: string): boolean {
   const relative = path.relative(path.resolve(parentPath), path.resolve(candidatePath))
-  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative))
+  return relative === "" || (!!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
 
 export type { KnowledgeBaseStorageRootInput }

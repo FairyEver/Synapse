@@ -16,6 +16,7 @@ export {
   DragonScaleOllamaEmbeddingProvider,
   isLocalOllamaUrl,
   resolveDragonScaleOllamaUrl,
+  sanitizeDragonScaleOllamaUrl,
 } from "./dragonscale/ollama-embedding-provider"
 export {
   diffWikiSnapshots,

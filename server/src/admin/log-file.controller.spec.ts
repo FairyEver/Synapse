@@ -251,6 +251,24 @@ describe("LogFileController", () => {
     expect(response.send).not.toHaveBeenCalled();
   });
 
+  it("answers log download HEAD checks without streaming or writing audit logs", () => {
+    const { controller, auditLog, service } = createController();
+    const response = {
+      end: vi.fn(),
+      set: vi.fn(),
+    };
+
+    controller.checkDownload("2026-05-01", "2026-05-23", response as never);
+
+    expect(service.streamZipTo).not.toHaveBeenCalled();
+    expect(response.set).toHaveBeenCalledWith({
+      "Content-Type": "application/zip",
+      "Content-Disposition": "attachment; filename=\"logs-2026-05-01-2026-05-23.zip\"",
+    });
+    expect(response.end).toHaveBeenCalledOnce();
+    expect(auditLog.record).not.toHaveBeenCalled();
+  });
+
   it("records failed downloads without rethrowing after headers are sent", async () => {
     const { controller, auditLog, service } = createController();
     const error = Object.assign(new Error("zip stream failed at /var/log/synapse/server.2026-05-23.log"), {

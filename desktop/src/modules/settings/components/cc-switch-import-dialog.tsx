@@ -140,7 +140,7 @@ function CcSwitchImportDialog({
             {preview?.source?.path ?? "默认位置"}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={loading || importing} onClick={() => loadPreview()}>
+            <Button type="button" variant="outline" size="sm" disabled={loading || importing} onClick={() => loadPreview(preview?.source)}>
               <RefreshCwIcon data-icon="inline-start" />
               扫描
             </Button>
