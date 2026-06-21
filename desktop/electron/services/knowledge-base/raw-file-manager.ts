@@ -171,8 +171,10 @@ export class KnowledgeBaseRawFileManager {
           skipped.push({ path: filePath, reason: "not-file" })
           continue
         }
-        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, budget, this.uploadLimits)
+        const nextBudget = { ...budget }
+        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, nextBudget, this.uploadLimits)
         if (budgetFailure) {
+          commitRawUploadBudget(budget, nextBudget)
           knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
             fileName: path.basename(filePath),
             reason: budgetFailure,
@@ -183,6 +185,7 @@ export class KnowledgeBaseRawFileManager {
           continue
         }
         const targetPath = await copyFileToAvailablePath(sourcePath, targetDirectory, path.basename(sourcePath))
+        commitRawUploadBudget(budget, nextBudget)
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
       } catch (error) {
         knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
@@ -250,8 +253,10 @@ export class KnowledgeBaseRawFileManager {
         return
       }
       if (sourceStat.isFile()) {
-        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, budget, this.uploadLimits)
+        const nextBudget = { ...budget }
+        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, nextBudget, this.uploadLimits)
         if (budgetFailure) {
+          commitRawUploadBudget(budget, nextBudget)
           knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
             itemName: path.basename(sourcePath),
             reason: budgetFailure,
@@ -262,6 +267,7 @@ export class KnowledgeBaseRawFileManager {
           return
         }
         const targetPath = await copyFileToAvailablePath(resolvedSource, targetDirectory, path.basename(resolvedSource))
+        commitRawUploadBudget(budget, nextBudget)
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
         return
       }
@@ -577,6 +583,13 @@ function reserveRawUploadFileBudget(size: number, budget: RawUploadBudget, limit
   budget.copiedFiles += 1
   budget.copiedBytes += size
   return null
+}
+
+function commitRawUploadBudget(budget: RawUploadBudget, nextBudget: RawUploadBudget): void {
+  budget.copiedFiles = nextBudget.copiedFiles
+  budget.copiedBytes = nextBudget.copiedBytes
+  budget.stopped = nextBudget.stopped
+  budget.stopReason = nextBudget.stopReason
 }
 
 function reserveRawExportFileBudget(size: number, budget: RawExportBudget, limits: RawExportLimits): RawUploadSkipReason | null {
