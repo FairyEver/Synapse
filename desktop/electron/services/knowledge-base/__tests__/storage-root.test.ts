@@ -22,6 +22,8 @@ describe("knowledge base storage root", () => {
 
   it("detects a child path", () => {
     expect(isPathInside("/tmp/root/knowledge-bases/kb-1", "/tmp/root/knowledge-bases")).toBe(true)
+    expect(isPathInside("/tmp/root/knowledge-bases/..backup", "/tmp/root/knowledge-bases")).toBe(true)
     expect(isPathInside("/tmp/root-other", "/tmp/root/knowledge-bases")).toBe(false)
+    expect(isPathInside("/tmp/root", "/tmp/root/knowledge-bases")).toBe(false)
   })
 })
