@@ -268,8 +268,7 @@ function inspectWindowsPath(entry: {
   name: string
   path: string
 }): WindowsPathInspection {
-  const segments = entry.path
-    .replace(/^[A-Za-z]:/u, "")
+  const segments = stripWindowsPathRootForSegmentInspection(entry.path)
     .split(/[\\/]+/u)
     .filter((segment) => segment.length > 0)
 
@@ -285,7 +284,17 @@ function inspectWindowsPath(entry: {
 }
 
 function isFullyQualifiedWindowsPath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/u.test(value) || /^\\\\[^\\]+\\[^\\]+/u.test(value)
+  return /^[A-Za-z]:[\\/]/u.test(value)
+    || /^\\\\\?\\[A-Za-z]:[\\/]/u.test(value)
+    || /^\\\\\?\\UNC\\[^\\]+\\[^\\]+/iu.test(value)
+    || /^\\\\[^\\]+\\[^\\]+/u.test(value)
+}
+
+function stripWindowsPathRootForSegmentInspection(value: string): string {
+  return value
+    .replace(/^\\\\\?\\UNC\\[^\\/]+[\\\/][^\\/]+/iu, "")
+    .replace(/^\\\\\?\\[A-Za-z]:/u, "")
+    .replace(/^[A-Za-z]:/u, "")
 }
 
 function isWindowsUnsafePathSegment(segment: string): boolean {
