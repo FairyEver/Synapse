@@ -111,6 +111,11 @@ export function DriveFileVersionsDialog({
               versions={versions}
               loading={versionsQuery.isLoading}
               error={versions.length === 0 && versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
+              loadMoreError={
+                versions.length > 0 && versionsQuery.isFetchNextPageError && versionsQuery.error instanceof Error
+                  ? versionsQuery.error.message
+                  : null
+              }
               pinningVersionId={pinMutation.variables?.versionId ?? null}
               pinning={pinMutation.isPending}
               hasMore={versionsQuery.hasNextPage}
@@ -158,6 +163,7 @@ export function DriveFileVersionContent({
   versions,
   loading,
   error,
+  loadMoreError,
   pinningVersionId,
   pinning,
   hasMore,
@@ -172,6 +178,7 @@ export function DriveFileVersionContent({
   readonly versions: readonly DriveFileVersionDto[]
   readonly loading: boolean
   readonly error: string | null
+  readonly loadMoreError: string | null
   readonly pinningVersionId: string | null
   readonly pinning: boolean
   readonly hasMore: boolean
@@ -225,12 +232,19 @@ export function DriveFileVersionContent({
           />
         ))}
       </DriveFileVersionTable>
-      {hasMore ? (
-        <div className='flex justify-center border-t p-2'>
-          <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={onLoadMore}>
-            {loadingMore ? <Loader2 className='animate-spin' /> : null}
-            {loadingMore ? '加载中' : '加载更多'}
-          </Button>
+      {hasMore || loadMoreError ? (
+        <div className='grid justify-items-center gap-2 border-t p-2'>
+          {loadMoreError ? (
+            <div className='text-center text-sm text-destructive'>
+              加载更多失败：{loadMoreError}
+            </div>
+          ) : null}
+          {hasMore ? (
+            <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={onLoadMore}>
+              {loadingMore ? <Loader2 className='animate-spin' /> : null}
+              {loadingMore ? '加载中' : '加载更多'}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </DriveFileVersionTableFrame>

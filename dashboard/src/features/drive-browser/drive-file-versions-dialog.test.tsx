@@ -118,6 +118,19 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('加载更多')
   })
 
+  it('shows load-more failures while keeping existing version rows visible', () => {
+    const html = renderVersionContent({
+      versions: [version({ id: 'version-100', versionNumber: 100 })],
+      hasMore: true,
+      loadMoreError: '第二页失败',
+    })
+
+    expect(html).toContain('v100')
+    expect(html).toContain('加载更多失败：第二页失败')
+    expect(html).toContain('加载更多')
+    expect(html).not.toContain('读取失败')
+  })
+
   it('renders loading, empty, and error states in the same bounded area', () => {
     const loadingHtml = renderVersionContent({ loading: true })
     const emptyHtml = renderVersions([])
@@ -160,6 +173,28 @@ describe('DriveFileVersionContent', () => {
       expect(onChanged).toHaveBeenCalledTimes(1)
     })
   })
+
+  it('shows a next-page error after version load-more fails', async () => {
+    vi.mocked(driveFileVersionsApi.list)
+      .mockResolvedValueOnce({
+        items: [version({ id: 'version-first', versionNumber: 2 })],
+        page: { limit: 100, offset: 0, nextOffset: 100, hasMore: true },
+      })
+      .mockRejectedValueOnce(new Error('分页失败'))
+    renderVersionDialog()
+
+    await waitFor(() => {
+      expect(buttonByText('加载更多')).toBeTruthy()
+    })
+    await act(async () => {
+      buttonByText('加载更多')?.click()
+    })
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('加载更多失败：分页失败')
+    })
+
+    expect(document.body.textContent).toContain('v2')
+  })
 })
 
 function renderVersions(versions: readonly DriveFileVersionDto[]) {
@@ -173,6 +208,7 @@ function renderVersionContent(overrides: Partial<ComponentProps<typeof DriveFile
       versions: [],
       loading: false,
       error: null,
+      loadMoreError: null,
       pinningVersionId: null,
       pinning: false,
       hasMore: false,
