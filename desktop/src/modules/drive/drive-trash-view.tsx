@@ -52,11 +52,15 @@ type DriveTrashViewHandle = {
 type DriveTrashViewProps = {
   readonly inlineToolbar?: boolean
   readonly onActionStateChange?: (state: DriveTrashViewActionState) => void
+  readonly onDriveItemsChanged?: () => void | Promise<void>
+  readonly onUsageChange?: () => void | Promise<void>
 }
 
 const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(function DriveTrashView({
   inlineToolbar = true,
   onActionStateChange,
+  onDriveItemsChanged,
+  onUsageChange,
 }, ref) {
   const [page, setPage] = useState<DriveTrashListPageDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -120,12 +124,19 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
     onActionStateChange?.({ loading })
   }, [loading, onActionStateChange])
 
-  const runTrashMutation = useCallback(async (item: DriveTrashItemDto, action: () => Promise<unknown>, successMessage: string, fallback: string) => {
+  const runTrashMutation = useCallback(async (
+    item: DriveTrashItemDto,
+    action: () => Promise<unknown>,
+    successMessage: string,
+    fallback: string,
+    onSuccess?: () => void | Promise<void>,
+  ) => {
     setBusyItemId(item.id)
     try {
       await action()
       toast(successMessage)
       await loadTrash()
+      await onSuccess?.()
     } catch (rawError) {
       toast(errorMessage(rawError, fallback))
     } finally {
@@ -142,8 +153,9 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: target.id }),
       "已删除",
       "删除失败",
+      onUsageChange,
     )
-  }, [deleteTarget, runTrashMutation])
+  }, [deleteTarget, onUsageChange, runTrashMutation])
 
   const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -202,6 +214,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
                     }),
                     "已恢复",
                     "恢复失败",
+                    onDriveItemsChanged,
                   )
                 }}
                 onDelete={() => {

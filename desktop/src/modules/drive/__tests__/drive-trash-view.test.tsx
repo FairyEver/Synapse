@@ -154,17 +154,21 @@ describe("DriveTrashView", () => {
   })
 
   it("restores and deletes trash entries after confirmation", async () => {
+    const onDriveItemsChanged = vi.fn()
+    const onUsageChange = vi.fn()
     mocks.listDriveTrash.mockResolvedValue(createTrashPage([
       createTrashItem({ id: "file-1", kind: "normal", name: "normal.txt" }),
       createTrashItem({ id: "asset-item-1", assetId: "asset_public", kind: "public_asset", name: "public.png" }),
     ]))
 
-    await render(<DriveTrashView />)
+    await render(<DriveTrashView onDriveItemsChanged={onDriveItemsChanged} onUsageChange={onUsageChange} />)
     await flushAct()
 
     await clickRowButtonText("normal.txt", "恢复")
     expect(mocks.restoreDriveTrashItem).toHaveBeenCalledWith({ itemId: "file-1", kind: "normal" })
     expect(mocks.toast).toHaveBeenCalledWith("已恢复")
+    expect(onDriveItemsChanged).toHaveBeenCalledTimes(1)
+    expect(onUsageChange).not.toHaveBeenCalled()
 
     await clickRowButtonText("public.png", "恢复")
     expect(mocks.restoreDriveTrashItem).toHaveBeenCalledWith({
@@ -172,6 +176,7 @@ describe("DriveTrashView", () => {
       itemId: "asset-item-1",
       kind: "public_asset",
     })
+    expect(onDriveItemsChanged).toHaveBeenCalledTimes(2)
 
     await clickRowButtonText("public.png", "删除")
     expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
@@ -179,6 +184,7 @@ describe("DriveTrashView", () => {
     await clickAlertDialogButtonText("删除")
     expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "asset-item-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
+    expect(onUsageChange).toHaveBeenCalledTimes(1)
   })
 
   it("cancels deletion and keeps entries visible when restore or delete fails", async () => {

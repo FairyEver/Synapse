@@ -645,6 +645,8 @@ function DriveModule() {
           ref={trashViewRef}
           inlineToolbar={false}
           onActionStateChange={setTrashActionState}
+          onDriveItemsChanged={() => { void loadItems() }}
+          onUsageChange={() => { void loadDriveUsage() }}
         />
       )
     }
