@@ -60,12 +60,12 @@ export class RepositoryStore {
 
     try {
       const watcher = watch(repository.localPath, { persistent: false }, () => {
-        void this.checkDirectoryExists(repository)
+        void this.checkDirectoryExists(repository, { requireCurrentWatcher: true })
       })
 
       watcher.on("error", () => {
         // Directory likely deleted — verify and notify
-        void this.checkDirectoryExists(repository)
+        void this.checkDirectoryExists(repository, { requireCurrentWatcher: true })
       })
 
       this.watchers.set(repository.uuid, {
@@ -111,11 +111,17 @@ export class RepositoryStore {
     }
   }
 
-  private async checkDirectoryExists(repository: SynapseRepositoryConfig): Promise<void> {
+  private async checkDirectoryExists(
+    repository: SynapseRepositoryConfig,
+    options: { readonly requireCurrentWatcher?: boolean } = {},
+  ): Promise<void> {
     try {
       const exists = await pathExists(repository.localPath)
 
       if (!exists) {
+        if (options.requireCurrentWatcher && this.watchers.get(repository.uuid)?.localPath !== repository.localPath) {
+          return
+        }
         logger.warn("Watched repository directory disappeared.", {
           repositoryUuid: repository.uuid,
         })
