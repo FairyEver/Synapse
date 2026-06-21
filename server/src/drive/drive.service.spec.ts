@@ -2683,6 +2683,26 @@ describe("DriveService", () => {
     await expect(service.getItem("user-1", second.id)).resolves.toMatchObject({ parentId: sourceB.id })
   })
 
+  it("checks reorganization folder relationships with bounded parent lookups", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const source = await service.createFolder("user-1", { parentId: null, name: "Source" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
+    const folders: Array<{ readonly id: string }> = []
+    for (let index = 0; index < 8; index += 1) {
+      folders.push(await service.createFolder("user-1", { parentId: source.id, name: `Folder ${index}` }))
+    }
+    const findUnique = vi.spyOn(prisma.driveItem, "findUnique")
+
+    const preview = await service.previewReorganization("user-1", {
+      moves: folders.map((folder) => ({ itemId: folder.id, targetParentId: target.id })),
+    })
+
+    expect(preview.summary.moveCount).toBe(folders.length)
+    expect(findUnique.mock.calls.length).toBeLessThanOrEqual(folders.length * 3)
+  })
+
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async (_input: any) => undefined) }

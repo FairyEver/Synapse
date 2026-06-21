@@ -1967,15 +1967,33 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   private async assertNoRelatedFoldersInReorganization(folderIds: readonly string[]): Promise<void> {
-    for (let leftIndex = 0; leftIndex < folderIds.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < folderIds.length; rightIndex += 1) {
-        const left = folderIds[leftIndex]
-        const right = folderIds[rightIndex]
-        if (await this.isDescendantOf(left, right) || await this.isDescendantOf(right, left)) {
-          throw new BadRequestException("同一整理计划不能同时移动父子文件夹。")
-        }
+    const movedFolderIds = new Set(folderIds)
+    if (movedFolderIds.size < 2) return
+
+    const parentIdByItemId = new Map<string, string | null>()
+    for (const folderId of movedFolderIds) {
+      const visited = new Set<string>()
+      let currentId: string | null = folderId
+      while (currentId) {
+        if (visited.has(currentId)) break
+        visited.add(currentId)
+        const parentId = await this.findCachedDriveItemParentId(currentId, parentIdByItemId)
+        if (!parentId) break
+        if (movedFolderIds.has(parentId)) throw new BadRequestException("同一整理计划不能同时移动父子文件夹。")
+        currentId = parentId
       }
     }
+  }
+
+  private async findCachedDriveItemParentId(itemId: string, cache: Map<string, string | null>): Promise<string | null> {
+    if (!cache.has(itemId)) {
+      const item = await this.prisma.driveItem.findUnique({
+        where: { id: itemId },
+        select: { parentId: true },
+      })
+      cache.set(itemId, item?.parentId ?? null)
+    }
+    return cache.get(itemId) ?? null
   }
 
   private pruneExpiredReorganizationPlans(now = Date.now()): void {
