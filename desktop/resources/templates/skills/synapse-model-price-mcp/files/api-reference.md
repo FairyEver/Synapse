@@ -119,4 +119,4 @@ Disable or delete:
 2. Use the returned `id` as `ruleId`.
 3. Call `model_price_rule_disable` to keep the rule, or `model_price_rule_delete` only for explicit removal.
 
-Model price rule changes affect current and future matching. Do not claim they changed historical usage costs or trigger historical repricing.
+Model price rule changes affect current matching immediately, but they do not rewrite already indexed usage totals at save time. A later Usage Analysis refresh can reprocess unchanged CC/Codex usage files when the price-rule hash changes. Do not trigger or simulate that refresh from this skill.

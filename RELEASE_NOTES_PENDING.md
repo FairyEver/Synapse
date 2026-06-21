@@ -125,6 +125,7 @@
 - Workflow MCP 读取工作流定义和运行历史时会经过权限检查并写入审计记录，避免敏感工作流内容被静默读取。
 - Content MCP 读取 Rule、Skill 和 Prompt 列表或详情时会经过权限检查并写入审计记录，避免内容资源被静默读取。
 - Automation MCP 的 trigger/executor discovery 也会经过 `automation.read` 权限检查并写入审计记录，和其它 Automation 读取工具保持一致。
+- Model Price MCP 内置 Skill 会正确说明价格规则保存和 Usage Analysis 刷新的关系，不再误导 Agent 否认刷新后可能重算历史费用。
 - Database MCP 读取表结构、行数据、日志和只读 SQL 时会经过权限检查并写入审计记录，避免数据表内容被静默读取。
 - Workflow MCP 创建节点时会在工具契约层要求提供节点配置，不再先接受空配置再在保存时失败。
 - MCP 工具返回 `ok:false` 时会标记为工具调用失败，不再把 Drive、Workflow 等调度失败包装成成功响应。
