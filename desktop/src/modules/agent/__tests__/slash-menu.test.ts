@@ -7,6 +7,7 @@ import {
   replaceAgentSlashFragment,
   toAgentSlashCandidates,
   toQuickInputSlashCandidates,
+  uniqueAgentSlashCandidates,
   type AgentSlashCandidate,
 } from "../slash-menu"
 import {
@@ -395,6 +396,29 @@ describe("agent slash menu utilities", () => {
           items: [candidates[2]],
         },
       ])
+  })
+
+  it("deduplicates slash candidates by name while keeping the first source", () => {
+    const knowledgeBase = toKnowledgeBaseSlashCandidates([
+      {
+        name: "wiki-ingest",
+        description: "汲取资料，整理 .raw 中的新内容",
+        slashText: "/wiki-ingest ",
+      },
+    ])[0]
+    const runtimeNative = toAgentSlashCandidates([{
+      name: "wiki-ingest",
+      description: "汲取资料，整理 .raw 中的新内容",
+      source: "agent-native",
+      kind: "agent-native",
+      adminOnly: false,
+      ui: {
+        group: "knowledge-base",
+        insertText: "/wiki-ingest ",
+      },
+    }])[0]
+
+    expect(uniqueAgentSlashCandidates([knowledgeBase, runtimeNative])).toEqual([knowledgeBase])
   })
 
   it("filters quick inputs by slash fragment text", () => {

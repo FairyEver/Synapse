@@ -62,6 +62,18 @@ export function toAgentSlashCandidates(
     }))
 }
 
+export function uniqueAgentSlashCandidates(
+  candidates: readonly AgentSlashCandidate[],
+): AgentSlashCandidate[] {
+  const seen = new Set<string>()
+  return candidates.filter((candidate) => {
+    const key = candidate.name.trim().replace(/^\/+/, "").toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export function findAgentSlashFragment(value: string, cursor: number): AgentSlashFragment | null {
   const safeCursor = Math.max(0, Math.min(cursor, value.length))
   const tokenStart = findTokenStart(value, safeCursor)

@@ -540,6 +540,27 @@ describe("AgentCommandRouter", () => {
       .resolves.toBeNull()
   })
 
+  it("lists agent-native commands supplied by runtime discovery", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      listCommands: async () => [{
+        name: "wiki-ingest",
+        description: "汲取资料，整理 .raw 中的新内容",
+        source: "agent-native",
+        kind: "agent-native",
+        adminOnly: false,
+      }],
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(await router.handle(baseMessage("/commands"), baseConversation()))
+
+    expect(result.resultText).toContain("/wiki-ingest [agent-native] - 汲取资料，整理 .raw 中的新内容")
+  })
+
   it("routes registered prompt commands that return direct command results", async () => {
     const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({

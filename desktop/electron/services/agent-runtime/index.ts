@@ -27,20 +27,16 @@ import { validateWorkspaceDirectory } from "./session-manager"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 import type { AgentMessage } from "./types"
+import {
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS,
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS,
+} from "./knowledge-base-native-commands"
 
-export const MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS = new Set([
-  "autoresearch",
-  "canvas",
-  "defuddle",
-  "obsidian-bases",
-  "obsidian-markdown",
-  "save",
-  "wiki",
-  "wiki-fold",
-  "wiki-ingest",
-  "wiki-lint",
-  "wiki-query",
-])
+export {
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS,
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMAND_NAMES,
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS,
+} from "./knowledge-base-native-commands"
 
 export {
   AgentRuntimeService,
@@ -202,7 +198,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         skills,
         commandRunner: runner,
         registeredPromptCommands: async () => [],
-        publishedProjectCommands: async () => [],
+        publishedProjectCommands: async () => isManagedKnowledgeBase
+          ? MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS
+          : [],
         sdkPlugins: async (message) => isManagedKnowledgeBaseRuntimeMessage(message)
           ? [{ type: "local", path: ctx.projectMeta.workspacePath as string }]
           : [],

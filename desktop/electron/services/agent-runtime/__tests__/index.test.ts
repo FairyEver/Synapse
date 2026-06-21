@@ -11,6 +11,7 @@ import {
   AgentRuntimeService,
   createAgentRuntimeProjectService,
   MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS,
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS,
 } from "../index"
 import { KNOWLEDGE_BASE_AGENT_CAPABILITIES } from "../../../../src/modules/agent/knowledge-base-commands"
 import type { AgentEvent, AgentMessage } from "../types"
@@ -383,8 +384,60 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
+  it("publishes managed knowledge base native slash commands for runtime discovery", async () => {
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      managedKnowledgeBase: true,
+    })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      await expect(service.listPublishedCommands("local-renderer")).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "wiki-ingest",
+            source: "agent-native",
+            kind: "agent-native",
+          }),
+          expect.objectContaining({
+            name: "save",
+            source: "agent-native",
+            kind: "agent-native",
+          }),
+        ]),
+      )
+      await expect(service.listPublishedCommands("scheduled")).resolves.not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "wiki-ingest" }),
+          expect.objectContaining({ name: "save" }),
+        ]),
+      )
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
+  it("does not publish knowledge base native slash commands for ordinary projects", async () => {
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext()
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      await expect(service.listPublishedCommands("local-renderer")).resolves.not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "wiki-ingest" }),
+          expect.objectContaining({ name: "save" }),
+        ]),
+      )
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
   it("covers every knowledge base UI catalog item in native slash passthrough", () => {
     expect(KNOWLEDGE_BASE_AGENT_CAPABILITIES.map((item) => item.name).sort())
+      .toEqual([...MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS].sort())
+    expect(MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS.map((item) => item.name).sort())
       .toEqual([...MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS].sort())
   })
 })

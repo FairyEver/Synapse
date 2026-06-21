@@ -42,6 +42,7 @@ import {
 import {
   toAgentSlashCandidates,
   toQuickInputSlashCandidates,
+  uniqueAgentSlashCandidates,
 } from "../slash-menu"
 import {
   formatAgentHeaderModelLabel,
@@ -422,11 +423,11 @@ function AgentConversationWorkspace({
     [canManageKnowledgeSources],
   )
   const slashCandidates = useMemo(
-    () => [
+    () => uniqueAgentSlashCandidates([
       ...toQuickInputSlashCandidates(quickInputs),
       ...knowledgeBaseSlashCandidates,
       ...toAgentSlashCandidates(commands),
-    ],
+    ]),
     [commands, knowledgeBaseSlashCandidates, quickInputs],
   )
   const knowledgeBaseActions = useMemo(
