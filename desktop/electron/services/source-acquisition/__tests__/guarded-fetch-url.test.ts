@@ -87,6 +87,55 @@ describe("createGuardedFetchUrl", () => {
     }
   })
 
+  it("closes redirected response bodies before following the next target", async () => {
+    lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }])
+    let redirectChunksSent = 0
+    let redirectResponseClosed = false
+    let finalRequested = false
+    const server = http.createServer((request, response) => {
+      if (request.url?.startsWith("/start")) {
+        response.statusCode = 302
+        response.setHeader("location", "/final")
+        response.flushHeaders()
+        const interval = setInterval(() => {
+          redirectChunksSent += 1
+          response.write("redirect-body")
+          if (redirectChunksSent >= 20) {
+            clearInterval(interval)
+            response.end()
+          }
+        }, 5)
+        response.on("close", () => {
+          redirectResponseClosed = true
+          clearInterval(interval)
+        })
+        return
+      }
+      finalRequested = true
+      response.setHeader("content-type", "text/plain")
+      response.end("ok")
+    })
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    try {
+      const address = server.address()
+      if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port.")
+      const fetchUrl = createGuardedFetchUrl({ allowLocalOrPrivateHosts: true })
+      const response = await fetchUrl(`http://127.0.0.1:${address.port}/start`, {
+        signal: new AbortController().signal,
+      })
+
+      await expect(response.text()).resolves.toBe("ok")
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(finalRequested).toBe(true)
+      expect(redirectResponseClosed).toBe(true)
+      expect(redirectChunksSent).toBeLessThan(4)
+    } finally {
+      server.close()
+      await once(server, "close")
+    }
+  })
+
   it("rejects and closes oversized response streams without content-length", async () => {
     lookup.mockImplementation(async (hostname: string) => [{ address: hostname, family: 4 }])
     let chunksSent = 0
