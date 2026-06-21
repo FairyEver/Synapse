@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
+import { REPLY_OUTBOX_SENT_RETENTION_LIMIT } from "../../../../config"
 import type {
   DataChangeEvent,
   DataChangeListener,
@@ -312,6 +313,33 @@ describe("SideChannelService", () => {
       }),
     ])
     expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
+  })
+
+  it("retains only recent sent side-channel outbox records per reply target", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      token: "tok",
+    })
+    const dispatcher = new FakeDispatcher()
+    service.registerDispatcher("bridge", dispatcher)
+    service.rememberReplyTarget(bridgeTarget())
+
+    for (let index = 0; index <= REPLY_OUTBOX_SENT_RETENTION_LIMIT; index += 1) {
+      await service.send({
+        project: "project-1",
+        sessionKey: "bridge:s1",
+        message: `message-${index}`,
+      })
+    }
+
+    const entries = await outbox.list()
+    expect(entries).toHaveLength(REPLY_OUTBOX_SENT_RETENTION_LIMIT)
+    expect(entries.map((entry) => entry.payload.content)).not.toContain("message-0")
+    expect(entries.map((entry) => entry.payload.content)).toContain(`message-${REPLY_OUTBOX_SENT_RETENTION_LIMIT}`)
   })
 
   it("reports when a dispatched side-channel send cannot be recorded in the outbox", async () => {

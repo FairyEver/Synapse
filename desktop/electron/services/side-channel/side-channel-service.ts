@@ -62,6 +62,7 @@ export class SideChannelService implements ReplyTargetRuntime {
   private readonly targets = new Map<string, ReplyTarget>()
   private readonly dispatchers = new Map<string, ReplyTransportDispatcher>()
   private readonly rateLimiter = new Map<string, number[]>()
+  private readonly outboxes = new Map<string, ReplyOutboxService>()
   private relaySendHandler: SideChannelRelaySendHandler | undefined
   private binding: ResolvedNetworkBinding | undefined
 
@@ -409,11 +410,15 @@ export class SideChannelService implements ReplyTargetRuntime {
   }
 
   private outbox(projectId: string): ReplyOutboxService {
-    return new ReplyOutboxService({
+    const existing = this.outboxes.get(projectId)
+    if (existing) return existing
+    const outbox = new ReplyOutboxService({
       projectId,
       outbox: this.deps.dataRepository.namespace<OutboxEntryV1>("outbox"),
       logger: this.deps.logger,
     })
+    this.outboxes.set(projectId, outbox)
+    return outbox
   }
 
   private recordSendAudit(

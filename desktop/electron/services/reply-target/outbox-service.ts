@@ -73,7 +73,12 @@ export class ReplyOutboxService {
       updatedAt: now,
     }
 
-    const write = this.pendingWrite.then(() => this.deps.outbox.upsert(entry))
+    const write = this.pendingWrite.then(async () => {
+      await this.deps.outbox.upsert(entry)
+      if (input.status === "sent") {
+        await this.pruneSentEntriesSafely(entry)
+      }
+    })
     this.pendingWrite = write
       .catch((error) => {
         this.deps.logger?.warn("Outbox persistence failed.", {
