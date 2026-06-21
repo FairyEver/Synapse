@@ -12,7 +12,7 @@ Parameters:
 
 `contentType` is optional and can be `rule`, `skill`, or `prompt`.
 
-Returns content categories, allowed icon values, allowed background colors, and publishing constraints.
+Returns content categories, allowed icon values, allowed background colors, name constraints, and publishing constraints.
 
 ## List And Get
 
@@ -51,7 +51,7 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 }
 ```
 
-Rule `name` may use lowercase letters, numbers, hyphens, and dots.
+Rule `name` may use lowercase letters, numbers, hyphens, and dots. It is limited to 64 characters, must start and end with a lowercase letter or number, and rejects Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`; the reserved segment before a dot is also rejected, so `con.rule` is invalid.
 
 `content_skill_create`
 
@@ -74,7 +74,7 @@ Rule `name` may use lowercase letters, numbers, hyphens, and dots.
 }
 ```
 
-Skill `name` may use only lowercase letters, numbers, and hyphens. Do not use dots; Synapse writes this value into the installed Skill directory and `SKILL.md` frontmatter.
+Skill `name` may use only lowercase letters, numbers, and hyphens. It is limited to 64 characters, must start and end with a lowercase letter or number, and rejects Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`. Do not use dots; Synapse writes this value into the installed Skill directory and `SKILL.md` frontmatter.
 
 `files` are attachments only. Do not include `SKILL.md` or `.synapse.json`; Synapse generates those install files from the Skill body and repository metadata.
 

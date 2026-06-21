@@ -7,6 +7,9 @@ import type {
 } from "./types"
 
 type ContentResourceType = "rule" | "skill" | "prompt"
+const RULE_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$"
+const SKILL_NAME_PATTERN = "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+const CONTENT_NAME_MAX_LENGTH = 64
 
 const contentCapabilities: readonly CapabilityDefinition[] = [
   { id: "content.type.describe" as CapabilityId, title: "Describe content types", description: "Return content fields, categories, appearance options, and publishing constraints.", mutates: false },
@@ -37,6 +40,14 @@ export const CONTENT_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntri
 )
 
 const stringField = (description: string) => ({ type: "string", description })
+const contentNameField = (type: Extract<ContentResourceType, "rule" | "skill">) => ({
+  type: "string",
+  maxLength: CONTENT_NAME_MAX_LENGTH,
+  pattern: type === "rule" ? RULE_NAME_PATTERN : SKILL_NAME_PATTERN,
+  description: type === "rule"
+    ? "Stable Rule name. Use lowercase letters, numbers, hyphens, and dots; max 64 chars; must start/end with a letter or number. Windows reserved names such as con, aux, nul, com1, or lpt1 are rejected, including the segment before a dot."
+    : "Stable Skill name. Use lowercase letters, numbers, and hyphens; max 64 chars; must start/end with a letter or number. Do not use dots. Windows reserved names such as con, aux, nul, com1, or lpt1 are rejected.",
+})
 
 const iconFields = {
   iconType: {
@@ -165,7 +176,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
   const required: string[] = [...inlineRequiredFields]
 
   if (type === "rule" || type === "skill") {
-    properties.name = stringField("Stable content slug/name.")
+    properties.name = contentNameField(type)
     required.unshift("name")
   }
 
@@ -182,8 +193,8 @@ function createTool(type: ContentResourceType): McpToolDefinition {
     name: `content_${type}_create`,
     description:
       type === "skill"
-        ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive.`
-        : `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, and constraints.`,
+        ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive.`
+        : `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints.`,
     inputSchema: {
       type: "object",
       properties,

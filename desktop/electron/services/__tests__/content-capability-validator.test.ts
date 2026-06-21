@@ -31,6 +31,31 @@ describe("content capability validator", () => {
     expect(description.constraints.skillAttachmentMaxCount).toBeGreaterThan(0)
   })
 
+  it("describes type-specific content name constraints", () => {
+    const description = describeContentTypes()
+    const rule = description.types.find((type) => type.id === "rule")
+    const skill = description.types.find((type) => type.id === "skill")
+    const prompt = description.types.find((type) => type.id === "prompt")
+
+    expect(rule?.nameConstraints).toMatchObject({
+      required: true,
+      maxLength: 64,
+      pattern: "^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$",
+      allowsDots: true,
+      rejectsWindowsReservedNames: true,
+    })
+    expect(skill?.nameConstraints).toMatchObject({
+      required: true,
+      maxLength: 64,
+      pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      allowsDots: false,
+      rejectsWindowsReservedNames: true,
+    })
+    expect(prompt?.nameConstraints).toMatchObject({
+      required: false,
+    })
+  })
+
   it("normalizes a rule create payload", () => {
     const payload = normalizeCreateContentParams("rule", validRuleParams)
 

@@ -43,4 +43,21 @@ describe("Content capability domain", () => {
     expect(update?.inputSchema).not.toHaveProperty("anyOf")
     expect(update?.description).toContain("sourceDirectoryPath")
   })
+
+  it("exposes rule and skill name constraints in create schemas", () => {
+    const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get("content_rule_create")?.inputSchema.properties.name).toMatchObject({
+      maxLength: 64,
+      pattern: "^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$",
+    })
+    expect(JSON.stringify(tools.get("content_rule_create")?.inputSchema.properties.name))
+      .toContain("Windows reserved")
+    expect(tools.get("content_skill_create")?.inputSchema.properties.name).toMatchObject({
+      maxLength: 64,
+      pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+    })
+    expect(JSON.stringify(tools.get("content_skill_create")?.inputSchema.properties.name))
+      .toContain("dots")
+  })
 })

@@ -8,8 +8,18 @@ import {
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
-import { normalizeContentNameInput, validateContentNameInput } from "../../src/lib/content-name-input"
-import { normalizeSkillNameInput, validateSkillNameInput } from "../../src/lib/skill-name-input"
+import {
+  CONTENT_NAME_MAX_LENGTH,
+  CONTENT_NAME_PATTERN,
+  normalizeContentNameInput,
+  validateContentNameInput,
+} from "../../src/lib/content-name-input"
+import {
+  SKILL_NAME_MAX_LENGTH,
+  SKILL_NAME_PATTERN,
+  normalizeSkillNameInput,
+  validateSkillNameInput,
+} from "../../src/lib/skill-name-input"
 import type {
   SynapseContentIconType,
   SynapseContentType,
@@ -51,6 +61,14 @@ type ContentTypeDescription = {
       label: string
     }>
     id: SynapseContentType
+    nameConstraints: {
+      allowsDots?: boolean
+      description: string
+      maxLength?: number
+      pattern?: string
+      rejectsWindowsReservedNames?: boolean
+      required: boolean
+    }
     requiresFilesInPayload: boolean
   }>
 }
@@ -67,6 +85,29 @@ const VALID_CONTENT_TYPES = new Set<SynapseContentType>(getAllContentTypeIds())
 const SKILL_INLINE_REQUIRED_FIELDS = ["name", "title", "description", "category", "content"] as const
 const SKILL_INLINE_FIELDS_TEXT = SKILL_INLINE_REQUIRED_FIELDS.join("/")
 
+const CONTENT_NAME_CONSTRAINTS: Record<SynapseContentType, ContentTypeDescription["types"][number]["nameConstraints"]> = {
+  rule: {
+    required: true,
+    maxLength: CONTENT_NAME_MAX_LENGTH,
+    pattern: CONTENT_NAME_PATTERN.source,
+    allowsDots: true,
+    rejectsWindowsReservedNames: true,
+    description: "Rule name: lowercase letters, numbers, hyphens, and dots; max 64 chars; must start and end with a letter or number; Windows reserved names are rejected, including reserved segments before a dot.",
+  },
+  skill: {
+    required: true,
+    maxLength: SKILL_NAME_MAX_LENGTH,
+    pattern: SKILL_NAME_PATTERN.source,
+    allowsDots: false,
+    rejectsWindowsReservedNames: true,
+    description: "Skill name: lowercase letters, numbers, and hyphens; max 64 chars; must start and end with a letter or number; dots and Windows reserved names are rejected.",
+  },
+  prompt: {
+    required: false,
+    description: "Prompts do not use a stable name field; use title, description, category, content, and appearance fields.",
+  },
+}
+
 function describeContentTypes(contentType?: unknown): ContentTypeDescription {
   const selectedTypes = isNonEmptyString(contentType)
     ? [assertContentType(contentType)]
@@ -79,6 +120,7 @@ function describeContentTypes(contentType?: unknown): ContentTypeDescription {
       return {
         id: type,
         requiresFilesInPayload: definition.requiresFilesInPayload,
+        nameConstraints: CONTENT_NAME_CONSTRAINTS[type],
         categories: definition.categories.map((category) => ({
           id: category.id,
           label: category.label,

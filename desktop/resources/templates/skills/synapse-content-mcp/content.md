@@ -14,7 +14,7 @@ Do not use this skill for database records, scheduler tasks, workflow definition
 
 ## Default Flow
 
-1. Call `content_type_describe` before create or update to discover valid categories, icons, background colors, and constraints.
+1. Call `content_type_describe` before create or update to discover valid categories, icons, background colors, name constraints, and attachment constraints.
 2. Choose the resource-specific tool group: `content_rule_*`, `content_skill_*`, or `content_prompt_*`.
 3. For updates and deletes, call the matching `content_*_get` first and pass `latestHistoryDirname` as `baseHistoryDirname`.
 4. After create, update, or delete, report the returned id, status, title, and latest history version.
@@ -63,7 +63,7 @@ Rules require:
 - `content`
 - appearance fields
 
-Rule names may use lowercase letters, numbers, hyphens, and dots. Skill names may use only lowercase letters, numbers, and hyphens; do not use dots in Skill names because installed Skill directories and `SKILL.md` frontmatter must use the editor-compatible Skill name.
+Rule names and Skill names are normalized to lowercase and can be at most 64 characters. They must start and end with a lowercase letter or number. Rule names may use lowercase letters, numbers, hyphens, and dots; Windows reserved segments such as `con`, `aux`, `nul`, `com1`, and `lpt1` are rejected, including names like `con.rule`. Skill names may use only lowercase letters, numbers, and hyphens; do not use dots, and do not use Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`.
 
 Skills require:
 
