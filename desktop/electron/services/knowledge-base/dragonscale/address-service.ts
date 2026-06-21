@@ -170,11 +170,48 @@ export async function acquireDragonScaleAddressFileLock(
       }
     } catch (error) {
       if (!isPathExistsError(error)) throw error
+      if (await removeStaleDragonScaleAddressFileLock(lockPath)) {
+        continue
+      }
       if (Date.now() - startedAt >= options.timeoutMs) {
         throw new DragonScaleAddressLockTimeoutError(vaultPath)
       }
       await delay(options.retryMs)
     }
+  }
+}
+
+async function removeStaleDragonScaleAddressFileLock(lockPath: string): Promise<boolean> {
+  const lockOwner = await readFile(path.join(lockPath, LOCK_OWNER_FILE), "utf8")
+    .catch((error) => {
+      if (isMissingPathError(error)) return null
+      throw error
+    })
+  const ownerPid = parseLockOwnerPid(lockOwner)
+  if (ownerPid === null || isProcessAlive(ownerPid)) return false
+  await rm(lockPath, { recursive: true, force: true })
+  return true
+}
+
+function parseLockOwnerPid(owner: string | null): number | null {
+  const match = owner?.trim().match(/^([1-9][0-9]*):/u)
+  if (!match?.[1]) return null
+  const pid = Number(match[1])
+  return Number.isSafeInteger(pid) ? pid : null
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    if (typeof error === "object"
+      && error !== null
+      && "code" in error
+      && (error as { readonly code?: unknown }).code === "ESRCH") {
+      return false
+    }
+    return true
   }
 }
 
