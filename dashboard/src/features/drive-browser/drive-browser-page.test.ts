@@ -76,6 +76,25 @@ vi.mock('@mdxeditor/editor', async () => {
   }
 })
 
+vi.mock('./use-drive-annotations', () => ({
+  useDriveAnnotations: () => ({
+    threads: [],
+    loading: false,
+    error: null,
+    refresh: vi.fn(async () => undefined),
+    createThread: vi.fn(async () => undefined),
+    creatingThread: false,
+    reply: vi.fn(async () => undefined),
+    replying: false,
+    updateComment: vi.fn(async () => undefined),
+    updatingComment: false,
+    deleteComment: vi.fn(async () => undefined),
+    deletingComment: false,
+    deleteThread: vi.fn(async () => undefined),
+    deletingThread: false,
+  }),
+}))
+
 describe('drive browser view model', () => {
   it('renders admin public asset controls without marketing copy', () => {
     const queryClient = new QueryClient()
@@ -215,6 +234,18 @@ describe('drive browser view model', () => {
     })
 
     expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/file?surface=standalone')
+  })
+
+  it('describes empty folder children without sibling wording', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder', type: 'folder' },
+      children: [],
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
+
+    expect(html).toContain('暂无文件')
+    expect(html).not.toContain('暂无同级文件')
   })
 
   it('prepends the console home breadcrumb for drive item pages', () => {
