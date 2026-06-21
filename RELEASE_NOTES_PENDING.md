@@ -101,6 +101,7 @@
 - 修复本地 Drive 存储模式下，文件上传完成后创建历史版本可能失败的问题。使用本地 fallback 存储时，云盘文件现在可以正常完成上传、分享、在线编辑和版本保存。
 - 服务端生产环境使用本地 Drive 存储时必须显式配置持久化目录，避免未配置 COS 时把用户云盘文件写入系统临时目录。
 - 服务端生产环境使用本地 Content Store 存储时必须显式配置持久化目录，Docker 部署会挂载并在切换前备份草稿附件和安装包数据。
+- Provider 密钥并发保存会串行写入加密存储，避免多个窗口或重复提交同时保存时互相覆盖 API key。
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
 - 诊断报告中的日志样本会先脱敏再写入详情和 `diagnostics.json`，避免排障包或设置页复制内容泄露 token、Cookie、Authorization 等敏感信息。
 - 工作流实时事件和运行状态会脱敏 Code X 节点结果，避免 token、Cookie、Authorization 和本地路径通过 live 通道泄露。
