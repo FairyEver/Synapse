@@ -388,6 +388,91 @@ export interface DriveBrowserPasswordRequiredDto {
   readonly message: string
 }
 
+export type DriveAnnotationTargetKind = "textRange"
+export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
+
+export interface DriveAnnotationAuthorDto {
+  readonly id: string
+  readonly email: string
+  readonly displayName: string | null
+}
+
+export interface DriveAnnotationTextRangeTargetV1 {
+  readonly schemaVersion: 1
+  readonly kind: "textRange"
+  readonly surface: "markdownRenderedText"
+  readonly range: {
+    readonly start: number
+    readonly end: number
+  }
+  readonly quote: {
+    readonly exact: string
+    readonly prefix: string
+    readonly suffix: string
+  }
+  readonly source?: {
+    readonly startOffset: number
+    readonly endOffset: number
+    readonly lineStart: number
+    readonly lineEnd: number
+  }
+  readonly blockHint?: {
+    readonly path: readonly number[]
+    readonly type: string
+    readonly textHash: string
+  }
+}
+
+export type DriveAnnotationTargetDto = DriveAnnotationTextRangeTargetV1
+
+export interface DriveAnnotationCommentDto {
+  readonly id: string
+  readonly threadId: string
+  readonly parentCommentId: string | null
+  readonly body: string
+  readonly author: DriveAnnotationAuthorDto
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly editedAt: string | null
+  readonly deletedAt: string | null
+  readonly deleted: boolean
+  readonly permissions: {
+    readonly canEdit: boolean
+    readonly canDelete: boolean
+  }
+}
+
+export interface DriveAnnotationThreadDto {
+  readonly id: string
+  readonly itemId: string
+  readonly baseVersionId: string | null
+  readonly targetKind: DriveAnnotationTargetKind
+  readonly target: DriveAnnotationTargetDto
+  readonly anchorStatus: DriveAnnotationAnchorStatus
+  readonly author: DriveAnnotationAuthorDto
+  readonly comments: readonly DriveAnnotationCommentDto[]
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly permissions: {
+    readonly canDelete: boolean
+  }
+}
+
+export interface DriveAnnotationCreateInput {
+  readonly targetKind: DriveAnnotationTargetKind
+  readonly target: DriveAnnotationTargetDto
+  readonly body: string
+}
+
+export interface DriveAnnotationReplyInput {
+  readonly parentCommentId?: string | null
+  readonly body: string
+}
+
+export interface DriveAnnotationCommentUpdateInput {
+  readonly body: string
+}
+
 export function buildDriveShareUrl(input: {
   readonly publicAppUrl: string
   readonly shareId: string
