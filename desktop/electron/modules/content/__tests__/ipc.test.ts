@@ -371,6 +371,7 @@ describe("contentIpcModule sync ownership", () => {
       contentId: "skill-1",
       contentType: "skill",
       editorId: "codex",
+      overwriteConfirmed: true,
       scope: "project",
     }).success).toBe(true)
     expect(contentIpcModule.methods.readEditorInstallFormValues.request.safeParse({

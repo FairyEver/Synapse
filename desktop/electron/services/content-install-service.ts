@@ -461,6 +461,18 @@ export class ContentInstallService {
           const previousSkillDirectoryPath = payload.contentType === "skill"
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
             : null
+          const isOwnExistingSkillDirectory = Boolean(
+            previousSkillDirectoryPath && isSamePath(previousSkillDirectoryPath, target.targetPath),
+          )
+
+          if (
+            target.status === "ready"
+            && target.targetExists
+            && !isOwnExistingSkillDirectory
+            && !payload.overwriteConfirmed
+          ) {
+            throw new Error("覆盖目标目录前需要用户确认。")
+          }
 
           // Handle Skill replacement: backup existing directory if replace confirmed
           if (payload.contentType === "skill" && payload.replaceConfirmed) {
