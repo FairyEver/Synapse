@@ -779,6 +779,36 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(fileSystem?.createReadStream).not.toHaveBeenCalled()
   })
 
+  it("rejects relative MCP file upload paths before permission checks", async () => {
+    const accountService = createAccountService()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(),
+    }
+    const fileSystem = {
+      lstat: vi.fn(),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "README.md",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
+
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+    }))
+    expect(fileSystem?.lstat).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveUpload).not.toHaveBeenCalled()
+  })
+
   it("retries completed MCP file upload sessions before cancelling", async () => {
     const item = driveItem({ id: "item-1", name: "report.md" })
     const accountService = createAccountService({
@@ -968,6 +998,36 @@ describe("createDriveCapabilityDispatcher", () => {
         error: "Folder upload completed with failed files.",
       }),
     }))
+  })
+
+  it("rejects relative MCP folder upload paths before permission checks", async () => {
+    const accountService = createAccountService()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(),
+    }
+    const fileSystem = {
+      lstat: vi.fn(),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "docs",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Local upload path must be absolute.")
+
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+    }))
+    expect(fileSystem?.lstat).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
   })
 
   it("deletes a newly created MCP folder upload root when every file upload fails", async () => {

@@ -876,6 +876,9 @@ async function authorizeFileRead(
   context: DispatchContext,
   action = "drive.upload",
 ): Promise<void> {
+  if (!path.isAbsolute(filePath)) {
+    throw new Error("Local upload path must be absolute.")
+  }
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const metadata = { source: context.source ?? "api", driveAction: action }
   const permission = await checkCapabilityPermission({
