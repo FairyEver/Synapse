@@ -47,6 +47,12 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除')
   })
+
+  it('hides reply actions when commenting is not allowed', () => {
+    renderRail({ canReply: false })
+
+    expect(document.body.textContent).not.toContain('回复')
+  })
 })
 
 function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
@@ -58,6 +64,7 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
       <MarkdownCommentsRail
         threads={[thread()]}
         activeThreadId={null}
+        canReply
         onFocusThread={vi.fn()}
         onReply={vi.fn(async () => undefined)}
         onUpdateComment={vi.fn(async () => undefined)}
@@ -68,6 +75,8 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
     )
   })
 }
+
+const canReply = true
 
 function thread(input: {
   readonly canEdit?: boolean

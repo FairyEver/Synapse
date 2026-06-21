@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 export function MarkdownCommentsRail({
   threads,
   activeThreadId,
+  canReply,
   onFocusThread,
   onReply,
   onUpdateComment,
@@ -15,6 +16,7 @@ export function MarkdownCommentsRail({
 }: {
   readonly threads: readonly DriveAnnotationThreadDto[]
   readonly activeThreadId: string | null
+  readonly canReply: boolean
   readonly onFocusThread: (threadId: string) => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => Promise<void>
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
@@ -30,6 +32,7 @@ export function MarkdownCommentsRail({
             key={thread.id}
             thread={thread}
             active={thread.id === activeThreadId}
+            canReply={canReply}
             onFocusThread={onFocusThread}
             onReply={onReply}
             onUpdateComment={onUpdateComment}
@@ -45,6 +48,7 @@ export function MarkdownCommentsRail({
 function ThreadView({
   thread,
   active,
+  canReply,
   onFocusThread,
   onReply,
   onUpdateComment,
@@ -53,6 +57,7 @@ function ThreadView({
 }: {
   readonly thread: DriveAnnotationThreadDto
   readonly active: boolean
+  readonly canReply: boolean
   readonly onFocusThread: (threadId: string) => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => Promise<void>
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
@@ -74,6 +79,7 @@ function ThreadView({
             key={comment.id}
             comment={comment}
             replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
+            canReply={canReply}
             onReply={(body) => onReply({ threadId: thread.id, parentCommentId: comment.id, body })}
             onUpdateComment={onUpdateComment}
             onDeleteComment={onDeleteComment}
@@ -92,12 +98,14 @@ function ThreadView({
 function CommentView({
   comment,
   replyToName,
+  canReply,
   onReply,
   onUpdateComment,
   onDeleteComment,
 }: {
   readonly comment: DriveAnnotationCommentDto
   readonly replyToName: string | null
+  readonly canReply: boolean
   readonly onReply: (body: string) => Promise<void>
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
   readonly onDeleteComment: (commentId: string) => Promise<void>
@@ -134,7 +142,9 @@ function CommentView({
         <p className='whitespace-pre-wrap break-words text-sm'>{comment.body}</p>
       )}
       <div className='flex items-center gap-1'>
-        <Button type='button' variant='ghost' size='sm' onClick={() => setReplying(true)}>回复</Button>
+        {canReply ? (
+          <Button type='button' variant='ghost' size='sm' onClick={() => setReplying(true)}>回复</Button>
+        ) : null}
         {comment.permissions.canEdit ? (
           <Button type='button' variant='ghost' size='sm' onClick={() => setEditing(true)}>编辑</Button>
         ) : null}
@@ -142,7 +152,7 @@ function CommentView({
           <Button type='button' variant='ghost' size='sm' onClick={() => { void onDeleteComment(comment.id) }}>删除</Button>
         ) : null}
       </div>
-      {replying ? (
+      {canReply && replying ? (
         <CommentComposer
           value={replyValue}
           onChange={setReplyValue}

@@ -82,6 +82,16 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('textarea')).toBeNull()
   })
 
+  it('hides reply actions for logged-out share viewers', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown({ annotationContext: { context: 'share', shareToken: 'share-token' } })
+
+    await act(async () => undefined)
+
+    expect(document.body.textContent).toContain('Comment body')
+    expect(document.body.textContent).not.toContain('回复')
+  })
+
   it('does not show comment controls for markdown previews whose file name is not .md', async () => {
     renderMarkdown({ currentItem: current({ name: 'notes.mdx' }) })
     selectStrongText()

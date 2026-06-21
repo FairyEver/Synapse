@@ -217,6 +217,7 @@ export function DriveMarkdownRenderer({
           <MarkdownCommentsRail
             threads={railThreads}
             activeThreadId={activeThreadId}
+            canReply={canCreateAnnotation}
             onFocusThread={focusThread}
             onReply={annotations.reply}
             onUpdateComment={annotations.updateComment}
