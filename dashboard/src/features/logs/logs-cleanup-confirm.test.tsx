@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { adminApi } from '@/lib/api'
 import LogsPage from './index'
 
@@ -38,6 +38,11 @@ const mockedAdminApi = vi.mocked(adminApi)
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 
+beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-06-01T07:46:00.000Z'))
+})
+
 afterEach(() => {
   if (root) {
     act(() => {
@@ -49,6 +54,7 @@ afterEach(() => {
   host = null
   document.body.innerHTML = ''
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 describe('LogsPage cleanup', () => {
@@ -57,17 +63,17 @@ describe('LogsPage cleanup', () => {
     mockedAdminApi.cleanupLogs.mockResolvedValue({ deleted: 1 })
 
     renderPage()
-    const cleanupButton = await waitFor(() => buttonByText('清理7天前'))
+    const cleanupButton = await waitFor(() => buttonByText('清理30天前'))
 
     await click(cleanupButton)
 
     expect(mockedAdminApi.cleanupLogs).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('将删除 7 天前的系统日志。')
+    expect(document.body.textContent).toContain('将删除 30 天前的系统日志。')
 
     await click(buttonByText('清理'))
 
     expect(mockedAdminApi.cleanupLogs).toHaveBeenCalledTimes(1)
-    expect(mockedAdminApi.cleanupLogs.mock.calls[0]?.[0]).toBeInstanceOf(Date)
+    expect(mockedAdminApi.cleanupLogs.mock.calls[0]?.[0]).toEqual(new Date('2026-05-02T07:46:00.000Z'))
   })
 })
 
@@ -106,7 +112,7 @@ async function waitFor<T>(read: () => T): Promise<T> {
     } catch (error) {
       lastError = error
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0))
+        await vi.advanceTimersByTimeAsync(0)
       })
     }
   }

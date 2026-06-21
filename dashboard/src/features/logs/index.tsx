@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { getCleanupBeforeDate } from './cleanup-date'
+import { getCleanupBeforeDate, LOG_CLEANUP_RETENTION_DAYS } from './cleanup-date'
 import { getCleanupResultMessage } from './cleanup-result'
 import { getLogsQueryErrorMessage } from './logs-error'
 
@@ -117,7 +117,7 @@ export default function LogsPage() {
             onClick={() => setCleanupOpen(true)}
           >
             <Trash2 className='mr-1 h-4 w-4' />
-            清理7天前
+            清理{LOG_CLEANUP_RETENTION_DAYS}天前
           </Button>
         </div>
         {isLoading ? (
@@ -159,7 +159,7 @@ export default function LogsPage() {
           open={cleanupOpen}
           onOpenChange={setCleanupOpen}
           title='清理日志'
-          desc='将删除 7 天前的系统日志。'
+          desc={`将删除 ${LOG_CLEANUP_RETENTION_DAYS} 天前的系统日志。`}
           cancelBtnText='取消'
           confirmText='清理'
           destructive
