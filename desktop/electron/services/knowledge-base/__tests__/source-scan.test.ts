@@ -209,4 +209,33 @@ describe("knowledge base source scan", () => {
       { relativePath: ".raw/b.md", reason: "scan-size-limit" },
     ])
   })
+
+  it("stops raw source discovery when the entry budget is exhausted", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha")
+    await writeFile(path.join(root, ".raw", "b.md"), "bravo")
+    await writeFile(path.join(root, ".raw", "c.md"), "charlie")
+
+    const result = await scanKnowledgeBaseSources(root, { maxDiscoveryEntries: 2 })
+
+    expect(result.sources.length).toBeLessThanOrEqual(2)
+    expect(result.skippedSources).toContainEqual(expect.objectContaining({
+      relativePath: expect.stringMatching(/^\.raw\/[abc]\.md$/),
+      reason: "scan-entry-limit",
+    }))
+  })
+
+  it("skips raw source subtrees after the discovery depth limit", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw", "nested"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "nested", "a.md"), "alpha")
+
+    const result = await scanKnowledgeBaseSources(root, { maxDiscoveryDepth: 0 })
+
+    expect(result.sources).toEqual([])
+    expect(result.skippedSources).toEqual([
+      { relativePath: ".raw/nested", reason: "scan-depth-limit" },
+    ])
+  })
 })
