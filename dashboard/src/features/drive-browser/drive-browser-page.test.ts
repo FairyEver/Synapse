@@ -479,11 +479,12 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('class="h-svh min-h-0 overflow-hidden bg-background"')
-    expect(html).toContain('class="h-full min-h-0 bg-background"')
+    expect(html).toContain('class="h-full min-h-0 bg-background flex flex-col"')
+    expect(html).toContain('data-drive-preview-header="true"')
     expect(html).not.toContain('max-w-4xl')
     expect(html).not.toContain('max-w-6xl')
-    expect(html).not.toContain('px-4')
-    expect(html).not.toContain('md:px-6')
+    expect(html).not.toContain('class="mx-auto w-full max-w-4xl px-4 md:px-6"')
+    expect(html).not.toContain('class="mx-auto w-full max-w-6xl px-4 md:px-6"')
     expect(html).toContain('class="flex h-full min-h-0 w-full flex-col overflow-hidden"')
     expect(html).not.toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
     expect(html).not.toContain('min-h-svh')
@@ -759,6 +760,7 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-finder="file"')
     expect(html).toContain('data-drive-renderer-region="true"')
+    expect(html).toContain('data-drive-preview-header="true"')
     expect(html).toContain('新窗口打开')
     expect(html).toContain('/drive/items/file?surface=standalone')
     expect(html).toContain('打开方式')
@@ -800,7 +802,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-slot="resizable-panel-group"')
   })
 
-  it('DriveSingleFileReaderView delegates to body renderer and floating menu', () => {
+  it('DriveSingleFileReaderView delegates markdown files to the shared preview header', () => {
     const snapshot = createSnapshot({
       context: 'owner',
       current: {
@@ -822,31 +824,26 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
-    const codeHtml = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
-      snapshot,
-      initialRendererId: 'code',
-    }))
-    const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
-    expect(html).toContain('文件操作')
-    expect(source).toContain("selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5'")
-    expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
-    expect(html).toContain('top-5')
-    expect(codeHtml).toContain('top-14')
-    expect(renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
-      snapshot,
-      initialRendererId: 'mdxeditor',
-    }))).toContain('top-14')
-    expect(source).toContain('FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000')
-    expect(source).toContain('setIdleDimmed(true)')
-    expect(source).toContain("'opacity-50 hover:opacity-100 focus-visible:opacity-100'")
-    expect(source).toContain("const driveBrowserUrl = getDriveFloatingMenuDriveBrowserUrl(snapshot)")
-    expect(source).toContain('buildConsoleDriveItemBrowserUrl(snapshot.current.id)')
-    expect(source).toContain('href={driveBrowserUrl}')
-    expect(source).toContain('在云盘中查看')
+    expect(html).toContain('data-drive-preview-header="true"')
+    expect(html).not.toContain('文件操作')
+    expect(html).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')
+  })
+
+  it('uses floating chrome for iframe html previews', () => {
+    const snapshot = createSnapshot({
+      surface: 'standalone',
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/file/render' },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('文件操作')
+    expect(html).not.toContain('data-drive-preview-header="true"')
   })
 
   it('does not offer opening a standalone file reader in another new window', () => {
@@ -923,7 +920,8 @@ describe('drive browser view model', () => {
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
-    expect(html).toContain('文件操作')
+    expect(html).toContain('data-drive-preview-header="true"')
+    expect(html).not.toContain('文件操作')
     expect(html).not.toContain('在云盘中查看')
     expect(html).not.toContain('预览')
     expect(html).not.toContain('源码')
