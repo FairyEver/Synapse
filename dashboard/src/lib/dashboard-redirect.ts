@@ -28,7 +28,8 @@ function stripDashboardBasePath(pathname: string) {
 }
 
 function sanitizePublicRedirectSearch(location: DashboardRedirectLocation) {
-  if (!rootPublicRedirectPathPrefixes.some((prefix) => location.pathname.startsWith(prefix))) {
+  const publicPathname = stripDashboardBasePath(location.pathname)
+  if (!rootPublicRedirectPathPrefixes.some((prefix) => publicPathname.startsWith(prefix))) {
     return location.search
   }
   const params = new URLSearchParams(location.search)

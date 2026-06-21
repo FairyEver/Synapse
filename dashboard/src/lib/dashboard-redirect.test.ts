@@ -33,6 +33,14 @@ describe('buildDashboardSignInUrl', () => {
       hash: '#line-1',
     })).toBe('/console/sign-in?redirect=%2Fshare%2Fshr_public%2Fitems%2Ffile-1%3Fview%3Dcode%23line-1')
   })
+
+  it('removes share passwords from console share login redirects', () => {
+    expect(buildDashboardSignInUrl({
+      pathname: '/console/share/shr_public/items/file-1',
+      search: '?password=secret&view=code',
+      hash: '#line-1',
+    })).toBe('/console/sign-in?redirect=%2Fconsole%2Fshare%2Fshr_public%2Fitems%2Ffile-1%3Fview%3Dcode%23line-1')
+  })
 })
 
 describe('normalizeDashboardRedirect', () => {
