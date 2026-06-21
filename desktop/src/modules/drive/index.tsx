@@ -210,6 +210,7 @@ function DriveModule() {
   const trashViewRef = useRef<DriveTrashViewHandle>(null)
   const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
   const currentParentIdRef = useRef<string | null>(null)
+  const driveItemsLoadRequestIdRef = useRef(0)
 
   const accountAuthenticated = accountState.status === "authenticated"
   const parentId = path.at(-1)?.id ?? null
@@ -219,15 +220,20 @@ function DriveModule() {
 
   const loadItems = useCallback(async () => {
     if (!accountAuthenticated) return
+    const requestParentId = parentId
+    const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(true)
     setError(null)
     try {
       const bridge = requireSynapseBridge()
-      const nextItems = await bridge.account.listDriveItems({ parentId })
+      const nextItems = await bridge.account.listDriveItems({ parentId: requestParentId })
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setItems(nextItems)
     } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
     } finally {
+      if (driveItemsLoadRequestIdRef.current !== requestId) return
       setLoading(false)
     }
   }, [accountAuthenticated, parentId])
@@ -257,6 +263,7 @@ function DriveModule() {
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
+      currentParentIdRef.current = null
       setPath([{ id: null, name: "根目录" }])
       setActiveView("files")
       return
@@ -274,16 +281,24 @@ function DriveModule() {
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
     if (openingFolderId !== null) return
+    const requestId = ++driveItemsLoadRequestIdRef.current
+    setLoading(false)
     setOpeningFolderId(item.id)
     setError(null)
     try {
       const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
+      if (driveItemsLoadRequestIdRef.current !== requestId) return
       prefetchedParentIdRef.current = item.id
       setItems(nextItems)
-      setPath((current) => [...current, { id: item.id, name: item.name }])
+      setPath((current) => {
+        currentParentIdRef.current = item.id
+        return [...current, { id: item.id, name: item.name }]
+      })
     } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current !== requestId) return
       setError(driveLoadError(rawError))
     } finally {
+      if (driveItemsLoadRequestIdRef.current !== requestId) return
       setOpeningFolderId(null)
     }
   }, [openingFolderId])
@@ -303,16 +318,25 @@ function DriveModule() {
       if (index === 0) setActiveView("files")
       return
     }
-    setPath((current) => current.slice(0, index + 1))
+    driveItemsLoadRequestIdRef.current += 1
+    setPath((current) => {
+      const nextPath = current.slice(0, index + 1)
+      currentParentIdRef.current = nextPath.at(-1)?.id ?? null
+      return nextPath
+    })
   }, [activeView])
 
   const refreshCurrentItemsAfterUpload = useCallback(async () => {
     if (!accountAuthenticated) return
+    const requestParentId = currentParentIdRef.current
+    const requestId = ++driveItemsLoadRequestIdRef.current
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: currentParentIdRef.current })
+      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId })
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(null)
       setItems(nextItems)
     } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
     }
     await loadDriveUsage()

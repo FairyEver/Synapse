@@ -527,6 +527,44 @@ describe("DriveModule", () => {
     expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
   })
 
+  it("ignores stale directory refresh responses after opening a folder", async () => {
+    const staleRootRefresh = createDeferred<DriveItemDto[]>()
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockReturnValueOnce(staleRootRefresh.promise)
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-2", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const folderRow = getTableRow("作业范文")
+    await act(async () => {
+      getButton("刷新").click()
+      folderRow.click()
+      await flushPromises()
+    })
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    await flushAct()
+    expect(document.body.textContent).toContain("cui.md")
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
+
+    await act(async () => {
+      staleRootRefresh.resolve([
+        createDriveItem({ id: "stale-root", name: "stale-root.txt", type: "file" }),
+      ])
+      await flushPromises()
+    })
+
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
+    expect(document.body.textContent).toContain("cui.md")
+    expect(document.body.textContent).not.toContain("stale-root.txt")
+  })
+
   it("opens folders when clicking anywhere on the folder row", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
