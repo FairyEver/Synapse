@@ -11,6 +11,8 @@ import type {
 } from '@synapse/shared'
 import { DriveCodeRenderer } from './code-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { DrivePreviewToolbarItemView } from './drive-preview-header'
+import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -69,6 +71,21 @@ describe('DriveCodeRenderer', () => {
     expect(editor().value).toBe('const answer = 42')
     expect(document.body.textContent).toContain('已同步')
   })
+
+  it('registers login action for shared read-only previews', () => {
+    window.history.pushState(null, '', '/share/share-1')
+    renderRenderer({
+      edit: {
+        ...editable(),
+        canEdit: false,
+        currentVersionId: null,
+        reason: 'login_required',
+      },
+    })
+
+    expect(editor().readOnly).toBe(true)
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+  })
 })
 
 function renderRenderer(input: {
@@ -83,14 +100,26 @@ function renderRenderer(input: {
 
   act(() => {
     root?.render(
-      <DriveCodeRenderer
-        current={input.current ?? baseCurrent()}
-        preview={input.preview ?? basePreview()}
-        edit={input.edit === undefined ? editable() : input.edit}
-        editContext={input.editContext ?? createEditContext()}
-      />
+      <DriveRendererToolbarProvider>
+        <ToolbarHost />
+        <DriveCodeRenderer
+          current={input.current ?? baseCurrent()}
+          preview={input.preview ?? basePreview()}
+          edit={input.edit === undefined ? editable() : input.edit}
+          editContext={input.editContext ?? createEditContext()}
+        />
+      </DriveRendererToolbarProvider>
     )
   })
+}
+
+function ToolbarHost() {
+  const toolbar = useDriveRendererToolbar()
+  return (
+    <div data-testid='toolbar'>
+      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+    </div>
+  )
 }
 
 function baseCurrent(): DriveBrowserItemDto {
@@ -183,5 +212,11 @@ function editor(): HTMLTextAreaElement {
 function buttonWithText(text: string): HTMLButtonElement {
   const element = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes(text))
   if (!(element instanceof HTMLButtonElement)) throw new Error(`button not found: ${text}`)
+  return element
+}
+
+function anchorWithText(text: string): HTMLAnchorElement {
+  const element = Array.from(document.querySelectorAll('a')).find((anchor) => anchor.textContent?.includes(text))
+  if (!(element instanceof HTMLAnchorElement)) throw new Error(`anchor not found: ${text}`)
   return element
 }

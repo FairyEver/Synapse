@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { MoreHorizontal } from 'lucide-react'
+import { Loader2, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -257,7 +257,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
       return (
         <DropdownMenuItem asChild disabled={item.disabled}>
           <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
-            {item.icon ? <item.icon data-icon='inline-start' /> : null}
+            {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
             {item.label}
           </a>
         </DropdownMenuItem>
@@ -265,7 +265,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
     }
     return (
       <DropdownMenuItem disabled={item.disabled} onSelect={item.onClick}>
-        {item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
       </DropdownMenuItem>
     )

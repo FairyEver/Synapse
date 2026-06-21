@@ -23,7 +23,7 @@ import {
 import '@mdxeditor/editor/style.css'
 import type { MDXEditorMethods } from '@mdxeditor/editor'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
-import { Download, Loader2, LogIn, RefreshCw, Save } from 'lucide-react'
+import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { useDriveRendererToolbar, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 export function DriveMDXeditorRenderer({
   current,
@@ -63,6 +64,7 @@ export function DriveMDXeditorRenderer({
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
+  const { registerItems } = useDriveRendererToolbar()
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
     externalMarkdownTargetRef.current = null
@@ -124,7 +126,7 @@ export function DriveMDXeditorRenderer({
     clearExternalMarkdownSync()
   }, [clearExternalMarkdownSync])
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
     try {
@@ -138,9 +140,9 @@ export function DriveMDXeditorRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }
+  }, [canEdit, edit?.currentVersionId, editContext, value])
 
-  const handleReload = async () => {
+  const handleReload = useCallback(async () => {
     if (!editContext) return
     setError(null)
     try {
@@ -155,51 +157,66 @@ export function DriveMDXeditorRenderer({
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
-  }
+  }, [beginExternalMarkdownSync, editContext])
+
+  const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
+    const items: DriveRendererToolbarItem[] = [{
+      kind: 'status',
+      id: 'mdxeditor-edit-status',
+      label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
+    }]
+    if (loginRequired) {
+      items.push({
+        kind: 'button',
+        id: 'mdxeditor-login',
+        label: '登录后编辑',
+        icon: LogIn,
+        variant: 'outline',
+        href: loginUrl,
+      })
+    }
+    if (canEdit) {
+      items.push(
+        {
+          kind: 'button',
+          id: 'mdxeditor-reload',
+          label: '重新加载',
+          icon: RefreshCw,
+          loading: editContext?.reloading,
+          variant: 'outline',
+          disabled: editContext?.reloading || editContext?.savingText,
+          onClick: () => { void handleReload() },
+        },
+        {
+          kind: 'button',
+          id: 'mdxeditor-save',
+          label: '保存',
+          icon: Save,
+          loading: editContext?.savingText,
+          disabled: !dirty || editContext?.savingText || editContext?.reloading,
+          onClick: () => { void handleSave() },
+        },
+      )
+    }
+    return items
+  }, [
+    canEdit,
+    dirty,
+    editContext?.reloading,
+    editContext?.savingText,
+    handleReload,
+    handleSave,
+    loginRequired,
+    loginUrl,
+  ])
+
+  useEffect(() => registerItems('mdxeditor', toolbarItems), [registerItems, toolbarItems])
 
   return (
     <div
       data-drive-mdxeditor-renderer='true'
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
     >
-      <div className='flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2'>
-        <div className='min-w-0 text-xs text-muted-foreground'>
-          {dirty ? '未保存' : canEdit ? '已同步' : '只读'}
-        </div>
-        <div className='flex shrink-0 items-center gap-2'>
-          {loginRequired ? (
-            <Button asChild variant='outline' size='sm'>
-              <a href={loginUrl}>
-                <LogIn data-icon='inline-start' />
-                登录后编辑
-              </a>
-            </Button>
-          ) : null}
-          {canEdit ? (
-            <>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => { void handleReload() }}
-                disabled={editContext?.reloading || editContext?.savingText}
-              >
-                {editContext?.reloading ? <Loader2 className='animate-spin' /> : <RefreshCw data-icon='inline-start' />}
-                重新加载
-              </Button>
-              <Button
-                type='button'
-                size='sm'
-                onClick={() => { void handleSave() }}
-                disabled={!dirty || editContext?.savingText || editContext?.reloading}
-              >
-                {editContext?.savingText ? <Loader2 className='animate-spin' /> : <Save data-icon='inline-start' />}
-                保存
-              </Button>
-            </>
-          ) : null}
-        </div>
-      </div>
       <div className='min-h-0 flex-1 overflow-auto'>
         <MDXEditor
           ref={editorRef}

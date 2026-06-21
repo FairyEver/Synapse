@@ -12,6 +12,8 @@ import type {
 import { ApiError } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { DrivePreviewToolbarItemView } from './drive-preview-header'
+import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -298,12 +300,15 @@ function renderRenderer(input: {
 
   const render = (nextInput: typeof input) => {
     root?.render(
-      <DriveMDXeditorRenderer
-        current={nextInput.current ?? baseCurrent()}
-        preview={nextInput.preview ?? basePreview()}
-        edit={nextInput.edit === undefined ? editable() : nextInput.edit}
-        editContext={nextInput.editContext ?? createEditContext()}
-      />
+      <DriveRendererToolbarProvider>
+        <ToolbarHost />
+        <DriveMDXeditorRenderer
+          current={nextInput.current ?? baseCurrent()}
+          preview={nextInput.preview ?? basePreview()}
+          edit={nextInput.edit === undefined ? editable() : nextInput.edit}
+          editContext={nextInput.editContext ?? createEditContext()}
+        />
+      </DriveRendererToolbarProvider>
     )
   }
 
@@ -318,6 +323,15 @@ function renderRenderer(input: {
       })
     },
   }
+}
+
+function ToolbarHost() {
+  const toolbar = useDriveRendererToolbar()
+  return (
+    <div data-testid='toolbar'>
+      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+    </div>
+  )
 }
 
 function baseCurrent(): DriveBrowserItemDto {

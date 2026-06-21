@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createElement } from 'react'
+import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -29,6 +29,7 @@ import {
 } from './renderers/drive-preview-actions'
 import { DrivePreviewFloatingMenu } from './renderers/drive-preview-floating-menu'
 import { DrivePreviewHeader } from './renderers/drive-preview-header'
+import { DriveRendererToolbarProvider } from './renderers/drive-renderer-toolbar-context'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -426,13 +427,11 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>' },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'code', label: '代码', container: 'full' },
-        body: true,
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'code', label: '代码', container: 'full' },
+      body: true,
+    })
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('data-drive-code-language="html"')
@@ -446,23 +445,21 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('min-h-svh')
   })
 
-  it('links shared read-only code previews through the console sign-in route', () => {
+  it('renders shared read-only code previews through the shared renderer shell', () => {
     const snapshot = createSnapshot({
       context: 'share',
       current: { ...baseCurrent(), browserUrl: '/share/shr_public' },
       edit: { canEdit: false, reason: 'login_required', currentVersionId: null },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'code', label: '代码', container: 'full' },
-        body: true,
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'code', label: '代码', container: 'full' },
+      body: true,
+    })
 
-    expect(html).toContain('登录后编辑')
-    expect(html).toContain('href="/console/sign-in"')
+    expect(html).toContain('data-drive-code-renderer="true"')
+    expect(html).not.toContain('data-drive-preview-header="true"')
   })
 
   it('uses a fullscreen host without reader container classes in standalone renderer mode', () => {
@@ -497,12 +494,10 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>', visitUrl: '/drive/render/page' },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'iframe', label: '网页', container: 'full' },
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'iframe', label: '网页', container: 'full' },
+    })
 
     expect(html).toContain('class="h-full min-h-0 w-full border-0 bg-background"')
     expect(html).toContain('sandbox="allow-scripts"')
@@ -653,11 +648,11 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveRendererContent, {
+    const html = renderDriveRendererContent({
       snapshot,
       selected: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
       body: true,
-    }))
+    })
 
     expect(html).toContain('data-mdxeditor="true"')
     expect(html).not.toContain('data-drive-code-renderer="true"')
@@ -1006,6 +1001,16 @@ describe('drive browser view model', () => {
     expect(html).toContain('加载更多')
   })
 })
+
+function renderDriveRendererContent(props: ComponentProps<typeof DriveRendererContent>): string {
+  return renderToStaticMarkup(
+    createElement(
+      DriveRendererToolbarProvider,
+      null,
+      createElement(DriveRendererContent, props),
+    ),
+  )
+}
 
 function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
   return {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type {
   DriveAnnotationTextRangeTargetV1,
   DriveBrowserItemDto,
@@ -16,6 +16,7 @@ import { DriveCodeRenderer } from './code-renderer'
 import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
 import { createMarkdownAnnotationTargetFromSelection } from './markdown-annotation-target'
 import { MarkdownCommentsRail } from './markdown-comments-rail'
+import { useDriveRendererToolbar, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = 'max-w-full space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc'
 
@@ -37,6 +38,7 @@ export function DriveMarkdownRenderer({
   const annotationsEnabled = current.name.toLowerCase().endsWith('.md')
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
+  const { registerItems } = useDriveRendererToolbar()
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -83,10 +85,55 @@ export function DriveMarkdownRenderer({
     setCommentsOpen(true)
   }, [annotations.threads.length])
 
-  const setCommentPanelOpen = (open: boolean) => {
+  const setCommentPanelOpen = useCallback((open: boolean) => {
     commentsTouchedRef.current = true
     setCommentsOpen(open)
-  }
+  }, [])
+
+  const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
+    const items: DriveRendererToolbarItem[] = []
+    if (outline.length > 0) {
+      items.push({
+        kind: 'toggle',
+        id: 'markdown-outline',
+        label: '目录',
+        icon: ListTree,
+        pressed: outlineOpen,
+        onPressedChange: setOutlineOpen,
+      })
+    }
+    if (annotationsEnabled) {
+      items.push(
+        {
+          kind: 'toggle',
+          id: 'markdown-comments',
+          label: `评论 ${annotations.threads.length}`,
+          icon: MessageSquare,
+          pressed: commentsOpen,
+          onPressedChange: setCommentPanelOpen,
+        },
+        {
+          kind: 'button',
+          id: 'markdown-refresh-comments',
+          label: '刷新评论',
+          icon: RefreshCw,
+          variant: 'ghost',
+          onClick: () => { void annotations.refresh() },
+        },
+      )
+    }
+    return items
+  }, [
+    annotations.refresh,
+    annotations.threads.length,
+    annotationsEnabled,
+    commentsOpen,
+    outline.length,
+    outlineOpen,
+    setCommentPanelOpen,
+  ])
+
+  useEffect(() => registerItems('markdown', toolbarItems), [registerItems, toolbarItems])
 
   const focusThread = (threadId: string) => {
     setActiveThreadId(threadId)
@@ -129,68 +176,34 @@ export function DriveMarkdownRenderer({
 
   return (
     <div className='min-h-0 bg-background'>
-      <div className='sticky top-0 z-10 border-b bg-background'>
-        <div className='flex h-10 items-center justify-between gap-3 px-3'>
-          <div className='min-w-0 truncate text-sm font-medium'>{current.name}</div>
-          <div className='flex items-center gap-1'>
-            {outline.length > 0 ? (
+      {pendingTarget ? (
+        <div className='border-b px-3 py-2'>
+          <div className='flex items-start gap-2'>
+            <Textarea
+              value={commentBody}
+              onChange={(event) => setCommentBody(event.currentTarget.value)}
+              className='min-h-10'
+            />
+            <div className='flex shrink-0 items-center gap-1'>
+              <Button type='button' size='sm' disabled={!commentBody.trim() || annotations.creatingThread} onClick={() => { void createThread() }}>
+                评论
+              </Button>
               <Button
                 type='button'
-                variant={outlineOpen ? 'secondary' : 'ghost'}
-                size='sm'
-                onClick={() => setOutlineOpen((value) => !value)}
+                variant='ghost'
+                size='icon'
+                onClick={() => {
+                  setPendingTarget(null)
+                  setCommentBody('')
+                  window.getSelection()?.removeAllRanges()
+                }}
               >
-                <ListTree />
-                目录
+                <X />
               </Button>
-            ) : null}
-            {annotationsEnabled ? (
-              <>
-                <Button
-                  type='button'
-                  variant={commentsOpen ? 'secondary' : 'ghost'}
-                  size='sm'
-                  onClick={() => setCommentPanelOpen(!commentsOpen)}
-                >
-                  <MessageSquare />
-                  评论 {annotations.threads.length}
-                </Button>
-                <Button type='button' variant='ghost' size='icon' onClick={() => { void annotations.refresh() }}>
-                  <RefreshCw />
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
-        {pendingTarget ? (
-          <div className='border-t px-3 py-2'>
-            <div className='flex items-start gap-2'>
-              <Textarea
-                value={commentBody}
-                onChange={(event) => setCommentBody(event.currentTarget.value)}
-                className='min-h-10'
-              />
-              <div className='flex shrink-0 items-center gap-1'>
-                <Button type='button' size='sm' disabled={!commentBody.trim() || annotations.creatingThread} onClick={() => { void createThread() }}>
-                  评论
-                </Button>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon'
-                  onClick={() => {
-                    setPendingTarget(null)
-                    setCommentBody('')
-                    window.getSelection()?.removeAllRanges()
-                  }}
-                >
-                  <X />
-                </Button>
-              </div>
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       <div className={cn('mx-auto flex min-h-0 w-full gap-6 px-4 py-6 md:px-6', commentsOpen || outlineOpen ? 'max-w-7xl' : 'max-w-3xl')}>
         {outline.length > 0 && outlineOpen ? (
           <aside className='hidden w-52 shrink-0 xl:block'>
