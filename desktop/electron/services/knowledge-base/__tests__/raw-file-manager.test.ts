@@ -346,7 +346,7 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(lstat(unsafeTarget)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("exports a folder shell and merges destination folder collisions", async () => {
+  it("exports a folder shell with collision-safe destination names", async () => {
     const rawRoot = await tempDir()
     const exportRoot = await tempDir()
     await mkdir(path.join(rawRoot, "会议资料", "访谈"), { recursive: true })
@@ -364,7 +364,29 @@ describe("KnowledgeBaseRawFileManager", () => {
       "会议资料/访谈",
     ])
     await expect(readFile(path.join(exportRoot, "会议资料", "01.pdf"), "utf8")).resolves.toBe("old\n")
-    await expect(readFile(path.join(exportRoot, "会议资料", "01-2.pdf"), "utf8")).resolves.toBe("new\n")
+    await expect(readFile(path.join(exportRoot, "会议资料-2", "01.pdf"), "utf8")).resolves.toBe("new\n")
+  })
+
+  it("keeps exported same-name folders from different parents separate", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "客户A", "资料"), { recursive: true })
+    await mkdir(path.join(rawRoot, "客户B", "资料"), { recursive: true })
+    await writeFile(path.join(rawRoot, "客户A", "资料", "brief.md"), "alpha\n", "utf8")
+    await writeFile(path.join(rawRoot, "客户B", "资料", "brief.md"), "bravo\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.exportEntries(rawRoot, ["客户A/资料", "客户B/资料"], exportRoot)
+
+    expect(result.skipped).toEqual([])
+    expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([
+      "客户A/资料",
+      "客户A/资料/brief.md",
+      "客户B/资料",
+      "客户B/资料/brief.md",
+    ])
+    await expect(readFile(path.join(exportRoot, "资料", "brief.md"), "utf8")).resolves.toBe("alpha\n")
+    await expect(readFile(path.join(exportRoot, "资料-2", "brief.md"), "utf8")).resolves.toBe("bravo\n")
   })
 
   it("skips folder export without partial copies when the recursive file budget is exceeded", async () => {

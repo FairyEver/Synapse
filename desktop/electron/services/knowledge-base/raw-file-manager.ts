@@ -537,8 +537,7 @@ export class KnowledgeBaseRawFileManager {
       skipped.push({ path: relativePath, reason: "export-error" })
       return
     }
-    const targetPath = path.join(targetDirectory, path.basename(sourcePath))
-    await mkdir(targetPath, { recursive: true })
+    const targetPath = await createAvailableDirectoryPath(targetDirectory, path.basename(sourcePath))
     entries.push(await entryForPath(rawRoot, sourcePath, "directory"))
     const children = await readdir(sourcePath, { withFileTypes: true })
     for (const child of children) {
