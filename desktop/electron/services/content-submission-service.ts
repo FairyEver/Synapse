@@ -23,6 +23,7 @@ import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./g
 import { assertNoPreexistingGitRebase } from "./git-rebase-guard"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
+import { toRepositoryGitPaths } from "./git-paths"
 import { repositoryLockManager } from "./repository-lock-manager"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
@@ -35,10 +36,6 @@ const logger = createMainLogger("service.content-submit")
 const GIT_REMOTE_OPERATION_TIMEOUT_MS = 60_000
 
 type PushProgressListener = (statusText: string) => void
-
-function toGitPath(filePath: string): string {
-  return filePath.split(path.sep).join("/")
-}
 
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
@@ -142,10 +139,7 @@ async function pullWithRebase(
 }
 
 async function stagePaths(gitRootPath: string, filePaths: string[]): Promise<void> {
-  const relativePaths = filePaths
-    .map((filePath) => path.relative(gitRootPath, filePath))
-    .filter((relativePath) => relativePath && !relativePath.startsWith(".."))
-    .map(toGitPath)
+  const relativePaths = toRepositoryGitPaths(gitRootPath, filePaths, { unique: true })
 
   if (relativePaths.length === 0) {
     throw new Error("当前没有可提交的改动。")
