@@ -7,12 +7,16 @@ import { DrivePublicAssetService } from "./drive-public-asset.service"
 import type { DriveStoragePort } from "./drive-storage"
 import { DRIVE_ITEM_LIFECYCLE_STATUS } from "./drive.constants"
 
+type LifecycleMemory = {
+  readonly cleanupUploadSessionState: (sessionId: string) => void
+}
+
 describe("DrivePublicAssetService", () => {
   let prisma: ReturnType<typeof createPrismaMemory>
   let storage: DriveStoragePort
   let objects: Map<string, { readonly body: Buffer; readonly contentType?: string | null }>
   let service: DrivePublicAssetService
-  let lifecycle: ReturnType<typeof createLifecycleMemory>
+  let lifecycle: LifecycleMemory
 
   beforeEach(async () => {
     prisma = createPrismaMemory()

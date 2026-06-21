@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import type { Prisma } from "@prisma/client"
 import type {
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
@@ -53,7 +54,7 @@ const annotationInclude = {
     orderBy: { createdAt: "asc" as const },
     include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
   },
-}
+} as const
 
 @Injectable()
 export class DriveAnnotationService {
@@ -80,7 +81,7 @@ export class DriveAnnotationService {
         itemId,
         baseVersionId: await this.findCurrentVersionId(item),
         targetKind: input.targetKind,
-        target: input.target,
+        target: input.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
         createdByUserId: userId,
         comments: { create: { body: input.body, createdByUserId: userId } },
@@ -158,7 +159,7 @@ export class DriveAnnotationService {
         itemId: item.id,
         baseVersionId: await this.findCurrentVersionId(item),
         targetKind: input.body.targetKind,
-        target: input.body.target,
+        target: input.body.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
         createdByUserId: input.actorUserId,
         comments: { create: { body: input.body.body, createdByUserId: input.actorUserId } },
@@ -314,7 +315,7 @@ function toVisibleThreadDtos(
   records: readonly AnnotationThreadRecord[],
   actorUserId: string | null,
   fileOwnerUserId: string,
-): readonly DriveAnnotationThreadDto[] {
+): DriveAnnotationThreadDto[] {
   return records
     .map((record) => toThreadDto(record, actorUserId, fileOwnerUserId))
     .filter((thread) => thread.comments.length > 0)
