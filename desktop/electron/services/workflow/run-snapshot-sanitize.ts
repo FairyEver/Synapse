@@ -1,4 +1,4 @@
-import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
@@ -21,6 +21,16 @@ export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): Work
     nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults),
     ...(snapshot.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(snapshot.definition) } : {}),
     ...(snapshot.error !== undefined ? { error: sanitizeError(snapshot.error) } : {}),
+  }
+}
+
+export function sanitizeWorkflowRunStatus(status: WorkflowRunStatus): WorkflowRunStatus {
+  return {
+    ...status,
+    nodeResults: sanitizeNodeResultsForSnapshot(status.nodeResults),
+    ...(status.error !== undefined ? { error: sanitizeError(status.error) } : {}),
+    ...(status.params !== undefined ? { params: sanitizeWorkflowOutputForHistory(status.params) } : {}),
+    ...(status.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(status.definition) } : {}),
   }
 }
 

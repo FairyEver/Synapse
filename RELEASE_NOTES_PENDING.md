@@ -96,6 +96,7 @@
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
 - 诊断报告中的日志样本会先脱敏再写入详情和 `diagnostics.json`，避免排障包或设置页复制内容泄露 token、Cookie、Authorization 等敏感信息。
 - 工作流实时事件和运行状态会脱敏 Code X 节点结果，避免 token、Cookie、Authorization 和本地路径通过 live 通道泄露。
+- Workflow MCP 查询运行中状态时会复用同一套脱敏规则，避免轮询结果暴露参数、节点输出或调试配置里的敏感内容。
 - Workflow MCP 读取工作流定义和运行历史时会经过权限检查并写入审计记录，避免敏感工作流内容被静默读取。
 - Content MCP 读取 Rule、Skill 和 Prompt 列表或详情时会经过权限检查并写入审计记录，避免内容资源被静默读取。
 - Database MCP 读取表结构、行数据、日志和只读 SQL 时会经过权限检查并写入审计记录，避免数据表内容被静默读取。
