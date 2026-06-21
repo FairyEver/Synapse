@@ -393,7 +393,7 @@ export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
 
 export interface DriveAnnotationAuthorDto {
   readonly id: string
-  readonly email: string
+  readonly email: string | null
   readonly displayName: string | null
 }
 

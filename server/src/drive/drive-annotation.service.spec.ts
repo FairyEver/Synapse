@@ -159,6 +159,18 @@ describe("DriveAnnotationService", () => {
     }))
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: true, canDelete: true })
   })
+
+  it("redacts author emails for share annotation reads", async () => {
+    const result = await service.listShareAnnotations({
+      actorUserId: null,
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+    })
+
+    expect(result[0]?.author.email).toBeNull()
+    expect(result[0]?.comments[0]?.author.email).toBeNull()
+  })
 })
 
 function createInput() {

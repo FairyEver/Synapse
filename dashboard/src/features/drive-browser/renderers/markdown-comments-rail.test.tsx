@@ -53,6 +53,13 @@ describe('MarkdownCommentsRail', () => {
 
     expect(document.body.textContent).not.toContain('回复')
   })
+
+  it('does not render account email as an author fallback', () => {
+    renderRail({ threads: [thread({ displayName: null })] })
+
+    expect(document.body.textContent).toContain('评论者')
+    expect(document.body.textContent).not.toContain('user@example.com')
+  })
 })
 
 function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
@@ -82,7 +89,9 @@ function thread(input: {
   readonly canEdit?: boolean
   readonly canDelete?: boolean
   readonly canDeleteThread?: boolean
+  readonly displayName?: string | null
 } = {}) {
+  const displayName = 'displayName' in input ? input.displayName : 'User'
   return {
     id: 'thread-1',
     itemId: 'item-1',
@@ -96,13 +105,13 @@ function thread(input: {
       quote: { exact: 'Note', prefix: '', suffix: '' },
     },
     anchorStatus: 'orphaned' as const,
-    author: { id: 'user-1', email: 'user@example.com', displayName: 'User' },
+    author: { id: 'user-1', email: 'user@example.com', displayName },
     comments: [{
       id: 'comment-1',
       threadId: 'thread-1',
       parentCommentId: null,
       body: 'First line\nSecond line\n<strong>unsafe</strong>',
-      author: { id: 'user-1', email: 'user@example.com', displayName: 'User' },
+      author: { id: 'user-1', email: 'user@example.com', displayName },
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: '2026-06-21T00:00:00.000Z',
       editedAt: null,

@@ -196,6 +196,6 @@ function CommentComposer({
   )
 }
 
-function displayAuthor(author: { readonly email: string; readonly displayName: string | null } | undefined): string {
-  return author?.displayName || author?.email || ''
+function displayAuthor(author: { readonly displayName: string | null } | undefined): string {
+  return author?.displayName || '评论者'
 }

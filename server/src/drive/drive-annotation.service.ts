@@ -53,6 +53,12 @@ type AnnotationCommentRecord = {
   readonly deletedAt: Date | null
 }
 
+type AnnotationAuthorRecord = {
+  readonly id: string
+  readonly email: string
+  readonly displayName: string | null
+}
+
 const annotationInclude = {
   createdByUser: { select: { id: true, email: true, displayName: true } },
   comments: {
@@ -152,7 +158,7 @@ export class DriveAnnotationService {
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId, canWrite)
+    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId, canWrite, true)
   }
 
   async createShareAnnotation(input: {
@@ -337,13 +343,20 @@ function toVisibleThreadDtos(
   actorUserId: string | null,
   fileOwnerUserId: string,
   canWrite = true,
+  redactAuthorEmail = false,
 ): DriveAnnotationThreadDto[] {
   return records
-    .map((record) => toThreadDto(record, actorUserId, fileOwnerUserId, canWrite))
+    .map((record) => toThreadDto(record, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail))
     .filter((thread) => thread.comments.length > 0)
 }
 
-function toThreadDto(record: AnnotationThreadRecord, actorUserId: string | null, fileOwnerUserId: string, canWrite = true): DriveAnnotationThreadDto {
+function toThreadDto(
+  record: AnnotationThreadRecord,
+  actorUserId: string | null,
+  fileOwnerUserId: string,
+  canWrite = true,
+  redactAuthorEmail = false,
+): DriveAnnotationThreadDto {
   return {
     id: record.id,
     itemId: record.itemId,
@@ -351,8 +364,8 @@ function toThreadDto(record: AnnotationThreadRecord, actorUserId: string | null,
     targetKind: "textRange",
     target: record.target as DriveAnnotationTargetDto,
     anchorStatus: record.anchorStatus === "shifted" || record.anchorStatus === "orphaned" ? record.anchorStatus : "attached",
-    author: record.createdByUser,
-    comments: visibleComments(record.comments).map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite)),
+    author: toAuthorDto(record.createdByUser, redactAuthorEmail),
+    comments: visibleComments(record.comments).map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     permissions: { canDelete: canWrite && Boolean(actorUserId && actorUserId === fileOwnerUserId) },
@@ -364,7 +377,13 @@ function visibleComments(comments: readonly AnnotationCommentRecord[]): readonly
   return comments.filter((comment) => !comment.deletedAt || parentIds.has(comment.id))
 }
 
-function toCommentDto(record: AnnotationCommentRecord, actorUserId: string | null, fileOwnerUserId: string, canWrite = true): DriveAnnotationCommentDto {
+function toCommentDto(
+  record: AnnotationCommentRecord,
+  actorUserId: string | null,
+  fileOwnerUserId: string,
+  canWrite = true,
+  redactAuthorEmail = false,
+): DriveAnnotationCommentDto {
   const deleted = Boolean(record.deletedAt)
   const isAuthor = actorUserId === record.createdByUserId
   const isFileOwner = actorUserId === fileOwnerUserId
@@ -373,7 +392,7 @@ function toCommentDto(record: AnnotationCommentRecord, actorUserId: string | nul
     threadId: record.threadId,
     parentCommentId: record.parentCommentId,
     body: deleted ? "" : record.body,
-    author: record.createdByUser,
+    author: toAuthorDto(record.createdByUser, redactAuthorEmail),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     editedAt: record.editedAt?.toISOString() ?? null,
@@ -383,5 +402,13 @@ function toCommentDto(record: AnnotationCommentRecord, actorUserId: string | nul
       canEdit: canWrite && !deleted && isAuthor,
       canDelete: canWrite && !deleted && (isAuthor || isFileOwner),
     },
+  }
+}
+
+function toAuthorDto(record: AnnotationAuthorRecord, redactEmail: boolean) {
+  return {
+    id: record.id,
+    email: redactEmail ? null : record.email,
+    displayName: record.displayName,
   }
 }
