@@ -23,6 +23,7 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import { assertValidWebhookNumericConfig } from "../../runtime/lib/webhook-config-validation"
 import { sanitizeError } from "../error-sanitize"
 import { isShellKind, resolveShellCommand } from "../shell-exec"
+import { WINDOWS_DEFAULT_SHELL } from "../../../action-packages/builtin/shell-defaults"
 import {
   AgentRuntimeService,
   AGENT_RUNTIME_SERVICE_ID,
@@ -81,6 +82,7 @@ export interface AutomationIngressServiceDeps {
   readonly runListLimit?: number
   readonly runRetentionLimit?: number
   readonly now?: () => Date
+  readonly platform?: NodeJS.Platform
 }
 
 interface PreparedWebhook {
@@ -519,7 +521,8 @@ export class AutomationIngressService {
     const timeoutMs = timeoutMinsToMs(timeoutMins)
     const env: Record<string, string> = {}
     const shell = resolveShellCommand(shellValue(body.shell), exec, {
-      windowsDefault: "powershell",
+      platform: this.deps.platform,
+      windowsDefault: WINDOWS_DEFAULT_SHELL,
     })
     const result = await this.deps.processRunner.run({
       actor: { kind: "agent", id: "webhook" },
