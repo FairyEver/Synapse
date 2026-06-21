@@ -75,6 +75,7 @@ const envSchema = z
     CONTENT_STORE_COS_SECRET_KEY: optionalEnvString,
     CONTENT_STORE_COS_BUCKET: optionalEnvString,
     CONTENT_STORE_COS_REGION: optionalEnvString,
+    SYNAPSE_CONTENT_STORE_LOCAL_ROOT: optionalEnvString,
     BACKUP_COS_SECRET_ID: optionalEnvString,
     BACKUP_COS_SECRET_KEY: optionalEnvString,
     BACKUP_COS_BUCKET: optionalEnvString,
@@ -111,6 +112,14 @@ const envSchema = z
     path: ["SYNAPSE_DRIVE_LOCAL_ROOT"],
     message: "SYNAPSE_DRIVE_LOCAL_ROOT is required in production when Drive COS is not configured",
   })
+  .refine((env) => {
+    if (env.NODE_ENV !== "production") return true
+    const hasContentStoreCos = !!(env.CONTENT_STORE_COS_SECRET_ID && env.CONTENT_STORE_COS_SECRET_KEY && env.CONTENT_STORE_COS_BUCKET && env.CONTENT_STORE_COS_REGION)
+    return hasContentStoreCos || !!env.SYNAPSE_CONTENT_STORE_LOCAL_ROOT
+  }, {
+    path: ["SYNAPSE_CONTENT_STORE_LOCAL_ROOT"],
+    message: "SYNAPSE_CONTENT_STORE_LOCAL_ROOT is required in production when Content Store COS is not configured",
+  })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL must be the public app root, not the /api URL",
@@ -137,6 +146,7 @@ export interface ServerEnv {
   readonly contentStoreCosSecretKey?: string
   readonly contentStoreCosBucket?: string
   readonly contentStoreCosRegion?: string
+  readonly contentStoreLocalRoot?: string
   readonly backupCosSecretId?: string
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
@@ -171,6 +181,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     contentStoreCosSecretKey: result.data.CONTENT_STORE_COS_SECRET_KEY,
     contentStoreCosBucket: result.data.CONTENT_STORE_COS_BUCKET,
     contentStoreCosRegion: result.data.CONTENT_STORE_COS_REGION,
+    contentStoreLocalRoot: result.data.SYNAPSE_CONTENT_STORE_LOCAL_ROOT,
     backupCosSecretId: result.data.BACKUP_COS_SECRET_ID,
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,
