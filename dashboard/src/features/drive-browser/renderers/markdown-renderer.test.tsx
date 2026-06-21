@@ -72,7 +72,29 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('does not open the composer for logged-out share viewers', async () => {
-    renderMarkdown({ annotationContext: { context: 'share', shareToken: 'share-token' } })
+    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1' } })
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(document.querySelector('textarea')).toBeNull()
+  })
+
+  it('does not open the composer for read-only share viewers', async () => {
+    useAuthStore.getState().auth.setUser({
+      id: 'reader-1',
+      email: 'reader@example.com',
+      displayName: null,
+      avatarUrl: null,
+      role: 'user',
+      storageLimitBytes: '0',
+      storageUsedBytes: '0',
+      createdAt: '2026-06-21T00:00:00.000Z',
+      updatedAt: '2026-06-21T00:00:00.000Z',
+    })
+    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1', canWrite: false } })
     selectStrongText()
 
     await act(async () => {
@@ -84,7 +106,7 @@ describe('DriveMarkdownRenderer', () => {
 
   it('hides reply actions for logged-out share viewers', async () => {
     annotationsMock.threads = [thread()]
-    renderMarkdown({ annotationContext: { context: 'share', shareToken: 'share-token' } })
+    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1' } })
 
     await act(async () => undefined)
 

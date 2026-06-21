@@ -80,7 +80,7 @@ describe("DriveAnnotationService", () => {
     })
   })
 
-  it("uses share browser visibility for share annotations", async () => {
+  it("uses writable share browser visibility for share annotations", async () => {
     await service.createShareAnnotation({
       actorUserId: "reader-1",
       shareId: "share-1",
@@ -98,6 +98,52 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ createdByUserId: "reader-1" }),
     }))
+  })
+
+  it("rejects share annotation writes when the share cannot be edited", async () => {
+    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false }))
+
+    await expect(service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: createInput(),
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    await expect(service.replyShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      body: { body: "Reply body" },
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    await expect(service.updateShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+      body: { body: "updated" },
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    await expect(service.deleteShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    await expect(service.deleteShareThread({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
   })
 
   it("projects share annotation permissions for the logged-in viewer", async () => {
@@ -140,7 +186,7 @@ function markdownItem() {
   }
 }
 
-function shareSnapshot() {
+function shareSnapshot(input: { readonly canEdit?: boolean } = {}) {
   return {
     context: "share",
     surface: "standalone",
@@ -149,6 +195,12 @@ function shareSnapshot() {
       name: "notes.md",
       type: "file",
       mimeType: "text/markdown",
+    },
+    edit: {
+      canEdit: input.canEdit ?? true,
+      editorKind: "text",
+      reason: null,
+      currentVersionId: "version-1",
     },
   }
 }

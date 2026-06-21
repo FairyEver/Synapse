@@ -46,8 +46,10 @@ export function DriveMarkdownRenderer({
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
   )
+  const canWriteAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canWrite)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)
+    && canWriteAnnotations
     && (effectiveAnnotationContext?.context === 'owner' || isAuthenticated)
   const resolvedByThreadId = useMemo(
     () => new Map(annotated.resolved.map((item) => [item.threadId, item])),
