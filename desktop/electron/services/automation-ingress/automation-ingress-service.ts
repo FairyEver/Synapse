@@ -115,7 +115,7 @@ export class AutomationIngressService {
       await this.recoverInterruptedRuns()
       this.recoveredInterruptedRuns = true
     }
-    const config = await this.getOrCreateConfig()
+    const config = await this.getConfigOrDefault()
     if (!config.enabled) return
     await this.checkListenPermission(config)
     this.binding = await this.deps.networkRegistry.register({
@@ -163,12 +163,12 @@ export class AutomationIngressService {
   }
 
   async getStatus(): Promise<WebhookStatus> {
-    return statusFromConfig(await this.getOrCreateConfig(), this.binding, this.runtimeConfigRestartRequired)
+    return statusFromConfig(await this.getConfigOrDefault(), this.binding, this.runtimeConfigRestartRequired)
   }
 
   async updateConfig(input: WebhookConfigUpdate): Promise<WebhookConfigUpdateResult> {
     assertValidWebhookNumericConfig(input)
-    const existing = await this.getOrCreateConfig()
+    const existing = await this.getConfigOrDefault()
     const bindAddress = input.bindAddress?.trim() || existing.bindAddress
     const preferredPort = input.preferredPort ?? existing.preferredPort
     const path = normalizePath(input.path ?? existing.path)
@@ -307,7 +307,7 @@ export class AutomationIngressService {
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
     const url = new URL(request.url, "http://127.0.0.1")
     try {
-      const config = await this.getOrCreateConfig()
+      const config = await this.getConfigOrDefault()
       if (url.pathname !== config.path) {
         return jsonResponse(404, false, undefined, "not_found", "not found")
       }
@@ -599,11 +599,11 @@ export class AutomationIngressService {
     throw new WebhookError("project_required", "project is required", 400)
   }
 
-  private async getOrCreateConfig(): Promise<WebhookConfigEntryV1> {
+  private async getConfigOrDefault(): Promise<WebhookConfigEntryV1> {
     const existing = await this.deps.configs.get(CONFIG_ID)
     if (existing) return existing
     const now = this.isoNow()
-    const config: WebhookConfigEntryV1 = {
+    return {
       id: CONFIG_ID,
       schemaVersion: 1,
       enabled: false,
@@ -615,12 +615,10 @@ export class AutomationIngressService {
       createdAt: now,
       updatedAt: now,
     }
-    await this.deps.configs.upsert(config)
-    return config
   }
 
   private async updateAssignedPort(port: number): Promise<void> {
-    const config = await this.getOrCreateConfig()
+    const config = await this.getConfigOrDefault()
     await this.deps.configs.upsert({
       ...config,
       assignedPort: port,

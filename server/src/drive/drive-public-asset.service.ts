@@ -146,32 +146,32 @@ export class DrivePublicAssetService {
 
   async listAssets(userId: string, publicAppUrl: string, input: DrivePublicAssetListInput = {}): Promise<DrivePublicAssetListPageDto> {
     const page = normalizePublicAssetPage(input)
+    const search = input.search?.trim()
+    const where: Prisma.PublicAssetWhereInput = {
+      userId,
+      deletedAt: null,
+      lifecycleStatus: { in: [
+        DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+        DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing,
+      ] },
+      ...(search
+        ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { assetId: { contains: search, mode: "insensitive" } },
+          ],
+        }
+        : {}),
+    }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.publicAsset.findMany({
-        where: {
-          userId,
-          deletedAt: null,
-          lifecycleStatus: { in: [
-            DRIVE_ITEM_LIFECYCLE_STATUS.active,
-            DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
-            DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing,
-          ] },
-        },
+        where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: page.offset,
         take: page.limit + 1,
       }),
-      this.prisma.publicAsset.count({
-        where: {
-          userId,
-          deletedAt: null,
-          lifecycleStatus: { in: [
-            DRIVE_ITEM_LIFECYCLE_STATUS.active,
-            DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
-            DRIVE_ITEM_LIFECYCLE_STATUS.legacyMissing,
-          ] },
-        },
-      }),
+      this.prisma.publicAsset.count({ where }),
     ])
     return {
       items: items.slice(0, page.limit).map((asset) => toDrivePublicAssetDto(asset, publicAppUrl)),

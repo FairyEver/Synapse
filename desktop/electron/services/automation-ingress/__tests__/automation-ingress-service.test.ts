@@ -106,12 +106,7 @@ describe("AutomationIngressService", () => {
       resetToken: true,
     })).rejects.toThrow("denied by policy")
 
-    const persistedConfig = await configs.get("webhook:default")
-    expect(persistedConfig).toEqual(expect.objectContaining({
-      enabled: false,
-      bindAddress: "127.0.0.1",
-    }))
-    expect(persistedConfig?.preferredPort).toBeUndefined()
+    await expect(configs.get("webhook:default")).resolves.toBeNull()
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "network.listen",
       actor: { kind: "user" },
@@ -152,6 +147,29 @@ describe("AutomationIngressService", () => {
     await expect(service.updateConfig({ maxBodyBytes: 0 })).rejects.toThrow("maxBodyBytes 必须是")
     await expect(service.updateConfig({ rateLimitPerMinute: 0 })).rejects.toThrow("rateLimitPerMinute 必须是")
 
+    await expect(configs.get("webhook:default")).resolves.toBeNull()
+  })
+
+  it("does not persist the default disabled config during startup or status reads", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+
+    await service.start()
+    await expect(configs.get("webhook:default")).resolves.toBeNull()
+
+    await expect(service.getStatus()).resolves.toMatchObject({
+      enabled: false,
+      bindAddress: "127.0.0.1",
+      path: "/hook",
+    })
     await expect(configs.get("webhook:default")).resolves.toBeNull()
   })
 

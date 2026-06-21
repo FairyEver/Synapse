@@ -992,7 +992,7 @@ export class DriveService implements OnApplicationBootstrap {
     return { ok: true }
   }
 
-  listTrash(userId: string, input: { readonly offset?: number; readonly limit?: number } = {}): Promise<DriveTrashListPageDto> {
+  listTrash(userId: string, input: { readonly offset?: number; readonly limit?: number; readonly search?: string } = {}): Promise<DriveTrashListPageDto> {
     return this.getLifecycleService().listTrash(userId, input)
   }
 

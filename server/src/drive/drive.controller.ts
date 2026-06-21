@@ -103,11 +103,13 @@ export class DriveUserController {
   listPublicAssets(
     @Query("offset") offset: string | undefined,
     @Query("limit") limit: string | undefined,
+    @Query("search") search: string | undefined,
     @Req() request: AuthenticatedUserRequest,
   ) {
     return requirePublicAssetService(this.publicAssets).listAssets(request.user!.id, resolveRequestPublicAppUrl(request), {
       offset: parseOptionalNonNegativeInteger(offset, "offset"),
       limit: parseOptionalNonNegativeInteger(limit, "limit"),
+      search: parseOptionalSearch(search),
     })
   }
 
@@ -321,11 +323,13 @@ export class DriveUserController {
   listTrash(
     @Query("offset") offset: string | undefined,
     @Query("limit") limit: string | undefined,
+    @Query("search") search: string | undefined,
     @Req() request: AuthenticatedUserRequest,
   ) {
     return this.drive.listTrash(request.user!.id, {
       offset: parseOptionalNonNegativeInteger(offset, "offset"),
       limit: parseOptionalNonNegativeInteger(limit, "limit"),
+      search: parseOptionalSearch(search),
     })
   }
 
@@ -1204,6 +1208,11 @@ function parseOptionalNonNegativeInteger(value: string | undefined, name: string
   const parsed = Number(value)
   if (!Number.isSafeInteger(parsed)) throw new BadRequestException(`${name} 必须是安全整数。`)
   return parsed
+}
+
+function parseOptionalSearch(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
 }
 
 function driveBrowserPasswordRequired(): DriveBrowserPasswordRequiredDto {

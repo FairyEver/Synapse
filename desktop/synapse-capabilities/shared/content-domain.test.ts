@@ -23,32 +23,24 @@ describe("Content capability domain", () => {
     })
   })
 
-  it("keeps skill schema alternatives for inline fields and source directory imports", () => {
+  it("keeps skill schemas strict-client compatible while documenting inline and source directory inputs", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
+    const create = tools.get("content_skill_create")
+    const update = tools.get("content_skill_update")
 
-    expect(tools.get("content_skill_create")?.inputSchema).toMatchObject({
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({
-          required: ["name", "title", "description", "category", "content", "icon"],
-        }),
-        expect.objectContaining({
-          required: ["sourceDirectoryPath", "icon"],
-        }),
-        expect.objectContaining({
-          required: ["sourceDirectoryPath", "iconType", "iconImagePath"],
-        }),
-      ]),
+    expect(create?.inputSchema.required).toBeUndefined()
+    expect(create?.inputSchema).not.toHaveProperty("anyOf")
+    expect(create?.inputSchema.properties).toMatchObject({
+      name: expect.any(Object),
+      files: expect.any(Object),
+      sourceDirectoryPath: expect.any(Object),
     })
-    expect(tools.get("content_skill_update")?.inputSchema).toMatchObject({
+    expect(create?.description).toContain("inline")
+    expect(create?.description).toContain("sourceDirectoryPath")
+    expect(update?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname"],
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({
-          required: ["name", "title", "description", "category", "content", "icon"],
-        }),
-        expect.objectContaining({
-          required: ["sourceDirectoryPath"],
-        }),
-      ]),
     })
+    expect(update?.inputSchema).not.toHaveProperty("anyOf")
+    expect(update?.description).toContain("sourceDirectoryPath")
   })
 })

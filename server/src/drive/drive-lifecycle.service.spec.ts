@@ -517,11 +517,13 @@ function createLifecyclePrismaMemory() {
       const sql = Array.isArray(strings) ? strings.join("?") : String(strings)
       queryRawCalls.push({ sql, values })
       const userId = values.find((value): value is string => typeof value === "string")
+      const search = values.find((value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%"))?.slice(1, -1).toLowerCase()
       const rootTrashItems = orderRows(
         [...items.values()].filter((item) =>
           item.userId === userId &&
           item.lifecycleStatus === "trashed" &&
-          item.deleteRootId === item.id),
+          item.deleteRootId === item.id &&
+          (!search || item.name.toLowerCase().includes(search) || (item.restorePath ?? "").toLowerCase().includes(search) || (item.publicAsset?.assetId ?? "").toLowerCase().includes(search))),
         [{ trashedAt: "desc" }, { updatedAt: "desc" }],
       )
       if (sql.includes("COUNT(*)")) return [{ total: BigInt(rootTrashItems.length) }]

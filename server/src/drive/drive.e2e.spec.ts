@@ -36,6 +36,7 @@ const request = require("supertest") as (server: unknown) => {
 const ownerUser = { id: "owner-user", email: "owner@example.com", passwordHash: "hash" }
 const editorUser = { id: "editor-user", email: "editor@example.com", passwordHash: "hash" }
 const outsiderUser = { id: "outsider-user", email: "outsider@example.com", passwordHash: "hash" }
+let driveE2eUploadSessionsForWhere: (() => readonly any[]) | null = null
 
 describe("Drive share and edit E2E", () => {
   let app: INestApplication | null = null
@@ -743,6 +744,14 @@ describe("Drive public asset user journeys", () => {
           originalPath: "brand.webp",
         })
       })
+    await request(app!.getHttpServer())
+      .get(`/api/drive/trash?search=${encodeURIComponent(assetId)}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.items[0].assetId).toBe(assetId)
+      })
 
     await request(app!.getHttpServer())
       .post(`/api/drive/items/${itemId}/restore`)
@@ -977,6 +986,14 @@ describe("Drive public asset user journeys", () => {
       .get("/api/drive/public-assets?limit=abc")
       .set("x-test-user-id", ownerUser.id)
       .expect(400)
+    await request(app!.getHttpServer())
+      .get(`/api/drive/public-assets?search=${encodeURIComponent(alpha.asset.assetId)}`)
+      .set("x-test-user-id", ownerUser.id)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.total).toBe(1)
+        expect(response.body.items[0].assetId).toBe(alpha.asset.assetId)
+      })
 
     await request(app!.getHttpServer())
       .get(`/api/drive/public-assets/${alpha.asset.assetId}/download`)
@@ -1431,6 +1448,7 @@ function createPrismaMemory() {
   const publicAssets = new Map<string, any>()
   const publicAssetRevisions = new Map<string, any>()
   const publicAssetAccessLogs = new Map<string, any>()
+  driveE2eUploadSessionsForWhere = () => [...sessions.values()]
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
@@ -1483,6 +1501,36 @@ function createPrismaMemory() {
         }
       }
       return Promise.all(input)
+    },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: readonly unknown[]) => {
+      const sql = strings.join("?")
+      if (!sql.includes('FROM "DriveItem" di')) {
+        throw new Error(`Unsupported queryRaw in drive e2e memory: ${sql}`)
+      }
+      const userId = values[0]
+      const lifecycleStatus = values[1]
+      const search = values.find((value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%"))?.slice(1, -1).toLowerCase()
+      const roots = orderRows(
+        [...items.values()].filter((item) => (
+          item.userId === userId
+          && item.lifecycleStatus === lifecycleStatus
+          && item.deleteRootId === item.id
+          && (!search || (
+            item.name.toLowerCase().includes(search)
+            || (item.restorePath ?? "").toLowerCase().includes(search)
+            || ([...publicAssets.values()].find((asset) => asset.itemId === item.id)?.assetId ?? "").toLowerCase().includes(search)
+          ))
+        )),
+        [{ trashedAt: "desc" }, { updatedAt: "desc" }],
+      )
+      if (sql.includes("COUNT(*)")) {
+        return [{ total: BigInt(roots.length) }]
+      }
+      const [limit = roots.length, offset = 0] = values.filter((value): value is number => typeof value === "number")
+      return roots.slice(offset, offset + limit).map((item) => ({
+        ...item,
+        assetId: [...publicAssets.values()].find((asset) => asset.itemId === item.id)?.assetId ?? null,
+      }))
     },
     user: {
       create: async ({ data }: any) => {
@@ -1850,9 +1898,17 @@ function createPrismaMemory() {
 }
 
 function matchesWhere(row: any, where: any): boolean {
+  if (!row) return false
   return Object.entries(where).every(([key, value]: [string, any]) => {
     if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
+    if (key === "NOT") return !matchesWhere(row, value)
+    if (key === "uploadSessions" && value && typeof value === "object") {
+      const related = [...(driveE2eUploadSessionsForWhere?.() ?? [])].filter((session) => session.itemId === row.id)
+      if ("some" in value) return related.some((session) => matchesWhere(session, value.some))
+      if ("none" in value) return related.every((session) => !matchesWhere(session, value.none))
+      if ("every" in value) return related.every((session) => matchesWhere(session, value.every))
+    }
     if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not

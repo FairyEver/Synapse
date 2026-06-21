@@ -26,6 +26,7 @@ export type DrivePublicAssetPrepareUploadInput = {
 export type DrivePublicAssetListInput = {
   readonly offset?: number
   readonly limit?: number
+  readonly search?: string
 }
 
 export type DrivePublicAssetRecord = {

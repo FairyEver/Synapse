@@ -98,6 +98,8 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
   const [renameState, setRenameState] = useState<DrivePublicAssetRenameState | null>(null)
   const [confirmState, setConfirmState] = useState<DrivePublicAssetConfirmState | null>(null)
   const [uploadResults, setUploadResults] = useState<readonly DrivePublicAssetUploadResultItem[]>([])
@@ -117,6 +119,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
       const result = await requireSynapseBridge().account.listDrivePublicAssets({
         offset,
         limit: DRIVE_PUBLIC_ASSET_PAGE_SIZE,
+        ...(searchQuery ? { search: searchQuery } : {}),
       })
       setPage((current) => {
         if (offset === 0 || !current) return result
@@ -140,7 +143,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
         setLoadingMore(false)
       }
     }
-  }, [])
+  }, [searchQuery])
 
   useEffect(() => {
     void loadAssets()
@@ -230,6 +233,16 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
       setBusyAssetId(null)
     }
   }, [loadAssets, renameState])
+
+  const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const nextSearch = searchInput.trim()
+    if (nextSearch === searchQuery) {
+      void loadAssets()
+      return
+    }
+    setSearchQuery(nextSearch)
+  }, [loadAssets, searchInput, searchQuery])
 
   const runAssetMutation = useCallback(async (
     asset: DrivePublicAssetDto,
@@ -373,6 +386,16 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
           </div>
         </div>
       ) : null}
+      <form className="flex flex-wrap items-center gap-2" onSubmit={handleSearchSubmit}>
+        <Input
+          className="w-64 max-w-full"
+          aria-label="搜索公开素材"
+          placeholder="搜索"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={loading || uploading}>搜索</Button>
+      </form>
       {uploadResults.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {uploadResults.map((result, index) => (

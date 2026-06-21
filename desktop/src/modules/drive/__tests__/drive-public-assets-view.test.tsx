@@ -142,6 +142,29 @@ describe("DrivePublicAssetsView", () => {
     expect(document.body.textContent).toContain("second.png")
   })
 
+  it("searches public assets by filename or assetId", async () => {
+    mocks.listDrivePublicAssets
+      .mockResolvedValueOnce(createPublicAssetPage([
+        createPublicAsset({ assetId: "asset_first", name: "first.png" }),
+      ]))
+      .mockResolvedValueOnce(createPublicAssetPage([
+        createPublicAsset({ assetId: "asset_target", name: "target.png" }),
+      ]))
+
+    await render(<DrivePublicAssetsView />)
+    await flushAct()
+
+    setInputValue('[aria-label="搜索公开素材"]', "asset_target")
+    await clickButtonText("搜索")
+
+    expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({
+      offset: 0,
+      limit: 50,
+      search: "asset_target",
+    })
+    expect(document.body.textContent).toContain("target.png")
+  })
+
   it("marks missing public assets as unavailable", async () => {
     mocks.listDrivePublicAssets.mockResolvedValue(createPublicAssetPage([
       createPublicAsset({
@@ -589,8 +612,9 @@ async function clickText(text: string): Promise<void> {
 function setInputValue(selector: string, value: string): void {
   const input = document.querySelector<HTMLInputElement>(selector)
   if (!input) throw new Error(`Input not found: ${selector}`)
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
   act(() => {
-    input.value = value
+    valueSetter?.call(input, value)
     input.dispatchEvent(new Event("input", { bubbles: true }))
   })
 }

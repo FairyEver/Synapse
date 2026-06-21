@@ -529,7 +529,7 @@ describe("DrivePublicAssetService", () => {
         throw new Error("storage unavailable")
       }),
     }
-    service = new DrivePublicAssetService(prisma as unknown as PrismaService, failingStorage, undefined, createLifecycleMemory(prisma))
+    service = new DrivePublicAssetService(prisma as unknown as PrismaService, failingStorage, undefined, createLifecycleMemory(prisma) as never)
 
     await expect(service.prepareReplace("user-1", asset.assetId, {
       name: "logo.webp",
@@ -746,7 +746,16 @@ async function seedPublicAsset(input: {
   return asset
 }
 
-function createLifecycleMemory(prisma: ReturnType<typeof createPrismaMemory>) {
+type LifecycleMemory = {
+  readonly registerUploadSessionCleanup: (sessionId: string, cleanup: () => void) => void
+  readonly forgetUploadSessionCleanup: (sessionId: string) => void
+  readonly cleanupUploadSessionState: (sessionId: string) => void
+  readonly trashItem: (input: { readonly itemId: string; readonly actorId: string }) => Promise<unknown>
+  readonly restoreItem: (input: { readonly itemId: string }) => Promise<unknown>
+  readonly hideTrashedItemAsAdmin: (input: { readonly itemId: string; readonly actorId: string }) => Promise<unknown>
+}
+
+function createLifecycleMemory(prisma: ReturnType<typeof createPrismaMemory>): LifecycleMemory {
   const uploadSessionCleanups = new Map<string, () => void>()
   return {
     registerUploadSessionCleanup: vi.fn((sessionId: string, cleanup: () => void) => {

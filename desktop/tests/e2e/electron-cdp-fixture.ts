@@ -119,7 +119,7 @@ export class CdpPage {
         const rect = element.getBoundingClientRect();
         return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
       };
-      const candidates = Array.from(document.querySelectorAll("button, [role=button], [role=tab], a, input[type=button], input[type=submit]"));
+      const candidates = Array.from(document.querySelectorAll("button, [role=button], [role=tab], [role=menuitem], a, input[type=button], input[type=submit]"));
       const textOf = (candidate) => (candidate.innerText || candidate.textContent || "").trim();
       const element = candidates.find((candidate) => isVisible(candidate) && textOf(candidate) === wanted)
         ?? candidates.find((candidate) => isVisible(candidate) && textOf(candidate).includes(wanted))
@@ -134,6 +134,21 @@ export class CdpPage {
         element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
         element.click();
       }
+      return true;
+    })()`)
+  }
+
+  async clickByAriaLabel(label: string): Promise<void> {
+    await this.evaluate(`(() => {
+      const wanted = ${JSON.stringify(label)};
+      const element = Array.from(document.querySelectorAll("[aria-label]"))
+        .find((candidate) => candidate.getAttribute("aria-label") === wanted);
+      if (!element) throw new Error("ARIA target not found: " + wanted);
+      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse" }));
+      element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+      element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse" }));
+      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+      element.click();
       return true;
     })()`)
   }
@@ -328,7 +343,20 @@ class CdpClient {
     const id = this.nextId++
     const payload = sessionId ? { id, method, params, sessionId } : { id, method, params }
     const promise = new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      const timeout = setTimeout(() => {
+        this.pending.delete(id)
+        reject(new Error(`Timed out waiting for CDP response: ${method}`))
+      }, 10_000)
+      this.pending.set(id, {
+        reject: (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        },
+        resolve: (value) => {
+          clearTimeout(timeout)
+          resolve(value)
+        },
+      })
     })
     this.socket.send(JSON.stringify(payload))
     return promise
@@ -477,22 +505,32 @@ async function waitForDevToolsEndpoint(userData: string, child: ChildProcess): P
 
 async function stopElectron(client: CdpClient, child: ChildProcess, root: string): Promise<void> {
   client.close()
-  if (child.exitCode === null && !child.killed) {
+  if (child.exitCode === null) {
     child.kill("SIGTERM")
-    await new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 2_000)
-      child.once("exit", () => {
-        clearTimeout(timeout)
-        resolve(undefined)
-      })
-    })
+    await waitForChildExit(child, 2_000)
   }
-  if (child.exitCode === null && !child.killed) {
+  if (child.exitCode === null) {
     child.kill("SIGKILL")
+    await waitForChildExit(child, 2_000)
   }
   if (existsSync(root)) {
     await rm(root, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 })
   }
+}
+
+async function waitForChildExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (child.exitCode !== null) return
+  await new Promise<void>((resolve) => {
+    const handleExit = () => {
+      clearTimeout(timeout)
+      resolve()
+    }
+    const timeout = setTimeout(() => {
+      child.off("exit", handleExit)
+      resolve()
+    }, timeoutMs)
+    child.once("exit", handleExit)
+  })
 }
 
 export { desktopRoot, workspaceRoot }

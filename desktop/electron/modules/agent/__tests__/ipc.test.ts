@@ -755,7 +755,33 @@ describe("agentIpcModule", () => {
 
   it("returns success false when conversation bundle export is cancelled", async () => {
     electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
-    const harness = createHarness({})
+    const conversation = {
+      id: "conv-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      providerId: "anthropic",
+      agentType: "claude-code",
+      history: [],
+      createdAt: "2026-06-20T00:00:00.000Z",
+      updatedAt: "2026-06-20T00:00:00.000Z",
+    }
+    const harness = createHarness({
+      dataRepository: {
+        namespace: vi.fn((name: string) => ({
+          name,
+          schemaVersion: 1,
+          backend: "sqlite",
+          get: vi.fn(async (id: string) => name === "conversations" && id === conversation.id ? conversation : null),
+          getSingleton: vi.fn().mockResolvedValue(null),
+          setSingleton: vi.fn().mockResolvedValue(undefined),
+          list: vi.fn().mockResolvedValue([]),
+          upsert: vi.fn().mockResolvedValue(undefined),
+          remove: vi.fn().mockResolvedValue(undefined),
+          onChange: vi.fn(() => () => {}),
+        })),
+      },
+    })
 
     const result = await harness.invoke("synapse:agent:export-conversation-bundle", {
       projectId: "project-1",

@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import type { DriveItemDto, DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
@@ -19,6 +20,7 @@ type DriveLifecycleInput = {
 type DriveTrashListInput = {
   readonly offset?: number
   readonly limit?: number
+  readonly search?: string
 }
 
 type DriveLifecycleItemRecord = {
@@ -302,6 +304,10 @@ export class DriveLifecycleService {
 
   async listTrash(userId: string, input: DriveTrashListInput = {}): Promise<DriveTrashListPageDto> {
     const page = normalizeTrashPage(input)
+    const search = input.search?.trim()
+    const searchCondition = search
+      ? Prisma.sql`AND (di."name" ILIKE ${`%${search}%`} OR di."restorePath" ILIKE ${`%${search}%`} OR pa."assetId" ILIKE ${`%${search}%`})`
+      : Prisma.empty
     const [rootRows, totalRows] = await Promise.all([
       this.prisma.$queryRaw<DriveTrashRootQueryRecord[]>`
         SELECT di.*, pa."assetId"
@@ -310,6 +316,7 @@ export class DriveLifecycleService {
         WHERE di."userId" = ${userId}
           AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.trashed}
           AND di."deleteRootId" = di.id
+          ${searchCondition}
         ORDER BY di."trashedAt" DESC NULLS LAST, di."updatedAt" DESC
         LIMIT ${page.limit + 1}
         OFFSET ${page.offset}
@@ -317,9 +324,11 @@ export class DriveLifecycleService {
       this.prisma.$queryRaw<Array<{ readonly total: bigint | number }>>`
         SELECT COUNT(*)::bigint AS total
         FROM "DriveItem" di
+        LEFT JOIN "PublicAsset" pa ON pa."itemId" = di.id
         WHERE di."userId" = ${userId}
           AND di."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.trashed}
           AND di."deleteRootId" = di.id
+          ${searchCondition}
       `,
     ])
     const pageItems = rootRows.map(toTrashRootRecord)

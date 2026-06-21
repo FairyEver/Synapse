@@ -188,7 +188,7 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       type: "object",
       properties,
       ...(type === "skill" ? {} : { required }),
-      anyOf: createSchemaAlternatives(type),
+      ...(type === "skill" ? {} : { anyOf: createSchemaAlternatives(type) }),
     },
   }
 }
@@ -212,7 +212,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
       required: type === "skill"
         ? ["id", "baseHistoryDirname"]
         : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
-      anyOf: updateSchemaAlternatives(type),
+      ...(type === "skill" ? {} : { anyOf: updateSchemaAlternatives(type) }),
     },
   }
 }
