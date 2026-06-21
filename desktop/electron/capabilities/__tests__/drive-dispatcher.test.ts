@@ -399,13 +399,13 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ listDrivePublicAssets, getDrivePublicAsset }),
     })
 
-    await expect(dispatcher.dispatch("drive.direct_link.list", { offset: 3, limit: 7 }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("drive.direct_link.list", { offset: 3, limit: 7, search: "logo" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { items: [asset], total: 1, page: drivePage() }, total: 1 })
     await expect(dispatcher.dispatch("drive.direct_link.get", {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
-    expect(listDrivePublicAssets).toHaveBeenCalledWith({ offset: 3, limit: 7 })
+    expect(listDrivePublicAssets).toHaveBeenCalledWith({ offset: 3, limit: 7, search: "logo" })
     expect(getDrivePublicAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
   })
 
@@ -503,7 +503,7 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService: createAccountService({ listDriveTrash, deleteDriveTrashItem, restoreDriveTrashItem }),
     })
 
-    await expect(dispatcher.dispatch("drive.trash.list", { offset: 1, limit: 20 }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("drive.trash.list", { offset: 1, limit: 20, search: "old" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: trashPage, total: 1 })
     await expect(dispatcher.dispatch("drive.trash.delete", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { ok: true } })
@@ -515,7 +515,7 @@ describe("createDriveCapabilityDispatcher", () => {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: restoredAsset })
 
-    expect(listDriveTrash).toHaveBeenCalledWith({ offset: 1, limit: 20 })
+    expect(listDriveTrash).toHaveBeenCalledWith({ offset: 1, limit: 20, search: "old" })
     expect(deleteDriveTrashItem).toHaveBeenCalledWith("item-1")
     expect(restoreDriveTrashItem).toHaveBeenCalledWith({ itemId: "item-1" })
     expect(restoreDriveTrashItem).toHaveBeenCalledWith({

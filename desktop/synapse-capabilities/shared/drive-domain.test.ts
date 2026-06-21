@@ -74,6 +74,7 @@ describe("Drive capability domain", () => {
     expect(tools.get("drive_direct_link_list")?.inputSchema.properties).toMatchObject({
       offset: { type: "number" },
       limit: { type: "number" },
+      search: { type: "string" },
     })
     expect(tools.get("drive_direct_link_get")?.inputSchema).toMatchObject({
       properties: { assetId: { type: "string" } },
@@ -106,6 +107,7 @@ describe("Drive capability domain", () => {
     expect(tools.get("drive_trash_list")?.inputSchema.properties).toMatchObject({
       offset: { type: "number" },
       limit: { type: "number" },
+      search: { type: "string" },
     })
     expect(tools.get("drive_trash_delete")?.inputSchema).toMatchObject({
       properties: { itemId: { type: "string" } },

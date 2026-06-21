@@ -64,6 +64,10 @@ const pageInputProperties = {
   offset: { type: "number", description: "Optional pagination offset. Defaults to 0." },
   limit: { type: "number", description: "Optional pagination page size." },
 }
+const searchablePageInputProperties = {
+  ...pageInputProperties,
+  search: stringField("Optional search text. Public assets match name or assetId; trash matches name, original path, or public asset id."),
+}
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
   expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Public access expiration. Defaults to 3d." },
@@ -285,7 +289,7 @@ export function buildDriveTools(): McpToolDefinition[] {
       description: "List current user's Drive share links for /share/... access without returning share passwords. Shares let others browse, render previewable HTML, or download shared files and folders.",
       inputSchema: {
         type: "object",
-        properties: pageInputProperties,
+        properties: searchablePageInputProperties,
       },
     },
     {
@@ -406,7 +410,7 @@ export function buildDriveTools(): McpToolDefinition[] {
       description: "List current user's Drive 公开素材 public assets. Access logs are not returned.",
       inputSchema: {
         type: "object",
-        properties: pageInputProperties,
+        properties: searchablePageInputProperties,
       },
     },
     {
@@ -473,7 +477,7 @@ export function buildDriveTools(): McpToolDefinition[] {
       description: "List user-visible Drive trash, including normal Drive files and public assets.",
       inputSchema: {
         type: "object",
-        properties: pageInputProperties,
+        properties: searchablePageInputProperties,
       },
     },
     {

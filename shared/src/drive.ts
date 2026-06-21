@@ -361,6 +361,7 @@ export interface DriveBrowserChildrenPageDto {
 export interface DrivePublicLinksPageInput {
   readonly offset?: number
   readonly limit?: number
+  readonly search?: string
 }
 
 export interface DrivePublicLinksPageDto<TItem> {

@@ -126,6 +126,7 @@ Input:
 
 - `offset` optional.
 - `limit` optional.
+- `search` optional: match public asset name or asset id.
 
 ### `drive_share_create`
 
@@ -160,6 +161,7 @@ Input:
 - `itemId` required: Drive file item id.
 - `offset` optional.
 - `limit` optional.
+- `search` optional: match item name, original path, or public asset id.
 
 ### `drive_file_version_download_create`
 

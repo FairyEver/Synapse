@@ -997,10 +997,12 @@ function optionalDrivePreviewSurface(value: unknown): "standalone" | "console" |
 function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublicLinksPageInput | undefined {
   const offset = optionalNumber(params.offset)
   const limit = optionalNumber(params.limit)
-  if (offset === undefined && limit === undefined) return undefined
+  const search = optionalString(params.search)
+  if (offset === undefined && limit === undefined && search === undefined) return undefined
   return {
     ...(offset === undefined ? {} : { offset }),
     ...(limit === undefined ? {} : { limit }),
+    ...(search === undefined ? {} : { search }),
   }
 }
 
