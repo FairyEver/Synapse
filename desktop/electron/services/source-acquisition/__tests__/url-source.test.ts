@@ -6,7 +6,7 @@ import { acquireUrlSource, type FetchUrl } from "../url-source"
 function response(input: {
   readonly url?: string
   readonly status?: number
-  readonly contentType?: string
+  readonly contentType?: string | null
   readonly body?: string
   readonly contentLength?: string
   readonly discard?: () => void
@@ -17,7 +17,9 @@ function response(input: {
     headers: {
       get: (name: string) => {
         const normalized = name.toLowerCase()
-        if (normalized === "content-type") return input.contentType ?? "text/html; charset=utf-8"
+        if (normalized === "content-type") {
+          return input.contentType === null ? null : input.contentType ?? "text/html; charset=utf-8"
+        }
         if (normalized === "content-length") return input.contentLength ?? null
         return null
       },
@@ -216,6 +218,39 @@ describe("acquireUrlSource", () => {
     })
 
     expect(result).toMatchObject({ ok: false, code: "unsupported_content_type" })
+  })
+
+  it("accepts text-looking responses with missing content type", async () => {
+    const result = await acquireUrlSource({
+      url: "https://example.com/note",
+      fetchUrl: async () => response({
+        contentType: null,
+        body: "Plain source text.",
+      }),
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.source.contentType).toBe("text/plain")
+    expect(result.source.markdown).toContain("Plain source text.")
+  })
+
+  it("rejects binary-looking responses with missing content type", async () => {
+    const result = await acquireUrlSource({
+      url: "https://example.com/file",
+      fetchUrl: async () => response({
+        contentType: null,
+        body: "\u0000PNG\r\n\u001a\nbinary",
+      }),
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      code: "unsupported_content_type",
+      message: "URL content type is missing and the response does not look like text.",
+    })
   })
 
   it("removes script and style content from HTML markdown", async () => {

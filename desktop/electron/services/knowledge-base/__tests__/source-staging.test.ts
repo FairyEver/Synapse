@@ -93,6 +93,31 @@ describe("knowledge base URL source staging", () => {
     expect(JSON.stringify(result)).not.toContain("input-secret")
   })
 
+  it("skips binary-looking URL responses that do not declare a content type", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/download",
+      status: 200,
+      headers: {
+        get: () => null,
+      },
+      text: async () => "\u0000PDF binary",
+    })
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "https://example.com/download",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toEqual({
+      uploaded: [],
+      skipped: [{ path: "https://example.com/download", reason: "unsupported_content_type" }],
+    })
+    await expect(access(path.join(projectPath, ".raw", "web"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("keeps URL validation failures visible as skipped URL reasons", async () => {
     const projectPath = await tempDir()
     const fetchUrl = vi.fn<FetchUrl>()

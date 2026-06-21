@@ -110,7 +110,8 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
     }
   }
 
-  const contentType = normalizeContentType(response.headers.get("content-type"))
+  const declaredContentType = normalizeContentType(response.headers.get("content-type"))
+  const contentType = declaredContentType ?? "text/plain"
   const contentLength = response.headers.get("content-length")
   const maxBytes = input.maxBytes ?? DEFAULT_MAX_BYTES
   if (contentLength && Number.isFinite(Number(contentLength)) && Number(contentLength) > maxBytes) {
@@ -144,6 +145,13 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
       ok: false,
       code: "size_limit_exceeded",
       message: `URL response exceeds the ${maxBytes} byte limit.`,
+    }
+  }
+  if (!declaredContentType && !looksLikeText(text)) {
+    return {
+      ok: false,
+      code: "unsupported_content_type",
+      message: "URL content type is missing and the response does not look like text.",
     }
   }
 
@@ -228,8 +236,26 @@ function sourceMarkdownForContent(input: {
   }
 }
 
-function normalizeContentType(value: string | null): string {
-  return value?.split(";")[0]?.trim().toLowerCase() || "text/plain"
+function normalizeContentType(value: string | null): string | null {
+  return value?.split(";")[0]?.trim().toLowerCase() || null
+}
+
+function looksLikeText(value: string): boolean {
+  const sample = value.slice(0, 4096)
+  if (sample.length === 0) return true
+  if (sample.includes("\u0000")) return false
+  if (sample.startsWith("%PDF-") || sample.startsWith("PK\u0003\u0004") || sample.startsWith("\u001f\ufffd")) {
+    return false
+  }
+
+  let suspicious = 0
+  for (const char of sample) {
+    const code = char.charCodeAt(0)
+    if (code === 0xfffd || (code < 32 && code !== 9 && code !== 10 && code !== 13)) {
+      suspicious += 1
+    }
+  }
+  return suspicious / sample.length < 0.01
 }
 
 function normalizeUrl(rawUrl: string): { readonly ok: true; readonly url: URL } | { readonly ok: false; readonly code: "invalid_url"; readonly message: string } {
