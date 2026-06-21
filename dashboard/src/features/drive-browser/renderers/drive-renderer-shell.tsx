@@ -415,6 +415,7 @@ function DriveRendererFloatingMenu({
         <DriveFileVersionsDialog
           itemId={versionItemId}
           open={versionsOpen}
+          onChanged={editContext?.reload}
           onOpenChange={setVersionsOpen}
         />
       ) : null}

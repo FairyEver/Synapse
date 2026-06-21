@@ -41,10 +41,12 @@ type ConfirmTarget =
 export function DriveFileVersionsDialog({
   itemId,
   open,
+  onChanged,
   onOpenChange,
 }: {
   readonly itemId: string
   readonly open: boolean
+  readonly onChanged?: () => void | Promise<unknown>
   readonly onOpenChange: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
@@ -60,6 +62,7 @@ export function DriveFileVersionsDialog({
   const invalidateVersionState = () => {
     void queryClient.invalidateQueries({ queryKey: ['drive-file-versions', itemId] })
     void queryClient.invalidateQueries({ queryKey: ['drive-browser'] })
+    void Promise.resolve(onChanged?.()).catch(() => undefined)
   }
   const restoreMutation = useMutation({
     mutationFn: (versionId: string) => driveFileVersionsApi.restore(itemId, versionId),

@@ -1,13 +1,52 @@
+// @vitest-environment jsdom
+
 import { createElement, type ComponentProps } from 'react'
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { describe, expect, it, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveFileVersionDto } from '@synapse/shared'
-import { DriveFileVersionContent } from './drive-file-versions-dialog'
+import { driveFileVersionsApi } from '@/lib/api'
+import { DriveFileVersionContent, DriveFileVersionsDialog } from './drive-file-versions-dialog'
+
+vi.mock('@/lib/api', () => ({
+  driveFileVersionsApi: {
+    list: vi.fn(),
+    restore: vi.fn(),
+    updatePin: vi.fn(),
+    delete: vi.fn(),
+    downloadUrl: vi.fn((itemId: string, versionId: string) => `/drive/items/${itemId}/versions/${versionId}/download`),
+  },
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+let root: Root | null = null
+let host: HTMLDivElement | null = null
+
+afterEach(() => {
+  if (root) {
+    act(() => {
+      root?.unmount()
+    })
+  }
+  host?.remove()
+  root = null
+  host = null
+  document.body.innerHTML = ''
+  vi.clearAllMocks()
+})
 
 describe('DriveFileVersionContent', () => {
   it('uses the shadcn-admin scrollable dialog body pattern', () => {
-    const source = readFileSync(new URL('./drive-file-versions-dialog.tsx', import.meta.url), 'utf8')
+    const source = readDialogSource()
     const contentClass = source.match(/<DialogContent className='([^']+)'/)?.[1]?.split(/\s+/u) ?? []
 
     expect(contentClass).toEqual(['sm:max-w-3xl'])
@@ -19,7 +58,7 @@ describe('DriveFileVersionContent', () => {
   })
 
   it('uses the version page cursor for additional history pages', () => {
-    const source = readFileSync(new URL('./drive-file-versions-dialog.tsx', import.meta.url), 'utf8')
+    const source = readDialogSource()
 
     expect(source).toContain('useInfiniteQuery')
     expect(source).toContain('getNextPageParam')
@@ -92,6 +131,35 @@ describe('DriveFileVersionContent', () => {
     expect(errorHtml).toContain('版本加载失败。')
     expect(errorHtml).toContain('重试')
   })
+
+  it('notifies the active browser after restoring a version', async () => {
+    const onChanged = vi.fn(async () => undefined)
+    vi.mocked(driveFileVersionsApi.list).mockResolvedValue({
+      items: [version({ id: 'version-old', versionNumber: 1 })],
+      page: { limit: 100, offset: 0, nextOffset: null, hasMore: false },
+    })
+    vi.mocked(driveFileVersionsApi.restore).mockResolvedValue(undefined)
+    renderVersionDialog({ onChanged })
+
+    await waitFor(() => {
+      expect(buttonByLabel('恢复 v1')).toBeTruthy()
+    })
+
+    await act(async () => {
+      buttonByLabel('恢复 v1')?.click()
+    })
+    await waitFor(() => {
+      expect(buttonByText('恢复')).toBeTruthy()
+    })
+    await act(async () => {
+      buttonByText('恢复')?.click()
+    })
+
+    await waitFor(() => {
+      expect(driveFileVersionsApi.restore).toHaveBeenCalledWith('item-1', 'version-old')
+      expect(onChanged).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 function renderVersions(versions: readonly DriveFileVersionDto[]) {
@@ -117,6 +185,60 @@ function renderVersionContent(overrides: Partial<ComponentProps<typeof DriveFile
       ...overrides,
     })
   )
+}
+
+function readDialogSource() {
+  return readFileSync('src/features/drive-browser/drive-file-versions-dialog.tsx', 'utf8')
+}
+
+function renderVersionDialog(overrides: Partial<ComponentProps<typeof DriveFileVersionsDialog>> = {}) {
+  host ??= document.createElement('div')
+  if (!host.parentElement) document.body.append(host)
+  root ??= createRoot(host)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+
+  act(() => {
+    root?.render(
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(DriveFileVersionsDialog, {
+          itemId: 'item-1',
+          open: true,
+          onOpenChange: vi.fn(),
+          ...overrides,
+        })
+      )
+    )
+  })
+}
+
+async function waitFor(read: () => void): Promise<void> {
+  let lastError: unknown
+  for (let index = 0; index < 20; index += 1) {
+    try {
+      read()
+      return
+    } catch (error) {
+      lastError = error
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+    }
+  }
+  throw lastError
+}
+
+function buttonByLabel(label: string): HTMLButtonElement | null {
+  return document.querySelector(`button[aria-label="${label}"]`)
+}
+
+function buttonByText(text: string): HTMLButtonElement | null {
+  return [...document.querySelectorAll('button')]
+    .find((button) => button.textContent?.trim() === text) ?? null
 }
 
 function version(overrides: Partial<DriveFileVersionDto> = {}): DriveFileVersionDto {

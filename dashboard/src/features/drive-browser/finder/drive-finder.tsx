@@ -85,6 +85,7 @@ export function DriveFinder({
         <DriveFileVersionsDialog
           itemId={versionItemId}
           open={versionsOpen}
+          onChanged={editContext?.reload}
           onOpenChange={setVersionsOpen}
         />
       ) : null}
