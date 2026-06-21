@@ -291,6 +291,32 @@ describe("variable capability dispatcher", () => {
     }))
   })
 
+  it("records failed audit when an authorized secret write fails validation", async () => {
+    const { auditEvents, dispatcher, getConfig, permissionGuard, updateConfig } = createHarness(baseConfig)
+
+    await expect(
+      dispatcher.dispatch("variable.item.create", { name: "token", value: "new-secret" }, { source: "mcp-http" }),
+    ).rejects.toThrow("already exists")
+
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(getConfig().global.variables.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:token",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "failed",
+      resource: "variable:user:token",
+      metadata: expect.objectContaining({
+        variableAction: "variable.item.create",
+        variableName: "token",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("new-secret")
+  })
+
   it("audits failed variable permission checks without raw error text", async () => {
     const { auditEvents, dispatcher, permissionGuard, updateConfig } = createHarness(baseConfig)
     vi.mocked(permissionGuard.check).mockRejectedValueOnce(

@@ -25,6 +25,10 @@ type SecretAuditContext = {
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
+type SecretAuditEntry = {
+  readonly audit: SecretAuditContext
+  readonly metadata?: Record<string, unknown>
+}
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
@@ -259,6 +263,31 @@ function recordSecretAudit(
   })
 }
 
+function secretFailureMetadata(error: unknown): Record<string, unknown> {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: String(error).length,
+  }
+}
+
+async function runSecretWriteWithAudit<T>(
+  deps: VariableCapabilityDispatcherDeps,
+  audits: ReadonlyArray<SecretAuditEntry>,
+  task: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await task()
+  } catch (error) {
+    for (const entry of audits) {
+      recordSecretAudit(deps, entry.audit, "failed", {
+        ...entry.metadata,
+        ...secretFailureMetadata(error),
+      })
+    }
+    throw error
+  }
+}
+
 async function persistVariables(
   deps: VariableCapabilityDispatcherDeps,
   variables: SynapseVariable[],
@@ -288,25 +317,11 @@ async function persistVariablesWithAudit(
 async function persistVariablesWithAudits(
   deps: VariableCapabilityDispatcherDeps,
   variables: SynapseVariable[],
-  audits: ReadonlyArray<{
-    readonly audit: SecretAuditContext
-    readonly metadata?: Record<string, unknown>
-  }>,
+  audits: ReadonlyArray<SecretAuditEntry>,
 ): Promise<void> {
-  try {
-    await persistVariables(deps, variables)
-    for (const entry of audits) {
-      recordSecretAudit(deps, entry.audit, "allowed", entry.metadata)
-    }
-  } catch (error) {
-    for (const entry of audits) {
-      recordSecretAudit(deps, entry.audit, "failed", {
-        ...entry.metadata,
-        errorName: error instanceof Error ? error.name : typeof error,
-        errorLength: String(error).length,
-      })
-    }
-    throw error
+  await persistVariables(deps, variables)
+  for (const entry of audits) {
+    recordSecretAudit(deps, entry.audit, "allowed", entry.metadata)
   }
 }
 
@@ -378,7 +393,7 @@ async function createVariable(
   const value = requireString(params, "value")
   const description = optionalDescription(params)
   const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
-  return mutateUserVariables(deps, params, async (config) => {
+  return runSecretWriteWithAudit(deps, [{ audit }], () => mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     assertNoDuplicate(variables, name)
     const variable: SynapseVariable = {
@@ -388,7 +403,7 @@ async function createVariable(
     }
     await persistVariablesWithAudit(deps, [...variables, variable], audit)
     return { ok: true, data: { ...variableResponse(variable), created: true } }
-  })
+  }))
 }
 
 async function updateVariable(
@@ -408,7 +423,19 @@ async function updateVariable(
   const targetAudit = requestedNewName.toLowerCase() === name.toLowerCase()
     ? sourceAudit
     : await authorizeSecret(deps, "secret.write", action, context, requestedNewName, false)
-  return mutateUserVariables(deps, params, async (config) => {
+  const renameMetadata = requestedNewName.toLowerCase() === name.toLowerCase()
+    ? undefined
+    : {
+        fromVariableName: name,
+        toVariableName: requestedNewName,
+      }
+  const auditEntries: SecretAuditEntry[] = targetAudit === sourceAudit
+    ? [{ audit: sourceAudit }]
+    : [
+        { audit: sourceAudit, metadata: renameMetadata },
+        { audit: targetAudit, metadata: renameMetadata },
+      ]
+  return runSecretWriteWithAudit(deps, auditEntries, () => mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
     const newName = hasNewName ? requestedNewName : variable.name
@@ -421,19 +448,19 @@ async function updateVariable(
     }
     variables[index] = updated
     if (updated.name !== variable.name) {
-      const renameMetadata = {
+      const persistedRenameMetadata = {
         fromVariableName: variable.name,
         toVariableName: updated.name,
       }
       await persistVariablesWithAudits(deps, variables, [
-        { audit: sourceAudit, metadata: renameMetadata },
-        { audit: targetAudit, metadata: renameMetadata },
+        { audit: sourceAudit, metadata: persistedRenameMetadata },
+        { audit: targetAudit, metadata: persistedRenameMetadata },
       ])
     } else {
       await persistVariablesWithAudit(deps, variables, sourceAudit)
     }
     return { ok: true, data: { ...variableResponse(updated), updated: true } }
-  })
+  }))
 }
 
 async function upsertVariable(
@@ -445,7 +472,7 @@ async function upsertVariable(
   rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
-  return mutateUserVariables(deps, params, async (config) => {
+  return runSecretWriteWithAudit(deps, [{ audit }], () => mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const index = findVariableIndex(variables, name)
     if (index < 0) {
@@ -475,7 +502,7 @@ async function upsertVariable(
     variables[index] = updated
     await persistVariablesWithAudit(deps, variables, audit)
     return { ok: true, data: { ...variableResponse(updated), created: false, updated: true } }
-  })
+  }))
 }
 
 async function deleteVariable(
@@ -487,11 +514,11 @@ async function deleteVariable(
   rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const audit = await authorizeSecret(deps, "secret.write", action, context, name, false)
-  return mutateUserVariables(deps, params, async (config) => {
+  return runSecretWriteWithAudit(deps, [{ audit }], () => mutateUserVariables(deps, params, async (config) => {
     const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
     variables.splice(index, 1)
     await persistVariablesWithAudit(deps, variables, audit)
     return { ok: true, data: { ...variableResponse(variable), deleted: true } }
-  })
+  }))
 }
