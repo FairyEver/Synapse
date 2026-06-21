@@ -106,11 +106,16 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const replaceTargetRef = useRef<DrivePublicAssetDto | null>(null)
+  const loadRequestIdRef = useRef(0)
 
   const loadAssets = useCallback(async (offset = 0) => {
+    const requestId = ++loadRequestIdRef.current
+    const search = searchQuery
     if (offset === 0) {
       setLoading(true)
       setError(null)
+      setLoadingMore(false)
+      setLoadMoreError(null)
     } else {
       setLoadingMore(true)
       setLoadMoreError(null)
@@ -119,8 +124,9 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
       const result = await requireSynapseBridge().account.listDrivePublicAssets({
         offset,
         limit: DRIVE_PUBLIC_ASSET_PAGE_SIZE,
-        ...(searchQuery ? { search: searchQuery } : {}),
+        ...(search ? { search } : {}),
       })
+      if (loadRequestIdRef.current !== requestId) return
       setPage((current) => {
         if (offset === 0 || !current) return result
         return {
@@ -130,6 +136,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
         }
       })
     } catch (rawError) {
+      if (loadRequestIdRef.current !== requestId) return
       const message = errorMessage(rawError, offset === 0 ? "公开素材加载失败" : "加载失败")
       if (offset === 0) {
         setError(message)
@@ -137,6 +144,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
         setLoadMoreError(message)
       }
     } finally {
+      if (loadRequestIdRef.current !== requestId) return
       if (offset === 0) {
         setLoading(false)
       } else {
