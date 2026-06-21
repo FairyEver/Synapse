@@ -134,6 +134,7 @@ describe("KnowledgeBaseStorageMigrationService", () => {
 
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
     expect(harness.service.isActive()).toBe(true)
+    expect(harness.service.requiresRestartForRecovery()).toBe(true)
     expect(harness.states.at(-1)).toMatchObject({
       active: true,
       phase: "failed",

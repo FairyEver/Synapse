@@ -134,6 +134,10 @@ export class KnowledgeBaseStorageMigrationService {
     return this.state.active
   }
 
+  requiresRestartForRecovery(): boolean {
+    return this.state.active && this.state.phase === "failed" && !this.state.cancellable
+  }
+
   focusDialog(): void {
     this.emitState({})
   }
