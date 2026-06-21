@@ -477,7 +477,7 @@ export class ContentInstallService {
           // Handle Skill replacement: backup existing directory if replace confirmed
           if (payload.contentType === "skill" && payload.replaceConfirmed) {
             const targetExists = await pathExists(target.targetPath)
-            if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
+            if (targetExists && !isOwnExistingSkillDirectory) {
               const backupPath = await getAvailableDesktopSkillBackupPath(target.targetPath)
               const backupAuditMetadata = {
                 ...auditMetadata,
@@ -583,7 +583,7 @@ export class ContentInstallService {
 
           if (
             previousSkillDirectoryPath
-            && previousSkillDirectoryPath !== target.targetPath
+            && !isSamePath(previousSkillDirectoryPath, target.targetPath)
           ) {
             try {
               await rm(previousSkillDirectoryPath, { recursive: true, force: true })

@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
-import { checkSkillNameConflict, SYNAPSE_SKILL_ID_FILE_NAME } from "../skill-identity"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { checkSkillNameConflict, resolveSkillTargetPath, SYNAPSE_SKILL_ID_FILE_NAME } from "../skill-identity"
 
 const tempDirs: string[] = []
 
@@ -13,6 +13,7 @@ async function createTempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -45,5 +46,21 @@ describe("checkSkillNameConflict", () => {
       existingContentId: "unknown",
       existingPath: skillDirectoryPath,
     })
+  })
+})
+
+describe("resolveSkillTargetPath", () => {
+  it("keeps the existing Skill directory when Windows paths differ only by case", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32")
+    const parentDirectoryPath = await createTempDir()
+    const skillDirectoryPath = path.join(parentDirectoryPath, "ReviewHelper")
+    await mkdir(skillDirectoryPath, { recursive: true })
+    await writeFile(path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), JSON.stringify({ id: "skill-1" }))
+
+    await expect(resolveSkillTargetPath({
+      parentDirectoryPath,
+      contentId: "skill-1",
+      slug: "reviewhelper",
+    })).resolves.toBe(skillDirectoryPath)
   })
 })
