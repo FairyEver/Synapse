@@ -191,6 +191,8 @@ const RECENT_LOG_FILE_LIMIT = 3
 const RECENT_LOG_SAMPLE_LIMIT = 5
 const LIFECYCLE_LOG_SAMPLE_LIMIT = 5
 const AGENT_LOG_SAMPLE_LIMIT = 5
+const DIAGNOSTICS_LOG_EXPORT_MAX_FILES = 5
+const DIAGNOSTICS_LOG_EXPORT_MAX_BYTES = 50 * 1024 * 1024
 const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_TEXT_FILES = 64
 const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_BYTES = 512 * 1024
 const KNOWLEDGE_BASE_OLD_REFERENCE_MAX_DEPTH = 4
@@ -1289,8 +1291,10 @@ class DiagnosticsService {
     await this.deps.logStore.flush()
     const logDirectory = this.deps.logStore.getLogDirectory()
     const logFiles = await this.deps.logStore.listLogFilesInfo()
+    const { selected, skipped: skippedLogs } = selectDiagnosticsLogFilesForExport(logFiles)
+    skipped.push(...skippedLogs)
 
-    for (const file of logFiles) {
+    for (const file of selected) {
       const fileName = path.basename(file.name)
       const relativePath = `logs/${fileName}`
       await this.copyOptionalFile(
@@ -1972,6 +1976,47 @@ function redactDiagnosticsLogContent(content: string): string {
     .split(/(\r?\n)/)
     .map((segment) => segment.includes("\n") ? segment : redactDiagnosticsLogLine(segment))
     .join("")
+}
+
+function selectDiagnosticsLogFilesForExport(
+  logFiles: Array<{ name: string; sizeBytes: number }>,
+): {
+  readonly selected: Array<{ name: string; sizeBytes: number }>
+  readonly skipped: Array<{ path: string; reason: string }>
+} {
+  const selected: Array<{ name: string; sizeBytes: number }> = []
+  const skipped: Array<{ path: string; reason: string }> = []
+  let includedBytes = 0
+
+  for (const file of logFiles) {
+    const relativePath = `logs/${path.basename(file.name)}`
+    const sizeBytes = Math.max(0, file.sizeBytes)
+    if (selected.length >= DIAGNOSTICS_LOG_EXPORT_MAX_FILES) {
+      skipped.push({
+        path: relativePath,
+        reason: `超过诊断包日志数量上限 ${DIAGNOSTICS_LOG_EXPORT_MAX_FILES} 个。`,
+      })
+      continue
+    }
+    if (sizeBytes > DIAGNOSTICS_LOG_EXPORT_MAX_BYTES) {
+      skipped.push({
+        path: relativePath,
+        reason: `超过诊断包单次日志导出大小上限 ${DIAGNOSTICS_LOG_EXPORT_MAX_BYTES} 字节。`,
+      })
+      continue
+    }
+    if (includedBytes + sizeBytes > DIAGNOSTICS_LOG_EXPORT_MAX_BYTES) {
+      skipped.push({
+        path: relativePath,
+        reason: `超过诊断包日志总大小上限 ${DIAGNOSTICS_LOG_EXPORT_MAX_BYTES} 字节。`,
+      })
+      continue
+    }
+    selected.push(file)
+    includedBytes += sizeBytes
+  }
+
+  return { selected, skipped }
 }
 
 function redactDiagnosticsLogLine(line: string): string {

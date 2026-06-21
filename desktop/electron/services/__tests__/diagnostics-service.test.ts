@@ -1142,6 +1142,56 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(diagnosticsJson).not.toContain("report-token")
   })
 
+  it("skips log files outside the diagnostics bundle budget", async () => {
+    const writtenFiles = new Map<string, string>()
+    const readTextFile = vi.fn(async (targetPath: string) => `content from ${path.basename(targetPath)}`)
+    const service = createService({
+      logStore: {
+        getLogDirectory: () => "/logs",
+        listLogFilesInfo: vi.fn(async () => [
+          { name: "log-1.log", sizeBytes: 1 },
+          { name: "log-2.log", sizeBytes: 1 },
+          { name: "log-3.log", sizeBytes: 1 },
+          { name: "log-4.log", sizeBytes: 1 },
+          { name: "log-5.log", sizeBytes: 1 },
+          { name: "log-6.log", sizeBytes: 1 },
+        ]),
+        readLogsByNames: vi.fn(async () => ""),
+        flush: vi.fn(async () => undefined),
+      },
+      readTextFile,
+      writeTextFile: vi.fn(async (targetPath: string, content: string) => {
+        writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
+      }),
+    })
+    const report = await service.collect()
+
+    await service.exportBundle({ report })
+
+    expect(readTextFile).toHaveBeenCalledTimes(5)
+    expect(readTextFile.mock.calls.map(([targetPath]) => targetPath.replace(/\\/g, "/"))).toEqual([
+      "/logs/log-1.log",
+      "/logs/log-2.log",
+      "/logs/log-3.log",
+      "/logs/log-4.log",
+      "/logs/log-5.log",
+    ])
+
+    const packagePathSuffix = "/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z"
+    expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/logs/log-6.log`)).toBeUndefined()
+    const manifestContent = writtenFiles.get(findWrittenPath(writtenFiles, `${packagePathSuffix}/manifest.json`) ?? "")
+    expect(manifestContent).toBeDefined()
+    const manifest = JSON.parse(manifestContent ?? "") as {
+      readonly skipped: Array<{ readonly path: string; readonly reason: string }>
+    }
+    expect(manifest.skipped).toEqual(expect.arrayContaining([
+      {
+        path: "logs/log-6.log",
+        reason: expect.stringContaining("日志数量上限"),
+      },
+    ]))
+  })
+
   it("does not use renderer-provided generatedAt for staging paths", { timeout: 15_000 }, async () => {
     const writtenFiles = new Map<string, string>()
     const service = createService({
