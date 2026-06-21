@@ -179,6 +179,68 @@ describe('toDriveBrowserQueryKey', () => {
     })
   })
 
+  it('ignores stale successful load-more responses after the browser target changes', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    const staleLoadMore = createDeferred<DriveBrowserSnapshotDto>()
+    const firstSnapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('folder-1-file-1')],
+      childrenPage: { hasMore: true, limit: 50, nextOffset: 50 },
+    })
+    const secondSnapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: { ...baseCurrent(), id: 'folder-2', type: 'folder' },
+      children: [createChild('folder-2-file-1')],
+      childrenPage: { hasMore: false, limit: 50, nextOffset: null },
+    })
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(firstSnapshot)
+      .mockReturnValueOnce(staleLoadMore.promise)
+      .mockResolvedValueOnce(secondSnapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'folder-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      if (!hook.result.current.loadMoreChildren) throw new Error('load more is not available')
+      hook.result.current.loadMoreChildren()
+    })
+    await waitFor(() => {
+      expect(driveBrowserApi.getOwnerItem).toHaveBeenCalledTimes(2)
+    })
+
+    hook.rerender('folder-2')
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.current.id : null)
+        .toBe('folder-2')
+    })
+
+    await act(async () => {
+      staleLoadMore.resolve(createSnapshot({
+        context: 'owner',
+        surface: 'console',
+        current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+        children: [createChild('stale-file')],
+        childrenPage: { hasMore: false, limit: 50, nextOffset: null },
+      }))
+      await staleLoadMore.promise
+    })
+
+    expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.children.map((child) => child.id) : [])
+      .toEqual(['folder-2-file-1'])
+  })
+
   it('treats text save as successful when the follow-up reload fails', async () => {
     vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
     vi.mocked(driveBrowserApi.updateOwnerText).mockReset()
@@ -403,4 +465,14 @@ async function waitFor(read: () => void): Promise<void> {
     }
   }
   throw lastError
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
 }

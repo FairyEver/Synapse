@@ -62,6 +62,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const loadingChildrenPageKeyRef = useRef<string | null>(null)
   const queryKeyPayload = useMemo(() => toDriveBrowserQueryKey(input), [input])
   const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
+  const queryKeySignatureRef = useRef(queryKeySignature)
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
   const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, queryKeySignature)
   const pagedSnapshot = keyedSnapshotForSignature(pagedSnapshotState, queryKeySignature)
@@ -84,7 +85,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   })
   const querySnapshot = toDriveBrowserSnapshot(query.data)
   const loadMoreMutation = useMutation({
-    mutationFn: async (variables: { readonly snapshot: DriveBrowserSnapshotDto; readonly pageKey: string }) => {
+    mutationFn: async (variables: { readonly snapshot: DriveBrowserSnapshotDto; readonly pageKey: string; readonly queryKeySignature: string }) => {
       const snapshot = variables.snapshot
       const nextOffset = snapshot.childrenPage?.nextOffset
       if (nextOffset === null || nextOffset === undefined) throw new Error('没有更多文件。')
@@ -99,19 +100,22 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         loadingChildrenPageKeyRef.current = null
       }
     },
-    onSuccess: (nextSnapshot) => {
+    onSuccess: (nextSnapshot, variables) => {
+      if (variables.queryKeySignature !== queryKeySignatureRef.current) return
       if (unlockedSnapshot) {
-        setUnlockedSnapshotState((current) => ({
-          keySignature: queryKeySignature,
-          snapshot: mergeDriveBrowserSnapshots(
-            keyedSnapshotForSignature(current, queryKeySignature) ?? unlockedSnapshot,
-            nextSnapshot
-          ),
-        }))
+        setUnlockedSnapshotState((current) => {
+          const baseSnapshot = keyedSnapshotForSignature(current, queryKeySignature) ?? unlockedSnapshot
+          if (driveBrowserChildrenPageKey(baseSnapshot) !== variables.pageKey) return current
+          return {
+            keySignature: queryKeySignature,
+            snapshot: mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot),
+          }
+        })
         return
       }
       setPagedSnapshotState((current) => {
-        const baseSnapshot = keyedSnapshotForSignature(current, queryKeySignature) ?? querySnapshot ?? nextSnapshot
+        const baseSnapshot = keyedSnapshotForSignature(current, queryKeySignature) ?? querySnapshot
+        if (!baseSnapshot || driveBrowserChildrenPageKey(baseSnapshot) !== variables.pageKey) return current
         return {
           keySignature: queryKeySignature,
           snapshot: mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot),
@@ -120,6 +124,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     },
   })
   useEffect(() => {
+    queryKeySignatureRef.current = queryKeySignature
     setUnlockedSnapshotState(null)
     setPagedSnapshotState(null)
     loadingChildrenPageKeyRef.current = null
@@ -171,7 +176,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
             const pageKey = driveBrowserChildrenPageKey(snapshot)
             if (loadingChildrenPageKeyRef.current === pageKey) return
             loadingChildrenPageKeyRef.current = pageKey
-            loadMoreMutation.mutate({ snapshot, pageKey })
+            loadMoreMutation.mutate({ snapshot, pageKey, queryKeySignature })
           }
         : undefined,
       loadingMoreChildren: loadMoreMutation.isPending,
