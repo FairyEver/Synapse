@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
-import { Download, Loader2, LogIn, RefreshCw, Save } from 'lucide-react'
+import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +17,7 @@ import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { ApiError } from '@/lib/api'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 export function DriveCodeRenderer({
   current,
@@ -48,7 +49,7 @@ export function DriveCodeRenderer({
     setConflictOpen(false)
   }, [current.id, edit?.currentVersionId, initialText])
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
     try {
@@ -62,9 +63,9 @@ export function DriveCodeRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }
+  }, [canEdit, edit?.currentVersionId, editContext, value])
 
-  const handleReload = async () => {
+  const handleReload = useCallback(async () => {
     if (!editContext) return
     setError(null)
     try {
@@ -77,7 +78,61 @@ export function DriveCodeRenderer({
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
-  }
+  }, [editContext])
+
+  const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
+    if (!canEdit && !loginRequired) return []
+    const items: DriveRendererToolbarItem[] = [{
+      kind: 'status',
+      id: 'code-edit-status',
+      label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
+    }]
+    if (loginRequired) {
+      items.push({
+        kind: 'button',
+        id: 'code-login',
+        label: '登录后编辑',
+        icon: LogIn,
+        variant: 'outline',
+        href: loginUrl,
+      })
+    }
+    if (canEdit) {
+      items.push(
+        {
+          kind: 'button',
+          id: 'code-reload',
+          label: '重新加载',
+          icon: RefreshCw,
+          loading: editContext?.reloading,
+          variant: 'outline',
+          disabled: editContext?.reloading || editContext?.savingText,
+          onClick: () => { void handleReload() },
+        },
+        {
+          kind: 'button',
+          id: 'code-save',
+          label: '保存',
+          icon: Save,
+          loading: editContext?.savingText,
+          disabled: !dirty || editContext?.savingText || editContext?.reloading,
+          onClick: () => { void handleSave() },
+        },
+      )
+    }
+    return items
+  }, [
+    canEdit,
+    dirty,
+    editContext?.reloading,
+    editContext?.savingText,
+    handleReload,
+    handleSave,
+    loginRequired,
+    loginUrl,
+  ])
+
+  useRegisterDriveRendererToolbarItems('code-editor', toolbarItems)
 
   return (
     <div
@@ -85,46 +140,6 @@ export function DriveCodeRenderer({
       data-drive-code-language={language}
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
     >
-      {canEdit || loginRequired ? (
-        <div className='flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2'>
-          <div className='min-w-0 text-xs text-muted-foreground'>
-            {dirty ? '未保存' : canEdit ? '已同步' : '只读'}
-          </div>
-          <div className='flex shrink-0 items-center gap-2'>
-            {loginRequired ? (
-              <Button asChild variant='outline' size='sm'>
-                <a href={loginUrl}>
-                  <LogIn data-icon='inline-start' />
-                  登录后编辑
-                </a>
-              </Button>
-            ) : null}
-            {canEdit ? (
-              <>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  onClick={() => { void handleReload() }}
-                  disabled={editContext?.reloading || editContext?.savingText}
-                >
-                  {editContext?.reloading ? <Loader2 className='animate-spin' /> : <RefreshCw data-icon='inline-start' />}
-                  重新加载
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  onClick={() => { void handleSave() }}
-                  disabled={!dirty || editContext?.savingText || editContext?.reloading}
-                >
-                  {editContext?.savingText ? <Loader2 className='animate-spin' /> : <Save data-icon='inline-start' />}
-                  保存
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
       <div className='min-h-0 flex-1'>
         <Editor
           height='100%'

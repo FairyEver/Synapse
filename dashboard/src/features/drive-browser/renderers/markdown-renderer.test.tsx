@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
+import { DrivePreviewToolbarItemView } from './drive-preview-header'
+import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
@@ -39,7 +41,6 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(document.body.textContent).toContain('notes.md')
     expect(document.body.textContent).toContain('评论 1')
     expect(document.body.textContent).toContain('Comment body')
   })
@@ -173,13 +174,25 @@ function renderMarkdown({
   root = createRoot(host)
   act(() => {
     root?.render(
-      <DriveMarkdownRenderer
-        current={currentItem}
-        preview={preview()}
-        annotationContext={annotationContext}
-      />
+      <DriveRendererToolbarProvider>
+        <ToolbarHost />
+        <DriveMarkdownRenderer
+          current={currentItem}
+          preview={preview()}
+          annotationContext={annotationContext}
+        />
+      </DriveRendererToolbarProvider>
     )
   })
+}
+
+function ToolbarHost() {
+  const toolbar = useDriveRendererToolbar()
+  return (
+    <div data-testid='toolbar'>
+      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+    </div>
+  )
 }
 
 function current({ name = 'notes.md' }: { readonly name?: string } = {}) {

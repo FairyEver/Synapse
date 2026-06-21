@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createElement } from 'react'
+import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -22,6 +22,14 @@ import {
   getDriveFloatingMenuNewWindowUrl,
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
+import {
+  getDrivePreviewFileIdentity,
+  getDrivePreviewSystemActions,
+  getDrivePreviewSystemMenuSections,
+} from './renderers/drive-preview-actions'
+import { DrivePreviewFloatingMenu } from './renderers/drive-preview-floating-menu'
+import { DrivePreviewHeader } from './renderers/drive-preview-header'
+import { DriveRendererToolbarProvider } from './renderers/drive-renderer-toolbar-context'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -174,6 +182,89 @@ describe('drive browser view model', () => {
     expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
     expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')
     expect(driveBrowserKindLabel('markdown')).toBe('Markdown')
+  })
+
+  it('builds shared preview identity and system actions for owner files', () => {
+    const consoleFile = createSnapshot({
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        name: 'notes.md',
+        size: '2048',
+        previewKind: 'markdown',
+        browserUrl: '/console/drive/items/file?surface=console',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+    const standaloneFile = createSnapshot({
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        name: 'notes.md',
+        size: '2048',
+        previewKind: 'markdown',
+        browserUrl: '/drive/items/file?surface=standalone',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+
+    expect(getDrivePreviewFileIdentity(consoleFile)).toMatchObject({
+      name: 'notes.md',
+      sizeLabel: '2.0 KB',
+      kindLabel: 'Markdown',
+    })
+    expect(getDrivePreviewSystemActions(consoleFile).map((action) => action.id)).toEqual([
+      'download',
+      'open-new-window',
+      'versions',
+      'renderer-select',
+    ])
+    expect(getDrivePreviewSystemActions(standaloneFile).map((action) => action.id)).toEqual([
+      'download',
+      'open-in-drive',
+      'versions',
+      'renderer-select',
+    ])
+    expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
+  })
+
+  it('renders shared toolbar and floating menu from the same action model', () => {
+    const snapshot = createSnapshot({
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        previewKind: 'markdown',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+    const rendererOptions = getDriveRendererOptions(snapshot)
+    const headerHtml = renderToStaticMarkup(createElement(DrivePreviewHeader, {
+      snapshot,
+      rendererItems: [{ kind: 'status', id: 'sync', label: '已同步' }],
+      rendererOptions,
+      selectedRendererId: 'markdown',
+      onRendererChange: vi.fn(),
+      onOpenVersions: vi.fn(),
+    }))
+    const floatingHtml = renderToStaticMarkup(createElement(DrivePreviewFloatingMenu, {
+      snapshot,
+      rendererItems: [{ kind: 'status', id: 'sync', label: '已同步' }],
+      rendererOptions,
+      selectedRendererId: 'markdown',
+      onRendererChange: vi.fn(),
+      onOpenVersions: vi.fn(),
+    }))
+
+    expect(headerHtml).toContain('notes.md')
+    expect(headerHtml).toContain('已同步')
+    expect(headerHtml).toContain('下载')
+    expect(headerHtml).toContain('历史版本')
+    expect(headerHtml).toContain('打开方式')
+    expect(floatingHtml).toContain('文件操作')
+    expect(floatingHtml).not.toContain('data-drive-preview-header')
   })
 
   it('keeps finder actions limited to browser actions', () => {
@@ -336,13 +427,11 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>' },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'code', label: '代码', container: 'full' },
-        body: true,
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'code', label: '代码', container: 'full' },
+      body: true,
+    })
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('data-drive-code-language="html"')
@@ -356,23 +445,21 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('min-h-svh')
   })
 
-  it('links shared read-only code previews through the console sign-in route', () => {
+  it('renders shared read-only code previews through the shared renderer shell', () => {
     const snapshot = createSnapshot({
       context: 'share',
       current: { ...baseCurrent(), browserUrl: '/share/shr_public' },
       edit: { canEdit: false, reason: 'login_required', currentVersionId: null },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'code', label: '代码', container: 'full' },
-        body: true,
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'code', label: '代码', container: 'full' },
+      body: true,
+    })
 
-    expect(html).toContain('登录后编辑')
-    expect(html).toContain('href="/console/sign-in"')
+    expect(html).toContain('data-drive-code-renderer="true"')
+    expect(html).not.toContain('data-drive-preview-header="true"')
   })
 
   it('uses a fullscreen host without reader container classes in standalone renderer mode', () => {
@@ -389,11 +476,12 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('class="h-svh min-h-0 overflow-hidden bg-background"')
-    expect(html).toContain('class="h-full min-h-0 bg-background"')
+    expect(html).toContain('class="h-full min-h-0 bg-background flex flex-col"')
+    expect(html).toContain('data-drive-preview-header="true"')
     expect(html).not.toContain('max-w-4xl')
     expect(html).not.toContain('max-w-6xl')
-    expect(html).not.toContain('px-4')
-    expect(html).not.toContain('md:px-6')
+    expect(html).not.toContain('class="mx-auto w-full max-w-4xl px-4 md:px-6"')
+    expect(html).not.toContain('class="mx-auto w-full max-w-6xl px-4 md:px-6"')
     expect(html).toContain('class="flex h-full min-h-0 w-full flex-col overflow-hidden"')
     expect(html).not.toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
     expect(html).not.toContain('min-h-svh')
@@ -406,12 +494,10 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>', visitUrl: '/drive/render/page' },
     })
 
-    const html = renderToStaticMarkup(
-      createElement(DriveRendererContent, {
-        snapshot,
-        selected: { id: 'iframe', label: '网页', container: 'full' },
-      })
-    )
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'iframe', label: '网页', container: 'full' },
+    })
 
     expect(html).toContain('class="h-full min-h-0 w-full border-0 bg-background"')
     expect(html).toContain('sandbox="allow-scripts"')
@@ -562,11 +648,11 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveRendererContent, {
+    const html = renderDriveRendererContent({
       snapshot,
       selected: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
       body: true,
-    }))
+    })
 
     expect(html).toContain('data-mdxeditor="true"')
     expect(html).not.toContain('data-drive-code-renderer="true"')
@@ -669,6 +755,7 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-finder="file"')
     expect(html).toContain('data-drive-renderer-region="true"')
+    expect(html).toContain('data-drive-preview-header="true"')
     expect(html).toContain('新窗口打开')
     expect(html).toContain('/drive/items/file?surface=standalone')
     expect(html).toContain('打开方式')
@@ -710,7 +797,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-slot="resizable-panel-group"')
   })
 
-  it('DriveSingleFileReaderView delegates to body renderer and floating menu', () => {
+  it('DriveSingleFileReaderView delegates markdown files to the shared preview header', () => {
     const snapshot = createSnapshot({
       context: 'owner',
       current: {
@@ -732,31 +819,26 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
-    const codeHtml = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
-      snapshot,
-      initialRendererId: 'code',
-    }))
-    const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
-    expect(html).toContain('文件操作')
-    expect(source).toContain("selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5'")
-    expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
-    expect(html).toContain('top-5')
-    expect(codeHtml).toContain('top-14')
-    expect(renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
-      snapshot,
-      initialRendererId: 'mdxeditor',
-    }))).toContain('top-14')
-    expect(source).toContain('FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000')
-    expect(source).toContain('setIdleDimmed(true)')
-    expect(source).toContain("'opacity-50 hover:opacity-100 focus-visible:opacity-100'")
-    expect(source).toContain("const driveBrowserUrl = getDriveFloatingMenuDriveBrowserUrl(snapshot)")
-    expect(source).toContain('buildConsoleDriveItemBrowserUrl(snapshot.current.id)')
-    expect(source).toContain('href={driveBrowserUrl}')
-    expect(source).toContain('在云盘中查看')
+    expect(html).toContain('data-drive-preview-header="true"')
+    expect(html).not.toContain('文件操作')
+    expect(html).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')
+  })
+
+  it('uses floating chrome for iframe html previews', () => {
+    const snapshot = createSnapshot({
+      surface: 'standalone',
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/file/render' },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('文件操作')
+    expect(html).not.toContain('data-drive-preview-header="true"')
   })
 
   it('does not offer opening a standalone file reader in another new window', () => {
@@ -833,7 +915,8 @@ describe('drive browser view model', () => {
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
-    expect(html).toContain('文件操作')
+    expect(html).toContain('data-drive-preview-header="true"')
+    expect(html).not.toContain('文件操作')
     expect(html).not.toContain('在云盘中查看')
     expect(html).not.toContain('预览')
     expect(html).not.toContain('源码')
@@ -918,6 +1001,16 @@ describe('drive browser view model', () => {
     expect(html).toContain('加载更多')
   })
 })
+
+function renderDriveRendererContent(props: ComponentProps<typeof DriveRendererContent>): string {
+  return renderToStaticMarkup(
+    createElement(
+      DriveRendererToolbarProvider,
+      null,
+      createElement(DriveRendererContent, props),
+    ),
+  )
+}
 
 function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
   return {
