@@ -229,10 +229,7 @@ class DatabaseService {
     }
 
     try {
-      const result = this.db.prepare("PRAGMA integrity_check").all() as { integrity_check: string }[]
-      if (result[0]?.integrity_check !== "ok") {
-        throw new Error("Database integrity check failed")
-      }
+      this.assertDatabaseIntegrity(this.db)
     } catch (error) {
       logger.warn("Database corrupted. Creating fresh database.", { error })
       corrupted = true
@@ -593,15 +590,45 @@ class DatabaseService {
     const suffix = `corrupt.${timestamp}`
     const walPath = `${this.dbPath}-wal`
     const shmPath = `${this.dbPath}-shm`
+    const backupEntries = [
+      { from: this.dbPath, to: `${this.dbPath}.${suffix}`, role: "database" },
+      { from: walPath, to: `${walPath}.${suffix}`, role: "wal" },
+      { from: shmPath, to: `${shmPath}.${suffix}`, role: "shm" },
+    ].filter((entry) => existsSync(entry.from))
+    const movedEntries: typeof backupEntries = []
 
     try {
-      if (existsSync(this.dbPath)) renameSync(this.dbPath, `${this.dbPath}.${suffix}`)
-      if (existsSync(walPath)) renameSync(walPath, `${walPath}.${suffix}`)
-      if (existsSync(shmPath)) renameSync(shmPath, `${shmPath}.${suffix}`)
-    } catch { /* best effort backup */ }
+      for (const entry of backupEntries) {
+        renameSync(entry.from, entry.to)
+        movedEntries.push(entry)
+      }
+    } catch (error) {
+      for (const entry of movedEntries.reverse()) {
+        try {
+          if (!existsSync(entry.from) && existsSync(entry.to)) {
+            renameSync(entry.to, entry.from)
+          }
+        } catch (rollbackError) {
+          logger.warn("Failed to roll back corrupted database backup file.", {
+            role: entry.role,
+            error: rollbackError,
+          })
+        }
+      }
+      logger.error("Failed to backup corrupted database before recovery.", { error })
+      throw new Error("Failed to backup corrupted database before recovery", { cause: error })
+    }
 
     this.db = new DatabaseSync(this.dbPath)
     this.db.exec("PRAGMA journal_mode=WAL")
+    this.assertDatabaseIntegrity(this.db)
+  }
+
+  private assertDatabaseIntegrity(db: DatabaseSync): void {
+    const result = db.prepare("PRAGMA integrity_check").all() as { integrity_check: string }[]
+    if (result[0]?.integrity_check !== "ok") {
+      throw new Error("Database integrity check failed")
+    }
   }
 
   private ensureSystemSchema(): void {

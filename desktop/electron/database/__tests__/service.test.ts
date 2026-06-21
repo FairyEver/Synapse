@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { DatabaseSync } from "node:sqlite"
 import os from "node:os"
 import path from "node:path"
@@ -497,6 +497,49 @@ describe("DatabaseService legacy database migration", () => {
       description: "",
     }))
     expect(readdirSync(tempDir).some((name) => /^synapse-database\.db\.legacy-migration\.\d+$/.test(name))).toBe(false)
+  })
+
+  it("stops opening a corrupted database when the recovery backup cannot be created", async () => {
+    const dbPath = path.join(tempDir, "synapse-database.db")
+    await writeFile(dbPath, "corrupted", "utf8")
+    const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs")
+    const renameSync = vi.fn(() => {
+      throw new Error("rename denied")
+    })
+    const prepare = vi.fn((sql: string) => ({
+      all: vi.fn(() => sql.includes("integrity_check")
+        ? [{ integrity_check: "database disk image is malformed" }]
+        : []),
+      get: vi.fn(() => null),
+      run: vi.fn(),
+    }))
+    const close = vi.fn()
+
+    vi.doMock("node:fs", async () => ({
+      ...actualFs,
+      renameSync,
+    }))
+    const DatabaseSyncMock = vi.fn(function DatabaseSync() {
+      return {
+        close,
+        exec: vi.fn(),
+        prepare,
+      }
+    })
+    vi.doMock("node:sqlite", () => ({
+      DatabaseSync: DatabaseSyncMock,
+    }))
+
+    try {
+      const module = await import("../service")
+      service = module.databaseService
+
+      expect(() => service.open()).toThrow("Failed to backup corrupted database before recovery")
+      expect(renameSync).toHaveBeenCalledWith(dbPath, expect.stringContaining("synapse-database.db.corrupt."))
+    } finally {
+      vi.doUnmock("node:fs")
+      vi.doUnmock("node:sqlite")
+    }
   })
 
   it("imports a legacy database backup", async () => {
