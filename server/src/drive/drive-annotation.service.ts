@@ -135,14 +135,19 @@ export class DriveAnnotationService {
     return { ok: true }
   }
 
-  async listShareAnnotations(input: { readonly shareId: string; readonly itemId?: string; readonly cookie?: string | null }): Promise<DriveAnnotationThreadDto[]> {
+  async listShareAnnotations(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly actorUserId?: string | null
+  }): Promise<DriveAnnotationThreadDto[]> {
     const item = await this.requireShareVisibleItem(input)
     const threads = await this.prisma.driveAnnotationThread.findMany({
       where: { itemId: item.id, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(threads, null, item.userId)
+    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId)
   }
 
   async createShareAnnotation(input: {

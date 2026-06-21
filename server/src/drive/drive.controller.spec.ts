@@ -7,6 +7,7 @@ import { BadRequestException, type INestApplication, NotFoundException, Unauthor
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
@@ -762,7 +763,47 @@ describe("DriveController", () => {
       shareId: "shr_file",
       itemId: "file-1",
       cookie: "file-cookie",
+      actorUserId: null,
     })
+
+    const dashboardAuth = {
+      verifyDashboardSession: vi.fn(async () => ({
+        id: "reader-1",
+        email: "reader@example.com",
+        displayName: "Reader",
+        role: "user" as const,
+      })),
+    }
+    const readModuleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: AdminAuthService, useValue: dashboardAuth },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn(() => { throw new UnauthorizedException("未登录或登录已过期。") }) })
+      .compile()
+    const readApp = readModuleRef.createNestApplication()
+    await readApp.init()
+    try {
+      await request(readApp.getHttpServer())
+        .get("/api/drive/browser/shares/shr_file/items/file-1/annotations")
+        .set("Cookie", `${cookieHeader}; synapse_admin=dashboard-cookie`)
+        .expect(200)
+
+      expect(dashboardAuth.verifyDashboardSession).toHaveBeenCalledWith("dashboard-cookie")
+      expect(annotations.listShareAnnotations).toHaveBeenLastCalledWith({
+        shareId: "shr_file",
+        itemId: "file-1",
+        cookie: "file-cookie",
+        actorUserId: "reader-1",
+      })
+    } finally {
+      await readApp.close()
+    }
 
     const moduleRef = await Test.createTestingModule({
       controllers: [DrivePublicController],

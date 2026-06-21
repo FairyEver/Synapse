@@ -99,6 +99,20 @@ describe("DriveAnnotationService", () => {
       data: expect.objectContaining({ createdByUserId: "reader-1" }),
     }))
   })
+
+  it("projects share annotation permissions for the logged-in viewer", async () => {
+    const result = await service.listShareAnnotations({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+    })
+
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      actorUserId: "reader-1",
+    }))
+    expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: true, canDelete: true })
+  })
 })
 
 function createInput() {

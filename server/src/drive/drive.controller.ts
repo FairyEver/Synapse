@@ -874,19 +874,21 @@ export class DrivePublicController {
   }
 
   @Get("/api/drive/browser/shares/:shareId/annotations")
-  listShareRootAnnotations(@Param("shareId") shareId: string, @Req() request: Request) {
+  async listShareRootAnnotations(@Param("shareId") shareId: string, @Req() request: Request) {
     return requireDriveAnnotationService(this.annotations).listShareAnnotations({
       shareId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      actorUserId: await this.resolveOptionalUserId(request),
     })
   }
 
   @Get("/api/drive/browser/shares/:shareId/items/:itemId/annotations")
-  listShareItemAnnotations(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request) {
+  async listShareItemAnnotations(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request) {
     return requireDriveAnnotationService(this.annotations).listShareAnnotations({
       shareId,
       itemId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      actorUserId: await this.resolveOptionalUserId(request),
     })
   }
 
@@ -1239,8 +1241,9 @@ export class DrivePublicController {
 
   private async resolveOptionalUserId(request: Request): Promise<string | null> {
     if (!this.dashboardAuth) return null
-    const session = typeof request.cookies?.synapse_admin === "string"
-      ? await this.dashboardAuth.verifyDashboardSession(request.cookies.synapse_admin)
+    const token = readRequestCookie(request, "synapse_admin")
+    const session = token
+      ? await this.dashboardAuth.verifyDashboardSession(token)
       : null
     return session?.role === "user" ? session.id : null
   }
@@ -1512,18 +1515,22 @@ function readDriveAccessCookie(
   scope: { readonly kind: DriveAccessCookieKind; readonly publicId: string },
 ): string | undefined {
   const cookieName = driveAccessCookieName(scope)
-  const cookies = (request as Request & { readonly cookies?: Record<string, unknown> }).cookies
   for (const name of [cookieName, legacyDriveAccessCookieName]) {
-    const parsed = cookies?.[name]
-    if (typeof parsed === "string" && parsed.length > 0) return parsed
+    const parsed = readRequestCookie(request, name)
+    if (parsed) return parsed
   }
+  return undefined
+}
 
+function readRequestCookie(request: Request, name: string): string | undefined {
+  const cookies = (request as Request & { readonly cookies?: Record<string, unknown> }).cookies
+  const parsed = cookies?.[name]
+  if (typeof parsed === "string" && parsed.length > 0) return parsed
   const header = request.headers.cookie
   if (!header) return undefined
-  const acceptedNames = new Set([cookieName, legacyDriveAccessCookieName])
   for (const part of header.split(";")) {
     const [rawName, ...rawValue] = part.trim().split("=")
-    if (acceptedNames.has(rawName)) return decodeCookieValue(rawValue.join("="))
+    if (rawName === name) return decodeCookieValue(rawValue.join("="))
   }
   return undefined
 }
