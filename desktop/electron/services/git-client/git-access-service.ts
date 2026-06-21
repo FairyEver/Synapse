@@ -171,6 +171,59 @@ async function readCredentialHelpers(deps: Pick<GitAccessDeps, "commandRunner" |
   }
 }
 
+async function readCredentialHelpersForConfiguration(
+  deps: Pick<GitAccessDeps, "commandRunner" | "homeDir">,
+): Promise<readonly string[]> {
+  try {
+    const result = await deps.commandRunner.run({
+      cwd: deps.homeDir,
+      args: ["config", "--global", "--get-all", "credential.helper"],
+      logFailure: false,
+      operation: "git.access.configureCredentialHelper",
+    })
+    return result.stdout.split(/\r?\n/u).map((helper) => helper.trim()).filter(Boolean)
+  } catch (error) {
+    if (isNoCredentialHelperConfigError(error)) return []
+    throw new Error("无法读取旧的凭证保存配置。", { cause: error })
+  }
+}
+
+async function unsetCredentialHelpers(deps: Pick<GitAccessDeps, "commandRunner" | "homeDir">): Promise<void> {
+  await deps.commandRunner.run({
+    cwd: deps.homeDir,
+    args: ["config", "--global", "--unset-all", "credential.helper"],
+    logFailure: false,
+    operation: "git.access.configureCredentialHelper",
+  })
+}
+
+async function addCredentialHelper(
+  deps: Pick<GitAccessDeps, "commandRunner" | "homeDir">,
+  helper: string,
+): Promise<void> {
+  await deps.commandRunner.run({
+    cwd: deps.homeDir,
+    args: ["config", "--global", "--add", "credential.helper", helper],
+    logFailure: false,
+    operation: "git.access.configureCredentialHelper",
+  })
+}
+
+async function restoreCredentialHelpers(
+  deps: Pick<GitAccessDeps, "commandRunner" | "homeDir">,
+  helpers: readonly string[],
+): Promise<void> {
+  if (helpers.length === 0) return
+  try {
+    await unsetCredentialHelpers(deps)
+  } catch (error) {
+    if (!isNoCredentialHelperConfigError(error)) throw error
+  }
+  for (const helper of helpers) {
+    await addCredentialHelper(deps, helper)
+  }
+}
+
 function getEd25519PublicKeyPath(homeDir: string): string {
   return path.join(homeDir, ".ssh", "id_ed25519.pub")
 }
@@ -475,25 +528,39 @@ export function createGitAccessService(deps: GitAccessDeps) {
         })
         throw new Error("不支持此凭证保存方式。")
       }
-      try {
-        await deps.commandRunner.run({
-          cwd: deps.homeDir,
-          args: ["config", "--global", "--unset-all", "credential.helper"],
-          logFailure: false,
-          operation: "git.access.configureCredentialHelper",
-        })
-      } catch (error) {
-        // Missing credential.helper is fine; lock/permission/config corruption must stop here.
-        if (!isNoCredentialHelperConfigError(error)) {
-          throw new Error("无法清理旧的凭证保存配置。", { cause: error })
+      const previousHelpers = await readCredentialHelpersForConfiguration(deps)
+      if (previousHelpers.length > 0) {
+        try {
+          await unsetCredentialHelpers(deps)
+        } catch (error) {
+          // Missing credential.helper is fine; lock/permission/config corruption must stop here.
+          if (!isNoCredentialHelperConfigError(error)) {
+            throw new Error("无法清理旧的凭证保存配置。", { cause: error })
+          }
         }
       }
-      await deps.commandRunner.run({
-        cwd: deps.homeDir,
-        args: ["config", "--global", "--add", "credential.helper", helper],
-        logFailure: false,
-        operation: "git.access.configureCredentialHelper",
-      })
+      try {
+        await addCredentialHelper(deps, helper)
+      } catch (error) {
+        if (previousHelpers.length > 0) {
+          try {
+            await restoreCredentialHelpers(deps, previousHelpers)
+            deps.logger?.warn("Restored previous Git credential helpers after configuration failure.", {
+              previousHelperCount: previousHelpers.length,
+            })
+          } catch (restoreError) {
+            deps.logger?.warn("Failed to restore previous Git credential helpers after configuration failure.", {
+              error: restoreError,
+              previousHelperCount: previousHelpers.length,
+            })
+            throw new Error("无法配置新的凭证保存方式，且恢复旧配置失败。请手动检查 Git credential.helper。", {
+              cause: restoreError,
+            })
+          }
+          throw new Error("无法配置新的凭证保存方式，已恢复旧配置。", { cause: error })
+        }
+        throw new Error("无法配置新的凭证保存方式。", { cause: error })
+      }
     },
 
     async saveHttpsCredential(input: SynapseGitSaveHttpsCredentialInput): Promise<void> {

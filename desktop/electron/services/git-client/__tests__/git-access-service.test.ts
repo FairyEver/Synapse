@@ -86,18 +86,26 @@ describe("git access service", () => {
   })
 
   it("replaces existing credential helpers before configuring a safe helper", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
+      .mockResolvedValue({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
     await service.configureCredentialHelper({ helper: "manager-core" })
 
     expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
       cwd: "/Users/writer",
-      args: ["config", "--global", "--unset-all", "credential.helper"],
+      args: ["config", "--global", "--get-all", "credential.helper"],
       logFailure: false,
       operation: "git.access.configureCredentialHelper",
     }))
     expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      cwd: "/Users/writer",
+      args: ["config", "--global", "--unset-all", "credential.helper"],
+      logFailure: false,
+      operation: "git.access.configureCredentialHelper",
+    }))
+    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
       cwd: "/Users/writer",
       args: ["config", "--global", "--add", "credential.helper", "manager-core"],
       logFailure: false,
@@ -114,6 +122,9 @@ describe("git access service", () => {
     await service.configureCredentialHelper({ helper: "manager" })
 
     expect(run).toHaveBeenCalledTimes(2)
+    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      args: ["config", "--global", "--get-all", "credential.helper"],
+    }))
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
       args: ["config", "--global", "--add", "credential.helper", "manager"],
     }))
@@ -132,6 +143,9 @@ describe("git access service", () => {
     await service.configureCredentialHelper({ helper: "manager" })
 
     expect(run).toHaveBeenCalledTimes(2)
+    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      args: ["config", "--global", "--get-all", "credential.helper"],
+    }))
     expect(run).toHaveBeenLastCalledWith(expect.objectContaining({
       args: ["config", "--global", "--add", "credential.helper", "manager"],
     }))
@@ -139,35 +153,75 @@ describe("git access service", () => {
 
   it("blocks helper configuration when old credential helper cleanup fails", async () => {
     const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
       .mockRejectedValueOnce(new Error("could not lock config file Permission denied"))
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
     await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法清理旧的凭证保存配置。")
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   it("blocks helper configuration when old credential helper cleanup reports invalid config", async () => {
     const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "osxkeychain\n", stderr: "" })
       .mockRejectedValueOnce(new Error("fatal: invalid key: credential.helper"))
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
     await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法清理旧的凭证保存配置。")
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   it.each([
     "git not found",
     "helper backend not found",
-  ])("blocks helper configuration when cleanup reports %s", async (message) => {
+  ])("blocks helper configuration when reading old helpers reports %s", async (message) => {
     const run = vi.fn()
       .mockRejectedValueOnce(new Error(message))
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
     const service = createService({ commandRunner: { run } })
 
-    await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法清理旧的凭证保存配置。")
+    await expect(service.configureCredentialHelper({ helper: "manager" })).rejects.toThrow("无法读取旧的凭证保存配置。")
     expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it("restores old credential helpers when adding the new helper fails", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const run = vi.fn()
+      .mockResolvedValueOnce({ stdout: "osxkeychain\nmanager\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockRejectedValueOnce(new Error("could not lock config file Permission denied"))
+      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" })
+    const service = createService({ commandRunner: { run }, logger })
+
+    await expect(service.configureCredentialHelper({ helper: "manager-core" }))
+      .rejects.toThrow("无法配置新的凭证保存方式，已恢复旧配置。")
+
+    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      args: ["config", "--global", "--get-all", "credential.helper"],
+    }))
+    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      args: ["config", "--global", "--unset-all", "credential.helper"],
+    }))
+    expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      args: ["config", "--global", "--add", "credential.helper", "manager-core"],
+    }))
+    expect(run).toHaveBeenNthCalledWith(4, expect.objectContaining({
+      args: ["config", "--global", "--unset-all", "credential.helper"],
+    }))
+    expect(run).toHaveBeenNthCalledWith(5, expect.objectContaining({
+      args: ["config", "--global", "--add", "credential.helper", "osxkeychain"],
+    }))
+    expect(run).toHaveBeenNthCalledWith(6, expect.objectContaining({
+      args: ["config", "--global", "--add", "credential.helper", "manager"],
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Restored previous Git credential helpers after configuration failure.",
+      { previousHelperCount: 2 },
+    )
   })
 
   it.each([
