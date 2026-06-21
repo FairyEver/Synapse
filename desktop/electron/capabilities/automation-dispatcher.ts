@@ -510,9 +510,10 @@ async function buildRuntimeInspect(deps: AutomationCapabilityDispatcherDeps, aut
   const inspect = deps.service.automationRuntimeInspect()
   const runningItemIds = [...inspect.runningItemIds]
   const scheduledItemIds = [...inspect.timers]
+  const runtimeItemIds = [...new Set([...runningItemIds, ...scheduledItemIds])]
   const items = automationId
     ? [await deps.service.automationGet(automationId)]
-    : await deps.service.automationList()
+    : await Promise.all(runtimeItemIds.map((id) => deps.service.automationGet(id)))
   if (automationId && !items[0]) throw new Error(`Automation "${automationId}" was not found`)
   return {
     runningItemIds,

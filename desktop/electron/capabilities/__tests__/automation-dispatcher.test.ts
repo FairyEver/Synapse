@@ -486,6 +486,8 @@ describe("automation capability dispatcher", () => {
         items: [expect.objectContaining({ id: "automation:1", running: true, scheduled: true })],
       },
     })
+    expect(service.automationList).not.toHaveBeenCalled()
+    expect(service.automationGet).toHaveBeenCalledWith("automation:1")
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private prompt")
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private output")
   })
