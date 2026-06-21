@@ -32,6 +32,17 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("requires an explicit parent id for item moves", () => {
+    const moveTool = buildDriveTools().find((tool) => tool.name === "drive_item_move")
+    expect(moveTool?.inputSchema.required).toContain("parentId")
+    expect(moveTool?.inputSchema.properties).toMatchObject({
+      parentId: {
+        anyOf: [{ type: "string" }, { type: "null" }],
+        description: expect.stringContaining("do not omit"),
+      },
+    })
+  })
+
   it("exposes the full Drive MCP tool set without legacy gaps", () => {
     expect(buildDriveTools().map((tool) => tool.name)).toEqual([
       "drive_item_list",
@@ -315,6 +326,27 @@ describe("createDriveCapabilityDispatcher", () => {
 
     expect(accountService.getDriveItem).toHaveBeenCalledWith("item-1")
     expect(accountService.renameDriveItem).toHaveBeenCalledWith("item-1", "after.md")
+  })
+
+  it("requires explicit item move targets while preserving null as root", async () => {
+    const accountService = createAccountService({
+      moveDriveItem: vi.fn(async () => driveItem({ id: "item-1", name: "report.md", parentId: null })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.item.move", {
+      itemId: "item-1",
+    }, { source: "mcp-stdio" })).rejects.toThrow("parentId is required")
+    await expect(dispatcher.dispatch("drive.item.move", {
+      itemId: "item-1",
+      parentId: null,
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveItem({ id: "item-1", name: "report.md", parentId: null }),
+    })
+
+    expect(accountService.moveDriveItem).toHaveBeenCalledTimes(1)
+    expect(accountService.moveDriveItem).toHaveBeenCalledWith("item-1", null)
   })
 
   it("routes public share link management tools", async () => {

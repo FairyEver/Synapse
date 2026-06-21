@@ -200,7 +200,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const item = await deps.accountService.moveDriveItem(
               requireString(params, "itemId"),
-              optionalNullableString(params.parentId),
+              requireNullableString(params, "parentId"),
             )
             return { ok: true, data: item }
           })
@@ -1122,6 +1122,16 @@ function optionalNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value !== "string") throw new Error("Expected string or null.")
   return value.trim() || null
+}
+
+function requireNullableString(params: Record<string, unknown>, key: string): string | null {
+  if (!(key in params)) throw new Error(`${key} is required`)
+  const value = params[key]
+  if (value === null) return null
+  if (typeof value !== "string") throw new Error(`Missing or invalid '${key}': expected string or null`)
+  const normalized = value.trim()
+  if (normalized === "") throw new Error(`Missing or invalid '${key}': expected non-empty string or null`)
+  return normalized
 }
 
 function requireStringArray(params: Record<string, unknown>, key: string): string[] {

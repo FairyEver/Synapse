@@ -66,7 +66,7 @@ Move a Drive file or folder.
 Input:
 
 - `itemId` required.
-- `parentId` optional: target folder id. Pass `null` to move to Drive root.
+- `parentId` required: target folder id. Pass `null` to move to Drive root. Do not omit this field.
 
 ### `drive_item_delete`
 
