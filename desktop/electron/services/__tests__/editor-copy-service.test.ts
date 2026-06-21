@@ -102,6 +102,28 @@ describe("EditorCopyService", () => {
     })
   })
 
+  it("rejects scanned rule names that are reserved Windows filenames", async () => {
+    const root = await createTempRoot()
+    const sourcePath = path.join(root, "source", "CON.md")
+    const projectPath = path.join(root, "project")
+    await mkdir(path.dirname(sourcePath), { recursive: true })
+    await mkdir(projectPath, { recursive: true })
+    await writeFile(sourcePath, "Reserved rule.", "utf8")
+    mockConfiguredProjects([projectPath])
+
+    const service = new EditorCopyService()
+
+    await expect(service.resolveTarget({
+      source: {
+        ...createRuleSource(sourcePath),
+        itemName: "CON.md",
+      },
+      targetEditorId: "cursor",
+      targetProjectPath: projectPath,
+      targetScope: "project",
+    })).rejects.toThrow("Windows 系统保留字")
+  })
+
   it("rejects copy targets that resolve to the same path as the source", async () => {
     const root = await createTempRoot()
     const sourcePath = path.join(root, "project", "AGENTS.md")

@@ -16,6 +16,7 @@ import {
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
+import { isWindowsReservedContentNameInput } from "../../src/lib/content-name-input"
 import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
@@ -112,6 +113,12 @@ function deriveSafeRuleId(source: SynapseEditorCopySource): string {
   return `copied-rule-${digest}`
 }
 
+function assertEditorCopyRuleName(ruleName: string): void {
+  if (isWindowsReservedContentNameInput(ruleName)) {
+    throw new Error("Rule 名称是 Windows 系统保留字，请重命名后再复制。")
+  }
+}
+
 function isSamePath(left: string, right: string): boolean {
   return arePathsEqualForCompare(left, right, {
     platform: process.platform,
@@ -171,6 +178,9 @@ async function normalizeCopyTarget(
 function createResolvePayload(payload: SynapseResolveEditorCopyTargetPayload) {
   const { source } = payload
   const ruleName = source.itemType === "rule" ? deriveRuleName(source) : undefined
+  if (ruleName) {
+    assertEditorCopyRuleName(ruleName)
+  }
   const contentId = source.itemType === "rule"
     ? deriveSafeRuleId(source)
     : source.itemName
