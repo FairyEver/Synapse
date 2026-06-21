@@ -27,6 +27,8 @@ import {
   getDrivePreviewSystemActions,
   getDrivePreviewSystemMenuSections,
 } from './renderers/drive-preview-actions'
+import { DrivePreviewFloatingMenu } from './renderers/drive-preview-floating-menu'
+import { DrivePreviewHeader } from './renderers/drive-preview-header'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -225,6 +227,43 @@ describe('drive browser view model', () => {
       'renderer-select',
     ])
     expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
+  })
+
+  it('renders shared toolbar and floating menu from the same action model', () => {
+    const snapshot = createSnapshot({
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        previewKind: 'markdown',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+    const rendererOptions = getDriveRendererOptions(snapshot)
+    const headerHtml = renderToStaticMarkup(createElement(DrivePreviewHeader, {
+      snapshot,
+      rendererItems: [{ kind: 'status', id: 'sync', label: '已同步' }],
+      rendererOptions,
+      selectedRendererId: 'markdown',
+      onRendererChange: vi.fn(),
+      onOpenVersions: vi.fn(),
+    }))
+    const floatingHtml = renderToStaticMarkup(createElement(DrivePreviewFloatingMenu, {
+      snapshot,
+      rendererItems: [{ kind: 'status', id: 'sync', label: '已同步' }],
+      rendererOptions,
+      selectedRendererId: 'markdown',
+      onRendererChange: vi.fn(),
+      onOpenVersions: vi.fn(),
+    }))
+
+    expect(headerHtml).toContain('notes.md')
+    expect(headerHtml).toContain('已同步')
+    expect(headerHtml).toContain('下载')
+    expect(headerHtml).toContain('历史版本')
+    expect(headerHtml).toContain('打开方式')
+    expect(floatingHtml).toContain('文件操作')
+    expect(floatingHtml).not.toContain('data-drive-preview-header')
   })
 
   it('keeps finder actions limited to browser actions', () => {
