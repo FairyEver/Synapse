@@ -861,6 +861,11 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/project",
+          isDirectory: target === "/tmp/project",
+          size: target.endsWith("b.txt") ? 2 : 1,
+        })),
         stat: vi.fn(async (target: string) => ({
           isFile: () => target !== "/tmp/project",
           isDirectory: () => target === "/tmp/project",
@@ -934,6 +939,11 @@ describe("createDriveCapabilityDispatcher", () => {
       accountService,
       auditSink,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/project",
+          isDirectory: target === "/tmp/project",
+          size: 1,
+        })),
         stat: vi.fn(async (target: string) => ({
           isFile: () => target !== "/tmp/project",
           isDirectory: () => target === "/tmp/project",
@@ -975,11 +985,39 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("rejects MCP folder uploads when the requested folder is a symbolic link", async () => {
+    const accountService = createAccountService()
+    const fileSystem = {
+      lstat: vi.fn(async () => statLikeForTest({ isDirectory: true, isSymbolicLink: true })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project-link",
+    }, { source: "mcp-stdio" })).rejects.toThrow("Folder upload does not support symbolic links.")
+
+    expect(fileSystem?.stat).not.toHaveBeenCalled()
+    expect(fileSystem?.readdir).not.toHaveBeenCalled()
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+  })
+
   it("rejects MCP folder uploads that exceed the local upload file limit before preparing sessions", async () => {
     const accountService = createAccountService()
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: target !== "/tmp/large-folder",
+          isDirectory: target === "/tmp/large-folder",
+          size: 1,
+        })),
         stat: vi.fn(async () => ({
           isFile: () => true,
           isDirectory: () => true,
@@ -1012,6 +1050,11 @@ describe("createDriveCapabilityDispatcher", () => {
       (_, index) => `level-${index}`,
     )
     const fileSystem = {
+      lstat: vi.fn(async (target: string) => statLikeForTest({
+        isFile: target.endsWith("too-deep.txt"),
+        isDirectory: !target.endsWith("too-deep.txt"),
+        size: 1,
+      })),
       stat: vi.fn(async () => ({
         isFile: () => true,
         isDirectory: () => true,
@@ -1246,6 +1289,20 @@ function createAuditSink(): DriveAuditSink {
     record: vi.fn(),
     list: vi.fn(() => []),
     clearForTests: vi.fn(),
+  }
+}
+
+function statLikeForTest(input: {
+  readonly isFile?: boolean
+  readonly isDirectory?: boolean
+  readonly isSymbolicLink?: boolean
+  readonly size?: number
+}) {
+  return {
+    isFile: () => input.isFile ?? false,
+    isDirectory: () => input.isDirectory ?? false,
+    isSymbolicLink: () => input.isSymbolicLink ?? false,
+    size: input.size ?? 0,
   }
 }
 

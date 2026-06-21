@@ -1,6 +1,6 @@
 import path from "node:path"
 import { createReadStream } from "node:fs"
-import { readdir, stat } from "node:fs/promises"
+import { lstat, readdir, stat } from "node:fs/promises"
 
 import type {
   DriveAccessExpiresIn,
@@ -125,6 +125,7 @@ type DriveAccountServicePort = {
 
 type FileSystemPort = {
   readonly createReadStream: typeof createReadStream
+  readonly lstat: typeof lstat
   readonly readdir: typeof readdir
   readonly stat: typeof stat
 }
@@ -152,7 +153,7 @@ type DriveMutationSecurity = {
 }
 
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
-const defaultFileSystem: FileSystemPort = { createReadStream, readdir, stat }
+const defaultFileSystem: FileSystemPort = { createReadStream, lstat, readdir, stat }
 const DRIVE_ACCESS_EXPIRES_IN_VALUES = new Set<DriveAccessExpiresIn>(["3d", "7d", "30d", "1y", "forever"])
 
 export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherDeps) {
@@ -440,7 +441,8 @@ async function uploadFolder(
 ): Promise<DispatchResult> {
   const folderPath = requireString(params, "folderPath")
   await authorizeFileRead(deps, folderPath, context)
-  const folderStat = await fileSystem.stat(folderPath)
+  const folderStat = await fileSystem.lstat(folderPath)
+  if (folderStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
   if (!folderStat.isDirectory()) throw new Error("folderPath must point to a directory.")
 
   const entries = await listLocalFiles(fileSystem, folderPath)
@@ -622,15 +624,16 @@ async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Pro
     for (const entry of entries) {
       const absolutePath = path.join(directoryPath, entry.name)
       const relativePath = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
-      if (entry.isDirectory()) {
+      const entryStat = await fileSystem.lstat(absolutePath)
+      if (entryStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
+      if (entryStat.isDirectory()) {
         await walk(absolutePath, relativePath, depth + 1)
-      } else if (entry.isFile()) {
+      } else if (entryStat.isFile()) {
         if (result.length >= DRIVE_LOCAL_UPLOAD_MAX_FILES) {
           throw createDriveLocalUploadTooManyFilesError()
         }
 
-        const fileStat = await fileSystem.stat(absolutePath)
-        result.push({ absolutePath, relativePath, size: String(fileStat.size), sizeBytes: fileStat.size })
+        result.push({ absolutePath, relativePath, size: String(entryStat.size), sizeBytes: entryStat.size })
       }
     }
   }
