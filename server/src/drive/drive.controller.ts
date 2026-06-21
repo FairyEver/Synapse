@@ -19,6 +19,12 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
+import { DriveAnnotationService } from "./drive-annotation.service"
+import {
+  parseDriveAnnotationCommentUpdateBody,
+  parseDriveAnnotationCreateBody,
+  parseDriveAnnotationReplyBody,
+} from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
@@ -97,6 +103,7 @@ export class DriveUserController {
   constructor(
     private readonly drive: DriveService,
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
+    @Optional() private readonly annotations?: DriveAnnotationService,
   ) {}
 
   @Get("/public-assets")
@@ -421,6 +428,72 @@ export class DriveUserController {
     })
   }
 
+  @Get("/browser/owner/items/:itemId/annotations")
+  listOwnerAnnotations(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveAnnotationService(this.annotations).listOwnerAnnotations(request.user!.id, itemId)
+  }
+
+  @Post("/browser/owner/items/:itemId/annotations")
+  createOwnerAnnotation(
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).createOwnerAnnotation(
+      request.user!.id,
+      itemId,
+      parseDriveAnnotationCreateBody(body),
+    )
+  }
+
+  @Post("/browser/owner/items/:itemId/annotations/:threadId/comments")
+  replyOwnerAnnotation(
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).replyOwnerAnnotation(
+      request.user!.id,
+      itemId,
+      threadId,
+      parseDriveAnnotationReplyBody(body),
+    )
+  }
+
+  @Patch("/browser/owner/items/:itemId/annotations/comments/:commentId")
+  updateOwnerAnnotationComment(
+    @Param("itemId") itemId: string,
+    @Param("commentId") commentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateOwnerComment(
+      request.user!.id,
+      itemId,
+      commentId,
+      parseDriveAnnotationCommentUpdateBody(body),
+    )
+  }
+
+  @Delete("/browser/owner/items/:itemId/annotations/comments/:commentId")
+  deleteOwnerAnnotationComment(
+    @Param("itemId") itemId: string,
+    @Param("commentId") commentId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId)
+  }
+
+  @Delete("/browser/owner/items/:itemId/annotations/:threadId")
+  deleteOwnerAnnotationThread(
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteOwnerThread(request.user!.id, itemId, threadId)
+  }
+
   @Patch("/browser/owner/items/:itemId/content")
   updateOwnerItemContent(
     @Param("itemId") itemId: string,
@@ -679,6 +752,7 @@ export class DrivePublicController {
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly dashboardAuth?: AdminAuthService,
+    @Optional() private readonly annotations?: DriveAnnotationService,
   ) {}
 
   @Get("/files/:assetId")
@@ -796,6 +870,187 @@ export class DrivePublicController {
       childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
       request,
       response,
+    })
+  }
+
+  @Get("/api/drive/browser/shares/:shareId/annotations")
+  listShareRootAnnotations(@Param("shareId") shareId: string, @Req() request: Request) {
+    return requireDriveAnnotationService(this.annotations).listShareAnnotations({
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @Get("/api/drive/browser/shares/:shareId/items/:itemId/annotations")
+  listShareItemAnnotations(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request) {
+    return requireDriveAnnotationService(this.annotations).listShareAnnotations({
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/annotations")
+  createShareRootAnnotation(@Param("shareId") shareId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveAnnotationService(this.annotations).createShareAnnotation({
+      actorUserId: request.user!.id,
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationCreateBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/annotations")
+  createShareItemAnnotation(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).createShareAnnotation({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationCreateBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/annotations/:threadId/comments")
+  replyShareRootAnnotation(
+    @Param("shareId") shareId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).replyShareAnnotation({
+      actorUserId: request.user!.id,
+      shareId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationReplyBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/comments")
+  replyShareItemAnnotation(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).replyShareAnnotation({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationReplyBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/annotations/comments/:commentId")
+  updateShareRootAnnotationComment(
+    @Param("shareId") shareId: string,
+    @Param("commentId") commentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareComment({
+      actorUserId: request.user!.id,
+      shareId,
+      commentId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationCommentUpdateBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId")
+  updateShareItemAnnotationComment(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("commentId") commentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareComment({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      commentId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parseDriveAnnotationCommentUpdateBody(body),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/browser/shares/:shareId/annotations/comments/:commentId")
+  deleteShareRootAnnotationComment(
+    @Param("shareId") shareId: string,
+    @Param("commentId") commentId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteShareComment({
+      actorUserId: request.user!.id,
+      shareId,
+      commentId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId")
+  deleteShareItemAnnotationComment(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("commentId") commentId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteShareComment({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      commentId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/browser/shares/:shareId/annotations/:threadId")
+  deleteShareRootAnnotationThread(
+    @Param("shareId") shareId: string,
+    @Param("threadId") threadId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteShareThread({
+      actorUserId: request.user!.id,
+      shareId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId")
+  deleteShareItemAnnotationThread(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).deleteShareThread({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      threadId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
   }
 
@@ -1149,6 +1404,11 @@ function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: strin
 function requirePublicAssetService(publicAssets: DrivePublicAssetService | undefined): DrivePublicAssetService {
   if (!publicAssets) throw new Error("DrivePublicAssetService is not available.")
   return publicAssets
+}
+
+function requireDriveAnnotationService(annotations: DriveAnnotationService | undefined): DriveAnnotationService {
+  if (!annotations) throw new Error("DriveAnnotationService is not available.")
+  return annotations
 }
 
 function parseAccessSettings(body: unknown): DriveAccessSettingsInput | undefined {
