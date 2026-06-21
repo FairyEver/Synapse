@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Head, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -221,6 +221,13 @@ export class AdminController {
       detail: { filters, count: data.length },
       ipAddress: request.ip ?? "",
     })
+  }
+
+  @Head("/audit-logs/export")
+  checkExportAuditLogs(@Res() response: Response) {
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
+    response.end()
   }
 
   private async recordAdminRead(
