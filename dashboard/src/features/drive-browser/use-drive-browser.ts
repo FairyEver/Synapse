@@ -62,9 +62,11 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const loadingChildrenPageKeyRef = useRef<string | null>(null)
   const queryKeyPayload = useMemo(() => toDriveBrowserQueryKey(input), [input])
   const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
+  const unlockedKeyPayload = useMemo(() => toUnlockedSnapshotKey(input), [input])
+  const unlockedKeySignature = useMemo(() => JSON.stringify(unlockedKeyPayload), [unlockedKeyPayload])
   const queryKeySignatureRef = useRef(queryKeySignature)
   const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
-  const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, queryKeySignature)
+  const unlockedSnapshot = keyedSnapshotForSignature(unlockedSnapshotState, unlockedKeySignature)
   const pagedSnapshot = keyedSnapshotForSignature(pagedSnapshotState, queryKeySignature)
 
   const query = useQuery({
@@ -79,11 +81,16 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       return requireDriveBrowserSnapshot(result)
     },
     onSuccess: (snapshot) => {
-      setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot })
+      setUnlockedSnapshotState({ keySignature: unlockedKeySignature, snapshot })
       setPagedSnapshotState(null)
     },
   })
   const querySnapshot = toDriveBrowserSnapshot(query.data)
+  const shareInput = input.context === 'share' ? input : null
+  useEffect(() => {
+    if (!shareInput?.initialPassword || !querySnapshot) return
+    setUnlockedSnapshotState({ keySignature: unlockedKeySignature, snapshot: querySnapshot })
+  }, [querySnapshot, shareInput?.initialPassword, shareInput?.shareId, shareInput?.itemId, unlockedKeySignature])
   const loadMoreMutation = useMutation({
     mutationFn: async (variables: { readonly snapshot: DriveBrowserSnapshotDto; readonly pageKey: string; readonly queryKeySignature: string }) => {
       const snapshot = variables.snapshot
@@ -125,18 +132,20 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   })
   useEffect(() => {
     queryKeySignatureRef.current = queryKeySignature
-    setUnlockedSnapshotState(null)
     setPagedSnapshotState(null)
     loadingChildrenPageKeyRef.current = null
     loadMoreMutation.reset()
   }, [queryKeySignature])
+  useEffect(() => {
+    setUnlockedSnapshotState(null)
+  }, [unlockedKeySignature])
 
   const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
   const reloadMutation = useMutation({
     mutationFn: async () => requireDriveBrowserSnapshot(await loadDriveBrowser(input)),
     onSuccess: (nextSnapshot) => {
       if (input.context === 'share') {
-        setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
+        setUnlockedSnapshotState({ keySignature: unlockedKeySignature, snapshot: nextSnapshot })
       } else {
         setPagedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       }
@@ -160,7 +169,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         nextSnapshot = savedSnapshot
       }
       if (input.context === 'share') {
-        setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
+        setUnlockedSnapshotState({ keySignature: unlockedKeySignature, snapshot: nextSnapshot })
       } else {
         setPagedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       }
@@ -261,6 +270,15 @@ export function toDriveBrowserQueryKey(input: DriveBrowserInput) {
     shareId: input.shareId,
     itemId: input.itemId,
     initialPasswordFingerprint: fingerprintInitialPassword(input.initialPassword),
+  }
+}
+
+function toUnlockedSnapshotKey(input: DriveBrowserInput) {
+  if (input.context !== 'share') return input
+  return {
+    context: input.context,
+    shareId: input.shareId,
+    itemId: input.itemId,
   }
 }
 
