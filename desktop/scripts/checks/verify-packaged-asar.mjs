@@ -144,6 +144,20 @@ const usageAnalysisWorkerEntries = [
   "dist-electron/electron/services/usage-analysis/conversation-worker.js",
   "dist-electron/electron/services/usage-analysis/refresh-worker.js",
 ]
+const requiredExtraResourceFiles = [
+  {
+    relativePath: "templates/skills/synapse-content-mcp/meta.json",
+    label: "built-in content templates",
+  },
+  {
+    relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",
+    label: "Knowledge Base runtime template",
+  },
+  {
+    relativePath: "database/mcp/index.js",
+    label: "Database MCP runtime",
+  },
+]
 const usageAnalysisAllowedUnpackedPrefixes = [
   "dist-electron/electron/services/usage-analysis/",
   "dist-electron/electron/services/model-price/",
@@ -269,6 +283,23 @@ function verifyClaudeRuntime(unpackedPath, failures) {
   failures.push(`Claude SDK native binary is missing: ${expectedRelativePaths.join(" or ")}`)
 }
 
+function verifyExtraResources(resourcesPath, failures) {
+  for (const resource of requiredExtraResourceFiles) {
+    const filePath = path.join(resourcesPath, resource.relativePath)
+    if (!existsSync(filePath)) {
+      failures.push(`missing extra resource (${resource.label}): ${resource.relativePath}`)
+      continue
+    }
+    try {
+      if (!statSync(filePath).isFile()) {
+        failures.push(`extra resource is not a file (${resource.label}): ${resource.relativePath}`)
+      }
+    } catch (error) {
+      failures.push(`${resource.relativePath}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
 function verifyResources(resourcesPath, label) {
   const asarPath = path.join(resourcesPath, "app.asar")
   const unpackedPath = path.join(resourcesPath, "app.asar.unpacked")
@@ -372,6 +403,7 @@ function verifyResources(resourcesPath, label) {
   )
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
+  verifyExtraResources(resourcesPath, failures)
 
   if (failures.length > 0) {
     throw new Error([

@@ -245,6 +245,12 @@ describe("packaged asar verification", () => {
     return filePath
   }
 
+  async function writeExtraResourceFixtures(resourcesPath: string) {
+    await writeUnpackedFixture(resourcesPath, ["templates", "skills", "synapse-content-mcp", "meta.json"], "{}")
+    await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
+    await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
+  }
+
   it("verifies a Windows-style resources directory with unpacked files", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -253,6 +259,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
 
       const result = await execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -260,6 +267,26 @@ describe("packaged asar verification", () => {
       ])
 
       expect(result.stdout).toContain("Verified resources")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing required extraResources", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("missing extra resource"),
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -391,6 +418,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
       await writeUnpackedFixture(
         resourcesPath,
         ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
@@ -431,6 +459,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
       await writeUnpackedFixture(
         resourcesPath,
         ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
