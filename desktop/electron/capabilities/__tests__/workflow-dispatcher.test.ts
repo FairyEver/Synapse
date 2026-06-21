@@ -471,6 +471,76 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
+  it("denies workflow discovery and inspect reads before calling handlers", async () => {
+    const cases = [
+      {
+        action: "workflow.node_type.list",
+        params: {},
+        resource: "workflow:workflow.node_type.list",
+        assertNotCalled: (deps: WorkflowDispatchDeps) => {
+          expect(deps.nodeTypeRegistry.listTypes).not.toHaveBeenCalled()
+        },
+      },
+      {
+        action: "workflow.node_type.describe",
+        params: { nodeType: "prompt" },
+        resource: "workflow:workflow.node_type.describe",
+        assertNotCalled: (deps: WorkflowDispatchDeps) => {
+          expect(deps.nodeTypeRegistry.getManifest).not.toHaveBeenCalled()
+        },
+      },
+      {
+        action: "workflow.definition.inspect",
+        params: {
+          definition: {
+            id: "wf-inspect", name: "Inspect", description: "", version: "v1",
+            createdAt: 1, updatedAt: 2, params: [],
+            nodes: [endNode("end")],
+            edges: [],
+          },
+        },
+        resource: "workflow:wf-inspect",
+        assertNotCalled: (deps: WorkflowDispatchDeps) => {
+          expect(deps.nodeTypeRegistry.getManifest).not.toHaveBeenCalled()
+        },
+      },
+    ] as const
+
+    for (const testCase of cases) {
+      const auditSink = {
+        record: vi.fn(),
+        list: () => [],
+        clearForTests: vi.fn(),
+      }
+      const permissionGuard = {
+        registerPolicy: vi.fn(),
+        check: vi.fn(async () => ({ allowed: false as const, reason: "workflow read denied", policyId: "deny-workflow-read" })),
+      }
+      const deps = makeDeps({ permissionGuard, auditSink })
+      const dispatcher = createWorkflowDispatcher(deps)
+
+      await expect(dispatcher.dispatch(testCase.action, testCase.params, { source: "mcp-http" }))
+        .rejects
+        .toThrow("workflow read denied")
+
+      testCase.assertNotCalled(deps)
+      expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+        action: "workflow.read",
+        resource: testCase.resource,
+      }))
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "workflow.read",
+        resource: testCase.resource,
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          source: "mcp-http",
+          workflowAction: testCase.action,
+          policyId: "deny-workflow-read",
+        }),
+      }))
+    }
+  })
+
   it("audits permission guard failures before calling the workflow service", async () => {
     const auditSink = {
       record: vi.fn(),

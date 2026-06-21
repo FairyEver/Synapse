@@ -516,8 +516,11 @@ const MUTATING_WORKFLOW_ACTIONS = new Set([
 ])
 
 const READING_WORKFLOW_ACTIONS = new Set([
+  "workflow.node_type.list",
+  "workflow.node_type.describe",
   "workflow.definition.list",
   "workflow.definition.get",
+  "workflow.definition.inspect",
   "workflow.run.get",
   "workflow.run.list",
 ])
