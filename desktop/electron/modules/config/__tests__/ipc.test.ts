@@ -46,8 +46,10 @@ vi.mock("../../../services/config-store", () => ({
 
 vi.mock("../../../services/config-backup-service", () => ({
   configBackupService: {
+    commitImport: vi.fn(),
     exportBackup: vi.fn(),
     importBackup: vi.fn(),
+    prepareImport: vi.fn(),
     readImport: vi.fn(),
     selectExportTarget: vi.fn(),
     selectImportSource: vi.fn(),
@@ -255,7 +257,8 @@ describe("configIpcModule", () => {
   it("returns filePath for config backup import", async () => {
     const { configBackupService } = await import("../../../services/config-backup-service")
     vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/synapse-backup.json")
-    vi.mocked(configBackupService.readImport).mockResolvedValue({ filePath: "/tmp/synapse-backup.json" })
+    vi.mocked(configBackupService.prepareImport).mockResolvedValue(importPlanFixture())
+    vi.mocked(configBackupService.commitImport).mockResolvedValue({ filePath: "/tmp/synapse-backup.json" })
     const harness = createHarness()
 
     const result = await harness.invoke("synapse:config:import-backup", undefined)
@@ -263,10 +266,105 @@ describe("configIpcModule", () => {
     expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
   })
 
+  it("checks and audits secret writes for backup-imported variables", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    previousConfig.global.variables = [{ name: "TOKEN", value: "old-secret" }]
+    const nextConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    nextConfig.global.variables = [
+      { name: "TOKEN", value: "new-secret" },
+      { name: "BACKUP_VALUE", value: "backup-secret" },
+    ]
+    vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/synapse-backup.json")
+    vi.mocked(configBackupService.prepareImport).mockResolvedValue(importPlanFixture({ previousConfig, nextConfig }))
+    vi.mocked(configBackupService.commitImport).mockResolvedValue({ filePath: "/tmp/synapse-backup.json" })
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+      registerPolicy: vi.fn(),
+    }
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const harness = createHarness({ auditSink, permissionGuard })
+
+    await harness.invoke("synapse:config:import-backup", undefined)
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:TOKEN",
+      context: expect.objectContaining({
+        source: "config.importBackup",
+        variableAction: "config.importBackup.variables",
+        includeValue: false,
+      }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:BACKUP_VALUE",
+    }))
+    expect(configBackupService.commitImport).toHaveBeenCalledWith(expect.objectContaining({ nextConfig }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:user:BACKUP_VALUE",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("new-secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("backup-secret")
+  })
+
+  it("blocks backup import when imported variable writes are denied", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    const previousConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    const nextConfig = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    nextConfig.global.variables = [{ name: "BACKUP_VALUE", value: "backup-secret" }]
+    vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/synapse-backup.json")
+    vi.mocked(configBackupService.prepareImport).mockResolvedValue(importPlanFixture({ previousConfig, nextConfig }))
+    const permissionGuard = {
+      check: vi.fn(async (input: { readonly action: string }) => (
+        input.action === "secret.write"
+          ? { allowed: false as const, reason: "secret denied", policyId: "secret-policy" }
+          : { allowed: true as const }
+      )),
+      registerPolicy: vi.fn(),
+    }
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const harness = createHarness({ auditSink, permissionGuard })
+
+    await expect(harness.invoke("synapse:config:import-backup", undefined)).rejects.toThrow("secret denied")
+
+    expect(configBackupService.commitImport).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "denied",
+      resource: "variable:user:BACKUP_VALUE",
+      metadata: expect.objectContaining({
+        reason: "secret denied",
+        policyId: "secret-policy",
+      }),
+    }))
+    expect(auditSink.record).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "config+identity",
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("backup-secret")
+  })
+
   it("does not record successful config writes when backup import is rejected", async () => {
     const { configBackupService } = await import("../../../services/config-backup-service")
     vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/large-synapse-backup.json")
-    vi.mocked(configBackupService.readImport).mockRejectedValue(new Error("备份文件超过 2097152 字节上限。"))
+    vi.mocked(configBackupService.prepareImport).mockRejectedValue(new Error("备份文件超过 2097152 字节上限。"))
     const auditSink = {
       clearForTests: vi.fn(),
       list: vi.fn(() => []),
@@ -416,6 +514,24 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
       defaultProviderModel: null,
       ...agent,
     },
+  }
+}
+
+function importPlanFixture(overrides: {
+  readonly previousConfig?: SynapseConfig
+  readonly nextConfig?: SynapseConfig
+} = {}) {
+  const previousConfig = overrides.previousConfig ?? configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+  const nextConfig = overrides.nextConfig ?? configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+  return {
+    filePath: "/tmp/synapse-backup.json",
+    identity: {
+      schemaVersion: 2 as const,
+      userId: "user-1",
+      generatedAt: "2026-06-21T00:00:00.000Z",
+    },
+    previousConfig,
+    nextConfig,
   }
 }
 

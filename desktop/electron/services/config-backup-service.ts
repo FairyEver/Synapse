@@ -36,6 +36,12 @@ type LegacyBackupRepositoryConfig = SynapseConfigBackup["config"]["repositories"
 type BackupConfigWithLegacyVariables = Omit<SynapseConfigBackup["config"], "repositories"> & {
   repositories: LegacyBackupRepositoryConfig[]
 }
+export type ConfigBackupPreparedImport = {
+  readonly filePath: string
+  readonly identity: SynapseConfigBackup["identity"]
+  readonly previousConfig: SynapseConfig
+  readonly nextConfig: SynapseConfigBackup["config"]
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -989,7 +995,7 @@ class ConfigBackupService {
    * Returns success result with message on success.
    * Returns null if cancelled (unreachable from code path where path is provided).
    */
-  async readImport(filePath: string): Promise<SynapseConfigBackupImportResult> {
+  async prepareImport(filePath: string): Promise<ConfigBackupPreparedImport> {
     const fileContent = await readBackupImportFile(filePath)
     let parsedValue: unknown
 
@@ -1002,14 +1008,25 @@ class ConfigBackupService {
     const backup = parseBackup(parsedValue)
 
     const previousConfig = await configStore.load()
-    await configStore.replace(mergeLocalMachineConfig(mergeBackupVariables(backup.config), previousConfig))
+    const nextConfig = mergeLocalMachineConfig(mergeBackupVariables(backup.config), previousConfig)
+
+    return {
+      filePath,
+      identity: backup.identity,
+      previousConfig,
+      nextConfig,
+    }
+  }
+
+  async commitImport(plan: ConfigBackupPreparedImport): Promise<SynapseConfigBackupImportResult> {
+    await configStore.replace(plan.nextConfig)
 
     try {
-      await userIdentityService.importIdentity(backup.identity)
+      await userIdentityService.importIdentity(plan.identity)
     } catch (identityError) {
       logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
       try {
-        await configStore.replace(previousConfig)
+        await configStore.replace(plan.previousConfig)
       } catch (rollbackError) {
         logger.error("Config backup import rollback failed.", {
           filePath: redactedFilePathForLog(),
@@ -1028,8 +1045,12 @@ class ConfigBackupService {
     })
 
     return {
-      filePath,
+      filePath: plan.filePath,
     }
+  }
+
+  async readImport(filePath: string): Promise<SynapseConfigBackupImportResult> {
+    return this.commitImport(await this.prepareImport(filePath))
   }
 
   async importBackup(

@@ -242,8 +242,29 @@ export const configIpcModule: IpcModule = {
           metadata: { source: "config.importBackup" },
         })
 
+        let importPlan: Awaited<ReturnType<typeof configBackupService.prepareImport>>
         try {
-          const result = await configBackupService.readImport(filePath)
+          importPlan = await configBackupService.prepareImport(filePath)
+        } catch (error) {
+          auditSink.record({
+            action: "fs.write",
+            actor,
+            resource: "config+identity",
+            outcome: "failed",
+            metadata: {
+              operation: "config.import",
+              source: "config.importBackup",
+              errorName: error instanceof Error ? error.name : typeof error,
+            },
+          })
+          throw error
+        }
+
+        const variableAudits = await authorizeVariableImport(ctx, importPlan.previousConfig.global.variables, importPlan.nextConfig.global.variables)
+
+        try {
+          const result = await configBackupService.commitImport(importPlan)
+          recordVariableAudits(ctx, variableAudits, "allowed")
           auditSink.record({
             action: "fs.write",
             actor,
@@ -263,6 +284,10 @@ export const configIpcModule: IpcModule = {
               source: "config.importBackup",
               errorName: error instanceof Error ? error.name : typeof error,
             },
+          })
+          recordVariableAudits(ctx, variableAudits, "failed", {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: String(error).length,
           })
           throw error
         }
@@ -397,7 +422,30 @@ async function authorizeVariablePatch(
   }
 
   const previousConfig = await configStore.load()
-  const plans = buildVariableAuditPlans(previousConfig.global.variables, nextVariables)
+  return authorizeVariableChanges(ctx, previousConfig.global.variables, nextVariables, {
+    source: "settings",
+    variableAction: "config.update.variables",
+  })
+}
+
+async function authorizeVariableImport(
+  ctx: IpcHandlerContext,
+  previousVariables: readonly SynapseVariable[],
+  nextVariables: readonly SynapseVariable[],
+): Promise<readonly VariableAuditEntry[]> {
+  return authorizeVariableChanges(ctx, previousVariables, nextVariables, {
+    source: "config.importBackup",
+    variableAction: "config.importBackup.variables",
+  })
+}
+
+async function authorizeVariableChanges(
+  ctx: IpcHandlerContext,
+  previousVariables: readonly SynapseVariable[],
+  nextVariables: readonly SynapseVariable[],
+  metadataBase: { readonly source: string; readonly variableAction: string },
+): Promise<readonly VariableAuditEntry[]> {
+  const plans = buildVariableAuditPlans(previousVariables, nextVariables)
   if (plans.length === 0) {
     return []
   }
@@ -410,8 +458,8 @@ async function authorizeVariablePatch(
   for (const plan of plans) {
     const resource = `variable:user:${plan.name}`
     const metadata = {
-      source: "settings",
-      variableAction: "config.update.variables",
+      source: metadataBase.source,
+      variableAction: metadataBase.variableAction,
       variableName: plan.name,
       change: plan.change,
       includeValue: false,
