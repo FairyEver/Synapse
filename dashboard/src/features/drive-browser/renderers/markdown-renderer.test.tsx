@@ -82,6 +82,18 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('textarea')).toBeNull()
   })
 
+  it('does not show comment controls for markdown previews whose file name is not .md', async () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.mdx' }) })
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(document.body.textContent).not.toContain('评论')
+    expect(document.querySelector('textarea')).toBeNull()
+  })
+
   it('scrolls to the rendered marker when a thread is focused from the rail', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
@@ -104,11 +116,24 @@ describe('DriveMarkdownRenderer', () => {
     const text = document.body.textContent ?? ''
     expect(text.indexOf('Earlier comment')).toBeLessThan(text.indexOf('Later comment'))
   })
+
+  it('shows orphaned anchor status in the comment rail after resolving current markdown', async () => {
+    annotationsMock.threads = [
+      thread({ body: 'Lost comment', range: { start: 0, end: 2 }, quote: '缺失' }),
+    ]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    expect(elementWithText('Lost comment').textContent).toContain('位置已变化')
+  })
 })
 
 function renderMarkdown({
+  currentItem = current(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
 }: {
+  readonly currentItem?: ReturnType<typeof current>
   readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
 } = {}) {
   host = document.createElement('div')
@@ -117,7 +142,7 @@ function renderMarkdown({
   act(() => {
     root?.render(
       <DriveMarkdownRenderer
-        current={current()}
+        current={currentItem}
         preview={preview()}
         annotationContext={annotationContext}
       />
@@ -125,10 +150,10 @@ function renderMarkdown({
   })
 }
 
-function current() {
+function current({ name = 'notes.md' }: { readonly name?: string } = {}) {
   return {
     id: 'item-1',
-    name: 'notes.md',
+    name,
     type: 'file',
     size: '12',
     mimeType: 'text/markdown',

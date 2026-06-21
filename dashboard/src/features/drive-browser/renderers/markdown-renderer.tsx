@@ -34,7 +34,9 @@ export function DriveMarkdownRenderer({
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
-  const annotations = useDriveAnnotations(annotationContext)
+  const annotationsEnabled = current.name.toLowerCase().endsWith('.md')
+  const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
+  const annotations = useDriveAnnotations(effectiveAnnotationContext)
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -44,9 +46,14 @@ export function DriveMarkdownRenderer({
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
   )
-  const canCreateAnnotation = Boolean(annotationContext) && (annotationContext?.context === 'owner' || isAuthenticated)
+  const canCreateAnnotation = annotationsEnabled
+    && Boolean(effectiveAnnotationContext)
+    && (effectiveAnnotationContext?.context === 'owner' || isAuthenticated)
+  const resolvedByThreadId = useMemo(
+    () => new Map(annotated.resolved.map((item) => [item.threadId, item])),
+    [annotated.resolved]
+  )
   const sortedThreads = useMemo(() => {
-    const resolvedByThreadId = new Map(annotated.resolved.map((item) => [item.threadId, item]))
     return [...annotations.threads].sort((a, b) => {
       const first = resolvedByThreadId.get(a.id)
       const second = resolvedByThreadId.get(b.id)
@@ -59,7 +66,15 @@ export function DriveMarkdownRenderer({
       if (typeof firstPosition !== 'number' && typeof secondPosition === 'number') return 1
       return Date.parse(a.createdAt) - Date.parse(b.createdAt)
     })
-  }, [annotated.resolved, annotations.threads])
+  }, [annotations.threads, resolvedByThreadId])
+  const railThreads = useMemo(
+    () => sortedThreads.map((thread) => {
+      const resolved = resolvedByThreadId.get(thread.id)
+      if (!resolved || resolved.anchorStatus === thread.anchorStatus) return thread
+      return { ...thread, anchorStatus: resolved.anchorStatus }
+    }),
+    [resolvedByThreadId, sortedThreads]
+  )
 
   useEffect(() => {
     if (commentsTouchedRef.current || annotations.threads.length === 0) return
@@ -127,18 +142,22 @@ export function DriveMarkdownRenderer({
                 目录
               </Button>
             ) : null}
-            <Button
-              type='button'
-              variant={commentsOpen ? 'secondary' : 'ghost'}
-              size='sm'
-              onClick={() => setCommentPanelOpen(!commentsOpen)}
-            >
-              <MessageSquare />
-              评论 {annotations.threads.length}
-            </Button>
-            <Button type='button' variant='ghost' size='icon' onClick={() => { void annotations.refresh() }}>
-              <RefreshCw />
-            </Button>
+            {annotationsEnabled ? (
+              <>
+                <Button
+                  type='button'
+                  variant={commentsOpen ? 'secondary' : 'ghost'}
+                  size='sm'
+                  onClick={() => setCommentPanelOpen(!commentsOpen)}
+                >
+                  <MessageSquare />
+                  评论 {annotations.threads.length}
+                </Button>
+                <Button type='button' variant='ghost' size='icon' onClick={() => { void annotations.refresh() }}>
+                  <RefreshCw />
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
         {pendingTarget ? (
@@ -196,7 +215,7 @@ export function DriveMarkdownRenderer({
         </div>
         {commentsOpen ? (
           <MarkdownCommentsRail
-            threads={sortedThreads}
+            threads={railThreads}
             activeThreadId={activeThreadId}
             onFocusThread={focusThread}
             onReply={annotations.reply}
