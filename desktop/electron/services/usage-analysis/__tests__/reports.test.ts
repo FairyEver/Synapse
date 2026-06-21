@@ -416,6 +416,34 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(service.getOverview({ preset: "all" }).totals.estimatedCost).toBe(14.4)
   })
 
+  it("parses only appended Codex usage lines when a session file grows", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".codex", "sessions")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "append-test.jsonl")
+    fs.writeFileSync(file, [
+      JSON.stringify({ type: "session_meta", timestamp: "2026-05-19T01:00:00.000Z", payload: { type: "session_meta", id: "s1", cwd: "/tmp/project", model_provider: "openai", source: "cli", cli_version: "1.0.0" } }),
+      JSON.stringify({ type: "turn_context", timestamp: "2026-05-19T01:00:01.000Z", payload: { type: "turn_context", model: "gpt-5.5" } }),
+      JSON.stringify({ type: "event_msg", timestamp: "2026-05-19T01:00:03.000Z", payload: { type: "token_count", info: { last_token_usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 30, reasoning_output_tokens: 10 } } } }),
+    ].join("\n"))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CodexUsageAnalysisService({ db, roots: [path.join(dir, ".codex", "sessions")] })
+    await service.refresh()
+
+    fs.appendFileSync(file, "\n" + [
+      JSON.stringify({ type: "turn_context", timestamp: "2026-05-19T01:00:04.000Z", payload: { type: "turn_context", model: "gpt-5.5" } }),
+      JSON.stringify({ type: "event_msg", timestamp: "2026-05-19T01:00:05.000Z", payload: { type: "token_count", info: { last_token_usage: { input_tokens: 50, cached_input_tokens: 0, output_tokens: 20, reasoning_output_tokens: 0 } } } }),
+    ].join("\n"))
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({ parsedFiles: 1, skippedFiles: 0, usageEvents: 1 })
+    expect(db.prepare("SELECT line_count FROM cx_scan_files WHERE file_path = ?").get(file)).toEqual({ line_count: 5 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_usage_events").get()).toEqual({ count: 2 })
+    expect(service.getOverview({ preset: "all" }).totals.tokens).toBe(210)
+  })
+
   it("keeps historical event costs stable after saving model-only price rules", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

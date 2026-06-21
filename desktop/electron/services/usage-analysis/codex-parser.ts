@@ -66,6 +66,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
 
   for await (const line of rl) {
     lineCount += 1
+    const eventLine = lineCount
     if (options.startLine && lineCount <= options.startLine) continue
     if (!line.trim()) continue
     let raw: Record<string, unknown>
@@ -118,7 +119,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
       }
       const cost = estimateModelUsageCost(currentModel, tokens, options.priceRules ?? [])
       usageEvents.push({
-        id: `${sessionId}:usage:${usageEvents.length}`,
+        id: `${sessionId}:usage:${eventLine}`,
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
@@ -146,7 +147,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
     if (payloadType === "function_call" || payloadType === "custom_tool_call") {
       const toolName = typeof payload.name === "string" ? payload.name : payloadType
       toolEvents.push({
-        id: `${sessionId}:tool:${toolEvents.length}`,
+        id: `${sessionId}:tool:${eventLine}`,
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
@@ -169,7 +170,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
     ) {
       const exitCode = Number(payload.exit_code)
       toolEvents.push({
-        id: `${sessionId}:tool:${toolEvents.length}`,
+        id: `${sessionId}:tool:${eventLine}`,
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
@@ -186,7 +187,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
 
     if (payloadType === "task_complete") {
       taskEvents.push({
-        id: typeof payload.turn_id === "string" ? payload.turn_id : `${sessionId}:task:${taskEvents.length}`,
+        id: typeof payload.turn_id === "string" ? payload.turn_id : `${sessionId}:task:${eventLine}`,
         sessionId,
         startedAt: typeof payload.started_at === "string" ? payload.started_at : "",
         completedAt: typeof payload.completed_at === "string" ? payload.completed_at : iso,

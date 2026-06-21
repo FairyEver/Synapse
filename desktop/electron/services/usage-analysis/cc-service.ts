@@ -1184,7 +1184,12 @@ async function refreshLegacyUsageNamespace(options: {
         continue
       }
 
-      const canAppend = options.prefix === "cc" && existing?.parse_status === "parsed" && fp.size >= existing.size && existing.line_count > 0
+      const canAppend = (
+        existing?.parse_status === "parsed"
+        && existing.pricing_rules_hash === pricingRulesHash
+        && fp.size >= existing.size
+        && existing.line_count > 0
+      )
       const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count, priceRules } : { priceRules })
       if (canAppend && parsed.lineCount <= existing.line_count) {
         markScanFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed.lineCount, pricingRulesHash)
