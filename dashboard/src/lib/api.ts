@@ -9,6 +9,11 @@ import type {
   ContentStoreVisibility,
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
+  DriveAnnotationCommentDto,
+  DriveAnnotationCommentUpdateInput,
+  DriveAnnotationCreateInput,
+  DriveAnnotationReplyInput,
+  DriveAnnotationThreadDto,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
   DriveFileContentUpdateResult,
@@ -427,6 +432,11 @@ function isProtectedDriveApiPath(path: string) {
 
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
+    || isProtectedDriveShareAnnotationPath(path)
+}
+
+function isProtectedDriveShareAnnotationPath(path: string) {
+  return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/annotations(?:/[^/?#]+/comments|/comments/[^/?#]+|/[^/?#]+)?(?:[?#].*)?$`, 'u').test(path)
 }
 
 type PaginationOptions = {
@@ -876,6 +886,62 @@ export const driveBrowserApi = {
         body: JSON.stringify(input),
       }
     ),
+}
+
+function ownerAnnotationPath(itemId: string, suffix = '') {
+  return `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/annotations${suffix}`
+}
+
+function shareAnnotationPath(shareId: string, itemId?: string | null, suffix = '') {
+  const base = itemId
+    ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/annotations`
+    : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/annotations`
+  return `${base}${suffix}`
+}
+
+export const driveAnnotationApi = {
+  listOwner: (itemId: string) =>
+    request<DriveAnnotationThreadDto[]>(ownerAnnotationPath(itemId)),
+  createOwner: (itemId: string, input: DriveAnnotationCreateInput) =>
+    request<DriveAnnotationThreadDto>(ownerAnnotationPath(itemId), {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  replyOwner: (itemId: string, threadId: string, input: DriveAnnotationReplyInput) =>
+    request<DriveAnnotationCommentDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/comments`), {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateOwnerComment: (itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput) =>
+    request<DriveAnnotationCommentDto>(ownerAnnotationPath(itemId, `/comments/${encodeURIComponent(commentId)}`), {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteOwnerComment: (itemId: string, commentId: string) =>
+    request<{ ok: true }>(ownerAnnotationPath(itemId, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
+  deleteOwnerThread: (itemId: string, threadId: string) =>
+    request<{ ok: true }>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
+  listShare: (shareId: string, itemId?: string | null) =>
+    request<DriveAnnotationThreadDto[]>(shareAnnotationPath(shareId, itemId)),
+  createShare: (shareId: string, itemId: string | null | undefined, input: DriveAnnotationCreateInput) =>
+    request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId), {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  replyShare: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationReplyInput) =>
+    request<DriveAnnotationCommentDto>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}/comments`), {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateShareComment: (shareId: string, itemId: string | null | undefined, commentId: string, input: DriveAnnotationCommentUpdateInput) =>
+    request<DriveAnnotationCommentDto>(shareAnnotationPath(shareId, itemId, `/comments/${encodeURIComponent(commentId)}`), {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteShareComment: (shareId: string, itemId: string | null | undefined, commentId: string) =>
+    request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
+  deleteShareThread: (shareId: string, itemId: string | null | undefined, threadId: string) =>
+    request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
 }
 
 type DriveFileVersionListOptions = {
