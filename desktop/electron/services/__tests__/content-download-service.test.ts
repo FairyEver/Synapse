@@ -6,6 +6,7 @@ import type { SynapseSkillDetail } from "../../../src/types/content"
 
 const mocks = vi.hoisted(() => ({
   copyAttachmentToPath: vi.fn(async () => true),
+  copyFile: vi.fn(),
   createZipArchive: vi.fn(async (_sourceDirectoryPath: string, outputFilePath: string) => {
     await writeFile(outputFilePath, "zip-by-runtime-archive", "utf8")
   }),
@@ -21,6 +22,15 @@ const mocks = vi.hoisted(() => ({
     }],
   })),
 }))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  mocks.copyFile.mockImplementation(actual.copyFile)
+  return {
+    ...actual,
+    copyFile: mocks.copyFile,
+  }
+})
 
 vi.mock("electron", () => ({
   app: {
@@ -160,5 +170,21 @@ describe("ContentDownloadService", () => {
 
     expect(mocks.createZipArchive).not.toHaveBeenCalled()
     await expect(readFile(targetPath, "utf8")).rejects.toThrow()
+  })
+
+  it("keeps the existing target when final archive copy fails", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skill.zip")
+    await writeFile(targetPath, "existing-export", "utf8")
+    mocks.getDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.copyFile.mockImplementationOnce(async (_sourcePath: string, destinationPath: string) => {
+      await writeFile(destinationPath, "partial-export", "utf8")
+      throw new Error("copy failed")
+    })
+
+    await expect(contentDownloadService.downloadSkill("skill-1", targetPath))
+      .rejects.toThrow("copy failed")
+
+    expect(await readFile(targetPath, "utf8")).toBe("existing-export")
   })
 })

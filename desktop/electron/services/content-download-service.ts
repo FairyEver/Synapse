@@ -1,4 +1,5 @@
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { randomBytes } from "node:crypto"
+import { copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { createZipArchive } from "../runtime/archive"
@@ -20,6 +21,7 @@ import { repositoryStore } from "./repository-store"
 
 const logger = createMainLogger("service.content-download")
 type ContentDownloadArchiveOptions = Pick<ZipArchiveOptions, "actor" | "processRunner">
+const ATOMIC_TARGET_TEMP_SUFFIX_BYTES = 8
 
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const config = await configStore.load()
@@ -68,6 +70,26 @@ async function withTemporaryOutput<T>(
   }
 }
 
+async function copyFileToTargetAtomically(sourcePath: string, targetPath: string): Promise<void> {
+  const targetDirectoryPath = path.dirname(targetPath)
+  const targetName = path.basename(targetPath)
+  const temporaryTargetPath = path.join(
+    targetDirectoryPath,
+    `.${targetName}.tmp-${randomBytes(ATOMIC_TARGET_TEMP_SUFFIX_BYTES).toString("hex")}`,
+  )
+
+  await mkdir(targetDirectoryPath, { recursive: true })
+
+  try {
+    await copyFile(sourcePath, temporaryTargetPath)
+    await rename(temporaryTargetPath, targetPath)
+  } catch (err) {
+    await rm(temporaryTargetPath, { force: true })
+      .catch((cleanupError) => logger.warn("Failed to clean up target temp file", cleanupError))
+    throw err
+  }
+}
+
 class ContentDownloadService {
   async download(
     contentType: SynapseContentType,
@@ -110,8 +132,8 @@ class ContentDownloadService {
     await withTemporaryOutput(definition.download.extension, async (tempPath) => {
       await writeFile(tempPath, file.content, "utf8")
       logger.info("Wrote text content to temp file.", { tempPath: path.basename(tempPath) })
-      await copyFile(tempPath, targetPath)
-      logger.info("Copied text content to target.", { targetPath: path.basename(targetPath) })
+      await copyFileToTargetAtomically(tempPath, targetPath)
+      logger.info("Replaced text content target.", { targetPath: path.basename(targetPath) })
     })
 
     logger.info("Text content download export completed.", {
@@ -177,8 +199,8 @@ class ContentDownloadService {
 
         await createSkillArchive(stagingDirectoryPath, tempPath, archiveOptions)
         logger.info("Created skill archive.", { tempPath: path.basename(tempPath) })
-        await copyFile(tempPath, targetPath)
-        logger.info("Copied archive to target.", { targetPath: path.basename(targetPath) })
+        await copyFileToTargetAtomically(tempPath, targetPath)
+        logger.info("Replaced archive target.", { targetPath: path.basename(targetPath) })
       } finally {
         await rm(stagingRoot, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging root", err))
       }
