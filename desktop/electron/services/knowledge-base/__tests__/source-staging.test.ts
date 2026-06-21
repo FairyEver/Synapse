@@ -7,6 +7,19 @@ import type { FetchUrl } from "../../source-acquisition/url-source"
 import { knowledgeBaseLogger } from "../logging"
 import { stageKnowledgeBaseUrlSource } from "../source-staging"
 
+const fsMocks = vi.hoisted(() => ({
+  writeFile: vi.fn(),
+}))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  fsMocks.writeFile.mockImplementation(actual.writeFile)
+  return {
+    ...actual,
+    writeFile: fsMocks.writeFile,
+  }
+})
+
 const roots: string[] = []
 
 async function tempDir(): Promise<string> {
@@ -17,6 +30,7 @@ async function tempDir(): Promise<string> {
 
 afterEach(async () => {
   vi.restoreAllMocks()
+  fsMocks.writeFile.mockClear()
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -119,6 +133,33 @@ describe("knowledge base URL source staging", () => {
 
     expect(first.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha.md" })
     expect(second.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha-2.md" })
+  })
+
+  it("does not expose a partial source when writing markdown fails", async () => {
+    const projectPath = await tempDir()
+    const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+    fsMocks.writeFile.mockImplementationOnce(async (filePath, _content, options) => {
+      await actualFs.writeFile(filePath, "partial markdown", options)
+      throw new Error("disk full")
+    })
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/articles/alpha",
+      status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
+      text: async () => "<html><body><h1>Alpha</h1></body></html>",
+    })
+
+    await expect(stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "https://example.com/articles/alpha",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })).rejects.toThrow("disk full")
+
+    await expect(access(path.join(projectPath, ".raw", "web", "2026", "05", "24", "alpha.md")))
+      .rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("stages URL sources with Windows reserved path names into safe files", async () => {

@@ -1,4 +1,5 @@
-import { lstat, mkdir, writeFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { link, lstat, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
@@ -82,8 +83,23 @@ function datePathSegments(date: Date): string[] {
 
 async function writeUtf8FileToAvailablePath(directoryPath: string, fileName: string, content: string): Promise<string> {
   return writeToAvailablePath(directoryPath, fileName, async (candidate) => {
-    await writeFile(candidate, content, { encoding: "utf8", flag: "wx" })
+    await writeUtf8FileToNewPathAtomically(candidate, content)
   })
+}
+
+async function writeUtf8FileToNewPathAtomically(filePath: string, content: string): Promise<void> {
+  const temporaryPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
+  )
+  try {
+    await writeFile(temporaryPath, content, "utf8")
+    await link(temporaryPath, filePath)
+    await rm(temporaryPath, { force: true }).catch(() => undefined)
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 async function writeToAvailablePath(
