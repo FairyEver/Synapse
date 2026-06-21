@@ -350,6 +350,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       registry: {
         get: vi.fn((id: string) => {
           if (id === "core.project-containers") return containers
+          if (id === "knowledge-base.storage-migration-service") return { isActive: vi.fn(() => false) }
           if (id === "core.permission-guard") return { check: vi.fn() }
           if (id === "core.audit-sink") return { record: vi.fn() }
           throw new Error(`unexpected service ${id}`)
@@ -380,6 +381,73 @@ describe("bootstrap descriptors (T1.5)", () => {
       workspacePath: "/kb-root/knowledge-bases/kb-1",
       managedKnowledgeBase: true,
     }))
+  })
+
+  it("workflow Agent dependency rejects managed knowledge base projects during storage migration", async () => {
+    const managedProject = {
+      id: "kb-1",
+      name: "Knowledge Base",
+      path: "synapse-kb://kb-1",
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: "2026-05-24",
+          managed: true,
+          runtimeId: "kb-1",
+        },
+      },
+    }
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: null,
+          repositories: [],
+          global: {
+            knowledgeBaseStorage: { mode: "custom", rootPath: "/kb-root" },
+            projects: [managedProject],
+          },
+        })),
+      },
+    }))
+
+    const containers = { open: vi.fn() }
+    const storageMigration = { isActive: vi.fn(() => true) }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return containers
+          if (id === "knowledge-base.storage-migration-service") return storageMigration
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: { prompt: string; projectId?: string; abortSignal: AbortSignal }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    const result = await engine.agentDeps.sendToAgent({
+      prompt: "use kb",
+      projectId: "kb-1",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "知识库存储迁移正在进行，请稍后再试。",
+    })
+    expect(containers.open).not.toHaveBeenCalled()
   })
 
   it("coreWorkflowEngineDescriptor resolves repository workspace paths for Codex nodes", async () => {
