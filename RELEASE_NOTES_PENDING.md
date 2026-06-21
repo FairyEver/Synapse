@@ -315,5 +315,6 @@
 - 知识库 `/wiki` 模板不再要求 Agent 在操作结束后追加上游社区推广 footer。
 - 仓库初始化遇到桌面、下载、源码目录等危险路径时会立即阻断，不再先扫描并统计目录里的全部顶层文件。
 - 配置 Git 凭据助手失败时会尽量恢复原有 `credential.helper`，不再因为新配置写入失败而丢掉旧的凭据保存方式。
+- Model Price MCP 内置 skill 会明确使用 `model_price_rule_enable` 启用已有规则，Agent 不再误把启用当成价格更新。
 
 ## 技术调整

@@ -24,9 +24,10 @@ Do not use this skill for Database tables, Scheduler tasks, Workflow definitions
 4. Use `model_price_rule_get` when the user names a specific rule id or when you need to inspect one rule before changing it.
 5. Use `model_price_rule_create` only when no existing rule should be changed.
 6. Use `model_price_rule_update` for partial price or pattern edits. Pass only fields that should change.
-7. Use `model_price_rule_disable` to keep a rule but stop matching it.
-8. Use `model_price_rule_delete` only when the user wants one rule removed.
-9. Use `model_price_rule_clear` only when the user explicitly asks to remove every price rule.
+7. Use `model_price_rule_enable` when the user wants a disabled rule to match again.
+8. Use `model_price_rule_disable` to keep a rule but stop matching it.
+9. Use `model_price_rule_delete` only when the user wants one rule removed.
+10. Use `model_price_rule_clear` only when the user explicitly asks to remove every price rule.
 
 ## Safety Rules
 

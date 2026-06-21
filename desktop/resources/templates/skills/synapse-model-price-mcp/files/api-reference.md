@@ -147,11 +147,13 @@ Update one price field:
 2. Identify the exact rule and confirm ambiguity if multiple rules could match.
 3. Call `model_price_rule_update` with `ruleId` and only the changed field.
 
-Disable or delete:
+Enable, disable, or delete:
 
 1. Call `model_price_rule_list`.
 2. Use the returned `id` as `ruleId`.
-3. Call `model_price_rule_disable` to keep the rule, or `model_price_rule_delete` only for explicit removal.
+3. Call `model_price_rule_enable` when a disabled rule should match again.
+4. Call `model_price_rule_disable` to keep the rule but stop matching it.
+5. Call `model_price_rule_delete` only for explicit removal.
 
 Clear all rules:
 
