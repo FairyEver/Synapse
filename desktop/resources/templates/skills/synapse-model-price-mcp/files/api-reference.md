@@ -20,6 +20,24 @@ Fields:
 
 Use this to find models with `priceKnown: false`. `matchedRuleId` is a rule id, not a model name.
 
+## List And Import Presets
+
+`model_price_preset_list`
+
+```json
+{}
+```
+
+Lists built-in presets. Use the returned `id` field as `presetId`.
+
+`model_price_preset_import`
+
+```json
+{ "presetId": "deepseek-official" }
+```
+
+Imports or refreshes one built-in preset. Existing user rules that do not match preset patterns are preserved.
+
 ## List And Get Rules
 
 `model_price_rule_list`
@@ -98,6 +116,16 @@ Disable a rule when you want to keep it for later but stop matching it.
 
 This hard-deletes the rule. Use only when the user explicitly wants removal.
 
+## Clear Rules
+
+`model_price_rule_clear`
+
+```json
+{}
+```
+
+Clears every model price rule. Use only when the user explicitly asks for a full reset.
+
 ## Common Flows
 
 Find unpriced used models:
@@ -106,6 +134,12 @@ Find unpriced used models:
 2. Look for rows with `priceKnown: false`.
 3. Ask the user for prices if they did not provide them.
 4. Create a rule with `model_price_rule_create`.
+
+Import built-in prices:
+
+1. Call `model_price_preset_list`.
+2. Choose the exact preset requested by the user.
+3. Call `model_price_preset_import` with the returned `id`.
 
 Update one price field:
 
@@ -118,5 +152,10 @@ Disable or delete:
 1. Call `model_price_rule_list`.
 2. Use the returned `id` as `ruleId`.
 3. Call `model_price_rule_disable` to keep the rule, or `model_price_rule_delete` only for explicit removal.
+
+Clear all rules:
+
+1. Confirm the user explicitly requested a full reset.
+2. Call `model_price_rule_clear`.
 
 Model price rule changes affect current and future matching. Do not claim they changed historical usage costs or trigger historical repricing.

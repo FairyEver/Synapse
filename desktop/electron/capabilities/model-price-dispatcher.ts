@@ -7,9 +7,11 @@ import {
   ModelPriceService,
   MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
   MODEL_PRICE_COVERAGE_MAX_LIMIT,
+  isModelPricePresetId,
   type ModelPriceCoverageInput,
   type ModelPriceCoverageRange,
   type ModelPriceCoverageSource,
+  type ModelPricePresetId,
   type ModelPriceRuleInput,
   type ModelPriceRulePatch,
 } from "../services/model-price"
@@ -32,14 +34,17 @@ type MutableModelPriceRulePatch = {
 const RANGE_PRESETS: readonly ModelPriceCoverageRange[] = ["today", "7d", "30d", "90d", "all"]
 const PRICE_FIELDS = ["inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "reasoningPer1M"] as const
 const MODEL_PRICE_MUTATION_ACTIONS = new Set([
+  "model_price.preset.import",
   "model_price.rule.create",
   "model_price.rule.update",
+  "model_price.rule.clear",
   "model_price.rule.delete",
   "model_price.rule.enable",
   "model_price.rule.disable",
 ])
 const MODEL_PRICE_READ_ACTIONS = new Set([
   "model_price.used_model.list",
+  "model_price.preset.list",
   "model_price.rule.list",
   "model_price.rule.get",
 ])
@@ -103,6 +108,9 @@ function dispatchCorrelation(
   if (typeof params.ruleId === "string" && params.ruleId.trim()) {
     correlation.ruleId = sanitizeError(params.ruleId.trim())
   }
+  if (typeof params.presetId === "string" && params.presetId.trim()) {
+    correlation.presetId = sanitizeError(params.presetId.trim())
+  }
   if (typeof params.modelPattern === "string" && params.modelPattern.trim()) {
     correlation.hasModelPattern = true
   }
@@ -136,6 +144,10 @@ function dispatchModelPriceAction(
   switch (action) {
     case "model_price.used_model.list":
       return { ok: true, data: service.listCoverage(readCoverageParams(params)) }
+    case "model_price.preset.list":
+      return { ok: true, data: service.listPresets() }
+    case "model_price.preset.import":
+      return { ok: true, data: service.importPreset(requirePresetId(params)) }
     case "model_price.rule.list":
       return { ok: true, data: service.listRules() }
     case "model_price.rule.get":
@@ -144,6 +156,8 @@ function dispatchModelPriceAction(
       return { ok: true, data: service.createRule(readCreateParams(params)) }
     case "model_price.rule.update":
       return { ok: true, data: service.updateRule(requireString(params, "ruleId"), readPatchParams(params)) }
+    case "model_price.rule.clear":
+      return { ok: true, data: service.clearRules() }
     case "model_price.rule.delete":
       return { ok: true, data: service.deleteRule(requireString(params, "ruleId")) }
     case "model_price.rule.enable":
@@ -172,16 +186,18 @@ function modelPriceDispatchSecurity(
     return modelPriceReadSecurity(deps, action, params, context)
   }
   if (!MODEL_PRICE_MUTATION_ACTIONS.has(action)) return null
-  const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : action
-  const auditRuleId = sanitizeError(ruleId)
+  const resource = modelPriceMutationResource(action, params)
+  const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? sanitizeError(params.ruleId.trim()) : undefined
+  const presetId = typeof params.presetId === "string" && params.presetId.trim() ? sanitizeError(params.presetId.trim()) : undefined
   return {
     action: "database.mutate",
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
-    resource: `model-price-rule:${auditRuleId}`,
+    resource,
     metadata: {
       source: context.source ?? "api",
       modelPriceAction: action,
-      ...(ruleId !== action ? { ruleId: auditRuleId } : undefined),
+      ...(ruleId ? { ruleId } : undefined),
+      ...(presetId ? { presetId } : undefined),
     },
   }
 }
@@ -196,9 +212,11 @@ function modelPriceReadSecurity(
   const auditRuleId = ruleId ? sanitizeError(ruleId) : undefined
   const resource = action === "model_price.used_model.list"
     ? "model-price:used-models"
-    : action === "model_price.rule.list"
-      ? "model-price-rules"
-      : `model-price-rule:${auditRuleId ?? action}`
+    : action === "model_price.preset.list"
+      ? "model-price-presets"
+      : action === "model_price.rule.list"
+        ? "model-price-rules"
+        : `model-price-rule:${auditRuleId ?? action}`
   return {
     action: "database.read",
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
@@ -209,6 +227,20 @@ function modelPriceReadSecurity(
       ...(auditRuleId ? { ruleId: auditRuleId } : undefined),
     },
   }
+}
+
+function modelPriceMutationResource(action: string, params: Record<string, unknown>): string {
+  if (action === "model_price.preset.import") {
+    const presetId = typeof params.presetId === "string" && params.presetId.trim()
+      ? sanitizeError(params.presetId.trim())
+      : action
+    return `model-price-preset:${presetId}`
+  }
+  if (action === "model_price.rule.clear") return "model-price-rules"
+  const ruleId = typeof params.ruleId === "string" && params.ruleId.trim()
+    ? sanitizeError(params.ruleId.trim())
+    : action
+  return `model-price-rule:${ruleId}`
 }
 
 async function authorizeModelPriceDispatch(
@@ -245,6 +277,14 @@ function requireString(params: Record<string, unknown>, key: string): string {
     throw new Error(`Missing or invalid '${key}': expected non-empty string`)
   }
   return value.trim()
+}
+
+function requirePresetId(params: Record<string, unknown>): ModelPricePresetId {
+  const presetId = requireString(params, "presetId")
+  if (!isModelPricePresetId(presetId)) {
+    throw new Error("Invalid 'presetId': expected a built-in model price preset ID")
+  }
+  return presetId
 }
 
 function optionalBoolean(params: Record<string, unknown>, key: string): boolean | undefined {

@@ -4,6 +4,7 @@ import { initUsageAnalysisSchema } from "../../services/usage-analysis/db-schema
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createModelPriceCapabilityDispatcher } from "../model-price-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
+import { MODEL_PRICE_MCP_TOOL_ACTIONS, buildModelPriceTools } from "../../../synapse-capabilities/shared/model-price-domain"
 
 function createTestDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
@@ -49,6 +50,19 @@ function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
 }
 
 describe("model price capability dispatcher", () => {
+  it("exposes preset import and clear tools through model price MCP actions", () => {
+    const toolNames = buildModelPriceTools().map((tool) => tool.name)
+
+    expect(toolNames).toEqual(expect.arrayContaining([
+      "model_price_preset_list",
+      "model_price_preset_import",
+      "model_price_rule_clear",
+    ]))
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_list).toBe("model_price.preset.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("model_price.preset.import")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("model_price.rule.clear")
+  })
+
   it("checks permission and audits model price read actions", async () => {
     const db = createTestDb()
     const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
@@ -67,10 +81,11 @@ describe("model price capability dispatcher", () => {
     const ruleId = (created.data as { id: string }).id
 
     await dispatcher.dispatch("model_price.used_model.list", {}, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
+    await dispatcher.dispatch("model_price.preset.list", {}, { source: "mcp-http" })
     await dispatcher.dispatch("model_price.rule.list", {}, { source: "mcp-http" })
     await dispatcher.dispatch("model_price.rule.get", { ruleId }, { source: "mcp-http" })
 
-    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(permissionGuard.check).toHaveBeenCalledTimes(4)
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.read",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
@@ -80,11 +95,16 @@ describe("model price capability dispatcher", () => {
         modelPriceAction: "model_price.used_model.list",
       }),
     }))
-    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(3)
+    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(4)
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.read",
       outcome: "allowed",
       resource: "model-price:used-models",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.read",
+      outcome: "allowed",
+      resource: "model-price-presets",
     }))
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.read",
@@ -135,6 +155,60 @@ describe("model price capability dispatcher", () => {
       action: "database.mutate",
       outcome: "allowed",
       resource: "model-price-rule:model_price.rule.create",
+    }))
+    db.close()
+  })
+
+  it("checks permission and audits preset import and full clear mutations", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    const presets = await dispatcher.dispatch("model_price.preset.list", {}, { source: "api" })
+    expect(presets.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "deepseek-official", ruleCount: expect.any(Number) }),
+    ]))
+
+    const imported = await dispatcher.dispatch("model_price.preset.import", {
+      presetId: "deepseek-official",
+    }, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
+    expect(imported.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ modelPattern: "deepseek-v4-pro", source: "builtin" }),
+    ]))
+
+    const cleared = await dispatcher.dispatch("model_price.rule.clear", {}, { source: "mcp-http" })
+    expect(cleared).toEqual({ ok: true, data: [] })
+    await expect(dispatcher.dispatch("model_price.rule.list", {}, { source: "api" }))
+      .resolves.toEqual({ ok: true, data: [] })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      resource: "model-price-preset:deepseek-official",
+      context: expect.objectContaining({
+        modelPriceAction: "model_price.preset.import",
+        presetId: "deepseek-official",
+      }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      resource: "model-price-rules",
+      context: expect.objectContaining({
+        modelPriceAction: "model_price.rule.clear",
+      }),
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "allowed",
+      resource: "model-price-preset:deepseek-official",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "allowed",
+      resource: "model-price-rules",
     }))
     db.close()
   })

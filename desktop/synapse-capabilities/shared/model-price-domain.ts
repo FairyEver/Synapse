@@ -3,10 +3,17 @@ import { capabilityIdToMcpTool } from "./naming"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
+const MODEL_PRICE_PRESET_IDS = ["openai", "anthropic", "deepseek-official", "aliyun-bailian", "other"] as const
 
 const ruleIdProperty = {
   type: "string",
   description: "Opaque model price rule ID from a rule's id field. This is not a model name and not modelPattern. Call model_price_rule_list first when only modelPattern is known.",
+}
+
+const presetIdProperty = {
+  type: "string",
+  enum: [...MODEL_PRICE_PRESET_IDS],
+  description: "Built-in model price preset ID. Call model_price_preset_list first when the preset ID is unknown.",
 }
 
 const priceProperty = (label: string) => ({
@@ -17,10 +24,13 @@ const priceProperty = (label: string) => ({
 
 const modelPriceCapabilities: readonly CapabilityDefinition[] = [
   { id: "model_price.used_model.list" as CapabilityId, title: "List used models", description: "List models seen in CC and Codex usage data with current price-rule match status.", mutates: false },
+  { id: "model_price.preset.list" as CapabilityId, title: "List price presets", description: "List built-in model price presets that can be imported.", mutates: false },
+  { id: "model_price.preset.import" as CapabilityId, title: "Import price preset", description: "Import or refresh rules from one built-in model price preset.", mutates: true },
   { id: "model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules. The id field is the opaque rule ID, not a rule name.", mutates: false },
   { id: "model_price.rule.get" as CapabilityId, title: "Get price rule", description: "Get one model price rule by opaque ruleId.", mutates: false },
   { id: "model_price.rule.create" as CapabilityId, title: "Create price rule", description: "Create one model price rule.", mutates: true },
   { id: "model_price.rule.update" as CapabilityId, title: "Update price rule", description: "Partially update one model price rule by opaque ruleId.", mutates: true },
+  { id: "model_price.rule.clear" as CapabilityId, title: "Clear price rules", description: "Clear all model price rules.", mutates: true },
   { id: "model_price.rule.delete" as CapabilityId, title: "Delete price rule", description: "Hard-delete one model price rule by opaque ruleId.", mutates: true },
   { id: "model_price.rule.enable" as CapabilityId, title: "Enable price rule", description: "Enable one model price rule.", mutates: true },
   { id: "model_price.rule.disable" as CapabilityId, title: "Disable price rule", description: "Disable one model price rule without deleting it.", mutates: true },
@@ -63,6 +73,16 @@ export function buildModelPriceTools(): McpToolDefinition[] {
       inputSchema: { type: "object", properties: {} },
     },
     {
+      name: "model_price_preset_list",
+      description: "List built-in model price presets available for import. Importing a preset adds missing rules and refreshes existing preset-matched rules.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "model_price_preset_import",
+      description: "Import or refresh one built-in model price preset by presetId. Existing user rules that do not match preset patterns are preserved.",
+      inputSchema: { type: "object", properties: { presetId: presetIdProperty }, required: ["presetId"] },
+    },
+    {
       name: "model_price_rule_get",
       description: "Get one model price rule by opaque ruleId.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
@@ -97,6 +117,11 @@ export function buildModelPriceTools(): McpToolDefinition[] {
       name: "model_price_rule_delete",
       description: "Hard-delete one model price rule by opaque ruleId.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
+    },
+    {
+      name: "model_price_rule_clear",
+      description: "Clear all model price rules. Use only when the user explicitly asks to remove every rule.",
+      inputSchema: { type: "object", properties: {} },
     },
     {
       name: "model_price_rule_enable",
