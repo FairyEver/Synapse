@@ -49,6 +49,48 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     expect(prepared.content.length).toBeLessThan(12_000)
   })
 
+  it("ignores reported sources omitted from a bounded preflight batch", async () => {
+    const root = await createKnowledgeBaseRoot()
+    for (let index = 0; index < 125; index += 1) {
+      await writeFile(path.join(root, ".raw", `batch-${String(index).padStart(3, "0")}.md`), `# Source ${index}\n`, "utf8")
+    }
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    const prepared = await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+    await writeFile(path.join(root, "wiki", "sources", "batch-124.md"), "# Batch 124\n", "utf8")
+
+    expect(prepared.content).not.toContain(".raw/batch-124.md")
+    await coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [{
+              source: ".raw/batch-124.md",
+              pages_created: ["wiki/sources/batch-124.md"],
+            }],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })
+
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.status).toBe("valid")
+    expect(result.manifest.sources).not.toHaveProperty(".raw/batch-124.md")
+  })
+
   it("rejects wiki ingest preflight when the raw manifest is invalid", async () => {
     const root = await createKnowledgeBaseRoot()
     await writeFile(path.join(root, ".raw", ".manifest.json"), "{", "utf8")

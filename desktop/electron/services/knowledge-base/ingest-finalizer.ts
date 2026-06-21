@@ -63,12 +63,14 @@ export class KnowledgeBaseIngestCoordinator {
       })
       throw new Error("知识库资料清单 .raw/.manifest.json 已损坏，请修复后再运行 /wiki-ingest。")
     }
+    const changedSources = scan.sources.filter((source) => source.state !== "unchanged" || force)
+    const listedSources = selectListedPreflightSources(changedSources)
     this.preflights.set(context.turnId, {
-      sources: scan.sources.filter((source) => source.state !== "unchanged" || force),
+      sources: listedSources,
     })
     return {
       ...message,
-      content: `${message.content}\n\n${buildPreflightAppendix(scan.sources, force)}`,
+      content: `${message.content}\n\n${buildPreflightAppendix(changedSources, listedSources)}`,
     }
   }
 
@@ -117,17 +119,30 @@ function isIngestMessage(content: string): boolean {
   return /^\/wiki-ingest\b/iu.test(content.trim())
 }
 
-function buildPreflightAppendix(sources: readonly KnowledgeBaseSourceScanItem[], force: boolean): string {
-  const changedSources = sources.filter((source) => source.state !== "unchanged" || force)
-  const sourceLines: string[] = []
+function selectListedPreflightSources(
+  changedSources: readonly KnowledgeBaseSourceScanItem[],
+): readonly KnowledgeBaseSourceScanItem[] {
+  const listedSources: KnowledgeBaseSourceScanItem[] = []
   let sourceListChars = 0
   for (const source of changedSources) {
-    if (sourceLines.length >= PREFLIGHT_SOURCE_LIST_MAX_ITEMS) break
+    if (listedSources.length >= PREFLIGHT_SOURCE_LIST_MAX_ITEMS) break
     const line = `  - ${source.relativePath} (${source.hash})`
     const nextSourceListChars = sourceListChars + line.length + 1
     if (nextSourceListChars > PREFLIGHT_SOURCE_LIST_MAX_CHARS) break
-    sourceLines.push(line)
+    listedSources.push(source)
     sourceListChars = nextSourceListChars
+  }
+  return listedSources
+}
+
+function buildPreflightAppendix(
+  changedSources: readonly KnowledgeBaseSourceScanItem[],
+  listedSources: readonly KnowledgeBaseSourceScanItem[],
+): string {
+  const sourceLines: string[] = []
+  for (const source of listedSources) {
+    const line = `  - ${source.relativePath} (${source.hash})`
+    sourceLines.push(line)
   }
   const omittedCount = changedSources.length - sourceLines.length
   return [
