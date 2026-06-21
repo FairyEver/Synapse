@@ -2548,7 +2548,7 @@ export class DriveService implements OnApplicationBootstrap {
         action: input.action,
         targetType: input.targetType,
         targetId: input.targetId,
-        detail: input.detail,
+        detail: redactDriveAuditDetail(input.detail),
         ipAddress: input.ipAddress ?? "system",
       })
     } catch (error) {
@@ -2800,6 +2800,38 @@ export class DriveService implements OnApplicationBootstrap {
   private getLifecycleService(): DriveLifecycleService {
     return this.lifecycle ?? new DriveLifecycleService(this.prisma, this.storage, this.auditLog)
   }
+}
+
+function redactDriveAuditDetail(value: Record<string, unknown>): Record<string, unknown> {
+  return redactDriveAuditValue(value) as Record<string, unknown>
+}
+
+function redactDriveAuditValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return isPublicDriveShareId(value) ? "[redacted-share-id]" : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactDriveAuditValue(item))
+  }
+  if (!isRecord(value)) return value
+  return Object.fromEntries(Object.entries(value).map(([key, entryValue]) => [
+    key,
+    key === "shareId" || key === "requestedShareId"
+      ? redactDriveAuditShareValue(entryValue)
+      : redactDriveAuditValue(entryValue),
+  ]))
+}
+
+function redactDriveAuditShareValue(value: unknown): unknown {
+  return typeof value === "string" ? "[redacted-share-id]" : redactDriveAuditValue(value)
+}
+
+function isPublicDriveShareId(value: string): boolean {
+  return /^shr_[A-Za-z0-9]+$/u.test(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === "[object Object]"
 }
 
 async function ensureUsage(client: DrivePrismaClient, userId: string) {

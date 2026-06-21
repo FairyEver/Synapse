@@ -1017,6 +1017,39 @@ describe("DriveService", () => {
     await expect(service.resolvePublicShareAccess({ shareId: publicShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("redacts public share ids from drive audit details", async () => {
+    const prisma = createPrismaMemory()
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      mimeType: "text/plain",
+    })
+
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    await service.disableShare("user-1", share.shareId)
+
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(share.shareId)
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.share.create",
+      targetId: share.id,
+      detail: expect.objectContaining({
+        shareRecordId: share.id,
+        shareId: "[redacted-share-id]",
+      }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.share.disable",
+      targetId: share.id,
+      detail: expect.objectContaining({
+        shareRecordId: share.id,
+        requestedShareId: "[redacted-share-id]",
+      }),
+    }))
+  })
+
   it("creates password-protected share links by default", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
