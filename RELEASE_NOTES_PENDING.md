@@ -103,6 +103,7 @@
 - 服务端生产环境使用本地 Content Store 存储时必须显式配置持久化目录，Docker 部署会挂载并在切换前备份草稿附件和安装包数据。
 - Provider 密钥并发保存会串行写入加密存储，避免多个窗口或重复提交同时保存时互相覆盖 API key。
 - 工作流 Code X 节点的运行历史会脱敏指令中的 token、Cookie、Authorization 和本地路径，避免敏感内容进入快照文件。
+- 工作流 Claude Code 节点的运行历史会脱敏指令中的 token、Authorization 和本地路径，避免节点 prompt 原文进入快照文件。
 - 诊断报告中的日志样本会先脱敏再写入详情和 `diagnostics.json`，避免排障包或设置页复制内容泄露 token、Cookie、Authorization 等敏感信息。
 - 工作流实时事件和运行状态会脱敏 Code X 节点结果，避免 token、Cookie、Authorization 和本地路径通过 live 通道泄露。
 - Workflow MCP 查询运行中状态时会复用同一套脱敏规则，避免轮询结果暴露参数、节点输出或调试配置里的敏感内容。

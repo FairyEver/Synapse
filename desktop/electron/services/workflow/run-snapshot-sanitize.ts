@@ -46,7 +46,7 @@ export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefini
 }
 
 function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
-  if (node.type !== "codex") return node
+  if (node.type !== "codex" && node.type !== "claude_code") return node
   const configOverrides = node.config.configOverrides
   const prompt = node.config.prompt
   return {
@@ -54,7 +54,7 @@ function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
     config: {
       ...node.config,
       ...(typeof prompt === "string" ? { prompt: sanitizeError(prompt) } : {}),
-      ...(Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
+      ...(node.type === "codex" && Array.isArray(configOverrides) ? { configOverrides: configOverrides.map(redactConfigOverrideValue) } : {}),
     },
   }
 }
