@@ -48,6 +48,10 @@ export abstract class AbstractDataNamespace<T> implements DataNamespace<T> {
   abstract upsert(item: T & { id: string }): Promise<void>
   abstract remove(id: string): Promise<void>
 
+  async count(filter?: Partial<T>): Promise<number> {
+    return (await this.list(filter)).length
+  }
+
   onChange(listener: DataChangeListener<T>): () => void {
     this.listeners.add(listener)
     return () => {

@@ -118,11 +118,13 @@ async function agentStatus(
 
 async function relayStatus(service: AgentRelayService | undefined) {
   if (!service) return undefined
-  const bindings = await service.listBindings()
-  const runs = await service.listRuns()
+  const [bindingCount, recentRunCount] = await Promise.all([
+    service.countBindings(),
+    service.countRuns(),
+  ])
   return {
-    bindingCount: bindings.length,
-    recentRunCount: runs.length,
+    bindingCount,
+    recentRunCount,
   }
 }
 

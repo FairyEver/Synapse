@@ -147,6 +147,10 @@ class MemoryNamespace implements DataNamespace<CheatCodeStatesEntryV1> {
     return this.value ? [this.value] : []
   }
 
+  async count(): Promise<number> {
+    return this.value ? 1 : 0
+  }
+
   async get(): Promise<CheatCodeStatesEntryV1 | null> {
     return this.value
   }

@@ -320,6 +320,10 @@ class MemoryNamespace<T extends { readonly id: string }> implements DataNamespac
       Object.entries(filter).every(([key, value]) => row[key as keyof T] === value))
   }
 
+  async count(filter?: Partial<T>): Promise<number> {
+    return (await this.list(filter)).length
+  }
+
   async get(id: string): Promise<T | null> {
     return this.rows.get(id) ?? null
   }

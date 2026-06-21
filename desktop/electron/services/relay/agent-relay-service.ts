@@ -140,6 +140,11 @@ export class AgentRelayService {
     return this.deps.bindings.list(filter)
   }
 
+  async countBindings(sourceProjectId?: string): Promise<number> {
+    const filter = sourceProjectId ? { sourceProjectId } as Partial<RelayBindingEntryV1> : undefined
+    return countNamespace(this.deps.bindings, filter)
+  }
+
   async bind(input: {
     readonly sourceProjectId: string
     readonly targetProjectId: string
@@ -183,6 +188,11 @@ export class AgentRelayService {
       ? runs.filter((run) => run.sourceProjectId === projectId || run.targetProjectId === projectId)
       : runs
     return filtered.map(sanitizeRelayRunForDiagnostics)
+  }
+
+  async countRuns(projectId?: string): Promise<number> {
+    if (!projectId) return countNamespace(this.deps.runs)
+    return (await this.listRuns(projectId)).length
   }
 
   private async trySendVisible(target: ReplyTarget, message: string): Promise<void> {
@@ -353,6 +363,15 @@ function sessionKeyHash(projectId: string, sessionKey: string): string {
     .update(sessionKey)
     .digest("hex")
     .slice(0, 16)
+}
+
+async function countNamespace<T>(
+  namespace: DataNamespace<T>,
+  filter?: Partial<T>,
+): Promise<number> {
+  return namespace.count
+    ? namespace.count(filter)
+    : (await namespace.list(filter)).length
 }
 
 function sanitizeRelayRunForDiagnostics(run: RelayRunEntryV1): RelayRunEntryV1 {

@@ -176,6 +176,25 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     return this.applyFilter(items, filter)
   }
 
+  async count(filter?: Partial<T>): Promise<number> {
+    const pushedFilter = buildSqliteFilter(filter)
+    if (filter && !pushedFilter) {
+      return super.count(filter)
+    }
+    if (!pushedFilter) {
+      const row = this.database
+        .prepare(`SELECT COUNT(*) as n FROM ${this.tableName} WHERE id != ?;`)
+        .get(SINGLETON_ID) as { n?: number } | undefined
+      return row?.n ?? 0
+    }
+    const statement = this.database.prepare(
+      `SELECT COUNT(*) as n FROM ${this.tableName}
+       WHERE id != ? AND ${pushedFilter.where};`,
+    )
+    const row = statement.get(SINGLETON_ID, ...pushedFilter.params) as { n?: number } | undefined
+    return row?.n ?? 0
+  }
+
   private listRows(filter?: Partial<T>): Array<{ value?: unknown }> {
     const pushedFilter = buildSqliteFilter(filter)
     if (!pushedFilter) {

@@ -112,4 +112,48 @@ describe("collectOpsStatus", () => {
       agentType: "claude-code",
     })
   })
+
+  it("uses Relay count APIs for diagnostics status", async () => {
+    const agent = {
+      getStatus: vi.fn(() => ({
+        projectId: "project-1",
+        agentType: "claude-code",
+        liveSessions: 0,
+        busySessions: 0,
+        queuedTurns: 0,
+        pendingPermissions: 0,
+      })),
+    }
+    const projectContainers: Pick<ProjectContainerRegistry, "open"> = {
+      open: vi.fn(async () => ({
+        get: () => agent,
+      }) as never),
+    }
+    const relay = {
+      countBindings: vi.fn(async () => 2),
+      countRuns: vi.fn(async () => 5),
+      listBindings: vi.fn(async () => {
+        throw new Error("listBindings should not be used for diagnostics counts")
+      }),
+      listRuns: vi.fn(async () => {
+        throw new Error("listRuns should not be used for diagnostics counts")
+      }),
+    }
+    const resolve: ServiceResolver = <T,>(serviceId: string): T => {
+      if (serviceId === "core.project-containers") return projectContainers as T
+      if (serviceId === "core.relay") return relay as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+
+    const result = await collectOpsStatus(resolve, { projectId: "project-1" })
+
+    expect(result.relay).toEqual({
+      bindingCount: 2,
+      recentRunCount: 5,
+    })
+    expect(relay.countBindings).toHaveBeenCalledTimes(1)
+    expect(relay.countRuns).toHaveBeenCalledTimes(1)
+    expect(relay.listBindings).not.toHaveBeenCalled()
+    expect(relay.listRuns).not.toHaveBeenCalled()
+  })
 })

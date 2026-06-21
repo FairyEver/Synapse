@@ -74,6 +74,16 @@ class ProjectScopedNamespace<T> implements DataNamespace<T> {
     return this.underlying.list(scopedFilter)
   }
 
+  async count(filter?: Partial<T>): Promise<number> {
+    const scopedFilter = {
+      ...(filter ?? {}),
+      projectId: this.projectId,
+    } as unknown as Partial<T>
+    return this.underlying.count
+      ? this.underlying.count(scopedFilter)
+      : (await this.underlying.list(scopedFilter)).length
+  }
+
   async get(id: string): Promise<T | null> {
     const value = await this.underlying.get(id)
     if (!value) return null
