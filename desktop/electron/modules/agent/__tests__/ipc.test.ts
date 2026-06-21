@@ -489,6 +489,44 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it.skipIf(process.platform === "win32")("blocks directory attachments that contain symlinks", async () => {
+    const realTmpDir = await fs.realpath(tmpdir())
+    const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-"))
+    const outside = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-outside-"))
+    const nested = path.join(root, "nested")
+    const outsideFilePath = path.join(outside, "secret.md")
+    await fs.mkdir(nested)
+    await fs.writeFile(outsideFilePath, "secret")
+    await fs.symlink(outsideFilePath, path.join(nested, "linked-secret.md"))
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    try {
+      await expect(harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "",
+        attachments: [{
+          kind: "path",
+          path: root,
+          entryType: "directory",
+        }],
+      })).rejects.toThrow("文件夹附件不能包含符号链接。")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+      await fs.rm(outside, { recursive: true, force: true })
+    }
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it("blocks oversized image attachments before sending to AgentRuntime", async () => {
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
