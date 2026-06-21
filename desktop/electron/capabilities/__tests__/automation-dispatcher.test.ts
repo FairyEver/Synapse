@@ -213,11 +213,14 @@ function auditSinkMock() {
   } satisfies AuditSink
 }
 
-function createHarness(options: { readonly platform?: string } = {}) {
+function createHarness(options: {
+  readonly permissionResult?: Awaited<ReturnType<PermissionGuard["check"]>>
+  readonly platform?: string
+} = {}) {
   const { triggers, actions } = registries()
   const service = serviceMock()
   const accountService = accountServiceMock()
-  const permissionGuard = permissionGuardMock()
+  const permissionGuard = permissionGuardMock(options.permissionResult)
   const auditSink = auditSinkMock()
   const dispatcher = createAutomationCapabilityDispatcher({
     service,
@@ -243,7 +246,7 @@ describe("automation capability dispatcher", () => {
   })
 
   it("lists trigger and executor descriptors from registries", async () => {
-    const { dispatcher } = createHarness()
+    const { auditSink, dispatcher, permissionGuard } = createHarness()
 
     await expect(dispatcher.dispatch("automation.trigger_type.list", {}, { source: "api" }))
       .resolves.toMatchObject({
@@ -269,6 +272,50 @@ describe("automation capability dispatcher", () => {
       ],
     })
     expect(JSON.stringify(result)).not.toContain("private prompt")
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.trigger_type.list",
+      context: expect.objectContaining({ automationAction: "automation.trigger_type.list" }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.executor_type.list",
+      context: expect.objectContaining({ automationAction: "automation.executor_type.list" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.trigger_type.list",
+      outcome: "allowed",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.executor_type.list",
+      outcome: "allowed",
+    }))
+  })
+
+  it("blocks Automation discovery when read permission is denied", async () => {
+    const { auditSink, dispatcher, permissionGuard } = createHarness({
+      permissionResult: { allowed: false, reason: "read denied", policyId: "deny-automation-read" },
+    })
+
+    await expect(dispatcher.dispatch("automation.trigger_type.list", {}, { source: "mcp-http" }))
+      .rejects.toThrow("read denied")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.trigger_type.list",
+      context: expect.objectContaining({ automationAction: "automation.trigger_type.list" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.read",
+      resource: "automation:automation.trigger_type.list",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        policyId: "deny-automation-read",
+        reason: "read denied",
+      }),
+    }))
   })
 
   it("checks read permission and lists Webhooks for builtin webhook trigger configuration", async () => {
