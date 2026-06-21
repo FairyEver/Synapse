@@ -16,6 +16,7 @@ import {
   DragonScaleOllamaEmbeddingProvider,
   isLocalOllamaUrl,
   resolveDragonScaleOllamaUrl,
+  sanitizeDragonScaleOllamaUrl,
 } from "../index"
 import { DRAGONSCALE_TILING_MAX_RESPONSE_BYTES } from "../dragonscale/tiling-types"
 
@@ -49,8 +50,12 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     expect(isLocalOllamaUrl("https://example.com")).toBe(false)
 
     expect(() => resolveDragonScaleOllamaUrl({ ollamaUrl: "https://example.com" })).toThrow("not localhost")
+    expect(() => resolveDragonScaleOllamaUrl({ ollamaUrl: "https://user:secret@example.com?token=sk-secret" }))
+      .toThrow("https://example.com/?token=%5Bredacted%5D")
     expect(resolveDragonScaleOllamaUrl({ ollamaUrl: "https://example.com", allowRemoteOllama: true }))
       .toBe("https://example.com")
+    expect(sanitizeDragonScaleOllamaUrl("http://user:secret@127.0.0.1:11434?token=sk-secret&ok=1"))
+      .toBe("http://127.0.0.1:11434/?token=%5Bredacted%5D&ok=1")
   })
 
   it("detects reachable Ollama and pulled models", async () => {
@@ -87,7 +92,7 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
       "DragonScale Ollama reachability check failed",
       expect.objectContaining({
-        url: baseUrl,
+        url: `${baseUrl}/`,
         errorName: "Error",
         errorMessage: "HTTP 500",
       }),
@@ -95,12 +100,24 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
       "DragonScale Ollama model query failed",
       expect.objectContaining({
-        url: baseUrl,
+        url: `${baseUrl}/`,
         model: "nomic-embed-text",
         errorName: "Error",
         errorMessage: "HTTP 500",
       }),
     )
+  })
+
+  it("redacts Ollama URL credentials in failure logs", async () => {
+    const provider = new DragonScaleOllamaEmbeddingProvider()
+    const rawUrl = "http://user:secret@127.0.0.1:11434?token=sk-secret"
+
+    await expect(provider.isReachable(rawUrl)).resolves.toBe(false)
+
+    const serialized = JSON.stringify(dragonScaleLogger.warn.mock.calls)
+    expect(serialized).toContain("http://127.0.0.1:11434/?token=%5Bredacted%5D")
+    expect(serialized).not.toContain("user:secret")
+    expect(serialized).not.toContain("sk-secret")
   })
 
   it("returns numeric embeddings and rejects malformed responses", async () => {

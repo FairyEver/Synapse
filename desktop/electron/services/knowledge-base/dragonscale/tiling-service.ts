@@ -7,6 +7,7 @@ import { TextDecoder } from "node:util"
 import {
   DragonScaleOllamaEmbeddingProvider,
   resolveDragonScaleOllamaUrl,
+  sanitizeDragonScaleOllamaUrl,
 } from "./ollama-embedding-provider"
 import { createMainLogger } from "../../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
@@ -102,10 +103,11 @@ export class DragonScaleTilingService {
     try {
       ollamaUrl = resolveDragonScaleOllamaUrl(options)
     } catch (error) {
+      const rawOllamaUrl = options.ollamaUrl ?? process.env.OLLAMA_URL ?? ""
       return {
         status: "usage-error",
         vaultPath: root,
-        ollamaUrl: options.ollamaUrl ?? process.env.OLLAMA_URL ?? "",
+        ollamaUrl: sanitizeDragonScaleOllamaUrl(rawOllamaUrl),
         ollamaReachable: false,
         modelRequested: model,
         modelPresent: false,
@@ -113,6 +115,7 @@ export class DragonScaleTilingService {
         message: error instanceof Error ? error.message : String(error),
       }
     }
+    const displayOllamaUrl = sanitizeDragonScaleOllamaUrl(ollamaUrl)
 
     const ollamaReachable = await this.embeddingProvider.isReachable(ollamaUrl)
     const modelPresent = ollamaReachable
@@ -122,7 +125,7 @@ export class DragonScaleTilingService {
     return {
       status: statusFromDiagnostics(ollamaReachable, modelPresent, diagnostics),
       vaultPath: root,
-      ollamaUrl,
+      ollamaUrl: displayOllamaUrl,
       ollamaReachable,
       modelRequested: model,
       modelPresent,
@@ -140,15 +143,17 @@ export class DragonScaleTilingService {
     try {
       ollamaUrl = resolveDragonScaleOllamaUrl(options)
     } catch (error) {
+      const rawOllamaUrl = options.ollamaUrl ?? process.env.OLLAMA_URL ?? ""
       return emptyCheckResult({
         status: "usage-error",
         generated,
         model,
-        ollamaUrl: options.ollamaUrl ?? process.env.OLLAMA_URL ?? "",
+        ollamaUrl: sanitizeDragonScaleOllamaUrl(rawOllamaUrl),
         thresholds: defaultThresholds,
         message: error instanceof Error ? error.message : String(error),
       })
     }
+    const displayOllamaUrl = sanitizeDragonScaleOllamaUrl(ollamaUrl)
 
     const reportPath = validateReportPath(root, options.reportPath)
     if (reportPath.status === "usage-error") {
@@ -156,21 +161,21 @@ export class DragonScaleTilingService {
         status: "usage-error",
         generated,
         model,
-        ollamaUrl,
+        ollamaUrl: displayOllamaUrl,
         thresholds: defaultThresholds,
         message: reportPath.message,
       })
     }
 
     if (!await wikiDirectoryExists(root)) {
-      return emptyCheckResult({ status: "ok", generated, model, ollamaUrl, thresholds: defaultThresholds })
+      return emptyCheckResult({ status: "ok", generated, model, ollamaUrl: displayOllamaUrl, thresholds: defaultThresholds })
     }
 
     if (!await this.embeddingProvider.isReachable(ollamaUrl)) {
-      return emptyCheckResult({ status: "ollama-unreachable", generated, model, ollamaUrl, thresholds: defaultThresholds })
+      return emptyCheckResult({ status: "ollama-unreachable", generated, model, ollamaUrl: displayOllamaUrl, thresholds: defaultThresholds })
     }
     if (!await this.embeddingProvider.hasModel(ollamaUrl, model)) {
-      return emptyCheckResult({ status: "model-missing", generated, model, ollamaUrl, thresholds: defaultThresholds })
+      return emptyCheckResult({ status: "model-missing", generated, model, ollamaUrl: displayOllamaUrl, thresholds: defaultThresholds })
     }
 
     const thresholdsResult = await loadThresholds(root, model)
@@ -179,7 +184,7 @@ export class DragonScaleTilingService {
         status: "usage-error",
         generated,
         model,
-        ollamaUrl,
+        ollamaUrl: displayOllamaUrl,
         thresholds: thresholdsResult.thresholds,
         message: thresholdsResult.message,
       })
@@ -193,7 +198,7 @@ export class DragonScaleTilingService {
           status: "scale-exceeded",
           generated,
           model,
-          ollamaUrl,
+          ollamaUrl: displayOllamaUrl,
           thresholds: thresholdsResult.thresholds,
           scanned: scan.scanned,
           skipped: scan.skipped,
@@ -210,7 +215,7 @@ export class DragonScaleTilingService {
           status: "cache-corrupt",
           generated,
           model,
-          ollamaUrl,
+          ollamaUrl: displayOllamaUrl,
           thresholds: thresholdsResult.thresholds,
           scanned: scan.scanned,
           skipped: scan.skipped,
@@ -246,7 +251,7 @@ export class DragonScaleTilingService {
           logger.warn("DragonScale tiling embed failed", {
             pagePath: page.relativePath,
             model,
-            ollamaUrl,
+            ollamaUrl: displayOllamaUrl,
             ...errorLogMeta(error),
           })
           skipped.embed_error = (skipped.embed_error ?? 0) + 1
@@ -267,7 +272,7 @@ export class DragonScaleTilingService {
       const reportMarkdown = formatReport({
         generated,
         model,
-        ollamaUrl,
+        ollamaUrl: displayOllamaUrl,
         thresholds: thresholdsResult.thresholds,
         scanned: scan.scanned,
         embedded: embeddedPages.length,
@@ -285,7 +290,7 @@ export class DragonScaleTilingService {
         status: "ok",
         generated,
         model,
-        ollamaUrl,
+        ollamaUrl: displayOllamaUrl,
         thresholds: thresholdsResult.thresholds,
         scanned: scan.scanned,
         embedded: embeddedPages.length,

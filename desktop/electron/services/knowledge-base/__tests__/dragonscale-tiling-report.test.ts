@@ -86,6 +86,26 @@ describe("DragonScaleTilingService reports", () => {
     expect(result.reportMarkdown).toContain("## Review (0.8 <= similarity < 0.9)\n\n- none")
   })
 
+  it("redacts Ollama URL credentials in generated reports", async () => {
+    const root = await tempDir()
+    await writePage(root, "wiki/concepts/Alpha.md", "---\ntype: concept\n---\n\nAlpha body\n")
+
+    const result = await new DragonScaleTilingService({
+      embeddingProvider: new ReportEmbeddingProvider(),
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    }).check(root, {
+      ollamaUrl: "http://user:secret@127.0.0.1:11434?token=sk-secret&ok=1",
+      reportPath: "wiki/meta/tiling-report.md",
+    })
+
+    expect(result.ollamaUrl).toBe("http://127.0.0.1:11434/?token=%5Bredacted%5D&ok=1")
+    expect(result.reportMarkdown).toContain("- ollama_url: http://127.0.0.1:11434/?token=%5Bredacted%5D&ok=1")
+    expect(result.reportMarkdown).not.toContain("user:secret")
+    expect(result.reportMarkdown).not.toContain("sk-secret")
+    await expect(readFile(path.join(root, "wiki", "meta", "tiling-report.md"), "utf8"))
+      .resolves.toBe(result.reportMarkdown)
+  })
+
   it("rejects report paths that escape the vault", async () => {
     const root = await tempDir()
     await writePage(root, "wiki/concepts/Alpha.md", "---\ntype: concept\n---\n\nAlpha body\n")
