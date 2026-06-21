@@ -147,7 +147,13 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         text: variables.text,
         baseVersionId: variables.baseVersionId,
       })
-      const nextSnapshot = requireDriveBrowserSnapshot(await loadDriveBrowser(input))
+      const savedSnapshot = snapshotAfterTextSave(variables.snapshot, result, variables.text)
+      let nextSnapshot = savedSnapshot
+      try {
+        nextSnapshot = requireDriveBrowserSnapshot(await loadDriveBrowser(input))
+      } catch {
+        nextSnapshot = savedSnapshot
+      }
       if (input.context === 'share') {
         setUnlockedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       } else {
@@ -212,6 +218,35 @@ async function saveDriveBrowserText(
     )
   }
   throw new Error('当前文件不支持保存。')
+}
+
+function snapshotAfterTextSave(
+  snapshot: DriveBrowserSnapshotDto,
+  result: DriveFileContentUpdateResult,
+  text: string
+): DriveBrowserSnapshotDto {
+  return {
+    ...snapshot,
+    current: {
+      ...snapshot.current,
+      name: result.item.name,
+      size: result.item.size,
+      mimeType: result.item.mimeType,
+      updatedAt: result.item.updatedAt,
+    },
+    edit: snapshot.edit
+      ? {
+          ...snapshot.edit,
+          currentVersionId: result.version.id,
+        }
+      : snapshot.edit,
+    preview: snapshot.preview && (snapshot.preview.kind === 'text' || snapshot.preview.kind === 'markdown')
+      ? {
+          ...snapshot.preview,
+          text,
+        }
+      : snapshot.preview,
+  }
 }
 
 export function toDriveBrowserQueryKey(input: DriveBrowserInput) {

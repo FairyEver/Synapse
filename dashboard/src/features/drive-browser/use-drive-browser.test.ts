@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import type { DriveBrowserSnapshotDto, DriveFileContentUpdateResult } from '@synapse/shared'
 import { driveBrowserApi } from '@/lib/api'
 
 import { loadDriveBrowser, toDriveBrowserQueryKey, useDriveBrowser, type DriveBrowserInput } from './use-drive-browser'
@@ -17,6 +17,8 @@ vi.mock('@/lib/api', () => ({
     getOwnerItem: vi.fn(),
     getShareItem: vi.fn(),
     getShareRoot: vi.fn(),
+    updateOwnerText: vi.fn(),
+    updateShareText: vi.fn(),
     unlockShare: vi.fn(),
   },
 }))
@@ -177,6 +179,55 @@ describe('toDriveBrowserQueryKey', () => {
     })
   })
 
+  it('treats text save as successful when the follow-up reload fails', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    vi.mocked(driveBrowserApi.updateOwnerText).mockReset()
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      edit: {
+        canEdit: true,
+        editorKind: 'text',
+        currentVersionId: 'version-1',
+        maxInlineEditBytes: '1024',
+        reason: null,
+      },
+    })
+    const updateResult = createTextUpdateResult()
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(snapshot)
+      .mockRejectedValueOnce(new Error('刷新失败'))
+    vi.mocked(driveBrowserApi.updateOwnerText).mockResolvedValueOnce(updateResult)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'item-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+
+    await expect(act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      await expect(hook.result.current.saveText({
+        text: 'updated',
+        baseVersionId: 'version-1',
+      })).resolves.toBe(updateResult)
+    })).resolves.toBeUndefined()
+
+    expect(driveBrowserApi.updateOwnerText).toHaveBeenCalledWith('item-1', {
+      contentType: 'text',
+      text: 'updated',
+      baseVersionId: 'version-1',
+    })
+    expect(driveBrowserApi.getOwnerItem).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.edit?.currentVersionId : null)
+      .toBe('version-2')
+  })
+
   it('does not reuse unlocked share snapshots after share route changes', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },
@@ -227,6 +278,38 @@ function baseCurrent(): DriveBrowserSnapshotDto['current'] {
     browserUrl: '/share/share-1/items/item-1',
     downloadUrl: '/share/share-1/items/item-1/download',
     previewKind: 'text',
+  }
+}
+
+function createTextUpdateResult(): DriveFileContentUpdateResult {
+  const now = '2026-06-13T00:00:00.000Z'
+  return {
+    item: {
+      id: 'item-1',
+      parentId: null,
+      type: 'file',
+      name: 'file.txt',
+      size: '7',
+      mimeType: 'text/plain',
+      storageStatus: 'active',
+      shared: false,
+      createdAt: now,
+      updatedAt: now,
+    },
+    version: {
+      id: 'version-2',
+      itemId: 'item-1',
+      versionNumber: 2,
+      size: '7',
+      mimeType: 'text/plain',
+      source: 'online_edit',
+      isCurrent: true,
+      isPinned: false,
+      deletePending: false,
+      restoredFromVersionId: null,
+      createdAt: now,
+      createdBy: null,
+    },
   }
 }
 
