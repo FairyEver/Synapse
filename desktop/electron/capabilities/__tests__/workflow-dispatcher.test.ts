@@ -212,7 +212,7 @@ describe("createWorkflowDispatcher", () => {
     })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-active" }, { source: "mcp" })
+    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-active" }, { source: "mcp-http" })
 
     expect(result.ok).toBe(true)
     const serialized = JSON.stringify(result.data)
