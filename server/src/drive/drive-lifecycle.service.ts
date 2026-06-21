@@ -305,8 +305,9 @@ export class DriveLifecycleService {
   async listTrash(userId: string, input: DriveTrashListInput = {}): Promise<DriveTrashListPageDto> {
     const page = normalizeTrashPage(input)
     const search = input.search?.trim()
+    const searchPattern = search ? `%${escapeLikePattern(search)}%` : null
     const searchCondition = search
-      ? Prisma.sql`AND (di."name" ILIKE ${`%${search}%`} OR di."restorePath" ILIKE ${`%${search}%`} OR pa."assetId" ILIKE ${`%${search}%`})`
+      ? Prisma.sql`AND (di."name" ILIKE ${searchPattern} ESCAPE '\\' OR di."restorePath" ILIKE ${searchPattern} ESCAPE '\\' OR pa."assetId" ILIKE ${searchPattern} ESCAPE '\\')`
       : Prisma.empty
     const [rootRows, totalRows] = await Promise.all([
       this.prisma.$queryRaw<DriveTrashRootQueryRecord[]>`
@@ -528,6 +529,10 @@ function normalizeTrashPage(input: DriveTrashListInput): { readonly offset: numb
     offset,
     limit: Math.min(requestedLimit, DRIVE_TRASH_MAX_LIMIT),
   }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
 }
 
 function toTrashItemDto(item: DriveLifecycleItemRecord): DriveTrashItemDto {

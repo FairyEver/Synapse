@@ -163,6 +163,29 @@ describe("DriveLifecycleService", () => {
     expect([first.id, second.id, folder.id]).toContain(trash.items[0]?.id)
   })
 
+  it("searches trash with literal percent and underscore characters", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const percentFile = await seedTrashedDriveFile(prisma, { userId: "user-1", name: "budget 100%.png", size: 1n })
+    const underscoreFile = await seedTrashedDriveFile(prisma, { userId: "user-1", name: "_draft.png", size: 1n })
+    await seedTrashedDriveFile(prisma, { userId: "user-1", name: "budget 1000.png", size: 1n })
+    await seedTrashedDriveFile(prisma, { userId: "user-1", name: "xdraft.png", size: 1n })
+
+    await expect(lifecycle.listTrash("user-1", { search: "100%" })).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: percentFile.id })],
+      total: 1,
+    })
+    await expect(lifecycle.listTrash("user-1", { search: "_draft" })).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: underscoreFile.id })],
+      total: 1,
+    })
+
+    const queryRawCalls = prisma.__queryRawCalls()
+    expect(queryRawCalls.some((call) => call.sql.includes("ESCAPE"))).toBe(true)
+    expect(queryRawCalls.some((call) => call.values.includes("%100\\%%"))).toBe(true)
+    expect(queryRawCalls.some((call) => call.values.includes("%\\_draft%"))).toBe(true)
+  })
+
   it("restores trashed roots and clears trash metadata", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
@@ -514,20 +537,22 @@ function createLifecyclePrismaMemory() {
     },
     __queryRawCalls: () => queryRawCalls,
     $queryRaw: async (strings: TemplateStringsArray | string, ...values: unknown[]) => {
-      const sql = Array.isArray(strings) ? strings.join("?") : String(strings)
-      queryRawCalls.push({ sql, values })
-      const userId = values.find((value): value is string => typeof value === "string")
-      const search = values.find((value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%"))?.slice(1, -1).toLowerCase()
+      const sql = sqlText(strings, values)
+      const flattenedValues = flattenSqlValues(values)
+      queryRawCalls.push({ sql, values: flattenedValues })
+      const userId = flattenedValues.find((value): value is string => typeof value === "string")
+      const search = flattenedValues.find((value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%"))
+      const literalSearch = search ? unescapeLikePattern(search.slice(1, -1)).toLowerCase() : undefined
       const rootTrashItems = orderRows(
         [...items.values()].filter((item) =>
           item.userId === userId &&
           item.lifecycleStatus === "trashed" &&
           item.deleteRootId === item.id &&
-          (!search || item.name.toLowerCase().includes(search) || (item.restorePath ?? "").toLowerCase().includes(search) || (item.publicAsset?.assetId ?? "").toLowerCase().includes(search))),
+          (!literalSearch || item.name.toLowerCase().includes(literalSearch) || (item.restorePath ?? "").toLowerCase().includes(literalSearch) || (item.publicAsset?.assetId ?? "").toLowerCase().includes(literalSearch))),
         [{ trashedAt: "desc" }, { updatedAt: "desc" }],
       )
       if (sql.includes("COUNT(*)")) return [{ total: BigInt(rootTrashItems.length) }]
-      const [limit = rootTrashItems.length, offset = 0] = values.filter((value): value is number => typeof value === "number")
+      const [limit = rootTrashItems.length, offset = 0] = flattenedValues.filter((value): value is number => typeof value === "number")
       return rootTrashItems.slice(offset, offset + limit)
     },
     $transaction: async (input: any) => {
@@ -678,6 +703,29 @@ function orderRows(rows: any[], orderBy: any): any[] {
     }
     return 0
   })
+}
+
+function unescapeLikePattern(value: string): string {
+  return value.replace(/\\([\\%_])/g, "$1")
+}
+
+function sqlText(strings: TemplateStringsArray | string, values: readonly unknown[]): string {
+  if (!Array.isArray(strings)) return String(strings)
+  return strings.reduce((text, part, index) => {
+    const value = values[index]
+    return `${text}${part}${isPrismaSql(value) ? value.strings.join("?") : "?"}`
+  }, "")
+}
+
+function flattenSqlValues(values: readonly unknown[]): readonly unknown[] {
+  return values.flatMap((value) => isPrismaSql(value) ? value.values : [value])
+}
+
+function isPrismaSql(value: unknown): value is { readonly strings: readonly string[]; readonly values: readonly unknown[] } {
+  return typeof value === "object"
+    && value !== null
+    && Array.isArray((value as { readonly strings?: unknown }).strings)
+    && Array.isArray((value as { readonly values?: unknown }).values)
 }
 
 function selectFields(row: any, select: Record<string, boolean>) {
