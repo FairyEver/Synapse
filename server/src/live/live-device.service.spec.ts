@@ -283,7 +283,13 @@ describe("LiveDeviceService", () => {
         }),
       ])
       .mockResolvedValueOnce([
-        { userId: "user-1", clientInstanceId: "client-a" },
+        device({
+          user: {
+            id: "user-1",
+            email: "user@example.com",
+            displayName: "Li Yang",
+          },
+        }),
       ])
     prisma.userDevice.count.mockResolvedValue(1)
     const registry = new LiveClientRegistry()
@@ -298,6 +304,8 @@ describe("LiveDeviceService", () => {
     })
 
     expect(prisma.userDevice.findMany).toHaveBeenNthCalledWith(1, {
+      skip: 0,
+      take: 21,
       orderBy: { lastSeenAt: "desc" },
       include: {
         user: {
@@ -381,9 +389,10 @@ describe("LiveDeviceService", () => {
           clientInstanceId: "client-live-only",
         }],
       },
-      select: {
-        userId: true,
-        clientInstanceId: true,
+      include: {
+        user: {
+          select: { id: true, email: true, displayName: true },
+        },
       },
     })
     expect(result).toEqual({
@@ -435,6 +444,16 @@ describe("LiveDeviceService", () => {
       sortOrder: "desc",
     })
 
+    expect(prisma.userDevice.findMany).toHaveBeenNthCalledWith(1, {
+      skip: 0,
+      take: 3,
+      orderBy: { lastSeenAt: "desc" },
+      include: {
+        user: {
+          select: { id: true, email: true, displayName: true },
+        },
+      },
+    })
     expect(result.total).toBe(3)
     expect(result.data).toHaveLength(2)
     expect(result.data.map((row) => row.clientInstanceId)).toEqual([
