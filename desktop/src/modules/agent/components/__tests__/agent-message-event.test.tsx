@@ -195,6 +195,12 @@ describe("AgentMessageEvent", () => {
     expect(links).not.toContain("example.com/docs")
   })
 
+  it("does not auto-wrap bare domain paths as local references", () => {
+    const wrapped = wrapLocalReferences("See github.com/FairyEver/Synapse and open desktop/src/App.tsx")
+
+    expect(wrapped).toBe("See github.com/FairyEver/Synapse and open [desktop/src/App.tsx](./desktop/src/App.tsx)")
+  })
+
   it("keeps local references inside fenced code blocks unchanged", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

@@ -555,6 +555,9 @@ function shouldWrapLocalReference(reference: string, offset: number, content: st
   if (isProtocolUrlMatch(reference, content, offset)) {
     return false
   }
+  if (isBareWebDomainPathReference(reference)) {
+    return false
+  }
 
   const previous = content[offset - 1]
   if (previous && /[\p{L}\p{N}_]/u.test(previous)) {
@@ -577,12 +580,27 @@ function isProtocolUrlMatch(reference: string, content: string, offset: number):
 }
 
 function isLocalReferenceHref(href: string): boolean {
+  if (isBareWebDomainPathReference(href)) return false
   return isAbsoluteLocalReferenceHref(href)
     || href.startsWith("./")
     || href.startsWith("../")
     || href.startsWith(".\\")
     || href.startsWith("..\\")
     || /^[\w.-]+[\\/]/.test(href)
+}
+
+function isBareWebDomainPathReference(reference: string): boolean {
+  if (reference.includes("\\")
+    || isAbsoluteLocalReferenceHref(reference)
+    || reference.startsWith("./")
+    || reference.startsWith("../")
+    || reference.startsWith(".\\")
+    || reference.startsWith("..\\")) {
+    return false
+  }
+  const pathWithoutLine = reference.replace(/:\d+(?::\d+)?$/, "")
+  const firstSegment = pathWithoutLine.split("/")[0] ?? ""
+  return /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/u.test(firstSegment)
 }
 
 function isAbsoluteLocalReferenceHref(href: string): boolean {
