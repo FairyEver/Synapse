@@ -13,7 +13,12 @@ function configFixture(patch: Partial<SynapseConfig> = {}): SynapseConfig {
   }
 }
 
-function createHarness(config: SynapseConfig) {
+function createHarness(
+  config: SynapseConfig,
+  options: {
+    readonly loadConfig?: () => Promise<SynapseConfig>
+  } = {},
+) {
   let current = structuredClone(config)
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
   const emitted: unknown[] = []
@@ -39,7 +44,7 @@ function createHarness(config: SynapseConfig) {
     return structuredClone(current)
   })
   const dispatcher = createVariableCapabilityDispatcher({
-    loadConfig: async () => structuredClone(current),
+    loadConfig: options.loadConfig ?? (async () => structuredClone(current)),
     updateConfig,
     permissionGuard,
     auditSink,
@@ -171,6 +176,42 @@ describe("variable capability dispatcher", () => {
       outcome: "allowed",
       resource: "variable:user:TOKEN",
     }))
+  })
+
+  it("audits variable get failures after secret read authorization", async () => {
+    const loadConfig = vi.fn(async () => {
+      throw new Error("config read failed with token=secret at /Users/example/secrets.json")
+    })
+    const { auditEvents, dispatcher, permissionGuard, updateConfig } = createHarness(baseConfig, { loadConfig })
+
+    await expect(
+      dispatcher.dispatch("variable.item.get", { name: "TOKEN", includeValue: true }, { source: "mcp-http" }),
+    ).rejects.toThrow("config read failed")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.read",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(auditEvents).not.toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "allowed",
+      resource: "variable:user:TOKEN",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "failed",
+      resource: "variable:user:TOKEN",
+      metadata: expect.objectContaining({
+        variableAction: "variable.item.get",
+        variableName: "TOKEN",
+        includeValue: true,
+        errorName: "Error",
+        errorLength: "Error: config read failed with token=secret at /Users/example/secrets.json".length,
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("token=secret")
+    expect(JSON.stringify(auditEvents)).not.toContain("/Users/example")
   })
 
   it("creates updates upserts and deletes variables without echoing values", async () => {
