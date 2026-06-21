@@ -9,6 +9,7 @@ import { ListTree, MessageSquare, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
 import { DriveCodeRenderer } from './code-renderer'
@@ -32,6 +33,7 @@ export function DriveMarkdownRenderer({
   const outline = preview.outline ?? []
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
+  const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotations = useDriveAnnotations(annotationContext)
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -42,6 +44,22 @@ export function DriveMarkdownRenderer({
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
   )
+  const canCreateAnnotation = Boolean(annotationContext) && (annotationContext?.context === 'owner' || isAuthenticated)
+  const sortedThreads = useMemo(() => {
+    const resolvedByThreadId = new Map(annotated.resolved.map((item) => [item.threadId, item]))
+    return [...annotations.threads].sort((a, b) => {
+      const first = resolvedByThreadId.get(a.id)
+      const second = resolvedByThreadId.get(b.id)
+      const firstPosition = first?.range?.start
+      const secondPosition = second?.range?.start
+      if (typeof firstPosition === 'number' && typeof secondPosition === 'number' && firstPosition !== secondPosition) {
+        return firstPosition - secondPosition
+      }
+      if (typeof firstPosition === 'number' && typeof secondPosition !== 'number') return -1
+      if (typeof firstPosition !== 'number' && typeof secondPosition === 'number') return 1
+      return Date.parse(a.createdAt) - Date.parse(b.createdAt)
+    })
+  }, [annotated.resolved, annotations.threads])
 
   useEffect(() => {
     if (commentsTouchedRef.current || annotations.threads.length === 0) return
@@ -53,7 +71,16 @@ export function DriveMarkdownRenderer({
     setCommentsOpen(open)
   }
 
+  const focusThread = (threadId: string) => {
+    setActiveThreadId(threadId)
+    setCommentPanelOpen(true)
+    const marker = Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('[data-drive-annotation-thread-id]') ?? [])
+      .find((item) => item.dataset.driveAnnotationThreadId === threadId)
+    marker?.scrollIntoView({ block: 'center', inline: 'nearest' })
+  }
+
   const handleBodyMouseUp = () => {
+    if (!canCreateAnnotation) return
     const root = bodyRef.current
     if (!root) return
     const target = createMarkdownAnnotationTargetFromSelection(root, window.getSelection())
@@ -66,8 +93,7 @@ export function DriveMarkdownRenderer({
     const marker = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-drive-annotation-thread-id]')
     const threadId = marker?.dataset.driveAnnotationThreadId
     if (!threadId) return
-    setActiveThreadId(threadId)
-    setCommentPanelOpen(true)
+    focusThread(threadId)
   }
 
   const createThread = async () => {
@@ -170,9 +196,9 @@ export function DriveMarkdownRenderer({
         </div>
         {commentsOpen ? (
           <MarkdownCommentsRail
-            threads={annotations.threads}
+            threads={sortedThreads}
             activeThreadId={activeThreadId}
-            onFocusThread={setActiveThreadId}
+            onFocusThread={focusThread}
             onReply={annotations.reply}
             onUpdateComment={annotations.updateComment}
             onDeleteComment={annotations.deleteComment}

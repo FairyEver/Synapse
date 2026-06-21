@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DriveMarkdownRenderer } from './markdown-renderer'
+import { useAuthStore } from '@/stores/auth-store'
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
@@ -14,9 +15,13 @@ vi.mock('../use-drive-annotations', () => ({
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 let annotationsMock: ReturnType<typeof createAnnotationsMock>
+let scrollIntoViewMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   annotationsMock = createAnnotationsMock()
+  scrollIntoViewMock = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoViewMock
+  useAuthStore.getState().auth.reset()
 })
 
 afterEach(() => {
@@ -65,9 +70,47 @@ describe('DriveMarkdownRenderer', () => {
       }),
     }))
   })
+
+  it('does not open the composer for logged-out share viewers', async () => {
+    renderMarkdown({ annotationContext: { context: 'share', shareToken: 'share-token' } })
+    selectStrongText()
+
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    expect(document.querySelector('textarea')).toBeNull()
+  })
+
+  it('scrolls to the rendered marker when a thread is focused from the rail', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+    await click(elementWithText('Comment body'))
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'center', inline: 'nearest' })
+  })
+
+  it('sorts attached comments by current rendered position', async () => {
+    annotationsMock.threads = [
+      thread({ id: 'thread-2', body: 'Later comment', range: { start: 6, end: 8 }, quote: '内容', createdAt: '2026-06-21T00:00:00.000Z' }),
+      thread({ id: 'thread-1', body: 'Earlier comment', range: { start: 3, end: 5 }, quote: '重点', createdAt: '2026-06-21T00:01:00.000Z' }),
+    ]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    const text = document.body.textContent ?? ''
+    expect(text.indexOf('Earlier comment')).toBeLessThan(text.indexOf('Later comment'))
+  })
 })
 
-function renderMarkdown() {
+function renderMarkdown({
+  annotationContext = { context: 'owner' as const, itemId: 'item-1' },
+}: {
+  readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
+} = {}) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -76,7 +119,7 @@ function renderMarkdown() {
       <DriveMarkdownRenderer
         current={current()}
         preview={preview()}
-        annotationContext={{ context: 'owner', itemId: 'item-1' }}
+        annotationContext={annotationContext}
       />
     )
   })
@@ -108,9 +151,21 @@ function preview() {
   }
 }
 
-function thread() {
+function thread({
+  id = 'thread-1',
+  body = 'Comment body',
+  range = { start: 3, end: 5 },
+  quote = '重点',
+  createdAt = '2026-06-21T00:00:00.000Z',
+}: {
+  readonly id?: string
+  readonly body?: string
+  readonly range?: { readonly start: number; readonly end: number }
+  readonly quote?: string
+  readonly createdAt?: string
+} = {}) {
   return {
-    id: 'thread-1',
+    id,
     itemId: 'item-1',
     baseVersionId: 'version-1',
     targetKind: 'textRange' as const,
@@ -118,16 +173,16 @@ function thread() {
       schemaVersion: 1 as const,
       kind: 'textRange' as const,
       surface: 'markdownRenderedText' as const,
-      range: { start: 3, end: 5 },
-      quote: { exact: '重点', prefix: '这是 ', suffix: ' 内容' },
+      range,
+      quote: { exact: quote, prefix: '这是 ', suffix: ' 内容' },
     },
     anchorStatus: 'attached' as const,
     author: { id: 'user-1', email: 'user@example.com', displayName: null },
     comments: [{
-      id: 'comment-1',
-      threadId: 'thread-1',
+      id: `comment-${id}`,
+      threadId: id,
       parentCommentId: null,
-      body: 'Comment body',
+      body,
       author: { id: 'user-1', email: 'user@example.com', displayName: null },
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: '2026-06-21T00:00:00.000Z',
@@ -136,8 +191,8 @@ function thread() {
       deleted: false,
       permissions: { canEdit: true, canDelete: true },
     }],
-    createdAt: '2026-06-21T00:00:00.000Z',
-    updatedAt: '2026-06-21T00:00:00.000Z',
+    createdAt,
+    updatedAt: createdAt,
     permissions: { canDelete: true },
   }
 }
@@ -173,10 +228,27 @@ function buttonWithText(text: string) {
   return button as HTMLButtonElement
 }
 
+function elementWithText(text: string) {
+  const element = Array.from(document.querySelectorAll('section, article, p')).find((item) => item.textContent?.includes(text))
+  if (!element) throw new Error(`Missing element ${text}`)
+  return element as HTMLElement
+}
+
 function textarea() {
   const element = document.querySelector('textarea')
   if (!element) throw new Error('Missing textarea')
   return element as HTMLTextAreaElement
+}
+
+function selectStrongText() {
+  const strongText = document.querySelector('strong')?.firstChild
+  if (!strongText) throw new Error('missing strong text')
+  const range = document.createRange()
+  range.setStart(strongText, 0)
+  range.setEnd(strongText, 2)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
 }
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {
