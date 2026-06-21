@@ -551,6 +551,59 @@ describe("knowledgeBaseIpcModule", () => {
     }))
   })
 
+  it("guards the old custom storage path when restoring storage to default", async () => {
+    const { auditSink, harness, migrationService, permissionGuard } = createHarness({ service: {} })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "custom",
+      rootPath: "/Volumes/Data/SynapseData",
+      knowledgeBasesPath: "/Volumes/Data/SynapseData/knowledge-bases",
+      available: true,
+    })
+    migrationService.startMigration.mockResolvedValue({ status: "completed" })
+
+    await harness.invoke("synapse:knowledge-base:start-storage-migration", {
+      target: { mode: "default" },
+    })
+
+    expect(migrationService.startMigration).toHaveBeenCalledWith({
+      target: { mode: "default" },
+      requestedBy: "settings",
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/Volumes/Data/SynapseData/knowledge-bases",
+      context: { source: "knowledgeBase.startStorageMigration.oldCustomStorage.read" },
+    }))
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/Volumes/Data/SynapseData/knowledge-bases",
+      context: { source: "knowledgeBase.startStorageMigration.oldCustomStorage.write" },
+    }))
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      action: "fs.write",
+      resource: "managed-knowledge-base:default-storage",
+      context: { source: "knowledgeBase.startStorageMigration" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/Volumes/Data/SynapseData/knowledge-bases",
+      metadata: { source: "knowledgeBase.startStorageMigration.oldCustomStorage.read" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      outcome: "allowed",
+      resource: "/Volumes/Data/SynapseData/knowledge-bases",
+      metadata: { source: "knowledgeBase.startStorageMigration.oldCustomStorage.write" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "managed-knowledge-base:default-storage",
+      metadata: { source: "knowledgeBase.startStorageMigration" },
+    }))
+  })
+
   it("returns current storage status", async () => {
     const { harness, migrationService } = createHarness({ service: {} })
     migrationService.getStorageStatus.mockResolvedValue({

@@ -373,6 +373,53 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
   }
 }
 
+async function runGuardedStorageMigration(
+  ctx: IpcHandlerContext,
+  request: { target: { mode: "default" } | { mode: "custom"; rootPath: string } },
+) {
+  const runMigration = () => migrationService(ctx).startMigration({
+    target: request.target,
+    requestedBy: "settings",
+  })
+
+  if (request.target.mode === "custom") {
+    return runGuardedKnowledgeBaseOperation({
+      ctx,
+      action: "fs.write.outside-userdata",
+      resource: request.target.rootPath,
+      source: "knowledgeBase.startStorageMigration",
+      run: runMigration,
+    })
+  }
+
+  const runDefaultWrite = () => runGuardedKnowledgeBaseOperation({
+    ctx,
+    action: "fs.write",
+    resource: "managed-knowledge-base:default-storage",
+    source: "knowledgeBase.startStorageMigration",
+    run: runMigration,
+  })
+
+  const currentStorage = await migrationService(ctx).getStorageStatus()
+  if (currentStorage.mode !== "custom") {
+    return runDefaultWrite()
+  }
+
+  return runGuardedKnowledgeBaseOperation({
+    ctx,
+    action: "fs.read.outside-userdata",
+    resource: currentStorage.knowledgeBasesPath,
+    source: "knowledgeBase.startStorageMigration.oldCustomStorage.read",
+    run: () => runGuardedKnowledgeBaseOperation({
+      ctx,
+      action: "fs.write.outside-userdata",
+      resource: currentStorage.knowledgeBasesPath,
+      source: "knowledgeBase.startStorageMigration.oldCustomStorage.write",
+      run: runDefaultWrite,
+    }),
+  })
+}
+
 async function checkKnowledgeBasePermission(options: {
   ctx: IpcHandlerContext
   action: PermissionAction
@@ -755,20 +802,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:start-storage-migration",
       request: storageMigrationPayloadSchema,
       response: storageMigrationResultSchema,
-      handler: (ctx, request: { target: { mode: "default" } | { mode: "custom"; rootPath: string } }) => (
-        runGuardedKnowledgeBaseOperation({
-          ctx,
-          action: request.target.mode === "custom" ? "fs.write.outside-userdata" : "fs.write",
-          resource: request.target.mode === "custom"
-            ? request.target.rootPath
-            : "managed-knowledge-base:default-storage",
-          source: "knowledgeBase.startStorageMigration",
-          run: () => migrationService(ctx).startMigration({
-            target: request.target,
-            requestedBy: "settings",
-          }),
-        })
-      ),
+      handler: runGuardedStorageMigration,
     },
     cancelStorageMigration: {
       kind: "invoke",
