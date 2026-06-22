@@ -20,30 +20,54 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("../components/system-app-content", () => ({
-  SystemAppContent: ({
-    appId,
-    onContentOpenRequest,
-  }: {
-    appId: SynapseSystemAppId
-    onContentOpenRequest?: (request: ContentOpenRequest) => void
-  }) => (
-    <div>
-      <span data-testid="system-app-content">{appId} 内容</span>
-      <button
-        type="button"
-        onClick={() => onContentOpenRequest?.({
-          kind: "detail",
-          requestId: "request-1",
-          contentType: "skill",
-          contentId: "skill-1",
-        })}
-      >
-        触发内容请求
-      </button>
-    </div>
-  ),
-}))
+vi.mock("../components/system-app-content", async () => {
+  const { useEffect } = await import("react")
+  const { useSystemAppHeaderSlot } = await import("../components/system-app-header-slot")
+
+  return {
+    SystemAppContent: ({
+      appId,
+      onContentOpenRequest,
+    }: {
+      appId: SynapseSystemAppId
+      onContentOpenRequest?: (request: ContentOpenRequest) => void
+    }) => {
+      const { setSlot } = useSystemAppHeaderSlot()
+
+      useEffect(() => {
+        setSlot({
+          tabs: [
+            { id: "main", label: "主视图" },
+            { id: "settings", label: "设置" },
+          ],
+          value: "main",
+          onValueChange: vi.fn(),
+          actions: <button type="button">App 操作</button>,
+        })
+        return () => {
+          setSlot(null)
+        }
+      }, [appId, setSlot])
+
+      return (
+        <div>
+          <span data-testid="system-app-content">{appId} 内容</span>
+          <button
+            type="button"
+            onClick={() => onContentOpenRequest?.({
+              kind: "detail",
+              requestId: "request-1",
+              contentType: "skill",
+              contentId: "skill-1",
+            })}
+          >
+            触发内容请求
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 describe("AppsModule", () => {
   const roots: Root[] = []
@@ -100,6 +124,9 @@ describe("AppsModule", () => {
     expect(mocks.openSystemApp).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("用量监控")
     expect(document.body.textContent).toContain("usage-monitor 内容")
+    expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("主视图")
+    expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("App 操作")
+    expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
   })
 
   it("opens the embedded app in a new window from the host toolbar", async () => {
@@ -135,6 +162,8 @@ describe("AppsModule", () => {
 
     expect(document.body.textContent).toContain("资源仓库")
     expect(document.body.textContent).not.toContain("usage-monitor 内容")
+    expect(document.querySelector("[data-embedded-system-app-tabs]")).toBeNull()
+    expect(document.body.textContent).not.toContain("App 操作")
   })
 
   it("switches embedded non-resource apps to the resource repository for content requests", async () => {

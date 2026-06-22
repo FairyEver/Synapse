@@ -1,10 +1,13 @@
-import type { ReactNode } from "react"
+import { useEffect, useMemo, type ReactNode } from "react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  useOptionalSystemAppHeaderSlot,
+  type SystemAppHeaderSlotState,
+  type SystemAppHeaderSlotTab,
+} from "./system-app-header-slot"
 
-type SystemAppWindowTab<T extends string = string> = {
+type SystemAppWindowTab<T extends string = string> = SystemAppHeaderSlotTab & {
   readonly id: T
-  readonly label: string
-  readonly disabled?: boolean
 }
 
 type SystemAppWindowShellTabProps<T extends string = string> = {
@@ -32,6 +35,30 @@ function SystemAppWindowShell<T extends string>({
   children,
 }: SystemAppWindowShellProps<T>) {
   const hasTabs = tabs !== undefined
+  const embeddedHeaderSlot = useOptionalSystemAppHeaderSlot()
+  const setEmbeddedHeaderSlot = embeddedHeaderSlot?.setSlot
+  const slotState = useMemo<SystemAppHeaderSlotState>(() => ({
+    tabs: hasTabs ? tabs : undefined,
+    value: hasTabs ? value : undefined,
+    onValueChange: hasTabs ? (nextValue: string) => onValueChange(nextValue as T) : undefined,
+    actions,
+  }), [actions, hasTabs, onValueChange, tabs, value])
+
+  useEffect(() => {
+    if (!setEmbeddedHeaderSlot) return undefined
+    setEmbeddedHeaderSlot(slotState)
+    return () => {
+      setEmbeddedHeaderSlot(null)
+    }
+  }, [setEmbeddedHeaderSlot, slotState])
+
+  if (embeddedHeaderSlot) {
+    return (
+      <div className="h-full min-h-0 min-w-0 bg-surface">
+        {children}
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
