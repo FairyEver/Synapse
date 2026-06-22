@@ -66,6 +66,30 @@ afterEach(() => {
 })
 
 describe("AboutPanel cheat codes", () => {
+  it("marks version and update details as selectable text", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    act(() => {
+      emitUpdaterState(updateState({
+        bytesPerSecond: 320 * 1024,
+        currentVersion: "0.2.282",
+        downloadPercent: 11.5,
+        message: "正在下载更新...",
+        releaseVersion: "0.2.284",
+        status: "downloading",
+        totalBytes: 58.3 * 1024 * 1024,
+        transferredBytes: 6.7 * 1024 * 1024,
+      }))
+    })
+
+    expect(isInsideSelectableText(getElementWithText("v0.2.282"))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText("软件更新"))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText("正在下载更新..."))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText("最新版本：v0.2.284"))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText("下载进度"))).toBe(true)
+    expect(isInsideSelectableText(getElementWithText(/已下载 6\.70 MB \/ 58\.3 MB/))).toBe(true)
+  })
+
   it("copies the visible app version when clicked", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
@@ -336,6 +360,26 @@ function getVersionButton(): HTMLButtonElement {
   }
 
   return button
+}
+
+function getElementWithText(text: string | RegExp): HTMLElement {
+  const element = Array.from(document.body.querySelectorAll("*"))
+    .reverse()
+    .find((candidate) => {
+      const content = candidate.textContent ?? ""
+
+      return typeof text === "string" ? content === text : text.test(content)
+    })
+
+  if (!(element instanceof HTMLElement)) {
+    throw new Error(`Element with text ${String(text)} not found`)
+  }
+
+  return element
+}
+
+function isInsideSelectableText(element: HTMLElement): boolean {
+  return element.closest('[data-allow-select="true"]') !== null
 }
 
 function getUpdateActionButton(): HTMLButtonElement {

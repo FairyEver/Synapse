@@ -14,7 +14,6 @@ import { withKnowledgeBaseManifestMutationLock } from "./manifest-mutation-lock"
 const REPORT_SCHEMA = "synapse.kb.ingest.report.v1"
 const ADDRESS_PATTERN = /^[cl]-\d{6}$/u
 const PREFLIGHT_SOURCE_LIST_MAX_ITEMS = 100
-const PREFLIGHT_SOURCE_LIST_MAX_CHARS = 10_000
 const ADDRESS_EXCLUDED_FILENAMES = new Set([
   "_index.md",
   "index.md",
@@ -122,17 +121,7 @@ function isIngestMessage(content: string): boolean {
 function selectListedPreflightSources(
   changedSources: readonly KnowledgeBaseSourceScanItem[],
 ): readonly KnowledgeBaseSourceScanItem[] {
-  const listedSources: KnowledgeBaseSourceScanItem[] = []
-  let sourceListChars = 0
-  for (const source of changedSources) {
-    if (listedSources.length >= PREFLIGHT_SOURCE_LIST_MAX_ITEMS) break
-    const line = `  - ${source.relativePath} (${source.hash})`
-    const nextSourceListChars = sourceListChars + line.length + 1
-    if (nextSourceListChars > PREFLIGHT_SOURCE_LIST_MAX_CHARS) break
-    listedSources.push(source)
-    sourceListChars = nextSourceListChars
-  }
-  return listedSources
+  return changedSources.slice(0, PREFLIGHT_SOURCE_LIST_MAX_ITEMS)
 }
 
 function buildPreflightAppendix(

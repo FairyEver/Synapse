@@ -346,7 +346,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
       <SettingsGroup>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1" data-allow-select="true">
             <p className="text-sm font-medium">当前版本</p>
             <button
               type="button"
@@ -363,7 +363,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
         <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
           <div className="flex min-w-0 flex-col gap-2">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1" data-allow-select="true">
               <p className="text-sm font-medium">软件更新</p>
               <p className={statusClassName}>{actionError ?? updateState.message}</p>
               {updateState.releaseVersion && updateState.releaseVersion !== updateState.currentVersion ? (
@@ -397,7 +397,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           </div>
 
           {updateState.status === "downloading" || updateState.status === "downloaded" ? (
-            <div className="flex min-w-0 flex-col gap-2 md:col-span-2">
+            <div className="flex min-w-0 flex-col gap-2 md:col-span-2" data-allow-select="true">
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
                 {updateState.downloadPercent !== null ? (

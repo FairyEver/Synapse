@@ -46,7 +46,25 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     expect(prepared.content).toContain(".raw/batch-000.md")
     expect(prepared.content).not.toContain(".raw/batch-124.md")
     expect(prepared.content).toContain("26 additional changed `.raw/` sources were omitted from this prompt")
-    expect(prepared.content.length).toBeLessThan(12_000)
+  })
+
+  it("does not omit sources only because the preflight path list is long", async () => {
+    const root = await createKnowledgeBaseRoot()
+    for (let index = 0; index < 80; index += 1) {
+      const name = `long-source-${String(index).padStart(3, "0")}-${"segment-".repeat(18)}.md`
+      await writeFile(path.join(root, ".raw", name), `# Source ${index}\n`, "utf8")
+    }
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    const prepared = await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+
+    expect(prepared.content).toContain(".raw/source.md")
+    expect(prepared.content).toContain(".raw/long-source-079-")
+    expect(prepared.content).not.toContain("additional changed `.raw/` sources were omitted")
   })
 
   it("ignores reported sources omitted from a bounded preflight batch", async () => {
