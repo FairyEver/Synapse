@@ -37,6 +37,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @synapse/desktop run typecheck
+      - name: Build desktop
+        run: pnpm --filter @synapse/desktop run build
       - name: Run tests
         run: pnpm --filter @synapse/desktop run test
       - name: Verify IPC codegen drift
@@ -71,9 +73,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @synapse/desktop run typecheck
-      - name: Run tests
-        run: pnpm --filter @synapse/desktop run test
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
+      - name: Run tests
+        run: pnpm --filter @synapse/desktop run test
       - name: Package Windows installer
-        run: pnpm --filter @synapse/desktop run package:win
+        run: pnpm --filter @synapse/desktop run package:win:compiled
