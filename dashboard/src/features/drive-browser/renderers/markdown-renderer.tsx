@@ -35,6 +35,7 @@ const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
 const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
 
+type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
 
 type SelectionPopoverPosition = {
@@ -298,6 +299,13 @@ export function DriveMarkdownRenderer({
   const outlinePanelSize = outlinePanelOpen ? MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE : 0
   const commentsPanelSize = commentsOpen ? MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE : 0
   const documentPanelSize = 100 - outlinePanelSize - commentsPanelSize
+  const outlinePanelDefaultSize = resizablePanelPercent(MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE)
+  const outlinePanelMinSize = resizablePanelPercent(MARKDOWN_OUTLINE_PANEL_MIN_SIZE)
+  const outlinePanelMaxSize = resizablePanelPercent(MARKDOWN_OUTLINE_PANEL_MAX_SIZE)
+  const documentPanelDefaultSize = resizablePanelPercent(documentPanelSize)
+  const commentsPanelDefaultSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE)
+  const commentsPanelMinSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_MIN_SIZE)
+  const commentsPanelMaxSize = resizablePanelPercent(MARKDOWN_COMMENTS_PANEL_MAX_SIZE)
 
   const createThread = async () => {
     if (!pendingTarget || !commentBody.trim()) return
@@ -316,7 +324,7 @@ export function DriveMarkdownRenderer({
   }
 
   return (
-    <div className='min-h-full bg-background'>
+    <div className='h-full min-h-0 overflow-hidden bg-background'>
       {selectionPopover && pendingTarget && !commentDialogOpen ? (
         <div
           data-drive-annotation-selection-action
@@ -362,21 +370,21 @@ export function DriveMarkdownRenderer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div ref={layoutRef} data-testid='markdown-layout' className='min-h-full w-full'>
-        <ResizablePanelGroup direction='horizontal' className='min-h-full'>
+      <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
+        <ResizablePanelGroup direction='horizontal' className='h-full min-h-0'>
           {outlinePanelOpen ? (
             <>
               <ResizablePanel
-                defaultSize={MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE}
-                minSize={MARKDOWN_OUTLINE_PANEL_MIN_SIZE}
-                maxSize={MARKDOWN_OUTLINE_PANEL_MAX_SIZE}
-                data-panel-size={MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE}
-                data-panel-min-size={MARKDOWN_OUTLINE_PANEL_MIN_SIZE}
-                data-panel-max-size={MARKDOWN_OUTLINE_PANEL_MAX_SIZE}
+                defaultSize={outlinePanelDefaultSize}
+                minSize={outlinePanelMinSize}
+                maxSize={outlinePanelMaxSize}
+                data-panel-size={outlinePanelDefaultSize}
+                data-panel-min-size={outlinePanelMinSize}
+                data-panel-max-size={outlinePanelMaxSize}
                 data-markdown-resizable-panel='outline'
-                className='min-h-full !overflow-visible'
+                className='h-full min-h-0 !overflow-visible'
               >
-                <aside className='h-full px-4 py-6 md:px-6'>
+                <aside className='h-full overflow-hidden px-4 py-6 md:px-6'>
                   <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
                     <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
                     <MarkdownOutlineTree items={outline} />
@@ -387,12 +395,12 @@ export function DriveMarkdownRenderer({
             </>
           ) : null}
           <ResizablePanel
-            defaultSize={documentPanelSize}
-            minSize={35}
+            defaultSize={documentPanelDefaultSize}
+            minSize='35%'
             data-markdown-resizable-panel='document'
-            className='min-h-full min-w-0 !overflow-visible'
+            className='h-full min-h-0 min-w-0 !overflow-visible'
           >
-            <div className='min-w-0 px-4 py-6 md:px-6'>
+            <div data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
               <div
                 data-markdown-width-mode={widthMode}
                 className={cn(
@@ -443,16 +451,16 @@ export function DriveMarkdownRenderer({
             <>
               <ResizableHandle withHandle />
               <ResizablePanel
-                defaultSize={MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE}
-                minSize={MARKDOWN_COMMENTS_PANEL_MIN_SIZE}
-                maxSize={MARKDOWN_COMMENTS_PANEL_MAX_SIZE}
-                data-panel-size={MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE}
-                data-panel-min-size={MARKDOWN_COMMENTS_PANEL_MIN_SIZE}
-                data-panel-max-size={MARKDOWN_COMMENTS_PANEL_MAX_SIZE}
+                defaultSize={commentsPanelDefaultSize}
+                minSize={commentsPanelMinSize}
+                maxSize={commentsPanelMaxSize}
+                data-panel-size={commentsPanelDefaultSize}
+                data-panel-min-size={commentsPanelMinSize}
+                data-panel-max-size={commentsPanelMaxSize}
                 data-markdown-resizable-panel='comments'
-                className='min-h-full !overflow-visible'
+                className='h-full min-h-0 !overflow-visible'
               >
-                <aside className='h-full min-h-full self-stretch border-l bg-background'>
+                <aside className='h-full min-h-0 self-stretch overflow-hidden border-l bg-background'>
                   <MarkdownCommentsRail
                     threads={railThreads}
                     activeThreadId={activeThreadId}
@@ -480,6 +488,10 @@ export function DriveMarkdownRenderer({
       ) : null}
     </div>
   )
+}
+
+function resizablePanelPercent(value: number): ResizablePanelPercent {
+  return `${value}%`
 }
 
 function getSelectionRect(range: Range): DOMRect | null {

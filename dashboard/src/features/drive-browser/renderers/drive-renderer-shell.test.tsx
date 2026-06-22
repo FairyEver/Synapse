@@ -70,6 +70,25 @@ vi.mock('@mdxeditor/editor', async () => {
   }
 })
 
+vi.mock('../use-drive-annotations', () => ({
+  useDriveAnnotations: () => ({
+    threads: [],
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+    createThread: vi.fn(),
+    creatingThread: false,
+    reply: vi.fn(),
+    replying: false,
+    updateComment: vi.fn(),
+    updatingComment: false,
+    deleteComment: vi.fn(),
+    deletingComment: false,
+    deleteThread: vi.fn(),
+    deletingThread: false,
+  }),
+}))
+
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 
@@ -105,6 +124,35 @@ describe('DriveRendererShell', () => {
     )
 
     expect(html).toContain('data-drive-code-renderer="true"')
+  })
+
+  it('does not make the markdown renderer host the scroll container', () => {
+    const html = renderToStaticMarkup(
+      <DriveRendererContent
+        snapshot={baseSnapshot({
+          current: {
+            ...baseSnapshot().current,
+            name: 'notes.md',
+            mimeType: 'text/markdown',
+            previewKind: 'markdown',
+          },
+          preview: {
+            kind: 'markdown',
+            text: '# Notes',
+            html: '<h1>Notes</h1>',
+            outline: [],
+            truncated: false,
+            imageUrl: null,
+            visitUrl: null,
+          },
+        })}
+        selected={{ id: 'markdown', label: '预览', container: 'reading' }}
+        body
+      />,
+    )
+
+    expect(html).toContain('overflow-hidden')
+    expect(html).not.toContain('overflow-auto"><div class="min-h-full bg-background"')
   })
 })
 

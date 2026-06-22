@@ -187,7 +187,7 @@ export function DriveRendererContent({
       : FULL_CONTAINER_CLASSNAME
   const contentHostClassName = cn(
     'h-full min-h-0',
-    selected.container === 'full' ? 'overflow-hidden' : 'overflow-auto'
+    selected.container === 'full' || selected.id === 'markdown' ? 'overflow-hidden' : 'overflow-auto'
   )
   const renderContent = (content: ReactNode) => (
     <div className={contentHostClassName}>

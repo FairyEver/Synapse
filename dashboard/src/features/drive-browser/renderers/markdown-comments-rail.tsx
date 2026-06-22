@@ -69,7 +69,7 @@ export function MarkdownCommentsRail({
   }, [threads])
 
   return (
-    <div data-markdown-comments-rail='true' className='min-h-full bg-background'>
+    <div data-markdown-comments-rail='true' className='h-full min-h-full bg-background'>
       <div className='sticky top-0 z-10 flex h-10 shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium'>
         <span>评论</span>
         <div className='flex items-center gap-1'>
