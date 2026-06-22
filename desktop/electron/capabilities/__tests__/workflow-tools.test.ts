@@ -34,7 +34,16 @@ function stringProperty(source: unknown, key: string): string {
 describe("workflow MCP tool definitions", () => {
   it("keeps the built-in workflow MCP API reference aligned with the end node schema", async () => {
     const reference = await readFile(
-      path.join(process.cwd(), "resources", "templates", "skills", "synapse-workflow-mcp", "files", "api-reference.md"),
+      path.join(
+        process.cwd(),
+        "resources",
+        "templates",
+        "skills",
+        "synapse-skill",
+        "files",
+        "workflow",
+        "api-reference.md",
+      ),
       "utf8",
     )
 
