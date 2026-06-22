@@ -4,6 +4,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Empty,
   EmptyHeader,
   EmptyTitle,
@@ -23,6 +30,8 @@ type GitChangesTabProps = {
   readonly onCommitted?: () => void | Promise<void>
   readonly onPush?: () => void
   readonly pushDisabled?: boolean
+  readonly commitDialogOpen: boolean
+  readonly onCommitDialogOpenChange: (open: boolean) => void
 }
 
 type CommitNotice = {
@@ -40,7 +49,15 @@ const statusLabels: Record<SynapseGitFileChange["status"], string> = {
   unknown: "未知",
 }
 
-export function GitChangesTab({ repository, status, onCommitted, onPush, pushDisabled }: GitChangesTabProps) {
+export function GitChangesTab({
+  repository,
+  status,
+  onCommitted,
+  onPush,
+  pushDisabled,
+  commitDialogOpen,
+  onCommitDialogOpenChange,
+}: GitChangesTabProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,9 +96,18 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
     }
   }
 
+  const handleCommitDialogOpenChange = (open: boolean) => {
+    if (busy) return
+    if (open) {
+      setError(null)
+      setCommitNotice(null)
+    }
+    onCommitDialogOpenChange(open)
+  }
+
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto]">
-      <div className="grid min-h-0 min-w-0 gap-0 border-b bg-background md:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 min-w-0">
+      <div className="grid min-h-0 min-w-0 gap-0 bg-background md:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
         <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
           <div className="min-h-full divide-y divide-border">
             {status.loading ? (
@@ -160,66 +186,69 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
           </div>
         </ScrollArea>
       </div>
-      <div
-        className="grid min-w-0 max-w-full gap-3 overflow-hidden bg-background p-4"
-        data-git-changes-commit-panel="true"
+      <Dialog
+        open={commitDialogOpen}
+        onOpenChange={handleCommitDialogOpenChange}
+        data-track="git-commit-dialog"
       >
-        {status.error || error ? (
-          <Alert variant="destructive">
-            <AlertTitle>操作失败</AlertTitle>
-            <AlertDescription>{status.error ?? error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {hasConflicts ? (
-          <Alert variant="destructive">
-            <AlertTitle>{actionPlan.blockerText ?? "发生冲突"}</AlertTitle>
-            <AlertDescription>{actionPlan.recoveryText ?? "处理冲突后再继续。"}</AlertDescription>
-          </Alert>
-        ) : null}
-        {commitNotice ? (
-          <Alert>
-            <AlertTitle>已提交</AlertTitle>
-            <AlertDescription className="flex flex-wrap items-center gap-2">
-              <span>{commitNotice.text}</span>
-              {commitNotice.canPush && onPush ? (
-                <Button type="button" variant="outline" size="sm" disabled={pushDisabled} onClick={onPush}>
-                  推送
-                </Button>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {changes.length > 0 ? (
-          <div
-            className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 text-sm"
-            data-git-changes-selection-bar="true"
-          >
-            <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
-            <span className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
-                全选
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
-                全不选
-              </Button>
-            </span>
+        <DialogContent className="sm:max-w-lg" showCloseButton={!busy} aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>提交改动</DialogTitle>
+          </DialogHeader>
+          <div className="grid min-w-0 gap-3">
+            {status.error || error ? (
+              <Alert variant="destructive">
+                <AlertTitle>操作失败</AlertTitle>
+                <AlertDescription>{status.error ?? error}</AlertDescription>
+              </Alert>
+            ) : null}
+            {hasConflicts ? (
+              <Alert variant="destructive">
+                <AlertTitle>{actionPlan.blockerText ?? "发生冲突"}</AlertTitle>
+                <AlertDescription>{actionPlan.recoveryText ?? "处理冲突后再继续。"}</AlertDescription>
+              </Alert>
+            ) : null}
+            {commitNotice ? (
+              <Alert>
+                <AlertTitle>已提交</AlertTitle>
+                <AlertDescription className="flex flex-wrap items-center gap-2">
+                  <span>{commitNotice.text}</span>
+                  {commitNotice.canPush && onPush ? (
+                    <Button type="button" variant="outline" size="sm" disabled={pushDisabled} onClick={onPush}>
+                      推送
+                    </Button>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="text-sm text-muted-foreground">
+              已选 {status.selectedPaths.length} / {changes.length}
+            </div>
+            <div className="grid min-w-0 gap-2">
+              <Label htmlFor="git-commit-message">提交说明</Label>
+              <Textarea
+                id="git-commit-message"
+                className="min-h-24 min-w-0 max-w-full"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+              />
+            </div>
           </div>
-        ) : null}
-        <div className="grid min-w-0 gap-2">
-          <Label htmlFor="git-commit-message">提交说明</Label>
-          <Textarea
-            id="git-commit-message"
-            className="min-h-24 min-w-0 max-w-full"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-        </div>
-        <div className="flex min-w-0 justify-end">
-          <Button type="button" disabled={commitDisabled} onClick={() => void commit()}>
-            {busy ? "提交中" : "提交选中文件"}
-          </Button>
-        </div>
-      </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => handleCommitDialogOpenChange(false)}
+            >
+              取消
+            </Button>
+            <Button type="button" disabled={commitDisabled} onClick={() => void commit()}>
+              {busy ? "提交中" : "提交选中文件"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

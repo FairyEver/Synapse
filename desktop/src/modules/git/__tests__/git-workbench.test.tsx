@@ -85,6 +85,9 @@ describe("GitWorkbench", () => {
     expect(document.body.textContent).toContain("docs/a.md")
     expect(document.body.textContent).toContain("+hello")
 
+    await click(findButton("提交改动"))
+    expect(findDialog().textContent).toContain("提交改动")
+
     await changeTextarea("提交说明", "更新文档")
     await click(findButton("提交选中文件"))
 
@@ -234,7 +237,7 @@ describe("GitWorkbench", () => {
     expect(bridge.git.sync).toHaveBeenCalledWith("repo-1")
   })
 
-  it("uses shared empty states for empty worktree panes and keeps submit disabled", () => {
+  it("uses shared empty states for empty worktree panes without an inline submit panel", () => {
     const status: ReturnType<typeof useGitWorktreeStatus> = {
       snapshot: {
         repositoryId: "repo-1",
@@ -259,7 +262,14 @@ describe("GitWorkbench", () => {
       selectAll: vi.fn(),
       clearSelection: vi.fn(),
     }
-    const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
+    const html = renderToStaticMarkup(
+      <GitChangesTab
+        repository={repository}
+        status={status}
+        commitDialogOpen={false}
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
     const container = document.createElement("div")
     container.innerHTML = html
 
@@ -270,7 +280,7 @@ describe("GitWorkbench", () => {
     expect(emptyStates).toHaveLength(2)
     expect(container.textContent).toContain("暂无改动")
     expect(container.textContent).toContain("选择文件查看差异")
-    expect(submit?.hasAttribute("disabled")).toBe(true)
+    expect(submit).toBeUndefined()
   })
 
   it("uses shared empty states for empty history panes", () => {
@@ -369,7 +379,14 @@ describe("GitWorkbench", () => {
       selectAll: vi.fn(),
       clearSelection: vi.fn(),
     }
-    const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
+    const html = renderToStaticMarkup(
+      <GitChangesTab
+        repository={repository}
+        status={status}
+        commitDialogOpen={false}
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
     const container = document.createElement("div")
     container.innerHTML = html
 
@@ -389,17 +406,26 @@ describe("GitWorkbench", () => {
     expect(rightViewport?.className).toContain("[&>div]:!max-w-full")
     expect(detailContent?.className).toContain("min-w-0")
     expect(detailContent?.className).toContain("max-w-full")
-    expect(commitPanel?.className).toContain("min-w-0")
-    expect(commitPanel?.className).toContain("max-w-full")
-    expect(commitPanel?.className).toContain("overflow-hidden")
-    expect(selectionBar?.className).toContain("flex-wrap")
-    expect(textarea?.className).toContain("min-w-0")
-    expect(textarea?.className).toContain("max-w-full")
+    expect(commitPanel).toBeNull()
+    expect(selectionBar).toBeNull()
+    expect(textarea).toBeNull()
     expect(diff?.className).toContain("block")
     expect(diff?.className).toContain("w-full")
     expect(diff?.className).toContain("min-w-0")
     expect(diff?.className).toContain("max-w-full")
     expect(diff?.className).toContain("overflow-x-auto")
+  })
+
+  it("places selection actions in the changes tab header", async () => {
+    await renderWorkbench(roots)
+
+    const selectionBar = document.querySelector('[data-git-changes-selection-bar="true"]')
+    const commitPanel = document.querySelector('[data-git-changes-commit-panel="true"]')
+
+    expect(selectionBar?.textContent).toContain("已选 1 / 1")
+    expect(selectionBar?.textContent).toContain("全选")
+    expect(selectionBar?.textContent).toContain("全不选")
+    expect(commitPanel).toBeNull()
   })
 
   it("does not render an empty history file list border", () => {
@@ -539,7 +565,15 @@ async function renderChangesTab(
   roots.push(root)
 
   await act(async () => {
-    root.render(<GitChangesTab repository={repository} status={status} onPush={vi.fn()} />)
+    root.render(
+      <GitChangesTab
+        repository={repository}
+        status={status}
+        onPush={vi.fn()}
+        commitDialogOpen
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
     await flush()
   })
 }
@@ -576,6 +610,12 @@ function findButton(label: string): HTMLElement {
     .find((item) => item.textContent?.includes(label))
   if (!button) throw new Error(`Button not found: ${label}`)
   return button
+}
+
+function findDialog(): HTMLElement {
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
+  if (!dialog) throw new Error("Dialog not found")
+  return dialog
 }
 
 function exactButtonsByLabel(label: string): HTMLButtonElement[] {

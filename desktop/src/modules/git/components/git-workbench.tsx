@@ -40,11 +40,13 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const [operationError, setOperationError] = useState<string | null>(null)
   const [operationFailure, setOperationFailure] = useState<GitOperationFailure | null>(null)
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository, { enabled: view === "history" })
   const currentBranch = status.snapshot?.currentBranch ?? null
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
+  const changes = status.snapshot?.changes ?? []
 
   const refreshAll = async () => {
     await status.refresh()
@@ -89,6 +91,9 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       return
     }
     setView("changes")
+    if (changes.length > 0) {
+      setCommitDialogOpen(true)
+    }
   }
 
   const recommendedLabel = busy === recommendedAction ? `${actionPlan.primaryLabel}中` : actionPlan.primaryLabel
@@ -246,16 +251,36 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       ) : null}
       <Tabs value={view} onValueChange={setView} className="flex min-h-0 min-w-0 flex-1 flex-col gap-0">
         <div className="shrink-0 border-b bg-background px-4 py-2">
-          <TabsList>
-            <TabsTrigger value="changes">改动</TabsTrigger>
-            <TabsTrigger value="history">历史</TabsTrigger>
-          </TabsList>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <TabsList>
+              <TabsTrigger value="changes">改动</TabsTrigger>
+              <TabsTrigger value="history">历史</TabsTrigger>
+            </TabsList>
+            {view === "changes" && changes.length > 0 ? (
+              <div
+                className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-sm"
+                data-git-changes-selection-bar="true"
+              >
+                <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
+                <span className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
+                    全选
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
+                    全不选
+                  </Button>
+                </span>
+              </div>
+            ) : null}
+          </div>
         </div>
         <TabsContent value="changes" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
           <GitChangesTab
             repository={repository}
             status={status}
             pushDisabled={busy !== null}
+            commitDialogOpen={commitDialogOpen}
+            onCommitDialogOpenChange={setCommitDialogOpen}
             onCommitted={history.hasLoaded ? history.refresh : undefined}
             onPush={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
           />
