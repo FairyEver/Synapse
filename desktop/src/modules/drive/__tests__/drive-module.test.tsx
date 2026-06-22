@@ -652,7 +652,7 @@ describe("DriveModule", () => {
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
   })
 
-  it("does not preview a file when clicking its name", async () => {
+  it("opens a file preview when clicking its name", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
     ])
@@ -660,8 +660,53 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
+    const fileName = driveItemNameElement("report.txt")
+    await act(async () => {
+      fileName.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      fileName.click()
+      await flushPromises()
+    })
+
+    expect(fileName.className).toContain("cursor-pointer")
+    expect(fileName.className).toContain("hover:underline")
+    expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/file-1")
+  })
+
+  it("does not preview a file when releasing a name click after selecting its name", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    selectElementText(driveItemNameElement("report.txt"))
+
     await act(async () => {
       const fileName = driveItemNameElement("report.txt")
+      fileName.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      fileName.click()
+      await flushPromises()
+    })
+
+    expect(mocks.getDriveItemPreviewUrl).not.toHaveBeenCalled()
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+  })
+
+  it("does not expose a clickable file name for unavailable previews", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "pending.txt", type: "file", storageStatus: "pending" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const fileName = driveItemNameElement("pending.txt")
+    expect(fileName.className).not.toContain("cursor-pointer")
+    expect(fileName.className).not.toContain("hover:underline")
+
+    await act(async () => {
       fileName.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
       fileName.click()
       await flushPromises()

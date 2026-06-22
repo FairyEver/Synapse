@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   ChevronRight,
@@ -1575,6 +1575,23 @@ function DriveFileListRow({
   const canShare = canShareDriveItem(item)
   const hasActiveShare = Boolean(item.activeShareId)
   const pointerDownStartedOnNameRef = useRef(false)
+  const canOpenFileName = !isFolder && canOpen
+
+  const handleFileNameClick = (event: MouseEvent<HTMLElement>) => {
+    if (!canOpenFileName) return
+    event.stopPropagation()
+    const shouldIgnoreSelectionClick = pointerDownStartedOnNameRef.current && hasSelectedTextInside(event.currentTarget)
+    pointerDownStartedOnNameRef.current = false
+    if (shouldIgnoreSelectionClick) return
+    onOpenItem(item)
+  }
+
+  const handleFileNameKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!canOpenFileName || (event.key !== "Enter" && event.key !== " ")) return
+    event.preventDefault()
+    event.stopPropagation()
+    onOpenItem(item)
+  }
 
   return (
     <TableRow
@@ -1618,9 +1635,16 @@ function DriveFileListRow({
                 </span>
               ) : (
                 <span
-                  className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
+                  className={cn(
+                    "block min-w-0 truncate whitespace-nowrap font-medium select-text",
+                    canOpenFileName && "cursor-pointer underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  )}
                   data-drive-item-name="true"
+                  role={canOpenFileName ? "button" : undefined}
+                  tabIndex={canOpenFileName ? 0 : undefined}
                   title={item.name}
+                  onClick={handleFileNameClick}
+                  onKeyDown={handleFileNameKeyDown}
                   onContextMenu={(event) => {
                     event.stopPropagation()
                   }}
