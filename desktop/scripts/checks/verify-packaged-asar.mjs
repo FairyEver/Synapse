@@ -146,7 +146,7 @@ const usageAnalysisWorkerEntries = [
 ]
 const requiredExtraResourceFiles = [
   {
-    relativePath: "templates/skills/synapse-content-mcp/meta.json",
+    relativePath: "templates/skills/synapse-skill/meta.json",
     label: "built-in content templates",
   },
   {
