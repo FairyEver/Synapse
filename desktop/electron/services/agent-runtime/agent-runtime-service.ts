@@ -1340,37 +1340,117 @@ function askUserQuestionUpdatedInput(
   if (!Array.isArray(questions)) {
     throw new Error(AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE)
   }
-  assertAskUserQuestionAnswersCoverQuestions(answers, questions)
+  const normalized = normalizeAskUserQuestionResponse(answers, questions)
   return {
-    ...request.updatedInput,
+    ...omitAskUserQuestionResponseFields(request.updatedInput),
     questions,
-    answers,
+    ...(normalized.kind === "answers"
+      ? { answers: normalized.answers }
+      : { response: normalized.response }),
   }
 }
 
-function assertAskUserQuestionAnswersCoverQuestions(
+function normalizeAskUserQuestionResponse(
   answers: Record<string, unknown>,
   questions: readonly unknown[],
-): void {
+): { readonly kind: "answers"; readonly answers: Record<string, unknown> }
+  | { readonly kind: "response"; readonly response: string } {
   if (Object.keys(answers).length < questions.length) {
     throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
   }
-  const missingAnswer = questions.some((question, index) => {
+  const questionTextCounts = askUserQuestionTextCounts(questions)
+  const normalizedAnswers: Record<string, unknown> = {}
+  const responseLines: string[] = []
+  let hasDuplicateQuestionText = false
+
+  questions.forEach((question, index) => {
     const record = recordValue(question)
-    const stableKey = askUserQuestionAnswerKey(record, index)
     const textKey = stringRecordValue(record?.question)
-    return !hasAnswerValue(answers[stableKey]) && (!textKey || !hasAnswerValue(answers[textKey]))
+    if (!textKey) {
+      throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
+    }
+    if ((questionTextCounts.get(textKey) ?? 0) > 1) {
+      hasDuplicateQuestionText = true
+    }
+    const answer = askUserQuestionAnswerValue(answers, record, index, questionTextCounts)
+    if (!hasAnswerValue(answer)) {
+      throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
+    }
+    normalizedAnswers[textKey] = answer
+    const label = askUserQuestionResponseLabel(record, index)
+    const formattedAnswer = formatAskUserQuestionAnswerValue(answer)
+    responseLines.push(`${index + 1}. ${label}: ${formattedAnswer}`)
   })
-  if (missingAnswer) {
-    throw new Error(AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE)
+
+  if (hasDuplicateQuestionText) {
+    return { kind: "response", response: responseLines.join("\n") }
   }
+
+  return { kind: "answers", answers: normalizedAnswers }
 }
 
-function askUserQuestionAnswerKey(question: Record<string, unknown> | undefined, index: number): string {
-  return stringRecordValue(question?.id) ?? stringRecordValue(question?.key) ?? `question-${index}`
+function askUserQuestionTextCounts(questions: readonly unknown[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const question of questions) {
+    const text = stringRecordValue(recordValue(question)?.question)
+    if (!text) continue
+    counts.set(text, (counts.get(text) ?? 0) + 1)
+  }
+  return counts
+}
+
+function askUserQuestionAnswerValue(
+  answers: Record<string, unknown>,
+  question: Record<string, unknown> | undefined,
+  index: number,
+  questionTextCounts: ReadonlyMap<string, number>,
+): unknown {
+  for (const key of askUserQuestionAnswerKeys(question, index, questionTextCounts)) {
+    const value = answers[key]
+    if (hasAnswerValue(value)) return value
+  }
+  return undefined
+}
+
+function askUserQuestionAnswerKeys(
+  question: Record<string, unknown> | undefined,
+  index: number,
+  questionTextCounts: ReadonlyMap<string, number>,
+): readonly string[] {
+  const keys: string[] = []
+  const textKey = stringRecordValue(question?.question)
+  if (textKey && (questionTextCounts.get(textKey) ?? 0) <= 1) {
+    keys.push(textKey)
+  }
+  const idKey = stringRecordValue(question?.id)
+  if (idKey) keys.push(idKey)
+  const stableKey = stringRecordValue(question?.key)
+  if (stableKey) keys.push(stableKey)
+  keys.push(`question-${index}`)
+  return [...new Set(keys)]
+}
+
+function askUserQuestionResponseLabel(question: Record<string, unknown> | undefined, index: number): string {
+  const text = stringRecordValue(question?.question) ?? `Question ${index + 1}`
+  const header = stringRecordValue(question?.header)
+  return header ? `${header}: ${text}` : text
+}
+
+function formatAskUserQuestionAnswerValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ")
+  return String(value)
+}
+
+function omitAskUserQuestionResponseFields(input: Record<string, unknown> | undefined): Record<string, unknown> {
+  const output = { ...(input ?? {}) }
+  delete output.questions
+  delete output.answers
+  delete output.response
+  return output
 }
 
 function hasAnswerValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0
   return typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null
 }
 
