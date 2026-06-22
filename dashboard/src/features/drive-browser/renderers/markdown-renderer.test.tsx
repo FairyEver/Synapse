@@ -20,15 +20,40 @@ let annotationsMock: ReturnType<typeof createAnnotationsMock>
 let scrollIntoViewMock: ReturnType<typeof vi.fn>
 let scrollContainerScrollToMock: ReturnType<typeof vi.fn>
 let rangeRects: DOMRect[]
+let resizeObservers: TestResizeObserver[]
+let animationFrameCallbacks: Array<{ readonly id: number; readonly callback: FrameRequestCallback }>
+let nextAnimationFrameId: number
 
 beforeEach(() => {
   annotationsMock = createAnnotationsMock()
   scrollIntoViewMock = vi.fn()
   scrollContainerScrollToMock = vi.fn()
   rangeRects = [domRect({ left: 80, top: 120, width: 48, height: 20 })]
+  resizeObservers = []
+  animationFrameCallbacks = []
+  nextAnimationFrameId = 1
   Element.prototype.scrollIntoView = scrollIntoViewMock
   Range.prototype.getBoundingClientRect = vi.fn(() => rangeRects[0] ?? domRect())
   Range.prototype.getClientRects = vi.fn(() => rangeRects as unknown as DOMRectList)
+  vi.stubGlobal('ResizeObserver', class ResizeObserverMock {
+    readonly callback: ResizeObserverCallback
+    readonly observe = vi.fn()
+    readonly disconnect = vi.fn()
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback
+      resizeObservers.push(this)
+    }
+  })
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    const id = nextAnimationFrameId
+    nextAnimationFrameId += 1
+    animationFrameCallbacks.push({ id, callback })
+    return id
+  })
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+    animationFrameCallbacks = animationFrameCallbacks.filter((item) => item.id !== id)
+  })
   useAuthStore.getState().auth.reset()
 })
 
@@ -38,6 +63,8 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('DriveMarkdownRenderer', () => {
@@ -293,6 +320,64 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('1')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
     expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
+  })
+
+  it('remeasures comment overlays after markdown body resize without using window resize listeners', async () => {
+    annotationsMock.threads = [thread()]
+    const windowAddEventListener = vi.spyOn(window, 'addEventListener')
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    expect(resizeObservers).toHaveLength(1)
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 120px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('left: 80px')
+
+    rangeRects = [domRect({ left: 160, top: 240, width: 90, height: 22 })]
+    triggerMarkdownResize()
+    triggerMarkdownResize()
+    triggerMarkdownResize()
+
+    expect(animationFrameCallbacks).toHaveLength(1)
+
+    await flushAnimationFrames()
+
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 240px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('left: 160px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('width: 90px')
+
+    scrollContainerScrollToMock.mockClear()
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: 180,
+        clientY: 250,
+      }))
+    })
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 201, behavior: 'smooth' })
+    expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
+
+    windowAddEventListener.mockRestore()
+  })
+
+  it('renders the focused thread overlay with a stronger active highlight', async () => {
+    annotationsMock.threads = [
+      thread({ id: 'thread-1', body: 'First comment' }),
+      thread({ id: 'thread-2', body: 'Second comment', range: { start: 6, end: 8 }, quote: '内容' }),
+    ]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    expect(threadOverlay('thread-1')?.className).not.toContain('ring-1')
+    expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
+
+    await click(elementWithText('First comment'))
+
+    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
+    expect(threadOverlay('thread-1')?.className).toContain('bg-amber-200/70')
+    expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
   })
 
   it('uses the precise overlay rect for focus scrolling across table and inline code ranges', async () => {
@@ -583,6 +668,22 @@ function threadOverlay(threadId: string) {
   return document.querySelector(`[data-drive-annotation-overlay-thread-id="${threadId}"]`)
 }
 
+function triggerMarkdownResize() {
+  const observer = resizeObservers[0]
+  if (!observer) throw new Error('Missing ResizeObserver')
+  observer.callback([], observer as unknown as ResizeObserver)
+}
+
+async function flushAnimationFrames() {
+  await act(async () => {
+    while (animationFrameCallbacks.length > 0) {
+      const callbacks = animationFrameCallbacks
+      animationFrameCallbacks = []
+      callbacks.forEach((item) => item.callback(performance.now()))
+    }
+  })
+}
+
 function domRect({
   left = 80,
   top = 120,
@@ -616,6 +717,12 @@ function selectStrongText() {
   const selection = window.getSelection()
   selection?.removeAllRanges()
   selection?.addRange(range)
+}
+
+type TestResizeObserver = {
+  readonly callback: ResizeObserverCallback
+  readonly observe: ReturnType<typeof vi.fn>
+  readonly disconnect: ReturnType<typeof vi.fn>
 }
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {

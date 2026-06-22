@@ -113,7 +113,7 @@ export function DriveMarkdownRenderer({
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
 
-  useLayoutEffect(() => {
+  const measureAnnotationLayout = useCallback(() => {
     const root = bodyRef.current
     if (!root) return
     const rootRect = root.getBoundingClientRect()
@@ -157,7 +157,30 @@ export function DriveMarkdownRenderer({
 
     setThreadAnchorTopById((current) => sameNumberRecord(current, nextAnchors) ? current : nextAnchors)
     setAnnotationOverlayRects((current) => sameOverlayRects(current, nextRects) ? current : nextRects)
-  }, [annotated.resolved, commentsOpen, outlineOpen, pendingTarget])
+  }, [annotated.resolved, pendingTarget])
+
+  useLayoutEffect(() => {
+    measureAnnotationLayout()
+  }, [commentsOpen, measureAnnotationLayout, outlineOpen])
+
+  useEffect(() => {
+    const root = bodyRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    let frame: number | null = null
+    const scheduleMeasurement = () => {
+      if (frame !== null) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        measureAnnotationLayout()
+      })
+    }
+    const observer = new ResizeObserver(scheduleMeasurement)
+    observer.observe(root)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) window.cancelAnimationFrame(frame)
+    }
+  }, [measureAnnotationLayout])
 
   useEffect(() => {
     if (commentsTouchedRef.current || annotations.threads.length === 0) return
@@ -351,8 +374,10 @@ export function DriveMarkdownRenderer({
                     className={cn(
                       'absolute mix-blend-multiply dark:mix-blend-screen',
                       rect.kind === 'pending'
-                        ? 'bg-amber-200/45 ring-1 ring-amber-300/60 dark:bg-amber-900/30 dark:ring-amber-700/50'
-                        : 'bg-amber-100/60 dark:bg-amber-900/25'
+                        ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
+                        : rect.threadId === activeThreadId
+                          ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
+                          : 'bg-amber-200/55 dark:bg-amber-800/35'
                     )}
                     style={{
                       top: rect.top,
