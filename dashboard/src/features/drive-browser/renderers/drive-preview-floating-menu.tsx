@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemMenuSections } from './drive-preview-actions'
+import { DriveRendererOptionMenuLabel } from './drive-preview-header'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -236,9 +237,12 @@ export function DrivePreviewFloatingMenu({
                   <DropdownMenuCheckboxItem
                     key={option.id}
                     checked={option.id === selectedRendererId}
-                    onCheckedChange={() => onRendererChange(option.id)}
+                    disabled={Boolean(option.disabledReason)}
+                    onCheckedChange={() => {
+                      if (!option.disabledReason) onRendererChange(option.id)
+                    }}
                   >
-                    {option.label}
+                    <DriveRendererOptionMenuLabel option={option} />
                   </DropdownMenuCheckboxItem>
                 ))
               })}

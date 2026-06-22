@@ -142,9 +142,12 @@ function DrivePreviewHeaderAction({
           <DropdownMenuCheckboxItem
             key={option.id}
             checked={option.id === selectedRendererId}
-            onCheckedChange={() => onRendererChange(option.id)}
+            disabled={Boolean(option.disabledReason)}
+            onCheckedChange={() => {
+              if (!option.disabledReason) onRendererChange(option.id)
+            }}
           >
-            {option.label}
+            <DriveRendererOptionMenuLabel option={option} />
           </DropdownMenuCheckboxItem>
         ))}
       </DropdownMenuContent>
@@ -185,11 +188,24 @@ function DrivePreviewHeaderMenuAction({
     <DropdownMenuCheckboxItem
       key={option.id}
       checked={option.id === selectedRendererId}
-      onCheckedChange={() => onRendererChange(option.id)}
+      disabled={Boolean(option.disabledReason)}
+      onCheckedChange={() => {
+        if (!option.disabledReason) onRendererChange(option.id)
+      }}
     >
-      {option.label}
+      <DriveRendererOptionMenuLabel option={option} />
     </DropdownMenuCheckboxItem>
   ))
+}
+
+export function DriveRendererOptionMenuLabel({ option }: { readonly option: DriveRendererOption }) {
+  if (!option.disabledReason) return <>{option.label}</>
+  return (
+    <span className='flex min-w-0 flex-col gap-0.5'>
+      <span>{option.label}</span>
+      <span className='text-xs text-muted-foreground'>{option.disabledReason}</span>
+    </span>
+  )
 }
 
 export function DrivePreviewToolbarItemView({ item }: { readonly item: DriveRendererToolbarItem }) {

@@ -12,6 +12,7 @@ import { AdminDriveStorageSummary } from './admin-drive-storage-summary'
 import { AccessLogTable, AdminPublicAssets } from './admin-public-assets'
 import { DriveFinder } from './finder/drive-finder'
 import {
+  findDriveRendererOption,
   getDriveRendererOptions,
   selectDefaultDriveRenderer,
 } from './renderers/drive-renderer-registry'
@@ -28,7 +29,7 @@ import {
   getDrivePreviewSystemMenuSections,
 } from './renderers/drive-preview-actions'
 import { DrivePreviewFloatingMenu } from './renderers/drive-preview-floating-menu'
-import { DrivePreviewHeader } from './renderers/drive-preview-header'
+import { DrivePreviewHeader, DriveRendererOptionMenuLabel } from './renderers/drive-preview-header'
 import { DriveRendererToolbarProvider } from './renderers/drive-renderer-toolbar-context'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
@@ -408,6 +409,46 @@ describe('drive browser view model', () => {
 
     expect(getDriveRendererOptions(text).map((option) => option.id)).toEqual(['code'])
     expect(getDriveRendererOptions(image).map((option) => option.id)).toEqual(['image'])
+  })
+
+  it('keeps oversized MDXeditor options visible but disabled', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'large.md',
+        size: String(100 * 1024),
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Large\n\n'.repeat(8 * 1024),
+        html: '<h1>Large</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const options = getDriveRendererOptions(snapshot)
+    const mdxeditor = options.find((option) => option.id === 'mdxeditor')
+
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
+    expect(mdxeditor?.disabledReason).toBe('文件过大')
+    expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('markdown')
+    if (!mdxeditor) throw new Error('MDXeditor option not found')
+
+    const labelHtml = renderToStaticMarkup(createElement(DriveRendererOptionMenuLabel, { option: mdxeditor }))
+
+    expect(labelHtml).toContain('MDXeditor')
+    expect(labelHtml).toContain('文件过大')
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
+      snapshot,
+      initialRendererId: 'mdxeditor',
+    }))
+
+    expect(html).toContain('data-testid="markdown-body"')
+    expect(html).not.toContain('data-mdxeditor="true"')
   })
 
   it('uses iframe as the default renderer for html files with visit urls', () => {
