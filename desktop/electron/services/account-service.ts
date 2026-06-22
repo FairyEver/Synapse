@@ -151,12 +151,10 @@ function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
   return query ? `?${query}` : ""
 }
 
-function drivePageQuery(input?: { readonly offset?: number; readonly limit?: number; readonly search?: string }): string {
+function drivePageQuery(input?: { readonly offset?: number; readonly limit?: number }): string {
   const params = new URLSearchParams()
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
   if (input?.limit !== undefined) params.set("limit", String(input.limit))
-  const search = input?.search?.trim()
-  if (search) params.set("search", search)
   const query = params.toString()
   return query ? `?${query}` : ""
 }
@@ -864,7 +862,7 @@ export class AccountService {
     return withCurrentDriveShareUrl(share)
   }
 
-  async listDrivePublicAssets(input?: { readonly offset?: number; readonly limit?: number; readonly search?: string }): Promise<DrivePublicAssetListPageDto> {
+  async listDrivePublicAssets(input?: { readonly offset?: number; readonly limit?: number }): Promise<DrivePublicAssetListPageDto> {
     return this.getAuthenticatedJson<DrivePublicAssetListPageDto>(
       `${apiBaseUrl()}/drive/public-assets${drivePageQuery(input)}`,
       "公开素材加载失败。",
@@ -953,7 +951,7 @@ export class AccountService {
     )
   }
 
-  async listDriveTrash(input?: { readonly offset?: number; readonly limit?: number; readonly search?: string }): Promise<DriveTrashListPageDto> {
+  async listDriveTrash(input?: { readonly offset?: number; readonly limit?: number }): Promise<DriveTrashListPageDto> {
     return this.getAuthenticatedJson<DriveTrashListPageDto>(
       `${apiBaseUrl()}/drive/trash${drivePageQuery(input)}`,
       "回收站加载失败。",

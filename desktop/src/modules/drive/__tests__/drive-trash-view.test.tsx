@@ -80,6 +80,7 @@ describe("DriveTrashView", () => {
     expect(document.body.textContent).toContain("项目/旧资料")
     expect(document.body.textContent).toContain("logo.png")
     expect(document.body.textContent).toContain("公开素材")
+    expect(document.querySelector('[aria-label="搜索回收站"]')).toBeNull()
   })
 
   it("loads more trash entries from the next page", async () => {
@@ -103,29 +104,6 @@ describe("DriveTrashView", () => {
     expect(mocks.listDriveTrash).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
     expect(document.body.textContent).toContain("first.txt")
     expect(document.body.textContent).toContain("second.txt")
-  })
-
-  it("searches trash entries", async () => {
-    mocks.listDriveTrash
-      .mockResolvedValueOnce(createTrashPage([
-        createTrashItem({ id: "file-1", name: "first.txt" }),
-      ]))
-      .mockResolvedValueOnce(createTrashPage([
-        createTrashItem({ id: "asset-item-1", assetId: "asset_public", kind: "public_asset", name: "logo.png" }),
-      ]))
-
-    await render(<DriveTrashView />)
-    await flushAct()
-
-    setInputValue('[aria-label="搜索回收站"]', "asset_public")
-    await clickButtonText("搜索")
-
-    expect(mocks.listDriveTrash).toHaveBeenLastCalledWith({
-      offset: 0,
-      limit: 50,
-      search: "asset_public",
-    })
-    expect(document.body.textContent).toContain("logo.png")
   })
 
   it("shows initial and load-more failures without dropping current trash entries", async () => {
@@ -245,16 +223,6 @@ async function clickButtonText(text: string): Promise<void> {
   await act(async () => {
     button.click()
     await flushPromises()
-  })
-}
-
-function setInputValue(selector: string, value: string): void {
-  const input = document.querySelector<HTMLInputElement>(selector)
-  if (!input) throw new Error(`Input not found: ${selector}`)
-  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-  act(() => {
-    valueSetter?.call(input, value)
-    input.dispatchEvent(new Event("input", { bubbles: true }))
   })
 }
 

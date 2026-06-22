@@ -671,6 +671,28 @@ describe("AccountService", () => {
     )
   })
 
+  it("lists public assets and trash with pagination-only query parameters", async () => {
+    const { service } = await createTestAccountService()
+    const page = { items: [], total: 0, page: { offset: 0, limit: 50, hasMore: false, nextOffset: null } }
+    const getAuthenticatedJson = vi.spyOn(service as unknown as {
+      getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "getAuthenticatedJson").mockResolvedValue(page)
+
+    await expect(service.listDrivePublicAssets({ offset: 0, limit: 50 })).resolves.toEqual(page)
+    await expect(service.listDriveTrash({ offset: 50, limit: 50 })).resolves.toEqual(page)
+
+    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
+      1,
+      expectedApiUrl("/drive/public-assets?offset=0&limit=50"),
+      "公开素材加载失败。",
+    )
+    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
+      2,
+      expectedApiUrl("/drive/trash?offset=50&limit=50"),
+      "回收站加载失败。",
+    )
+  })
+
   it("keeps ordered public asset upload results and cancels failed sessions", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-batch-"))
     const okPath = path.join(dir, "ok.png")

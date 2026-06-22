@@ -861,14 +861,14 @@ export type SynapseBridge = {
     getDriveUsage: () => Promise<DriveUsageDto>
     getDriveShare: (input: { shareId: string }) => Promise<DriveShareListItemDto>
     listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
-    listDrivePublicAssets: (input?: { offset?: number; limit?: number; search?: string }) => Promise<DrivePublicAssetListPageDto>
+    listDrivePublicAssets: (input?: { offset?: number; limit?: number }) => Promise<DrivePublicAssetListPageDto>
     getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
     uploadDrivePublicAssets: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
     replaceDrivePublicAssetFile: (input: { assetId: string } & DrivePublicAssetLocalFile) => Promise<DrivePublicAssetDto>
     renameDrivePublicAsset: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
     trashDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
     restoreDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
-    listDriveTrash: (input?: { offset?: number; limit?: number; search?: string }) => Promise<DriveTrashListPageDto>
+    listDriveTrash: (input?: { offset?: number; limit?: number }) => Promise<DriveTrashListPageDto>
     restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
     deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
