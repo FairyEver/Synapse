@@ -397,7 +397,7 @@ export function fakeGitScript(input: {
   readonly helper?: string
   readonly missingIdentity?: boolean
 } = {}): string {
-  const helper = input.helper ?? "osxkeychain"
+  const helper = input.helper ?? defaultCredentialHelper()
   return `#!/bin/sh
 set -eu
 log="$HOME/git-credential.log"
@@ -475,6 +475,12 @@ if [ "$cmd" = "clone" ]; then
 fi
 exit 0
 `
+}
+
+function defaultCredentialHelper(): string {
+  if (process.platform === "darwin") return "osxkeychain"
+  if (process.platform === "win32") return "wincred"
+  return "manager-core"
 }
 
 function electronExecutablePath(): string {
