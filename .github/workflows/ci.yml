@@ -10,9 +10,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  desktop:
-    name: Desktop typecheck + tests + hard-constraints
-    runs-on: ubuntu-latest
+  desktop-macos:
+    name: Desktop macOS typecheck + tests + hard-constraints
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         shell: bash
@@ -25,12 +25,6 @@ jobs:
             git fetch --depth=1 origin "${GITHUB_SHA}"
           fi
           git checkout --detach FETCH_HEAD
-      - name: Free Linux runner disk space
-        shell: bash
-        run: |
-          df -h
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -46,13 +40,7 @@ jobs:
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
       - name: Run tests
-        shell: bash
-        run: |
-          if ! command -v xvfb-run >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y xvfb
-          fi
-          xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm --filter @synapse/desktop run test
+        run: pnpm --filter @synapse/desktop run test
       - name: Verify IPC codegen drift
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints

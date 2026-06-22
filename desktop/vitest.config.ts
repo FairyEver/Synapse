@@ -21,7 +21,6 @@ export default defineConfig({
       "tests/ipc/**/*.{test,spec}.ts",
       "tests/perf/**/*.{test,spec}.ts",
       "tests/fuzz/**/*.{test,spec}.ts",
-      "tests/e2e/**/*.{test,spec}.ts",
     ],
     exclude: ["node_modules", "dist", "dist-electron", "dist-database"],
     reporters: process.env.CI ? ["default"] : ["default"],

@@ -129,7 +129,7 @@ jobs:
 
   publish:
     name: Publish release
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: build-installers
     env:
       GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
@@ -186,15 +186,15 @@ jobs:
 
       - name: Install COSCLI
         env:
-          COSCLI_SHA256: 7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91
+          COSCLI_SHA256: df0018fbf78b552cbe875ebe26e8bdf7938c7f4394959f913dfc2ea4d1252568
           COSCLI_VERSION: v1.0.8
         run: |
           set -euo pipefail
-          COSCLI_NAME="coscli-${COSCLI_VERSION}-linux-amd64"
+          COSCLI_NAME="coscli-${COSCLI_VERSION}-darwin-arm64"
           curl --fail --silent --show-error --location \
             --output "$RUNNER_TEMP/$COSCLI_NAME" \
             "https://github.com/tencentyun/coscli/releases/download/${COSCLI_VERSION}/${COSCLI_NAME}"
-          printf '%s  %s\n' "$COSCLI_SHA256" "$RUNNER_TEMP/$COSCLI_NAME" | sha256sum --check -
+          printf '%s  %s\n' "$COSCLI_SHA256" "$RUNNER_TEMP/$COSCLI_NAME" | shasum -a 256 --check -
           install -m 0755 "$RUNNER_TEMP/$COSCLI_NAME" "$RUNNER_TEMP/coscli"
           "$RUNNER_TEMP/coscli" --version
 
@@ -239,8 +239,9 @@ jobs:
           set -euo pipefail
 
           python -m pip install --user tccli
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.local/bin:$PATH"
+          PY_USER_BASE="$(python -m site --user-base)"
+          echo "$PY_USER_BASE/bin" >> "$GITHUB_PATH"
+          export PATH="$PY_USER_BASE/bin:$PATH"
 
           CDN_REFRESH_URLS=$(node -e "console.log(JSON.stringify(['https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml']))")
           tccli cdn PurgeUrlsCache --Urls "$CDN_REFRESH_URLS" --Area mainland
@@ -266,7 +267,7 @@ jobs:
 
   notify:
     name: Notify package completion
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: publish
     steps:
       - name: Checkout repository
