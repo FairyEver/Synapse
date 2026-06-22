@@ -34,16 +34,18 @@ describe('webhook display helpers', () => {
     expect(findWebhookById(webhooks, 'missing')).toBeNull()
   })
 
-  it('always masks webhook URLs in the list', () => {
+  it('uses full webhook URLs when available', () => {
     expect(getWebhookUrlDisplayState({
       url: 'https://synapse.test/webhooks/wh_public/whsec_secret',
       maskedUrl: 'https://synapse.test/webhooks/wh_public/***',
     })).toEqual({
-      kind: 'masked',
-      label: 'https://synapse.test/webhooks/wh_public/***',
-      copyValue: null,
+      kind: 'full',
+      label: 'https://synapse.test/webhooks/wh_public/whsec_secret',
+      copyValue: 'https://synapse.test/webhooks/wh_public/whsec_secret',
     })
+  })
 
+  it('falls back to masked webhook URLs for legacy webhooks', () => {
     expect(getWebhookUrlDisplayState({
       url: null,
       maskedUrl: 'https://synapse.test/webhooks/wh_public/***',
