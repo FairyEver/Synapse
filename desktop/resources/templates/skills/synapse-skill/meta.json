@@ -1,0 +1,10 @@
+{
+  "id": "synapse-skill",
+  "name": "synapse-skill",
+  "title": "Synapse Skill",
+  "usage": "让 AI 通过一个入口使用 Synapse MCP 能力，并按数据库、云盘、工作流、自动化、内容发布、价格规则、变量和仓库等意图读取对应说明。\n\n- **适合**：需要操作 Synapse Database、Drive、Workflow、Automation、Content、模型价格规则、本地变量或仓库配置的请求。\n- **会做**：先判断用户意图所属领域，再读取对应域文件夹里的 `index.md` 和必要引用文件；跨域任务按步骤连续路由。\n- **限制**：不把一个领域的规则套用到另一个领域；不自动清理用户已经安装到编辑器里的旧独立 Skill。",
+  "description": "Use when operating Synapse through MCP tools, including Database, Drive, Workflow, Automation, Content, model price rules, variables, and repositories.",
+  "category": "automation",
+  "icon": "workflow",
+  "iconBg": "teal"
+}

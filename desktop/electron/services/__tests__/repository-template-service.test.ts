@@ -29,9 +29,15 @@ describe("RepositoryTemplateService", () => {
       .filter((seed) => seed.type === "skill")
       .map((seed) => seed.id)
       .sort((left, right) => left.localeCompare(right))
+    const skillNames = seeds
+      .filter((seed) => seed.type === "skill")
+      .map((seed) => seed.name)
+      .filter((name): name is string => Boolean(name))
+      .sort((left, right) => left.localeCompare(right))
 
     expect(skillIds).toContain("synapse-skill")
-    expect(skillIds).toContain("synapse-test-skill")
+    expect(skillIds).toContain("test-skill")
+    expect(skillNames).toContain("synapse-test-skill")
     expect(skillIds).toContain("bark-notification")
     expect(skillIds).not.toContain("synapse-automation-mcp")
     expect(skillIds).not.toContain("synapse-content-mcp")
