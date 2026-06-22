@@ -229,6 +229,19 @@ describe("accountIpcModule", () => {
     })).toThrow()
   })
 
+  it("keeps public asset and trash list requests pagination-only", () => {
+    const publicAssetsRequest = accountIpcModule.methods.listDrivePublicAssets.request
+    const trashRequest = accountIpcModule.methods.listDriveTrash.request
+    expect(publicAssetsRequest).toBeDefined()
+    expect(trashRequest).toBeDefined()
+    if (!publicAssetsRequest || !trashRequest) throw new Error("expected drive list request schemas")
+
+    expect(publicAssetsRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
+    expect(trashRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
+    expect(publicAssetsRequest.safeParse({ offset: 0, limit: 50, search: "logo" }).success).toBe(false)
+    expect(trashRequest.safeParse({ offset: 0, limit: 50, search: "old" }).success).toBe(false)
+  })
+
   it("returns owner drive item preview URLs", async () => {
     const handler = accountIpcModule.methods.getDriveItemPreviewUrl.handler
 

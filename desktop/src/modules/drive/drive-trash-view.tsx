@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState, type FormEvent } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react"
 import { LoaderCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
@@ -23,7 +23,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -68,8 +67,6 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
-  const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<DriveTrashItemDto | null>(null)
 
   const loadTrash = useCallback(async (offset = 0) => {
@@ -84,7 +81,6 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       const result = await requireSynapseBridge().account.listDriveTrash({
         offset,
         limit: DRIVE_TRASH_PAGE_SIZE,
-        ...(searchQuery ? { search: searchQuery } : {}),
       })
       setPage((current) => {
         if (offset === 0 || !current) return result
@@ -108,7 +104,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
         setLoadingMore(false)
       }
     }
-  }, [searchQuery])
+  }, [])
 
   useEffect(() => {
     void loadTrash()
@@ -156,16 +152,6 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       onUsageChange,
     )
   }, [deleteTarget, onUsageChange, runTrashMutation])
-
-  const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const nextSearch = searchInput.trim()
-    if (nextSearch === searchQuery) {
-      void loadTrash()
-      return
-    }
-    setSearchQuery(nextSearch)
-  }, [loadTrash, searchInput, searchQuery])
 
   const content = (() => {
     if (loading) return <DriveTrashTableSkeleton />
@@ -240,16 +226,6 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
           </Button>
         </div>
       ) : null}
-      <form className="flex flex-wrap items-center gap-2" onSubmit={handleSearchSubmit}>
-        <Input
-          className="w-64 max-w-full"
-          aria-label="搜索回收站"
-          placeholder="搜索"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-        />
-        <Button type="submit" size="sm" variant="outline" disabled={loading}>搜索</Button>
-      </form>
       {content}
       {!loading && page?.page.hasMore ? (
         <div className="flex items-center justify-center gap-2">

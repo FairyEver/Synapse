@@ -153,8 +153,7 @@ const drivePublicLinksPageInputSchema = z.object({
 const drivePageInputSchema = z.object({
   offset: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().optional(),
-  search: z.string().trim().optional(),
-}).optional()
+}).strict().optional()
 
 const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
   items: z.array(itemSchema),

@@ -93,6 +93,7 @@ describe("DrivePublicAssetsView", () => {
     expect(document.body.textContent).toContain("image/png")
     expect(document.body.textContent).toContain("1.5 KB")
     expect(document.body.textContent).toContain("7")
+    expect(document.querySelector('[aria-label="搜索公开素材"]')).toBeNull()
 
     await clickButtonByLabel("复制 brand.png")
 
@@ -140,65 +141,6 @@ describe("DrivePublicAssetsView", () => {
     expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
     expect(document.body.textContent).toContain("first.png")
     expect(document.body.textContent).toContain("second.png")
-  })
-
-  it("searches public assets by filename or assetId", async () => {
-    mocks.listDrivePublicAssets
-      .mockResolvedValueOnce(createPublicAssetPage([
-        createPublicAsset({ assetId: "asset_first", name: "first.png" }),
-      ]))
-      .mockResolvedValueOnce(createPublicAssetPage([
-        createPublicAsset({ assetId: "asset_target", name: "target.png" }),
-      ]))
-
-    await render(<DrivePublicAssetsView />)
-    await flushAct()
-
-    setInputValue('[aria-label="搜索公开素材"]', "asset_target")
-    await clickButtonText("搜索")
-
-    expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({
-      offset: 0,
-      limit: 50,
-      search: "asset_target",
-    })
-    expect(document.body.textContent).toContain("target.png")
-  })
-
-  it("ignores stale load-more responses after a new search", async () => {
-    const loadMore = deferred<DrivePublicAssetListPageDto>()
-    mocks.listDrivePublicAssets
-      .mockResolvedValueOnce(createPublicAssetPage(
-        [createPublicAsset({ assetId: "asset_first", name: "first.png" })],
-        { hasMore: true, nextOffset: 50, total: 2 },
-      ))
-      .mockImplementationOnce(() => loadMore.promise)
-      .mockResolvedValueOnce(createPublicAssetPage([
-        createPublicAsset({ assetId: "asset_target", name: "target.png" }),
-      ]))
-
-    await render(<DrivePublicAssetsView />)
-    await flushAct()
-
-    await clickButtonText("加载更多")
-    setInputValue('[aria-label="搜索公开素材"]', "asset_target")
-    await clickButtonText("搜索")
-
-    expect(mocks.listDrivePublicAssets).toHaveBeenLastCalledWith({
-      offset: 0,
-      limit: 50,
-      search: "asset_target",
-    })
-    expect(document.body.textContent).toContain("target.png")
-
-    loadMore.resolve(createPublicAssetPage(
-      [createPublicAsset({ assetId: "asset_second", name: "second.png" })],
-      { offset: 50, total: 2 },
-    ))
-    await flushAct()
-
-    expect(document.body.textContent).toContain("target.png")
-    expect(document.body.textContent).not.toContain("second.png")
   })
 
   it("marks missing public assets as unavailable", async () => {
@@ -569,23 +511,19 @@ function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-function deferred<T>(): {
-  readonly promise: Promise<T>
-  readonly resolve: (value: T) => void
-  readonly reject: (reason?: unknown) => void
-} {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 async function flushAct(): Promise<void> {
   await act(async () => {
     await flushPromises()
+  })
+}
+
+function setInputValue(selector: string, value: string): void {
+  const input = document.querySelector<HTMLInputElement>(selector)
+  if (!input) throw new Error(`Input not found: ${selector}`)
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+  act(() => {
+    valueSetter?.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
   })
 }
 
@@ -656,16 +594,6 @@ async function clickText(text: string): Promise<void> {
   await act(async () => {
     element.click()
     await flushPromises()
-  })
-}
-
-function setInputValue(selector: string, value: string): void {
-  const input = document.querySelector<HTMLInputElement>(selector)
-  if (!input) throw new Error(`Input not found: ${selector}`)
-  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-  act(() => {
-    valueSetter?.call(input, value)
-    input.dispatchEvent(new Event("input", { bubbles: true }))
   })
 }
 
