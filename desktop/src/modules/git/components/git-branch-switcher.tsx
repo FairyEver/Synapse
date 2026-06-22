@@ -25,6 +25,7 @@ type GitBranchSwitcherProps = {
   readonly currentBranch: string | null
   readonly disabled?: boolean
   readonly mode?: "full" | "select" | "create"
+  readonly selectWidth?: "default" | "compact"
   readonly refreshKey?: number
   readonly onChanged: () => void | Promise<void>
 }
@@ -34,6 +35,7 @@ export function GitBranchSwitcher({
   currentBranch,
   disabled,
   mode = "full",
+  selectWidth = "default",
   refreshKey = 0,
   onChanged,
 }: GitBranchSwitcherProps) {
@@ -90,13 +92,19 @@ export function GitBranchSwitcher({
     }
   }
 
+  const selectTriggerClassName = mode === "full"
+    ? "w-40"
+    : selectWidth === "compact"
+      ? "w-56 max-w-full min-w-0 sm:w-72"
+      : "w-full min-w-0"
+
   const selectControl = (
     <Select
       value={currentBranch ?? ""}
       onValueChange={(value) => void checkout(value)}
       disabled={disabled || busy || branches.length === 0}
     >
-      <SelectTrigger size="sm" aria-label="分支" className={mode === "full" ? "w-40" : "w-full min-w-0"}>
+      <SelectTrigger size="sm" aria-label="分支" className={selectTriggerClassName}>
         <GitBranch data-icon="inline-start" />
         <SelectValue placeholder="无分支" />
       </SelectTrigger>

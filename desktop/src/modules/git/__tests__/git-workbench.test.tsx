@@ -149,7 +149,8 @@ describe("GitWorkbench", () => {
     })
   })
 
-  it("separates primary repository context from secondary metadata", async () => {
+  it("keeps repository context, branch state, actions, and metadata in a compact toolbar", async () => {
+    const longBranch = "feat/portal/王璐-人力合并功能-with-extra-long-suffix"
     const longRepository = {
       id: "repo-1",
       name: "Projects_Js_With_A_Very_Long_Display_Name",
@@ -158,40 +159,54 @@ describe("GitWorkbench", () => {
       lastOpenedAt: null,
     }
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({
-      currentBranch: "feat/portal/王璐-人力合并功能-with-extra-long-suffix",
-      upstream: "origin/feat/portal/王璐-人力合并功能-with-extra-long-suffix",
+      currentBranch: longBranch,
+      upstream: `origin/${longBranch}`,
       ahead: 12,
       behind: 0,
-      changes: [],
+      changes: Array.from({ length: 12 }, (_, index) => ({
+        path: `docs/${index}.md`,
+        originalPath: null,
+        status: "modified" as const,
+        staged: false,
+        conflicted: false,
+      })),
     }))
+    bridge.git.listBranches.mockResolvedValue([{ name: longBranch, current: true }])
 
     await renderWorkbench(roots, longRepository)
 
     const toolbar = document.querySelector('[data-git-workbench-toolbar="true"]')
     const primaryBar = document.querySelector('[data-git-workbench-primary-bar="true"]')
-    const secondaryBar = document.querySelector('[data-git-workbench-secondary-bar="true"]')
     const repositoryContext = document.querySelector('[data-git-workbench-repository-context="true"]')
+    const branchStatusBar = document.querySelector('[data-git-workbench-branch-status-bar="true"]')
     const actionBar = document.querySelector('[data-git-workbench-action-bar="true"]')
     const metadataBar = document.querySelector('[data-git-workbench-metadata-bar="true"]')
     const tabs = document.querySelector('[data-slot="tabs"]')
+    const tabsHeader = document.querySelector('[data-git-workbench-tabs-header="true"]')
     const changesContent = document.querySelector('[data-slot="tabs-content"][data-state="active"]')
 
-    expect(toolbar?.className).toContain("py-3")
-    expect(primaryBar?.className).toContain("lg:grid-cols-[minmax(260px,1fr)_minmax(220px,420px)_minmax(220px,1fr)]")
+    expect(toolbar?.className).toContain("py-2.5")
+    expect(primaryBar?.className).toContain("lg:grid-cols-[minmax(240px,1fr)_auto]")
     expect(repositoryContext?.className).toContain("items-start")
     expect(repositoryContext?.textContent).toContain("Projects_Js_With_A_Very_Long_Display_Name")
     expect(repositoryContext?.textContent).toContain(longRepository.localPath)
-    expect(secondaryBar?.className).toContain("text-xs")
+    expect(branchStatusBar?.className).toContain("flex-wrap")
+    expect(branchStatusBar?.textContent).toContain(longBranch)
+    expect(branchStatusBar?.textContent).toContain("12 个改动")
     expect(actionBar?.className).toContain("flex-wrap")
-    expect(actionBar?.className).toContain("max-w-full")
+    expect(actionBar?.className).toContain("justify-between")
     expect(metadataBar?.className).toContain("flex-wrap")
+    expect(metadataBar?.textContent).not.toContain(`origin/${longBranch}`)
     expect(tabs?.className).toContain("min-w-0")
+    expect(tabsHeader?.textContent).toBe("改动历史")
     expect(changesContent?.className).toContain("min-w-0")
     expect(document.body.textContent).toContain("Projects_Js_With_A_Very_Long_Display_Name")
     expect(document.body.textContent).toContain(longRepository.localPath)
-    expect(document.body.textContent).toContain("origin/feat/portal/王璐-人力合并功能-with-extra-long-suffix")
+    expect(document.body.textContent).not.toContain(`origin/${longBranch}`)
+    await click(findButton("详情"))
+    expect(document.body.textContent).toContain(`origin/${longBranch}`)
     expect(document.querySelector('button[aria-label="返回仓库列表"]')).toBeTruthy()
-    expect(findButton("推送本地提交")).toBeTruthy()
+    expect(findButton("提交改动")).toBeTruthy()
     expect(findButton("新建分支")).toBeTruthy()
     expect(findButton("详情")).toBeTruthy()
     expect(document.querySelector('button[aria-label="更多 Git 操作"]')).toBeTruthy()
@@ -205,7 +220,7 @@ describe("GitWorkbench", () => {
     expect(bridge.git.pull).not.toHaveBeenCalled()
     expect(bridge.git.push).not.toHaveBeenCalled()
     expect(bridge.git.sync).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("选择文件并提交。")
+    expect(document.body.textContent).toContain("1 个改动")
   })
 
   it("runs the matching action bar operation for remote state", async () => {
@@ -416,15 +431,19 @@ describe("GitWorkbench", () => {
     expect(diff?.className).toContain("overflow-x-auto")
   })
 
-  it("places selection actions in the changes tab header", async () => {
+  it("places selection actions in the workbench action row", async () => {
     await renderWorkbench(roots)
 
     const selectionBar = document.querySelector('[data-git-changes-selection-bar="true"]')
+    const actionBar = document.querySelector('[data-git-workbench-action-bar="true"]')
+    const tabsHeader = document.querySelector('[data-git-workbench-tabs-header="true"]')
     const commitPanel = document.querySelector('[data-git-changes-commit-panel="true"]')
 
     expect(selectionBar?.textContent).toContain("已选 1 / 1")
     expect(selectionBar?.textContent).toContain("全选")
     expect(selectionBar?.textContent).toContain("全不选")
+    expect(actionBar?.contains(selectionBar)).toBe(true)
+    expect(tabsHeader?.contains(selectionBar)).toBe(false)
     expect(commitPanel).toBeNull()
   })
 

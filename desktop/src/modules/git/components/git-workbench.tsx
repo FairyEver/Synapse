@@ -97,19 +97,17 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   }
 
   const recommendedLabel = busy === recommendedAction ? `${actionPlan.primaryLabel}中` : actionPlan.primaryLabel
-  const statusLabel = statusStateLabel(actionPlan.statusText, status.snapshot?.ahead, status.snapshot?.behind)
-  const showContextNote = Boolean(actionPlan.blockerText || actionPlan.recoveryText)
   const canRunGitOperation = busy === null
   const failureActionLabel = canHandleGitFailureAction(operationFailure) ? getGitFailureActionLabel(operationFailure) : null
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
-        className="grid shrink-0 gap-2 border-b bg-background px-4 py-3"
+        className="grid shrink-0 gap-2 border-b bg-background px-4 py-2.5"
         data-git-workbench-toolbar="true"
       >
         <div
-          className="grid min-w-0 gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(220px,420px)_minmax(220px,1fr)] lg:items-start"
+          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(240px,1fr)_auto] lg:items-start"
           data-git-workbench-primary-bar="true"
         >
           <div className="flex min-w-0 items-start gap-2" data-git-workbench-repository-context="true">
@@ -123,28 +121,49 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             >
               <ArrowLeft />
             </Button>
-            <div className="grid min-w-0 gap-1">
-              <div className="truncate text-sm font-semibold leading-5">{repository.name}</div>
-              <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
+            <div className="grid min-w-0 gap-2">
+              <div className="grid min-w-0 gap-1">
+                <div className="truncate text-sm font-semibold leading-5">{repository.name}</div>
+                <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
+              </div>
+              <div
+                className="flex min-w-0 max-w-full flex-wrap items-center gap-2"
+                data-git-workbench-branch-status-bar="true"
+              >
+                <GitBranchSwitcher
+                  repository={repository}
+                  currentBranch={currentBranch}
+                  disabled={busy !== null}
+                  mode="select"
+                  selectWidth="compact"
+                  refreshKey={branchRefreshKey}
+                  onChanged={refreshAfterBranchChange}
+                />
+                <Badge variant="secondary" className="max-w-32 truncate">
+                  {actionPlan.statusText}
+                </Badge>
+              </div>
             </div>
           </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:pt-0.5">
-            <GitBranchSwitcher
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 lg:justify-end"
+            data-git-workbench-metadata-bar="true"
+          >
+            <RepositoryDetailsPopover
               repository={repository}
               currentBranch={currentBranch}
-              disabled={busy !== null}
-              mode="select"
-              refreshKey={branchRefreshKey}
-              onChanged={refreshAfterBranchChange}
+              upstream={status.snapshot?.upstream ?? null}
+              ahead={status.snapshot?.ahead ?? null}
+              behind={status.snapshot?.behind ?? null}
+              statusText={actionPlan.statusText}
             />
-            <Badge variant="secondary" className="max-w-28 truncate">
-              {statusLabel}
-            </Badge>
           </div>
-          <div
-            className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end lg:pt-0.5"
-            data-git-workbench-action-bar="true"
-          >
+        </div>
+        <div
+          className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2"
+          data-git-workbench-action-bar="true"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
@@ -188,42 +207,22 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-        <div
-          className="grid min-w-0 gap-2 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-          data-git-workbench-secondary-bar="true"
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            {showContextNote ? (
-              <span className="hidden shrink-0 items-center gap-1 sm:inline-flex">
-                {actionPlan.blockerText ? <Badge variant="outline">{actionPlan.blockerText}</Badge> : null}
-                {actionPlan.recoveryText ? <span>{actionPlan.recoveryText}</span> : null}
+          {view === "changes" && changes.length > 0 ? (
+            <div
+              className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-sm"
+              data-git-changes-selection-bar="true"
+            >
+              <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
+              <span className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
+                  全选
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
+                  全不选
+                </Button>
               </span>
-            ) : <span aria-hidden="true" />}
-          </div>
-          <div
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end"
-            data-git-workbench-metadata-bar="true"
-          >
-            {status.snapshot?.upstream ? (
-              <Badge variant="outline" className="hidden max-w-52 truncate sm:inline-flex">
-                {status.snapshot.upstream}
-              </Badge>
-            ) : null}
-            {status.snapshot ? (
-              <Badge variant="outline" className="hidden sm:inline-flex">
-                ↑{status.snapshot.ahead} ↓{status.snapshot.behind}
-              </Badge>
-            ) : null}
-            <RepositoryDetailsPopover
-              repository={repository}
-              currentBranch={currentBranch}
-              upstream={status.snapshot?.upstream ?? null}
-              ahead={status.snapshot?.ahead ?? null}
-              behind={status.snapshot?.behind ?? null}
-              statusText={actionPlan.statusText}
-            />
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
       {operationError ? (
@@ -250,29 +249,11 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
         </div>
       ) : null}
       <Tabs value={view} onValueChange={setView} className="flex min-h-0 min-w-0 flex-1 flex-col gap-0">
-        <div className="shrink-0 border-b bg-background px-4 py-2">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <TabsList>
-              <TabsTrigger value="changes">改动</TabsTrigger>
-              <TabsTrigger value="history">历史</TabsTrigger>
-            </TabsList>
-            {view === "changes" && changes.length > 0 ? (
-              <div
-                className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-sm"
-                data-git-changes-selection-bar="true"
-              >
-                <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
-                <span className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
-                    全选
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
-                    全不选
-                  </Button>
-                </span>
-              </div>
-            ) : null}
-          </div>
+        <div className="shrink-0 border-b bg-background px-4 py-2" data-git-workbench-tabs-header="true">
+          <TabsList>
+            <TabsTrigger value="changes">改动</TabsTrigger>
+            <TabsTrigger value="history">历史</TabsTrigger>
+          </TabsList>
         </div>
         <TabsContent value="changes" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
           <GitChangesTab
@@ -291,12 +272,6 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       </Tabs>
     </div>
   )
-}
-
-function statusStateLabel(statusText: string, ahead?: number, behind?: number): string {
-  if (ahead === undefined || behind === undefined) return statusText
-  if (ahead === 0 && behind === 0) return statusText
-  return `${statusText} · ↑${ahead} ↓${behind}`
 }
 
 type RepositoryDetailsPopoverProps = {
