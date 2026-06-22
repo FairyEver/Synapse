@@ -502,8 +502,9 @@ describe('drive browser view model', () => {
     })
 
     expect(html).toContain('class="h-full min-h-0 w-full border-0 bg-background"')
-    expect(html).toContain('sandbox="allow-scripts"')
+    expect(html).toContain('sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"')
     expect(html).not.toContain('allow-same-origin')
+    expect(html).not.toContain('allow-top-navigation')
     expect(html).not.toContain('h-svh')
   })
 

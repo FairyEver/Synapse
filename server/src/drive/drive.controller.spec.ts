@@ -540,8 +540,7 @@ describe("DriveController", () => {
         .get("/drive/items/file-1/render")
         .expect(200)
       expect(render.headers["content-type"]).toContain("text/html; charset=utf-8")
-      expect(render.headers["content-security-policy"]).toContain("frame-ancestors 'self'")
-      expect(render.headers["content-security-policy"]).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https:")
+      expectDriveHtmlRenderCsp(render.headers["content-security-policy"])
       expect(render.text).toContain("Notes")
       expect(drive.resolveOwnerRenderAccess).toHaveBeenLastCalledWith({
         userId: "user-1",
@@ -1158,13 +1157,7 @@ describe("DriveController", () => {
       .expect(200)
 
     expect(response.headers["content-type"]).toContain("text/html; charset=utf-8")
-    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'self'")
-    expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
-    expect(response.headers["content-security-policy"]).toContain("script-src 'none'")
-    expect(response.headers["content-security-policy"]).toContain("connect-src 'none'")
-    expect(response.headers["content-security-policy"]).toContain("sandbox")
-    expect(response.headers["content-security-policy"]).not.toContain("'unsafe-inline' https:")
-    expect(response.headers["content-security-policy"]).not.toContain("'unsafe-eval'")
+    expectDriveHtmlRenderCsp(response.headers["content-security-policy"])
     expect(response.text).toContain("Shared page")
     expect(drive.resolveShareRenderAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
@@ -1484,6 +1477,18 @@ function createAnnotationComment() {
 
 function driveAccessCookieName(kind: "share", publicId: string): string {
   return `synapse_drive_access_${kind}_${Buffer.from(publicId, "utf8").toString("base64url")}`
+}
+
+function expectDriveHtmlRenderCsp(value: string | undefined): void {
+  expect(value).toContain("frame-ancestors 'self'")
+  expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
+  expect(value).toContain("connect-src 'self' https:")
+  expect(value).toContain("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals")
+  expect(value).toContain("object-src 'none'")
+  expect(value).toContain("base-uri 'none'")
+  expect(value).not.toContain("allow-same-origin")
+  expect(value).not.toContain("allow-top-navigation")
+  expect(value).not.toContain("script-src 'none'")
 }
 
 function createDownloadResponse() {

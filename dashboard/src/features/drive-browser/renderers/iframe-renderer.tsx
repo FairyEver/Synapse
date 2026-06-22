@@ -1,5 +1,7 @@
 import type { DriveBrowserItemDto } from '@synapse/shared'
 
+const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
+
 export function DriveIframeRenderer({
   current,
   visitUrl,
@@ -12,7 +14,7 @@ export function DriveIframeRenderer({
       title={current.name}
       src={visitUrl}
       className='h-full min-h-0 w-full border-0 bg-background'
-      sandbox='allow-scripts'
+      sandbox={DRIVE_IFRAME_SANDBOX}
     />
   )
 }

@@ -100,22 +100,30 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
-        className="grid shrink-0 gap-2 border-b bg-background px-3 py-2"
+        className="grid shrink-0 gap-2 border-b bg-background px-4 py-3"
         data-git-workbench-toolbar="true"
       >
         <div
-          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,360px)_minmax(180px,1fr)] lg:items-center"
+          className="grid min-w-0 gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(220px,420px)_minmax(220px,1fr)] lg:items-start"
           data-git-workbench-primary-bar="true"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="返回仓库列表" onClick={onBack}>
+          <div className="flex min-w-0 items-start gap-2" data-git-workbench-repository-context="true">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="mt-0.5 shrink-0"
+              aria-label="返回仓库列表"
+              onClick={onBack}
+            >
               <ArrowLeft />
             </Button>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">{repository.name}</div>
+            <div className="grid min-w-0 gap-1">
+              <div className="truncate text-sm font-semibold leading-5">{repository.name}</div>
+              <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
             </div>
           </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:pt-0.5">
             <GitBranchSwitcher
               repository={repository}
               currentBranch={currentBranch}
@@ -129,7 +137,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             </Badge>
           </div>
           <div
-            className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end"
+            className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end lg:pt-0.5"
             data-git-workbench-action-bar="true"
           >
             <Button
@@ -181,13 +189,12 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
           data-git-workbench-secondary-bar="true"
         >
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{repository.localPath}</span>
             {showContextNote ? (
               <span className="hidden shrink-0 items-center gap-1 sm:inline-flex">
                 {actionPlan.blockerText ? <Badge variant="outline">{actionPlan.blockerText}</Badge> : null}
                 {actionPlan.recoveryText ? <span>{actionPlan.recoveryText}</span> : null}
               </span>
-            ) : null}
+            ) : <span aria-hidden="true" />}
           </div>
           <div
             className="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end"

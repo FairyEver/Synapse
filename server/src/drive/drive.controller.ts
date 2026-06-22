@@ -30,8 +30,7 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
-const DRIVE_OWNER_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self';"
-const DRIVE_SHARE_RENDER_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox;"
+const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals;"
 type DriveAccessCookieKind = "share"
 
 const prepareUploadSchema = z.object({
@@ -1343,7 +1342,7 @@ export class DrivePublicController {
     if (access.cookie) {
       setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
     }
-    await sendDriveRenderedAsset(response, { ...access.value, csp: DRIVE_SHARE_RENDER_CSP })
+    await sendDriveHtmlRenderedAsset(response, access.value)
   }
 }
 
@@ -1659,7 +1658,7 @@ async function sendDriveRenderedAsset(response: Response, asset: {
   await pipeline(asset.stream, createResponseWritable(response))
 }
 
-async function sendOwnerRenderedAsset(response: Response, asset: {
+async function sendDriveHtmlRenderedAsset(response: Response, asset: {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
@@ -1667,8 +1666,17 @@ async function sendOwnerRenderedAsset(response: Response, asset: {
 }) {
   await sendDriveRenderedAsset(response, {
     ...asset,
-    csp: asset.csp ?? DRIVE_OWNER_RENDER_CSP,
+    csp: asset.csp ?? DRIVE_HTML_RENDER_CSP,
   })
+}
+
+async function sendOwnerRenderedAsset(response: Response, asset: {
+  readonly stream: NodeJS.ReadableStream
+  readonly contentType: string
+  readonly size?: bigint
+  readonly csp?: string
+}) {
+  await sendDriveHtmlRenderedAsset(response, asset)
 }
 
 function createResponseWritable(response: Response): Writable {
