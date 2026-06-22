@@ -789,7 +789,8 @@ describe("DriveModule", () => {
 
     const table = document.querySelector<HTMLTableElement>("table")
     expect(table?.className).toContain("table-fixed")
-    expect(table?.className).not.toContain("min-w-[760px]")
+    expect(tableColumnClasses()).toEqual(["w-auto", "w-24", "w-40", "w-52"])
+    expect(tableContainer()?.className).not.toContain("overflow-x-hidden")
     expect(document.body.textContent).toContain("1.5 KB")
 
     const nameCellText = document.querySelector<HTMLElement>(`td span[title="${longName}"]`)
@@ -1215,7 +1216,7 @@ describe("DriveModule", () => {
     expect(rowButton("notes.md", "删除")?.className).not.toContain("bg-destructive")
     expect(rowActions("notes.md")?.className).not.toContain("gap-")
     expect(rowButtonTexts("notes.md")).toEqual(["分享", "预览", "删除", "更多"])
-    expect(actionColumnHeader()?.className).toContain("w-52")
+    expect(actionColumnHeader()?.className).not.toContain("w-")
     expect(queryButtonByLabel("更多 notes.md")).not.toBeNull()
   })
 
@@ -1457,6 +1458,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
+    if (!dialogContent) throw new Error("Public links dialog not found")
     expect(dialogContent?.className).toContain("sm:max-w-4xl")
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("report.txt")
@@ -1466,8 +1468,8 @@ describe("DriveModule", () => {
     expect(dialogHeader?.className).toContain("px-5")
     const tabsHeader = document.querySelector('[data-testid="drive-public-links-tabs-header"]')
     expect(tabsHeader).toBeNull()
-    const tableContainer = document.querySelector('[data-slot="table-container"]')
-    expect(tableContainer?.className).toContain("overflow-x-hidden")
+    expect(tableContainer()?.className).not.toContain("overflow-x-hidden")
+    expect(tableColumnClasses(dialogContent)).toEqual(["w-72", "w-auto", "w-44"])
   })
 
   it("loads share data in the public links dialog", async () => {
@@ -1787,6 +1789,15 @@ function tableHeaderTexts(): string[] {
 function actionColumnHeader(): HTMLTableCellElement | undefined {
   return Array.from(document.body.querySelectorAll<HTMLTableCellElement>("thead th"))
     .find((element) => element.getAttribute("aria-label") === "操作")
+}
+
+function tableContainer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-slot="table-container"]')
+}
+
+function tableColumnClasses(scope: ParentNode = document.body): string[] {
+  return Array.from(scope.querySelectorAll<HTMLTableColElement>("colgroup col"))
+    .map((element) => element.className)
 }
 
 function driveToolbarButtons(): HTMLButtonElement[] {

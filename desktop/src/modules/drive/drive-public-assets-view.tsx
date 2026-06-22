@@ -48,6 +48,7 @@ import {
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from "@/types/bridge"
 import { DriveItemIcon } from "./drive-item-icon"
+import { DRIVE_PUBLIC_ASSET_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
 
 const DRIVE_PUBLIC_ASSET_PAGE_SIZE = 50
 const DRIVE_PUBLIC_ASSET_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
@@ -310,6 +311,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     return (
       <ModuleContentPanel>
         <Table className="table-fixed">
+          <DriveTableColumns columns={DRIVE_PUBLIC_ASSET_TABLE_COLUMNS} />
           <DrivePublicAssetTableHeader />
           <TableBody>
             {assets.map((asset) => (
@@ -481,11 +483,11 @@ function DrivePublicAssetTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-16 text-right">大小</TableHead>
-        <TableHead className="w-24">类型</TableHead>
-        <TableHead className="w-14 text-right">访问</TableHead>
-        <TableHead className="w-44 whitespace-nowrap text-right">创建时间</TableHead>
-        <TableHead className="w-24 text-right" aria-label="操作" />
+        <TableHead className="text-right">大小</TableHead>
+        <TableHead>类型</TableHead>
+        <TableHead className="text-right">访问</TableHead>
+        <TableHead className="whitespace-nowrap text-right">创建时间</TableHead>
+        <TableHead className="text-right" aria-label="操作" />
       </TableRow>
     </TableHeader>
   )
@@ -495,6 +497,7 @@ function DrivePublicAssetTableSkeleton() {
   return (
     <ModuleContentPanel>
       <Table className="table-fixed">
+        <DriveTableColumns columns={DRIVE_PUBLIC_ASSET_TABLE_COLUMNS} />
         <DrivePublicAssetTableHeader />
         <TableBody>
           {DRIVE_PUBLIC_ASSET_SKELETON_ROWS.map((row) => (
@@ -549,7 +552,7 @@ function DrivePublicAssetRow({
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">{formatBytes(asset.size)}</TableCell>
-      <TableCell className="whitespace-nowrap text-muted-foreground" title={asset.mimeType}>{asset.mimeType}</TableCell>
+      <TableCell className="truncate text-muted-foreground" title={asset.mimeType}>{asset.mimeType}</TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
         <span title={formatDriveDateTime(asset.lastAccessedAt)}>{asset.accessCount}</span>
       </TableCell>

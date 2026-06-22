@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { DriveItemIcon } from "./drive-item-icon"
+import { DRIVE_TRASH_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
 
 const DRIVE_TRASH_PAGE_SIZE = 50
 const DRIVE_TRASH_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
@@ -183,6 +184,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
     return (
       <ModuleContentPanel>
         <Table className="table-fixed">
+          <DriveTableColumns columns={DRIVE_TRASH_TABLE_COLUMNS} />
           <DriveTrashTableHeader />
           <TableBody>
             {items.map((item) => (
@@ -270,11 +272,11 @@ function DriveTrashTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-24">来源</TableHead>
-        <TableHead className="w-20 text-right">大小</TableHead>
-        <TableHead className="w-40">原路径</TableHead>
-        <TableHead className="w-44 whitespace-nowrap text-right">删除时间</TableHead>
-        <TableHead className="w-24 text-right" aria-label="操作" />
+        <TableHead>来源</TableHead>
+        <TableHead className="text-right">大小</TableHead>
+        <TableHead>原路径</TableHead>
+        <TableHead className="whitespace-nowrap text-right">删除时间</TableHead>
+        <TableHead className="text-right" aria-label="操作" />
       </TableRow>
     </TableHeader>
   )
@@ -284,6 +286,7 @@ function DriveTrashTableSkeleton() {
   return (
     <ModuleContentPanel>
       <Table className="table-fixed">
+        <DriveTableColumns columns={DRIVE_TRASH_TABLE_COLUMNS} />
         <DriveTrashTableHeader />
         <TableBody>
           {DRIVE_TRASH_SKELETON_ROWS.map((row) => (
