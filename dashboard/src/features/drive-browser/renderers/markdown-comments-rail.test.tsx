@@ -23,10 +23,19 @@ describe('MarkdownCommentsRail', () => {
     renderRail()
 
     expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
     expect(document.body.textContent).toContain('位置已变化')
     expect(document.body.innerHTML).not.toContain('<strong>unsafe</strong>')
+  })
+
+  it('renders a compact empty state when no comments are present', () => {
+    renderRail({ threads: [] })
+
+    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('0')
+    expect(document.body.textContent).toContain('暂无评论')
   })
 
   it('submits replies without nesting the visual layout indefinitely', async () => {
@@ -73,7 +82,7 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('回复')
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除')
-    expect(buttonWithLabel('评论操作')).toBeNull()
+    expect(buttonWithLabel('更多评论操作')).toBeNull()
     expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
@@ -107,23 +116,46 @@ describe('MarkdownCommentsRail', () => {
 
     await click(buttonWithText('回复'))
     expect(textarea().className).toContain('shadow-none')
+    expect(textarea().className).toContain('resize-none')
+    expect(textarea().className).toContain('overflow-hidden')
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
     expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
   })
 
+  it('grows the composer textarea with its content instead of scrolling inside it', async () => {
+    renderRail()
+
+    await click(buttonWithText('回复'))
+    Object.defineProperty(textarea(), 'scrollHeight', { configurable: true, value: 128 })
+    await inputValue(textarea(), 'First line\nSecond line\nThird line')
+
+    expect(textarea().style.height).toBe('128px')
+  })
+
   it('positions attached comments by their markdown anchor', () => {
     renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })] })
 
-    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 48px')
+    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 8px')
   })
 
-  it('keeps the rail title above positioned comment cards', () => {
+  it('offsets attached comments by the markdown content position', () => {
+    renderRail({ anchorBaseOffset: 24, threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })] })
+
+    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 32px')
+  })
+
+  it('keeps the rail title sticky without an internal scrolling comment list', () => {
     renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })] })
 
+    expect(commentRail().className).toContain('min-h-full')
+    expect(commentRail().className).not.toContain('max-h-screen')
     expect(railTitle().className).toContain('sticky')
+    expect(railTitle().className).toContain('top-0')
     expect(railTitle().className).toContain('z-10')
+    expect(railTitle().className).toContain('shrink-0')
+    expect(railScrollRegion().className).not.toContain('overflow-y-auto')
   })
 
   it('keeps nearby anchored comments from overlapping', () => {
@@ -147,7 +179,7 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
 
-    await click(requiredButtonWithLabel('评论操作'))
+    await click(requiredButtonWithLabel('更多评论操作'))
     await click(actionElementWithText('删除评论'))
 
     expect(document.body.textContent).toContain('删除评论？')
@@ -158,7 +190,7 @@ describe('MarkdownCommentsRail', () => {
     expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
   })
 
-  it('keeps owner discussion deletion in the thread action menu without single-comment deletion', async () => {
+  it('labels owner discussion deletion as deleting the visible comment', async () => {
     const onDeleteThread = vi.fn(async () => undefined)
     renderRail({
       onDeleteThread,
@@ -166,21 +198,44 @@ describe('MarkdownCommentsRail', () => {
     })
 
     expect(document.body.textContent).not.toContain('编辑')
-    expect(document.body.textContent).not.toContain('删除讨论')
-    expect(buttonWithLabel('评论操作')).toBeNull()
-
-    await click(requiredButtonWithLabel('讨论操作'))
-
-    expect(document.body.textContent).toContain('删除讨论')
     expect(document.body.textContent).not.toContain('删除评论')
 
-    await click(actionElementWithText('删除讨论'))
-    expect(document.body.textContent).toContain('删除讨论？')
+    await click(requiredButtonWithLabel('更多评论操作'))
+
+    expect(document.body.textContent).toContain('删除评论')
+    expect(document.body.textContent).not.toContain('删除讨论')
+
+    await click(actionElementWithText('删除评论'))
+    expect(document.body.textContent).toContain('删除评论？')
     expect(onDeleteThread).not.toHaveBeenCalled()
 
-    await click(buttonWithText('删除讨论'))
+    await click(buttonWithText('删除评论'))
 
     expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
+  })
+
+  it('deletes the discussion from the visible comment action when both delete permissions are allowed', async () => {
+    const onDeleteComment = vi.fn(async () => undefined)
+    const onDeleteThread = vi.fn(async () => undefined)
+    renderRail({
+      onDeleteComment,
+      onDeleteThread,
+      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: true })],
+    })
+
+    expect(document.querySelectorAll('button[aria-label="更多评论操作"]')).toHaveLength(1)
+    expect(buttonWithLabel('讨论操作')).toBeNull()
+
+    await click(requiredButtonWithLabel('更多评论操作'))
+
+    expect(document.body.textContent).toContain('删除评论')
+    expect(document.body.textContent).not.toContain('删除讨论')
+
+    await click(actionElementWithText('删除评论'))
+    await click(buttonWithText('删除评论'))
+
+    expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
+    expect(onDeleteComment).not.toHaveBeenCalled()
   })
 })
 
@@ -309,8 +364,20 @@ function threadTop(threadId: string): number {
 }
 
 function railTitle() {
-  const element = document.querySelector('aside > div')
+  const element = document.querySelector('[data-markdown-comments-rail="true"] > div')
   if (!(element instanceof HTMLElement)) throw new Error('Missing rail title')
+  return element
+}
+
+function commentRail() {
+  const element = document.querySelector('[data-markdown-comments-rail="true"]')
+  if (!(element instanceof HTMLElement)) throw new Error('Missing rail')
+  return element
+}
+
+function railScrollRegion() {
+  const element = document.querySelector('[data-markdown-comments-rail="true"] > div + div')
+  if (!(element instanceof HTMLElement)) throw new Error('Missing rail scroll region')
   return element
 }
 

@@ -54,10 +54,12 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
     : 'card'
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready' && state.status !== 'loading'
-  if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
-    const annotationContext: DriveAnnotationContext = props.context === 'owner'
+  const annotationContext: DriveAnnotationContext | undefined = state.status === 'ready'
+    ? props.context === 'owner'
       ? { context: 'owner', itemId: state.snapshot.current.id }
       : { context: 'share', shareId: props.shareId, itemId: state.snapshot.current.id, canWrite: Boolean(state.snapshot.edit?.canEdit) }
+    : undefined
+  if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
     return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} annotationContext={annotationContext} />
   }
 
@@ -92,6 +94,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
           loadingMoreChildren={state.loadingMoreChildren}
           loadMoreChildrenError={state.loadMoreChildrenError}
           editContext={state}
+          annotationContext={annotationContext}
         />
       ) : null}
     </div>
@@ -135,6 +138,7 @@ export function DriveBrowserView({
   loadingMoreChildren = false,
   loadMoreChildrenError = null,
   editContext,
+  annotationContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly layoutMode?: DriveBrowserLayoutMode
@@ -142,6 +146,7 @@ export function DriveBrowserView({
   readonly loadingMoreChildren?: boolean
   readonly loadMoreChildrenError?: string | null
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
 }) {
   void layoutMode
   return (
@@ -152,6 +157,7 @@ export function DriveBrowserView({
       loadingMoreChildren={loadingMoreChildren}
       loadMoreChildrenError={loadMoreChildrenError}
       editContext={editContext}
+      annotationContext={annotationContext}
     />
   )
 }

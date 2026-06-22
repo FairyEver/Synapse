@@ -4,6 +4,7 @@ import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DriveRendererShell } from '../renderers/drive-renderer-shell'
 import type { DriveRendererEditContext } from '../renderers/drive-renderer-shell'
+import type { DriveAnnotationContext } from '../use-drive-annotations'
 import {
   findDriveRendererOption,
   getDriveRendererOptions,
@@ -21,6 +22,7 @@ export function DriveFinder({
   loadingMoreChildren = false,
   loadMoreChildrenError = null,
   editContext,
+  annotationContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly mode: 'console' | 'share' | 'standalone'
@@ -28,6 +30,7 @@ export function DriveFinder({
   readonly loadingMoreChildren?: boolean
   readonly loadMoreChildrenError?: string | null
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
 }) {
   const fileSelected = snapshot.current.type === 'file'
   const rendererOptions = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
@@ -48,6 +51,7 @@ export function DriveFinder({
             rendererId={selectedRenderer?.id ?? null}
             onRendererChange={setRendererId}
             editContext={editContext}
+            annotationContext={annotationContext}
           />
         </DriveFinderFileLayout>
       ) : (

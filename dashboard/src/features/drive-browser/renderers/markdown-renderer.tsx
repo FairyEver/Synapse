@@ -55,6 +55,7 @@ export function DriveMarkdownRenderer({
   const renderedHtml = preview.html?.trim()
   if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} />
   const outline = preview.outline ?? []
+  const layoutRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
@@ -68,6 +69,7 @@ export function DriveMarkdownRenderer({
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
   const [commentDialogOpen, setCommentDialogOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
+  const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
   const annotated = useMemo(
@@ -115,6 +117,11 @@ export function DriveMarkdownRenderer({
     const root = bodyRef.current
     if (!root) return
     const rootRect = root.getBoundingClientRect()
+    const layoutRect = layoutRef.current?.getBoundingClientRect()
+    if (layoutRect) {
+      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top)
+      setCommentAnchorBaseOffset((current) => current === nextBaseOffset ? current : nextBaseOffset)
+    }
     const renderedText = getMarkdownRenderedText(root)
     const nextAnchors: Record<string, number> = {}
     const nextRects: MarkdownAnnotationOverlayRect[] = []
@@ -269,7 +276,7 @@ export function DriveMarkdownRenderer({
   }
 
   return (
-    <div className='min-h-0 bg-background'>
+    <div className='min-h-full bg-background'>
       {selectionPopover && pendingTarget && !commentDialogOpen ? (
         <div
           data-drive-annotation-selection-action
@@ -315,7 +322,7 @@ export function DriveMarkdownRenderer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div data-testid='markdown-layout' className='flex min-h-0 w-full gap-6'>
+      <div ref={layoutRef} data-testid='markdown-layout' className='flex min-h-full w-full'>
         {outline.length > 0 && outlineOpen ? (
           <aside className='w-52 shrink-0 px-4 py-6 md:px-6'>
             <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
@@ -363,16 +370,19 @@ export function DriveMarkdownRenderer({
           </div>
         </div>
         {commentsOpen ? (
-          <MarkdownCommentsRail
-            threads={railThreads}
-            activeThreadId={activeThreadId}
-            canReply={canCreateAnnotation}
-            onFocusThread={focusThread}
-            onReply={annotations.reply}
-            onUpdateComment={annotations.updateComment}
-            onDeleteComment={annotations.deleteComment}
-            onDeleteThread={annotations.deleteThread}
-          />
+          <aside className='w-72 shrink-0 self-stretch border-l bg-background'>
+            <MarkdownCommentsRail
+              threads={railThreads}
+              activeThreadId={activeThreadId}
+              canReply={canCreateAnnotation}
+              anchorBaseOffset={commentAnchorBaseOffset}
+              onFocusThread={focusThread}
+              onReply={annotations.reply}
+              onUpdateComment={annotations.updateComment}
+              onDeleteComment={annotations.deleteComment}
+              onDeleteThread={annotations.deleteThread}
+            />
+          </aside>
         ) : null}
       </div>
       {annotations.error ? (

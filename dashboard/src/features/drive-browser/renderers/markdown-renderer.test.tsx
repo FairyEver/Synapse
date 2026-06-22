@@ -62,6 +62,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(layout?.className).not.toContain('md:px-6')
     expect(layout?.className).not.toContain('mx-auto')
     expect(layout?.className).not.toContain('max-w-7xl')
+    expect(layout?.className).not.toContain('gap-6')
     expect(outlineRail?.className).toContain('w-52')
     expect(outlineRail?.className).toContain('px-4')
     expect(outlineRail?.className).toContain('py-6')
@@ -70,17 +71,32 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn?.parentElement?.className).toContain('px-4')
     expect(documentColumn?.parentElement?.className).toContain('py-6')
     expect(documentColumn?.className).toContain('mx-auto')
+    expect(documentColumn?.className).not.toContain('ml-auto')
     expect(documentColumn?.className).toContain('max-w-3xl')
   })
 
   it('opens the comment rail by default when comments exist', async () => {
     annotationsMock.threads = [thread()]
+    const windowAddEventListener = vi.spyOn(window, 'addEventListener')
     renderMarkdown()
 
     await act(async () => undefined)
 
-    expect(document.body.textContent).toContain('评论 1')
+    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
+    expect(commentRailShell()?.className).toContain('border-l')
+    expect(commentRailShell()?.className).not.toContain('gap-6')
+    expect(commentRailPanel()?.className).toContain('min-h-full')
+    expect(commentRailPanel()?.className).not.toContain('max-h-screen')
+    expect(commentRailTitle()?.className).toContain('sticky')
+    expect(commentRailTitle()?.className).toContain('top-0')
+    expect(commentRailScrollRegion()?.className).not.toContain('overflow-y-auto')
+    expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
+    expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).toContain('mx-auto')
+    expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).not.toContain('ml-auto')
+
+    windowAddEventListener.mockRestore()
   })
 
   it('opens a selection action before creating a comment from selected rendered text', async () => {
@@ -233,7 +249,8 @@ describe('DriveMarkdownRenderer', () => {
       }))
     })
 
-    expect(document.body.textContent).toContain('评论 1')
+    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('1')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
     expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 80, behavior: 'smooth' })
   })
@@ -489,6 +506,23 @@ function elementWithText(text: string) {
   const element = Array.from(document.querySelectorAll('section, article, p')).find((item) => item.textContent?.includes(text))
   if (!element) throw new Error(`Missing element ${text}`)
   return element as HTMLElement
+}
+
+function commentRailShell() {
+  return Array.from(document.querySelectorAll('aside'))
+    .find((item) => item.textContent?.includes('Comment body')) as HTMLElement | undefined
+}
+
+function commentRailPanel() {
+  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"]') ?? undefined
+}
+
+function commentRailTitle() {
+  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"] > div') ?? undefined
+}
+
+function commentRailScrollRegion() {
+  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"] > div + div') ?? undefined
 }
 
 function textarea() {
