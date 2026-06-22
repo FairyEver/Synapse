@@ -46,7 +46,13 @@ jobs:
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
       - name: Run tests
-        run: pnpm --filter @synapse/desktop run test
+        shell: bash
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+          xvfb-run -a --server-args="-screen 0 1280x1024x24" pnpm --filter @synapse/desktop run test
       - name: Verify IPC codegen drift
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
