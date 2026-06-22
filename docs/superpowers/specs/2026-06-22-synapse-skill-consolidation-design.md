@@ -9,7 +9,7 @@ The new skill should solve four problems at once:
 - Reduce noise in the built-in Skill list.
 - Let users install Synapse MCP guidance once instead of installing each domain separately.
 - Give agents one stable entry point that routes by user intent.
-- Keep maintenance modular by preserving one domain document per Synapse capability.
+- Keep maintenance modular by preserving one domain folder per Synapse capability.
 
 ## Current State
 
@@ -37,14 +37,30 @@ desktop/resources/templates/skills/synapse-skill/
   meta.json
   content.md
   files/
-    automation.md
-    content.md
-    database.md
-    drive.md
-    model-price.md
-    repository.md
-    variable.md
-    workflow.md
+    automation/
+      index.md
+      api-reference.md
+    content/
+      index.md
+      api-reference.md
+    database/
+      index.md
+      api-reference.md
+    drive/
+      index.md
+      api-reference.md
+    model-price/
+      index.md
+      api-reference.md
+    repository/
+      index.md
+      api-reference.md
+    variable/
+      index.md
+      api-reference.md
+    workflow/
+      index.md
+      api-reference.md
 ```
 
 The main `content.md` is a router. It should stay short and only define:
@@ -55,20 +71,20 @@ The main `content.md` is a router. It should stay short and only define:
 - How to handle cross-domain requests.
 - Shared safety rules that apply to all Synapse MCP operations.
 
-Domain-specific instructions move into the corresponding file under `files/`.
+Domain-specific instructions move into the corresponding folder under `files/`. Each domain folder should have an `index.md` as the secondary entry point and may keep supporting references such as `api-reference.md`, examples, checklists, or tool-specific notes beside it.
 
 ## Routing
 
 The router should classify requests by domain:
 
-- Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database.md`
-- Drive files, folders, upload, download, preview, share links, public assets, trash, versions -> `drive.md`
-- Workflow definitions, nodes, edges, DAG validation, layout, workflow runs -> `workflow.md`
-- Automation items, triggers, executors, manual runs, active runs, run history -> `automation.md`
-- Rule, Skill, Prompt publishing and content resource management -> `content.md`
-- Model price rules -> `model-price.md`
-- User-scoped local variables -> `variable.md`
-- Configured Synapse repositories -> `repository.md`
+- Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
+- Drive files, folders, upload, download, preview, share links, public assets, trash, versions -> `drive/index.md`
+- Workflow definitions, nodes, edges, DAG validation, layout, workflow runs -> `workflow/index.md`
+- Automation items, triggers, executors, manual runs, active runs, run history -> `automation/index.md`
+- Rule, Skill, Prompt publishing and content resource management -> `content/index.md`
+- Model price rules -> `model-price/index.md`
+- User-scoped local variables -> `variable/index.md`
+- Configured Synapse repositories -> `repository/index.md`
 
 If a request spans multiple domains, the skill should route sequentially and apply the relevant reference file for each part.
 
@@ -123,6 +139,8 @@ It should not add a migration system, editor cleanup flow, or UI hidden-state me
 
 It should not change the generic Skill install format. Installed Skills still use one root `SKILL.md` plus optional attachments.
 
+The installed Skill should therefore be organized as one primary `SKILL.md` at the root, plus domain folders containing secondary Markdown files and reference files. Do not collapse domain details into the root `SKILL.md`, and do not keep all domain files flat in the root attachment directory.
+
 ## Validation
 
 Required checks:
@@ -131,7 +149,7 @@ Required checks:
 - Confirm `builtin__skill__synapse-skill` appears in built-in Skill listings.
 - Confirm the removed built-in Skill ids no longer appear in built-in Skill listings.
 - Confirm `synapse-test-skill` and `bark-notification` still appear.
-- Confirm attachments for the new Skill include all domain files.
+- Confirm attachments for the new Skill include all domain folders, each required `index.md`, and the expected reference files.
 - Run focused tests for repository template and built-in content loading.
 - Run desktop typecheck if implementation touches TypeScript.
 
