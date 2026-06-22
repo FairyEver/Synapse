@@ -36,6 +36,11 @@ import {
   type DriveSystemEntry,
 } from "./drive-system-entries"
 import {
+  DRIVE_FILE_TABLE_COLUMNS,
+  DRIVE_SHARE_TABLE_COLUMNS,
+  DriveTableColumns,
+} from "./drive-table-columns"
+import {
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
   createDriveLocalUploadTooDeepError,
@@ -1215,7 +1220,8 @@ function DriveFileList({
         </Empty>
       ) : (
         <ModuleContentPanel>
-          <Table className="table-fixed" containerClassName="overflow-x-hidden">
+          <Table className="table-fixed">
+            <DriveTableColumns columns={DRIVE_FILE_TABLE_COLUMNS} />
             <DriveFileTableHeader />
             <TableBody>
               {systemEntries.map((entry) => (
@@ -1261,9 +1267,9 @@ function DriveFileTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-24 text-right">大小</TableHead>
-        <TableHead className="w-40 text-right">更新时间</TableHead>
-        <TableHead className="w-52 text-right" aria-label="操作" />
+        <TableHead className="text-right">大小</TableHead>
+        <TableHead className="text-right">更新时间</TableHead>
+        <TableHead className="text-right" aria-label="操作" />
       </TableRow>
     </TableHeader>
   )
@@ -1272,6 +1278,7 @@ function DriveFileTableHeader() {
 function DriveFileTableSkeleton() {
   return (
     <Table className="table-fixed">
+      <DriveTableColumns columns={DRIVE_FILE_TABLE_COLUMNS} />
       <DriveFileTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.map((row) => (
@@ -2104,9 +2111,9 @@ function DrivePublicLinkTableHeader() {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
-        <TableHead className="w-72">名称</TableHead>
+        <TableHead>名称</TableHead>
         <TableHead>链接信息</TableHead>
-        <TableHead className="w-36 text-right">操作</TableHead>
+        <TableHead className="text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -2236,7 +2243,8 @@ function DriveShareTableSkeleton() {
 
 function DrivePublicLinkTableSkeleton() {
   return (
-    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+    <Table className="table-fixed">
+      <DriveTableColumns columns={DRIVE_SHARE_TABLE_COLUMNS} />
       <DrivePublicLinkTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
@@ -2353,7 +2361,8 @@ function DriveShareList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无分享" />
 
   return (
-    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+    <Table className="table-fixed">
+      <DriveTableColumns columns={DRIVE_SHARE_TABLE_COLUMNS} />
       <DrivePublicLinkTableHeader />
       <TableBody>
         {items.map((item) => (

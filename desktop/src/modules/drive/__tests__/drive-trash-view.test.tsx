@@ -81,6 +81,7 @@ describe("DriveTrashView", () => {
     expect(document.body.textContent).toContain("logo.png")
     expect(document.body.textContent).toContain("公开素材")
     expect(document.querySelector('[aria-label="搜索回收站"]')).toBeNull()
+    expect(tableColumnClasses()).toEqual(["w-auto", "w-28", "w-20", "w-56", "w-44", "w-36"])
   })
 
   it("loads more trash entries from the next page", async () => {
@@ -253,6 +254,11 @@ function getTableRow(text: string): HTMLTableRowElement {
     .find((candidate) => candidate.textContent?.includes(text))
   if (!row) throw new Error(`Table row not found: ${text}`)
   return row
+}
+
+function tableColumnClasses(): string[] {
+  return Array.from(document.body.querySelectorAll<HTMLTableColElement>("colgroup col"))
+    .map((element) => element.className)
 }
 
 function createTrashItem(overrides: Partial<DriveTrashItemDto> = {}): DriveTrashItemDto {

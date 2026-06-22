@@ -94,6 +94,7 @@ describe("DrivePublicAssetsView", () => {
     expect(document.body.textContent).toContain("1.5 KB")
     expect(document.body.textContent).toContain("7")
     expect(document.querySelector('[aria-label="搜索公开素材"]')).toBeNull()
+    expect(tableColumnClasses()).toEqual(["w-auto", "w-20", "w-36", "w-16", "w-44", "w-44"])
 
     await clickButtonByLabel("复制 brand.png")
 
@@ -576,6 +577,11 @@ function requireButtonByLabel(label: string): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
   return button
+}
+
+function tableColumnClasses(): string[] {
+  return Array.from(document.body.querySelectorAll<HTMLTableColElement>("colgroup col"))
+    .map((element) => element.className)
 }
 
 async function openRowMenu(name: string): Promise<void> {
