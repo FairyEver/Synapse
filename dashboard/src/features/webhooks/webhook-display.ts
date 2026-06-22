@@ -19,6 +19,14 @@ export function findWebhookById<T extends { readonly id: string }>(
 }
 
 export function getWebhookUrlDisplayState(webhook: WebhookUrlLike) {
+  if (webhook.url) {
+    return {
+      kind: 'full' as const,
+      label: webhook.url,
+      copyValue: webhook.url,
+    }
+  }
+
   return {
     kind: 'masked' as const,
     label: webhook.maskedUrl,

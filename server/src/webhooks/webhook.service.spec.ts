@@ -65,7 +65,7 @@ function createPrismaMock() {
 }
 
 describe("WebhookService", () => {
-  it("creates a webhook for the current user and returns the full URL only in the one-time result", async () => {
+  it("creates a webhook for the current user and returns the full URL in the webhook dto", async () => {
     const prisma = createPrismaMock()
     const tx = {
       userWebhook: {
@@ -95,7 +95,7 @@ describe("WebhookService", () => {
     expect(result.webhook.publicId).toBe("wh_public")
     expect(result.webhook.name).toBe("GitHub")
     expect(result.webhook.enabled).toBe(true)
-    expect(result.webhook.url).toBeNull()
+    expect(result.webhook.url).toBe("https://synapse.test/webhooks/wh_public/whsec_secret")
     expect(result.webhook.maskedUrl).toBe("https://synapse.test/webhooks/wh_public/***")
     expect(tx.userWebhook.create.mock.calls[0]?.[0]?.data).toMatchObject({
       userId: "user-1",
@@ -213,7 +213,7 @@ describe("WebhookService", () => {
         publicId: "wh_public",
         name: "GitHub",
         enabled: true,
-        url: null,
+        url: "https://synapse.test/webhooks/wh_public/whsec_secret",
         maskedUrl: "https://synapse.test/webhooks/wh_public/***",
         createdAt: "2026-06-06T10:00:00.000Z",
         updatedAt: "2026-06-06T10:00:00.000Z",
@@ -287,7 +287,7 @@ describe("WebhookService", () => {
     const reset = await service.resetSecret("user-1", "webhook-1", "https://synapse.test")
 
     expect(reset.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
-    expect(reset.webhook.url).toBeNull()
+    expect(reset.webhook.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "webhook-1", userId: "user-1", deletedAt: null },
       data: expect.objectContaining({ secret: "whsec_new" }),

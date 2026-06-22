@@ -690,13 +690,14 @@ export class WebhookService implements OnModuleInit {
   private toDashboardWebhookDto(webhook: WebhookRecord, publicAppUrl: string): DashboardWebhookDto {
     const latestDelivery = webhook.deliveries?.[0]
     const lastDeliveryStatus = normalizeWebhookDeliveryStatus(latestDelivery?.status)
+    const url = webhook.secret ? buildWebhookUrl(publicAppUrl, webhook.publicId, webhook.secret) : null
     const dto: DashboardWebhookDto = {
       id: webhook.id,
       publicId: webhook.publicId,
       name: webhook.name,
       enabled: webhook.enabled,
       maskedUrl: maskWebhookUrl(buildWebhookUrl(publicAppUrl, webhook.publicId, "secret")),
-      url: null,
+      url,
       createdAt: webhook.createdAt.toISOString(),
       updatedAt: webhook.updatedAt.toISOString(),
     }
