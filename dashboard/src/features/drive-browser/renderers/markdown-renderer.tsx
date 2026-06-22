@@ -5,7 +5,7 @@ import type {
   DriveBrowserPreviewDto,
   DriveMarkdownOutlineItemDto,
 } from '@synapse/shared'
-import { ListTree, MessageSquare, RefreshCw } from 'lucide-react'
+import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -27,6 +28,14 @@ import { MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdow
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = 'max-w-full space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_td:not(:first-child)]:min-w-56 [&_th]:border [&_th]:p-2 [&_th]:align-top [&_th:not(:first-child)]:min-w-56 [&_ul]:list-disc'
+const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = 16
+const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = 12
+const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
+const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
+const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
+const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
+
+type MarkdownWidthMode = 'reading' | 'wide'
 
 type SelectionPopoverPosition = {
   readonly top: number
@@ -64,6 +73,7 @@ export function DriveMarkdownRenderer({
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [pendingTarget, setPendingTarget] = useState<DriveAnnotationTextRangeTargetV1 | null>(null)
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
@@ -161,7 +171,7 @@ export function DriveMarkdownRenderer({
 
   useLayoutEffect(() => {
     measureAnnotationLayout()
-  }, [commentsOpen, measureAnnotationLayout, outlineOpen])
+  }, [commentsOpen, measureAnnotationLayout, outlineOpen, widthMode])
 
   useEffect(() => {
     const root = bodyRef.current
@@ -201,7 +211,16 @@ export function DriveMarkdownRenderer({
   }, [])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
-    const items: DriveRendererToolbarItem[] = []
+    const items: DriveRendererToolbarItem[] = [
+      {
+        kind: 'button',
+        id: 'markdown-width-mode',
+        label: widthMode === 'reading' ? '宽屏' : '阅读',
+        icon: Maximize2,
+        variant: widthMode === 'wide' ? 'secondary' : 'ghost',
+        onClick: () => setWidthMode((current) => current === 'reading' ? 'wide' : 'reading'),
+      },
+    ]
     if (outline.length > 0) {
       items.push({
         kind: 'toggle',
@@ -221,26 +240,18 @@ export function DriveMarkdownRenderer({
           icon: MessageSquare,
           pressed: commentsOpen,
           onPressedChange: setCommentPanelOpen,
-        },
-        {
-          kind: 'button',
-          id: 'markdown-refresh-comments',
-          label: '刷新评论',
-          icon: RefreshCw,
-          variant: 'ghost',
-          onClick: () => { void annotations.refresh() },
-        },
+        }
       )
     }
     return items
   }, [
-    annotations.refresh,
     annotations.threads.length,
     annotationsEnabled,
     commentsOpen,
     outline.length,
     outlineOpen,
     setCommentPanelOpen,
+    widthMode,
   ])
 
   useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
@@ -249,7 +260,7 @@ export function DriveMarkdownRenderer({
     setActiveThreadId(threadId)
     setCommentPanelOpen(true)
     const root = bodyRef.current
-    const overlayRect = annotationOverlayRects.find((rect) => rect.kind === 'thread' && rect.threadId === threadId)
+    const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
     if (!root || !overlayRect) return
     scrollPreviewContainerToRect(root, overlayRect)
   }
@@ -278,9 +289,15 @@ export function DriveMarkdownRenderer({
 
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
+      ?? findRenderedOverlayThreadAtPoint(event.clientX, event.clientY, bodyRef.current)
     if (!threadId) return
     focusThread(threadId)
   }
+
+  const outlinePanelOpen = outline.length > 0 && outlineOpen
+  const outlinePanelSize = outlinePanelOpen ? MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE : 0
+  const commentsPanelSize = commentsOpen ? MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE : 0
+  const documentPanelSize = 100 - outlinePanelSize - commentsPanelSize
 
   const createThread = async () => {
     if (!pendingTarget || !commentBody.trim()) return
@@ -345,70 +362,115 @@ export function DriveMarkdownRenderer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div ref={layoutRef} data-testid='markdown-layout' className='flex min-h-full w-full'>
-        {outline.length > 0 && outlineOpen ? (
-          <aside className='w-52 shrink-0 px-4 py-6 md:px-6'>
-            <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
-              <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
-              <MarkdownOutlineTree items={outline} />
-            </nav>
-          </aside>
-        ) : null}
-        <div className='min-w-0 flex-1 px-4 py-6 md:px-6'>
-          <div className='relative mx-auto max-w-3xl'>
-            <div
-              ref={bodyRef}
-              data-testid='markdown-body'
-              className={MARKDOWN_BODY_CLASSNAME}
-              onClick={handleBodyClick}
-              onMouseUp={handleBodyMouseUp}
-              dangerouslySetInnerHTML={{ __html: annotated.html }}
-            />
-            {annotationOverlayRects.length > 0 ? (
-              <div aria-hidden className='pointer-events-none absolute inset-0'>
-                {annotationOverlayRects.map((rect) => (
-                  <div
-                    key={rect.key}
-                    data-drive-annotation-overlay-kind={rect.kind}
-                    data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
-                    className={cn(
-                      'absolute mix-blend-multiply dark:mix-blend-screen',
-                      rect.kind === 'pending'
-                        ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
-                        : rect.threadId === activeThreadId
-                          ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
-                          : 'bg-amber-200/55 dark:bg-amber-800/35'
-                    )}
-                    style={{
-                      top: rect.top,
-                      left: rect.left,
-                      width: rect.width,
-                      height: rect.height,
-                    }}
-                  />
-                ))}
+      <div ref={layoutRef} data-testid='markdown-layout' className='min-h-full w-full'>
+        <ResizablePanelGroup direction='horizontal' className='min-h-full'>
+          {outlinePanelOpen ? (
+            <>
+              <ResizablePanel
+                defaultSize={MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE}
+                minSize={MARKDOWN_OUTLINE_PANEL_MIN_SIZE}
+                maxSize={MARKDOWN_OUTLINE_PANEL_MAX_SIZE}
+                data-panel-size={MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE}
+                data-panel-min-size={MARKDOWN_OUTLINE_PANEL_MIN_SIZE}
+                data-panel-max-size={MARKDOWN_OUTLINE_PANEL_MAX_SIZE}
+                data-markdown-resizable-panel='outline'
+                className='min-h-full !overflow-visible'
+              >
+                <aside className='h-full px-4 py-6 md:px-6'>
+                  <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto' aria-label='目录'>
+                    <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
+                    <MarkdownOutlineTree items={outline} />
+                  </nav>
+                </aside>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+            </>
+          ) : null}
+          <ResizablePanel
+            defaultSize={documentPanelSize}
+            minSize={35}
+            data-markdown-resizable-panel='document'
+            className='min-h-full min-w-0 !overflow-visible'
+          >
+            <div className='min-w-0 px-4 py-6 md:px-6'>
+              <div
+                data-markdown-width-mode={widthMode}
+                className={cn(
+                  'relative mx-auto',
+                  widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
+                )}
+              >
+                <div
+                  ref={bodyRef}
+                  data-testid='markdown-body'
+                  className={MARKDOWN_BODY_CLASSNAME}
+                  onClick={handleBodyClick}
+                  onMouseUp={handleBodyMouseUp}
+                  dangerouslySetInnerHTML={{ __html: annotated.html }}
+                />
+                {annotationOverlayRects.length > 0 ? (
+                  <div aria-hidden className='pointer-events-none absolute inset-0'>
+                    {annotationOverlayRects.map((rect) => (
+                      <div
+                        key={rect.key}
+                        data-drive-annotation-overlay-kind={rect.kind}
+                        data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
+                        className={cn(
+                          'absolute mix-blend-multiply dark:mix-blend-screen',
+                          rect.kind === 'pending'
+                            ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
+                            : rect.threadId === activeThreadId
+                              ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
+                              : 'bg-amber-200/55 dark:bg-amber-800/35'
+                        )}
+                        style={{
+                          top: rect.top,
+                          left: rect.left,
+                          width: rect.width,
+                          height: rect.height,
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {preview.truncated ? (
+                  <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+                ) : null}
               </div>
-            ) : null}
-            {preview.truncated ? (
-              <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
-            ) : null}
-          </div>
-        </div>
-        {commentsOpen ? (
-          <aside className='w-72 shrink-0 self-stretch border-l bg-background'>
-            <MarkdownCommentsRail
-              threads={railThreads}
-              activeThreadId={activeThreadId}
-              canReply={canCreateAnnotation}
-              anchorBaseOffset={commentAnchorBaseOffset}
-              onFocusThread={focusThread}
-              onReply={annotations.reply}
-              onUpdateComment={annotations.updateComment}
-              onDeleteComment={annotations.deleteComment}
-              onDeleteThread={annotations.deleteThread}
-            />
-          </aside>
-        ) : null}
+            </div>
+          </ResizablePanel>
+          {commentsOpen ? (
+            <>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                defaultSize={MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE}
+                minSize={MARKDOWN_COMMENTS_PANEL_MIN_SIZE}
+                maxSize={MARKDOWN_COMMENTS_PANEL_MAX_SIZE}
+                data-panel-size={MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE}
+                data-panel-min-size={MARKDOWN_COMMENTS_PANEL_MIN_SIZE}
+                data-panel-max-size={MARKDOWN_COMMENTS_PANEL_MAX_SIZE}
+                data-markdown-resizable-panel='comments'
+                className='min-h-full !overflow-visible'
+              >
+                <aside className='h-full min-h-full self-stretch border-l bg-background'>
+                  <MarkdownCommentsRail
+                    threads={railThreads}
+                    activeThreadId={activeThreadId}
+                    canReply={canCreateAnnotation}
+                    loading={annotations.loading}
+                    anchorBaseOffset={commentAnchorBaseOffset}
+                    onFocusThread={focusThread}
+                    onRefresh={() => { void annotations.refresh() }}
+                    onReply={annotations.reply}
+                    onUpdateComment={annotations.updateComment}
+                    onDeleteComment={annotations.deleteComment}
+                    onDeleteThread={annotations.deleteThread}
+                  />
+                </aside>
+              </ResizablePanel>
+            </>
+          ) : null}
+        </ResizablePanelGroup>
       </div>
       {annotations.error ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
@@ -539,6 +601,55 @@ function findOverlayThreadAtPoint(
   return hit?.threadId ?? null
 }
 
+function findOverlayRectByThreadId(
+  rects: readonly MarkdownAnnotationOverlayRect[],
+  threadId: string,
+  root: HTMLElement | null,
+): MarkdownAnnotationOverlayRect | null {
+  const match = rects.find((rect) => rect.kind === 'thread' && rect.threadId === threadId)
+  if (match) return match
+  if (!root) return null
+  const element = findRenderedOverlayByThreadId(root, threadId)
+  if (!element) return null
+  const rect = readRenderedOverlayRect(element)
+  if (!rect) return null
+  return {
+    key: `rendered-${threadId}`,
+    kind: 'thread',
+    threadId,
+    ...rect,
+  }
+}
+
+function findRenderedOverlayThreadAtPoint(clientX: number, clientY: number, root: HTMLElement | null): string | null {
+  if (!root) return null
+  const rootRect = root.getBoundingClientRect()
+  const x = clientX - rootRect.left
+  const y = clientY - rootRect.top
+  const overlays = root.parentElement?.querySelectorAll<HTMLElement>('[data-drive-annotation-overlay-kind="thread"]') ?? []
+  for (const element of overlays) {
+    const rect = readRenderedOverlayRect(element)
+    const threadId = element.getAttribute('data-drive-annotation-overlay-thread-id')
+    if (!rect || !threadId) continue
+    if (x >= rect.left && x <= rect.left + rect.width && y >= rect.top && y <= rect.top + rect.height) return threadId
+  }
+  return null
+}
+
+function findRenderedOverlayByThreadId(root: HTMLElement, threadId: string): HTMLElement | null {
+  const overlays = root.parentElement?.querySelectorAll<HTMLElement>('[data-drive-annotation-overlay-kind="thread"]') ?? []
+  return Array.from(overlays).find((element) => element.getAttribute('data-drive-annotation-overlay-thread-id') === threadId) ?? null
+}
+
+function readRenderedOverlayRect(element: HTMLElement): Omit<MarkdownAnnotationOverlayRect, 'key' | 'kind' | 'threadId'> | null {
+  const top = Number.parseFloat(element.style.top)
+  const left = Number.parseFloat(element.style.left)
+  const width = Number.parseFloat(element.style.width)
+  const height = Number.parseFloat(element.style.height)
+  if (![top, left, width, height].every(Number.isFinite)) return null
+  return { top, left, width, height }
+}
+
 function scrollPreviewContainerToRect(root: HTMLElement, rect: MarkdownAnnotationOverlayRect): void {
   const container = findNearestScrollContainer(root)
   if (!container) return
@@ -564,10 +675,19 @@ function findNearestScrollContainer(element: HTMLElement): HTMLElement | null {
   let current = element.parentElement
   while (current) {
     const style = window.getComputedStyle(current)
-    if (/(auto|scroll|overlay)/u.test(`${style.overflowY} ${style.overflow}`)) return current
+    if (!isResizableLayoutElement(current) && /(auto|scroll|overlay)/u.test(`${style.overflowY} ${style.overflow}`)) return current
     current = current.parentElement
   }
   return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : null
+}
+
+function isResizableLayoutElement(element: HTMLElement): boolean {
+  const slot = element.getAttribute('data-slot')
+  return element.classList.contains('!overflow-visible')
+    || element.hasAttribute('data-markdown-resizable-panel')
+    || slot === 'resizable-panel'
+    || slot === 'resizable-panel-group'
+    || slot === 'resizable-handle'
 }
 
 function sameNumberRecord(left: Record<string, number>, right: Record<string, number>): boolean {

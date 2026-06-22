@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
-import { MoreHorizontal } from 'lucide-react'
+import { Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +37,8 @@ export function MarkdownCommentsRail({
   canReply,
   anchorBaseOffset = 0,
   onFocusThread,
+  loading = false,
+  onRefresh,
   onReply,
   onUpdateComment,
   onDeleteComment,
@@ -47,6 +49,8 @@ export function MarkdownCommentsRail({
   readonly canReply: boolean
   readonly anchorBaseOffset?: number
   readonly onFocusThread: (threadId: string) => void
+  readonly loading?: boolean
+  readonly onRefresh?: () => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
@@ -68,7 +72,22 @@ export function MarkdownCommentsRail({
     <div data-markdown-comments-rail='true' className='min-h-full bg-background'>
       <div className='sticky top-0 z-10 flex h-10 shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium'>
         <span>评论</span>
-        <span className='text-xs font-normal text-muted-foreground'>{threads.length}</span>
+        <div className='flex items-center gap-1'>
+          <span className='text-xs font-normal text-muted-foreground'>{threads.length}</span>
+          {onRefresh ? (
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              className='size-7'
+              aria-label='刷新评论'
+              disabled={loading}
+              onClick={onRefresh}
+            >
+              {loading ? <Loader2 className='animate-spin' /> : <RefreshCw />}
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div>
         {threads.length === 0 ? (

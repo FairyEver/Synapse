@@ -13,6 +13,13 @@ vi.mock('../use-drive-annotations', () => ({
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & {
+  ResizeObserver: typeof ResizeObserver
+}).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -37,8 +44,11 @@ beforeEach(() => {
   Range.prototype.getClientRects = vi.fn(() => rangeRects as unknown as DOMRectList)
   vi.stubGlobal('ResizeObserver', class ResizeObserverMock {
     readonly callback: ResizeObserverCallback
-    readonly observe = vi.fn()
+    readonly observe = vi.fn((target: Element) => {
+      this.observedElements.push(target)
+    })
     readonly disconnect = vi.fn()
+    readonly observedElements: Element[] = []
 
     constructor(callback: ResizeObserverCallback) {
       this.callback = callback
@@ -80,7 +90,8 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     const layout = document.querySelector('[data-testid="markdown-layout"]')
-    const outlineRail = document.querySelector('nav[aria-label="目录"]')?.closest('aside')
+    const outlineRail = document.querySelector('nav[aria-label="目录"]')?.closest('[data-slot="resizable-panel"]')
+    const outlineAside = document.querySelector('nav[aria-label="目录"]')?.closest('aside')
     const documentColumn = document.querySelector('[data-testid="markdown-body"]')?.parentElement
 
     expect(layout?.className).toContain('w-full')
@@ -90,16 +101,38 @@ describe('DriveMarkdownRenderer', () => {
     expect(layout?.className).not.toContain('mx-auto')
     expect(layout?.className).not.toContain('max-w-7xl')
     expect(layout?.className).not.toContain('gap-6')
-    expect(outlineRail?.className).toContain('w-52')
-    expect(outlineRail?.className).toContain('px-4')
-    expect(outlineRail?.className).toContain('py-6')
-    expect(outlineRail?.className).not.toContain('hidden')
-    expect(outlineRail?.className).not.toContain('xl:block')
+    expect(document.querySelector('[data-slot="resizable-panel-group"]')).not.toBeNull()
+    expect(outlineRail?.getAttribute('data-slot')).toBe('resizable-panel')
+    expect(outlineRail?.getAttribute('data-panel-size')).toBe('16')
+    expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('12')
+    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('22')
+    expect(outlineAside?.className).toContain('px-4')
+    expect(outlineAside?.className).toContain('py-6')
+    expect(outlineAside?.className).not.toContain('hidden')
+    expect(outlineAside?.className).not.toContain('xl:block')
     expect(documentColumn?.parentElement?.className).toContain('px-4')
     expect(documentColumn?.parentElement?.className).toContain('py-6')
     expect(documentColumn?.className).toContain('mx-auto')
     expect(documentColumn?.className).not.toContain('ml-auto')
     expect(documentColumn?.className).toContain('max-w-3xl')
+    expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
+  })
+
+  it('switches the markdown document between reading and wide width', async () => {
+    renderMarkdown()
+
+    const documentColumn = () => document.querySelector('[data-testid="markdown-body"]')?.parentElement
+    expect(documentColumn()?.className).toContain('max-w-3xl')
+    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('reading')
+    expect(buttonWithText('宽屏')).not.toBeNull()
+
+    await click(buttonWithText('宽屏'))
+
+    expect(documentColumn()?.className).not.toContain('max-w-3xl')
+    expect(documentColumn()?.className).toContain('max-w-none')
+    expect(documentColumn()?.className).toContain('w-full')
+    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('wide')
+    expect(buttonWithText('阅读')).not.toBeNull()
   })
 
   it('keeps wide markdown tables scrollable inside the reader column', () => {
@@ -145,14 +178,20 @@ describe('DriveMarkdownRenderer', () => {
   it('opens the comment rail by default when comments exist', async () => {
     annotationsMock.threads = [thread()]
     const windowAddEventListener = vi.spyOn(window, 'addEventListener')
-    renderMarkdown()
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     await act(async () => undefined)
 
     expect(document.body.textContent).toContain('评论')
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
+    expect(toolbarButtonTexts()).toEqual(['宽屏', '目录', '评论 1'])
+    expect(commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')).not.toBeNull()
     expect(commentRailShell()?.className).toContain('border-l')
+    expect(commentRailPanelGroup()?.getAttribute('data-slot')).toBe('resizable-panel')
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('22')
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe('17')
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-max-size')).toBe('32')
     expect(commentRailShell()?.className).not.toContain('gap-6')
     expect(commentRailPanel()?.className).toContain('min-h-full')
     expect(commentRailPanel()?.className).not.toContain('max-h-screen')
@@ -164,6 +203,18 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).not.toContain('ml-auto')
 
     windowAddEventListener.mockRestore()
+  })
+
+  it('refreshes comments from the comment rail header', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    await click(buttonByLabel('刷新评论'))
+
+    expect(annotationsMock.refresh).toHaveBeenCalledTimes(1)
+    expect(toolbarButtonTexts()).not.toContain('刷新评论')
   })
 
   it('opens a selection action before creating a comment from selected rendered text', async () => {
@@ -329,7 +380,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(resizeObservers).toHaveLength(1)
+    expect(markdownResizeObserver()).not.toBeNull()
     expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 120px')
     expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('left: 80px')
 
@@ -623,6 +674,17 @@ function buttonWithText(text: string) {
   return button as HTMLButtonElement
 }
 
+function buttonByLabel(label: string) {
+  const button = document.querySelector(`button[aria-label="${label}"]`)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`)
+  return button
+}
+
+function toolbarButtonTexts() {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-testid="toolbar"] button'))
+    .map((button) => button.textContent?.trim() ?? '')
+}
+
 function selectionAction() {
   return document.querySelector('[data-drive-annotation-selection-action]')
 }
@@ -636,6 +698,10 @@ function elementWithText(text: string) {
 function commentRailShell() {
   return Array.from(document.querySelectorAll('aside'))
     .find((item) => item.textContent?.includes('Comment body')) as HTMLElement | undefined
+}
+
+function commentRailPanelGroup() {
+  return commentRailShell()?.closest('[data-slot="resizable-panel"]') as HTMLElement | null
 }
 
 function commentRailPanel() {
@@ -669,9 +735,14 @@ function threadOverlay(threadId: string) {
 }
 
 function triggerMarkdownResize() {
-  const observer = resizeObservers[0]
+  const observer = markdownResizeObserver()
   if (!observer) throw new Error('Missing ResizeObserver')
   observer.callback([], observer as unknown as ResizeObserver)
+}
+
+function markdownResizeObserver() {
+  const body = document.querySelector('[data-testid="markdown-body"]')
+  return resizeObservers.find((observer) => body ? observer.observedElements.includes(body) : false) ?? null
 }
 
 async function flushAnimationFrames() {
@@ -723,6 +794,7 @@ type TestResizeObserver = {
   readonly callback: ResizeObserverCallback
   readonly observe: ReturnType<typeof vi.fn>
   readonly disconnect: ReturnType<typeof vi.fn>
+  readonly observedElements: Element[]
 }
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {
