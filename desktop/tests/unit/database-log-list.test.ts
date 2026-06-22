@@ -137,7 +137,7 @@ describe("Database operation log", () => {
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret row detail")
   })
 
-  it("does not check permissions for read-only database actions", async () => {
+  it("checks permission and audits read-only database actions", async () => {
     const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
     const permissionGuard = permissionGuardMock({ allowed: true })
     const auditSink = auditSinkMock()
@@ -149,8 +149,27 @@ describe("Database operation log", () => {
       { permissionGuard, auditSink },
     )
 
-    expect(permissionGuard.check).not.toHaveBeenCalled()
-    expect(auditSink.record).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "database.read",
+      actor: { kind: "user", id: "database-dispatch:mcp-stdio" },
+      resource: "database:tasks",
+      context: {
+        source: "mcp-stdio",
+        databaseAction: "database.row.list",
+        table: "tasks",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.read",
+      actor: { kind: "user", id: "database-dispatch:mcp-stdio" },
+      resource: "database:tasks",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-stdio",
+        databaseAction: "database.row.list",
+        table: "tasks",
+      }),
+    }))
   })
 })
 

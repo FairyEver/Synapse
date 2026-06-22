@@ -29,10 +29,8 @@ describe("Content capability domain", () => {
     const update = tools.get("content_skill_update")
 
     expect(create?.inputSchema.required).toBeUndefined()
-    expect(create?.inputSchema.anyOf).toEqual(expect.arrayContaining([
-      expect.objectContaining({ required: expect.arrayContaining(["name", "title", "description", "category", "content", "icon"]) }),
-      expect.objectContaining({ required: expect.arrayContaining(["sourceDirectoryPath", "icon"]) }),
-    ]))
+    expect(create?.inputSchema).not.toHaveProperty("anyOf")
+    expect(create?.inputSchema).not.toHaveProperty("allOf")
     expect(create?.inputSchema.properties).toMatchObject({
       name: expect.any(Object),
       files: expect.any(Object),
@@ -44,11 +42,9 @@ describe("Content capability domain", () => {
     expect(JSON.stringify(create?.inputSchema.properties.sourceDirectoryPath)).toContain("depth 8")
     expect(update?.inputSchema).toMatchObject({
       required: ["id", "baseHistoryDirname"],
-      anyOf: expect.arrayContaining([
-        expect.objectContaining({ required: expect.arrayContaining(["name", "title", "description", "category", "content", "icon"]) }),
-        expect.objectContaining({ required: ["sourceDirectoryPath"] }),
-      ]),
     })
+    expect(update?.inputSchema).not.toHaveProperty("anyOf")
+    expect(update?.inputSchema).not.toHaveProperty("allOf")
     expect(update?.description).toContain("sourceDirectoryPath")
   })
 
@@ -81,35 +77,10 @@ describe("Content capability domain", () => {
         { not: { required: ["iconImagePath", "iconImageBase64"] } },
       ]),
     })
-    expect(skillCreateSchema).toMatchObject({
-      allOf: expect.arrayContaining([
-        { not: { required: ["iconImagePath", "iconImageBase64"] } },
-        {
-          not: {
-            properties: {
-              files: { type: "array", minItems: 1 },
-            },
-            required: ["files", "sourceDirectoryPath"],
-          },
-        },
-      ]),
-    })
-    expect(skillUpdateSchema).toMatchObject({
-      allOf: expect.arrayContaining([
-        {
-          not: {
-            properties: {
-              files: { type: "array", minItems: 1 },
-            },
-            required: ["files", "sourceDirectoryPath"],
-          },
-        },
-      ]),
-    })
-    expect(filesProperty?.items).toMatchObject({
-      allOf: [
-        { not: { required: ["contentText", "contentBase64"] } },
-      ],
-    })
+    expect(skillCreateSchema).not.toHaveProperty("allOf")
+    expect(skillUpdateSchema).not.toHaveProperty("allOf")
+    expect(JSON.stringify(skillCreateSchema?.properties)).toContain("Mutually exclusive")
+    expect(filesProperty?.items).not.toHaveProperty("allOf")
+    expect(JSON.stringify(filesProperty?.items)).toContain("Mutually exclusive")
   })
 })

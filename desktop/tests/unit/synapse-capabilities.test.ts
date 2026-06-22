@@ -40,10 +40,13 @@ describe("Model price capability domain", () => {
     expect(MODEL_PRICE_DOMAIN.id).toBe("model_price")
     expect(MODEL_PRICE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
       "model_price.used_model.list",
+      "model_price.preset.list",
+      "model_price.preset.import",
       "model_price.rule.list",
       "model_price.rule.get",
       "model_price.rule.create",
       "model_price.rule.update",
+      "model_price.rule.clear",
       "model_price.rule.delete",
       "model_price.rule.enable",
       "model_price.rule.disable",
@@ -52,7 +55,9 @@ describe("Model price capability domain", () => {
 
   it("maps model price MCP tools to canonical actions", () => {
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_used_model_list).toBe("model_price.used_model.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("model_price.preset.import")
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_update).toBe("model_price.rule.update")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("model_price.rule.clear")
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_disable).toBe("model_price.rule.disable")
   })
 

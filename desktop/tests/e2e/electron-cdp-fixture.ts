@@ -64,11 +64,16 @@ export async function launchElectronCdpApp(options: LaunchOptions = {}): Promise
     await writeFile(registryPath, `${JSON.stringify(options.repositoryRegistry, null, 2)}\n`, "utf8")
   }
 
-  const child = spawn(electronExecutablePath(), [
+  const launchArgs = [
       "--remote-debugging-port=0",
       `--user-data-dir=${userData}`,
       desktopRoot,
-    ], {
+    ]
+  if (process.platform === "linux" && process.env.CI) {
+    launchArgs.unshift("--no-sandbox")
+  }
+
+  const child = spawn(electronExecutablePath(), launchArgs, {
     cwd: desktopRoot,
     env: {
       ...process.env,

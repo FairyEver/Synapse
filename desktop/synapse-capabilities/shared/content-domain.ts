@@ -79,13 +79,6 @@ const skillFileSchema = {
     contentBase64: stringField("Base64 file bytes. Mutually exclusive with contentText."),
   },
   required: ["path"],
-  allOf: [
-    {
-      not: {
-        required: ["contentText", "contentBase64"],
-      },
-    },
-  ],
 }
 
 const skillInlineFields = "name/title/description/category/content"
@@ -222,10 +215,13 @@ function createTool(type: ContentResourceType): McpToolDefinition {
       type === "skill"
         ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS}`
         : `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, name rules, and constraints.`,
-    inputSchema: {
+    inputSchema: type === "skill" ? {
       type: "object",
       properties,
-      ...(type === "skill" ? {} : { required }),
+    } : {
+      type: "object",
+      properties,
+      required,
       anyOf: createSchemaAlternatives(type),
       allOf: schemaConstraints(type),
     },
@@ -241,16 +237,22 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
       type === "skill"
         ? `Update a Synapse skill created by the current repo profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. ${SKILL_SOURCE_DIRECTORY_LIMITS} Force update is not supported.`
         : `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
-    inputSchema: {
+    inputSchema: type === "skill" ? {
       type: "object",
       properties: {
         id: stringField("Content id."),
         baseHistoryDirname: stringField("Version token from latestHistoryDirname."),
         ...create.inputSchema.properties,
       },
-      required: type === "skill"
-        ? ["id", "baseHistoryDirname"]
-        : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
+      required: ["id", "baseHistoryDirname"],
+    } : {
+      type: "object",
+      properties: {
+        id: stringField("Content id."),
+        baseHistoryDirname: stringField("Version token from latestHistoryDirname."),
+        ...create.inputSchema.properties,
+      },
+      required: ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
       anyOf: updateSchemaAlternatives(type),
       allOf: schemaConstraints(type),
     },
