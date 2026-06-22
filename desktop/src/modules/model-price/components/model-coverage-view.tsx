@@ -70,7 +70,7 @@ export function ModelCoverageView({ state }: ModelCoverageViewProps) {
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>模型</TableHead>
-            <TableHead>定价</TableHead>
+            <TableHead>当前规则</TableHead>
             <TableHead className="text-right">用量</TableHead>
           </TableRow>
         </TableHeader>
@@ -109,12 +109,12 @@ function CoveragePanel({ children }: { readonly children: ReactNode }) {
 
 function renderPricingStatus(row: ModelPriceCoverageRow): ReactNode {
   if (!row.priceKnown) {
-    return <span className="text-muted-foreground">未匹配</span>
+    return <span className="text-muted-foreground">无匹配规则</span>
   }
 
   return (
     <div className="flex min-w-0 flex-col items-start gap-1">
-      <Badge variant="outline">已匹配</Badge>
+      <Badge variant="outline">规则已匹配</Badge>
       <span className="min-w-0 break-all text-muted-foreground">{row.matchedRulePattern}</span>
     </div>
   )
@@ -125,8 +125,8 @@ function UsageSummary({ row }: { readonly row: ModelPriceCoverageRow }) {
     <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
       <UsageMetric label="Tokens" value={formatInteger(row.tokens)} />
       <UsageMetric label="请求" value={formatInteger(row.requests)} />
-      <UsageMetric label="未定价" value={formatInteger(row.unpricedTokens)} />
-      <UsageMetric label="费用" value={formatSynapseCost(row.estimatedCost)} />
+      <UsageMetric label="未计价" value={formatInteger(row.unpricedTokens)} />
+      <UsageMetric label="已计费用" value={formatSynapseCost(row.estimatedCost)} />
     </dl>
   )
 }

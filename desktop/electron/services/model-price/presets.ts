@@ -13,15 +13,25 @@ const OPENAI_RULES: readonly ModelPriceRuleInput[] = [
 ]
 
 const ANTHROPIC_RULES: readonly ModelPriceRuleInput[] = [
-  { modelPattern: "claude-opus-4.7", inputPer1M: 36, outputPer1M: 180, cacheReadPer1M: 3.6, cacheWritePer1M: 45, reasoningPer1M: 180 },
-  { modelPattern: "claude-opus-4-7", inputPer1M: 36, outputPer1M: 180, cacheReadPer1M: 3.6, cacheWritePer1M: 45, reasoningPer1M: 180 },
-  { modelPattern: "claude-opus-4.6", inputPer1M: 36, outputPer1M: 180, cacheReadPer1M: 3.6, cacheWritePer1M: 45, reasoningPer1M: 180 },
-  { modelPattern: "claude-opus-4-6", inputPer1M: 36, outputPer1M: 180, cacheReadPer1M: 3.6, cacheWritePer1M: 45, reasoningPer1M: 180 },
-  { modelPattern: "claude-opus-4", inputPer1M: 108, outputPer1M: 540, cacheReadPer1M: 10.8, cacheWritePer1M: 135, reasoningPer1M: 540 },
-  { modelPattern: "claude-sonnet-4.6", inputPer1M: 21.6, outputPer1M: 108, cacheReadPer1M: 2.16, cacheWritePer1M: 27, reasoningPer1M: 108 },
-  { modelPattern: "claude-sonnet-4", inputPer1M: 21.6, outputPer1M: 108, cacheReadPer1M: 2.16, cacheWritePer1M: 27, reasoningPer1M: 108 },
-  { modelPattern: "claude-haiku-4.5", inputPer1M: 7.2, outputPer1M: 36, cacheReadPer1M: 0.72, cacheWritePer1M: 9, reasoningPer1M: 36 },
-  { modelPattern: "claude-haiku-4", inputPer1M: 7.2, outputPer1M: 36, cacheReadPer1M: 0.72, cacheWritePer1M: 9, reasoningPer1M: 36 },
+  { modelPattern: "claude-fable-5", inputPer1M: 67.75, outputPer1M: 338.75, cacheReadPer1M: 6.775, cacheWritePer1M: 84.6875, reasoningPer1M: 338.75 },
+  { modelPattern: "claude-opus-4.8", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4-8", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4.7", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4-7", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4.6", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4-6", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4.5", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4-5", inputPer1M: 33.875, outputPer1M: 169.375, cacheReadPer1M: 3.3875, cacheWritePer1M: 42.34375, reasoningPer1M: 169.375 },
+  { modelPattern: "claude-opus-4", inputPer1M: 101.625, outputPer1M: 508.125, cacheReadPer1M: 10.1625, cacheWritePer1M: 127.03125, reasoningPer1M: 508.125 },
+  { modelPattern: "claude-sonnet-4.6", inputPer1M: 20.325, outputPer1M: 101.625, cacheReadPer1M: 2.0325, cacheWritePer1M: 25.40625, reasoningPer1M: 101.625 },
+  { modelPattern: "claude-sonnet-4-6", inputPer1M: 20.325, outputPer1M: 101.625, cacheReadPer1M: 2.0325, cacheWritePer1M: 25.40625, reasoningPer1M: 101.625 },
+  { modelPattern: "claude-sonnet-4.5", inputPer1M: 20.325, outputPer1M: 101.625, cacheReadPer1M: 2.0325, cacheWritePer1M: 25.40625, reasoningPer1M: 101.625 },
+  { modelPattern: "claude-sonnet-4-5", inputPer1M: 20.325, outputPer1M: 101.625, cacheReadPer1M: 2.0325, cacheWritePer1M: 25.40625, reasoningPer1M: 101.625 },
+  { modelPattern: "claude-sonnet-4", inputPer1M: 20.325, outputPer1M: 101.625, cacheReadPer1M: 2.0325, cacheWritePer1M: 25.40625, reasoningPer1M: 101.625 },
+  { modelPattern: "claude-haiku-4.5", inputPer1M: 6.775, outputPer1M: 33.875, cacheReadPer1M: 0.6775, cacheWritePer1M: 8.46875, reasoningPer1M: 33.875 },
+  { modelPattern: "claude-haiku-4-5", inputPer1M: 6.775, outputPer1M: 33.875, cacheReadPer1M: 0.6775, cacheWritePer1M: 8.46875, reasoningPer1M: 33.875 },
+  { modelPattern: "claude-haiku-4-5-20251001", inputPer1M: 6.775, outputPer1M: 33.875, cacheReadPer1M: 0.6775, cacheWritePer1M: 8.46875, reasoningPer1M: 33.875 },
+  { modelPattern: "claude-haiku-4", inputPer1M: 6.775, outputPer1M: 33.875, cacheReadPer1M: 0.6775, cacheWritePer1M: 8.46875, reasoningPer1M: 33.875 },
 ]
 
 const DEEPSEEK_OFFICIAL_RULES: readonly ModelPriceRuleInput[] = [

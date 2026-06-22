@@ -15,6 +15,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository } from "@/types/git"
 import type { GitOperationFailure } from "../hooks/use-git-operations"
@@ -47,6 +53,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
   const changes = status.snapshot?.changes ?? []
+  const repositoryDisplayPath = formatRepositoryDisplayPath(repository.localPath)
 
   const refreshAll = async () => {
     await status.refresh()
@@ -103,52 +110,22 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
-        className="grid shrink-0 gap-2 border-b bg-background px-4 py-2.5"
+        className="grid shrink-0 gap-1.5 border-b bg-background px-4 py-2"
         data-git-workbench-toolbar="true"
       >
-        <div
-          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(240px,1fr)_auto] lg:items-start"
-          data-git-workbench-primary-bar="true"
-        >
-          <div className="flex min-w-0 items-start gap-2" data-git-workbench-repository-context="true">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2" data-git-workbench-primary-bar="true">
+          <div className="flex min-w-0 items-center gap-1.5" data-git-workbench-repository-context="true">
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="mt-0.5 shrink-0"
+              className="shrink-0"
               aria-label="返回仓库列表"
               onClick={onBack}
             >
               <ArrowLeft />
             </Button>
-            <div className="grid min-w-0 gap-2">
-              <div className="grid min-w-0 gap-1">
-                <div className="truncate text-sm font-semibold leading-5">{repository.name}</div>
-                <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
-              </div>
-              <div
-                className="flex min-w-0 max-w-full flex-wrap items-center gap-2"
-                data-git-workbench-branch-status-bar="true"
-              >
-                <GitBranchSwitcher
-                  repository={repository}
-                  currentBranch={currentBranch}
-                  disabled={busy !== null}
-                  mode="select"
-                  selectWidth="compact"
-                  refreshKey={branchRefreshKey}
-                  onChanged={refreshAfterBranchChange}
-                />
-                <Badge variant="secondary" className="max-w-32 truncate">
-                  {actionPlan.statusText}
-                </Badge>
-              </div>
-            </div>
-          </div>
-          <div
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 lg:justify-end"
-            data-git-workbench-metadata-bar="true"
-          >
+            <div className="truncate text-sm font-semibold leading-5">{repository.name}</div>
             <RepositoryDetailsPopover
               repository={repository}
               currentBranch={currentBranch}
@@ -158,20 +135,44 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               statusText={actionPlan.statusText}
             />
           </div>
+          <GitBranchSwitcher
+            repository={repository}
+            currentBranch={currentBranch}
+            disabled={busy !== null}
+            mode="select"
+            selectWidth="compact"
+            refreshKey={branchRefreshKey}
+            onChanged={refreshAfterBranchChange}
+          />
+          <Badge variant="secondary" className="max-w-32 truncate">
+            {actionPlan.statusText}
+          </Badge>
         </div>
         <div
           className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2"
           data-git-workbench-action-bar="true"
         >
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy !== null || recommendedAction === "none"}
-              onClick={runRecommendedAction}
-            >
-              {recommendedLabel}
-            </Button>
+          <span
+            className="max-w-80 truncate text-xs text-muted-foreground"
+            title={repository.localPath}
+          >
+            {repositoryDisplayPath}
+          </span>
+          <div
+            className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 text-sm lg:justify-end"
+            data-git-changes-selection-bar="true"
+          >
+            {view === "changes" && changes.length > 0 ? (
+              <>
+                <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
+                <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
+                  全选
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
+                  全不选
+                </Button>
+              </>
+            ) : null}
             <GitBranchSwitcher
               repository={repository}
               currentBranch={currentBranch}
@@ -206,23 +207,15 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-          {view === "changes" && changes.length > 0 ? (
-            <div
-              className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-sm"
-              data-git-changes-selection-bar="true"
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy !== null || recommendedAction === "none"}
+              onClick={runRecommendedAction}
             >
-              <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
-              <span className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
-                  全选
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
-                  全不选
-                </Button>
-              </span>
-            </div>
-          ) : null}
+              {recommendedLabel}
+            </Button>
+          </div>
         </div>
       </div>
       {operationError ? (
@@ -293,12 +286,18 @@ function RepositoryDetailsPopover({
 }: RepositoryDetailsPopoverProps) {
   return (
     <Popover data-track="git-repository-details">
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm">
-          <Info data-icon="inline-start" />
-          详情
-        </Button>
-      </PopoverTrigger>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="仓库详情">
+                <Info />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>详情</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <PopoverContent align="end" className="w-80 sm:w-96">
         <div className="grid gap-2 text-xs">
           <RepositoryDetail label="路径" value={repository.localPath} />
@@ -310,6 +309,22 @@ function RepositoryDetailsPopover({
       </PopoverContent>
     </Popover>
   )
+}
+
+function formatRepositoryDisplayPath(path: string): string {
+  if (path.startsWith("/Users/") || path.startsWith("/home/")) {
+    const [, root, user, ...parts] = path.split("/")
+    if (root && user && parts.length > 0) return formatCompactPath("~", parts)
+  }
+  const parts = path.split("/").filter(Boolean)
+  if (parts.length > 0 && path.length > 48) return formatCompactPath(path.startsWith("/") ? "/" : "", parts)
+  return path
+}
+
+function formatCompactPath(prefix: string, parts: readonly string[]): string {
+  if (parts.length <= 6) return prefix ? `${prefix}/${parts.join("/")}`.replace("//", "/") : parts.join("/")
+  const compact = [...parts.slice(0, 4), "...", ...parts.slice(-2)].join("/")
+  return prefix ? `${prefix}/${compact}`.replace("//", "/") : compact
 }
 
 function RepositoryDetail({ label, value }: { readonly label: string; readonly value: string }) {

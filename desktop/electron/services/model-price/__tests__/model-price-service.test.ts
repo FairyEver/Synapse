@@ -10,6 +10,13 @@ function createDb(): DatabaseSync {
   return db
 }
 
+function presetRule(presetId: string, modelPattern: string) {
+  const preset = MODEL_PRICE_PRESETS.find((candidate) => candidate.id === presetId)
+  const rule = preset?.rules.find((candidate) => candidate.modelPattern === modelPattern)
+  expect(rule).toBeTruthy()
+  return rule!
+}
+
 describe("model price service", () => {
   it("initializes model price tables without inserting default rules", () => {
     const db = new DatabaseSync(":memory:")
@@ -315,6 +322,71 @@ describe("model price service", () => {
     })
     expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
     expect(rule?.id).not.toContain("deepseek")
+    db.close()
+  })
+
+  it("keeps anthropic preset prices aligned with current official Claude pricing converted to CNY", () => {
+    expect(presetRule("anthropic", "claude-fable-5")).toMatchObject({
+      inputPer1M: 67.75,
+      outputPer1M: 338.75,
+      cacheReadPer1M: 6.775,
+      cacheWritePer1M: 84.6875,
+      reasoningPer1M: 338.75,
+    })
+    expect(presetRule("anthropic", "claude-opus-4.8")).toMatchObject({
+      inputPer1M: 33.875,
+      outputPer1M: 169.375,
+      cacheReadPer1M: 3.3875,
+      cacheWritePer1M: 42.34375,
+      reasoningPer1M: 169.375,
+    })
+    expect(presetRule("anthropic", "claude-opus-4-8")).toMatchObject({
+      inputPer1M: 33.875,
+      outputPer1M: 169.375,
+    })
+    expect(presetRule("anthropic", "claude-opus-4.5")).toMatchObject({
+      inputPer1M: 33.875,
+      outputPer1M: 169.375,
+    })
+    expect(presetRule("anthropic", "claude-sonnet-4-6")).toMatchObject({
+      inputPer1M: 20.325,
+      outputPer1M: 101.625,
+      cacheReadPer1M: 2.0325,
+      cacheWritePer1M: 25.40625,
+      reasoningPer1M: 101.625,
+    })
+    expect(presetRule("anthropic", "claude-sonnet-4.5")).toMatchObject({
+      inputPer1M: 20.325,
+      outputPer1M: 101.625,
+    })
+    expect(presetRule("anthropic", "claude-haiku-4-5-20251001")).toMatchObject({
+      inputPer1M: 6.775,
+      outputPer1M: 33.875,
+      cacheReadPer1M: 0.6775,
+      cacheWritePer1M: 8.46875,
+      reasoningPer1M: 33.875,
+    })
+  })
+
+  it("imports anthropic preset with specific new Claude aliases matching before broader rules", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.importPreset("anthropic")
+
+    expect(service.findRuleForModel("claude-opus-4-8")).toMatchObject({
+      modelPattern: "claude-opus-4-8",
+      inputPer1M: 33.875,
+      outputPer1M: 169.375,
+    })
+    expect(service.findRuleForModel("claude-sonnet-4-6")).toMatchObject({
+      modelPattern: "claude-sonnet-4-6",
+      inputPer1M: 20.325,
+    })
+    expect(service.findRuleForModel("claude-haiku-4-5-20251001")).toMatchObject({
+      modelPattern: "claude-haiku-4-5-20251001",
+      inputPer1M: 6.775,
+    })
     db.close()
   })
 

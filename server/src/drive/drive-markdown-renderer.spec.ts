@@ -23,13 +23,28 @@ describe("drive markdown renderer", () => {
 
     const html = result.html
     expect(html).toContain('<h1 id="notes">Notes</h1>')
-    expect(html).toContain("<table>")
+    expect(html).toContain('<div data-drive-markdown-table-scroll="true"><table>')
+    expect(html).toContain("</table></div>")
     expect(html).toContain('type="checkbox"')
     expect(html).toContain("<code")
     expect(html).not.toContain("<!doctype html>")
     expect(html).not.toContain("<script>")
     expect(html).not.toContain("onerror")
     expect(html).toContain("script>alert(1)")
+  })
+
+  it("wraps tables without changing rendered text", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "| # | 说明 |",
+      "| --- | --- |",
+      "| 1 | 来自本地计算，不直接对应后台响应数组。 |",
+    ].join("\n"))
+
+    const text = result.html.replace(/<[^>]+>/g, "")
+    expect(result.html).toContain('data-drive-markdown-table-scroll="true"')
+    expect(text).toContain("#")
+    expect(text).toContain("说明")
+    expect(text).toContain("来自本地计算，不直接对应后台响应数组。")
   })
 
   it("removes relative resource urls from markdown previews", async () => {

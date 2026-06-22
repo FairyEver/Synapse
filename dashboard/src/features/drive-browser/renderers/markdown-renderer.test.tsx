@@ -75,6 +75,46 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn?.className).toContain('max-w-3xl')
   })
 
+  it('keeps wide markdown tables scrollable inside the reader column', () => {
+    renderMarkdown({
+      previewData: preview({
+        text: [
+          '前端文件:行号',
+          'v-for 数据源',
+          '处理口径',
+        ].join(''),
+        html: [
+          '<div data-drive-markdown-table-scroll="true">',
+          '<table>',
+          '<thead><tr><th>#</th><th>前端文件:行号</th><th>v-for 数据源</th><th>处理口径</th></tr></thead>',
+          '<tbody><tr>',
+          '<td>1</td>',
+          '<td><code>app/portal/views/dashboard/material/operation/special/transport/list.vue:26</code></td>',
+          '<td><code>(item, index) in record.orderList?.length ? record.orderList : [record]</code></td>',
+          '<td>来自详情状态对象，但当前文件未能静态拼出完整接口。</td>',
+          '</tr></tbody>',
+          '</table>',
+          '</div>',
+        ].join(''),
+      }),
+    })
+
+    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    const wrapper = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
+    const table = document.querySelector<HTMLTableElement>('[data-testid="markdown-body"] table')
+    expect(wrapper).not.toBeNull()
+    expect(table).not.toBeNull()
+    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:max-w-full')
+    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto')
+    expect(body?.className).toContain('[&_table]:w-max')
+    expect(body?.className).toContain('[&_table]:min-w-full')
+    expect(body?.className).toContain('[&_td:not(:first-child)]:min-w-56')
+    expect(body?.className).toContain('[&_th:not(:first-child)]:min-w-56')
+    expect(body?.className).not.toContain('[&_table]:block')
+    expect(body?.className).not.toContain('[&_table]:w-full')
+    expect(body?.parentElement?.className).toContain('max-w-3xl')
+  })
+
   it('opens the comment rail by default when comments exist', async () => {
     annotationsMock.threads = [thread()]
     const windowAddEventListener = vi.spyOn(window, 'addEventListener')

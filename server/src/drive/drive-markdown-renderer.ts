@@ -67,6 +67,7 @@ async function renderMarkdownBody(markdown: string): Promise<DriveMarkdownRender
     .use(remarkRehype)
     .use(stripRelativeResourceUrlsPlugin)
     .use(rehypeSanitize, { ...defaultSchema, clobberPrefix: "" })
+    .use(wrapTablesPlugin)
     .use(rehypeStringify)
     .process(markdown)
   return {
@@ -176,6 +177,33 @@ function stripRelativeResourceUrlsPlugin() {
   return (tree: HtmlAstNode) => {
     visitHtmlAst(tree)
   }
+}
+
+function wrapTablesPlugin() {
+  return (tree: HtmlAstNode) => {
+    wrapTablesInHtmlAst(tree)
+  }
+}
+
+function wrapTablesInHtmlAst(node: HtmlAstNode): void {
+  const children = node.children
+  if (!children) return
+
+  node.children = children.map((child) => {
+    if (child.type === "element" && child.tagName === "table") {
+      return {
+        type: "element",
+        tagName: "div",
+        properties: {
+          "data-drive-markdown-table-scroll": "true",
+        },
+        children: [child],
+      }
+    }
+
+    wrapTablesInHtmlAst(child)
+    return child
+  })
 }
 
 function visitHtmlAst(node: HtmlAstNode): void {

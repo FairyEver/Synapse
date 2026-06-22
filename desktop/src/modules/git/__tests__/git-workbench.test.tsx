@@ -173,42 +173,50 @@ describe("GitWorkbench", () => {
     }))
     bridge.git.listBranches.mockResolvedValue([{ name: longBranch, current: true }])
 
-    await renderWorkbench(roots, longRepository)
+    const handleBack = vi.fn()
+    await renderWorkbench(roots, longRepository, handleBack)
 
     const toolbar = document.querySelector('[data-git-workbench-toolbar="true"]')
     const primaryBar = document.querySelector('[data-git-workbench-primary-bar="true"]')
     const repositoryContext = document.querySelector('[data-git-workbench-repository-context="true"]')
-    const branchStatusBar = document.querySelector('[data-git-workbench-branch-status-bar="true"]')
     const actionBar = document.querySelector('[data-git-workbench-action-bar="true"]')
-    const metadataBar = document.querySelector('[data-git-workbench-metadata-bar="true"]')
+    const selectionBar = document.querySelector('[data-git-changes-selection-bar="true"]')
     const tabs = document.querySelector('[data-slot="tabs"]')
     const tabsHeader = document.querySelector('[data-git-workbench-tabs-header="true"]')
     const changesContent = document.querySelector('[data-slot="tabs-content"][data-state="active"]')
 
-    expect(toolbar?.className).toContain("py-2.5")
-    expect(primaryBar?.className).toContain("lg:grid-cols-[minmax(240px,1fr)_auto]")
-    expect(repositoryContext?.className).toContain("items-start")
+    expect(toolbar?.className).toContain("py-2")
+    expect(primaryBar?.className).toContain("flex-wrap")
+    expect(repositoryContext?.className).toContain("items-center")
     expect(repositoryContext?.textContent).toContain("Projects_Js_With_A_Very_Long_Display_Name")
-    expect(repositoryContext?.textContent).toContain(longRepository.localPath)
-    expect(branchStatusBar?.className).toContain("flex-wrap")
-    expect(branchStatusBar?.textContent).toContain(longBranch)
-    expect(branchStatusBar?.textContent).toContain("12 个改动")
+    expect(primaryBar?.textContent).toContain(longBranch)
+    expect(primaryBar?.textContent).toContain("12 个改动")
     expect(actionBar?.className).toContain("flex-wrap")
     expect(actionBar?.className).toContain("justify-between")
-    expect(metadataBar?.className).toContain("flex-wrap")
-    expect(metadataBar?.textContent).not.toContain(`origin/${longBranch}`)
+    expect(actionBar?.textContent).toContain("~/Documents/code/wdbc/Projects_Js/.../pc/edit")
+    expect(selectionBar?.textContent).toContain("已选 12 / 12")
+    expect(selectionBar?.textContent).toContain("全选")
+    expect(selectionBar?.textContent).toContain("全不选")
+    expect(selectionBar?.textContent).toContain("新建分支")
+    expect(selectionBar?.textContent).toContain("提交改动")
+    expect(selectionBar?.lastElementChild?.textContent).toContain("提交改动")
+    expect(document.querySelector(`[title="${longRepository.localPath}"]`)).toBeTruthy()
     expect(tabs?.className).toContain("min-w-0")
     expect(tabsHeader?.textContent).toBe("改动历史")
     expect(changesContent?.className).toContain("min-w-0")
     expect(document.body.textContent).toContain("Projects_Js_With_A_Very_Long_Display_Name")
-    expect(document.body.textContent).toContain(longRepository.localPath)
+    expect(document.body.textContent).toContain("~/Documents/code/wdbc/Projects_Js/.../pc/edit")
     expect(document.body.textContent).not.toContain(`origin/${longBranch}`)
-    await click(findButton("详情"))
+    await click(findButtonByLabel("仓库详情"))
+    expect(document.body.textContent).toContain(longRepository.localPath)
     expect(document.body.textContent).toContain(`origin/${longBranch}`)
-    expect(document.querySelector('button[aria-label="返回仓库列表"]')).toBeTruthy()
+    const backButton = document.querySelector<HTMLElement>('button[aria-label="返回仓库列表"]')
+    expect(backButton).toBeTruthy()
+    await click(backButton!)
+    expect(handleBack).toHaveBeenCalledTimes(1)
     expect(findButton("提交改动")).toBeTruthy()
     expect(findButton("新建分支")).toBeTruthy()
-    expect(findButton("详情")).toBeTruthy()
+    expect(findButtonByLabel("仓库详情")).toBeTruthy()
     expect(document.querySelector('button[aria-label="更多 Git 操作"]')).toBeTruthy()
   })
 
@@ -443,6 +451,7 @@ describe("GitWorkbench", () => {
     expect(selectionBar?.textContent).toContain("全选")
     expect(selectionBar?.textContent).toContain("全不选")
     expect(actionBar?.contains(selectionBar)).toBe(true)
+    expect(findButton("提交改动")).toBeTruthy()
     expect(tabsHeader?.contains(selectionBar)).toBe(false)
     expect(commitPanel).toBeNull()
   })
@@ -561,6 +570,7 @@ function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>
 async function renderWorkbench(
   roots: Root[],
   targetRepository: typeof repository = repository,
+  onBack = vi.fn(),
 ): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -568,7 +578,7 @@ async function renderWorkbench(
   roots.push(root)
 
   await act(async () => {
-    root.render(<GitWorkbench repository={targetRepository} onBack={vi.fn()} />)
+    root.render(<GitWorkbench repository={targetRepository} onBack={onBack} />)
     await flush()
     await flush()
   })
@@ -628,6 +638,12 @@ function findButton(label: string): HTMLElement {
   const button = Array.from(document.querySelectorAll("button"))
     .find((item) => item.textContent?.includes(label))
   if (!button) throw new Error(`Button not found: ${label}`)
+  return button
+}
+
+function findButtonByLabel(label: string): HTMLElement {
+  const button = document.querySelector<HTMLElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found by aria-label: ${label}`)
   return button
 }
 

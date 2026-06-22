@@ -1,17 +1,25 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { Loader2 } from 'lucide-react'
+import { ChevronDown, Loader2, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
+import type { DrivePreviewSystemAction } from './drive-preview-actions'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
+
+const DRIVE_PREVIEW_PRIMARY_ACTION_IDS = new Set<DrivePreviewSystemAction['id']>([
+  'open-in-drive',
+  'versions',
+  'renderer-select',
+])
 
 export function DrivePreviewHeader({
   snapshot,
@@ -29,7 +37,10 @@ export function DrivePreviewHeader({
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
   const systemActions = getDrivePreviewSystemActions(snapshot, selectedRendererId)
-  const showActionSeparator = rendererItems.length > 0 && systemActions.length > 0
+  const primaryActions = systemActions.filter((action) => DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
+  const overflowActions = systemActions.filter((action) => !DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
+  const hasHeaderActions = primaryActions.length > 0 || overflowActions.length > 0
+  const showActionSeparator = rendererItems.length > 0 && hasHeaderActions
 
   return (
     <header data-drive-preview-header='true' className='flex shrink-0 flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
@@ -53,47 +64,132 @@ export function DrivePreviewHeader({
             className='h-6 border-l border-border'
           />
         ) : null}
-        {systemActions.map((action) => {
-          if (action.kind === 'link') {
-            return (
-              <Button key={action.id} asChild variant='outline' size='sm'>
-                <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
-                  <action.icon data-icon='inline-start' />
-                  {action.label}
-                </a>
+        {primaryActions.map((action) => (
+          <DrivePreviewHeaderAction
+            key={action.id}
+            action={action}
+            selectedRendererId={selectedRendererId}
+            onRendererChange={onRendererChange}
+            onOpenVersions={onOpenVersions}
+          />
+        ))}
+        {overflowActions.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type='button' variant='outline' size='icon' className='h-8 w-8' aria-label='更多操作'>
+                <MoreHorizontal />
               </Button>
-            )
-          }
-          if (action.kind === 'versions') {
-            return (
-              <Button key={action.id} type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
-                <action.icon data-icon='inline-start' />
-                {action.label}
-              </Button>
-            )
-          }
-          return (
-            <DropdownMenu key={action.id}>
-              <DropdownMenuTrigger asChild>
-                <Button type='button' variant='outline' size='sm'>{action.label}</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
-                {action.options.map((option) => (
-                  <DropdownMenuCheckboxItem
-                    key={option.id}
-                    checked={option.id === selectedRendererId}
-                    onCheckedChange={() => onRendererChange(option.id)}
-                  >
-                    {option.label}
-                  </DropdownMenuCheckboxItem>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuGroup>
+                {overflowActions.map((action) => (
+                  <DrivePreviewHeaderMenuAction
+                    key={action.id}
+                    action={action}
+                    selectedRendererId={selectedRendererId}
+                    onRendererChange={onRendererChange}
+                    onOpenVersions={onOpenVersions}
+                  />
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )
-        })}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
     </header>
   )
+}
+
+function DrivePreviewHeaderAction({
+  action,
+  selectedRendererId,
+  onRendererChange,
+  onOpenVersions,
+}: {
+  readonly action: DrivePreviewSystemAction
+  readonly selectedRendererId: DriveRendererId | null
+  readonly onRendererChange: (id: DriveRendererId) => void
+  readonly onOpenVersions: (itemId: string) => void
+}) {
+  if (action.kind === 'link') {
+    return (
+      <Button asChild variant='outline' size='sm'>
+        <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+          <action.icon data-icon='inline-start' />
+          {action.label}
+        </a>
+      </Button>
+    )
+  }
+  if (action.kind === 'versions') {
+    return (
+      <Button type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
+        <action.icon data-icon='inline-start' />
+        {action.label}
+      </Button>
+    )
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type='button' variant='outline' size='sm'>
+          {action.label}
+          <ChevronDown data-icon='inline-end' />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end'>
+        {action.options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.id}
+            checked={option.id === selectedRendererId}
+            onCheckedChange={() => onRendererChange(option.id)}
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function DrivePreviewHeaderMenuAction({
+  action,
+  selectedRendererId,
+  onRendererChange,
+  onOpenVersions,
+}: {
+  readonly action: DrivePreviewSystemAction
+  readonly selectedRendererId: DriveRendererId | null
+  readonly onRendererChange: (id: DriveRendererId) => void
+  readonly onOpenVersions: (itemId: string) => void
+}) {
+  if (action.kind === 'link') {
+    return (
+      <DropdownMenuItem asChild>
+        <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+          <action.icon data-icon='inline-start' />
+          {action.label}
+        </a>
+      </DropdownMenuItem>
+    )
+  }
+  if (action.kind === 'versions') {
+    return (
+      <DropdownMenuItem onSelect={() => onOpenVersions(action.itemId)}>
+        <action.icon data-icon='inline-start' />
+        {action.label}
+      </DropdownMenuItem>
+    )
+  }
+  return action.options.map((option) => (
+    <DropdownMenuCheckboxItem
+      key={option.id}
+      checked={option.id === selectedRendererId}
+      onCheckedChange={() => onRendererChange(option.id)}
+    >
+      {option.label}
+    </DropdownMenuCheckboxItem>
+  ))
 }
 
 export function DrivePreviewToolbarItemView({ item }: { readonly item: DriveRendererToolbarItem }) {
