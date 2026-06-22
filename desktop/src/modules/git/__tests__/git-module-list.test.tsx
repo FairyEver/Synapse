@@ -4,6 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { GitModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -248,6 +249,19 @@ describe("GitModule repository list", () => {
     expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("访问")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("添加本地仓库")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("克隆仓库")
+  })
+
+  it("moves Git tabs and repository actions into the embedded system app header", async () => {
+    await renderEmbeddedGitModule(roots)
+
+    expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
+    expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("仓库")
+    expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("环境")
+    expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("安装 Git")
+    expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("访问")
+    expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("添加本地仓库")
+    expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("克隆仓库")
+    expect(document.body.textContent).toContain("暂无仓库")
   })
 
   it("separates Git environment from the repository list tab", async () => {
@@ -1027,6 +1041,22 @@ async function renderGitModule(roots: Root[]): Promise<void> {
 
   await act(async () => {
     root.render(<GitModule />)
+    await flush()
+  })
+}
+
+async function renderEmbeddedGitModule(roots: Root[]): Promise<void> {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(
+      <EmbeddedSystemAppShell appName="Git" onBack={vi.fn()} onOpenWindow={vi.fn()}>
+        <GitModule />
+      </EmbeddedSystemAppShell>,
+    )
     await flush()
   })
 }
