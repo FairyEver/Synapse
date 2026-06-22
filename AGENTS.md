@@ -226,6 +226,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 修改 SDK event bridge、Agent transcript、tool event UI、Usage Analysis raw 展示或 provider preview 时，必须补回归测试：provider token、side-channel token、Authorization/Bearer、Cookie、JSON `token`/`apiKey`、data-server token、`--env KEY=value` 都不出现真实值，普通 `/Users/...` 路径仍保留。
 - 手工验证脱敏时只能使用假 canary，并优先使用只打印、不 `export`、不写文件、不改配置的命令；不要要求用户粘贴真实 token，也不要把测试 token 写进 shell 配置、Claude 配置或 Synapse 配置。
 - AskUserQuestion/确认类交互如果返回空答案，后续敏感写操作必须停止，并给用户明确反馈“未收到选择，已停止操作。”不要把空答案当成同意或默认选项。
+- AskUserQuestion 的前端展示和内部状态可以用稳定 id、key 或 index 区分重复题干，但回传 Claude SDK 的 `updatedInput.answers` 必须遵守 SDK 契约：key 使用原始 `question` 文本，value 使用用户选择的选项文本。若同一次请求存在重复 `question` 文本，必须在 Agent runtime 边界转换为不会丢失多题答案的 `response` 文本或其它 SDK 支持格式；不要把 `question-0`、renderer 私有 key 或脱敏/截断后的展示摘要原样交给 SDK。修改该链路时必须测试：普通单题、重复题干、多题缺失答案、空答案停止，以及 SDK 工具结果不出现 `User has answered your questions: .`。
 - Agent 工具调用与工具结果的稳定关联键是 `toolUseId`。修改 SDK event bridge、history metadata、IPC schema、renderer timeline、复制或导出文本时，必须端到端保留该字段；有 `toolUseId` 的结果只能按 `toolUseId` 归属，缺失时才允许走旧数据兼容 fallback。
 - 并行工具结果不能只靠顺序或 `toolName` 猜归属；`toolName` 可能重复或只是 SDK 返回的占位名。文件读取类工具日志和导出文本要保留原始 `file_path`，但 token、Authorization、Bearer、env secret 等敏感值必须继续脱敏。
 

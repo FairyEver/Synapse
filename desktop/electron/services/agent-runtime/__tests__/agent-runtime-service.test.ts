@@ -864,7 +864,7 @@ describe("AgentRuntimeService", () => {
     await service.respondPermission({
       requestId: "conversation-a-permission-1",
       behavior: "allow",
-      updatedInput: { answers: { "该怎么处理？": "重试" } },
+      updatedInput: { answers: { "question-0": "重试" } },
       actor: { kind: "user" },
     })
 
@@ -877,6 +877,108 @@ describe("AgentRuntimeService", () => {
         answers: { "该怎么处理？": "重试" },
       },
     }])
+    await expect(turn).resolves.toMatchObject({ resultText: "question answered" })
+  })
+
+  it("passes through AskUserQuestion answers already keyed by question text", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "是否将 L1/L2 问题上传为 Gitee 缺陷？（当前默认项目: 22）",
+      header: "Gitee 缺陷",
+      options: [
+        { label: "仅本次上传" },
+        { label: "本次不上传" },
+        { label: "以后都上传" },
+      ],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question answered")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: {
+        answers: {
+          "是否将 L1/L2 问题上传为 Gitee 缺陷？（当前默认项目: 22）": "以后都上传",
+        },
+      },
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses[0]?.updatedInput).toEqual({
+      questions,
+      answers: {
+        "是否将 L1/L2 问题上传为 Gitee 缺陷？（当前默认项目: 22）": "以后都上传",
+      },
+    })
+    await expect(turn).resolves.toMatchObject({ resultText: "question answered" })
+  })
+
+  it("uses a numbered response fallback for duplicate AskUserQuestion text", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [
+      {
+        question: "请选择处理方式",
+        header: "当前文件",
+        options: [
+          { label: "保留当前" },
+          { label: "覆盖当前" },
+        ],
+        multiSelect: false,
+      },
+      {
+        question: "请选择处理方式",
+        header: "目标文件",
+        options: [
+          { label: "保留目标" },
+          { label: "覆盖目标" },
+        ],
+        multiSelect: false,
+      },
+    ]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question answered")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choices"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: {
+        answers: {
+          "question-0": "覆盖当前",
+          "question-1": "保留目标",
+        },
+      },
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses[0]?.updatedInput).toEqual({
+      questions,
+      response: [
+        "1. 当前文件: 请选择处理方式: 覆盖当前",
+        "2. 目标文件: 请选择处理方式: 保留目标",
+      ].join("\n"),
+    })
     await expect(turn).resolves.toMatchObject({ resultText: "question answered" })
   })
 
