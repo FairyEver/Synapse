@@ -39,10 +39,20 @@ describe("desktop release workflow", () => {
     const workflowText = readFileSync(releaseWorkflowPath, "utf8")
 
     expect(workflowText).toContain("COSCLI_VERSION: v1.0.8")
-    expect(workflowText).toContain("7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91")
+    expect(workflowText).toContain("df0018fbf78b552cbe875ebe26e8bdf7938c7f4394959f913dfc2ea4d1252568")
     expect(workflowText).toContain("https://github.com/tencentyun/coscli/releases/download/${COSCLI_VERSION}/${COSCLI_NAME}")
-    expect(workflowText).not.toContain("cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64")
-    expect(workflowText.indexOf("sha256sum --check -"))
+    expect(workflowText).toContain("coscli-${COSCLI_VERSION}-darwin-arm64")
+    expect(workflowText).not.toContain(["coscli", "linux"].join("-"))
+    expect(workflowText.indexOf("shasum -a 256 --check -"))
       .toBeLessThan(workflowText.indexOf("\"$RUNNER_TEMP/coscli\" --version"))
+  })
+
+  it("does not use Linux runners for release jobs", () => {
+    const workflowText = readFileSync(releaseWorkflowPath, "utf8")
+    const linuxRunner = ["ubuntu", "latest"].join("-")
+
+    expect(workflowText).not.toContain(linuxRunner)
+    expect(workflowText).toContain("runs-on: macos-latest")
+    expect(workflowText).toContain("os: windows-latest")
   })
 })

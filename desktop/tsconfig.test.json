@@ -29,7 +29,11 @@
     "src/**/*.test.{ts,tsx}",
     "src/**/*.spec.{ts,tsx}",
     "src/types/**/*.d.ts",
-    "tests/**/*.ts",
+    "tests/unit/**/*.ts",
+    "tests/ipc/**/*.ts",
+    "tests/perf/**/*.ts",
+    "tests/fuzz/**/*.ts",
+    "tests/fixtures/**/*.ts",
     "vitest.config.ts"
   ]
 }

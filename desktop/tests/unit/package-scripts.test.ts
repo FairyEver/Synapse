@@ -32,4 +32,13 @@ describe("desktop package scripts", () => {
 
     expect(packageJson.build?.files).toContain("node_modules/@synapse/shared/**/*")
   })
+
+  it("does not expose a committed E2E test script", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      readonly scripts?: Record<string, string>
+    }
+    const e2eScript = ["test", "e2e"].join(":")
+
+    expect(packageJson.scripts).not.toHaveProperty(e2eScript)
+  })
 })

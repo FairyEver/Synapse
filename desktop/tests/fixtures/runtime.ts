@@ -1,7 +1,7 @@
 /**
  * Phase 0.6 — Shared test fixture utilities.
  *
- * Used by tests under `tests/{unit,ipc,perf,fuzz,e2e}/` to spin up runtime
+ * Used by tests under `tests/{unit,ipc,perf,fuzz}/` to spin up runtime
  * infrastructure without booting Electron.
  */
 

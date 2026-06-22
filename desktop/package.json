@@ -35,7 +35,6 @@
     "test": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run",
     "test:watch": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest",
     "test:ipc": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run tests/ipc",
-    "test:e2e": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run tests/e2e",
     "test:ci": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run",
     "lint": "eslint",
     "lint:fix": "eslint --fix"
