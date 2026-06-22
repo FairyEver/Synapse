@@ -76,7 +76,7 @@ describe("AgentSessionSidebar", () => {
   })
 
   it("lets users edit the generated name before creating a session", async () => {
-    vi.spyOn(createSessionName, "formatCreateSessionName").mockReturnValue("24日下午1:30")
+    vi.spyOn(createSessionName, "formatCreateSessionName").mockReturnValue("新对话 13:30")
     const onCreateSession = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -132,7 +132,7 @@ describe("AgentSessionSidebar", () => {
     })
 
     const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
-    expect(input?.value).toBe("24日下午1:30")
+    expect(input?.value).toBe("新对话 13:30")
 
     await act(async () => {
       if (!input) return
