@@ -25,6 +25,12 @@ jobs:
             git fetch --depth=1 origin "${GITHUB_SHA}"
           fi
           git checkout --detach FETCH_HEAD
+      - name: Free Linux runner disk space
+        shell: bash
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h
       - uses: actions/setup-node@v5
         with:
           node-version: 22
