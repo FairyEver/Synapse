@@ -142,7 +142,7 @@ function DriveRendererShellChrome({
           rendererOptions={options}
           selectedRendererId={selected.id}
           onRendererChange={onSelect}
-          onOpenVersions={versionItemId ? () => setVersionsOpen(true) : undefined}
+          onOpenVersions={() => setVersionsOpen(true)}
         />
       )}
       <div className='min-h-0 flex-1 overflow-hidden'>

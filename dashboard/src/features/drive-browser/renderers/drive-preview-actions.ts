@@ -139,10 +139,14 @@ export function getDrivePreviewSystemMenuSections(
   const actions = getDrivePreviewSystemActions(snapshot, selectedRendererId)
   const fileItems = actions.filter((action) => action.kind !== 'renderer-select')
   const rendererItems = actions.filter((action) => action.kind === 'renderer-select')
-  return [
-    fileItems.length > 0 ? { id: 'file' as const, items: fileItems } : null,
-    rendererItems.length > 0 ? { id: 'renderer' as const, items: rendererItems } : null,
-  ].filter((section): section is DrivePreviewSystemMenuSection => Boolean(section))
+  const sections: DrivePreviewSystemMenuSection[] = []
+  if (fileItems.length > 0) {
+    sections.push({ id: 'file', items: fileItems })
+  }
+  if (rendererItems.length > 0) {
+    sections.push({ id: 'renderer', items: rendererItems })
+  }
+  return sections
 }
 
 export function getDrivePreviewNewWindowUrl(snapshot: DriveBrowserSnapshotDto): string | null {

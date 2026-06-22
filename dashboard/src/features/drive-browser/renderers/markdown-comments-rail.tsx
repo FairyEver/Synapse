@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
 const COMMENT_CARD_GAP = 12
 const COMMENT_RAIL_HEADER_HEIGHT = 40
+type CommentActionPromise = Promise<unknown>
 
 export type MarkdownCommentsRailThread = {
   readonly thread: DriveAnnotationThreadDto
@@ -46,10 +47,10 @@ export function MarkdownCommentsRail({
   readonly canReply: boolean
   readonly anchorBaseOffset?: number
   readonly onFocusThread: (threadId: string) => void
-  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => Promise<void>
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
-  readonly onDeleteComment: (commentId: string) => Promise<void>
-  readonly onDeleteThread: (threadId: string) => Promise<void>
+  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onDeleteComment: (commentId: string) => CommentActionPromise
+  readonly onDeleteThread: (threadId: string) => CommentActionPromise
 }) {
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({})
@@ -138,10 +139,10 @@ function ThreadView({
   readonly active: boolean
   readonly canReply: boolean
   readonly onFocusThread: (threadId: string) => void
-  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => Promise<void>
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
-  readonly onDeleteComment: (commentId: string) => Promise<void>
-  readonly onDeleteThread: (threadId: string) => Promise<void>
+  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onDeleteComment: (commentId: string) => CommentActionPromise
+  readonly onDeleteThread: (threadId: string) => CommentActionPromise
 }) {
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const firstVisibleCommentId = thread.comments.find((comment) => !comment.deleted)?.id ?? null
@@ -197,10 +198,10 @@ function CommentView({
   readonly comment: DriveAnnotationCommentDto
   readonly replyToName: string | null
   readonly canReply: boolean
-  readonly onReply: (body: string) => Promise<void>
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => Promise<void>
-  readonly onDeleteComment: (commentId: string) => Promise<void>
-  readonly onDeleteThread?: () => Promise<void>
+  readonly onReply: (body: string) => CommentActionPromise
+  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onDeleteComment: (commentId: string) => CommentActionPromise
+  readonly onDeleteThread?: () => CommentActionPromise
 }) {
   const [replying, setReplying] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -273,8 +274,8 @@ function CommentActionMenu({
   onDeleteComment,
   onDeleteThread,
 }: {
-  readonly onDeleteComment?: () => Promise<void>
-  readonly onDeleteThread?: () => Promise<void>
+  readonly onDeleteComment?: () => CommentActionPromise
+  readonly onDeleteThread?: () => CommentActionPromise
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -315,7 +316,7 @@ function CommentActionMenu({
 function ThreadActionMenu({
   onDeleteThread,
 }: {
-  readonly onDeleteThread: () => Promise<void>
+  readonly onDeleteThread: () => CommentActionPromise
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -361,7 +362,7 @@ function DeleteConfirmDialog({
   readonly description: string
   readonly actionLabel: string
   readonly onOpenChange: (open: boolean) => void
-  readonly onConfirm: () => Promise<void>
+  readonly onConfirm: () => CommentActionPromise
 }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -474,13 +475,13 @@ function useAutosizedTextarea(value: string) {
 }
 
 function getCommentDeleteConfig(
-  onDeleteComment: (() => Promise<void>) | undefined,
-  onDeleteThread: (() => Promise<void>) | undefined,
+  onDeleteComment: (() => CommentActionPromise) | undefined,
+  onDeleteThread: (() => CommentActionPromise) | undefined,
 ): {
   readonly title: string
   readonly description: string
   readonly actionLabel: string
-  readonly onConfirm: () => Promise<void>
+  readonly onConfirm: () => CommentActionPromise
 } | null {
   if (onDeleteThread) {
     return {
