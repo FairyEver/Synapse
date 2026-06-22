@@ -246,12 +246,27 @@ jobs:
           CDN_REFRESH_URLS=$(node -e "console.log(JSON.stringify(['https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml']))")
           tccli cdn PurgeUrlsCache --Urls "$CDN_REFRESH_URLS" --Area mainland
 
-          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml"
-          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml"
-          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml"
+          verify_cdn_head() {
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --head \
+              --connect-timeout 20 \
+              --max-time 60 \
+              --retry 4 \
+              --retry-delay 5 \
+              --retry-all-errors \
+              "$1"
+          }
+
+          verify_cdn_head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml"
+          verify_cdn_head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml"
+          verify_cdn_head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml"
 
           while IFS= read -r url; do
-            curl --fail --silent --show-error --location --head "$url"
+            verify_cdn_head "$url"
           done < <(node -e "const manifest=require('./cdn-release/manifest.json'); for (const url of manifest.assetUrls) console.log(url)")
 
       - name: Publish release notes
