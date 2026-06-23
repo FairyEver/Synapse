@@ -24,6 +24,7 @@ vi.mock("../../services/log-store", () => ({
 }))
 
 import {
+  attachActivateHandler,
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
   attachSecondInstanceProtocolHandler,
@@ -174,5 +175,15 @@ describe("app event bootstrap", () => {
 
     expect(handleUrl).toHaveBeenNthCalledWith(1, "Synapse://auth/desktop/callback?code=auth-code")
     expect(handleUrl).toHaveBeenNthCalledWith(2, "SYNAPSE://content-install?session=session-1")
+  })
+
+  it("runs the show-or-create callback when the app is activated", () => {
+    const showOrCreate = vi.fn()
+
+    attachActivateHandler(showOrCreate)
+    const handler = electronMock.app.on.mock.calls.find(([event]) => event === "activate")?.[1]
+    handler?.()
+
+    expect(showOrCreate).toHaveBeenCalledTimes(1)
   })
 })

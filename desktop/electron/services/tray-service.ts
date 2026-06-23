@@ -46,6 +46,11 @@ function applyCurrentIcon(): void {
 }
 
 function createTray(onShowWindow: () => void): void {
+  if (process.platform === "darwin") {
+    logger.info("System tray skipped on macOS.")
+    return
+  }
+
   const iconPath = resolveTrayIconPath()
 
   if (!iconPath) {
@@ -76,10 +81,8 @@ function createTray(onShowWindow: () => void): void {
     showWindowCallback?.()
   })
 
-  if (process.platform !== "darwin") {
-    themeUpdateHandler = () => applyCurrentIcon()
-    nativeTheme.on("updated", themeUpdateHandler)
-  }
+  themeUpdateHandler = () => applyCurrentIcon()
+  nativeTheme.on("updated", themeUpdateHandler)
 
   logger.info("System tray created.")
 }
