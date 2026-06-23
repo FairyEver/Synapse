@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { WorkflowDefaultProviderModel, WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowParamPresetService } from "../../services/workflow/workflow-param-preset-service"
 import type { WorkflowPackageService } from "../../services/workflow/workflow-package-service"
 import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
@@ -395,6 +396,13 @@ function saveRunSnapshot(
 const workflowIdSchema = z.string().refine(isSafeWorkflowId, "Invalid workflow id")
 const workflowRunIdSchema = z.string().refine(isSafeWorkflowRunId, "Invalid workflow run id")
 const workflowNodeIdSchema = z.string().refine(isSafeWorkflowNodeId, "Invalid workflow node id")
+const workflowResourceEntryTypeSchema = z.enum(["file", "directory"])
+const workflowResourceRefSchema = z.union([
+  z.object({ kind: z.literal("local_path"), entryType: workflowResourceEntryTypeSchema, path: z.string() }),
+  z.object({ kind: z.literal("drive"), entryType: workflowResourceEntryTypeSchema, id: z.string(), versionId: z.string().optional() }),
+  z.object({ kind: z.literal("staged"), entryType: workflowResourceEntryTypeSchema, id: z.string() }),
+  z.object({ kind: z.literal("inline_file"), entryType: z.literal("file"), name: z.string(), mimeType: z.string().optional(), base64: z.string() }),
+])
 
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
@@ -404,9 +412,25 @@ const workflowDefinitionSchema = z.object({
   defaultProviderId: z.string().optional(),
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   defaultNodeTimeoutMins: z.number().int().min(1).optional(),
-  params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
+  params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number", "file", "directory"]), default: z.union([z.string(), z.number(), workflowResourceRefSchema, z.null()]), description: z.string().optional() })),
   nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
+})
+
+const workflowParamPresetSchema = z.object({
+  id: z.string(),
+  workflowId: workflowIdSchema,
+  name: z.string(),
+  values: z.record(z.string(), z.string()),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+
+const saveWorkflowParamPresetSchema = z.object({
+  workflowId: workflowIdSchema,
+  name: z.string(),
+  values: z.record(z.string(), z.string()),
+  overwritePresetId: z.string().optional(),
 })
 
 const modelTierSchema = z.enum(["default", "haiku", "sonnet", "opus"])
@@ -1012,6 +1036,38 @@ export const workflowIpcModule: IpcModule = {
     chooseParamDirectory: {
       channel: "synapse:workflow:param-directory:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
       handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
+    },
+    paramPresetsList: {
+      channel: "synapse:workflow:param-presets:list", kind: "invoke",
+      request: z.object({ workflowId: workflowIdSchema }),
+      response: z.array(workflowParamPresetSchema),
+      handler: async (ctx, { workflowId }: { workflowId: string }) => {
+        logger.info("workflow:paramPresets:list", { workflowId })
+        return ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").list(workflowId)
+      },
+    },
+    paramPresetsSave: {
+      channel: "synapse:workflow:param-presets:save", kind: "invoke",
+      request: saveWorkflowParamPresetSchema,
+      response: workflowParamPresetSchema,
+      handler: async (ctx, input: z.infer<typeof saveWorkflowParamPresetSchema>) => {
+        logger.info("workflow:paramPresets:save", {
+          workflowId: input.workflowId,
+          nameLength: input.name.length,
+          valueKeyCount: Object.keys(input.values).length,
+          overwrite: Boolean(input.overwritePresetId),
+        })
+        return ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").save(input)
+      },
+    },
+    paramPresetsDelete: {
+      channel: "synapse:workflow:param-presets:delete", kind: "invoke",
+      request: z.object({ id: z.string() }),
+      response: z.void(),
+      handler: async (ctx, { id }: { id: string }) => {
+        logger.info("workflow:paramPresets:delete", { presetId: id })
+        await ctx.resolve<WorkflowParamPresetService>("core.workflow.param-presets").delete(id)
+      },
     },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),

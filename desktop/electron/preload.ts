@@ -269,6 +269,9 @@ const IPC_CHANNELS = {
     "importPackage": "synapse:workflow:import-package",
     "chooseParamFile": "synapse:workflow:param-file:choose",
     "chooseParamDirectory": "synapse:workflow:param-directory:choose",
+    "paramPresetsList": "synapse:workflow:param-presets:list",
+    "paramPresetsSave": "synapse:workflow:param-presets:save",
+    "paramPresetsDelete": "synapse:workflow:param-presets:delete",
     "event": "synapse:workflow:event",
   },
   "usage-analysis": {
@@ -1272,6 +1275,11 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "synapse:workflow:editor-refocus",
     ),
+  },
+  workflowParamPresets: {
+    list: (workflowId: string) => invoke(IPC_CHANNELS.workflow.paramPresetsList)({ workflowId }),
+    save: (input) => invoke(IPC_CHANNELS.workflow.paramPresetsSave)(input),
+    delete: (id: string) => invoke(IPC_CHANNELS.workflow.paramPresetsDelete)({ id }),
   },
   usageAnalysis: {
     cc: {

@@ -307,9 +307,11 @@ import type {
 import type {
   WorkflowDefinition,
   WorkflowMeta,
+  SaveWorkflowParamPresetInput,
   ValidationError,
   ValidationResult,
   WorkflowEvent,
+  WorkflowParamPreset,
   WorkflowRunListItem,
   WorkflowRunStatus,
 } from "./workflow"
@@ -1405,6 +1407,11 @@ export type SynapseBridge = {
     onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
     onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
+  }
+  workflowParamPresets: {
+    list: (workflowId: string) => Promise<WorkflowParamPreset[]>
+    save: (input: SaveWorkflowParamPresetInput) => Promise<WorkflowParamPreset>
+    delete: (id: string) => Promise<void>
   }
   usageAnalysis: {
     cc: ClaudeCodeUsageAnalysisBridgeDomain
