@@ -5,6 +5,7 @@ import {
   type DrivePublicAssetDto,
   type DriveSiteDto,
   type DriveStorageStatus,
+  buildDriveUrlWithPassword,
   buildDrivePublicAssetUrl,
   buildDriveSiteUrl,
   maskDriveBrowserUrl,
@@ -185,6 +186,7 @@ export function toDriveSiteDto(site: {
   readonly name: string
   readonly status: string
   readonly accessMode: string
+  readonly password?: string | null
   readonly expiresAt: Date | null
   readonly sourceFolderItemId: string | null
   readonly sourceFolderName: string | null
@@ -198,13 +200,19 @@ export function toDriveSiteDto(site: {
   } | null
 }, publicAppUrl: string): DriveSiteDto {
   const expired = site.expiresAt !== null && site.expiresAt.getTime() <= Date.now()
+  const url = buildDriveSiteUrl({ publicAppUrl, siteId: site.siteId })
+  const passwordEnabled = site.accessMode === "password"
+  const password = passwordEnabled ? site.password ?? null : null
   return {
     id: site.id,
     siteId: site.siteId,
     name: site.name,
     status: expired && site.status === "active" ? "expired" : site.status as DriveSiteDto["status"],
     accessMode: site.accessMode as DriveSiteDto["accessMode"],
-    url: buildDriveSiteUrl({ publicAppUrl, siteId: site.siteId }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, password),
+    passwordEnabled,
+    password,
     expiresAt: site.expiresAt?.toISOString() ?? null,
     sourceFolderItemId: site.sourceFolderItemId,
     sourceFolderName: site.sourceFolderName,

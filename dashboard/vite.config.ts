@@ -83,6 +83,10 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      '/sites': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
       '^/drive/items/[^/]+/(download|render)$': {
         target: 'http://localhost:3001',
         changeOrigin: true,

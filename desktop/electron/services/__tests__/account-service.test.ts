@@ -696,6 +696,15 @@ describe("AccountService", () => {
   it("calls Drive site APIs and rewrites URLs to the configured public app URL", async () => {
     const { service } = await createTestAccountService()
     const site = driveSite({ siteId: "site_abc", url: "https://server.example/sites/site_abc/" })
+    const protectedSite = driveSite({
+      siteId: "site_abc",
+      url: "https://server.example/sites/site_abc/",
+      urlWithPassword: "https://server.example/sites/site_abc/?password=server-secret",
+      passwordEnabled: true,
+      password: "SitePw1",
+      accessMode: "password",
+      expiresAt: "2026-06-26T00:00:00.000Z",
+    })
     const page = { items: [site], total: 1, page: { offset: 0, limit: 50, hasMore: false, nextOffset: null } }
     const preflight = {
       sourceFolderItemId: "folder-1",
@@ -715,7 +724,7 @@ describe("AccountService", () => {
       requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
     }, "requestAuthenticatedJson")
       .mockResolvedValueOnce(site)
-      .mockResolvedValueOnce(site)
+      .mockResolvedValueOnce(protectedSite)
       .mockResolvedValueOnce(site)
       .mockResolvedValueOnce(site)
       .mockResolvedValueOnce({ ok: true })
@@ -734,9 +743,13 @@ describe("AccountService", () => {
     await expect(service.updateDriveSiteAccess({
       siteId: "site_abc",
       accessMode: "password",
-      password: "secret",
       expiresIn: "7d",
-    })).resolves.toMatchObject({ siteId: "site_abc", url: `${expectedPublicAppUrl}/sites/site_abc/` })
+    })).resolves.toMatchObject({
+      siteId: "site_abc",
+      url: `${expectedPublicAppUrl}/sites/site_abc/`,
+      urlWithPassword: `${expectedPublicAppUrl}/sites/site_abc/?password=SitePw1`,
+      password: "SitePw1",
+    })
     await expect(service.disableDriveSite("site_abc")).resolves.toMatchObject({ siteId: "site_abc" })
     await expect(service.enableDriveSite("site_abc")).resolves.toMatchObject({ siteId: "site_abc" })
     await expect(service.deleteDriveSite("site_abc")).resolves.toEqual({ ok: true })
@@ -763,7 +776,7 @@ describe("AccountService", () => {
       2,
       "PATCH",
       expectedApiUrl("/drive/sites/site_abc/access"),
-      { accessMode: "password", password: "secret", expiresIn: "7d" },
+      { accessMode: "password", expiresIn: "7d" },
       "站点访问设置保存失败。",
     )
     expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(3, "POST", expectedApiUrl("/drive/sites/site_abc/disable"), undefined, "停用站点失败。")
@@ -2525,6 +2538,9 @@ function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     status: overrides.status ?? "active",
     accessMode: overrides.accessMode ?? "public",
     url: overrides.url ?? `${expectedPublicAppUrl}/sites/site_abc/`,
+    urlWithPassword: overrides.urlWithPassword ?? `${expectedPublicAppUrl}/sites/site_abc/`,
+    passwordEnabled: overrides.passwordEnabled ?? false,
+    password: overrides.password ?? null,
     expiresAt: overrides.expiresAt ?? null,
     sourceFolderItemId: overrides.sourceFolderItemId ?? "folder-1",
     sourceFolderName: overrides.sourceFolderName ?? "产品原型",

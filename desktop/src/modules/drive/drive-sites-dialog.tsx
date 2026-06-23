@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -59,7 +58,6 @@ type DriveSitesState = {
 type DriveSiteAccessState = {
   readonly site: DriveSiteDto
   readonly passwordEnabled: boolean
-  readonly password: string
   readonly expiresIn: DriveAccessExpiresIn
 }
 
@@ -161,7 +159,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-h-[85vh] overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent aria-describedby={undefined} className="max-h-[85vh] w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-5xl">
         <div className="flex max-h-[85vh] min-h-0 flex-col overflow-hidden">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle>站点</DialogTitle>
@@ -366,10 +364,10 @@ function DriveSiteRow({
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-0.5">
           {busy ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-hidden="true" /> : null}
-          <DriveSiteIconAction label={`复制 ${site.name}`} tooltip="复制链接" onClick={() => { void copyText(site.url, "链接已复制") }}>
+          <DriveSiteIconAction label={`复制 ${site.name}`} tooltip="复制链接" onClick={() => { void copyText(site.urlWithPassword, "链接已复制") }}>
             <Copy />
           </DriveSiteIconAction>
-          <DriveSiteIconAction label={`打开 ${site.name}`} tooltip="打开" onClick={() => { void openExternal(site.url) }}>
+          <DriveSiteIconAction label={`打开 ${site.name}`} tooltip="打开" onClick={() => { void openExternal(site.urlWithPassword) }}>
             <ExternalLink />
           </DriveSiteIconAction>
           <DropdownMenu>
@@ -382,7 +380,6 @@ function DriveSiteRow({
               <DropdownMenuItem onClick={() => onAccess({
                 site,
                 passwordEnabled: site.accessMode === "password",
-                password: "",
                 expiresIn: site.expiresAt ? "30d" : "forever",
               })}>
                 访问设置
@@ -416,7 +413,6 @@ function DriveSiteAccessDialog({
   readonly setBusySiteId: (siteId: string | null) => void
 }) {
   const [form, setForm] = useState<DriveSiteAccessState | null>(accessState)
-  const passwordMissing = Boolean(form?.passwordEnabled && form.password.trim().length === 0)
 
   useEffect(() => {
     setForm(accessState)
@@ -424,13 +420,12 @@ function DriveSiteAccessDialog({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!form || passwordMissing) return
+    if (!form) return
     setBusySiteId(form.site.siteId)
     try {
       await requireSynapseBridge().account.updateDriveSiteAccess({
         siteId: form.site.siteId,
         accessMode: form.passwordEnabled ? "password" : "public",
-        password: form.passwordEnabled ? form.password : null,
         expiresIn: form.expiresIn,
       })
       toast("访问设置已保存")
@@ -455,7 +450,7 @@ function DriveSiteAccessDialog({
           footer={(
             <>
               <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>取消</Button>
-              <Button type="submit" disabled={busy || passwordMissing}>保存</Button>
+              <Button type="submit" disabled={busy}>保存</Button>
             </>
           )}
         >
@@ -469,18 +464,6 @@ function DriveSiteAccessDialog({
                 onCheckedChange={(checked) => setForm((current) => current ? { ...current, passwordEnabled: checked } : current)}
               />
             </label>
-            {form.passwordEnabled ? (
-              <div className="grid gap-2">
-                <Label htmlFor="drive-site-access-password">密码</Label>
-                <Input
-                  id="drive-site-access-password"
-                  type="password"
-                  value={form.password}
-                  aria-invalid={passwordMissing || undefined}
-                  onChange={(event) => setForm((current) => current ? { ...current, password: event.target.value } : current)}
-                />
-              </div>
-            ) : null}
             <div className="grid gap-2.5">
               <Label>有效时长</Label>
               <ToggleGroup

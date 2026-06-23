@@ -357,6 +357,7 @@ model DriveSite {
   status              String                @db.VarChar(32)
   accessMode          String                @db.VarChar(32)
   passwordHash        String?
+  passwordEncrypted   String?
   expiresAt           DateTime?
   currentDeploymentId String?
   sourceFolderItemId  String?

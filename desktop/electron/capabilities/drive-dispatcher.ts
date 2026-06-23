@@ -1092,7 +1092,6 @@ function parseDriveSiteCreateInput(params: Record<string, unknown>): DriveSiteCr
     name: requireString(params, "name"),
     entryPath: optionalNullableString(params.entryPath),
     accessMode,
-    password: accessMode === "password" ? optionalNullableString(params.password) : null,
     expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
   }
 }
@@ -1118,7 +1117,6 @@ function parseDriveSiteAccessUpdateInput(
   return {
     siteId: requireString(params, "siteId"),
     accessMode,
-    password: accessMode === "password" ? optionalNullableString(params.password) : null,
     expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
   }
 }

@@ -274,13 +274,12 @@ describe("accountIpcModule", () => {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "public",
-      expiresIn: "forever",
+      accessMode: "password",
+      expiresIn: "3d",
     })
     await accountIpcModule.methods.updateDriveSiteAccess.handler({} as IpcHandlerContext, {
       siteId: "site_abc",
       accessMode: "password",
-      password: "secret",
       expiresIn: "7d",
     })
     await accountIpcModule.methods.disableDriveSite.handler({} as IpcHandlerContext, { siteId: "site_abc" })
@@ -293,19 +292,48 @@ describe("accountIpcModule", () => {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "public",
-      expiresIn: "forever",
+      accessMode: "password",
+      expiresIn: "3d",
     })
     expect(accountService.updateDriveSiteAccess).toHaveBeenCalledWith({
       siteId: "site_abc",
       accessMode: "password",
-      password: "secret",
       expiresIn: "7d",
     })
     expect(accountService.disableDriveSite).toHaveBeenCalledWith("site_abc")
     expect(accountService.enableDriveSite).toHaveBeenCalledWith("site_abc")
     expect(accountService.deleteDriveSite).toHaveBeenCalledWith("site_abc")
     expect(accountService.republishDriveSite).toHaveBeenCalledWith({ siteId: "site_abc", entryPath: "index.html" })
+  })
+
+  it("validates drive site response password fields", () => {
+    const response = accountIpcModule.methods.createDriveSite.response
+    if (!response) throw new Error("Expected drive site response schema")
+
+    expect(response.parse({
+      id: "site-row-1",
+      siteId: "site_abc",
+      name: "产品原型",
+      status: "active",
+      accessMode: "password",
+      url: "https://synapse.test/sites/site_abc/",
+      urlWithPassword: "https://synapse.test/sites/site_abc/?password=AbC234xy",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      expiresAt: "2026-06-26T00:00:00.000Z",
+      sourceFolderItemId: "folder-1",
+      sourceFolderName: "产品原型",
+      entryPath: "index.html",
+      fileCount: 3,
+      totalBytes: "128",
+      createdAt: "2026-06-23T00:00:00.000Z",
+      updatedAt: "2026-06-23T00:00:00.000Z",
+      lastPublishedAt: "2026-06-23T00:00:00.000Z",
+    })).toMatchObject({
+      passwordEnabled: true,
+      password: "AbC234xy",
+      urlWithPassword: "https://synapse.test/sites/site_abc/?password=AbC234xy",
+    })
   })
 
   it("returns owner drive item preview URLs", async () => {

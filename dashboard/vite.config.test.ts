@@ -101,12 +101,15 @@ describe("dashboard Vite dev proxy", () => {
     expect(resolveDashboardDevSpaFallback("/drive/items/file-id/render")).toBeNull()
   })
 
-  it("does not proxy removed drive publication endpoints", () => {
+  it("proxies published site routes while keeping retired page routes removed", () => {
     const proxy = config.server?.proxy
     const pagesProxy = proxy && !Array.isArray(proxy) ? proxy["/pages"] : undefined
     const sitesProxy = proxy && !Array.isArray(proxy) ? proxy["/sites"] : undefined
 
     expect(pagesProxy).toBeUndefined()
-    expect(sitesProxy).toBeUndefined()
+    expect(sitesProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
   })
 })

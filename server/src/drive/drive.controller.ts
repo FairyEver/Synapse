@@ -919,8 +919,8 @@ export class DrivePublicController {
   }
 
   @Get("/sites/:siteId")
-  async redirectSiteRoot(@Param("siteId") siteId: string, @Res() response: Response) {
-    response.redirect(302, `/sites/${encodeURIComponent(siteId)}/`)
+  async serveSiteRoot(@Param("siteId") siteId: string, @Req() request: Request, @Res() response: Response) {
+    await this.serveSiteAsset(siteId, "", request, response)
   }
 
   @Post("/sites/:siteId")
@@ -957,6 +957,20 @@ export class DrivePublicController {
 
   private async serveSiteAsset(siteId: string, relativePath: string, request: Request, response: Response): Promise<void> {
     const sites = requireDriveSiteService(this.sites)
+    const password = readPasswordQuery(request)
+    if (password) {
+      if (await sites.verifySitePassword(siteId, password)) {
+        setDriveAccessCookie(response, driveSiteAccessCookieValue(siteId), { kind: "site", publicId: siteId })
+        response.redirect(302, cleanPasswordUrl(request))
+        return
+      }
+      if (relativePath === "" || isDriveSiteHtmlPath(relativePath)) {
+        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
+        return
+      }
+      response.status(404).type("html").send(renderDriveSiteNotFoundPage())
+      return
+    }
     const access = await sites.resolvePublicSite(siteId, {
       cookie: readDriveAccessCookie(request, { kind: "site", publicId: siteId }) ?? null,
       relativePath,

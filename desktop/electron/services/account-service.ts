@@ -238,11 +238,15 @@ async function withCurrentDriveShareUrl<T extends {
 async function withCurrentDriveSiteUrl<T extends {
   readonly siteId: string
   readonly url: string
+  readonly urlWithPassword: string
+  readonly password: string | null
 }>(site: T): Promise<T> {
-  const { buildDriveSiteUrl } = await sharedUrlsPromise
+  const { buildDriveSiteUrl, buildDriveUrlWithPassword } = await sharedUrlsPromise
+  const url = buildDriveSiteUrl({ publicAppUrl: publicAppUrl(), siteId: site.siteId })
   return {
     ...site,
-    url: buildDriveSiteUrl({ publicAppUrl: publicAppUrl(), siteId: site.siteId }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, site.password),
   }
 }
 
@@ -1010,7 +1014,7 @@ export class AccountService {
     return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
       "PATCH",
       `${apiBaseUrl()}/drive/sites/${encodeURIComponent(input.siteId)}/access`,
-      { accessMode: input.accessMode, password: input.password, expiresIn: input.expiresIn },
+      { accessMode: input.accessMode, ...(input.password === undefined ? {} : { password: input.password }), expiresIn: input.expiresIn },
       "站点访问设置保存失败。",
     ))
   }

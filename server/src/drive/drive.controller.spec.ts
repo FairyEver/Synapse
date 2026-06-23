@@ -232,6 +232,56 @@ describe("DriveController", () => {
     }
   })
 
+  it("allows protected Drive site creation without a user-supplied password", async () => {
+    const site = createDriveSite({
+      accessMode: "password",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      urlWithPassword: "https://app.example/sites/site_public/?password=AbC234xy",
+    })
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.test")
+    sites.createSite.mockResolvedValue(site)
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: DriveSiteService, useValue: sites },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      await request(userApp.getHttpServer())
+        .post("/api/drive/sites")
+        .send({
+          sourceFolderItemId: "folder-1",
+          name: "产品原型",
+          entryPath: null,
+          accessMode: "password",
+          expiresIn: "3d",
+        })
+        .expect(201)
+      expect(sites.createSite).toHaveBeenCalledWith("user-1", expect.any(String), {
+        sourceFolderItemId: "folder-1",
+        name: "产品原型",
+        entryPath: null,
+        accessMode: "password",
+        expiresIn: "3d",
+      })
+    } finally {
+      await userApp.close()
+    }
+  })
+
   it("serves nested static site assets from the copied deployment", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
@@ -247,6 +297,37 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/sites/site_public/assets/app.css").expect(200)
     expect(response.headers["content-type"]).toContain("text/css")
     expect(response.text).toBe("body{}")
+  })
+
+  it("serves the static site root without a redirect loop", async () => {
+    sites.resolvePublicSite.mockResolvedValue({
+      status: "ok",
+      asset: {
+        storageKey: "drive-sites/site_public/dep-1/index.html",
+        relativePath: "index.html",
+        contentType: "text/html",
+        size: 16n,
+      },
+    })
+    storage.getObjectStream.mockResolvedValue({ stream: Readable.from("<h1>Home</h1>"), size: 13n, contentType: "text/html" })
+
+    const response = await request(app!.getHttpServer()).get("/sites/site_public/").expect(200)
+    expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "" })
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.text).toBe("<h1>Home</h1>")
+  })
+
+  it("accepts password query links for protected static sites", async () => {
+    sites.verifySitePassword.mockResolvedValue(true)
+
+    const response = await request(app!.getHttpServer())
+      .get("/sites/site_secret/?password=AbC234xy")
+      .expect(302)
+
+    expect(sites.verifySitePassword).toHaveBeenCalledWith("site_secret", "AbC234xy")
+    expect(response.headers.location).toBe("/sites/site_secret/")
+    const setCookie = response.headers["set-cookie"]
+    expect(Array.isArray(setCookie) ? setCookie.join("\n") : setCookie).toContain("drive_access_site_")
   })
 
   it("does not leak protected static assets without a site cookie", async () => {
@@ -1770,7 +1851,7 @@ function createPublicAssetResponse() {
   return response
 }
 
-function createDriveSite() {
+function createDriveSite(overrides: Record<string, unknown> = {}) {
   return {
     id: "site-row-1",
     siteId: "site_public",
@@ -1778,6 +1859,9 @@ function createDriveSite() {
     status: "active",
     accessMode: "public",
     url: "https://app.example/sites/site_public/",
+    urlWithPassword: "https://app.example/sites/site_public/",
+    passwordEnabled: false,
+    password: null,
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "产品原型",
@@ -1787,6 +1871,7 @@ function createDriveSite() {
     createdAt: "2026-06-23T00:00:00.000Z",
     updatedAt: "2026-06-23T00:00:00.000Z",
     lastPublishedAt: "2026-06-23T00:00:00.000Z",
+    ...overrides,
   }
 }
 

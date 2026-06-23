@@ -302,6 +302,47 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("发布站点")
   })
 
+  it("publishes a protected site with generated password output", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", type: "folder", name: "原型" }),
+    ])
+    mocks.createDriveSite.mockResolvedValue(createDriveSite({
+      accessMode: "password",
+      passwordEnabled: true,
+      password: "SitePw1",
+      urlWithPassword: "https://synapse.test/sites/site_abc/?password=SitePw1",
+      expiresAt: "2026-06-26T00:00:00.000Z",
+    }))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("原型")
+    await clickText("发布站点")
+
+    expect(document.querySelector<HTMLInputElement>("#drive-site-password")).toBeNull()
+    expect(document.body.textContent).toContain("需要密码")
+    expect(document.body.textContent).toContain("3 天")
+
+    await clickButtonText("发布")
+
+    expect(mocks.createDriveSite).toHaveBeenCalledWith({
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: "index.html",
+      accessMode: "password",
+      expiresIn: "3d",
+    })
+    expect(getSiteCreatedUrlInput().value).toBe("https://synapse.test/sites/site_abc/?password=SitePw1")
+    expect(getSiteCreatedPasswordInput().value).toBe("SitePw1")
+
+    await clickButtonText("复制链接")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/sites/site_abc/?password=SitePw1")
+
+    await clickButtonByLabel("复制密码")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("SitePw1")
+  })
+
   it("opens the site management dialog from the Drive top bar", async () => {
     mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
 
@@ -311,7 +352,9 @@ describe("DriveModule", () => {
     await clickButtonText("站点")
     await flushAct()
 
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("站点")
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("站点")
+    expect(dialog?.className).toContain("w-[calc(100%-2rem)]")
     expect(mocks.listDriveSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
 
@@ -320,7 +363,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(driveToolbarActionTexts()).toEqual(["上传", "新建文件夹", "我的分享", "站点", "刷新"])
-    expect(getButton("站点").querySelector("svg")).not.toBeNull()
+    expect(getButton("站点").querySelector("svg")).toBeNull()
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -2135,6 +2178,18 @@ function getShareUrlInput(): HTMLInputElement {
   return input
 }
 
+function getSiteCreatedUrlInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>("#drive-site-created-url")
+  if (!input) throw new Error("Site URL input not found")
+  return input
+}
+
+function getSiteCreatedPasswordInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>("#drive-site-created-password")
+  if (!input) throw new Error("Site password input not found")
+  return input
+}
+
 function getDialogContent(): HTMLElement {
   const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
   if (!content) throw new Error("Dialog content not found")
@@ -2205,6 +2260,9 @@ function createDriveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     status: "active",
     accessMode: "public",
     url: "https://synapse.test/sites/site_abc/",
+    urlWithPassword: "https://synapse.test/sites/site_abc/",
+    passwordEnabled: false,
+    password: null,
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "原型",

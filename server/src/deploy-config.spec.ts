@@ -293,19 +293,19 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location = /drive/")
     expect(nginx).toContain("location /share/")
     expect(nginx).toContain("location /files/")
+    expect(nginx).toContain("location /sites/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
     expect(nginx).not.toContain("location /pages/")
-    expect(nginx).not.toContain("location /sites/")
     expect(nginx).not.toContain("download|zip")
     expect(nginx).toContain("alias /app/dashboard/dist/;")
     expect(nginx).toContain("try_files $uri $uri/ /console/index.html;")
   })
 
-  it("does not keep retired drive publication routes in nginx", () => {
+  it("keeps retired page publication routes out of nginx while serving sites", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(nginx).not.toContain("location /pages/")
-    expect(nginx).not.toContain("location /sites/")
+    expect(nginx).toContain("location /sites/")
     expect(nginx).toContain("location /share/")
   })
 

@@ -56,6 +56,13 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.test/sites/site_abc/")
   })
 
+  it("builds password-bearing site URLs", () => {
+    const siteUrl = buildDriveSiteUrl({ publicAppUrl: "https://synapse.test/", siteId: "site_abc" })
+
+    expect(buildDriveUrlWithPassword(siteUrl, "AbC234xy"))
+      .toBe("https://synapse.test/sites/site_abc/?password=AbC234xy")
+  })
+
   it("keeps site page limits stable", () => {
     expect(DRIVE_SITE_DEFAULT_PAGE_SIZE).toBe(50)
     expect(DRIVE_SITE_MAX_PAGE_SIZE).toBe(200)

@@ -161,14 +161,15 @@ Input:
 - `sourceFolderItemId` required: Drive folder item id to copy.
 - `name` required: site display name.
 - `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
-- `accessMode` required: `public` or `password`.
-- `password` optional: required when `accessMode` is `password`.
+- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 Output:
 
 - `siteId`: public id used in `/sites/<siteId>/`.
 - `url`: public site URL.
+- `urlWithPassword`: public site URL with password query when password mode is enabled.
+- `password`: generated password, or `null` for public sites.
 
 ### `drive_site_list`
 
@@ -183,13 +184,12 @@ Input:
 
 ### `drive_site_update_access`
 
-Update site password and expiry without republishing files.
+Update site access mode and expiry without republishing files. Password mode generates a new password.
 
 Input:
 
 - `siteId` required.
-- `accessMode` required: `public` or `password`.
-- `password` optional: required when `accessMode` is `password`; omit to keep the existing password when supported.
+- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 ### `drive_site_disable`

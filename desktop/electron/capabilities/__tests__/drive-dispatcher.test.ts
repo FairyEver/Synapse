@@ -397,7 +397,6 @@ describe("createDriveCapabilityDispatcher", () => {
       name: "产品原型",
       entryPath: null,
       accessMode: "public",
-      password: null,
       expiresIn: "forever",
     })
     expect(shareDriveItem).not.toHaveBeenCalled()
@@ -429,7 +428,6 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.site.update_access", {
       siteId: "site_public",
       accessMode: "password",
-      password: "secret",
       expiresIn: "7d",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
@@ -456,7 +454,6 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(updateDriveSiteAccess).toHaveBeenCalledWith({
       siteId: "site_public",
       accessMode: "password",
-      password: "secret",
       expiresIn: "7d",
     })
     expect(disableDriveSite).toHaveBeenCalledWith("site_public")
@@ -1671,6 +1668,9 @@ function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     status: "active",
     accessMode: "public",
     url: "https://synapse.test/sites/site_public/",
+    urlWithPassword: "https://synapse.test/sites/site_public/",
+    passwordEnabled: false,
+    password: null,
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "产品原型",

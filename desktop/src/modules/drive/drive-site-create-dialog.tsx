@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { Check, Copy, ExternalLink, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
-import type { DriveAccessExpiresIn, DriveItemDto, DriveSiteDto, DriveSitePreflightDto } from "@synapse/shared"
+import { DRIVE_DEFAULT_ACCESS_SETTINGS, type DriveAccessExpiresIn, type DriveItemDto, type DriveSiteDto, type DriveSitePreflightDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -23,7 +23,6 @@ type DriveSiteCreateState = {
   readonly name: string
   readonly entryPath: string
   readonly passwordEnabled: boolean
-  readonly password: string
   readonly expiresIn: DriveAccessExpiresIn
 }
 
@@ -76,12 +75,11 @@ function DriveSiteCreateDialog({
 
   const htmlFiles = preflight?.htmlFiles ?? []
   const canSubmit = Boolean(folder && preflight && htmlFiles.length > 0 && form.name.trim() && form.entryPath)
-  const passwordMissing = form.passwordEnabled && form.password.trim().length === 0
   const selectedEntryExists = useMemo(() => htmlFiles.includes(form.entryPath), [form.entryPath, htmlFiles])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!folder || !preflight || !canSubmit || passwordMissing || !selectedEntryExists) return
+    if (!folder || !preflight || !canSubmit || !selectedEntryExists) return
     setSubmitting(true)
     setError(null)
     try {
@@ -90,7 +88,6 @@ function DriveSiteCreateDialog({
         name: form.name.trim(),
         entryPath: form.entryPath,
         accessMode: form.passwordEnabled ? "password" : "public",
-        password: form.passwordEnabled ? form.password : null,
         expiresIn: form.expiresIn,
       })
       setCreatedSite(site)
@@ -117,7 +114,7 @@ function DriveSiteCreateDialog({
         ) : (
           <>
             <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>取消</Button>
-            <Button type="submit" disabled={!canSubmit || passwordMissing || !selectedEntryExists || loading || submitting}>
+            <Button type="submit" disabled={!canSubmit || !selectedEntryExists || loading || submitting}>
               {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
               发布
             </Button>
@@ -169,18 +166,6 @@ function DriveSiteCreateDialog({
                     onCheckedChange={(checked) => setForm((current) => ({ ...current, passwordEnabled: checked }))}
                   />
                 </label>
-                {form.passwordEnabled ? (
-                  <div className="grid gap-2">
-                    <Label htmlFor="drive-site-password">密码</Label>
-                    <Input
-                      id="drive-site-password"
-                      type="password"
-                      value={form.password}
-                      aria-invalid={passwordMissing || undefined}
-                      onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                    />
-                  </div>
-                ) : null}
                 <div className="grid gap-2.5">
                   <Label>有效时长</Label>
                   <ToggleGroup
@@ -230,14 +215,25 @@ function DriveSiteCreatedContent({ site }: { readonly site: DriveSiteDto }) {
       </div>
       <div className="grid gap-2">
         <Label htmlFor="drive-site-created-url">访问链接</Label>
-        <Input id="drive-site-created-url" className="font-mono text-sm" value={site.url} readOnly />
+        <Input id="drive-site-created-url" className="font-mono text-sm" value={site.urlWithPassword} readOnly />
       </div>
+      {site.passwordEnabled && site.password ? (
+        <div className="grid gap-2">
+          <Label htmlFor="drive-site-created-password">密码</Label>
+          <div className="flex gap-2">
+            <Input id="drive-site-created-password" className="font-mono text-sm" value={site.password} readOnly />
+            <Button type="button" size="icon" variant="outline" aria-label="复制密码" onClick={() => { void copyText(site.password ?? "", "密码已复制") }}>
+              <Copy aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyText(site.url, "链接已复制") }}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyText(site.urlWithPassword, "链接已复制") }}>
           <Copy data-icon="inline-start" />
           复制链接
         </Button>
-        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openExternal(site.url) }}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openExternal(site.urlWithPassword) }}>
           <ExternalLink data-icon="inline-start" />
           打开站点
         </Button>
@@ -250,9 +246,8 @@ function createInitialForm(folder: DriveItemDto | null, preflight: DriveSitePref
   return {
     name: folder?.name ?? "",
     entryPath: preflight?.defaultEntryPath ?? preflight?.htmlFiles[0] ?? "",
-    passwordEnabled: false,
-    password: "",
-    expiresIn: "forever",
+    passwordEnabled: DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
+    expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
   }
 }
 

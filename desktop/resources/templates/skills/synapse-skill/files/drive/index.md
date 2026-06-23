@@ -74,7 +74,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 11. If the user asks to publish a Drive folder as a static website, folder site, multi-page HTML prototype, or product prototype site, call `drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
-   - Use `accessMode: "public"` for open sites or `accessMode: "password"` with `password` when the user asks for a password.
+   - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Do not provide a password value; Synapse generates it and returns it in the result.
    - Use `drive_site_list`, `drive_site_update_access`, `drive_site_disable`, `drive_site_delete`, and `drive_site_republish` for existing site management.
 12. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
 13. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.

@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { verifyPassword } from "../auth/password"
 import { DriveSiteService } from "./drive-site.service"
 
 describe("DriveSiteService", () => {
+  beforeEach(() => {
+    vi.stubEnv("USER_ACCESS_JWT_SECRET", "site-password-secret-with-enough-length")
+  })
+
   it("creates a site by copying active folder files into deployment assets", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()
@@ -25,6 +30,73 @@ describe("DriveSiteService", () => {
       ["drive/app", expect.stringMatching(/assets\/app\.js$/u)],
       ["drive/logo", expect.stringMatching(/assets\/logo\.png$/u)],
     ])
+  })
+
+  it("generates a share-style password when publishing a protected site without manual password input", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "password",
+      expiresIn: "3d",
+    })
+
+    expect(result.accessMode).toBe("password")
+    expect(result.passwordEnabled).toBe(true)
+    expect(result.password).toMatch(/^[0-9A-Za-z]{8}$/u)
+    expect(result.urlWithPassword).toBe(`${result.url}?password=${result.password}`)
+    expect(result.expiresAt).not.toBeNull()
+
+    const stored = await prisma.driveSite.findFirst({ where: { userId: "user-1", siteId: result.siteId, deletedAt: null } })
+    expect(stored?.passwordEncrypted).toEqual(expect.any(String))
+    if (!stored?.passwordHash || !result.password) {
+      throw new Error("expected generated site password material")
+    }
+    await expect(verifyPassword(result.password, stored.passwordHash)).resolves.toBe(true)
+  })
+
+  it("does not return password material for public sites", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+
+    expect(result.passwordEnabled).toBe(false)
+    expect(result.password).toBeNull()
+    expect(result.urlWithPassword).toBe(result.url)
+  })
+
+  it("generates a readable password when legacy protected site access is saved without one", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({
+        accessMode: "password",
+        passwordHash: "$2a$12$MM8qv7ZWmVn2sA6eNltSZOVcUx3Z4i9mU.DnUjmg0ivhQzPY57M1K",
+        passwordEncrypted: null,
+        siteId: "site_legacy",
+      })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.updateSiteAccess("user-1", "site_legacy", "https://synapse.test", {
+      accessMode: "password",
+      expiresIn: "7d",
+    })
+
+    expect(result.passwordEnabled).toBe(true)
+    expect(result.password).toMatch(/^[0-9A-Za-z]{8}$/u)
+    expect(result.urlWithPassword).toBe(`${result.url}?password=${result.password}`)
   })
 
   it("keeps an existing deployment active when republish copy fails", async () => {
@@ -208,6 +280,7 @@ function createSiteRecord(overrides: Record<string, unknown> = {}) {
     status: "active",
     accessMode: "public",
     passwordHash: null,
+    passwordEncrypted: null,
     expiresAt: null,
     currentDeploymentId: null,
     sourceFolderItemId: "folder-1",

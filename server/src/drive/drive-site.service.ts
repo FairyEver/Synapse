@@ -25,6 +25,7 @@ import {
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
 } from "./drive.constants"
+import { createDrivePasswordMaterial, decryptDrivePassword, encryptDrivePassword } from "./drive-access-protection"
 import { normalizeDriveSiteRelativePath, resolveDriveSiteRequestPath } from "./drive-site-path"
 import type { DriveStoragePort } from "./drive-storage"
 import { createDriveSiteId } from "./drive-token"
@@ -72,6 +73,7 @@ type DriveSiteRecord = {
   readonly status: string
   readonly accessMode: string
   readonly passwordHash: string | null
+  readonly passwordEncrypted: string | null
   readonly expiresAt: Date | null
   readonly currentDeploymentId: string | null
   readonly sourceFolderItemId: string | null
@@ -111,6 +113,8 @@ export type DriveResolvedSiteAccess =
 
 @Injectable()
 export class DriveSiteService {
+  private readonly accessSecret = readUserAccessJwtSecret(process.env)
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
@@ -132,7 +136,7 @@ export class DriveSiteService {
   async createSite(userId: string, publicAppUrl: string, input: DriveSiteCreateInput): Promise<DriveSiteDto> {
     const snapshot = await this.buildSnapshot(this.prisma, userId, input.sourceFolderItemId)
     const entryPath = this.resolveEntryPath(snapshot, input.entryPath ?? null)
-    const passwordHash = await this.resolvePasswordHash(input.accessMode, input.password ?? null)
+    const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
     const site = await this.prisma.driveSite.create({
       data: {
         siteId: createDriveSiteId(),
@@ -140,14 +144,15 @@ export class DriveSiteService {
         name: input.name.trim(),
         status: DRIVE_SITE_STATUS.failed,
         accessMode: input.accessMode,
-        passwordHash,
+        passwordHash: passwordMaterial.passwordHash,
+        passwordEncrypted: passwordMaterial.passwordEncrypted,
         expiresAt: expiresAtFromInput(input.expiresIn),
         sourceFolderItemId: snapshot.sourceFolderItemId,
         sourceFolderName: snapshot.sourceFolderName,
       },
     })
     await this.publishDeployment(site, snapshot, entryPath)
-    return this.getSiteDto(userId, site.siteId, publicAppUrl)
+    return this.getSiteDto(userId, site.siteId, publicAppUrl, passwordMaterial.password)
   }
 
   async listSites(userId: string, publicAppUrl: string, input: DriveSiteListInput = {}): Promise<DriveSiteListPageDto> {
@@ -192,16 +197,17 @@ export class DriveSiteService {
 
   async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
     await this.requireOwnedSite(userId, siteId)
-    const passwordHash = await this.resolvePasswordHash(input.accessMode, input.password ?? null, { keepExistingWhenMissing: true, userId, siteId })
+    const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
     await this.prisma.driveSite.update({
       where: { siteId },
       data: {
         accessMode: input.accessMode,
-        ...(passwordHash !== undefined ? { passwordHash } : {}),
+        passwordHash: passwordMaterial.passwordHash,
+        passwordEncrypted: passwordMaterial.passwordEncrypted,
         expiresAt: expiresAtFromInput(input.expiresIn),
       },
     })
-    return this.getSiteDto(userId, siteId, publicAppUrl)
+    return this.getSiteDto(userId, siteId, publicAppUrl, passwordMaterial.password)
   }
 
   async disableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
@@ -270,12 +276,12 @@ export class DriveSiteService {
     return bcrypt.compare(password, site.passwordHash)
   }
 
-  private async getSiteDto(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
+  private async getSiteDto(userId: string, siteId: string, publicAppUrl: string, passwordOverride?: string | null): Promise<DriveSiteDto> {
     const site = await this.requireOwnedSite(userId, siteId)
     const deployment = site.currentDeploymentId
       ? await this.prisma.driveSiteDeployment.findUnique({ where: { id: site.currentDeploymentId } })
       : null
-    return this.toDto(site, publicAppUrl, deployment)
+    return this.toDto(site, publicAppUrl, deployment, passwordOverride)
   }
 
   private async requireOwnedSite(userId: string, siteId: string): Promise<DriveSiteRecord> {
@@ -291,8 +297,16 @@ export class DriveSiteService {
     return new Map(deployments.map((deployment) => [deployment.id, deployment]))
   }
 
-  private toDto(site: DriveSiteRecord, publicAppUrl: string, currentDeployment?: DriveSiteDeploymentRecord | null): DriveSiteDto {
-    return toDriveSiteDto({ ...site, currentDeployment: currentDeployment ?? null }, publicAppUrl)
+  private toDto(
+    site: DriveSiteRecord,
+    publicAppUrl: string,
+    currentDeployment?: DriveSiteDeploymentRecord | null,
+    passwordOverride?: string | null,
+  ): DriveSiteDto {
+    const password = passwordOverride ?? (site.accessMode === DRIVE_SITE_ACCESS_MODE.password
+      ? this.decryptStoredPassword(site.passwordEncrypted)
+      : null)
+    return toDriveSiteDto({ ...site, currentDeployment: currentDeployment ?? null, password }, publicAppUrl)
   }
 
   private async publishDeployment(site: DriveSiteRecord, snapshot: DriveSiteSnapshot, entryPath: string): Promise<void> {
@@ -416,18 +430,32 @@ export class DriveSiteService {
     return normalized
   }
 
-  private async resolvePasswordHash(
+  private async resolvePasswordMaterial(
     accessMode: DriveSiteAccessMode,
     password: string | null,
-    options?: { readonly keepExistingWhenMissing: boolean; readonly userId: string; readonly siteId: string },
-  ): Promise<string | null | undefined> {
-    if (accessMode === DRIVE_SITE_ACCESS_MODE.public) return null
-    if (password) return bcrypt.hash(password, 12)
-    if (options?.keepExistingWhenMissing) {
-      const site = await this.requireOwnedSite(options.userId, options.siteId)
-      if (site.passwordHash) return undefined
+    expiresIn: DriveAccessExpiresIn,
+  ): Promise<{ readonly password: string | null; readonly passwordHash: string | null; readonly passwordEncrypted: string | null }> {
+    if (accessMode === DRIVE_SITE_ACCESS_MODE.public) {
+      return { password: null, passwordHash: null, passwordEncrypted: null }
     }
-    throw new BadRequestException("请设置站点访问密码。")
+    if (password) {
+      return {
+        password,
+        passwordHash: await bcrypt.hash(password, 12),
+        passwordEncrypted: encryptDrivePassword(password, this.accessSecret),
+      }
+    }
+    const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn }, this.accessSecret)
+    return {
+      password: material.password,
+      passwordHash: material.passwordHash,
+      passwordEncrypted: material.passwordEncrypted,
+    }
+  }
+
+  private decryptStoredPassword(value: string | null | undefined): string | null {
+    if (!value) return null
+    return decryptDrivePassword(value, this.accessSecret)
   }
 }
 
@@ -449,4 +477,10 @@ function expiresAtFromInput(expiresIn: DriveAccessExpiresIn): Date | null {
   if (expiresIn === "forever") return null
   const days = expiresIn === "3d" ? 3 : expiresIn === "7d" ? 7 : expiresIn === "30d" ? 30 : 365
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+}
+
+function readUserAccessJwtSecret(source: NodeJS.ProcessEnv): string {
+  const secret = source.USER_ACCESS_JWT_SECRET
+  if (!secret || secret.length < 32) throw new Error("服务端环境变量无效：USER_ACCESS_JWT_SECRET")
+  return secret
 }

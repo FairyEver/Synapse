@@ -6,7 +6,6 @@ import {
   Copy,
   ExternalLink,
   Folder,
-  Globe2,
   KeyRound,
   LoaderCircle,
   RefreshCw,
@@ -1389,7 +1388,6 @@ function DriveToolbarActions({
         我的分享
       </Button>
       <Button variant="outline" size="sm" disabled={publicLinksDisabled} onClick={onOpenSites}>
-        <Globe2 data-icon="inline-start" />
         站点
       </Button>
       <Button variant="outline" size="sm" disabled={refreshDisabled} onClick={onRefresh}>

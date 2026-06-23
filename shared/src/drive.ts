@@ -183,6 +183,9 @@ export interface DriveSiteDto {
   readonly status: DriveSiteStatus
   readonly accessMode: DriveSiteAccessMode
   readonly url: string
+  readonly urlWithPassword: string
+  readonly passwordEnabled: boolean
+  readonly password: string | null
   readonly expiresAt: string | null
   readonly sourceFolderItemId: string | null
   readonly sourceFolderName: string | null
