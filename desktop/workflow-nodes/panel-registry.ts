@@ -10,6 +10,7 @@ import { ScriptNodePanel } from "./script/panel"
 import { WorkflowCallNodePanel } from "./workflow-call/panel"
 import { CodexNodePanel } from "./codex/panel"
 import { ClaudeCodeNodePanel } from "./claude-code/panel"
+import { DocumentTemplateNodePanel } from "../app-capabilities/document-template/workflow-node/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -39,6 +40,7 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["workflow_call", WorkflowCallNodePanel as unknown as PanelComponent],
   ["codex", CodexNodePanel as unknown as PanelComponent],
   ["claude_code", ClaudeCodeNodePanel as unknown as PanelComponent],
+  ["document_template_docx_generate", DocumentTemplateNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

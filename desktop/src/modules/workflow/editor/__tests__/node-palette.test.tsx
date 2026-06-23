@@ -12,6 +12,7 @@ describe("NodePalette", () => {
     const html = renderToStaticMarkup(<NodePalette />)
 
     expect(html).toContain("Prompt")
+    expect(html).toContain("生成 Word 文档")
     expect(html).not.toContain("文件转换")
   })
 })

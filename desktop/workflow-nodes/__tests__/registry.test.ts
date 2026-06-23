@@ -85,6 +85,16 @@ describe("NodeTypeRegistry", () => {
     expect(manifest.type).toBe("claude_code")
   })
 
+  it("registers document template manifest in renderer registry", async () => {
+    await import("../register.renderer")
+    const { nodeTypeRegistry } = await import("../registry")
+
+    const manifest = nodeTypeRegistry.getManifest("document_template_docx_generate")
+
+    expect(manifest.title).toBe("生成 Word 文档")
+    expect(manifest.type).toBe("document_template_docx_generate")
+  })
+
   it("registers claude code manifest and executor in main registry", async () => {
     vi.doMock("electron", () => ({
       app: {
@@ -110,5 +120,32 @@ describe("NodeTypeRegistry", () => {
 
     expect(nodeTypeRegistry.getManifest("claude_code").title).toBe("Claude Code")
     expect(nodeTypeRegistry.getExecutor("claude_code")).toBe(claudeCodeNodeExecutor)
+  })
+
+  it("registers document template manifest and executor in main registry", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { documentTemplateNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../../app-capabilities/document-template/workflow-node/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("document_template_docx_generate").title).toBe("生成 Word 文档")
+    expect(nodeTypeRegistry.getExecutor("document_template_docx_generate")).toBe(documentTemplateNodeExecutor)
   })
 })

@@ -788,6 +788,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
+      permissionGuard,
+      auditSink,
     })
 
     const actionRouter = createSynapseActionRouter({
@@ -1869,6 +1871,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
+      permissionGuard,
+      auditSink,
       resolveProjectWorkspacePath: async (projectId) => {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         return resolveWorkflowProjectWorkspacePath(config, repo, proj)
