@@ -249,6 +249,9 @@ export const IPC_CHANNELS = {
   "apps": {
     "openSystemApp": "synapse:apps:open-system-app",
   },
+  "documentTemplate": {
+    "generateDocx": "synapse:document-template:docx:generate",
+  },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",

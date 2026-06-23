@@ -20,6 +20,10 @@ import type {
   SynapseAccountStateChangedEvent,
 } from "./account"
 import type {
+  GenerateDocxInput,
+  GenerateDocxResult,
+} from "../../app-capabilities/document-template/shared/schema"
+import type {
   SynapseContentStoreInstallPrepareResult,
   SynapseContentStoreInstallResolveResult,
 } from "./content-store-install"
@@ -792,6 +796,9 @@ export type SynapseBridge = {
     onContentOpenRequest: (
       listener: (request: SynapseSystemAppContentOpenRequest) => void,
     ) => () => void
+  }
+  documentTemplate: {
+    generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>

@@ -360,6 +360,9 @@ const IPC_CHANNELS = {
   "apps": {
     "openSystemApp": "synapse:apps:open-system-app",
   },
+  "documentTemplate": {
+    "generateDocx": "synapse:document-template:docx:generate",
+  },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",
@@ -703,6 +706,9 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       EVENT_CHANNELS.apps.contentOpenRequest,
     ),
+  },
+  documentTemplate: {
+    generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
   },
   git: {
     checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),
