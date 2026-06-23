@@ -944,6 +944,13 @@ export const opsDiagnosticsSchema: NamespaceSchema<OpsDiagnosticsEntryV1> = {
     && typeof (v as OpsDiagnosticsEntryV1).updatedAt === "string",
 }
 
+type WorkflowResourceEntryTypeV1 = "file" | "directory"
+type WorkflowResourceRefV1 =
+  | { readonly kind: "local_path"; readonly entryType: WorkflowResourceEntryTypeV1; readonly path: string }
+  | { readonly kind: "drive"; readonly entryType: WorkflowResourceEntryTypeV1; readonly id: string; readonly versionId?: string }
+  | { readonly kind: "staged"; readonly entryType: WorkflowResourceEntryTypeV1; readonly id: string }
+  | { readonly kind: "inline_file"; readonly entryType: "file"; readonly name: string; readonly mimeType?: string; readonly base64: string }
+
 export interface WorkflowEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -957,7 +964,7 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   defaultNodeTimeoutMins?: number
-  params: Array<{ name: string; type: "text" | "number"; default: string | number | null; description?: string }>
+  params: Array<{ name: string; type: "text" | "number" | "file" | "directory"; default: string | number | WorkflowResourceRefV1 | null; description?: string }>
   nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
   edges: Array<{ id: string; from: string; to: string; branch?: string }>
 }
@@ -965,9 +972,37 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
 function isWorkflowParam(value: unknown): value is WorkflowEntryV1["params"][number] {
   return isAnyRecord<Record<string, unknown>>(value)
     && typeof value.name === "string"
-    && (value.type === "text" || value.type === "number")
-    && (value.default === null || typeof value.default === "string" || typeof value.default === "number")
+    && isWorkflowParamType(value.type)
+    && (value.default === null || typeof value.default === "string" || typeof value.default === "number" || isWorkflowResourceRef(value.default))
     && isOptionalString(value.description)
+}
+
+function isWorkflowParamType(value: unknown): value is WorkflowEntryV1["params"][number]["type"] {
+  return value === "text" || value === "number" || value === "file" || value === "directory"
+}
+
+function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRefV1 {
+  if (!isAnyRecord<Record<string, unknown>>(value)) return false
+  if (value.kind === "local_path") {
+    return (value.entryType === "file" || value.entryType === "directory")
+      && typeof value.path === "string"
+  }
+  if (value.kind === "drive") {
+    return (value.entryType === "file" || value.entryType === "directory")
+      && typeof value.id === "string"
+      && isOptionalString(value.versionId)
+  }
+  if (value.kind === "staged") {
+    return (value.entryType === "file" || value.entryType === "directory")
+      && typeof value.id === "string"
+  }
+  if (value.kind === "inline_file") {
+    return value.entryType === "file"
+      && typeof value.name === "string"
+      && typeof value.base64 === "string"
+      && isOptionalString(value.mimeType)
+  }
+  return false
 }
 
 function isWorkflowNode(value: unknown): value is WorkflowEntryV1["nodes"][number] {
@@ -1012,11 +1047,11 @@ function normalizeWorkflowTimeout(value: unknown): number | undefined {
 function normalizeWorkflowParam(value: unknown): WorkflowEntryV1["params"][number] | null {
   if (!isAnyRecord<Record<string, unknown>>(value)) return null
   if (typeof value.name !== "string") return null
-  if (value.type !== "text" && value.type !== "number") return null
+  if (!isWorkflowParamType(value.type)) return null
   const rawDefault = value.default
   const defaultValue = rawDefault === undefined || rawDefault === null
     ? null
-    : typeof rawDefault === "string" || typeof rawDefault === "number"
+    : typeof rawDefault === "string" || typeof rawDefault === "number" || isWorkflowResourceRef(rawDefault)
       ? rawDefault
       : null
   const param: WorkflowEntryV1["params"][number] = {

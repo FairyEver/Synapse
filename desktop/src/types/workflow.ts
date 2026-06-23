@@ -1,7 +1,19 @@
 import type { SynapseAgentConversationTarget } from "./agent-navigation"
 
+export type WorkflowParamType = "text" | "number" | "file" | "directory"
+export type WorkflowResourceEntryType = "file" | "directory"
+export type WorkflowLocalPathResourceRef = { readonly kind: "local_path"; readonly entryType: WorkflowResourceEntryType; readonly path: string }
+export type WorkflowDriveResourceRef = { readonly kind: "drive"; readonly entryType: WorkflowResourceEntryType; readonly id: string; readonly versionId?: string }
+export type WorkflowStagedResourceRef = { readonly kind: "staged"; readonly entryType: WorkflowResourceEntryType; readonly id: string }
+export type WorkflowInlineFileResourceRef = { readonly kind: "inline_file"; readonly entryType: "file"; readonly name: string; readonly mimeType?: string; readonly base64: string }
+export type WorkflowResourceRef =
+  | WorkflowLocalPathResourceRef
+  | WorkflowDriveResourceRef
+  | WorkflowStagedResourceRef
+  | WorkflowInlineFileResourceRef
+export type WorkflowParamDefault = string | number | WorkflowResourceRef | null
 export interface WorkflowParam {
-  name: string; type: "text" | "number"; default: string | number | null; description?: string
+  name: string; type: WorkflowParamType; default: WorkflowParamDefault; description?: string
 }
 export interface WorkflowNode {
   id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
@@ -11,6 +23,9 @@ export type WorkflowVariableSource =
   | { readonly type: "param"; readonly param: string }
   | { readonly type: "node_output"; readonly node: string }
   | { readonly type: "static"; readonly value: string }
+export type WorkflowParamBinding =
+  | { readonly mode: "template"; readonly template: string }
+  | { readonly mode: "value"; readonly source: WorkflowVariableSource }
 export interface WorkflowVariableBinding {
   readonly name: string
   readonly source: WorkflowVariableSource
