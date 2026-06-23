@@ -255,6 +255,7 @@ describe('DriveMarkdownRenderer', () => {
     await click(buttonWithText('评论'))
 
     expect(annotationsMock.createThread).toHaveBeenCalledWith(expect.objectContaining({
+      baseVersionId: 'version-1',
       targetKind: 'textRange',
       body: 'New comment',
       target: expect.objectContaining({
@@ -555,10 +556,12 @@ describe('DriveMarkdownRenderer', () => {
 function renderMarkdown({
   currentItem = current(),
   previewData = preview(),
+  edit = editable(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
 }: {
   readonly currentItem?: ReturnType<typeof current>
   readonly previewData?: ReturnType<typeof preview>
+  readonly edit?: ComponentProps<typeof DriveMarkdownRenderer>['edit']
   readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
 } = {}) {
   host = document.createElement('div')
@@ -580,6 +583,7 @@ function renderMarkdown({
         <DriveMarkdownRenderer
           current={currentItem}
           preview={previewData}
+          edit={edit}
           annotationContext={annotationContext}
         />
       </DriveRendererToolbarProvider>
@@ -594,6 +598,16 @@ function ToolbarHost() {
       {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
     </div>
   )
+}
+
+function editable() {
+  return {
+    canEdit: true,
+    editorKind: 'text' as const,
+    currentVersionId: 'version-1',
+    maxInlineEditBytes: '1024',
+    reason: null,
+  }
 }
 
 function current({ name = 'notes.md' }: { readonly name?: string } = {}) {

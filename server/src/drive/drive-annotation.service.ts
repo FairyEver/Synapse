@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type {
   DriveAnnotationCommentDto,
@@ -87,10 +87,11 @@ export class DriveAnnotationService {
   async createOwnerAnnotation(userId: string, itemId: string, input: DriveAnnotationCreateInput): Promise<DriveAnnotationThreadDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     assertCommentableItem(item)
+    const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.baseVersionId ?? null)
     const thread = await this.prisma.driveAnnotationThread.create({
       data: {
         itemId,
-        baseVersionId: await this.findCurrentVersionId(item),
+        baseVersionId,
         targetKind: input.targetKind,
         target: input.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
@@ -170,10 +171,11 @@ export class DriveAnnotationService {
   }): Promise<DriveAnnotationThreadDto> {
     const item = await this.requireWritableShareItem(input)
     assertCommentableItem(item)
+    const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.body.baseVersionId ?? null)
     const thread = await this.prisma.driveAnnotationThread.create({
       data: {
         itemId: item.id,
-        baseVersionId: await this.findCurrentVersionId(item),
+        baseVersionId,
         targetKind: input.body.targetKind,
         target: input.body.target as unknown as Prisma.InputJsonValue,
         anchorStatus: "attached",
@@ -329,6 +331,14 @@ export class DriveAnnotationService {
       select: { id: true },
     })
     return version?.id ?? null
+  }
+
+  private async resolveAnnotationBaseVersionId(item: DriveAnnotationItem, requestedBaseVersionId: string | null): Promise<string | null> {
+    const currentVersionId = await this.findCurrentVersionId(item)
+    if (requestedBaseVersionId && requestedBaseVersionId !== currentVersionId) {
+      throw new ConflictException("文件已有新内容。")
+    }
+    return currentVersionId
   }
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type {
   DriveAnnotationTextRangeTargetV1,
+  DriveBrowserEditDto,
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveMarkdownOutlineItemDto,
@@ -56,10 +57,12 @@ type MarkdownAnnotationOverlayRect = {
 export function DriveMarkdownRenderer({
   current,
   preview,
+  edit,
   annotationContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
+  readonly edit?: DriveBrowserEditDto | null
   readonly annotationContext?: DriveAnnotationContext
 }) {
   const renderedHtml = preview.html?.trim()
@@ -340,6 +343,7 @@ export function DriveMarkdownRenderer({
   const createThread = async () => {
     if (!pendingTarget || !commentBody.trim()) return
     const thread = await annotations.createThread({
+      ...(edit?.currentVersionId ? { baseVersionId: edit.currentVersionId } : {}),
       targetKind: 'textRange',
       target: pendingTarget,
       body: commentBody,

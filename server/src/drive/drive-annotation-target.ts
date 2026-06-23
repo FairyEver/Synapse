@@ -35,6 +35,7 @@ const textRangeTargetSchema = z.object({
 }).strict()
 
 const createBodySchema = z.object({
+  baseVersionId: z.string().min(1).nullable().optional(),
   targetKind: z.literal("textRange"),
   target: textRangeTargetSchema,
   body: z.string().max(COMMENT_MAX_LENGTH),
