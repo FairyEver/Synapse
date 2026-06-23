@@ -1,7 +1,6 @@
 import { FileText } from "lucide-react"
 import type { NodeManifest } from "../../../workflow-nodes/types"
 import { DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE } from "../shared/capability"
-import { documentTemplateNodeCardSummary } from "./card"
 import { documentTemplateNodeConfigSchema, type DocumentTemplateNodeConfig } from "./schema"
 
 export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConfig> = {
@@ -19,7 +18,10 @@ export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConf
     variables: [],
   },
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
-  cardSummary: documentTemplateNodeCardSummary,
+  cardSummary: (config) => ({
+    title: "生成 Word 文档",
+    subtitle: config.outputPath || "未设置输出文件",
+  }),
   configFields: [
     { name: "templatePath", kind: "text", label: "模板文件" },
     { name: "outputPath", kind: "text", label: "输出文件" },

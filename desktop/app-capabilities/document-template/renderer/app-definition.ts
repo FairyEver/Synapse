@@ -1,4 +1,4 @@
-import type { SynapseSystemAppDefinition } from "@/modules/apps/types"
+import type { SynapseSystemAppDefinition } from "../../../src/modules/apps/types"
 import { DOCUMENT_TEMPLATE_APP_ID } from "../shared/capability"
 
 export const documentTemplateAppDefinition = {

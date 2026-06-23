@@ -9,6 +9,8 @@ const chooseOutputDocxRequestSchema = z.object({
   defaultPath: z.string().min(1).optional(),
 }).optional()
 
+type ChooseOutputDocxRequest = z.infer<typeof chooseOutputDocxRequestSchema>
+
 export const documentTemplateIpcModule: IpcModule = {
   id: "documentTemplate",
   methods: {
@@ -37,7 +39,7 @@ export const documentTemplateIpcModule: IpcModule = {
       kind: "invoke",
       request: chooseOutputDocxRequestSchema,
       response: z.string().nullable(),
-      handler: async (_ctx, request) => {
+      handler: async (_ctx, request: ChooseOutputDocxRequest) => {
         const parentWindow = focusedWindow()
         const options = {
           title: "选择输出文件",
