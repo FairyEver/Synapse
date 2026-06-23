@@ -3,8 +3,10 @@ import {
   type DriveItemDto,
   type DriveItemLifecycleStatus,
   type DrivePublicAssetDto,
+  type DriveSiteDto,
   type DriveStorageStatus,
   buildDrivePublicAssetUrl,
+  buildDriveSiteUrl,
   maskDriveBrowserUrl,
 } from "@synapse/shared"
 
@@ -174,6 +176,44 @@ export function toDrivePublicAssetDto(asset: DrivePublicAssetRecord, publicAppUr
     lastAccessedAt: asset.lastAccessedAt?.toISOString() ?? null,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
+  }
+}
+
+export function toDriveSiteDto(site: {
+  readonly id: string
+  readonly siteId: string
+  readonly name: string
+  readonly status: string
+  readonly accessMode: string
+  readonly expiresAt: Date | null
+  readonly sourceFolderItemId: string | null
+  readonly sourceFolderName: string | null
+  readonly createdAt: Date
+  readonly updatedAt: Date
+  readonly currentDeployment?: {
+    readonly entryPath: string
+    readonly fileCount: number
+    readonly totalBytes: bigint
+    readonly activatedAt: Date | null
+  } | null
+}, publicAppUrl: string): DriveSiteDto {
+  const expired = site.expiresAt !== null && site.expiresAt.getTime() <= Date.now()
+  return {
+    id: site.id,
+    siteId: site.siteId,
+    name: site.name,
+    status: expired && site.status === "active" ? "expired" : site.status as DriveSiteDto["status"],
+    accessMode: site.accessMode as DriveSiteDto["accessMode"],
+    url: buildDriveSiteUrl({ publicAppUrl, siteId: site.siteId }),
+    expiresAt: site.expiresAt?.toISOString() ?? null,
+    sourceFolderItemId: site.sourceFolderItemId,
+    sourceFolderName: site.sourceFolderName,
+    entryPath: site.currentDeployment?.entryPath ?? null,
+    fileCount: site.currentDeployment?.fileCount ?? 0,
+    totalBytes: (site.currentDeployment?.totalBytes ?? 0n).toString(),
+    createdAt: site.createdAt.toISOString(),
+    updatedAt: site.updatedAt.toISOString(),
+    lastPublishedAt: site.currentDeployment?.activatedAt?.toISOString() ?? null,
   }
 }
 

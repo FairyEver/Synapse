@@ -39,3 +39,21 @@ export const DRIVE_UPLOAD_PURPOSE = {
   publicAssetUpload: "public_asset_upload",
   publicAssetReplace: "public_asset_replace",
 } as const
+
+export const DRIVE_SITE_STATUS = {
+  active: "active",
+  disabled: "disabled",
+  failed: "failed",
+  deleted: "deleted",
+} as const
+
+export const DRIVE_SITE_DEPLOYMENT_STATUS = {
+  pending: "pending",
+  active: "active",
+  failed: "failed",
+} as const
+
+export const DRIVE_SITE_ACCESS_MODE = {
+  public: "public",
+  password: "password",
+} as const
