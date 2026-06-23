@@ -136,12 +136,13 @@ export class DriveLifecycleService {
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
     const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, DRIVE_ITEM_LIFECYCLE_STATUS.trashed))
     const itemIds = items.map((item) => item.id)
-    const releasedBytes = currentFileBytes(items)
+    let releasedBytes = currentFileBytes(items)
     const hiddenAt = new Date()
     let cancelledUploadSessions = 0
     let releasedReservedBytes = 0n
 
     await this.prisma.$transaction(async (tx) => {
+      releasedBytes += await publicAssetRevisionBytes(tx, itemIds)
       const pendingSessions = await tx.driveUploadSession.findMany({
         where: { userId: root.userId, itemId: { in: itemIds }, status: DRIVE_UPLOAD_STATUS.pending },
         select: { id: true, itemId: true, reservedBytes: true },
@@ -238,7 +239,7 @@ export class DriveLifecycleService {
     const restoringHidden = root.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden
     const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, root.lifecycleStatus))
     const itemIds = items.map((item) => item.id)
-    const restoredBytes = restoringHidden ? currentFileBytes(items) : 0n
+    let restoredBytes = restoringHidden ? currentFileBytes(items) : 0n
     if (restoringHidden) assertHiddenTreeCanRestore(items)
 
     const parentId = await this.resolveRestoreParent(root)
@@ -251,6 +252,7 @@ export class DriveLifecycleService {
     })
     const restoredAt = new Date()
     const restored = await this.prisma.$transaction(async (tx) => {
+      if (restoringHidden) restoredBytes += await publicAssetRevisionBytes(tx, itemIds)
       if (restoredBytes > 0n) {
         const usage = await tx.driveUsage.findUniqueOrThrow({ where: { userId: input.userId } })
         if (usage.usedBytes + usage.reservedBytes + restoredBytes > usage.quotaBytes) {
@@ -492,6 +494,23 @@ function currentFileBytes(items: readonly DriveLifecycleItemRecord[]): bigint {
   return items
     .filter((item) => item.type === DRIVE_ITEM_TYPE.file && item.storageStatus === DRIVE_STORAGE_STATUS.active && item.storageKey)
     .reduce((sum, item) => sum + item.size, 0n)
+}
+
+async function publicAssetRevisionBytes(tx: unknown, itemIds: readonly string[]): Promise<bigint> {
+  if (itemIds.length === 0) return 0n
+  const revisions = (tx as {
+    publicAssetRevision?: {
+      aggregate?: (args: {
+        readonly where: { readonly itemId: { readonly in: readonly string[] } }
+        readonly _sum: { readonly size: true }
+      }) => Promise<{ readonly _sum: { readonly size: bigint | null } }>
+    }
+  }).publicAssetRevision
+  const aggregate = await revisions?.aggregate?.({
+    where: { itemId: { in: itemIds } },
+    _sum: { size: true },
+  })
+  return aggregate?._sum.size ?? 0n
 }
 
 function assertHiddenTreeCanRestore(items: readonly DriveLifecycleItemRecord[]): void {
