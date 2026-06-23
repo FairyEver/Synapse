@@ -27,6 +27,12 @@ describe("Drive capability domain", () => {
       "drive_share_list",
       "drive_share_create",
       "drive_share_disable",
+      "drive_site_create",
+      "drive_site_list",
+      "drive_site_update_access",
+      "drive_site_disable",
+      "drive_site_delete",
+      "drive_site_republish",
       "drive_usage_get",
       "drive_stats_get",
       "drive_item_tree_list",
@@ -54,6 +60,12 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_rename).toBe("drive.direct_link.rename")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_delete).toBe("drive.direct_link.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_restore).toBe("drive.direct_link.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_create).toBe("drive.site.create")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_list).toBe("drive.site.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_update_access).toBe("drive.site.update_access")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_disable).toBe("drive.site.disable")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_delete).toBe("drive.site.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_republish).toBe("drive.site.republish")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_list).toBe("drive.trash.list")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_delete).toBe("drive.trash.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_item_restore).toBe("drive.item.restore")
