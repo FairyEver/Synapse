@@ -30,6 +30,7 @@ export function CanvasFloatingToolbar({ definition, saving, running, dirty, onSa
       </Button>
       <RunParamsDialog
         open={runParamsOpen}
+        workflowId={definition.id}
         params={definition.params}
         lastValues={lastRunValues}
         onConfirm={async (params, rawValues) => {
