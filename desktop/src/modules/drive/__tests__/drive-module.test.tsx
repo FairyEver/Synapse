@@ -344,7 +344,16 @@ describe("DriveModule", () => {
   })
 
   it("opens the site management dialog from the Drive top bar", async () => {
-    mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
+    mocks.listDriveSites.mockResolvedValue(createDriveSitePage([
+      createDriveSite({
+        name: "001",
+        accessMode: "password",
+        expiresAt: "2026-06-26T06:04:00.000Z",
+        totalBytes: "26522",
+        url: "https://synapse.d2.pub/sites/site_AZYoLz4O/",
+        urlWithPassword: "https://synapse.d2.pub/sites/site_AZYoLz4O/?password=SitePw1",
+      }),
+    ]))
 
     await render(<DriveModule />)
     await flushAct()
@@ -353,9 +362,18 @@ describe("DriveModule", () => {
     await flushAct()
 
     const dialog = document.querySelector('[role="dialog"]')
-    expect(dialog?.textContent).toContain("站点")
-    expect(dialog?.className).toContain("w-[calc(100%-2rem)]")
+    if (!dialog) throw new Error("Site management dialog not found")
+    expect(dialog.textContent).toContain("站点")
+    expect(dialog.className).toContain("w-[calc(100%-2rem)]")
     expect(mocks.listDriveSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+    expect(tableColumnClasses(dialog)).toEqual(["w-80", "w-20", "w-20", "w-32", "w-32", "w-24", "w-32"])
+    expect(dialog.textContent).toContain("001")
+    expect(dialog.textContent).toContain("https://synapse.d2.pub/sites/site_AZYoLz4O/")
+    expect(dialog.textContent).toContain("正常")
+    expect(dialog.textContent).toContain("密码")
+    expect(dialog.textContent).toContain("25.9 KB")
+    expect(queryButtonByLabel("复制 001")).not.toBeNull()
+    expect(queryButtonByLabel("打开 001")).not.toBeNull()
   })
 
   it("groups cloud drive actions in the top toolbar", async () => {

@@ -28,7 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -260,7 +260,8 @@ function DriveSiteTableContent({
     return (
       <Empty className="min-h-48 border">
         <EmptyHeader>
-          <EmptyTitle>读取失败</EmptyTitle>
+          <EmptyTitle>站点加载失败</EmptyTitle>
+          <EmptyDescription>{error}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button type="button" size="sm" variant="outline" onClick={() => { void onReload() }}>
@@ -282,25 +283,23 @@ function DriveSiteTableContent({
   }
   return (
     <div className="grid gap-3">
-      <div className="overflow-x-auto rounded-lg border">
-        <Table className="min-w-[920px] table-fixed">
-          <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
-          <DriveSiteTableHeader />
-          <TableBody>
-            {sites.map((site) => (
-              <DriveSiteRow
-                key={site.id}
-                busy={busySiteId === site.siteId}
-                site={site}
-                onAccess={onAccess}
-                onConfirm={onConfirm}
-                onEnable={onEnable}
-                onRepublish={onRepublish}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <Table containerClassName="rounded-lg border" className="min-w-[960px] table-fixed">
+        <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
+        <DriveSiteTableHeader />
+        <TableBody>
+          {sites.map((site) => (
+            <DriveSiteRow
+              key={site.id}
+              busy={busySiteId === site.siteId}
+              site={site}
+              onAccess={onAccess}
+              onConfirm={onConfirm}
+              onEnable={onEnable}
+              onRepublish={onRepublish}
+            />
+          ))}
+        </TableBody>
+      </Table>
       {page?.hasMore ? (
         <div className="flex justify-center">
           <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
@@ -320,8 +319,8 @@ function DriveSiteTableHeader() {
         <TableHead>站点</TableHead>
         <TableHead>状态</TableHead>
         <TableHead>访问</TableHead>
-        <TableHead>到期</TableHead>
-        <TableHead>更新</TableHead>
+        <TableHead className="text-right">到期</TableHead>
+        <TableHead className="text-right">更新</TableHead>
         <TableHead className="text-right">大小</TableHead>
         <TableHead className="text-right" aria-label="操作" />
       </TableRow>
@@ -354,10 +353,10 @@ function DriveSiteRow({
       </TableCell>
       <TableCell><DriveSiteStatusBadge status={site.status} /></TableCell>
       <TableCell>{site.accessMode === "password" ? "密码" : "公开"}</TableCell>
-      <TableCell className="truncate text-muted-foreground tabular-nums" title={formatNullableDate(site.expiresAt)}>
+      <TableCell className="truncate text-right text-muted-foreground tabular-nums" title={formatNullableDate(site.expiresAt)}>
         {formatNullableDate(site.expiresAt)}
       </TableCell>
-      <TableCell className="truncate text-muted-foreground tabular-nums" title={formatDateTime(site.updatedAt)}>
+      <TableCell className="truncate text-right text-muted-foreground tabular-nums" title={formatDateTime(site.updatedAt)}>
         {formatDateTime(site.updatedAt)}
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums">{formatBytes(site.totalBytes)}</TableCell>
@@ -493,25 +492,23 @@ function DriveSiteAccessDialog({
 
 function DriveSiteTableSkeleton() {
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table className="min-w-[920px] table-fixed">
-        <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
-        <DriveSiteTableHeader />
-        <TableBody>
-          {DRIVE_SITE_SKELETON_ROWS.map((row) => (
-            <TableRow key={row}>
-              <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
-              <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <Table containerClassName="rounded-lg border" className="min-w-[960px] table-fixed">
+      <DriveTableColumns columns={DRIVE_SITE_TABLE_COLUMNS} />
+      <DriveSiteTableHeader />
+      <TableBody>
+        {DRIVE_SITE_SKELETON_ROWS.map((row) => (
+          <TableRow key={row}>
+            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-14" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-24" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-24" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-14" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
