@@ -21,7 +21,7 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
 }) {
   const Icon = workflowCallNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
-  const paramCount = Object.keys(config.paramTemplates).length
+  const paramCount = new Set([...Object.keys(config.paramTemplates), ...Object.keys(config.paramBindings ?? {})]).size
   const [workflowName, setWorkflowName] = useState<string | null>(null)
   const [workflowMissing, setWorkflowMissing] = useState(false)
   const workflowId = typeof config.workflowId === "string" ? config.workflowId.trim() : ""

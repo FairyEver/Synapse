@@ -8,6 +8,21 @@ describe("workflow_call node schema", () => {
       workflowId: "child-1",
       variables: [{ name: "topic", source: { type: "param", param: "topic" } }],
       paramTemplates: { topic: "请总结 {{topic}}" },
+      paramBindings: {},
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts typed param bindings", () => {
+    const result = workflowCallNodeConfigSchema.safeParse({
+      workflowId: "child-1",
+      variables: [{ name: "input", source: { type: "param", param: "input_file" } }],
+      paramTemplates: {},
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "param", param: "input_file" } },
+        topic: { mode: "template", template: "总结 {{input}}" },
+      },
     })
 
     expect(result.success).toBe(true)
@@ -18,6 +33,7 @@ describe("workflow_call node schema", () => {
       workflowId: "",
       variables: [],
       paramTemplates: {},
+      paramBindings: {},
     })
 
     expect(result.success).toBe(false)

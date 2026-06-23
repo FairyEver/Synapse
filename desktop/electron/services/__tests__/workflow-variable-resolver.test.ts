@@ -11,6 +11,14 @@ describe("resolveVariables", () => {
     const { resolved } = resolveVariables(b, { topic: "TS" }, {})
     expect(resolved).toEqual({ t: "TS" })
   })
+  it("resolves local path resource params to their path string", () => {
+    const b: VariableBinding[] = [{ name: "input", source: { type: "param", param: "input_file" } }]
+    const { resolved } = resolveVariables(b, {
+      input_file: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" },
+    }, {})
+
+    expect(resolved.input).toBe("/tmp/input.txt")
+  })
   it("resolves node_output source", () => {
     const b: VariableBinding[] = [{ name: "r", source: { type: "node_output", node: "n1" } }]
     const { resolved } = resolveVariables(b, {}, { n1: "output" })

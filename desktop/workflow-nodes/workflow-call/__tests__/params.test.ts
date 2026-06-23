@@ -99,4 +99,30 @@ describe("workflow call params", () => {
     expect(result.params).toEqual({})
     expect(result.errors[0]).toContain("子工作流参数「topic」模板变量解析失败")
   })
+
+  it("forwards resource params through value bindings", () => {
+    const resource = { kind: "local_path" as const, entryType: "file" as const, path: "/tmp/input.txt" }
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "input_file", type: "file", default: null }]),
+      paramTemplates: {},
+      paramBindings: { input_file: { mode: "value", source: { type: "param", param: "input_file" } } },
+      parentParamValues: { input_file: resource },
+      resolvedVariables: { input_file: "/tmp/input.txt" },
+    })
+
+    expect(result.params.input_file).toEqual(resource)
+    expect(result.errors).toEqual([])
+  })
+
+  it("rejects duplicate template and binding mappings for the same child param", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([{ name: "topic", type: "text", default: null }]),
+      paramTemplates: { topic: "{{topic}}" },
+      paramBindings: { topic: { mode: "template", template: "{{topic}}" } },
+      parentParamValues: {},
+      resolvedVariables: { topic: "hello" },
+    })
+
+    expect(result.errors[0]).toBe("子工作流参数「topic」不能同时使用 paramTemplates 和 paramBindings")
+  })
 })

@@ -306,6 +306,8 @@ export const IPC_CHANNELS = {
     "exportPackage": "synapse:workflow:export-package",
     "inspectImportPackage": "synapse:workflow:inspect-import-package",
     "importPackage": "synapse:workflow:import-package",
+    "chooseParamFile": "synapse:workflow:param-file:choose",
+    "chooseParamDirectory": "synapse:workflow:param-directory:choose",
     "list": "synapse:workflow:list",
     "get": "synapse:workflow:get",
     "create": "synapse:workflow:create",

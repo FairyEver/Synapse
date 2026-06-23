@@ -11,7 +11,8 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
+import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
+import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunResult, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
@@ -776,6 +777,22 @@ async function waitForRunCompletion(runId: string): Promise<RunCompletionWaitRes
   return result
 }
 
+async function chooseWorkflowParamPath(options: {
+  readonly title: string
+  readonly properties: Electron.OpenDialogOptions["properties"]
+}): Promise<string | null> {
+  const parentWindow = focusedWindow()
+  const dialogOptions: Electron.OpenDialogOptions = {
+    title: options.title,
+    properties: options.properties,
+  }
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions)
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0] ?? null
+}
+
 async function abortActiveRunsForWorkflow(options: {
   readonly workflowId: string
   readonly runStatuses: Map<string, WorkflowRunStatus>
@@ -988,6 +1005,14 @@ export const workflowIpcModule: IpcModule = {
         }
       },
     },
+    chooseParamFile: {
+      channel: "synapse:workflow:param-file:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      handler: async () => chooseWorkflowParamPath({ title: "选择文件", properties: ["openFile"] }),
+    },
+    chooseParamDirectory: {
+      channel: "synapse:workflow:param-directory:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
+    },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
       response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
@@ -1154,12 +1179,12 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
         }
-        const paramErrors = validateRunParams(def, params)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:run blocked by missing params", { workflowId: id, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, params)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:run blocked by invalid params", { workflowId: id, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const effectiveParams = buildEffectiveRunParams(def, params)
+        const effectiveParams = normalizedParams.params
 
         const activeRunId = findActiveRun(runStatuses, id)
         if (activeRunId) {
@@ -1208,12 +1233,12 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
         }
-        const paramErrors = validateRunParams(def, params)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:runDefinition blocked by missing params", { workflowId: def.id, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, params)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:runDefinition blocked by invalid params", { workflowId: def.id, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const effectiveParams = buildEffectiveRunParams(def, params)
+        const effectiveParams = normalizedParams.params
 
         if (!force) {
           const activeRunId = findActiveRun(runStatuses, def.id)
@@ -1320,12 +1345,12 @@ export const workflowIpcModule: IpcModule = {
         const workflowService = resolveWorkflowValidationService(ctx)
         const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService))
         if (!validation.valid) return { errors: validation.errors }
-        const paramErrors = validateRunParams(def, effectiveParams)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:rerun blocked by missing params", { workflowId, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, effectiveParams)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:rerun blocked by invalid params", { workflowId, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const validatedParams = buildEffectiveRunParams(def, effectiveParams)
+        const validatedParams = normalizedParams.params
 
         // Check for conflicting active runs before auto-aborting
         if (!force) {

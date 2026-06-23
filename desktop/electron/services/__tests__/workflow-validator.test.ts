@@ -368,6 +368,43 @@ describe("validateWorkflow", () => {
     expect(r.errors[0]).toMatchObject({ type: "invalid_config", message: "工作流参数名称不能为空" })
   })
 
+  it("accepts file and directory parameter definitions", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [
+        { name: "source_file", type: "file", default: null },
+        { name: "workspace_dir", type: "directory", default: null },
+      ],
+    }
+
+    expect(validateWorkflow(def).errors.filter((error) => error.message.includes("参数"))).toEqual([])
+  })
+
+  it("validates local path resource defaults by parameter type", () => {
+    const resourceDefault = { kind: "local_path" as const, entryType: "file" as const, path: "/tmp/input.txt" }
+    const def: WorkflowDefinition = { ...base, params: [{ name: "input", type: "file", default: resourceDefault }] }
+
+    expect(validateWorkflow(def).errors).toEqual([])
+  })
+
+  it("rejects resource parameter defaults with the wrong entry type", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [
+        {
+          name: "source_file",
+          type: "file",
+          default: { kind: "local_path", entryType: "directory", path: "/tmp" },
+        },
+      ],
+    }
+
+    expect(validateWorkflow(def).errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「source_file」的默认值必须是文件引用",
+    })
+  })
+
   // Edge case: multiple nodes with no incoming edges
   it("warns about multiple explicit start nodes", () => {
     const startA = { ...nodeA, type: "start" }
@@ -411,6 +448,25 @@ describe("validateRunParams", () => {
     const def: WorkflowDefinition = { ...base, params: [{ name: "text", type: "text", default: "" }] }
 
     expect(validateRunParams(def, {})).toHaveLength(0)
+  })
+
+  it("validates resource params passed as shorthand paths or envelopes", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [
+        { name: "input", type: "file", default: null },
+        { name: "workspace", type: "directory", default: null },
+      ],
+    }
+
+    expect(validateRunParams(def, {
+      input: "/tmp/input.txt",
+      workspace: { kind: "local_path", entryType: "directory", path: "/tmp/workspace" },
+    })).toHaveLength(0)
+    expect(validateRunParams(def, { input: "", workspace: "/tmp/workspace" })[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「input」必须是文件引用",
+    })
   })
 })
 

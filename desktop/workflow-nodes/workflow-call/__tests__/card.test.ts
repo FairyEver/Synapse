@@ -54,7 +54,7 @@ describe("WorkflowCallNodeCard", () => {
 
     await act(async () => {
       root.render(React.createElement(WorkflowCallNodeCard, {
-        config: { workflowId, variables: [], paramTemplates: {} },
+        config: { workflowId, variables: [], paramTemplates: {}, paramBindings: {} },
         name: "调用工作流",
       }))
     })
@@ -78,7 +78,7 @@ describe("WorkflowCallNodeCard", () => {
 
     await act(async () => {
       root.render(React.createElement(WorkflowCallNodeCard, {
-        config: { workflowId: "deleted-child", variables: [], paramTemplates: {} },
+        config: { workflowId: "deleted-child", variables: [], paramTemplates: {}, paramBindings: {} },
         name: "调用工作流",
       }))
     })

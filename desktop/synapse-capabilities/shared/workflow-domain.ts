@@ -47,7 +47,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, codex, claude_code, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Workflow params support text, number, file, and directory types; file/directory values are resource references such as { kind: "local_path", entryType: "file", path: "/abs/file.txt" }. Available node types include prompt, switch, http_request, script, workflow_call, codex, claude_code, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps text/number child params through paramTemplates, can pass file/directory child params through paramBindings, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 const modelTierSchema = {
   type: "string",
@@ -106,6 +106,14 @@ const codexConfigOverrideSchema = {
   required: ["key", "value"],
 }
 
+const workflowParamTypeSchema = {
+  type: "string",
+  enum: ["text", "number", "file", "directory"],
+  description: "Workflow parameter type. file and directory params receive resource references, not file bytes.",
+}
+
+const workflowParamDefaultDescription = "Default value. Use null for required params. For file/directory, use a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' } or { kind: 'local_path', entryType: 'directory', path: '/abs/dir' }."
+
 const workflowDefinitionSchema = {
   type: "object",
   description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex/claude_code nodes inherit it, defaultProviderId and defaultModelTier when prompt/switch nodes inherit them, and defaultNodeTimeoutMins when prompt/switch/codex/claude_code nodes inherit it.",
@@ -126,8 +134,8 @@ const workflowDefinitionSchema = {
         type: "object",
         properties: {
           name: { type: "string" },
-          type: { type: "string", enum: ["text", "number"] },
-          default: { description: "Default value. Use null for required params." },
+          type: workflowParamTypeSchema,
+          default: { description: workflowParamDefaultDescription },
           description: { type: "string" },
         },
         required: ["name", "type"],
@@ -144,7 +152,7 @@ const workflowDefinitionSchema = {
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
           config: {
             type: "object",
-            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectory, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. claude_code uses prompt, variables, projectId, optional workingDirectory, timeoutMins, permissionMode, model, maxTurns, outputFormat, settingSources, settingsPath, mcpConfigPath, allowed/disallowed tools, additionalDirectories, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectory, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. claude_code uses prompt, variables, projectId, optional workingDirectory, timeoutMins, permissionMode, model, maxTurns, outputFormat, settingSources, settingsPath, mcpConfigPath, allowed/disallowed tools, additionalDirectories, and debug artifact capture. workflow_call uses workflowId, variables, paramTemplates, and paramBindings to call a child workflow without provider fields.",
             properties: {
               providerId: { type: "string" },
               modelTier: modelTierSchema,
@@ -153,7 +161,8 @@ const workflowDefinitionSchema = {
               prompt: { type: "string", description: "prompt/switch/codex/claude_code only: prompt or instruction template. Local CLI prompts are sent to codex exec via stdin and to claude -p as the print query argument." },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
-              paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
+              paramTemplates: { type: "object", description: "workflow_call only: child text/number parameter name to template string map." },
+              paramBindings: { type: "object", description: "workflow_call only: child parameter name to typed binding map. Use { mode: 'value', source: { type: 'param', param: 'input_file' } } to pass file/directory resource params through without stringifying." },
               approvalPolicy: { type: "string", enum: ["never", "on-request", "untrusted"], description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
               sandbox: { type: "string", enum: ["read-only", "workspace-write", "danger-full-access"], description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
               workingDirectory: { type: "string", description: "codex/claude_code only: optional per-task working directory. Supports {{variable}} interpolation and must already exist. For codex it becomes process cwd and Codex --cd; for claude_code it becomes process cwd." },
@@ -314,7 +323,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID to execute." },
-          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions." },
+          params: { type: "object", description: "Key-value parameters matching the workflow's param definitions. For file/directory params, pass a local path string or a resource ref such as { kind: 'local_path', entryType: 'file', path: '/abs/file.txt' }." },
         },
         required: ["workflowId"],
       },
@@ -434,8 +443,8 @@ export function buildWorkflowTools(): McpToolDefinition[] {
               type: "object",
               properties: {
                 name: { type: "string" },
-                type: { type: "string", enum: ["text", "number"] },
-                default: { description: "Default value." },
+                type: workflowParamTypeSchema,
+                default: { description: workflowParamDefaultDescription },
                 description: { type: "string" },
               },
               required: ["name", "type"],

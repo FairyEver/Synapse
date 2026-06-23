@@ -6,6 +6,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { WorkflowCallNodePanel } from "../panel"
+import type { WorkflowCallNodePanelProps } from "../panel"
 import type { WorkflowCallNodeConfig } from "../schema"
 
 const workflowList = vi.fn()
@@ -60,7 +61,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function renderPanel(config: WorkflowCallNodeConfig, onChange = vi.fn()) {
+function renderPanel(
+  config: WorkflowCallNodeConfig,
+  onChange = vi.fn(),
+  workflowParams: WorkflowCallNodePanelProps["workflowParams"] = [{ name: "topic", type: "text", default: null }],
+) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -70,7 +75,7 @@ function renderPanel(config: WorkflowCallNodeConfig, onChange = vi.fn()) {
       config,
       onChange,
       upstreamNodes: [],
-      workflowParams: [{ name: "topic", type: "text", default: null }],
+      workflowParams,
       projects: [],
       currentWorkflowId: "parent",
     }))
@@ -105,7 +110,7 @@ describe("WorkflowCallNodePanel", () => {
       edges: [],
     })
 
-    const { container } = renderPanel({ workflowId: "child", variables: [], paramTemplates: { topic: "请总结 {{topic}}" } })
+    const { container } = renderPanel({ workflowId: "child", variables: [], paramTemplates: { topic: "请总结 {{topic}}" }, paramBindings: {} })
     await flushEffects()
 
     expect(container.textContent).toContain("子工作流")
@@ -120,7 +125,7 @@ describe("WorkflowCallNodePanel", () => {
     ])
     workflowGet.mockResolvedValue(null)
 
-    const { container } = renderPanel({ workflowId: "", variables: [], paramTemplates: {} })
+    const { container } = renderPanel({ workflowId: "", variables: [], paramTemplates: {}, paramBindings: {} })
     await flushEffects()
 
     const trigger = container.querySelector<HTMLElement>("[role='combobox']")
@@ -139,7 +144,7 @@ describe("WorkflowCallNodePanel", () => {
     workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
     workflowGet.mockResolvedValue(null)
 
-    const { container } = renderPanel({ workflowId: "deleted-child", variables: [], paramTemplates: {} })
+    const { container } = renderPanel({ workflowId: "deleted-child", variables: [], paramTemplates: {}, paramBindings: {} })
     await flushEffects()
 
     expect(workflowGet).toHaveBeenCalledWith("deleted-child")
@@ -158,7 +163,7 @@ describe("WorkflowCallNodePanel", () => {
       nodes: [],
       edges: [],
     })
-    const { container, onChange } = renderPanel({ workflowId: "child", variables: [], paramTemplates: { topic: "" } })
+    const { container, onChange } = renderPanel({ workflowId: "child", variables: [], paramTemplates: { topic: "" }, paramBindings: {} })
     await flushEffects()
 
     const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
@@ -190,12 +195,42 @@ describe("WorkflowCallNodePanel", () => {
       edges: [],
     })
 
-    const { onChange } = renderPanel({ workflowId: "child", variables: [], paramTemplates: {} })
+    const { onChange } = renderPanel({ workflowId: "child", variables: [], paramTemplates: {}, paramBindings: {} })
     await flushEffects()
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       variables: [{ name: "topic", source: { type: "param", param: "topic" } }],
       paramTemplates: { topic: "{{topic}}" },
+      paramBindings: {},
+    }))
+  })
+
+  it("auto-fills same-name resource params as value bindings", async () => {
+    workflowList.mockResolvedValue([{ id: "child", name: "子工作流", version: "v1", nodeCount: 1, createdAt: 0, updatedAt: 0 }])
+    workflowGet.mockResolvedValue({
+      id: "child",
+      name: "子工作流",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "input_file", type: "file", default: null }],
+      nodes: [],
+      edges: [],
+    })
+
+    const { onChange } = renderPanel(
+      { workflowId: "child", variables: [], paramTemplates: {}, paramBindings: {} },
+      vi.fn(),
+      [{ name: "input_file", type: "file", default: null }],
+    )
+    await flushEffects()
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      variables: [],
+      paramTemplates: {},
+      paramBindings: {
+        input_file: { mode: "value", source: { type: "param", param: "input_file" } },
+      },
     }))
   })
 })

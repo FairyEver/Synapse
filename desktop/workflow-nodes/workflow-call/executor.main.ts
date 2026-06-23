@@ -38,6 +38,8 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
     const paramResult = buildWorkflowCallParams({
       childDefinition,
       paramTemplates: config.paramTemplates,
+      paramBindings: config.paramBindings,
+      parentParamValues: input.paramValues,
       resolvedVariables,
     })
     if (paramResult.errors.length > 0) {

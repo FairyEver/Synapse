@@ -31,9 +31,11 @@ function makeInput(config: Partial<WorkflowCallNodeConfig>, runtimeDeps?: NodeRu
       workflowId: "child-1",
       variables: [],
       paramTemplates: { topic: "请总结 {{topic}}" },
+      paramBindings: {},
       ...config,
     },
     resolvedVariables: { topic: "搜索结果" },
+    paramValues: {},
     context: {
       workflowId: "parent-1",
       workflowName: "父工作流",
@@ -96,6 +98,27 @@ describe("workflowCallNodeExecutor", () => {
         { workflowId: "parent-1", workflowName: "父工作流" },
         { workflowId: "child-1", workflowName: "子工作流" },
       ],
+    }))
+  })
+
+  it("passes typed resource params to the child workflow", async () => {
+    const resource = { kind: "local_path" as const, entryType: "file" as const, path: "/tmp/input.txt" }
+    const runtimeDeps = deps()
+    const input = makeInput({
+      paramTemplates: {},
+      paramBindings: { input_file: { mode: "value", source: { type: "param", param: "input_file" } } },
+    }, runtimeDeps)
+    input.paramValues = { input_file: resource }
+    vi.mocked(runtimeDeps.workflowCall!.getWorkflowDefinition).mockResolvedValue({
+      ...childDefinition,
+      params: [{ name: "input_file", type: "file", default: null }],
+    })
+
+    const result = await workflowCallNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.workflowCall?.runWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      params: { input_file: resource },
     }))
   })
 

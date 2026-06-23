@@ -59,4 +59,40 @@ describe("ParamsEditorDialog", () => {
     ])
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it("saves file and directory parameter defaults as resource refs", async () => {
+    const onChange = vi.fn()
+    const onClose = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ParamsEditorDialog
+          open
+          params={[
+            { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
+            { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work" } },
+          ]}
+          onChange={onChange}
+          onClose={onClose}
+        />,
+      )
+    })
+
+    const saveButton = [...document.body.querySelectorAll("button")]
+      .find((button) => button.textContent === "保存")
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onChange).toHaveBeenCalledWith([
+      { name: "input_file", type: "file", default: { kind: "local_path", entryType: "file", path: "/tmp/input.txt" } },
+      { name: "input_dir", type: "directory", default: { kind: "local_path", entryType: "directory", path: "/tmp/work" } },
+    ])
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })

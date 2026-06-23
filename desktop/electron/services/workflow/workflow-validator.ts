@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowParam, WorkflowResourceRef, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import type { SynapseConfig } from "../../../src/types/config"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
@@ -23,6 +23,52 @@ export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfi
     if (project.id) ids.add(project.id)
   }
   return [...ids]
+}
+
+function isResourceParamType(type: WorkflowParam["type"]): type is "file" | "directory" {
+  return type === "file" || type === "directory"
+}
+
+function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  if (record.kind === "local_path") {
+    return (record.entryType === "file" || record.entryType === "directory")
+      && typeof record.path === "string"
+  }
+  if (record.kind === "drive") {
+    return (record.entryType === "file" || record.entryType === "directory")
+      && typeof record.id === "string"
+      && (record.versionId === undefined || typeof record.versionId === "string")
+  }
+  if (record.kind === "staged") {
+    return (record.entryType === "file" || record.entryType === "directory")
+      && typeof record.id === "string"
+  }
+  if (record.kind === "inline_file") {
+    return record.entryType === "file"
+      && typeof record.name === "string"
+      && typeof record.base64 === "string"
+      && (record.mimeType === undefined || typeof record.mimeType === "string")
+  }
+  return false
+}
+
+function validateParamDefault(param: WorkflowParam, errors: ValidationError[]): void {
+  const name = param.name.trim()
+  if (param.type === "number" && param.default !== null) {
+    if (typeof param.default !== "number" || !Number.isFinite(param.default)) {
+      errors.push({ type: "invalid_config", message: `参数「${name}」是数字类型，默认值必须是有效数字` })
+    }
+  }
+  if (param.type === "text" && param.default !== null && typeof param.default !== "string") {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的默认值必须是文本` })
+  }
+  if (isResourceParamType(param.type) && param.default !== null) {
+    if (!isWorkflowResourceRef(param.default) || param.default.entryType !== param.type) {
+      errors.push({ type: "invalid_config", message: `参数「${name}」的默认值必须是${param.type === "file" ? "文件" : "文件夹"}引用` })
+    }
+  }
 }
 
 function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
@@ -194,12 +240,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
     }
     paramNamesSeen.add(trimmed)
 
-    // Validate that number-type param defaults are finite numbers
-    if (p.type === "number" && p.default !== null) {
-      if (typeof p.default !== "number" || !Number.isFinite(p.default)) {
-        errors.push({ type: "invalid_config", message: `参数「${trimmed}」是数字类型，默认值必须是有效数字` })
-      }
-    }
+    validateParamDefault(p, errors)
   }
 
   const endNodes = def.nodes.filter((n) => n.type === "end")
@@ -531,6 +572,13 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
       const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN
       if (!Number.isFinite(numberValue)) {
         errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是数字` })
+      }
+    }
+    if (isResourceParamType(param.type)) {
+      const isStringPath = typeof value === "string" && value.trim().length > 0
+      const isEnvelope = Boolean(value) && typeof value === "object" && !Array.isArray(value)
+      if (!isStringPath && !isEnvelope) {
+        errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是${param.type === "file" ? "文件" : "文件夹"}引用` })
       }
     }
   }

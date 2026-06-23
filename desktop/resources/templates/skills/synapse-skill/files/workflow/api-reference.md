@@ -77,9 +77,10 @@ No provider needed on the call node. It invokes another saved workflow and retur
 
 - `workflowId` (string) — child workflow ID to call. Must not be the current workflow ID.
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
-- `paramTemplates` (object) — child param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
+- `paramTemplates` (object) — child text/number param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
+- `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`.
 
-Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+Before configuring child params, call `workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
 ### codex
 
@@ -301,9 +302,15 @@ Delete an edge by ID.
 
 Replace the workflow's parameter list entirely.
 
-**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number", default?, description? }`
+**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory", default?, description? }`
 **Returns:** `{ versionHash, validation? }`
-**Notes:** Pass empty array to clear all params.
+**Notes:** Pass empty array to clear all params. Use `null` default for required params. For file/directory defaults, use a resource ref:
+
+```json
+{ "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
+```
+
+Use `"entryType": "directory"` for directory params. Defaults store a reference, not file bytes.
 
 ---
 
@@ -327,7 +334,13 @@ Execute a workflow with parameters.
 
 **Params:** `workflowId` (string, required), `params?` (object — key-value matching param definitions)
 **Returns:** `{ runId }`
-**Notes:** Poll `workflow_run_get` with the returned runId to track progress.
+**Notes:** Poll `workflow_run_get` with the returned runId to track progress. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
+
+```json
+{ "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
+```
+
+The path must exist and match the param kind before the run starts. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
 
 ### workflow_run_disable
 
