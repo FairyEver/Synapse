@@ -72,6 +72,7 @@ export {
   webhookRunsSchema,
   normalizeWorkflowEntry,
   reviveWorkflowsEnvelope,
+  workflowParamPresetsSchema,
   workflowsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,
@@ -115,6 +116,7 @@ export {
   type WebhookConfigEntryV1,
   type WebhookRunEntryV1,
   type WebhookRunStatusV1,
+  type WorkflowParamPresetEntryV1,
   type WorkflowEntryV1,
 } from "./schemas"
 export {

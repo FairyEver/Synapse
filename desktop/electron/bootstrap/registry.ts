@@ -53,6 +53,7 @@ import {
   coreWorkflowRunStatusesDescriptor,
   coreWorkflowEngineDescriptor,
   coreWorkflowPackageDescriptor,
+  coreWorkflowParamPresetServiceDescriptor,
   coreWorkflowWindowManagerDescriptor,
   gitAccessServiceDescriptor,
   gitBranchServiceDescriptor,
@@ -113,6 +114,7 @@ export function buildServiceRegistry(
   registry.register(coreHttpTestDescriptor)
   registry.register(coreKnowledgeBaseDescriptor)
   registry.register(coreKnowledgeBaseStorageMigrationDescriptor)
+  registry.register(coreWorkflowParamPresetServiceDescriptor)
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowPackageDescriptor)
   registry.register(coreWorkflowSnapshotsDescriptor)
