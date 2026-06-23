@@ -706,7 +706,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.readDriveFileContent).toHaveBeenCalledWith({ itemId: "item-1", maxBytes: 4096 })
   })
 
-  it("checks fs.write before saving Drive file and folder downloads locally", async () => {
+  it("checks fs.write.outside-userdata before saving Drive file and folder downloads locally", async () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "/tmp/report.md" })),
       downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "/tmp/project.zip" })),
@@ -728,12 +728,12 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/project.zip" } })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      action: "fs.write",
+      action: "fs.write.outside-userdata",
       resource: "/tmp/report.md",
       context: expect.objectContaining({ driveAction: "drive.file_download.create", itemId: "item-1" }),
     }))
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      action: "fs.write",
+      action: "fs.write.outside-userdata",
       resource: "/tmp/project.zip",
       context: expect.objectContaining({ driveAction: "drive.folder_zip.create", itemId: "folder-1" }),
     }))
@@ -790,7 +790,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
   })
 
-  it("checks fs.write before saving a Drive file version locally", async () => {
+  it("checks fs.write.outside-userdata before saving a Drive file version locally", async () => {
     const accountService = createAccountService({
       downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const, path: "/tmp/report-v1.md" })),
     })
@@ -807,7 +807,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/report-v1.md" } })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      action: "fs.write",
+      action: "fs.write.outside-userdata",
       resource: "/tmp/report-v1.md",
       context: expect.objectContaining({ driveAction: "drive.file_version_download.create", itemId: "item-1" }),
     }))
@@ -818,7 +818,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("rejects relative Drive download output paths before fs.write authorization", async () => {
+  it("rejects relative Drive download output paths before fs.write.outside-userdata authorization", async () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
@@ -849,7 +849,7 @@ describe("createDriveCapabilityDispatcher", () => {
         .rejects.toThrow("expected absolute local output path")
     }
 
-    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({ action: "fs.write" }))
+    expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({ action: "fs.write.outside-userdata" }))
     expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFileVersion).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFolderZip).not.toHaveBeenCalled()

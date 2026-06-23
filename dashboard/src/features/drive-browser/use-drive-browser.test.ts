@@ -290,6 +290,65 @@ describe('toDriveBrowserQueryKey', () => {
       .toBe('version-2')
   })
 
+  it('uses saved HTML source text when the follow-up reload fails', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    vi.mocked(driveBrowserApi.updateOwnerText).mockReset()
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        name: 'page.html',
+        mimeType: 'text/html',
+        previewKind: 'html-source',
+      },
+      preview: {
+        kind: 'html-source',
+        text: '<p>old</p>',
+        html: null,
+        outline: null,
+        truncated: false,
+        imageUrl: null,
+        visitUrl: '/files/page.html',
+      },
+      edit: {
+        canEdit: true,
+        editorKind: 'text',
+        currentVersionId: 'version-1',
+        maxInlineEditBytes: '1024',
+        reason: null,
+      },
+    })
+    const updateResult = createTextUpdateResult()
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(snapshot)
+      .mockRejectedValueOnce(new Error('刷新失败'))
+    vi.mocked(driveBrowserApi.updateOwnerText).mockResolvedValueOnce(updateResult)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'item-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      await hook.result.current.saveText({
+        text: '<p>updated</p>',
+        baseVersionId: 'version-1',
+      })
+    })
+
+    const readySnapshot = hook.result.current.status === 'ready' ? hook.result.current.snapshot : null
+    expect(readySnapshot?.edit?.currentVersionId).toBe('version-2')
+    expect(readySnapshot?.preview?.text).toBe('<p>updated</p>')
+  })
+
   it('does not reuse unlocked share snapshots after share route changes', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },

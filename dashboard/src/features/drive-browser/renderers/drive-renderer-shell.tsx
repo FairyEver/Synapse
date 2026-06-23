@@ -199,7 +199,7 @@ export function DriveRendererContent({
     return renderContent(<DriveDownloadRenderer current={snapshot.current} />)
   }
   if (selected.id === 'markdown') {
-    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} annotationContext={annotationContext} />)
+    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} annotationContext={annotationContext} />)
   }
   if (selected.id === 'mdxeditor') {
     return renderContent(<DriveMDXeditorRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)

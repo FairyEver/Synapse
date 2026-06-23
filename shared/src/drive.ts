@@ -524,6 +524,7 @@ export interface DriveAnnotationThreadDto {
 }
 
 export interface DriveAnnotationCreateInput {
+  readonly baseVersionId?: string | null
   readonly targetKind: DriveAnnotationTargetKind
   readonly target: DriveAnnotationTargetDto
   readonly body: string

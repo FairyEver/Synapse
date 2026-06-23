@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type {
   DriveAnnotationTextRangeTargetV1,
+  DriveBrowserEditDto,
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveMarkdownOutlineItemDto,
@@ -24,7 +25,7 @@ import { useDriveAnnotations } from '../use-drive-annotations'
 import { DriveCodeRenderer } from './code-renderer'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationTargetFromSelection, getMarkdownRenderedText } from './markdown-annotation-target'
-import { MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = 'max-w-full space-y-3 text-base leading-7 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:scroll-mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:scroll-mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:scroll-mt-6 [&_h3]:font-medium [&_h4]:scroll-mt-6 [&_h5]:scroll-mt-6 [&_h6]:scroll-mt-6 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_td:not(:first-child)]:min-w-56 [&_th]:border [&_th]:p-2 [&_th]:align-top [&_th:not(:first-child)]:min-w-56 [&_ul]:list-disc'
@@ -56,10 +57,12 @@ type MarkdownAnnotationOverlayRect = {
 export function DriveMarkdownRenderer({
   current,
   preview,
+  edit,
   annotationContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
+  readonly edit?: DriveBrowserEditDto | null
   readonly annotationContext?: DriveAnnotationContext
 }) {
   const renderedHtml = preview.html?.trim()
@@ -82,6 +85,7 @@ export function DriveMarkdownRenderer({
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
   const [commentDialogOpen, setCommentDialogOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
+  const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
@@ -238,6 +242,7 @@ export function DriveMarkdownRenderer({
     setSelectionPopover(null)
     setCommentDialogOpen(false)
     setCommentBody('')
+    setCommentCreateError(null)
     window.getSelection()?.removeAllRanges()
   }, [])
 
@@ -339,18 +344,24 @@ export function DriveMarkdownRenderer({
 
   const createThread = async () => {
     if (!pendingTarget || !commentBody.trim()) return
-    const thread = await annotations.createThread({
-      targetKind: 'textRange',
-      target: pendingTarget,
-      body: commentBody,
-    })
-    setActiveThreadId(thread.id)
-    setCommentPanelOpen(true)
-    setPendingTarget(null)
-    setSelectionPopover(null)
-    setCommentDialogOpen(false)
-    setCommentBody('')
-    window.getSelection()?.removeAllRanges()
+    setCommentCreateError(null)
+    try {
+      const thread = await annotations.createThread({
+        ...(edit?.currentVersionId ? { baseVersionId: edit.currentVersionId } : {}),
+        targetKind: 'textRange',
+        target: pendingTarget,
+        body: commentBody,
+      })
+      setActiveThreadId(thread.id)
+      setCommentPanelOpen(true)
+      setPendingTarget(null)
+      setSelectionPopover(null)
+      setCommentDialogOpen(false)
+      setCommentBody('')
+      window.getSelection()?.removeAllRanges()
+    } catch (cause) {
+      setCommentCreateError(getCommentActionErrorMessage(cause))
+    }
   }
 
   return (
@@ -388,10 +399,14 @@ export function DriveMarkdownRenderer({
           </DialogHeader>
           <Textarea
             value={commentBody}
-            onChange={(event) => setCommentBody(event.currentTarget.value)}
+            onChange={(event) => {
+              setCommentBody(event.currentTarget.value)
+              if (commentCreateError) setCommentCreateError(null)
+            }}
             className='min-h-24'
             autoFocus
           />
+          {commentCreateError ? <div role='status' className='text-sm text-destructive'>{commentCreateError}</div> : null}
           <DialogFooter>
             <Button type='button' variant='ghost' onClick={clearPendingComment}>取消</Button>
             <Button type='button' disabled={!commentBody.trim() || annotations.creatingThread} onClick={() => { void createThread() }}>

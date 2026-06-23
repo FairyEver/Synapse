@@ -69,6 +69,36 @@ describe("DriveLifecycleService", () => {
     expect(await usedBytes(prisma, "user-1")).toBe(0n)
   })
 
+  it("hides and restores public asset revisions as part of quota accounting", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const file = await seedTrashedPublicAssetDriveFileWithRevision(prisma, {
+      userId: "user-1",
+      name: "logo.png",
+      size: 12n,
+      revisionSize: 8n,
+    })
+
+    await lifecycle.hideTrashedItem({
+      userId: "user-1",
+      itemId: file.id,
+      actorId: "user-1",
+      ipAddress: "127.0.0.1",
+      allowPublicAsset: true,
+    })
+
+    expect(await usedBytes(prisma, "user-1")).toBe(0n)
+
+    await lifecycle.restoreItemAsAdmin({
+      userId: "user-1",
+      itemId: file.id,
+      actorId: "admin@example.com",
+      ipAddress: "127.0.0.1",
+    })
+
+    expect(await usedBytes(prisma, "user-1")).toBe(20n)
+  })
+
   it("hides trashed files without setting deletedAt", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
@@ -515,6 +545,32 @@ async function seedHiddenPublicAssetDriveFile(prisma: ReturnType<typeof createLi
   })
 }
 
+async function seedTrashedPublicAssetDriveFileWithRevision(
+  prisma: ReturnType<typeof createLifecyclePrismaMemory>,
+  input: SeedDriveFileInput & { readonly revisionSize: bigint },
+) {
+  const item = await seedTrashedDriveFile(prisma, input)
+  const publicAssetId = `asset_${item.id}`
+  const updated = await prisma.driveItem.update({
+    where: { id: item.id },
+    data: { publicAsset: { assetId: publicAssetId } },
+  })
+  await prisma.publicAssetRevision.create({
+    data: {
+      assetId: publicAssetId,
+      publicAssetId,
+      itemId: item.id,
+      storageKey: `drive/${input.userId}/${input.name}.old`,
+      name: input.name,
+      originalName: input.name,
+      size: input.revisionSize,
+      mimeType: "image/png",
+    },
+  })
+  await prisma.driveUsage.update({ where: { userId: input.userId }, data: { usedBytes: { increment: input.revisionSize } } })
+  return updated
+}
+
 async function readDriveItem(prisma: ReturnType<typeof createLifecyclePrismaMemory>, itemId: string) {
   return prisma.driveItem.findUniqueOrThrow({ where: { id: itemId } })
 }
@@ -551,6 +607,7 @@ function createLifecyclePrismaMemory() {
   const items = new Map<string, any>()
   const sessions = new Map<string, any>()
   const usages = new Map<string, any>()
+  const publicAssetRevisions = new Map<string, any>()
   const now = () => new Date("2026-06-18T12:00:00.000Z")
   const id = () => `item-${nextId++}`
   let beforeNextDriveItemUpdateMany: ((args: any) => Promise<void> | void) | null = null
@@ -584,12 +641,14 @@ function createLifecyclePrismaMemory() {
       const itemSnapshot = cloneMap(items)
       const sessionSnapshot = cloneMap(sessions)
       const usageSnapshot = cloneMap(usages)
+      const publicAssetRevisionSnapshot = cloneMap(publicAssetRevisions)
       try {
         return await input(prisma)
       } catch (error) {
         restoreMap(items, itemSnapshot)
         restoreMap(sessions, sessionSnapshot)
         restoreMap(usages, usageSnapshot)
+        restoreMap(publicAssetRevisions, publicAssetRevisionSnapshot)
         throw error
       }
     },
@@ -699,6 +758,27 @@ function createLifecyclePrismaMemory() {
           }
         }
         return { count }
+      },
+    },
+    publicAssetRevision: {
+      aggregate: async ({ where }: any = {}) => {
+        const rows = [...publicAssetRevisions.values()].filter((revision) => matchesWhere(revision, where ?? {}))
+        return {
+          _count: { _all: rows.length },
+          _sum: { size: rows.reduce((sum, revision) => sum + revision.size, 0n) },
+        }
+      },
+      create: async ({ data }: any) => {
+        const revision = {
+          id: data.id ?? id(),
+          ...data,
+          etag: data.etag ?? null,
+          replacedBy: data.replacedBy ?? null,
+          createdAt: now(),
+          replacedAt: now(),
+        }
+        publicAssetRevisions.set(revision.id, revision)
+        return revision
       },
     },
   }

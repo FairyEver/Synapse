@@ -8,6 +8,7 @@ import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
+import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -34,6 +35,7 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
 const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals;"
+const PUBLIC_ASSET_CACHE_CONTROL = "no-cache, must-revalidate"
 type DriveAccessCookieKind = "share" | "site"
 
 const prepareUploadSchema = z.object({
@@ -852,7 +854,7 @@ export class DrivePublicController {
       return
     }
     if (resolved.status === "not_modified") {
-      response.setHeader("Cache-Control", "public, max-age=300")
+      response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
       response.setHeader("ETag", resolved.etag)
       response.status(304).end()
       void publicAssets.recordAccessSafely({
@@ -865,7 +867,7 @@ export class DrivePublicController {
       return
     }
 
-    response.setHeader("Cache-Control", "public, max-age=300")
+    response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
     response.setHeader("Content-Type", resolved.mimeType)
     response.setHeader("Content-Disposition", driveInlineContentDisposition(resolved.name))
     response.setHeader("Content-Length", resolved.size.toString())
@@ -1507,10 +1509,10 @@ export class DriveLocalStorageController {
       storageKey = readLocalDriveStorageKey(error) ?? storageKey
       this.logger.warn({
         message: "drive local download stream failed",
-        storageKey,
+        storageKeyLength: storageKey?.length ?? 0,
         tokenLength: token.length,
         errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage: formatAuditError(error),
       })
       if (response.headersSent) {
         if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)

@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common"
+import { ConflictException, ForbiddenException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DriveAnnotationService } from "./drive-annotation.service"
 
@@ -33,7 +33,7 @@ describe("DriveAnnotationService", () => {
   })
 
   it("creates a thread plus first comment for .md files", async () => {
-    const result = await service.createOwnerAnnotation("owner-1", "item-1", createInput())
+    const result = await service.createOwnerAnnotation("owner-1", "item-1", createInput({ baseVersionId: "version-1" }))
 
     expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -44,6 +44,15 @@ describe("DriveAnnotationService", () => {
       }),
     }))
     expect(result.id).toBe("thread-1")
+  })
+
+  it("rejects owner annotation creation when the preview version is stale", async () => {
+    prisma.driveFileVersion.findFirst.mockResolvedValueOnce({ id: "version-2" })
+
+    await expect(service.createOwnerAnnotation("owner-1", "item-1", createInput({ baseVersionId: "version-1" })))
+      .rejects.toBeInstanceOf(ConflictException)
+
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
   it("rejects comment creation for unsupported file names", async () => {
@@ -101,12 +110,14 @@ describe("DriveAnnotationService", () => {
   })
 
   it("uses writable share browser visibility for share annotations", async () => {
+    prisma.driveFileVersion.findFirst.mockResolvedValueOnce({ id: "version-1" })
+
     await service.createShareAnnotation({
       actorUserId: "reader-1",
       shareId: "share-1",
       itemId: "item-1",
       cookie: "cookie",
-      body: createInput(),
+      body: createInput({ baseVersionId: "version-1" }),
     })
 
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
@@ -118,6 +129,20 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ createdByUserId: "reader-1" }),
     }))
+  })
+
+  it("rejects share annotation creation when the preview version is stale", async () => {
+    prisma.driveFileVersion.findFirst.mockResolvedValueOnce({ id: "version-2" })
+
+    await expect(service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: createInput({ baseVersionId: "version-1" }),
+    })).rejects.toBeInstanceOf(ConflictException)
+
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
   it("rejects share annotation writes when the share cannot be edited", async () => {
@@ -219,8 +244,9 @@ describe("DriveAnnotationService", () => {
   })
 })
 
-function createInput() {
+function createInput(input: { readonly baseVersionId?: string } = {}) {
   return {
+    ...(input.baseVersionId ? { baseVersionId: input.baseVersionId } : {}),
     targetKind: "textRange" as const,
     target: {
       schemaVersion: 1 as const,

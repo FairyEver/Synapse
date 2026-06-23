@@ -255,6 +255,7 @@ describe('DriveMarkdownRenderer', () => {
     await click(buttonWithText('评论'))
 
     expect(annotationsMock.createThread).toHaveBeenCalledWith(expect.objectContaining({
+      baseVersionId: 'version-1',
       targetKind: 'textRange',
       body: 'New comment',
       target: expect.objectContaining({
@@ -263,6 +264,23 @@ describe('DriveMarkdownRenderer', () => {
       }),
     }))
     expect(pendingOverlay()).toBeNull()
+  })
+
+  it('shows an error when creating a comment fails', async () => {
+    annotationsMock.createThread.mockRejectedValueOnce(new Error('文件已有新内容。'))
+    renderMarkdown()
+    selectStrongText()
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    await click(buttonWithText('添加评论'))
+    await inputValue(textarea(), 'New comment')
+    await click(buttonWithText('评论'))
+
+    expect(document.body.textContent).toContain('文件已有新内容。')
+    expect(pendingOverlay()).not.toBeNull()
+    expect(textarea()).not.toBeNull()
   })
 
   it('clears the pending marker when the add comment dialog is cancelled', async () => {
@@ -555,10 +573,12 @@ describe('DriveMarkdownRenderer', () => {
 function renderMarkdown({
   currentItem = current(),
   previewData = preview(),
+  edit = editable(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
 }: {
   readonly currentItem?: ReturnType<typeof current>
   readonly previewData?: ReturnType<typeof preview>
+  readonly edit?: ComponentProps<typeof DriveMarkdownRenderer>['edit']
   readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
 } = {}) {
   host = document.createElement('div')
@@ -580,6 +600,7 @@ function renderMarkdown({
         <DriveMarkdownRenderer
           current={currentItem}
           preview={previewData}
+          edit={edit}
           annotationContext={annotationContext}
         />
       </DriveRendererToolbarProvider>
@@ -594,6 +615,16 @@ function ToolbarHost() {
       {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
     </div>
   )
+}
+
+function editable() {
+  return {
+    canEdit: true,
+    editorKind: 'text' as const,
+    currentVersionId: 'version-1',
+    maxInlineEditBytes: '1024',
+    reason: null,
+  }
 }
 
 function current({ name = 'notes.md' }: { readonly name?: string } = {}) {
