@@ -39,8 +39,7 @@ export function resolveVariables(
         })
       }
       const raw = paramValues[source.param]
-      const isNaN = typeof raw === "number" && Number.isNaN(raw)
-      resolved[name] = (raw != null && !isNaN) ? String(raw) : ""
+      resolved[name] = paramValueToString(raw)
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
         const displayName = nodeNames?.[source.node] ?? source.node
@@ -70,6 +69,16 @@ export function resolveVariables(
   return { resolved, skippedReferences }
 }
 
+function paramValueToString(raw: unknown): string {
+  if (raw == null) return ""
+  if (typeof raw === "number" && Number.isNaN(raw)) return ""
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const record = raw as Record<string, unknown>
+    if (record.kind === "local_path" && typeof record.path === "string") return record.path
+    if (typeof record.id === "string") return record.id
+  }
+  return String(raw)
+}
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
   // Supports {{varName}} and {{$varName}} with spaces, dots, and hyphens.

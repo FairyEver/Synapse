@@ -11,7 +11,8 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
+import { configuredWorkflowProjectIdsFromConfig, validateWorkflow, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
+import { normalizeWorkflowRunParams } from "../../services/workflow/workflow-param-normalizer"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunResult, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
@@ -1154,12 +1155,12 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
         }
-        const paramErrors = validateRunParams(def, params)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:run blocked by missing params", { workflowId: id, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, params)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:run blocked by invalid params", { workflowId: id, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const effectiveParams = buildEffectiveRunParams(def, params)
+        const effectiveParams = normalizedParams.params
 
         const activeRunId = findActiveRun(runStatuses, id)
         if (activeRunId) {
@@ -1208,12 +1209,12 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
         }
-        const paramErrors = validateRunParams(def, params)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:runDefinition blocked by missing params", { workflowId: def.id, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, params)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:runDefinition blocked by invalid params", { workflowId: def.id, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const effectiveParams = buildEffectiveRunParams(def, params)
+        const effectiveParams = normalizedParams.params
 
         if (!force) {
           const activeRunId = findActiveRun(runStatuses, def.id)
@@ -1320,12 +1321,12 @@ export const workflowIpcModule: IpcModule = {
         const workflowService = resolveWorkflowValidationService(ctx)
         const validation = validateWorkflow(def, await loadWorkflowValidationOptions(workflowService))
         if (!validation.valid) return { errors: validation.errors }
-        const paramErrors = validateRunParams(def, effectiveParams)
-        if (paramErrors.length > 0) {
-          logger.warn("workflow:rerun blocked by missing params", { workflowId, errors: paramErrors })
-          return { errors: paramErrors }
+        const normalizedParams = await normalizeWorkflowRunParams(def, effectiveParams)
+        if (normalizedParams.errors.length > 0) {
+          logger.warn("workflow:rerun blocked by invalid params", { workflowId, errors: normalizedParams.errors })
+          return { errors: normalizedParams.errors }
         }
-        const validatedParams = buildEffectiveRunParams(def, effectiveParams)
+        const validatedParams = normalizedParams.params
 
         // Check for conflicting active runs before auto-aborting
         if (!force) {

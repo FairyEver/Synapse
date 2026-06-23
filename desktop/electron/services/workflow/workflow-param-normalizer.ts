@@ -13,9 +13,9 @@ export async function normalizeWorkflowRunParams(
   def: Pick<WorkflowDefinition, "params">,
   rawParams: Record<string, unknown>,
 ): Promise<NormalizedWorkflowRunParams> {
-  const params: Record<string, unknown> = {}
+  const params: Record<string, unknown> = { ...rawParams }
   const stringValues: Record<string, string> = {}
-  const snapshotParams: Record<string, unknown> = {}
+  const snapshotParams: Record<string, unknown> = { ...rawParams }
   const errors: ValidationError[] = []
 
   for (const param of def.params) {

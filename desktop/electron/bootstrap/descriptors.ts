@@ -149,7 +149,8 @@ import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowPackageService } from "../services/workflow/workflow-package-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
-import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
+import { configuredWorkflowProjectIdsFromConfig, validateWorkflow } from "../services/workflow/workflow-validator"
+import { normalizeWorkflowRunParams } from "../services/workflow/workflow-param-normalizer"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowRunSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
@@ -444,8 +445,8 @@ export function createRunWorkflowHandler(deps: {
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
     const validation = validateWorkflow(def, await loadValidationOptions?.())
     if (!validation.valid) return { errors: validation.errors }
-    const paramErrors = validateRunParams(def, params)
-    if (paramErrors.length > 0) return { errors: paramErrors }
+    const normalizedParams = await normalizeWorkflowRunParams(def, params)
+    if (normalizedParams.errors.length > 0) return { errors: normalizedParams.errors }
 
     for (const [, status] of runStatuses) {
       if (status.workflowId === id && status.status === "running") {
@@ -453,7 +454,7 @@ export function createRunWorkflowHandler(deps: {
       }
     }
 
-    const effectiveParams = buildEffectiveRunParams(def, params)
+    const effectiveParams = normalizedParams.params
     const runId = randomUUID()
     const ac = new AbortController()
     const source = options?.triggerSource ?? "mcp"
