@@ -22,6 +22,11 @@ import {
   buildContentTools,
 } from "../../synapse-capabilities/shared/content-domain"
 import {
+  APP_DOMAIN,
+  APP_MCP_TOOL_ACTIONS,
+  buildAppTools,
+} from "../../synapse-capabilities/shared/app-domain"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -39,6 +44,15 @@ describe("Synapse capability domains", () => {
 describe("App capability naming", () => {
   it("accepts generate as a canonical app capability action", () => {
     expect(isCanonicalCapabilityId("app.document_template.docx.generate")).toBe(true)
+  })
+})
+
+describe("App capability domain", () => {
+  it("registers document template docx generation", () => {
+    expect(APP_DOMAIN.id).toBe("app")
+    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.document_template.docx.generate")
+    expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
+    expect(buildAppTools().map((tool) => tool.name)).toEqual(["app_document_template_docx_generate"])
   })
 })
 

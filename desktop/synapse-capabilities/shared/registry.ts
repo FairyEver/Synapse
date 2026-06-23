@@ -6,6 +6,11 @@ import {
   buildAutomationTools,
 } from "./automation-domain"
 import {
+  APP_DOMAIN,
+  APP_MCP_TOOL_ACTIONS,
+  buildAppTools,
+} from "./app-domain"
+import {
   MODEL_PRICE_DOMAIN,
   MODEL_PRICE_MCP_TOOL_ACTIONS,
   buildModelPriceTools,
@@ -38,6 +43,7 @@ import {
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
+  APP_DOMAIN,
   DATABASE_DOMAIN,
   MODEL_PRICE_DOMAIN,
   REPOSITORY_DOMAIN,
@@ -49,6 +55,7 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
 ]
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
+  ...APP_MCP_TOOL_ACTIONS,
   ...buildDatabaseMcpToolActions(),
   ...MODEL_PRICE_MCP_TOOL_ACTIONS,
   ...REPOSITORY_MCP_TOOL_ACTIONS,
@@ -61,6 +68,7 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
 
 export function buildAllMcpTools(): McpToolDefinition[] {
   return [
+    ...buildAppTools(),
     ...buildDatabaseTools(),
     ...buildModelPriceTools(),
     ...buildRepositoryTools(),

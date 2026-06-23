@@ -4,6 +4,7 @@ import { createSynapseActionRouter } from "../action-router"
 
 function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActionRouter>[0]> = {}) {
   return {
+    appDispatch: vi.fn(),
     automationDispatch: vi.fn(),
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
@@ -17,6 +18,19 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
 }
 
 describe("createSynapseActionRouter", () => {
+  it("routes App actions to the App dispatcher", async () => {
+    const appDispatch = vi.fn(async () => ({ ok: true as const, data: { outputPath: "/tmp/output.docx" } }))
+    const deps = createRouterDeps({ appDispatch })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("app.document_template.docx.generate", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: { outputPath: "/tmp/output.docx" },
+    })
+    expect(appDispatch).toHaveBeenCalledWith("app.document_template.docx.generate", {}, { source: "api" })
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
   it("routes Database actions to the Database dispatcher", async () => {
     const databaseDispatch = vi.fn(() => ({ ok: true as const, data: ["tables"] }))
     const deps = createRouterDeps({
