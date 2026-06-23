@@ -3,6 +3,7 @@
  */
 import { act, createRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { Square } from "lucide-react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { WorkflowDefinition } from "@/types/workflow"
@@ -202,7 +203,7 @@ describe("WorkflowCanvas", () => {
     vi.mocked(nodeTypeRegistry.getManifest).mockReturnValue({
       type: "claude_code",
       title: "Claude Code",
-      icon: () => null,
+      icon: Square,
       color: "bg-primary/10",
       defaultConfig: {
         variables: [],
@@ -221,10 +222,11 @@ describe("WorkflowCanvas", () => {
         captureDebugArtifacts: true,
       },
       ports: { inputs: [], outputs: [] },
+      cardSummary: () => ({ title: "Claude Code", subtitle: "" }),
       configFields: [],
       configSchema: {} as never,
     })
-    vi.spyOn(crypto, "randomUUID").mockReturnValue("claude-node-1")
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001")
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -254,7 +256,7 @@ describe("WorkflowCanvas", () => {
 
     const nextDefinition = onChange.mock.lastCall?.[0] as WorkflowDefinition | undefined
     expect(nextDefinition?.nodes).toContainEqual(expect.objectContaining({
-      id: "claude-node-1",
+      id: "00000000-0000-4000-8000-000000000001",
       type: "claude_code",
       config: expect.objectContaining({
         settingSources: ["user", "project", "local"],
