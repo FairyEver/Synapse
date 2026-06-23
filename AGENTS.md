@@ -116,6 +116,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 生产代码禁止用 `console.log` 当日志；错误必须显式处理、结构化记录或带上下文向上抛出。
 - 完成用户可感知或发版相关改动后，必须更新根目录 `RELEASE_NOTES_PENDING.md`。记录要面向后续发版说明，口语化说明用户得到什么、什么行为变了、修了什么问题；不要写代码路径、提交号或实现流水账。纯内部整理、版本 bump、无产品影响的文档规划通常不需要记录。
 - 修改工作流、Scheduler、Automation、Content、Rule、Skill、Prompt 等用户可操作能力时，如果该能力有对应 MCP 工具、内置 skill/rule/prompt 模板或 Agent 使用指南，必须在功能改动完成后同步更新对应 MCP 能力描述/schema、内置资源模板和指南文档；不要只改产品功能本体。
+- Synapse MCP 的内置 Skill 已合并为单一模板 `desktop/resources/templates/skills/synapse-skill/`。修改 Database、Drive、Workflow、Automation、Content、Model Price、Variable、Repository 等 MCP 域能力时，必须同步更新该模板下对应 `files/<domain>/index.md` 和必要的 `files/<domain>/api-reference.md`；不要再新增或维护旧式 `desktop/resources/templates/skills/synapse-*-mcp/` 独立内置 Skill。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。Claude SDK native binary（例如 `node_modules/@anthropic-ai/claude-agent-sdk-*/claude` 或 `claude.exe`）属于启动关键 runtime 文件；只写 `asarUnpack` 不够，必须校验证明目标平台的实际二进制已落在 `app.asar.unpacked` 中。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
 ### 参考模板目录

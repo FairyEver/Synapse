@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
 import { Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
 import {
@@ -36,6 +36,7 @@ export function MarkdownCommentsRail({
   activeThreadId,
   canReply,
   anchorBaseOffset = 0,
+  anchoredLayerRef,
   onFocusThread,
   loading = false,
   onRefresh,
@@ -48,6 +49,7 @@ export function MarkdownCommentsRail({
   readonly activeThreadId: string | null
   readonly canReply: boolean
   readonly anchorBaseOffset?: number
+  readonly anchoredLayerRef?: Ref<HTMLDivElement>
   readonly onFocusThread: (threadId: string) => void
   readonly loading?: boolean
   readonly onRefresh?: () => void
@@ -94,7 +96,12 @@ export function MarkdownCommentsRail({
           <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
         ) : null}
         {layout.anchored.length > 0 ? (
-          <div className='relative p-3' style={{ minHeight: layout.anchoredHeight }}>
+          <div
+            ref={anchoredLayerRef}
+            data-markdown-comments-anchored-layer='true'
+            className='relative p-3 will-change-transform'
+            style={{ minHeight: layout.anchoredHeight }}
+          >
             {layout.anchored.map(({ item, top }) => (
               <div
                 key={item.thread.id}

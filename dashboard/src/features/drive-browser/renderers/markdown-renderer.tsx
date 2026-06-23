@@ -67,6 +67,8 @@ export function DriveMarkdownRenderer({
   const outline = preview.outline ?? []
   const layoutRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const documentScrollRef = useRef<HTMLDivElement | null>(null)
+  const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = current.name.toLowerCase().endsWith('.md')
@@ -130,7 +132,7 @@ export function DriveMarkdownRenderer({
     const rootRect = root.getBoundingClientRect()
     const layoutRect = layoutRef.current?.getBoundingClientRect()
     if (layoutRect) {
-      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top)
+      const nextBaseOffset = Math.round(rootRect.top - layoutRect.top + (documentScrollRef.current?.scrollTop ?? 0))
       setCommentAnchorBaseOffset((current) => current === nextBaseOffset ? current : nextBaseOffset)
     }
     const renderedText = getMarkdownRenderedText(root)
@@ -192,6 +194,34 @@ export function DriveMarkdownRenderer({
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [measureAnnotationLayout])
+
+  const syncCommentScrollTransform = useCallback(() => {
+    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, documentScrollRef.current?.scrollTop ?? 0)
+  }, [])
+
+  const setCommentAnchorLayer = useCallback((element: HTMLDivElement | null) => {
+    commentAnchorLayerRef.current = element
+    syncCommentScrollTransform()
+  }, [syncCommentScrollTransform])
+
+  useEffect(() => {
+    const scroller = documentScrollRef.current
+    if (!scroller) return
+    let frame: number | null = null
+    const scheduleScrollSync = () => {
+      if (frame !== null) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        syncCommentScrollTransform()
+      })
+    }
+    syncCommentScrollTransform()
+    scroller.addEventListener('scroll', scheduleScrollSync, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', scheduleScrollSync)
+      if (frame !== null) window.cancelAnimationFrame(frame)
+    }
+  }, [syncCommentScrollTransform])
 
   useEffect(() => {
     if (commentsTouchedRef.current || annotations.threads.length === 0) return
@@ -371,7 +401,7 @@ export function DriveMarkdownRenderer({
         </DialogContent>
       </Dialog>
       <div ref={layoutRef} data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
-        <ResizablePanelGroup direction='horizontal' className='h-full min-h-0'>
+        <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0'>
           {outlinePanelOpen ? (
             <>
               <ResizablePanel
@@ -400,7 +430,7 @@ export function DriveMarkdownRenderer({
             data-markdown-resizable-panel='document'
             className='h-full min-h-0 min-w-0 !overflow-visible'
           >
-            <div data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
+            <div ref={documentScrollRef} data-testid='markdown-document-scroll' className='h-full min-w-0 overflow-auto px-4 py-6 md:px-6'>
               <div
                 data-markdown-width-mode={widthMode}
                 className={cn(
@@ -467,6 +497,7 @@ export function DriveMarkdownRenderer({
                     canReply={canCreateAnnotation}
                     loading={annotations.loading}
                     anchorBaseOffset={commentAnchorBaseOffset}
+                    anchoredLayerRef={setCommentAnchorLayer}
                     onFocusThread={focusThread}
                     onRefresh={() => { void annotations.refresh() }}
                     onReply={annotations.reply}
@@ -492,6 +523,13 @@ export function DriveMarkdownRenderer({
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
   return `${value}%`
+}
+
+function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
+  if (!element) return
+  const offset = Math.max(0, Math.round(scrollTop))
+  element.dataset.markdownCommentScrollOffset = String(offset)
+  element.style.transform = offset === 0 ? '' : `translate3d(0px, -${offset}px, 0px)`
 }
 
 function getSelectionRect(range: Range): DOMRect | null {

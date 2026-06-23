@@ -420,6 +420,40 @@ describe('DriveMarkdownRenderer', () => {
     windowAddEventListener.mockRestore()
   })
 
+  it('moves anchored comment cards with a compositor transform during markdown document scroll', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+    expect(commentAnchorLayer()?.style.transform).toBe('')
+
+    const scroller = markdownDocumentScroller()
+    scroller.scrollTop = 50
+    await act(async () => {
+      scroller.dispatchEvent(new Event('scroll'))
+      scroller.dispatchEvent(new Event('scroll'))
+      scroller.dispatchEvent(new Event('scroll'))
+    })
+
+    expect(animationFrameCallbacks).toHaveLength(1)
+
+    await flushAnimationFrames()
+
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+    expect(commentAnchorLayer()?.style.transform).toBe('translate3d(0px, -50px, 0px)')
+
+    rangeRects = [domRect({ left: 80, top: 190, width: 48, height: 20 })]
+    vi.spyOn(markdownBody(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: -50, width: 600, height: 400 }))
+    triggerMarkdownResize()
+
+    await flushAnimationFrames()
+
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 200px')
+    expect(commentAnchorLayer()?.style.transform).toBe('translate3d(0px, -50px, 0px)')
+  })
+
   it('renders the focused thread overlay with a stronger active highlight', async () => {
     annotationsMock.threads = [
       thread({ id: 'thread-1', body: 'First comment' }),
@@ -740,6 +774,26 @@ function pendingOverlay() {
 
 function threadOverlay(threadId: string) {
   return document.querySelector(`[data-drive-annotation-overlay-thread-id="${threadId}"]`)
+}
+
+function threadCommentCard(threadId: string) {
+  return document.querySelector<HTMLElement>(`[data-markdown-comment-thread-id="${threadId}"]`)
+}
+
+function commentAnchorLayer() {
+  return document.querySelector<HTMLElement>('[data-markdown-comments-anchored-layer="true"]')
+}
+
+function markdownDocumentScroller() {
+  const element = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
+  if (!element) throw new Error('Missing markdown document scroller')
+  return element
+}
+
+function markdownBody() {
+  const element = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+  if (!element) throw new Error('Missing markdown body')
+  return element
 }
 
 function triggerMarkdownResize() {
