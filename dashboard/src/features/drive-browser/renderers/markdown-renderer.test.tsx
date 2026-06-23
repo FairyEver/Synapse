@@ -266,6 +266,23 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
+  it('shows an error when creating a comment fails', async () => {
+    annotationsMock.createThread.mockRejectedValueOnce(new Error('文件已有新内容。'))
+    renderMarkdown()
+    selectStrongText()
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+
+    await click(buttonWithText('添加评论'))
+    await inputValue(textarea(), 'New comment')
+    await click(buttonWithText('评论'))
+
+    expect(document.body.textContent).toContain('文件已有新内容。')
+    expect(pendingOverlay()).not.toBeNull()
+    expect(textarea()).not.toBeNull()
+  })
+
   it('clears the pending marker when the add comment dialog is cancelled', async () => {
     renderMarkdown()
     selectStrongText()

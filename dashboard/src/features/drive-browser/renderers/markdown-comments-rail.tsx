@@ -536,7 +536,7 @@ function isInteractiveCommentTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && Boolean(target.closest('button, textarea, input, a'))
 }
 
-function getCommentActionErrorMessage(error: unknown): string {
+export function getCommentActionErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === 'string' && error.trim()) return error
   return '操作失败'
