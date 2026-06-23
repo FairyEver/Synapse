@@ -159,7 +159,7 @@ describe('drive browser view model', () => {
     )
 
     expect(summaryHtml).toContain('配额计入')
-    expect(summaryHtml).toContain('管理员可见')
+    expect(summaryHtml).toContain('后台留存')
     expect(summaryHtml).not.toContain('>合计<')
   })
 

@@ -384,7 +384,7 @@ describe("DrivePublicAssetsView", () => {
     await openRowMenu("trashed.png")
     await clickText("删除")
     expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("普通用户将不再看到")
+    expect(document.body.textContent).toContain("此操作完成后将从列表中移除")
     await clickAlertDialogButtonText("删除")
     expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "item-trashed" })
   })

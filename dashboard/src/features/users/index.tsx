@@ -350,7 +350,7 @@ export default function UsersPage() {
             <DialogHeader>
               <DialogTitle>编辑备注</DialogTitle>
               <DialogDescription className='sr-only'>
-                编辑管理员可见的用户备注。
+                编辑用户备注。
               </DialogDescription>
             </DialogHeader>
             <div className='grid gap-2'>

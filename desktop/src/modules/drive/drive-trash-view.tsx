@@ -252,7 +252,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div>普通用户将不再看到「{deleteTarget?.name}」，仅管理员可见。</div>
+              <div>删除「{deleteTarget?.name}」？此操作完成后将从回收站移除。</div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -33,7 +33,7 @@ const storageRows: StorageRow[] = [
 
 const storageTotalRows: StorageTotalRow[] = [
   { label: '配额计入', value: (total) => formatDriveBytes(total.quotaBytes) },
-  { label: '管理员可见', value: (total) => formatDriveBytes(total.adminVisibleBytes) },
+  { label: '后台留存', value: (total) => formatDriveBytes(total.adminVisibleBytes) },
 ]
 
 export function AdminDriveStorageSummary() {

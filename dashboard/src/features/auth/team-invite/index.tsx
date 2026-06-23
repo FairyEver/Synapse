@@ -104,7 +104,7 @@ export function TeamInvite({ token }: TeamInviteProps) {
         <TeamInviteCard title='账号不支持'>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-muted-foreground'>
-              请使用普通用户账号加入团队。
+              请切换账号后加入团队。
             </p>
             <Button disabled={isSwitchingAccount} onClick={switchAccount}>
               {isSwitchingAccount ? <Loader2 className='animate-spin' /> : null}

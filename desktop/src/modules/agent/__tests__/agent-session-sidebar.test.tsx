@@ -244,6 +244,27 @@ describe("AgentSessionSidebar", () => {
     expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps compact session actions on the same rail as project actions", () => {
+    const html = renderToStaticMarkup(
+      <AgentSidebarSessionRow
+        active={false}
+        trailing={<span data-testid="session-trailing">status</span>}
+        trackValue="project-1:conversation-1"
+        onSelect={vi.fn()}
+      >
+        新会话 08:32 PM
+      </AgentSidebarSessionRow>,
+    )
+
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const trailingRail = [...wrapper.querySelectorAll("span")]
+      .find((span) => span.textContent === "status" && span.className.includes("shrink-0"))
+
+    expect(trailingRail?.className).toContain("min-w-6")
+    expect(trailingRail?.className).toContain("justify-center")
+  })
+
   it("defaults to user conversations and filters by source", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

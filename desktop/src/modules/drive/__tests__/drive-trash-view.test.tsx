@@ -159,7 +159,7 @@ describe("DriveTrashView", () => {
 
     await clickRowButtonText("public.png", "删除")
     expect(mocks.deleteDriveTrashItem).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("普通用户将不再看到")
+    expect(document.body.textContent).toContain("此操作完成后将从回收站移除")
     await clickAlertDialogButtonText("删除")
     expect(mocks.deleteDriveTrashItem).toHaveBeenCalledWith({ itemId: "asset-item-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已删除")

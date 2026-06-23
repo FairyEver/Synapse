@@ -450,7 +450,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
                 {confirmState?.action === "trash" ? (
                   <div>「{confirmState.asset.name}」将移到回收站。</div>
                 ) : (
-                  <div>普通用户将不再看到「{confirmState?.asset.name}」，仅管理员可见。</div>
+                  <div>删除「{confirmState?.asset.name}」？此操作完成后将从列表中移除。</div>
                 )}
               </div>
             </AlertDialogDescription>

@@ -60,7 +60,7 @@ function AgentSidebarSessionRow({
         {icon}
         <span className="block min-w-0 flex-1 truncate">{children}</span>
       </span>
-      <span className="ml-2 flex shrink-0 items-center">{trailing}</span>
+      <span className="ml-2 flex min-w-6 shrink-0 items-center justify-center">{trailing}</span>
     </div>
   )
 }

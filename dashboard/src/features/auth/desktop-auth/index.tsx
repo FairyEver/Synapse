@@ -229,7 +229,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
       <AuthLayout>
         <DesktopAuthCard title='账号不支持'>
           <div className='flex flex-col gap-4'>
-            <p className='text-sm text-muted-foreground'>请使用普通用户账号登录。</p>
+            <p className='text-sm text-muted-foreground'>请切换账号后继续登录。</p>
             <Button disabled={isSwitchingAccount} onClick={switchAccount}>
               {isSwitchingAccount ? <Loader2 className='animate-spin' /> : null}
               切换账号

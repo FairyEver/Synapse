@@ -20,7 +20,7 @@ export function SignUp() {
       <Card className='w-full max-w-sm gap-4 sm:min-w-sm'>
         <CardHeader>
           <CardTitle className='text-lg'>创建账号</CardTitle>
-          <CardDescription>输入邮箱和密码创建普通用户账号。</CardDescription>
+          <CardDescription>输入邮箱和密码创建账号。</CardDescription>
         </CardHeader>
         <CardContent>
           <SignUpForm redirectTo={redirectTo} />
