@@ -1365,6 +1365,65 @@ describe("DriveController", () => {
 })
 
 describe("DrivePublicController public asset streaming", () => {
+  it("requires revalidation for public asset cache hits", async () => {
+    const publicAssets = {
+      resolvePublicAsset: vi.fn(async () => ({
+        status: "ok",
+        assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+        publicAssetId: "public-asset-1",
+        userId: "user-1",
+        storageKey: "drive/item-1",
+        name: "logo.png",
+        mimeType: "image/png",
+        size: 8n,
+        etag: "\"etag-1\"",
+      })),
+      recordAccessSafely: vi.fn(async () => undefined),
+    }
+    const storage = {
+      getObjectStream: vi.fn(async () => ({
+        stream: Readable.from("content"),
+        size: 7n,
+        contentType: "image/png",
+      })),
+    }
+    const controller = new DrivePublicController({} as DriveService, storage as never, publicAssets as never)
+    const response = createPublicAssetResponse()
+
+    await controller.sendPublicAsset(
+      "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      { headers: {}, ip: "127.0.0.1", method: "GET" } as never,
+      response as never,
+    )
+
+    expect(response.headers.get("Cache-Control")).toBe("no-cache, must-revalidate")
+    expect(response.headers.get("ETag")).toBe("\"etag-1\"")
+  })
+
+  it("keeps public asset 304 responses revalidation-only", async () => {
+    const publicAssets = {
+      resolvePublicAsset: vi.fn(async () => ({
+        status: "not_modified",
+        publicAssetId: "public-asset-1",
+        userId: "user-1",
+        etag: "\"etag-1\"",
+      })),
+      recordAccessSafely: vi.fn(async () => undefined),
+    }
+    const controller = new DrivePublicController({} as DriveService, {} as never, publicAssets as never)
+    const response = createPublicAssetResponse()
+
+    await controller.sendPublicAsset(
+      "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      { headers: { "if-none-match": "\"etag-1\"" }, ip: "127.0.0.1", method: "GET" } as never,
+      response as never,
+    )
+
+    expect(response.headers.get("Cache-Control")).toBe("no-cache, must-revalidate")
+    expect(response.headers.get("ETag")).toBe("\"etag-1\"")
+    expect(response.status).toHaveBeenCalledWith(304)
+  })
+
   it("records failed public asset access when streaming fails after headers are sent", async () => {
     const publicAssets = {
       resolvePublicAsset: vi.fn(async () => ({
@@ -1583,6 +1642,33 @@ function createHeadersSentResponse() {
   })
   response.setHeader = vi.fn()
   response.removeHeader = vi.fn()
+  response.status = vi.fn(() => response)
+  response.send = vi.fn(() => response)
+  return response
+}
+
+function createPublicAssetResponse() {
+  const headers = new Map<string, string>()
+  const response = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback()
+    },
+  }) as Writable & {
+    headers: Map<string, string>
+    removeHeader: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
+    setHeader: ReturnType<typeof vi.fn>
+    status: ReturnType<typeof vi.fn>
+  }
+  response.headers = headers
+  response.setHeader = vi.fn((name: string, value: string | number | bigint) => {
+    headers.set(name, String(value))
+    return response
+  })
+  response.removeHeader = vi.fn((name: string) => {
+    headers.delete(name)
+    return response
+  })
   response.status = vi.fn(() => response)
   response.send = vi.fn(() => response)
   return response
