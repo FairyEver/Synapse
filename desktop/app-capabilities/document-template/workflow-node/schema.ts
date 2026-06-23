@@ -2,8 +2,8 @@ import { z } from "zod"
 import { variableBindingSchema } from "../../../workflow-nodes/schemas/variable-binding"
 
 export const documentTemplateNodeConfigSchema = z.object({
-  templatePath: z.string(),
-  outputPath: z.string(),
+  templatePath: z.string().refine((value) => value.trim().length > 0, "模板文件必填"),
+  outputPath: z.string().refine((value) => value.trim().length > 0, "输出文件必填"),
   dataSource: z.enum(["dataPath", "inline"]),
   dataPath: z.string().optional(),
   dataJson: z.string().optional(),

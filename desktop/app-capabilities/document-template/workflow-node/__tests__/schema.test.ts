@@ -23,4 +23,35 @@ describe("documentTemplateNodeConfigSchema", () => {
       variables: [],
     }).success).toBe(false)
   })
+
+  it("requires template and output paths", () => {
+    expect(documentTemplateNodeConfigSchema.safeParse({
+      templatePath: "",
+      outputPath: "/tmp/output.docx",
+      dataSource: "dataPath",
+      dataPath: "/tmp/data.json",
+      overwrite: false,
+      variables: [],
+    }).success).toBe(false)
+
+    expect(documentTemplateNodeConfigSchema.safeParse({
+      templatePath: "/tmp/template.docx",
+      outputPath: "",
+      dataSource: "dataPath",
+      dataPath: "/tmp/data.json",
+      overwrite: false,
+      variables: [],
+    }).success).toBe(false)
+  })
+
+  it("requires JSON file path when JSON file source is selected", () => {
+    expect(documentTemplateNodeConfigSchema.safeParse({
+      templatePath: "/tmp/template.docx",
+      outputPath: "/tmp/output.docx",
+      dataSource: "dataPath",
+      dataPath: "",
+      overwrite: false,
+      variables: [],
+    }).success).toBe(false)
+  })
 })

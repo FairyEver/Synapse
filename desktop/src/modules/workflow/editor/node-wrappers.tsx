@@ -8,6 +8,7 @@ import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/card"
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
+import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
@@ -17,6 +18,7 @@ import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow-call/schema"
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
+import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -130,6 +132,19 @@ export function ClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function DocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="document_template_docx_generate">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <DocumentTemplateNodeCard config={data as DocumentTemplateNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
@@ -139,4 +154,5 @@ export const nodeTypes = {
   workflow_call: WorkflowCallNodeWrapper,
   codex: CodexNodeWrapper,
   claude_code: ClaudeCodeNodeWrapper,
+  document_template_docx_generate: DocumentTemplateNodeWrapper,
 }

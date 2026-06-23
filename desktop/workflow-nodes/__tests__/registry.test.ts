@@ -91,7 +91,7 @@ describe("NodeTypeRegistry", () => {
 
     const manifest = nodeTypeRegistry.getManifest("document_template_docx_generate")
 
-    expect(manifest.title).toBe("生成 Word 文档")
+    expect(manifest.title).toBe("模板生成文档")
     expect(manifest.type).toBe("document_template_docx_generate")
   })
 
@@ -145,7 +145,7 @@ describe("NodeTypeRegistry", () => {
       import("../../app-capabilities/document-template/workflow-node/executor.main"),
     ])
 
-    expect(nodeTypeRegistry.getManifest("document_template_docx_generate").title).toBe("生成 Word 文档")
+    expect(nodeTypeRegistry.getManifest("document_template_docx_generate").title).toBe("模板生成文档")
     expect(nodeTypeRegistry.getExecutor("document_template_docx_generate")).toBe(documentTemplateNodeExecutor)
   })
 })

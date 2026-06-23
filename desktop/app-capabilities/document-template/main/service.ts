@@ -16,6 +16,7 @@ export type DocumentTemplateService = {
 export function createDocumentTemplateService(now: () => Date = () => new Date()): DocumentTemplateService {
   return {
     async generateDocx(input) {
+      const generatedAt = now()
       const parsed = generateDocxInputSchema.parse(input)
       assertDocxPath(parsed.templatePath, "模板文件")
       assertDocxPath(parsed.outputPath, "输出文件")
@@ -56,7 +57,7 @@ export function createDocumentTemplateService(now: () => Date = () => new Date()
         outputPath: parsed.outputPath,
         fileName: path.basename(parsed.outputPath),
         size: outputStat.size,
-        generatedAt: now().toISOString(),
+        generatedAt: generatedAt.toISOString(),
       }
     },
   }

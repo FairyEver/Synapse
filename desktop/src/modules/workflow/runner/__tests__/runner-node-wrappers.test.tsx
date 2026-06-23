@@ -41,6 +41,10 @@ afterEach(() => {
 })
 
 describe("runnerNodeTypes", () => {
+  it("registers the document template node type", () => {
+    expect(runnerNodeTypes.document_template_docx_generate).toBeTypeOf("function")
+  })
+
   it("opens the agent conversation directly from a DAG node card", async () => {
     const target: SynapseAgentConversationTarget = {
       projectId: "project-1",

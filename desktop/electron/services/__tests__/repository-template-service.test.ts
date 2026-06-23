@@ -76,6 +76,8 @@ describe("RepositoryTemplateService", () => {
       .sort((left, right) => left.localeCompare(right))
 
     expect(attachmentNames).toEqual([
+      "app/api-reference.md",
+      "app/index.md",
       "automation/api-reference.md",
       "automation/index.md",
       "content/api-reference.md",

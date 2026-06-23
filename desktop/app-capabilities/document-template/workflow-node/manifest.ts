@@ -5,7 +5,7 @@ import { documentTemplateNodeConfigSchema, type DocumentTemplateNodeConfig } fro
 
 export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConfig> = {
   type: DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE,
-  title: "生成 Word 文档",
+  title: "模板生成文档",
   icon: FileText,
   color: "bg-primary/10",
   defaultConfig: {
@@ -19,7 +19,7 @@ export const documentTemplateNodeManifest: NodeManifest<DocumentTemplateNodeConf
   },
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
   cardSummary: (config) => ({
-    title: "生成 Word 文档",
+    title: "模板生成文档",
     subtitle: config.outputPath || "未设置输出文件",
   }),
   configFields: [

@@ -26,7 +26,7 @@ export const documentTemplateNodeExecutor: NodeExecutor<DocumentTemplateNodeConf
       }
       await authorizeFileAccess(input.runtimeDeps, input, "fs.write.outside-userdata", outputPath, "workflow.documentTemplate.output")
 
-      input.onProgress?.("generating", "生成 Word 文档")
+      input.onProgress?.("generating", "模板生成文档")
       const result = await createDocumentTemplateService().generateDocx({
         templatePath,
         outputPath,

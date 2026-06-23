@@ -100,6 +100,29 @@ describe("buildWorkflowValidationDisplayItems", () => {
     })
     expect(items[0].summary).not.toContain("[")
   })
+
+  it("maps document template config paths to field errors", () => {
+    const errors: ValidationError[] = [{
+      type: "invalid_config",
+      nodeId: "doc-1",
+      message: JSON.stringify([
+        {
+          code: "too_small",
+          path: ["templatePath"],
+          message: "模板文件必填",
+        },
+      ]),
+    }]
+
+    const items = buildWorkflowValidationDisplayItems(definition(), errors)
+
+    expect(items[0]).toMatchObject({
+      summary: "模板文件不能为空。",
+      fieldKey: "templatePath",
+      location: "模板生成文档",
+      type: "invalid_config",
+    })
+  })
 })
 
 function definition(): WorkflowDefinition {
@@ -117,6 +140,13 @@ function definition(): WorkflowDefinition {
         type: "prompt",
         position: { x: 0, y: 0 },
         config: { variables: [], prompt: "" },
+      },
+      {
+        id: "doc-1",
+        name: "模板生成文档",
+        type: "document_template_docx_generate",
+        position: { x: 200, y: 0 },
+        config: { variables: [], templatePath: "", outputPath: "", dataSource: "dataPath", dataPath: "", overwrite: false },
       },
       {
         id: "switch-1",

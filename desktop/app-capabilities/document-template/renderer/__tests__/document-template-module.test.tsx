@@ -17,6 +17,10 @@ const documentTemplateBridge = vi.hoisted(() => ({
   })),
 }))
 
+const shellBridge = vi.hoisted(() => ({
+  showItemInFolder: vi.fn(async () => undefined),
+}))
+
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -25,6 +29,7 @@ const toast = vi.hoisted(() => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "documentTemplate") return documentTemplateBridge
+    if (domain === "shell") return shellBridge
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -38,6 +43,11 @@ vi.mock("sonner", () => ({ toast }))
 import { DocumentTemplateModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 let roots: Root[] = []
 
@@ -46,6 +56,7 @@ beforeEach(() => {
   documentTemplateBridge.chooseJsonFile.mockClear()
   documentTemplateBridge.chooseOutputFile.mockClear()
   documentTemplateBridge.generateDocx.mockClear()
+  shellBridge.showItemInFolder.mockClear()
   toast.error.mockClear()
   toast.success.mockClear()
 })
@@ -67,7 +78,7 @@ describe("DocumentTemplateModule", () => {
     await clickButton("选择", 0)
     await clickButton("选择", 1)
     await clickButton("选择", 2)
-    await clickButton("生成")
+    await clickButton("生成文档")
 
     expect(documentTemplateBridge.generateDocx).toHaveBeenCalledWith({
       templatePath: "/tmp/template.docx",
@@ -76,6 +87,19 @@ describe("DocumentTemplateModule", () => {
       overwrite: false,
     })
     expect(toast.success).toHaveBeenCalledWith("生成完成")
+    expect(document.body.textContent).toContain("生成完成")
+  })
+
+  it("reveals the generated file in its folder", async () => {
+    renderModule()
+
+    await clickButton("选择", 0)
+    await clickButton("选择", 1)
+    await clickButton("选择", 2)
+    await clickButton("生成文档")
+    await clickButton("在文件夹中查看")
+
+    expect(shellBridge.showItemInFolder).toHaveBeenCalledWith("/tmp/output.docx")
   })
 
   it("generates from inline JSON object", async () => {
@@ -85,7 +109,7 @@ describe("DocumentTemplateModule", () => {
     await clickLabel("内联")
     await clickButton("选择", 1)
     await changeTextarea('{"name":"Ada"}')
-    await clickButton("生成")
+    await clickButton("生成文档")
 
     expect(documentTemplateBridge.generateDocx).toHaveBeenCalledWith({
       templatePath: "/tmp/template.docx",
@@ -93,6 +117,20 @@ describe("DocumentTemplateModule", () => {
       outputPath: "/tmp/output.docx",
       overwrite: false,
     })
+  })
+
+  it("shows an inline JSON error without generating", async () => {
+    renderModule()
+
+    await clickButton("选择", 0)
+    await clickLabel("内联")
+    await clickButton("选择", 1)
+    await changeTextarea("[]")
+    await clickButton("生成文档")
+
+    expect(documentTemplateBridge.generateDocx).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith("JSON 数据必须是对象")
+    expect(document.body.textContent).toContain("JSON 数据必须是对象")
   })
 })
 
