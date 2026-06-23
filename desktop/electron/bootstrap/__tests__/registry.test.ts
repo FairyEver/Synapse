@@ -101,6 +101,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow",
         "core.workflow.engine",
         "core.workflow.package",
+        "core.workflow.param-presets",
         "core.workflow.run-aborts",
         "core.workflow.run-statuses",
         "core.workflow.snapshots",

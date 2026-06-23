@@ -138,6 +138,22 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "missing", from: "a", to: "nope" }, { id: "e2", from: "a", to: "end" }] })
     expect(r.errors.some((e) => e.type === "invalid_config" && e.edgeId === "missing")).toBe(true)
   })
+  it("returns validation errors when a missing end node is still referenced by an edge", () => {
+    const callNode = {
+      id: "call",
+      name: "Call",
+      type: "workflow_call",
+      position: { x: 0, y: 0 },
+      config: { workflowId: "child", variables: [], paramTemplates: {} },
+    }
+    const r = validateWorkflow({ ...base, nodes: [callNode], edges: [{ id: "missing-end", from: "call", to: "end" }] })
+
+    expect(r.valid).toBe(false)
+    expect(r.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "missing_end_node" }),
+      expect.objectContaining({ type: "invalid_config", edgeId: "missing-end" }),
+    ]))
+  })
   it("does not report a cycle for an edge that only references a missing node", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "missing", from: "a", to: "nope" }, { id: "e2", from: "a", to: "end" }] })
     expect(r.errors.some((e) => e.type === "cycle")).toBe(false)

@@ -57,6 +57,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "secrets",
         "webhook.config",
         "webhook.runs",
+        "workflow.param-presets",
         "workflows",
       ].sort(),
     )

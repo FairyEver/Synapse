@@ -291,15 +291,15 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   return (
     <>
       <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting && !savingPreset) onCancel() }}>
-        <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
-          <form onSubmit={(event) => { void handleSubmit(event) }} className="grid gap-3">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+          <form onSubmit={(event) => { void handleSubmit(event) }} className="grid min-w-0 gap-4">
             <DialogHeader>
               <DialogTitle>设置运行参数</DialogTitle>
             </DialogHeader>
             {params.length > 0 && (
-              <div className="grid gap-1.5">
-                <Label htmlFor="workflow-run-param-preset">预设</Label>
-                <div className="flex items-center gap-2">
+              <div className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-center">
+                <Label htmlFor="workflow-run-param-preset" className="leading-5">预设</Label>
+                <div className="flex min-w-0 items-center gap-2">
                   <Select
                     value={selectedPresetId}
                     onValueChange={handlePresetSelect}
@@ -328,12 +328,12 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                 </div>
               </div>
             )}
-            <ScrollArea className="max-h-[60vh] pr-2">
+            <ScrollArea className="max-h-[56vh] pr-2">
               <div className="grid gap-3 py-1">
-                {params.length === 0 && <p className="text-sm text-muted-foreground">此工作流无需参数。</p>}
+                {params.length === 0 && <p className="text-sm text-muted-foreground">无需参数</p>}
                 {params.map((param) => (
-                  <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
-                    <Label htmlFor={param.name} className="pt-2 leading-5">
+                  <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:items-start">
+                    <Label htmlFor={param.name} className="pt-1.5 leading-5">
                       {param.description ?? param.name}
                     </Label>
                     <div className="grid min-w-0 gap-1.5">
@@ -354,7 +354,11 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                             aria-invalid={!!errors[param.name]}
                           />
                           <InputGroupAddon align="inline-end">
-                            <InputGroupButton onClick={() => { void chooseResourcePath(param) }} aria-label="选择路径">
+                            <InputGroupButton
+                              size="icon-xs"
+                              onClick={() => { void chooseResourcePath(param) }}
+                              aria-label="选择路径"
+                            >
                               <FolderOpen className="size-3.5" />
                             </InputGroupButton>
                           </InputGroupAddon>

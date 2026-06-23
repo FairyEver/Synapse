@@ -113,6 +113,29 @@ async function renderDialog(props: Partial<ComponentProps<typeof RunParamsDialog
 }
 
 describe("RunParamsDialog", () => {
+  it("uses the compact product form layout", async () => {
+    await renderDialog()
+
+    const dialogContent = document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+    expect(dialogContent?.className).toContain("sm:max-w-xl")
+    expect(dialogContent?.className).not.toContain("sm:max-w-2xl")
+
+    const presetLabel = [...document.body.querySelectorAll<HTMLLabelElement>("label")]
+      .find((label) => label.textContent?.trim() === "预设")
+    expect(presetLabel?.parentElement?.className).toContain("sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]")
+
+    const topicLabel = [...document.body.querySelectorAll<HTMLLabelElement>("label")]
+      .find((label) => label.textContent?.trim() === "topic")
+    expect(topicLabel?.parentElement?.className).toContain("sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]")
+  })
+
+  it("keeps the empty parameter state concise", async () => {
+    await renderDialog({ params: [] })
+
+    expect(document.body.textContent).toContain("无需参数")
+    expect(document.body.textContent).not.toContain("此工作流无需参数。")
+  })
+
   it("tracks parameterized run submits without recording parameter values", async () => {
     const onConfirm = vi.fn()
     const container = document.createElement("div")
