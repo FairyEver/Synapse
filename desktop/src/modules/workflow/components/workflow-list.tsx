@@ -306,7 +306,17 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           </TableBody>
         </Table>
       </ModuleContentPanel>
-      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={runTarget ? lastRunValues[runTarget.id] : undefined} onConfirm={async (params, rawValues) => { if (runTarget) setLastRunValues((prev) => ({ ...prev, [runTarget.id]: rawValues })); await handleConfirmRun(params).catch(() => {}) }} onCancel={() => setRunTarget(null)} />
+      <RunParamsDialog
+        open={!!runTarget}
+        workflowId={runTarget?.id ?? ""}
+        params={runTarget?.params ?? []}
+        lastValues={runTarget ? lastRunValues[runTarget.id] : undefined}
+        onConfirm={async (params, rawValues) => {
+          if (runTarget) setLastRunValues((prev) => ({ ...prev, [runTarget.id]: rawValues }))
+          await handleConfirmRun(params).catch(() => {})
+        }}
+        onCancel={() => setRunTarget(null)}
+      />
       <RunHistoryDialog open={!!historyWorkflowId} workflowId={historyWorkflowId ?? ""} onClose={() => setHistoryWorkflowId(null)} />
       <AlertDialog open={!!conflictState} onOpenChange={(o) => { if (!o) setConflictState(null) }}>
         <AlertDialogContent>
