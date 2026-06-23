@@ -308,7 +308,6 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       </ModuleContentPanel>
       <RunParamsDialog
         open={!!runTarget}
-        workflowId={runTarget?.id ?? ""}
         params={runTarget?.params ?? []}
         lastValues={runTarget ? lastRunValues[runTarget.id] : undefined}
         onConfirm={async (params, rawValues) => {
