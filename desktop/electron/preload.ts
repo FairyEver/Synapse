@@ -361,6 +361,9 @@ const IPC_CHANNELS = {
     "openSystemApp": "synapse:apps:open-system-app",
   },
   "documentTemplate": {
+    "chooseTemplateFile": "synapse:document-template:template:choose",
+    "chooseJsonFile": "synapse:document-template:json:choose",
+    "chooseOutputFile": "synapse:document-template:output:choose",
     "generateDocx": "synapse:document-template:docx:generate",
   },
   "git": {
@@ -708,6 +711,9 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   documentTemplate: {
+    chooseTemplateFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseTemplateFile)(),
+    chooseJsonFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseJsonFile)(),
+    chooseOutputFile: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input),
     generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
   },
   git: {

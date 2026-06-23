@@ -2,6 +2,7 @@ export const SYSTEM_APP_IDS = [
   "resource-repository",
   "git",
   "database",
+  "document-template",
   "editor-scan",
   "usage-monitor",
   "model-price",

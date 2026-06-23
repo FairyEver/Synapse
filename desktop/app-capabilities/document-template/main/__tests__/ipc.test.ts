@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 import { documentTemplateIpcModule } from "../ipc"
 
 describe("documentTemplateIpcModule", () => {
-  it("declares the generate docx channel", () => {
+  it("declares document template channels", () => {
     expect(documentTemplateIpcModule.id).toBe("documentTemplate")
+    expect(documentTemplateIpcModule.methods.chooseTemplateFile.channel).toBe("synapse:document-template:template:choose")
+    expect(documentTemplateIpcModule.methods.chooseJsonFile.channel).toBe("synapse:document-template:json:choose")
+    expect(documentTemplateIpcModule.methods.chooseOutputFile.channel).toBe("synapse:document-template:output:choose")
     expect(documentTemplateIpcModule.methods.generateDocx.channel).toBe("synapse:document-template:docx:generate")
   })
 

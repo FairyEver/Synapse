@@ -1,4 +1,5 @@
 import { databaseAppManifest } from "@/modules/database/app-manifest"
+import { documentTemplateAppManifest } from "../../../app-capabilities/document-template/renderer/app-manifest"
 import { editorScanAppManifest } from "@/modules/editor-scan/app-manifest"
 import { gitAppManifest } from "@/modules/git/app-manifest"
 import { modelPriceAppManifest } from "@/modules/model-price/app-manifest"
@@ -11,6 +12,7 @@ const systemApps = [
   resourceRepositoryAppManifest,
   gitAppManifest,
   databaseAppManifest,
+  documentTemplateAppManifest,
   editorScanAppManifest,
   usageMonitorAppManifest,
   modelPriceAppManifest,

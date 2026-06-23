@@ -798,6 +798,9 @@ export type SynapseBridge = {
     ) => () => void
   }
   documentTemplate: {
+    chooseTemplateFile: () => Promise<string | null>
+    chooseJsonFile: () => Promise<string | null>
+    chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
   }
   git: {
