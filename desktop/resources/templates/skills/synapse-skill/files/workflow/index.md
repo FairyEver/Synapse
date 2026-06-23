@@ -66,6 +66,24 @@ Strict validation runs after every MCP mutation. Do not create disconnected plac
 
 Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or preserve node IDs containing path separators, `..`, absolute paths, or spaces.
 
+## Workflow Parameters
+
+Workflow params support four types:
+- `text` — string input.
+- `number` — numeric input.
+- `file` — a file resource reference.
+- `directory` — a directory resource reference.
+
+For `file` and `directory`, the parameter value is a resource reference, not file bytes. The current local form is:
+
+```json
+{ "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
+```
+
+For directories, use `"entryType": "directory"` and a directory path. When calling `workflow_run_execute` from MCP, you may pass either this object or a plain local path string. Synapse normalizes plain strings to `local_path`, verifies that the path exists, and checks the expected file/directory kind before the run starts.
+
+When defining defaults with `workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above. Do not inline file bytes into params.
+
 ## Variable Bindings
 
 Nodes declare a `variables` array. Each binding has:
@@ -88,13 +106,14 @@ Use a **workflow_call** node when the parent workflow should run another saved w
 Config fields:
 - `workflowId` — child workflow ID. Do not set this to the current workflow ID.
 - `variables` — bindings from the parent workflow params, upstream node outputs, or static values.
-- `paramTemplates` — object whose keys are child workflow param names and whose values are template strings using `{{variableName}}`.
+- `paramTemplates` — object whose keys are child text/number param names and whose values are template strings using `{{variableName}}`.
+- `paramBindings` — object whose keys are child param names and whose values are typed bindings. Use this for file/directory child params so resource references pass through without becoming strings.
 
 Recommended MCP flow:
 1. Call `workflow_definition_list` to find the child workflow ID, then `workflow_definition_get` to read its current `params`.
 2. Create the workflow_call node with minimal valid config:
    ```json
-   { "workflowId": "child-workflow-id", "variables": [], "paramTemplates": {} }
+   { "workflowId": "child-workflow-id", "variables": [], "paramTemplates": {}, "paramBindings": {} }
    ```
 3. Create edges so upstream nodes exist before using `node_output` bindings.
 4. Update the workflow_call config with variable bindings and `paramTemplates`, for example:
@@ -108,10 +127,15 @@ Recommended MCP flow:
      "paramTemplates": {
        "topic": "请根据 {{search_result}} 输出摘要",
        "style": "面向 {{audience}}，语气克制"
+     },
+     "paramBindings": {
+       "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } }
      }
    }
    ```
 5. Run `workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
+
+Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent file/directory param with the same resource kind.
 
 At runtime, the call node reads the child workflow's latest saved definition. It returns only the child workflow End output as the workflow_call node output. It does not lock a child version and does not expose arbitrary child node outputs.
 

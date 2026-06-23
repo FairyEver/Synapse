@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises"
 import path from "node:path"
-import type { ValidationError, WorkflowDefinition, WorkflowParam, WorkflowResourceRef } from "../../../src/types/workflow"
+import type { ValidationError, WorkflowDefinition, WorkflowParam, WorkflowResourceEntryType, WorkflowResourceRef } from "../../../src/types/workflow"
 
 export interface NormalizedWorkflowRunParams {
   readonly params: Record<string, unknown>
@@ -70,14 +70,16 @@ function normalizeResourceInput(
   param: WorkflowParam,
   raw: unknown,
 ): { value: WorkflowResourceRef } | { error: ValidationError } {
+  const entryType = resourceEntryType(param)
+  if (!entryType) return paramError(param, "必须是文件或文件夹参数")
   if (typeof raw === "string") {
     const trimmed = raw.trim()
     if (!path.isAbsolute(trimmed)) return paramError(param, "必须是绝对路径")
-    return { value: { kind: "local_path", entryType: param.type, path: trimmed } }
+    return { value: { kind: "local_path", entryType, path: trimmed } }
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return paramError(param, "必须是资源引用")
   const ref = raw as WorkflowResourceRef
-  if (ref.entryType !== param.type) return paramError(param, `必须是${param.type === "file" ? "文件" : "文件夹"}`)
+  if (ref.entryType !== entryType) return paramError(param, `必须是${entryType === "file" ? "文件" : "文件夹"}`)
   return { value: ref }
 }
 
@@ -99,4 +101,8 @@ function paramError(param: WorkflowParam, message: string): { error: ValidationE
       message: `参数「${param.name}」${message}`,
     },
   }
+}
+
+function resourceEntryType(param: WorkflowParam): WorkflowResourceEntryType | null {
+  return param.type === "file" || param.type === "directory" ? param.type : null
 }

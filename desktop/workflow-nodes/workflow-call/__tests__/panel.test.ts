@@ -6,6 +6,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { WorkflowCallNodePanel } from "../panel"
+import type { WorkflowCallNodePanelProps } from "../panel"
 import type { WorkflowCallNodeConfig } from "../schema"
 
 const workflowList = vi.fn()
@@ -63,7 +64,7 @@ afterEach(() => {
 function renderPanel(
   config: WorkflowCallNodeConfig,
   onChange = vi.fn(),
-  workflowParams = [{ name: "topic", type: "text" as const, default: null }],
+  workflowParams: WorkflowCallNodePanelProps["workflowParams"] = [{ name: "topic", type: "text", default: null }],
 ) {
   const container = document.createElement("div")
   document.body.appendChild(container)

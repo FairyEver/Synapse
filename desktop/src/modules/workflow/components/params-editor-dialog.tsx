@@ -3,12 +3,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
-import type { WorkflowParam } from "@/types/workflow"
+import { Plus, Trash2, ChevronUp, ChevronDown, FolderOpen } from "lucide-react"
+import type { WorkflowParam, WorkflowParamDefault, WorkflowResourceEntryType, WorkflowResourceRef } from "@/types/workflow"
 
 type DraftParam = WorkflowParam & { _key: string }
 function toDraft(p: WorkflowParam): DraftParam {
@@ -37,6 +38,17 @@ interface WorkflowParamCardProps {
 }
 
 function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
+  const resourceEntryType: WorkflowResourceEntryType | null = param.type === "file" || param.type === "directory" ? param.type : null
+  const handleChooseResourceDefault = async () => {
+    if (!resourceEntryType) return
+    const selectedPath = resourceEntryType === "file"
+      ? await window.synapse?.workflow.chooseParamFile?.()
+      : await window.synapse?.workflow.chooseParamDirectory?.()
+    if (selectedPath) {
+      onChange({ default: toLocalPathDefault(resourceEntryType, selectedPath) })
+    }
+  }
+
   return (
     <div className={`rounded-lg bg-muted/50 p-3 grid gap-2 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
       <div className="flex items-center justify-between">
@@ -91,7 +103,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
           <Label className="text-xs">类型</Label>
           <Select
             value={param.type}
-            onValueChange={(v) => onChange({ type: v as WorkflowParam["type"] })}
+            onValueChange={(v) => onChange({ type: v as WorkflowParam["type"], default: null })}
           >
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -99,6 +111,8 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             <SelectContent>
               <SelectItem value="text">文本</SelectItem>
               <SelectItem value="number">数字</SelectItem>
+              <SelectItem value="file">文件</SelectItem>
+              <SelectItem value="directory">文件夹</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -108,17 +122,32 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
         {param.type === "number" ? (
           <Input
             type="number"
-            value={param.default ?? ""}
+            value={typeof param.default === "number" ? param.default : ""}
             onChange={(e) =>
               onChange({ default: e.target.value === "" ? null : Number(e.target.value) })
             }
             placeholder="可选"
           />
+        ) : resourceEntryType ? (
+          <InputGroup>
+            <InputGroupInput
+              value={resourceDefaultPath(param.default)}
+              onChange={(e) =>
+                onChange({ default: toLocalPathDefault(resourceEntryType, e.target.value) })
+              }
+              placeholder="可选"
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton onClick={handleChooseResourceDefault} aria-label="选择路径">
+                <FolderOpen className="size-3.5" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         ) : (
           <Textarea
             className="resize-none"
             rows={2}
-            value={String(param.default ?? "")}
+            value={textDefaultValue(param.default)}
             onChange={(e) =>
               onChange({ default: e.target.value === "" ? null : e.target.value })
             }
@@ -141,7 +170,12 @@ interface ParamsEditorDialogProps {
 
 function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
   if (a.length !== b.length) return false
-  return a.every((p, i) => p.name === b[i]?.name && p.type === b[i]?.type && p.default === b[i]?.default)
+  return a.every((p, i) =>
+    p.name === b[i]?.name
+    && p.type === b[i]?.type
+    && p.description === b[i]?.description
+    && paramDefaultEqual(p.default, b[i]?.default)
+  )
 }
 
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
@@ -263,4 +297,32 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
     </AlertDialog>
     </>
   )
+}
+
+function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
+  return typeof value === "object" && value !== null && "kind" in value
+}
+
+function resourceDefaultPath(value: WorkflowParamDefault): string {
+  if (isWorkflowResourceRef(value) && value.kind === "local_path") return value.path
+  if (typeof value === "string") return value
+  return ""
+}
+
+function textDefaultValue(value: WorkflowParamDefault): string {
+  return typeof value === "string" ? value : ""
+}
+
+function toLocalPathDefault(entryType: WorkflowResourceEntryType, rawPath: string): WorkflowParamDefault {
+  const path = rawPath.trim()
+  if (!path) return null
+  return { kind: "local_path", entryType, path }
+}
+
+function paramDefaultEqual(a: WorkflowParamDefault, b: WorkflowParamDefault): boolean {
+  if (a === b) return true
+  if (isWorkflowResourceRef(a) || isWorkflowResourceRef(b)) {
+    return JSON.stringify(a) === JSON.stringify(b)
+  }
+  return false
 }

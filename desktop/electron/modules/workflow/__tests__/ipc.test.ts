@@ -76,6 +76,44 @@ describe("workflowIpcModule", () => {
     } as never)
   })
 
+  it("opens native pickers for workflow file and directory params", async () => {
+    electronMock.dialog.showOpenDialog
+      .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/input.txt"] })
+      .mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/work"] })
+    const harness = createInMemoryHarness()
+    harness.registry.register(workflowIpcModule, {
+      moduleId: "workflow",
+      resolve: <T,>(): T => {
+        throw new Error("No services expected")
+      },
+    })
+
+    await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBe("/tmp/input.txt")
+    await expect(harness.invoke("synapse:workflow:param-directory:choose", undefined)).resolves.toBe("/tmp/work")
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(1, {
+      title: "选择文件",
+      properties: ["openFile"],
+    })
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenNthCalledWith(2, {
+      title: "选择文件夹",
+      properties: ["openDirectory"],
+    })
+  })
+
+  it("returns null when workflow param picker is cancelled", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
+    const harness = createInMemoryHarness()
+    harness.registry.register(workflowIpcModule, {
+      moduleId: "workflow",
+      resolve: <T,>(): T => {
+        throw new Error("No services expected")
+      },
+    })
+
+    await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBeNull()
+  })
+
   it("sanitizes workflow engine rejection diagnostics and visible failure state", async () => {
     const rawError = "engine failed token=sk-secret at /Users/example/repo with prompt text"
     const runStatuses = new Map<string, WorkflowRunStatus>()

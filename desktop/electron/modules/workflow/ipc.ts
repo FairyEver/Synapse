@@ -777,6 +777,22 @@ async function waitForRunCompletion(runId: string): Promise<RunCompletionWaitRes
   return result
 }
 
+async function chooseWorkflowParamPath(options: {
+  readonly title: string
+  readonly properties: Electron.OpenDialogOptions["properties"]
+}): Promise<string | null> {
+  const parentWindow = focusedWindow()
+  const dialogOptions: Electron.OpenDialogOptions = {
+    title: options.title,
+    properties: options.properties,
+  }
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions)
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0] ?? null
+}
+
 async function abortActiveRunsForWorkflow(options: {
   readonly workflowId: string
   readonly runStatuses: Map<string, WorkflowRunStatus>
@@ -988,6 +1004,14 @@ export const workflowIpcModule: IpcModule = {
           throw error
         }
       },
+    },
+    chooseParamFile: {
+      channel: "synapse:workflow:param-file:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      handler: async () => chooseWorkflowParamPath({ title: "选择文件", properties: ["openFile"] }),
+    },
+    chooseParamDirectory: {
+      channel: "synapse:workflow:param-directory:choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
+      handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
     },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
