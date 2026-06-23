@@ -208,7 +208,7 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
 }) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
-  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const { getProviderName, getModelName, getModelDisplayName, isProviderAvailable } = useProviderLookup()
   const providerUnavailable = Boolean(definition.defaultProviderId && !isProviderAvailable(definition.defaultProviderId))
 
   return (
@@ -241,7 +241,7 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             <span className="flex min-w-0 items-center gap-1 truncate">
               {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
               {definition.defaultProviderId
-                ? `${getProviderName(definition.defaultProviderId) ?? definition.defaultProviderId} · ${getModelName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? TIER_LABELS[definition.defaultModelTier ?? "default"]}`
+                ? `${getProviderName(definition.defaultProviderId) ?? definition.defaultProviderId} · ${getModelDisplayName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? getModelName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? TIER_LABELS[definition.defaultModelTier ?? "default"]}`
                 : "未设置"}
             </span>
             <ChevronDown className="size-3.5 text-muted-foreground" />

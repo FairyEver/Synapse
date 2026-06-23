@@ -20,19 +20,12 @@ import {
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { ProviderModelSelectDialog } from "../../../src/components/provider-model-select-dialog"
+import { formatProviderModelLabel } from "../../../src/lib/provider-model"
 import { AgentPermissionModeMenu } from "../../../src/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "../../../src/modules/agent/permission-mode-options"
 import type { SynapseAgentPermissionMode } from "../../../src/types/agent"
 import type { SynapseProjectConfig } from "../../../src/types/config"
-import type { ModelTier } from "../../../src/types/provider-model"
 import type { AgentActionConfig } from "./schema"
-
-const TIER_LABELS: Record<ModelTier, string> = {
-  default: "主模型",
-  haiku: "Haiku",
-  sonnet: "Sonnet",
-  opus: "Opus",
-}
 
 export function AgentConfigForm({
   value,
@@ -87,7 +80,12 @@ export function AgentConfigForm({
             >
               <span className="truncate">
                 {value.providerId
-                  ? `${value.providerName ?? value.providerId} ${value.modelName ?? (TIER_LABELS[value.modelTier] ?? value.modelTier)}`
+                  ? formatProviderModelLabel(
+                    value.providerName ?? value.providerId,
+                    value.modelName,
+                    value.modelTier,
+                    { id: value.providerId },
+                  )
                   : "选择供应商 + 模型"}
               </span>
               <ChevronDown className="size-4 text-muted-foreground" />

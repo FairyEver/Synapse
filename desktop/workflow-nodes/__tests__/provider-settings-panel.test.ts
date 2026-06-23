@@ -30,6 +30,8 @@ vi.mock("../prompt-editor", () => ({
 const providerLookup: ProviderLookup = {
   getProviderName: (providerId) => providerId === "provider-1" ? "Bailian 公司" : undefined,
   getModelName: (providerId, modelTier) => providerId === "provider-1" && modelTier === "sonnet" ? "deepseek-v4-pro" : undefined,
+  getModelDisplayName: (providerId, modelTier) =>
+    providerId === "local-claude-code" && modelTier === "default" ? "Claude Code 默认" : undefined,
   isProviderAvailable: () => true,
 }
 
@@ -83,6 +85,23 @@ describe("workflow node provider settings", () => {
 
     expect(container.textContent).toContain("选择供应商 + 模型")
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it("shows local Claude Code default labels for inherited prompt providers", () => {
+    const container = renderPanel(
+      React.createElement(PromptNodePanel, {
+        config: { providerId: undefined, modelTier: undefined, variables: [], prompt: "run" },
+        onChange: vi.fn(),
+        upstreamNodes: [],
+        workflowParams: [],
+        projects: [],
+        defaultProviderId: "local-claude-code",
+        defaultModelTier: "default",
+      }),
+    )
+
+    expect(container.textContent).toContain("使用工作流默认：local-claude-code · Claude Code 默认")
+    expect(container.textContent).not.toContain("local-claude-code · 主模型")
   })
 
   it("clears switch node provider overrides when custom provider is disabled", () => {

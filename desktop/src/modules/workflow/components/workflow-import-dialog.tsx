@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { ChevronDown } from "lucide-react"
+import { resolveModelDisplayName } from "@/lib/provider-model"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 import type {
@@ -240,7 +241,15 @@ function formatTargetModel(
   if (!mapping) return "选择供应商 + 模型"
   const provider = providerById.get(mapping.targetProviderId)
   const providerName = provider?.providerName ?? mapping.targetProviderId
-  const modelName = provider?.models[mapping.targetModelTier] ?? mapping.targetModelTier
+  const modelName = provider
+    ? resolveModelDisplayName({
+      id: provider.providerId,
+      model: provider.models.default,
+      haikuModel: provider.models.haiku,
+      sonnetModel: provider.models.sonnet,
+      opusModel: provider.models.opus,
+    }, mapping.targetModelTier) ?? mapping.targetModelTier
+    : mapping.targetModelTier
   return `${providerName} / ${modelName}`
 }
 

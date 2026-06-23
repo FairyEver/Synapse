@@ -33,7 +33,7 @@ function formatAgentHeaderModelLabel(input: {
   const tier = explicitTier ?? "default"
   const modelName = resolveModelName(input.provider, tier)
   if (modelName || explicitTier) {
-    return formatProviderModelLabel(providerName, modelName, tier)
+    return formatProviderModelLabel(providerName, modelName, tier, input.provider)
   }
   return providerName
 }

@@ -54,6 +54,7 @@ afterEach(() => {
 function provider(input: {
   readonly id: string
   readonly name: string
+  readonly source?: "local" | "user"
   readonly active?: boolean
   readonly model?: string
   readonly haikuModel?: string
@@ -65,6 +66,7 @@ function provider(input: {
     id: input.id,
     name: input.name,
     category: "anthropic" as const,
+    source: input.source,
     apiKeyField: "ANTHROPIC_AUTH_TOKEN" as const,
     active: input.active,
     model: input.model,
@@ -145,6 +147,67 @@ describe("ProviderModelSelectDialog", () => {
     expect(document.body.textContent).toContain("Sonnet")
     expect(document.body.textContent).not.toContain("Opus")
     expect(document.body.textContent).not.toContain("Haiku")
+  })
+
+  it("allows local Claude Code default tier without explicit models", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({
+        id: "local-claude-code",
+        name: "ClaudeCode/Synapse",
+        source: "local",
+        active: true,
+      }),
+    ])
+    const { root, ...props } = renderDialog()
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("ClaudeCode/Synapse")
+    expect(document.body.textContent).toContain("Claude Code 默认")
+    expect([...document.querySelectorAll("[data-tier]")]
+      .map((el) => el.getAttribute("data-tier"))).toEqual(["default"])
+
+    const confirmButton = [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton?.disabled).toBe(false)
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(props.onSelect).toHaveBeenCalledWith({
+      providerId: "local-claude-code",
+      modelTier: "default",
+      providerName: "ClaudeCode/Synapse",
+      modelName: undefined,
+    })
+  })
+
+  it("does not allow non-local providers without model fields", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({
+        id: "empty-provider",
+        name: "Empty Provider",
+        source: "user",
+        active: true,
+      }),
+    ])
+    const { root, ...props } = renderDialog()
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Empty Provider")
+    expect(document.querySelectorAll("[data-tier]")).toHaveLength(0)
+
+    const confirmButton = [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton?.disabled).toBe(true)
   })
 
   it("preselects active provider and sonnet tier", async () => {

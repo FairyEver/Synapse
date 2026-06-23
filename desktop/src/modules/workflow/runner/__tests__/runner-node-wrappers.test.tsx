@@ -21,6 +21,7 @@ vi.mock("@xyflow/react", () => ({
 vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
   useProviderLookup: () => ({
     getModelName: () => undefined,
+    getModelDisplayName: () => undefined,
     getProviderName: () => undefined,
   }),
 }))

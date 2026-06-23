@@ -12,6 +12,7 @@ vi.mock("../../provider-lookup-context", () => ({
   useProviderLookup: () => ({
     getProviderName: () => undefined,
     getModelName: () => undefined,
+    getModelDisplayName: () => undefined,
     isProviderAvailable: () => true,
   }),
 }))

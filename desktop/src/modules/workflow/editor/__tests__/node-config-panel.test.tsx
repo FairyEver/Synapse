@@ -42,6 +42,7 @@ vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
   useProviderLookup: () => ({
     getProviderName: () => undefined,
     getModelName: () => undefined,
+    getModelDisplayName: () => undefined,
     isProviderAvailable: () => true,
   }),
 }))

@@ -3,31 +3,25 @@ import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ModelTier } from "@/types/provider-model"
 import { createRendererLogger } from "@/app-shell/logging"
 import { errorDiagnostic } from "@/modules/workflow/lib/error-utils"
+import { resolveModelDisplayName, resolveModelName } from "@/lib/provider-model"
 
 const logger = createRendererLogger("workflow.provider-lookup")
 
 type ProviderLookup = {
   getProviderName: (providerId: string) => string | undefined
   getModelName: (providerId: string, modelTier: ModelTier) => string | undefined
+  getModelDisplayName: (providerId: string, modelTier: ModelTier) => string | undefined
   isProviderAvailable: (providerId: string) => boolean
 }
 
 const defaultLookup: ProviderLookup = {
   getProviderName: () => undefined,
   getModelName: () => undefined,
+  getModelDisplayName: () => undefined,
   isProviderAvailable: () => true,
 }
 
 const ProviderLookupContext = createContext<ProviderLookup>(defaultLookup)
-
-function tierModelValue(provider: SynapseAgentProvider, tier: ModelTier): string | undefined {
-  const raw = tier === "default" ? provider.model
-    : tier === "haiku" ? provider.haikuModel
-    : tier === "sonnet" ? provider.sonnetModel
-    : provider.opusModel
-  const trimmed = raw?.trim()
-  return trimmed || undefined
-}
 
 function ProviderLookupProvider({ children }: { children: ReactNode }) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
@@ -55,7 +49,11 @@ function ProviderLookupProvider({ children }: { children: ReactNode }) {
       providers.find((p) => p.id === providerId)?.name,
     getModelName: (providerId, modelTier) => {
       const provider = providers.find((p) => p.id === providerId)
-      return provider ? tierModelValue(provider, modelTier) : undefined
+      return provider ? resolveModelName(provider, modelTier) : undefined
+    },
+    getModelDisplayName: (providerId, modelTier) => {
+      const provider = providers.find((p) => p.id === providerId)
+      return provider ? resolveModelDisplayName(provider, modelTier) : undefined
     },
     isProviderAvailable: (providerId) => {
       if (!loaded) return true

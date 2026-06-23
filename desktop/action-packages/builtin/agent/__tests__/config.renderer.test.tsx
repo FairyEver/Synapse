@@ -56,6 +56,30 @@ describe("AgentConfigForm", () => {
       timeoutMins: 5,
     })
   })
+
+  it("labels local Claude Code default model without storing a fake model name", async () => {
+    const value: AgentActionConfig = {
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerId: "local-claude-code",
+      modelTier: "default",
+      providerName: "ClaudeCode/Synapse",
+      mode: "default",
+      prompt: "Reply OK",
+      sessionPolicy: "fresh",
+      timeoutMins: 60,
+    }
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AgentConfigForm value={value} onChange={vi.fn()} />)
+    })
+
+    expect(document.body.textContent).toContain("ClaudeCode/Synapse Claude Code 默认")
+    expect(document.body.textContent).not.toContain("ClaudeCode/Synapse 主模型")
+  })
 })
 
 function changeInput(input: HTMLInputElement, value: string): void {

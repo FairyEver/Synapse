@@ -558,6 +558,40 @@ describe("SessionManager", () => {
     expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBe("reply-sonnet")
   })
 
+  it("leaves the SDK model unset for local Claude Code default without provider model env", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({})),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        providerId: "local-claude-code",
+        agentConfig: { modelTier: "default" },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      env: {},
+      model: undefined,
+    }))
+    expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBeUndefined()
+  })
+
   it("passes project SDK agents into the default Claude SDK live session", async () => {
     vi.mocked(ClaudeSDKSession).mockClear()
     const states = new Map<string, RuntimeSessionState>()

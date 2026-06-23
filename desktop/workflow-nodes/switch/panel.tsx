@@ -44,7 +44,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [customProviderEnabled, setCustomProviderEnabled] = useState(Boolean(config.providerId))
   const [customTimeoutEnabled, setCustomTimeoutEnabled] = useState(config.timeoutMins !== undefined)
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
-  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const { getProviderName, getModelName, getModelDisplayName, isProviderAvailable } = useProviderLookup()
   const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) => {
@@ -97,11 +97,11 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const branchSummary = `${branches.length}条`
   const errorFor = (fieldKey: string) => validationItems.find((item) => item.fieldKey === fieldKey)?.summary
   const inheritedProviderLabel = defaultProviderId
-    ? `${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
+    ? `${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelDisplayName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
     : undefined
   const inheritedTimeoutMins = defaultNodeTimeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS
   const nodeProviderLabel = config.providerId
-    ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
+    ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelDisplayName(config.providerId, config.modelTier ?? "default") ?? getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
     : "选择供应商 + 模型"
   const branchIdError = getBranchIdError(branches)
   const defaultBranchOptions = branches.filter((branch) => BRANCH_ID_RE.test(branch.id))
