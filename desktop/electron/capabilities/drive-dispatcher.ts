@@ -932,14 +932,14 @@ async function authorizeFileWrite(
   const permission = await checkCapabilityPermission({
     permissionGuard: deps.permissionGuard,
     auditSink: deps.auditSink,
-    action: "fs.write",
+    action: "fs.write.outside-userdata",
     actor,
     resource: outputPath,
     context: metadata,
   })
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
-      action: "fs.write",
+      action: "fs.write.outside-userdata",
       actor,
       resource: outputPath,
       outcome: "denied",
@@ -948,7 +948,7 @@ async function authorizeFileWrite(
     throw new Error(permission.reason)
   }
   deps.auditSink?.record({
-    action: "fs.write",
+    action: "fs.write.outside-userdata",
     actor,
     resource: outputPath,
     outcome: "allowed",
