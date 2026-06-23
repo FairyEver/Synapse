@@ -119,6 +119,7 @@ export interface WorkflowCallRuntimeDeps {
 export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
+  paramValues?: Record<string, unknown>
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
   runtimeDeps?: NodeRuntimeDeps
