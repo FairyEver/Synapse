@@ -26,12 +26,19 @@ import {
   buildAllMcpTools,
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
+import { isCanonicalCapabilityId } from "../../synapse-capabilities/shared/naming"
 import { buildWorkflowTools } from "../../synapse-capabilities/shared/workflow-domain"
 
 describe("Synapse capability domains", () => {
   it("keeps Database capabilities in the Database domain", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
     expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
+  })
+})
+
+describe("App capability naming", () => {
+  it("accepts generate as a canonical app capability action", () => {
+    expect(isCanonicalCapabilityId("app.document_template.docx.generate")).toBe(true)
   })
 })
 
