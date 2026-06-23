@@ -1,0 +1,16 @@
+import {
+  DOCUMENT_TEMPLATE_APP_ID,
+  DOCUMENT_TEMPLATE_CAPABILITY_ID,
+  DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
+  DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE,
+} from "./capability"
+
+export const documentTemplateCapabilityManifest = {
+  id: DOCUMENT_TEMPLATE_APP_ID,
+  app: {
+    id: DOCUMENT_TEMPLATE_APP_ID,
+  },
+  capabilities: [DOCUMENT_TEMPLATE_CAPABILITY_ID],
+  mcpTools: [DOCUMENT_TEMPLATE_MCP_TOOL_NAME],
+  workflowNodes: [DOCUMENT_TEMPLATE_WORKFLOW_NODE_TYPE],
+} as const

@@ -37,6 +37,7 @@
 | `database.folder.reorder` | `database_folder_reorder` | `database.folder.reorder` | `databaseFolderReorder` |
 | `database.table.move` | `database_table_move` | `database.table.move` | `databaseTableMove` |
 | `repository.item.list` | `repository_item_list` | `repository.item.list` | `repositoryItemList` |
+| `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
 | `variable.item.list` | `variable_item_list` | `variable.item.list` | `variableItemList` |
 | `variable.item.get` | `variable_item_get` | `variable.item.get` | `variableItemGet` |
 | `variable.item.create` | `variable_item_create` | `variable.item.create` | `variableItemCreate` |

@@ -32,6 +32,8 @@ import { readFile, statfs } from "node:fs/promises"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
+import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -784,8 +786,14 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
+      service: createDocumentTemplateService(),
+      permissionGuard,
+      auditSink,
+    })
 
     const actionRouter = createSynapseActionRouter({
+      appDispatch: (action, params, context) => documentTemplateDispatcher.dispatch(action, params, context),
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
@@ -1863,6 +1871,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
+      permissionGuard,
+      auditSink,
       resolveProjectWorkspacePath: async (projectId) => {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         return resolveWorkflowProjectWorkspacePath(config, repo, proj)

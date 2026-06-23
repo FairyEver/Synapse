@@ -22,16 +22,37 @@ import {
   buildContentTools,
 } from "../../synapse-capabilities/shared/content-domain"
 import {
+  APP_DOMAIN,
+  APP_MCP_TOOL_ACTIONS,
+  buildAppTools,
+} from "../../synapse-capabilities/shared/app-domain"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
+import { isCanonicalCapabilityId } from "../../synapse-capabilities/shared/naming"
 import { buildWorkflowTools } from "../../synapse-capabilities/shared/workflow-domain"
 
 describe("Synapse capability domains", () => {
   it("keeps Database capabilities in the Database domain", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
     expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
+  })
+})
+
+describe("App capability naming", () => {
+  it("accepts generate as a canonical app capability action", () => {
+    expect(isCanonicalCapabilityId("app.document_template.docx.generate")).toBe(true)
+  })
+})
+
+describe("App capability domain", () => {
+  it("registers document template docx generation", () => {
+    expect(APP_DOMAIN.id).toBe("app")
+    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.document_template.docx.generate")
+    expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
+    expect(buildAppTools().map((tool) => tool.name)).toEqual(["app_document_template_docx_generate"])
   })
 })
 

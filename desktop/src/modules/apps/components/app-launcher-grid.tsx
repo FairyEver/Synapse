@@ -10,6 +10,7 @@ const appDescriptions = {
   "resource-repository": "技能、规则、提示词",
   git: "仓库、提交、同步",
   database: "表、字段、数据记录",
+  "document-template": "模板与 JSON",
   "editor-scan": "编辑器扫描与安装状态",
   "usage-monitor": "CC 与 Codex 用量",
   "model-price": "模型价格规则",

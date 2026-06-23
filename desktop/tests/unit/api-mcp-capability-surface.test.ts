@@ -66,6 +66,7 @@ describe("API and MCP capability surface", () => {
 
   it("routes every registered API action to its owning domain dispatcher", async () => {
     const dispatchers = {
+      app: vi.fn(async () => ({ ok: true as const })),
       automation: vi.fn(async () => ({ ok: true as const })),
       content: vi.fn(async () => ({ ok: true as const })),
       database: vi.fn(async () => ({ ok: true as const })),
@@ -76,6 +77,7 @@ describe("API and MCP capability surface", () => {
       workflow: vi.fn(async () => ({ ok: true as const })),
     }
     const router = createSynapseActionRouter({
+      appDispatch: dispatchers.app,
       automationDispatch: dispatchers.automation,
       contentDispatch: dispatchers.content,
       databaseDispatch: dispatchers.database,

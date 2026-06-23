@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
-import type { ActorIdentity } from "../electron/runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../electron/runtime/security"
 import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
 
@@ -79,6 +79,8 @@ export interface NodeRuntimeDeps {
     run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
   }
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+  permissionGuard?: PermissionGuard
+  auditSink?: AuditSink
   resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
   workflowCall?: WorkflowCallRuntimeDeps
 }

@@ -14,6 +14,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Model price rules and used-model pricing -> `model-price/index.md`
 - User-scoped local variables -> `variable/index.md`
 - Configured Synapse repositories -> `repository/index.md`
+- App-provided capabilities such as document generation -> `app/index.md`
 
 If the task spans multiple domains, handle each part in order and read each relevant domain file.
 

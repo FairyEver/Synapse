@@ -360,6 +360,12 @@ const IPC_CHANNELS = {
   "apps": {
     "openSystemApp": "synapse:apps:open-system-app",
   },
+  "documentTemplate": {
+    "chooseTemplateFile": "synapse:document-template:template:choose",
+    "chooseJsonFile": "synapse:document-template:json:choose",
+    "chooseOutputFile": "synapse:document-template:output:choose",
+    "generateDocx": "synapse:document-template:docx:generate",
+  },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",
@@ -703,6 +709,12 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       EVENT_CHANNELS.apps.contentOpenRequest,
     ),
+  },
+  documentTemplate: {
+    chooseTemplateFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseTemplateFile)(),
+    chooseJsonFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseJsonFile)(),
+    chooseOutputFile: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input),
+    generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
   },
   git: {
     checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),
