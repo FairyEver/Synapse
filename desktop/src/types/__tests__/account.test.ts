@@ -6,6 +6,7 @@ import {
   type SynapseAccountProfile,
   type SynapseAccountState,
 } from "../account"
+import type { SynapseBridge } from "../bridge"
 
 const profile = {
   user: { id: "u1", email: "u@example.com", displayName: null, status: "active" },
@@ -44,5 +45,30 @@ describe("account state helpers", () => {
     expect(hasAccountProfile(state)).toBe(false)
     expect(isAccountOnline(state)).toBe(false)
     expect(isAccountUnavailable(state)).toBe(true)
+  })
+
+  it("exposes Drive site methods on the account bridge type", () => {
+    type DriveSiteBridgeMethods = Pick<
+      SynapseBridge["account"],
+      | "preflightDriveSite"
+      | "createDriveSite"
+      | "listDriveSites"
+      | "updateDriveSiteAccess"
+      | "disableDriveSite"
+      | "enableDriveSite"
+      | "deleteDriveSite"
+      | "republishDriveSite"
+    >
+    const methodNames: Array<keyof DriveSiteBridgeMethods> = [
+      "preflightDriveSite",
+      "createDriveSite",
+      "listDriveSites",
+      "updateDriveSiteAccess",
+      "disableDriveSite",
+      "enableDriveSite",
+      "deleteDriveSite",
+      "republishDriveSite",
+    ]
+    expect(methodNames).toHaveLength(8)
   })
 })

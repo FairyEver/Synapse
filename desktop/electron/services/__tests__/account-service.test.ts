@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -690,6 +690,91 @@ describe("AccountService", () => {
       2,
       expectedApiUrl("/drive/trash?offset=50&limit=50"),
       "回收站加载失败。",
+    )
+  })
+
+  it("calls Drive site APIs and rewrites URLs to the configured public app URL", async () => {
+    const { service } = await createTestAccountService()
+    const site = driveSite({ siteId: "site_abc", url: "https://server.example/sites/site_abc/" })
+    const page = { items: [site], total: 1, page: { offset: 0, limit: 50, hasMore: false, nextOffset: null } }
+    const preflight = {
+      sourceFolderItemId: "folder-1",
+      sourceFolderName: "产品原型",
+      htmlFiles: ["index.html"],
+      defaultEntryPath: "index.html",
+      fileCount: 3,
+      totalBytes: "128",
+      includesJavaScript: true,
+    }
+    const getAuthenticatedJson = vi.spyOn(service as unknown as {
+      getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "getAuthenticatedJson")
+      .mockResolvedValueOnce(preflight)
+      .mockResolvedValueOnce(page)
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce(site)
+      .mockResolvedValueOnce(site)
+      .mockResolvedValueOnce(site)
+      .mockResolvedValueOnce(site)
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce(site)
+
+    await expect(service.preflightDriveSite({ sourceFolderItemId: "folder-1" })).resolves.toEqual(preflight)
+    await expect(service.createDriveSite({
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })).resolves.toMatchObject({ siteId: "site_abc", url: `${expectedPublicAppUrl}/sites/site_abc/` })
+    await expect(service.listDriveSites({ offset: 0, limit: 50, search: "原型", status: "active" }))
+      .resolves.toMatchObject({ items: [{ siteId: "site_abc", url: `${expectedPublicAppUrl}/sites/site_abc/` }] })
+    await expect(service.updateDriveSiteAccess({
+      siteId: "site_abc",
+      accessMode: "password",
+      password: "secret",
+      expiresIn: "7d",
+    })).resolves.toMatchObject({ siteId: "site_abc", url: `${expectedPublicAppUrl}/sites/site_abc/` })
+    await expect(service.disableDriveSite("site_abc")).resolves.toMatchObject({ siteId: "site_abc" })
+    await expect(service.enableDriveSite("site_abc")).resolves.toMatchObject({ siteId: "site_abc" })
+    await expect(service.deleteDriveSite("site_abc")).resolves.toEqual({ ok: true })
+    await expect(service.republishDriveSite({ siteId: "site_abc", entryPath: "index.html" })).resolves.toMatchObject({ siteId: "site_abc" })
+
+    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
+      1,
+      expectedApiUrl("/drive/sites/preflight?sourceFolderItemId=folder-1"),
+      "站点预检失败。",
+    )
+    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
+      2,
+      expectedApiUrl("/drive/sites?offset=0&limit=50&search=%E5%8E%9F%E5%9E%8B&status=active"),
+      "站点列表加载失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      1,
+      "POST",
+      expectedApiUrl("/drive/sites"),
+      { sourceFolderItemId: "folder-1", name: "产品原型", entryPath: null, accessMode: "public", expiresIn: "forever" },
+      "站点发布失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      2,
+      "PATCH",
+      expectedApiUrl("/drive/sites/site_abc/access"),
+      { accessMode: "password", password: "secret", expiresIn: "7d" },
+      "站点访问设置保存失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(3, "POST", expectedApiUrl("/drive/sites/site_abc/disable"), undefined, "停用站点失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(4, "POST", expectedApiUrl("/drive/sites/site_abc/enable"), undefined, "启用站点失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(5, "DELETE", expectedApiUrl("/drive/sites/site_abc"), undefined, "删除站点失败。")
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      6,
+      "POST",
+      expectedApiUrl("/drive/sites/site_abc/republish"),
+      { entryPath: "index.html" },
+      "重新发布站点失败。",
     )
   })
 
@@ -2429,6 +2514,26 @@ function drivePublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePu
     lastAccessedAt: overrides.lastAccessedAt ?? null,
     createdAt: overrides.createdAt ?? "2026-06-09T00:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-06-09T00:00:00.000Z",
+  }
+}
+
+function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
+  return {
+    id: overrides.id ?? "site-row-1",
+    siteId: overrides.siteId ?? "site_abc",
+    name: overrides.name ?? "产品原型",
+    status: overrides.status ?? "active",
+    accessMode: overrides.accessMode ?? "public",
+    url: overrides.url ?? `${expectedPublicAppUrl}/sites/site_abc/`,
+    expiresAt: overrides.expiresAt ?? null,
+    sourceFolderItemId: overrides.sourceFolderItemId ?? "folder-1",
+    sourceFolderName: overrides.sourceFolderName ?? "产品原型",
+    entryPath: overrides.entryPath ?? "index.html",
+    fileCount: overrides.fileCount ?? 3,
+    totalBytes: overrides.totalBytes ?? "128",
+    createdAt: overrides.createdAt ?? "2026-06-23T00:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-06-23T00:00:00.000Z",
+    lastPublishedAt: overrides.lastPublishedAt ?? "2026-06-23T00:00:00.000Z",
   }
 }
 

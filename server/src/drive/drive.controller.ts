@@ -26,12 +26,15 @@ import {
   parseDriveAnnotationReplyBody,
 } from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
+import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPage } from "./drive-site-public"
+import { driveSiteAccessCookieValue, DriveSiteService } from "./drive-site.service"
+import { isDriveSiteHtmlPath } from "./drive-site-path"
 import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
 const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals;"
-type DriveAccessCookieKind = "share"
+type DriveAccessCookieKind = "share" | "site"
 
 const prepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
@@ -90,6 +93,22 @@ const driveAccessSettingsSchema = z.object({
   accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]).optional(),
   editorEmails: z.array(z.string().trim().min(1).max(320)).max(100).optional(),
 }).strict()
+const driveSiteCreateSchema = z.object({
+  sourceFolderItemId: z.string().min(1),
+  name: z.string().min(1).max(255),
+  entryPath: z.string().min(1).max(1024).nullable().optional(),
+  accessMode: z.enum(["public", "password"]),
+  password: z.string().min(1).max(256).nullable().optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+}).strict()
+const driveSiteAccessUpdateSchema = z.object({
+  accessMode: z.enum(["public", "password"]),
+  password: z.string().min(1).max(256).nullable().optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+}).strict()
+const driveSiteRepublishSchema = z.object({
+  entryPath: z.string().min(1).max(1024).nullable().optional(),
+}).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
 const adminPublicAssetSortFields = ["createdAt", "updatedAt", "name", "size", "lifecycleStatus", "lastAccessedAt"] as const
 const adminPublicAssetAccessLogSortFields = ["accessedAt", "statusCode", "method", "bytes"] as const
@@ -103,6 +122,7 @@ export class DriveUserController {
     private readonly drive: DriveService,
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly annotations?: DriveAnnotationService,
+    @Optional() private readonly sites?: DriveSiteService,
   ) {}
 
   @Get("/public-assets")
@@ -201,6 +221,54 @@ export class DriveUserController {
   async downloadPublicAsset(@Param("assetId") assetId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
     const download = await requirePublicAssetService(this.publicAssets).openAssetDownload(request.user!.id, assetId)
     await sendDriveFileDownload(response, download)
+  }
+
+  @Get("/sites/preflight")
+  preflightSite(@Query("sourceFolderItemId") sourceFolderItemId: string | undefined, @Req() request: AuthenticatedUserRequest) {
+    if (!sourceFolderItemId) throw new BadRequestException("sourceFolderItemId 不能为空。")
+    return requireDriveSiteService(this.sites).preflightSite(request.user!.id, sourceFolderItemId)
+  }
+
+  @Post("/sites")
+  createSite(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(driveSiteCreateSchema, body, "站点发布请求无效。")
+    return requireDriveSiteService(this.sites).createSite(request.user!.id, resolveRequestPublicAppUrl(request), parsed)
+  }
+
+  @Get("/sites")
+  listSites(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveSiteService(this.sites).listSites(
+      request.user!.id,
+      resolveRequestPublicAppUrl(request),
+      parseDriveSiteListQuery(query),
+    )
+  }
+
+  @Patch("/sites/:siteId/access")
+  updateSiteAccess(@Param("siteId") siteId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(driveSiteAccessUpdateSchema, body, "站点访问设置无效。")
+    return requireDriveSiteService(this.sites).updateSiteAccess(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed)
+  }
+
+  @Post("/sites/:siteId/disable")
+  disableSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveSiteService(this.sites).disableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request))
+  }
+
+  @Post("/sites/:siteId/enable")
+  enableSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveSiteService(this.sites).enableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request))
+  }
+
+  @Post("/sites/:siteId/republish")
+  republishSite(@Param("siteId") siteId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(driveSiteRepublishSchema, body, "站点重新发布请求无效。")
+    return requireDriveSiteService(this.sites).republishSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed)
+  }
+
+  @Delete("/sites/:siteId")
+  deleteSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveSiteService(this.sites).deleteSite(request.user!.id, siteId)
   }
 
   @Get("/items")
@@ -761,6 +829,7 @@ export class DrivePublicController {
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly dashboardAuth?: AdminAuthService,
     @Optional() private readonly annotations?: DriveAnnotationService,
+    @Optional() private readonly sites?: DriveSiteService,
   ) {}
 
   @Get("/files/:assetId")
@@ -845,6 +914,69 @@ export class DrivePublicController {
       response.status(404).send("Not Found")
       void publicAssets.recordAccessSafely({ ...accessBase, statusCode: 404, bytes: 0n })
     }
+  }
+
+  @Get("/sites/:siteId")
+  async redirectSiteRoot(@Param("siteId") siteId: string, @Res() response: Response) {
+    response.redirect(302, `/sites/${encodeURIComponent(siteId)}/`)
+  }
+
+  @Post("/sites/:siteId")
+  async unlockSiteRoot(@Param("siteId") siteId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockSiteToPath(siteId, request, response)
+  }
+
+  @Post("/sites/:siteId/*path")
+  async unlockSitePath(@Param("siteId") siteId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockSiteToPath(siteId, request, response)
+  }
+
+  @Get("/sites/:siteId/*path")
+  async serveSitePath(
+    @Param("siteId") siteId: string,
+    @Param("path") pathSegments: string[] | string | undefined,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const relativePath = Array.isArray(pathSegments) ? pathSegments.join("/") : pathSegments ?? ""
+    await this.serveSiteAsset(siteId, relativePath, request, response)
+  }
+
+  private async unlockSiteToPath(siteId: string, request: Request, response: Response): Promise<void> {
+    const password = readBodyPassword(request)
+    const sites = requireDriveSiteService(this.sites)
+    if (!password || !await sites.verifySitePassword(siteId, password)) {
+      response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
+      return
+    }
+    setDriveAccessCookie(response, driveSiteAccessCookieValue(siteId), { kind: "site", publicId: siteId })
+    response.redirect(302, request.path)
+  }
+
+  private async serveSiteAsset(siteId: string, relativePath: string, request: Request, response: Response): Promise<void> {
+    const sites = requireDriveSiteService(this.sites)
+    const access = await sites.resolvePublicSite(siteId, {
+      cookie: readDriveAccessCookie(request, { kind: "site", publicId: siteId }) ?? null,
+      relativePath,
+    })
+    if (access.status === "password_required") {
+      if (relativePath === "" || isDriveSiteHtmlPath(relativePath)) {
+        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+        return
+      }
+      response.status(404).type("html").send(renderDriveSiteNotFoundPage())
+      return
+    }
+    if (access.status !== "ok") {
+      response.status(404).type("html").send(renderDriveSiteNotFoundPage())
+      return
+    }
+    const object = await this.storage.getObjectStream({ key: access.asset.storageKey })
+    response.setHeader("Content-Type", driveSiteContentType(access.asset.relativePath, object.contentType ?? access.asset.contentType))
+    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath))
+    response.setHeader("X-Content-Type-Options", "nosniff")
+    if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())
+    await pipeline(object.stream as Readable, response)
   }
 
   @Get("/api/drive/browser/shares/:shareId")
@@ -1422,6 +1554,11 @@ function requireDriveAnnotationService(annotations: DriveAnnotationService | und
   return annotations
 }
 
+function requireDriveSiteService(sites: DriveSiteService | undefined): DriveSiteService {
+  if (!sites) throw new Error("DriveSiteService is not available.")
+  return sites
+}
+
 function parseAccessSettings(body: unknown): DriveAccessSettingsInput | undefined {
   if (body === undefined || body === null || (isRecord(body) && Object.keys(body).length === 0)) {
     return undefined
@@ -1467,6 +1604,21 @@ function parseDrivePublicLinksPageQuery(
     ...(parsedOffset === undefined ? {} : { offset: parsedOffset }),
     ...(parsedLimit === undefined ? {} : { limit: parsedLimit }),
   }
+}
+
+function parseDriveSiteListQuery(query: Record<string, unknown>): {
+  readonly offset?: number
+  readonly limit?: number
+  readonly search?: string
+  readonly status?: "active" | "disabled" | "expired" | "deleted" | "failed" | "all"
+} {
+  const offset = typeof query.offset === "string" ? parseOptionalNonNegativeInteger(query.offset, "offset") : undefined
+  const limit = typeof query.limit === "string" ? parseOptionalNonNegativeInteger(query.limit, "limit") : undefined
+  const search = typeof query.search === "string" ? parseOptionalSearch(query.search) : undefined
+  const status = typeof query.status === "string" && ["active", "disabled", "expired", "deleted", "failed", "all"].includes(query.status)
+    ? query.status as "active" | "disabled" | "expired" | "deleted" | "failed" | "all"
+    : undefined
+  return { offset, limit, search, status }
 }
 
 function parseOptionalNonNegativeInteger(value: string | undefined, name: string): number | undefined {

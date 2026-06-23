@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Folder,
+  Globe2,
   KeyRound,
   LoaderCircle,
   RefreshCw,
@@ -28,6 +29,8 @@ import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
+import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
+import { DriveSitesDialog } from "./drive-sites-dialog"
 import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
 import {
   DRIVE_PUBLIC_ASSETS_ENTRY_ID,
@@ -202,6 +205,8 @@ function DriveModule() {
   const [moveParentId, setMoveParentId] = useState<string>("root")
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
   const [publicLinksOpen, setPublicLinksOpen] = useState(false)
+  const [siteCreateTarget, setSiteCreateTarget] = useState<DriveItemDto | null>(null)
+  const [sitesOpen, setSitesOpen] = useState(false)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -592,6 +597,7 @@ function DriveModule() {
         onUploadFolder={() => folderInputRef.current?.click()}
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
+        onOpenSites={() => setSitesOpen(true)}
         onRefresh={() => { void refreshDriveView() }}
       >
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
@@ -693,6 +699,7 @@ function DriveModule() {
         onDelete={handleDelete}
         onOpenItem={handlePreview}
         onShare={handleShare}
+        onPublishSite={setSiteCreateTarget}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
@@ -793,6 +800,15 @@ function DriveModule() {
               onOpenChange={setPublicLinksOpen}
               onDriveItemsChanged={loadItems}
             />
+            <DriveSiteCreateDialog
+              folder={siteCreateTarget}
+              open={siteCreateTarget !== null}
+              onOpenChange={(open) => {
+                if (!open) setSiteCreateTarget(null)
+              }}
+              onCreated={() => setSitesOpen(true)}
+            />
+            <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
             <DriveAccessSettingsDialog
               target={accessSettingsTarget}
               submitting={submitting}
@@ -1146,6 +1162,7 @@ function DriveFileList({
   onDelete,
   onOpenItem,
   onShare,
+  onPublishSite,
   onOpenShareDetails,
   onDisableShare,
   onUploadDroppedFiles,
@@ -1163,6 +1180,7 @@ function DriveFileList({
   readonly onDelete: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
+  readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
@@ -1243,6 +1261,7 @@ function DriveFileList({
                   onDelete={onDelete}
                   onOpenItem={onOpenItem}
                   onShare={onShare}
+                  onPublishSite={onPublishSite}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
                 />
@@ -1335,6 +1354,7 @@ function DriveToolbarActions({
   createDisabled,
   onCreateFolder,
   onOpenPublicLinks,
+  onOpenSites,
   onRefresh,
   onUploadFiles,
   onUploadFolder,
@@ -1349,6 +1369,7 @@ function DriveToolbarActions({
   readonly uploadDisabled: boolean
   readonly onCreateFolder: () => void
   readonly onOpenPublicLinks: () => void
+  readonly onOpenSites: () => void
   readonly onRefresh: () => void
   readonly onUploadFiles: () => void
   readonly onUploadFolder: () => void
@@ -1366,6 +1387,10 @@ function DriveToolbarActions({
       </Button>
       <Button variant="outline" size="sm" disabled={publicLinksDisabled} onClick={onOpenPublicLinks}>
         我的分享
+      </Button>
+      <Button variant="outline" size="sm" disabled={publicLinksDisabled} onClick={onOpenSites}>
+        <Globe2 data-icon="inline-start" />
+        站点
       </Button>
       <Button variant="outline" size="sm" disabled={refreshDisabled} onClick={onRefresh}>
         刷新
@@ -1554,6 +1579,7 @@ function DriveFileListRow({
   onDelete,
   onOpenItem,
   onShare,
+  onPublishSite,
   onOpenShareDetails,
   onDisableShare,
 }: {
@@ -1566,6 +1592,7 @@ function DriveFileListRow({
   readonly onDelete: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
+  readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
@@ -1693,6 +1720,7 @@ function DriveFileListRow({
             item={item}
             onRename={onRename}
             onMove={onMove}
+            onPublishSite={onPublishSite}
           />
         </div>
       </TableCell>
@@ -1752,10 +1780,12 @@ function DriveItemMenu({
   item,
   onRename,
   onMove,
+  onPublishSite,
 }: {
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
+  readonly onPublishSite: (item: DriveItemDto) => void
 }) {
   return (
     <DropdownMenu>
@@ -1766,6 +1796,7 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
+          {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
         </DropdownMenuGroup>

@@ -148,6 +148,75 @@ Input:
 
 - `shareId` required: Drive share record id, item `activeShareId`, or public share id such as `shr_...`.
 
+## Drive Site Tools
+
+Use site tools for publishing a Drive folder as a read-only static website at `/sites/<siteId>/`. Site publishing copies the folder at publish or republish time. It does not create a `/share/...` link, does not grant Drive browse or edit access, and does not use `/files/<assetId>` public asset URLs.
+
+### `drive_site_create`
+
+Publish a Drive folder as an independent static site.
+
+Input:
+
+- `sourceFolderItemId` required: Drive folder item id to copy.
+- `name` required: site display name.
+- `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
+- `accessMode` required: `public` or `password`.
+- `password` optional: required when `accessMode` is `password`.
+- `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
+
+Output:
+
+- `siteId`: public id used in `/sites/<siteId>/`.
+- `url`: public site URL.
+
+### `drive_site_list`
+
+List current user's published Drive sites.
+
+Input:
+
+- `offset` optional.
+- `limit` optional.
+- `search` optional: match site name, site id, source folder, or entry path.
+- `status` optional: `active`, `disabled`, `expired`, `deleted`, `failed`, or `all`.
+
+### `drive_site_update_access`
+
+Update site password and expiry without republishing files.
+
+Input:
+
+- `siteId` required.
+- `accessMode` required: `public` or `password`.
+- `password` optional: required when `accessMode` is `password`; omit to keep the existing password when supported.
+- `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
+
+### `drive_site_disable`
+
+Disable public access to a site while keeping its record and deployment.
+
+Input:
+
+- `siteId` required.
+
+### `drive_site_delete`
+
+Delete a published site and make its `/sites/<siteId>/` URL inaccessible.
+
+Input:
+
+- `siteId` required.
+
+### `drive_site_republish`
+
+Copy the remembered source folder into a new site deployment. The active deployment switches only after success.
+
+Input:
+
+- `siteId` required.
+- `entryPath` optional: replacement HTML entry path inside the source folder.
+
 ## File Version Tools
 
 Versions are available for owned Drive files. Public share links always point to the current version and do not expose version history.

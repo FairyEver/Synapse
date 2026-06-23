@@ -11,6 +11,8 @@ import {
   type DrivePublicAssetDto,
   type DrivePublicAssetListPageDto,
   type DrivePublicLinksPageDto,
+  type DriveSiteDto,
+  type DriveSiteListPageDto,
   type DriveShareListItemDto,
   type DriveTrashListPageDto,
 } from "@synapse/shared"
@@ -39,13 +41,16 @@ const mocks = vi.hoisted(() => ({
   getDriveUsage: vi.fn(),
   listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
+  listDriveSites: vi.fn(),
   listDriveTrash: vi.fn(),
   listDriveShares: vi.fn(),
   moveDriveItem: vi.fn(),
   openExternal: vi.fn(),
   prepareDriveFolderUpload: vi.fn(),
   prepareDriveUpload: vi.fn(),
+  preflightDriveSite: vi.fn(),
   renameDriveItem: vi.fn(),
+  createDriveSite: vi.fn(),
   shareDriveItem: vi.fn(),
   uploadDriveLocalItems: vi.fn(),
   toast: vi.fn(),
@@ -104,12 +109,15 @@ vi.mock("@/lib/electron-bridge", () => ({
       getDriveUsage: mocks.getDriveUsage,
       listDrivePublicAssets: mocks.listDrivePublicAssets,
       listDriveItems: mocks.listDriveItems,
+      listDriveSites: mocks.listDriveSites,
       listDriveTrash: mocks.listDriveTrash,
       listDriveShares: mocks.listDriveShares,
       moveDriveItem: mocks.moveDriveItem,
       prepareDriveFolderUpload: mocks.prepareDriveFolderUpload,
       prepareDriveUpload: mocks.prepareDriveUpload,
+      preflightDriveSite: mocks.preflightDriveSite,
       renameDriveItem: mocks.renameDriveItem,
+      createDriveSite: mocks.createDriveSite,
       shareDriveItem: mocks.shareDriveItem,
       uploadDriveLocalItems: mocks.uploadDriveLocalItems,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
@@ -141,6 +149,7 @@ beforeEach(() => {
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
+  mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
   mocks.listDriveTrash.mockResolvedValue(createDriveTrashPage([]))
   mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([]))
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
@@ -159,7 +168,17 @@ beforeEach(() => {
       url: "https://upload.example.test/object",
     },
   })
+  mocks.preflightDriveSite.mockResolvedValue({
+    sourceFolderItemId: "folder-1",
+    sourceFolderName: "原型",
+    htmlFiles: ["index.html"],
+    defaultEntryPath: "index.html",
+    fileCount: 3,
+    totalBytes: "128",
+    includesJavaScript: true,
+  })
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
+  mocks.createDriveSite.mockResolvedValue(createDriveSite())
   mocks.shareDriveItem.mockResolvedValue({
     id: "share-row-1",
     shareId: "shr_test",
@@ -265,14 +284,43 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("发布")
   })
 
+  it("shows publish site only for folder rows", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", type: "folder", name: "原型" }),
+      createDriveItem({ id: "file-1", type: "file", name: "index.html", mimeType: "text/html" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(rowButton("原型", "更多")).toBeTruthy()
+    await openRowMenu("原型")
+    expect(document.body.textContent).toContain("发布站点")
+
+    await closeMenus()
+    await openRowMenu("index.html")
+    expect(document.body.textContent).not.toContain("发布站点")
+  })
+
+  it("opens the site management dialog from the Drive top bar", async () => {
+    mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("站点")
+    await flushAct()
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("站点")
+    expect(mocks.listDriveSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+  })
+
   it("groups cloud drive actions in the top toolbar", async () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionTexts()).toEqual(["上传", "新建文件夹", "我的分享", "刷新"])
-    for (const button of driveToolbarButtons()) {
-      expect(button.querySelector("svg")).toBeNull()
-    }
+    expect(driveToolbarActionTexts()).toEqual(["上传", "新建文件夹", "我的分享", "站点", "刷新"])
+    expect(getButton("站点").querySelector("svg")).not.toBeNull()
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -2149,6 +2197,27 @@ function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): Drive
   }
 }
 
+function createDriveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
+  return {
+    id: "site-row-1",
+    siteId: "site_abc",
+    name: "原型",
+    status: "active",
+    accessMode: "public",
+    url: "https://synapse.test/sites/site_abc/",
+    expiresAt: null,
+    sourceFolderItemId: "folder-1",
+    sourceFolderName: "原型",
+    entryPath: "index.html",
+    fileCount: 3,
+    totalBytes: "128",
+    createdAt: "2026-06-23T00:00:00.000Z",
+    updatedAt: "2026-06-23T00:00:00.000Z",
+    lastPublishedAt: "2026-06-23T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
 function createDrivePublicLinksPage<TItem>(
   items: readonly TItem[],
   page: Partial<DrivePublicLinksPageDto<TItem>["page"]> = {},
@@ -2158,6 +2227,23 @@ function createDrivePublicLinksPage<TItem>(
     page: {
       offset: 0,
       limit: 20,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
+  }
+}
+
+function createDriveSitePage(
+  items: readonly DriveSiteDto[],
+  page: Partial<DriveSiteListPageDto["page"]> = {},
+): DriveSiteListPageDto {
+  return {
+    items,
+    total: items.length,
+    page: {
+      offset: 0,
+      limit: 50,
       hasMore: false,
       nextOffset: null,
       ...page,

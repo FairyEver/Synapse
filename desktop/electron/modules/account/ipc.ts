@@ -180,6 +180,38 @@ const drivePublicAssetSchema = z.object({
   updatedAt: z.string(),
 })
 
+const driveSiteSchema = z.object({
+  id: z.string(),
+  siteId: z.string(),
+  name: z.string(),
+  status: z.enum(["active", "disabled", "expired", "deleted", "failed"]),
+  accessMode: z.enum(["public", "password"]),
+  url: z.string(),
+  expiresAt: z.string().nullable(),
+  sourceFolderItemId: z.string().nullable(),
+  sourceFolderName: z.string().nullable(),
+  entryPath: z.string().nullable(),
+  fileCount: z.number().int().nonnegative(),
+  totalBytes: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastPublishedAt: z.string().nullable(),
+})
+
+const driveSitePreflightResultSchema = z.object({
+  sourceFolderItemId: z.string(),
+  sourceFolderName: z.string(),
+  htmlFiles: z.array(z.string()),
+  defaultEntryPath: z.string().nullable(),
+  fileCount: z.number().int().nonnegative(),
+  totalBytes: z.string(),
+  includesJavaScript: z.boolean(),
+})
+
+const driveSiteListPageSchema = drivePublicLinksPageSchema(driveSiteSchema).extend({
+  total: z.number().int().nonnegative(),
+})
+
 const driveTrashItemSchema = z.object({
   id: z.string(),
   kind: z.enum(["normal", "public_asset"]),
@@ -210,6 +242,30 @@ const driveUsageSchema = z.object({
 })
 
 const driveParentSchema = z.object({ parentId: z.string().nullable().optional() })
+const driveSiteIdSchema = z.object({ siteId: z.string().min(1) })
+const driveSitePreflightSchema = z.object({ sourceFolderItemId: z.string().min(1) })
+const driveSiteCreateSchema = z.object({
+  sourceFolderItemId: z.string().min(1),
+  name: z.string().min(1).max(255),
+  entryPath: z.string().min(1).max(1024).nullable().optional(),
+  accessMode: z.enum(["public", "password"]),
+  password: z.string().min(1).max(256).nullable().optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+}).strict()
+const driveSiteAccessUpdateSchema = driveSiteIdSchema.extend({
+  accessMode: z.enum(["public", "password"]),
+  password: z.string().min(1).max(256).nullable().optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+}).strict()
+const driveSiteListSchema = z.object({
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+  search: z.string().optional(),
+  status: z.enum(["active", "disabled", "expired", "deleted", "failed", "all"]).optional(),
+}).strict().optional()
+const driveSiteRepublishSchema = driveSiteIdSchema.extend({
+  entryPath: z.string().min(1).max(1024).nullable().optional(),
+}).strict()
 const drivePrepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   name: z.string(),
@@ -887,6 +943,62 @@ export const accountIpcModule: IpcModule = {
       request: drivePublicAssetIdSchema,
       response: drivePublicAssetSchema,
       handler: async (_ctx, input) => accountService.restoreDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
+    },
+    preflightDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:preflight",
+      request: driveSitePreflightSchema,
+      response: driveSitePreflightResultSchema,
+      handler: async (_ctx, input) => accountService.preflightDriveSite(driveSitePreflightSchema.parse(input)),
+    },
+    createDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:create",
+      request: driveSiteCreateSchema,
+      response: driveSiteSchema,
+      handler: async (_ctx, input) => accountService.createDriveSite(driveSiteCreateSchema.parse(input)),
+    },
+    listDriveSites: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:list",
+      request: driveSiteListSchema,
+      response: driveSiteListPageSchema,
+      handler: async (_ctx, input) => accountService.listDriveSites(driveSiteListSchema.parse(input)),
+    },
+    updateDriveSiteAccess: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:access:update",
+      request: driveSiteAccessUpdateSchema,
+      response: driveSiteSchema,
+      handler: async (_ctx, input) => accountService.updateDriveSiteAccess(driveSiteAccessUpdateSchema.parse(input)),
+    },
+    disableDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:disable",
+      request: driveSiteIdSchema,
+      response: driveSiteSchema,
+      handler: async (_ctx, input) => accountService.disableDriveSite(driveSiteIdSchema.parse(input).siteId),
+    },
+    enableDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:enable",
+      request: driveSiteIdSchema,
+      response: driveSiteSchema,
+      handler: async (_ctx, input) => accountService.enableDriveSite(driveSiteIdSchema.parse(input).siteId),
+    },
+    deleteDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:delete",
+      request: driveSiteIdSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.deleteDriveSite(driveSiteIdSchema.parse(input).siteId),
+    },
+    republishDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:sites:republish",
+      request: driveSiteRepublishSchema,
+      response: driveSiteSchema,
+      handler: async (_ctx, input) => accountService.republishDriveSite(driveSiteRepublishSchema.parse(input)),
     },
     listDriveTrash: {
       kind: "invoke",

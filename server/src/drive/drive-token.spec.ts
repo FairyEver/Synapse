@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   createDrivePublicAssetId,
   createDriveShareId,
+  createDriveSiteId,
   driveOverwriteStorageKeyForSession,
   driveStorageKeyForItem,
   isValidDriveItemName,
@@ -15,6 +16,10 @@ describe("drive token helpers", () => {
   it("creates fixed-length public asset ids", () => {
     expect(createDrivePublicAssetId()).toMatch(/^asset_[0-9A-Za-z]{32}$/u)
     expect(createDrivePublicAssetId()).toHaveLength(38)
+  })
+
+  it("creates URL-safe Drive site ids", () => {
+    expect(createDriveSiteId()).toMatch(/^site_[A-Za-z0-9_-]{32,}$/u)
   })
 
   it("builds storage keys from server item ids", () => {

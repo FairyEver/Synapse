@@ -6,12 +6,16 @@ import {
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
   DRIVE_OWNER_BROWSER_PATH_PREFIX,
+  DRIVE_SITE_DEFAULT_PAGE_SIZE,
+  DRIVE_SITE_MAX_PAGE_SIZE,
+  DRIVE_SITE_PATH_PREFIX,
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SHARE_BROWSER_PATH_PREFIX,
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
   buildDrivePublicAssetUrl,
+  buildDriveSiteUrl,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   buildOwnerDriveBrowserUrl,
@@ -44,6 +48,17 @@ describe("drive URL helpers", () => {
       publicAppUrl: "https://synapse.example/",
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     })).toBe("https://synapse.example/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("builds canonical site root URLs", () => {
+    expect(DRIVE_SITE_PATH_PREFIX).toBe("/sites")
+    expect(buildDriveSiteUrl({ publicAppUrl: "https://synapse.test/", siteId: "site_abc" }))
+      .toBe("https://synapse.test/sites/site_abc/")
+  })
+
+  it("keeps site page limits stable", () => {
+    expect(DRIVE_SITE_DEFAULT_PAGE_SIZE).toBe(50)
+    expect(DRIVE_SITE_MAX_PAGE_SIZE).toBe(200)
   })
 
   it("trims public app URL whitespace for public asset URLs", () => {

@@ -26,6 +26,12 @@ Use these tools only for Synapse Drive:
 - `drive_share_list`
 - `drive_share_create`
 - `drive_share_disable`
+- `drive_site_create`
+- `drive_site_list`
+- `drive_site_update_access`
+- `drive_site_disable`
+- `drive_site_delete`
+- `drive_site_republish`
 - `drive_usage_get`
 - `drive_stats_get`
 - `drive_item_tree_list`
@@ -65,14 +71,19 @@ Do not use this skill for database records, content resources, scheduler tasks, 
    - Pass `accessMode: "link_read"` for a new read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
    - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
    - Use the `drive_share_create` result when the user needs the password for a specific share. `drive_share_list` lists existing shares without returning passwords.
-11. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
-12. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
-13. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
-14. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
-15. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
-16. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
-17. Use `drive_trash_list` to inspect user-visible trash. Restore rows from that list with `drive_item_restore`; pass `kind` and `assetId` when the row kind is `public_asset`. Use `drive_direct_link_restore` only when the user directly provides a public asset id. Use `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
-18. Report the final item name, item id, and share URL or public asset URL when one was created.
+11. If the user asks to publish a Drive folder as a static website, folder site, multi-page HTML prototype, or product prototype site, call `drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
+   - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
+   - Set `entryPath` only when the homepage is not the default `index.html`.
+   - Use `accessMode: "public"` for open sites or `accessMode: "password"` with `password` when the user asks for a password.
+   - Use `drive_site_list`, `drive_site_update_access`, `drive_site_disable`, `drive_site_delete`, and `drive_site_republish` for existing site management.
+12. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
+13. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
+14. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
+15. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
+16. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
+17. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
+18. Use `drive_trash_list` to inspect user-visible trash. Restore rows from that list with `drive_item_restore`; pass `kind` and `assetId` when the row kind is `public_asset`. Use `drive_direct_link_restore` only when the user directly provides a public asset id. Use `drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
+19. Report the final item name, item id, share URL, public asset URL, or site URL when one was created.
 
 ## Safety
 
@@ -85,6 +96,8 @@ Before deleting a file, folder, public asset, trash item, or disabling a share, 
 Shares use `/share/...` and let others browse files and folders, render previewable HTML, download content, and, when the owner chooses an editable mode, edit supported text files after login. HTML shares are live links to the current Drive file, not static site snapshots.
 
 Share editors cannot see version history through public share links. Editable shares update the owner's Drive file and create normal file versions owned by the file owner.
+
+Sites use `/sites/<siteId>/` and are read-only static snapshots copied from a Drive folder. Site access settings do not change Drive shares, Drive item permissions, or public asset URLs.
 
 Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 
@@ -100,6 +113,12 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "生成直链": call `drive_direct_link_upload`.
 - "生成外链": call `drive_direct_link_upload`.
 - "分享云盘文件": call `drive_share_create`.
+- "发布这个文件夹为站点": call `drive_site_create`.
+- "把这个多页 HTML 原型发成网站": call `drive_site_create`.
+- "重新发布站点": call `drive_site_republish`.
+- "管理站点": call `drive_site_list`.
+- "停用站点": call `drive_site_disable`.
+- "删除站点": call `drive_site_delete`.
 - "把这个目录传到云盘": call `drive_folder_upload`.
 - "打开/预览这个文件": call `drive_item_preview_get`.
 - "读取这个 Markdown": call `drive_file_content_read`.
