@@ -43,6 +43,7 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `model_price.rule.enable` | `model_price_rule_enable` | `model_price.rule.enable` | `modelPriceRuleEnable` |
 | `model_price.rule.disable` | `model_price_rule_disable` | `model_price.rule.disable` | `modelPriceRuleDisable` |
 | `repository.item.list` | `repository_item_list` | `repository.item.list` | `repositoryItemList` |
+| `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
 | `variable.item.list` | `variable_item_list` | `variable.item.list` | `variableItemList` |
 | `variable.item.get` | `variable_item_get` | `variable.item.get` | `variableItemGet` |
 | `variable.item.create` | `variable_item_create` | `variable.item.create` | `variableItemCreate` |

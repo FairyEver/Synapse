@@ -28,6 +28,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 - `desktop/synapse-capabilities/shared/variable-domain.ts`
 - `desktop/synapse-capabilities/shared/workflow-domain.ts`
 - `desktop/synapse-capabilities/shared/content-domain.ts`
+- `desktop/synapse-capabilities/shared/app-domain.ts`
 - `desktop/synapse-capabilities/shared/registry.ts`
 - `desktop/synapse-capabilities/shared/naming.ts`
 - `desktop/electron/capabilities/action-router.ts`
@@ -49,6 +50,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `database.table.list` | `database_table_list` | `database.table.list` | `databaseTableList` |
 | `automation.runtime.inspect` | `automation_runtime_inspect` | `automation.runtime.inspect` | `automationRuntimeInspect` |
 | `content.skill.create` | `content_skill_create` | `content.skill.create` | `contentSkillCreate` |
+| `app.document_template.docx.generate` | `app_document_template_docx_generate` | `app.document_template.docx.generate` | `documentTemplateDocxGenerate` |
 
 公开 JSON 字段使用 camelCase。
 
@@ -64,6 +66,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
 | `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
 | `drive` | 云盘文件、文件夹、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
+| `app` | 系统 App 提供的可复用能力，例如文档模板生成 | `desktop/synapse-capabilities/shared/app-domain.ts` |
 
 领域边界必须清晰。跨领域暴露通过 shared registry 和 action router 完成。
 
@@ -79,6 +82,7 @@ automation.item.list -> automation_item_list
 model_price.rule.list -> model_price_rule_list
 content.skill.create -> content_skill_create
 drive.file.upload -> drive_file_upload
+app.document_template.docx.generate -> app_document_template_docx_generate
 ```
 
 工具参数使用与 HTTP action 参数一致的公开 JSON 字段名。
@@ -125,6 +129,10 @@ Content MCP 的更新和删除只允许修改当前仓库身份创建的资源�
 ## Drive MCP
 
 Drive MCP 暴露普通用户云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。整理云盘时，Agent 应先用 `drive_stats_get` 和 `drive_item_tree_list` 获取元数据，再用 `drive_folder_path_ensure` 准备目录，最后通过 `drive_reorganization_preview` 生成计划并用 `drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
+
+## App MCP
+
+App MCP 暴露系统 App 提供的可复用能力。`app_document_template_docx_generate` 用本地 `.docx` 模板和 JSON 对象生成 Word 文档；调用时必须提供 `templatePath`、`outputPath`，并且在 `dataPath` 和内联 `data` 中二选一。默认不覆盖已有输出文件，除非显式传入 `overwrite: true`。
 
 ## Repository And Variable MCP
 
