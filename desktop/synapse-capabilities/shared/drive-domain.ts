@@ -23,6 +23,12 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
   { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
   { id: "drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
+  { id: "drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a Drive folder as an independent read-only static site at /sites/<siteId>/.", mutates: true },
+  { id: "drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
+  { id: "drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update password and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
+  { id: "drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
+  { id: "drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
+  { id: "drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
   { id: "drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
   { id: "drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
   { id: "drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
@@ -60,6 +66,8 @@ const optionalParentId = {
 }
 const driveAccessExpiresInValues = ["3d", "7d", "30d", "1y", "forever"]
 const driveShareAccessModeValues = ["link_read", "link_edit", "specified_users_edit"]
+const driveSiteAccessModeValues = ["public", "password"]
+const driveSiteStatusValues = ["active", "disabled", "expired", "deleted", "failed", "all"]
 const pageInputProperties = {
   offset: { type: "number", description: "Optional pagination offset. Defaults to 0." },
   limit: { type: "number", description: "Optional pagination page size." },
@@ -316,6 +324,82 @@ export function buildDriveTools(): McpToolDefinition[] {
           shareId: stringField("Drive share record id, item activeShareId, or public shareId such as shr_...."),
         },
         required: ["shareId"],
+      },
+    },
+    {
+      name: "drive_site_create",
+      description: "Publish a Drive folder as an independent static site at /sites/<siteId>/. The folder is copied at publish time; this does not create a Drive share or grant edit access.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sourceFolderItemId: stringField("Drive folder item id to copy into the site deployment."),
+          name: stringField("Site display name."),
+          entryPath: stringField("Optional HTML entry path inside the folder. Defaults to index.html when available."),
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: stringField("Password to set when accessMode is password."),
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
+        },
+        required: ["sourceFolderItemId", "name", "accessMode", "expiresIn"],
+      },
+    },
+    {
+      name: "drive_site_list",
+      description: "List Drive-published static sites for the current user. Sites use /sites/<siteId>/ and are separate from /share links and /files public assets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...pageInputProperties,
+          search: stringField("Optional search text for site name, site id, source folder, or entry path."),
+          status: { type: "string", enum: driveSiteStatusValues, description: "Optional status filter. Use all or omit to include normal site rows." },
+        },
+      },
+    },
+    {
+      name: "drive_site_update_access",
+      description: "Update a Drive site password and expiry without republishing files or changing Drive shares.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: stringField("Password to set when accessMode is password."),
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
+        },
+        required: ["siteId", "accessMode", "expiresIn"],
+      },
+    },
+    {
+      name: "drive_site_disable",
+      description: "Disable public access to a Drive-published site while keeping its record and deployment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+        },
+        required: ["siteId"],
+      },
+    },
+    {
+      name: "drive_site_delete",
+      description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+        },
+        required: ["siteId"],
+      },
+    },
+    {
+      name: "drive_site_republish",
+      description: "Republish a Drive site by copying the remembered source folder into a new deployment. The active deployment switches only after success.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+          entryPath: stringField("Optional replacement HTML entry path inside the source folder."),
+        },
+        required: ["siteId"],
       },
     },
     {

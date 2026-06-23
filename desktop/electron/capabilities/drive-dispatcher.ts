@@ -22,6 +22,12 @@ import type {
   DriveReorganizationApplyResultDto,
   DriveReorganizationPreviewDto,
   DriveReorganizationPreviewInput,
+  DriveSiteAccessMode,
+  DriveSiteAccessUpdateInput,
+  DriveSiteCreateInput,
+  DriveSiteDto,
+  DriveSiteListInput,
+  DriveSiteListPageDto,
   DriveShareAccessMode,
   DriveShareDto,
   DriveShareListPageDto,
@@ -70,6 +76,12 @@ type DriveAccountServicePort = {
   readonly previewDriveReorganization: (input: DriveReorganizationPreviewInput) => Promise<DriveReorganizationPreviewDto>
   readonly applyDriveReorganization: (input: DriveReorganizationApplyInput) => Promise<DriveReorganizationApplyResultDto>
   readonly listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
+  readonly createDriveSite: (input: DriveSiteCreateInput) => Promise<DriveSiteDto>
+  readonly listDriveSites: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
+  readonly updateDriveSiteAccess: (input: { readonly siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
+  readonly disableDriveSite: (siteId: string) => Promise<DriveSiteDto>
+  readonly deleteDriveSite: (siteId: string) => Promise<{ ok: true }>
+  readonly republishDriveSite: (input: { readonly siteId: string; readonly entryPath?: string | null }) => Promise<DriveSiteDto>
   readonly getDriveItemPreview: (input: {
     readonly itemId: string
     readonly surface?: "standalone" | "console"
@@ -155,6 +167,7 @@ type DriveMutationSecurity = {
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const defaultFileSystem: FileSystemPort = { createReadStream, lstat, readdir, stat }
 const DRIVE_ACCESS_EXPIRES_IN_VALUES = new Set<DriveAccessExpiresIn>(["3d", "7d", "30d", "1y", "forever"])
+const DRIVE_SITE_STATUS_VALUES = new Set<DriveSiteListInput["status"]>(["active", "disabled", "expired", "deleted", "failed", "all"])
 
 export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherDeps) {
   const fileSystem = deps.fileSystem ?? defaultFileSystem
@@ -316,6 +329,39 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
+          }))
+        case "drive.site.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params)),
+          }))
+        case "drive.site.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const sites = await deps.accountService.listDriveSites(parseDriveSiteListInput(params))
+            return { ok: true, data: sites, total: sites.total }
+          })
+        case "drive.site.update_access":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params)),
+          }))
+        case "drive.site.disable":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.disableDriveSite(requireString(params, "siteId")),
+          }))
+        case "drive.site.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveSite(requireString(params, "siteId")),
+          }))
+        case "drive.site.republish":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.republishDriveSite({
+              siteId: requireString(params, "siteId"),
+              entryPath: optionalNullableString(params.entryPath),
+            }),
           }))
         case "drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -755,7 +801,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "assetId", "versionId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "isPinned", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "assetId", "versionId", "shareId", "siteId", "sourceFolderItemId", "parentId", "name", "folderName", "passwordEnabled", "accessMode", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) {
       metadata[key] = key === "shareId" && typeof value === "string"
@@ -804,6 +850,7 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   const record = data as Record<string, unknown>
   if (typeof record.itemId === "string") metadata.itemId = record.itemId
   if (typeof record.assetId === "string") metadata.assetId = record.assetId
+  if (typeof record.siteId === "string") metadata.siteId = record.siteId
   if (typeof record.shareId === "string" && typeof record.id === "string") metadata.shareRecordId = record.id
   if (typeof record.id === "string" && !metadata.itemId && !metadata.shareRecordId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
@@ -1038,6 +1085,44 @@ function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublic
   }
 }
 
+function parseDriveSiteCreateInput(params: Record<string, unknown>): DriveSiteCreateInput {
+  const accessMode = requireDriveSiteAccessMode(params.accessMode)
+  return {
+    sourceFolderItemId: requireString(params, "sourceFolderItemId"),
+    name: requireString(params, "name"),
+    entryPath: optionalNullableString(params.entryPath),
+    accessMode,
+    password: accessMode === "password" ? optionalNullableString(params.password) : null,
+    expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
+  }
+}
+
+function parseDriveSiteListInput(params: Record<string, unknown>): DriveSiteListInput | undefined {
+  const offset = optionalNumber(params.offset)
+  const limit = optionalNumber(params.limit)
+  const search = optionalString(params.search)
+  const status = optionalDriveSiteStatus(params.status)
+  if (offset === undefined && limit === undefined && search === undefined && status === undefined) return undefined
+  return {
+    ...(offset === undefined ? {} : { offset }),
+    ...(limit === undefined ? {} : { limit }),
+    ...(search === undefined ? {} : { search }),
+    ...(status === undefined ? {} : { status }),
+  }
+}
+
+function parseDriveSiteAccessUpdateInput(
+  params: Record<string, unknown>,
+): { readonly siteId: string } & DriveSiteAccessUpdateInput {
+  const accessMode = requireDriveSiteAccessMode(params.accessMode)
+  return {
+    siteId: requireString(params, "siteId"),
+    accessMode,
+    password: accessMode === "password" ? optionalNullableString(params.password) : null,
+    expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
+  }
+}
+
 function parseDriveVersionListInput(params: Record<string, unknown>): DriveFileVersionListInput | undefined {
   const offset = optionalNumber(params.offset)
   const limit = optionalNumber(params.limit)
@@ -1090,10 +1175,29 @@ function optionalDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn | un
   return value as DriveAccessExpiresIn
 }
 
+function requireDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn {
+  const expiresIn = optionalDriveAccessExpiresIn(value)
+  if (!expiresIn) throw new Error("Missing or invalid 'expiresIn': expected one of 3d, 7d, 30d, 1y, or forever.")
+  return expiresIn
+}
+
 function optionalDriveShareAccessMode(value: unknown): DriveShareAccessMode | undefined {
   if (value === undefined || value === null) return undefined
   if (value === "link_read" || value === "link_edit" || value === "specified_users_edit") return value
   throw new Error("Expected accessMode to be one of link_read, link_edit, or specified_users_edit.")
+}
+
+function requireDriveSiteAccessMode(value: unknown): DriveSiteAccessMode {
+  if (value === "public" || value === "password") return value
+  throw new Error("Missing or invalid 'accessMode': expected public or password.")
+}
+
+function optionalDriveSiteStatus(value: unknown): DriveSiteListInput["status"] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === "string" && DRIVE_SITE_STATUS_VALUES.has(value as DriveSiteListInput["status"])) {
+    return value as DriveSiteListInput["status"]
+  }
+  throw new Error("Missing or invalid 'status': expected Drive site status.")
 }
 
 function parseDriveAccessSettings(

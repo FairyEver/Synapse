@@ -1,6 +1,6 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
-import type { DrivePublicAssetDto, DriveTrashListPageDto } from "@synapse/shared"
+import type { DrivePublicAssetDto, DriveSiteDto, DriveSiteListPageDto, DriveTrashListPageDto } from "@synapse/shared"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
@@ -65,6 +65,12 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_share_list",
       "drive_share_create",
       "drive_share_disable",
+      "drive_site_create",
+      "drive_site_list",
+      "drive_site_update_access",
+      "drive_site_disable",
+      "drive_site_delete",
+      "drive_site_republish",
       "drive_usage_get",
       "drive_stats_get",
       "drive_item_tree_list",
@@ -370,6 +376,92 @@ describe("createDriveCapabilityDispatcher", () => {
       })
 
     expect(accountService.listDriveShares).toHaveBeenCalledWith({ offset: 10, limit: 5 })
+  })
+
+  it("dispatches Drive site creation separately from share creation", async () => {
+    const site = driveSite({ siteId: "site_public" })
+    const createDriveSite = vi.fn(async () => site)
+    const shareDriveItem = vi.fn()
+    const accountService = createAccountService({ createDriveSite, shareDriveItem })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.site.create", {
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      accessMode: "public",
+      expiresIn: "forever",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: site })
+
+    expect(createDriveSite).toHaveBeenCalledWith({
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      entryPath: null,
+      accessMode: "public",
+      password: null,
+      expiresIn: "forever",
+    })
+    expect(shareDriveItem).not.toHaveBeenCalled()
+  })
+
+  it("routes Drive site management tools", async () => {
+    const site = driveSite({ siteId: "site_public" })
+    const listPage: DriveSiteListPageDto = { items: [site], total: 1, page: drivePage() }
+    const listDriveSites = vi.fn(async () => listPage)
+    const updateDriveSiteAccess = vi.fn(async () => driveSite({ siteId: "site_public", accessMode: "password" }))
+    const disableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "disabled" }))
+    const deleteDriveSite = vi.fn(async () => ({ ok: true as const }))
+    const republishDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
+    const accountService = createAccountService({
+      listDriveSites,
+      updateDriveSiteAccess,
+      disableDriveSite,
+      deleteDriveSite,
+      republishDriveSite,
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.site.list", {
+      offset: 2,
+      limit: 5,
+      search: "原型",
+      status: "active",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: listPage, total: 1 })
+    await expect(dispatcher.dispatch("drive.site.update_access", {
+      siteId: "site_public",
+      accessMode: "password",
+      password: "secret",
+      expiresIn: "7d",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveSite({ siteId: "site_public", accessMode: "password" }),
+    })
+    await expect(dispatcher.dispatch("drive.site.disable", {
+      siteId: "site_public",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveSite({ siteId: "site_public", status: "disabled" }),
+    })
+    await expect(dispatcher.dispatch("drive.site.delete", {
+      siteId: "site_public",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
+    await expect(dispatcher.dispatch("drive.site.republish", {
+      siteId: "site_public",
+      entryPath: "pages/home.html",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }),
+    })
+
+    expect(listDriveSites).toHaveBeenCalledWith({ offset: 2, limit: 5, search: "原型", status: "active" })
+    expect(updateDriveSiteAccess).toHaveBeenCalledWith({
+      siteId: "site_public",
+      accessMode: "password",
+      password: "secret",
+      expiresIn: "7d",
+    })
+    expect(disableDriveSite).toHaveBeenCalledWith("site_public")
+    expect(deleteDriveSite).toHaveBeenCalledWith("site_public")
+    expect(republishDriveSite).toHaveBeenCalledWith({ siteId: "site_public", entryPath: "pages/home.html" })
   })
 
   it("uploads a public asset through the account helper after authorizing local file read", async () => {
@@ -1464,6 +1556,12 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     deleteDriveItem: vi.fn(),
     shareDriveItem: vi.fn(),
     disableDriveShare: vi.fn(),
+    createDriveSite: vi.fn(),
+    listDriveSites: vi.fn(),
+    updateDriveSiteAccess: vi.fn(),
+    disableDriveSite: vi.fn(),
+    deleteDriveSite: vi.fn(),
+    republishDriveSite: vi.fn(),
     getDriveUsage: vi.fn(),
     listDriveShares: vi.fn(),
     getDriveStats: vi.fn(),
@@ -1561,6 +1659,27 @@ function drivePublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePu
     lastAccessedAt: null,
     createdAt: "2026-06-18T00:00:00.000Z",
     updatedAt: "2026-06-18T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
+  return {
+    id: "site-row-1",
+    siteId: "site_public",
+    name: "产品原型",
+    status: "active",
+    accessMode: "public",
+    url: "https://synapse.test/sites/site_public/",
+    expiresAt: null,
+    sourceFolderItemId: "folder-1",
+    sourceFolderName: "产品原型",
+    entryPath: "index.html",
+    fileCount: 4,
+    totalBytes: "1024",
+    createdAt: "2026-06-23T00:00:00.000Z",
+    updatedAt: "2026-06-23T00:00:00.000Z",
+    lastPublishedAt: "2026-06-23T00:00:00.000Z",
     ...overrides,
   }
 }
