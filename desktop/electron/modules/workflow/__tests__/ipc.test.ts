@@ -1659,6 +1659,36 @@ describe("workflowIpcModule", () => {
     }))
   })
 
+  it("exposes workflow parameter preset IPC without logging values", async () => {
+    const presets = {
+      list: vi.fn(async () => [{ id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret text" }, createdAt: 1, updatedAt: 2 }]),
+      save: vi.fn(async (input: unknown) => ({ id: "preset-2", workflowId: "workflow-1", name: "新预设", values: (input as { values: Record<string, string> }).values, createdAt: 3, updatedAt: 3 })),
+      delete: vi.fn(async () => undefined),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.param-presets") return presets as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:param-presets:list", { workflowId: "workflow-1" }))
+      .resolves.toEqual([expect.objectContaining({ id: "preset-1", values: { topic: "secret text" } })])
+    await expect(harness.invoke("synapse:workflow:param-presets:save", {
+      workflowId: "workflow-1",
+      name: "新预设",
+      values: { topic: "secret text" },
+    })).resolves.toEqual(expect.objectContaining({ id: "preset-2" }))
+    await expect(harness.invoke("synapse:workflow:param-presets:delete", { id: "preset-2" }))
+      .resolves.toBeUndefined()
+
+    expect(presets.list).toHaveBeenCalledWith("workflow-1")
+    expect(presets.save).toHaveBeenCalledWith({ workflowId: "workflow-1", name: "新预设", values: { topic: "secret text" } })
+    expect(presets.delete).toHaveBeenCalledWith("preset-2")
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("secret text")
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("secret text")
+  })
+
 })
 
 function workflowDefinition() {

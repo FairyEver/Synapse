@@ -682,6 +682,27 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps workflow parameter preset methods to workflow IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.workflowParamPresets.list("workflow-1")
+    await bridge.workflowParamPresets.save({ workflowId: "workflow-1", name: "A", values: { topic: "secret" } })
+    await bridge.workflowParamPresets.delete("preset-1")
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:workflow:param-presets:list",
+      { workflowId: "workflow-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:workflow:param-presets:save",
+      { workflowId: "workflow-1", name: "A", values: { topic: "secret" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:workflow:param-presets:delete",
+      { id: "preset-1" },
+    )
+  })
+
   it("maps Agent conversation bundle export to the Agent IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 

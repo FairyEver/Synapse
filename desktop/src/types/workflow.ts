@@ -3,6 +3,20 @@ import type { SynapseAgentConversationTarget } from "./agent-navigation"
 export interface WorkflowParam {
   name: string; type: "text" | "number"; default: string | number | null; description?: string
 }
+export interface WorkflowParamPreset {
+  id: string
+  workflowId: string
+  name: string
+  values: Record<string, string>
+  createdAt: number
+  updatedAt: number
+}
+export interface SaveWorkflowParamPresetInput {
+  workflowId: string
+  name: string
+  values: Record<string, string>
+  overwritePresetId?: string
+}
 export interface WorkflowNode {
   id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
 }
