@@ -174,6 +174,7 @@ type DriveBrowserChildrenPageInput = {
 type DrivePublicLinksPageInput = {
   readonly offset?: number
   readonly limit?: number
+  readonly search?: string
 }
 
 type DriveBrowserChildrenResult = {
@@ -1079,8 +1080,23 @@ export class DriveService implements OnApplicationBootstrap {
   async listShares(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {
     const pageInput = normalizeDrivePublicLinksPage(page)
     const now = new Date()
+    const where: Prisma.DriveShareWhereInput = {
+      userId,
+      enabled: true,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      item: { is: { publicAsset: null } },
+    }
+    if (pageInput.search) {
+      where.AND = [{
+        OR: [
+          { id: { contains: pageInput.search, mode: "insensitive" } },
+          { shareId: { contains: pageInput.search, mode: "insensitive" } },
+          { item: { is: { name: { contains: pageInput.search, mode: "insensitive" } } } },
+        ],
+      }]
+    }
     const shares = await this.prisma.driveShare.findMany({
-      where: { userId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], item: { is: { publicAsset: null } } },
+      where,
       include: { item: { select: { id: true, name: true, type: true, deletedAt: true, lifecycleStatus: true } }, ...driveShareWithEditors },
       orderBy: { createdAt: "desc" },
       skip: pageInput.offset,
@@ -3289,9 +3305,10 @@ function normalizeDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput
   }
 }
 
-function normalizeDrivePublicLinksPage(input?: DrivePublicLinksPageInput): { readonly offset: number; readonly limit: number } {
+function normalizeDrivePublicLinksPage(input?: DrivePublicLinksPageInput): { readonly offset: number; readonly limit: number; readonly search?: string } {
   const requestedOffset = input?.offset
   const requestedLimit = input?.limit
+  const search = input?.search?.trim()
   const offset = typeof requestedOffset === "number" && Number.isFinite(requestedOffset) && requestedOffset > 0
     ? Math.floor(requestedOffset)
     : 0
@@ -3301,6 +3318,7 @@ function normalizeDrivePublicLinksPage(input?: DrivePublicLinksPageInput): { rea
   return {
     offset,
     limit: Math.min(rawLimit, 100),
+    ...(search ? { search } : {}),
   }
 }
 

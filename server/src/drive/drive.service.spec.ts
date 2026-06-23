@@ -736,6 +736,21 @@ describe("DriveService", () => {
     })
   })
 
+  it("filters public links by shared item name", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const reportFile = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const budgetFile = await createCompletedUpload(service, "user-1", { parentId: null, name: "budget.txt", mimeType: "text/plain" })
+    const reportShare = await service.createShare("user-1", reportFile.id, "https://synapse.test")
+    await service.createShare("user-1", budgetFile.id, "https://synapse.test")
+
+    await expect(service.listShares("user-1", "https://synapse.test", { search: "report" })).resolves.toMatchObject({
+      items: [expect.objectContaining({ shareId: reportShare.shareId, itemName: "report.txt" })],
+      page: { hasMore: false },
+    })
+  })
+
   it("rejects ordinary restore for trashed public asset backing files", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
