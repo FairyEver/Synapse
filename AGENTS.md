@@ -119,6 +119,16 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - Synapse MCP 的内置 Skill 已合并为单一模板 `desktop/resources/templates/skills/synapse-skill/`。修改 Database、Drive、Workflow、Automation、Content、Model Price、Variable、Repository 等 MCP 域能力时，必须同步更新该模板下对应 `files/<domain>/index.md` 和必要的 `files/<domain>/api-reference.md`；不要再新增或维护旧式 `desktop/resources/templates/skills/synapse-*-mcp/` 独立内置 Skill。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。Claude SDK native binary（例如 `node_modules/@anthropic-ai/claude-agent-sdk-*/claude` 或 `claude.exe`）属于启动关键 runtime 文件；只写 `asarUnpack` 不够，必须校验证明目标平台的实际二进制已落在 `app.asar.unpacked` 中。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
+### App Capability Package 架构
+
+- 当新增系统应用同时提供 App UI、MCP 能力、Workflow 节点或其它外部调用入口时，必须按能力包组织代码，目录放在 `desktop/app-capabilities/<app-id>/`。
+- 能力包必须按职责拆分：`shared/` 放 schema、类型、capability id、MCP tool 名和 manifest；`main/` 放核心 service、IPC 和 MCP dispatcher；`renderer/` 放系统应用界面；`workflow-node/` 放工作流节点 schema、manifest、executor、panel 和 card。
+- 核心业务逻辑必须集中在 `main/service.ts` 或同级 core service 中。App UI、IPC、MCP dispatcher、Workflow node 只能作为入口适配器，不得各自复制核心逻辑。
+- 能力包接入现有全局 registry 时，必须保持专属业务逻辑内聚在能力包内；不要把应用专属逻辑散落到 `desktop/src/modules/apps`、`desktop/workflow-nodes`、`desktop/synapse-capabilities` 或 Electron bootstrap 文件中。
+- App 类 MCP capability 命名采用 `app.<app_namespace>.<subdomain>.<action>`，MCP tool 名采用 capability id 的下划线形式，例如 `app.document_template.docx.generate` 对应 `app_document_template_docx_generate`。
+- 生成类能力使用 `generate` action。新增这类 action 或 domain 时，必须同步更新 capability 命名校验、MCP tool 映射、action router、内置 `synapse-skill` 模板和相关测试。
+- 能力包如果涉及本地文件读写、网络、shell、Agent、Drive 或其它敏感能力，入口适配器和核心 service 必须保留统一权限检查、审计、错误脱敏和日志边界，不得只在某一个入口处理。
+
 ### 参考模板目录
 
 - `templates/` 目录下的内容是外部参考模板，仅供阅读和参考，禁止自动修改其中的任何文件。
