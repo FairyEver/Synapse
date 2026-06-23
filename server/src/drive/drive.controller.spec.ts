@@ -11,6 +11,8 @@ import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { DrivePublicAssetService } from "./drive-public-asset.service"
+import { DriveSiteService } from "./drive-site.service"
 import { DriveService } from "./drive.service"
 import { LocalDriveStorage } from "./drive-storage"
 
@@ -79,6 +81,18 @@ describe("DriveController", () => {
     deleteShareComment: vi.fn(),
     deleteShareThread: vi.fn(),
   }
+  const sites = {
+    preflightSite: vi.fn(),
+    createSite: vi.fn(),
+    listSites: vi.fn(),
+    updateSiteAccess: vi.fn(),
+    disableSite: vi.fn(),
+    enableSite: vi.fn(),
+    deleteSite: vi.fn(),
+    republishSite: vi.fn(),
+    resolvePublicSite: vi.fn(),
+    verifySitePassword: vi.fn(),
+  }
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
   }
@@ -126,6 +140,16 @@ describe("DriveController", () => {
     annotations.updateShareComment.mockReset()
     annotations.deleteShareComment.mockReset()
     annotations.deleteShareThread.mockReset()
+    sites.preflightSite.mockReset()
+    sites.createSite.mockReset()
+    sites.listSites.mockReset()
+    sites.updateSiteAccess.mockReset()
+    sites.disableSite.mockReset()
+    sites.enableSite.mockReset()
+    sites.deleteSite.mockReset()
+    sites.republishSite.mockReset()
+    sites.resolvePublicSite.mockReset()
+    sites.verifySitePassword.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
@@ -134,7 +158,9 @@ describe("DriveController", () => {
       controllers: [DriveUserController, DrivePublicController],
       providers: [
         { provide: DriveService, useValue: drive },
+        { provide: DrivePublicAssetService, useValue: publicAssets },
         { provide: DriveAnnotationService, useValue: annotations },
+        { provide: DriveSiteService, useValue: sites },
         { provide: "DriveStoragePort", useValue: storage },
       ],
     })
@@ -158,6 +184,76 @@ describe("DriveController", () => {
 
   it("requires user auth for owner direct file responses", async () => {
     await request(app!.getHttpServer()).get("/drive/items/root-1/download").expect(401)
+  })
+
+  it("creates a Drive site through the authenticated Drive API", async () => {
+    const site = createDriveSite()
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.test")
+    sites.createSite.mockResolvedValue(site)
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: DriveSiteService, useValue: sites },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const response = await request(userApp.getHttpServer())
+        .post("/api/drive/sites")
+        .send({
+          sourceFolderItemId: "folder-1",
+          name: "产品原型",
+          entryPath: null,
+          accessMode: "public",
+          expiresIn: "forever",
+        })
+        .expect(201)
+      expect((response.body as { readonly siteId?: string }).siteId).toBe("site_public")
+      expect(sites.createSite).toHaveBeenCalledWith("user-1", expect.any(String), {
+        sourceFolderItemId: "folder-1",
+        name: "产品原型",
+        entryPath: null,
+        accessMode: "public",
+        expiresIn: "forever",
+      })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("serves nested static site assets from the copied deployment", async () => {
+    sites.resolvePublicSite.mockResolvedValue({
+      status: "ok",
+      asset: {
+        storageKey: "drive-sites/site_public/dep-1/assets/app.css",
+        relativePath: "assets/app.css",
+        contentType: "text/css",
+        size: 16n,
+      },
+    })
+    storage.getObjectStream.mockResolvedValue({ stream: Readable.from("body{}"), size: 6n, contentType: "text/css" })
+
+    const response = await request(app!.getHttpServer()).get("/sites/site_public/assets/app.css").expect(200)
+    expect(response.headers["content-type"]).toContain("text/css")
+    expect(response.text).toBe("body{}")
+  })
+
+  it("does not leak protected static assets without a site cookie", async () => {
+    sites.resolvePublicSite.mockResolvedValue({ status: "password_required" })
+
+    await request(app!.getHttpServer()).get("/sites/site_secret/assets/app.js").expect(404)
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
   it("calls owner browser APIs with the authenticated user and surface", async () => {
@@ -1553,6 +1649,26 @@ function createHeadersSentResponse() {
   response.status = vi.fn(() => response)
   response.send = vi.fn(() => response)
   return response
+}
+
+function createDriveSite() {
+  return {
+    id: "site-row-1",
+    siteId: "site_public",
+    name: "产品原型",
+    status: "active",
+    accessMode: "public",
+    url: "https://app.example/sites/site_public/",
+    expiresAt: null,
+    sourceFolderItemId: "folder-1",
+    sourceFolderName: "产品原型",
+    entryPath: "index.html",
+    fileCount: 3,
+    totalBytes: "128",
+    createdAt: "2026-06-23T00:00:00.000Z",
+    updatedAt: "2026-06-23T00:00:00.000Z",
+    lastPublishedAt: "2026-06-23T00:00:00.000Z",
+  }
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

@@ -7,6 +7,7 @@ import { DriveAdminController, DriveLocalStorageController, DrivePublicControlle
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
+import { DriveSiteService } from "./drive-site.service"
 import { DriveService } from "./drive.service"
 import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
 
@@ -17,6 +18,7 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
     DriveLifecycleService,
     DriveAnnotationService,
     DrivePublicAssetService,
+    DriveSiteService,
     DriveService,
     AuditLogService,
     CosDriveStorage,
@@ -27,6 +29,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: [DriveService, DriveLifecycleService, DrivePublicAssetService, DriveAnnotationService],
+  exports: [DriveService, DriveLifecycleService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService],
 })
 export class DriveModule {}
