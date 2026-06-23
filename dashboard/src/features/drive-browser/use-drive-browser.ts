@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DriveBrowserPasswordRequiredDto,
+  DriveBrowserPreviewKind,
   DriveBrowserSnapshotDto,
   DriveBrowserSurface,
   DriveFileContentUpdateResult,
@@ -254,13 +255,17 @@ function snapshotAfterTextSave(
           currentVersionId: result.version.id,
         }
       : snapshot.edit,
-    preview: snapshot.preview && (snapshot.preview.kind === 'text' || snapshot.preview.kind === 'markdown')
+    preview: snapshot.preview && isEditableTextPreviewKind(snapshot.preview.kind)
       ? {
           ...snapshot.preview,
           text,
         }
       : snapshot.preview,
   }
+}
+
+function isEditableTextPreviewKind(kind: DriveBrowserPreviewKind): boolean {
+  return kind === 'text' || kind === 'html-source' || kind === 'markdown'
 }
 
 export function toDriveBrowserQueryKey(input: DriveBrowserInput) {
