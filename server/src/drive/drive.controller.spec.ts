@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Readable, Writable } from "node:stream"
-import { BadRequestException, type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
+import { BadRequestException, type INestApplication, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -603,6 +603,39 @@ describe("DriveController", () => {
     } finally {
       await localApp.close()
       await rm(root, { force: true, recursive: true })
+    }
+  })
+
+  it("redacts local download failure logs", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const sensitiveError = new Error("download failed Authorization: Bearer canary-token apiKey=canary-key https://user:pass@example.test/private /Users/example/file.txt")
+    Object.assign(sensitiveError, { storageKey: "drive/item-secret-storage-key" })
+    const localStorage = {
+      resolveDownload: vi.fn(() => {
+        throw sensitiveError
+      }),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveLocalStorageController],
+      providers: [{ provide: LocalDriveStorage, useValue: localStorage }],
+    }).compile()
+    const localApp = moduleRef.createNestApplication()
+    await localApp.init()
+    try {
+      await request(localApp.getHttpServer())
+        .get("/api/drive/local-download/download-token")
+        .expect(500)
+
+      expect(warnSpy).toHaveBeenCalled()
+      const payload = JSON.stringify(warnSpy.mock.calls.at(-1)?.[0])
+      expect(payload).not.toContain("canary-token")
+      expect(payload).not.toContain("canary-key")
+      expect(payload).not.toContain("user:pass")
+      expect(payload).not.toContain("/Users/example/file.txt")
+      expect(payload).not.toContain("drive/item-secret-storage-key")
+    } finally {
+      await localApp.close()
+      warnSpy.mockRestore()
     }
   })
 

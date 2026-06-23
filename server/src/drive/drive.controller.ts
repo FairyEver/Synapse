@@ -8,6 +8,7 @@ import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
+import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -1375,10 +1376,10 @@ export class DriveLocalStorageController {
       storageKey = readLocalDriveStorageKey(error) ?? storageKey
       this.logger.warn({
         message: "drive local download stream failed",
-        storageKey,
+        storageKeyLength: storageKey?.length ?? 0,
         tokenLength: token.length,
         errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage: formatAuditError(error),
       })
       if (response.headersSent) {
         if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
