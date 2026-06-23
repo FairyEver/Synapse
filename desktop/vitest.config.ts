@@ -11,6 +11,7 @@ export default defineConfig({
     globals: false,
     environment: "node",
     include: [
+      "app-capabilities/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "workflow-nodes/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "action-packages/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "action-packages/**/*.test.{ts,tsx}",
