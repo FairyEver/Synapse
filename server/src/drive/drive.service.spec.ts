@@ -58,6 +58,37 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(0n)
   })
 
+  it("rejects stale concurrent upload reservations before reserved quota exceeds the limit", async () => {
+    const prisma = createPrismaMemory({ staleUsageReads: true })
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.driveUsage.upsert({
+      where: { userId: "user-1" },
+      create: { userId: "user-1", usedBytes: 0n, reservedBytes: 0n, quotaBytes: 10n },
+      update: {},
+    })
+
+    await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "first.bin",
+      size: "8",
+      mimeType: "application/octet-stream",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await expect(service.prepareUpload("user-1", {
+      parentId: null,
+      name: "second.bin",
+      size: "8",
+      mimeType: "application/octet-stream",
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toThrow("云盘空间不足。")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(8n)
+    expect(await prisma.driveUploadSession.findMany()).toHaveLength(1)
+  })
+
   it("rejects Windows-unsafe upload names", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -2871,7 +2902,7 @@ async function markAsPublicAssetBacking(prisma: ReturnType<typeof createPrismaMe
   })
 }
 
-function createPrismaMemory() {
+function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}) {
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
   const items = new Map<string, any>()
@@ -2927,6 +2958,14 @@ function createPrismaMemory() {
       }
       return Promise.all(input)
     },
+    $executeRaw: async (_strings: TemplateStringsArray | string, requestedBytes: bigint, userId: string, requestedBytesForCheck: bigint) => {
+      const usage = usages.get(userId)
+      if (!usage) return 0
+      if (usage.usedBytes + usage.reservedBytes + requestedBytesForCheck > usage.quotaBytes) return 0
+      usage.reservedBytes += requestedBytes
+      usage.updatedAt = now()
+      return 1
+    },
     user: {
       create: async ({ data }: any) => {
         users.set(data.id, data)
@@ -2941,9 +2980,10 @@ function createPrismaMemory() {
     driveUsage: {
       upsert: async ({ where, create }: any) => {
         const existing = usages.get(where.userId)
-        if (existing) return existing
+        if (existing) return options.staleUsageReads ? { ...existing, reservedBytes: 0n } : existing
         usages.set(where.userId, { ...create, updatedAt: now() })
-        return usages.get(where.userId)
+        const usage = usages.get(where.userId)
+        return options.staleUsageReads ? { ...usage, reservedBytes: 0n } : usage
       },
       update: async ({ where, data }: any) => {
         const usage = usages.get(where.userId)

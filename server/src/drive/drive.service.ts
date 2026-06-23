@@ -66,11 +66,11 @@ import {
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_PURPOSE,
   DRIVE_UPLOAD_STATUS,
-  driveDefaultQuotaBytes,
   driveMaxFileBytes,
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
+import { ensureDriveUsage, reserveDriveUsageBytes } from "./drive-usage"
 import {
   createDriveShareId,
   driveOverwriteStorageKeyForSession,
@@ -566,7 +566,6 @@ export class DriveService implements OnApplicationBootstrap {
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const usage = await ensureUsage(tx, userId)
       const existingFile = await tx.driveItem.findFirst({
         where: {
           userId,
@@ -582,9 +581,6 @@ export class DriveService implements OnApplicationBootstrap {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       })
       const reservedBytes = requestedSize
-      if (usage.usedBytes + usage.reservedBytes + reservedBytes > usage.quotaBytes) {
-        throw new BadRequestException("云盘空间不足。")
-      }
       if (existingFile) {
         const sessionId = randomUUID()
         const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
@@ -603,12 +599,7 @@ export class DriveService implements OnApplicationBootstrap {
             expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
           },
         })
-        if (reservedBytes > 0n) {
-          await tx.driveUsage.update({
-            where: { userId },
-            data: { reservedBytes: { increment: reservedBytes } },
-          })
-        }
+        await reserveDriveUsageBytes(tx, userId, reservedBytes)
         return { item: existingFile, session }
       }
       const item = await tx.driveItem.create({
@@ -643,10 +634,7 @@ export class DriveService implements OnApplicationBootstrap {
           expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
         },
       })
-      await tx.driveUsage.update({
-        where: { userId },
-        data: { reservedBytes: { increment: requestedSize } },
-      })
+      await reserveDriveUsageBytes(tx, userId, requestedSize)
       return { item: updatedItem, session }
     })
 
@@ -2900,11 +2888,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function ensureUsage(client: DrivePrismaClient, userId: string) {
-  return client.driveUsage.upsert({
-    where: { userId },
-    create: { userId, usedBytes: 0n, reservedBytes: 0n, quotaBytes: driveDefaultQuotaBytes },
-    update: {},
-  })
+  return ensureDriveUsage(client, userId)
 }
 
 function isOverwriteUploadSession(session: {

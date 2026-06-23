@@ -20,7 +20,6 @@ import {
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_PURPOSE,
   DRIVE_UPLOAD_STATUS,
-  driveDefaultQuotaBytes,
   drivePublicAssetMaxFileBytes,
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
@@ -28,6 +27,7 @@ import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { detectPublicAssetImageType, validatePublicAssetNameAndMime } from "./drive-public-asset-policy"
 import type { DriveStoragePort } from "./drive-storage"
 import { createDrivePublicAssetId, driveOverwriteStorageKeyForSession, driveStorageKeyForItem, isValidDriveItemName } from "./drive-token"
+import { reserveDriveUsageBytes } from "./drive-usage"
 import {
   toDriveAdminPublicAssetAccessLogDto,
   toDriveAdminPublicAssetDto,
@@ -297,8 +297,6 @@ export class DrivePublicAssetService {
   async prepareUpload(userId: string, input: DrivePublicAssetPrepareUploadInput): Promise<DriveUploadPrepareResult> {
     const normalized = normalizePublicAssetUploadInput(input)
     const result = await this.prisma.$transaction(async (tx) => {
-      const usage = await ensureUsage(tx, userId)
-      if (usage.usedBytes + usage.reservedBytes + normalized.size > usage.quotaBytes) throw new BadRequestException("云盘空间不足。")
       const item = await tx.driveItem.create({
         data: {
           userId,
@@ -328,10 +326,7 @@ export class DrivePublicAssetService {
           expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
         },
       })
-      await tx.driveUsage.update({
-        where: { userId },
-        data: { reservedBytes: { increment: normalized.size } },
-      })
+      await reserveDriveUsageBytes(tx, userId, normalized.size)
       return { item: updatedItem, session }
     })
     this.rememberPublicAppUrl(result.session.id, input.publicAppUrl)
@@ -401,8 +396,6 @@ export class DrivePublicAssetService {
     const sessionId = randomUUID()
     const storageKey = driveOverwriteStorageKeyForSession(asset.itemId, sessionId)
     const result = await this.prisma.$transaction(async (tx) => {
-      const usage = await ensureUsage(tx, userId)
-      if (usage.usedBytes + usage.reservedBytes + reservedBytes > usage.quotaBytes) throw new BadRequestException("云盘空间不足。")
       const session = await tx.driveUploadSession.create({
         data: {
           id: sessionId,
@@ -421,12 +414,7 @@ export class DrivePublicAssetService {
           expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
         },
       })
-      if (reservedBytes > 0n) {
-        await tx.driveUsage.update({
-          where: { userId },
-          data: { reservedBytes: { increment: reservedBytes } },
-        })
-      }
+      await reserveDriveUsageBytes(tx, userId, reservedBytes)
       return { item: asset.item, session }
     })
     this.rememberPublicAppUrl(result.session.id, input.publicAppUrl)
@@ -1012,14 +1000,6 @@ function parseRequestedSize(value: string): bigint {
   const size = BigInt(value)
   if (size <= 0n) throw new BadRequestException("文件大小无效。")
   return size
-}
-
-async function ensureUsage(client: DrivePrismaClient, userId: string) {
-  return client.driveUsage.upsert({
-    where: { userId },
-    create: { userId, usedBytes: 0n, reservedBytes: 0n, quotaBytes: driveDefaultQuotaBytes },
-    update: {},
-  })
 }
 
 async function updateDriveUsageAfterCompletion(
