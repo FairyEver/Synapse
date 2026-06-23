@@ -41,6 +41,12 @@ import type {
   DriveReorganizationApplyResultDto,
   DriveReorganizationPreviewDto,
   DriveReorganizationPreviewInput,
+  DriveSiteAccessUpdateInput,
+  DriveSiteCreateInput,
+  DriveSiteDto,
+  DriveSiteListInput,
+  DriveSiteListPageDto,
+  DriveSitePreflightDto,
   DriveShareDto,
   DriveShareListPageDto,
   DriveShareListItemDto,
@@ -159,6 +165,16 @@ function drivePageQuery(input?: { readonly offset?: number; readonly limit?: num
   return query ? `?${query}` : ""
 }
 
+function driveSiteListQuery(input?: DriveSiteListInput): string {
+  const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  if (input?.search) params.set("search", input.search)
+  if (input?.status && input.status !== "all") params.set("status", input.status)
+  const query = params.toString()
+  return query ? `?${query}` : ""
+}
+
 function driveVersionListQuery(input?: DriveFileVersionListInput): string {
   const params = new URLSearchParams()
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
@@ -216,6 +232,17 @@ async function withCurrentDriveShareUrl<T extends {
     ...item,
     url,
     urlWithPassword: buildDriveUrlWithPassword(url, item.password),
+  }
+}
+
+async function withCurrentDriveSiteUrl<T extends {
+  readonly siteId: string
+  readonly url: string
+}>(site: T): Promise<T> {
+  const { buildDriveSiteUrl } = await sharedUrlsPromise
+  return {
+    ...site,
+    url: buildDriveSiteUrl({ publicAppUrl: publicAppUrl(), siteId: site.siteId }),
   }
 }
 
@@ -949,6 +976,79 @@ export class AccountService {
       undefined,
       "恢复失败。",
     )
+  }
+
+  async preflightDriveSite(input: { readonly sourceFolderItemId: string }): Promise<DriveSitePreflightDto> {
+    const query = new URLSearchParams({ sourceFolderItemId: input.sourceFolderItemId })
+    return this.getAuthenticatedJson<DriveSitePreflightDto>(
+      `${apiBaseUrl()}/drive/sites/preflight?${query}`,
+      "站点预检失败。",
+    )
+  }
+
+  async createDriveSite(input: DriveSiteCreateInput): Promise<DriveSiteDto> {
+    return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/sites`,
+      input,
+      "站点发布失败。",
+    ))
+  }
+
+  async listDriveSites(input?: DriveSiteListInput): Promise<DriveSiteListPageDto> {
+    const result = await this.getAuthenticatedJson<DriveSiteListPageDto>(
+      `${apiBaseUrl()}/drive/sites${driveSiteListQuery(input)}`,
+      "站点列表加载失败。",
+    )
+    return {
+      ...result,
+      items: await Promise.all(result.items.map(withCurrentDriveSiteUrl)),
+    }
+  }
+
+  async updateDriveSiteAccess(input: { readonly siteId: string } & DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
+    return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
+      "PATCH",
+      `${apiBaseUrl()}/drive/sites/${encodeURIComponent(input.siteId)}/access`,
+      { accessMode: input.accessMode, password: input.password, expiresIn: input.expiresIn },
+      "站点访问设置保存失败。",
+    ))
+  }
+
+  async disableDriveSite(siteId: string): Promise<DriveSiteDto> {
+    return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}/disable`,
+      undefined,
+      "停用站点失败。",
+    ))
+  }
+
+  async enableDriveSite(siteId: string): Promise<DriveSiteDto> {
+    return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}/enable`,
+      undefined,
+      "启用站点失败。",
+    ))
+  }
+
+  async deleteDriveSite(siteId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>(
+      "DELETE",
+      `${apiBaseUrl()}/drive/sites/${encodeURIComponent(siteId)}`,
+      undefined,
+      "删除站点失败。",
+    )
+  }
+
+  async republishDriveSite(input: { readonly siteId: string; readonly entryPath?: string | null }): Promise<DriveSiteDto> {
+    return withCurrentDriveSiteUrl(await this.requestAuthenticatedJson<DriveSiteDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/sites/${encodeURIComponent(input.siteId)}/republish`,
+      { entryPath: input.entryPath },
+      "重新发布站点失败。",
+    ))
   }
 
   async listDriveTrash(input?: { readonly offset?: number; readonly limit?: number }): Promise<DriveTrashListPageDto> {

@@ -34,6 +34,12 @@ import type {
   DrivePublicAssetDto,
   DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
+  DriveSiteAccessUpdateInput,
+  DriveSiteCreateInput,
+  DriveSiteDto,
+  DriveSiteListInput,
+  DriveSiteListPageDto,
+  DriveSitePreflightDto,
   DriveShareDto,
   DriveShareListPageDto,
   DriveShareListItemDto,
@@ -868,6 +874,14 @@ export type SynapseBridge = {
     renameDrivePublicAsset: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
     trashDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
     restoreDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
+    preflightDriveSite: (input: { sourceFolderItemId: string }) => Promise<DriveSitePreflightDto>
+    createDriveSite: (input: DriveSiteCreateInput) => Promise<DriveSiteDto>
+    listDriveSites: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
+    updateDriveSiteAccess: (input: { siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
+    disableDriveSite: (input: { siteId: string }) => Promise<DriveSiteDto>
+    enableDriveSite: (input: { siteId: string }) => Promise<DriveSiteDto>
+    deleteDriveSite: (input: { siteId: string }) => Promise<{ ok: true }>
+    republishDriveSite: (input: { siteId: string; entryPath?: string | null }) => Promise<DriveSiteDto>
     listDriveTrash: (input?: { offset?: number; limit?: number }) => Promise<DriveTrashListPageDto>
     restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
     deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>

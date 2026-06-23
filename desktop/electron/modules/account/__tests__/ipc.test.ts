@@ -57,6 +57,20 @@ vi.mock("../../../services/account-service", () => ({
     getDrivePublicAsset: async () => ({}),
     uploadDrivePublicAssets: vi.fn(async () => ({ results: [] })),
     replaceDrivePublicAssetFile: vi.fn(async () => ({})),
+    renameDrivePublicAsset: vi.fn(async () => ({})),
+    trashDrivePublicAsset: vi.fn(async () => ({})),
+    restoreDrivePublicAsset: vi.fn(async () => ({})),
+    preflightDriveSite: vi.fn(async () => ({})),
+    createDriveSite: vi.fn(async () => ({})),
+    listDriveSites: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 50, hasMore: false, nextOffset: null }, total: 0 })),
+    updateDriveSiteAccess: vi.fn(async () => ({})),
+    disableDriveSite: vi.fn(async () => ({})),
+    enableDriveSite: vi.fn(async () => ({})),
+    deleteDriveSite: vi.fn(async () => ({ ok: true })),
+    republishDriveSite: vi.fn(async () => ({})),
+    listDriveTrash: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 })),
+    restoreDriveTrashItem: vi.fn(async () => ({})),
+    deleteDriveTrashItem: vi.fn(async () => ({ ok: true })),
   },
 }))
 
@@ -240,6 +254,58 @@ describe("accountIpcModule", () => {
     expect(trashRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
     expect(publicAssetsRequest.safeParse({ offset: 0, limit: 50, search: "logo" }).success).toBe(false)
     expect(trashRequest.safeParse({ offset: 0, limit: 50, search: "old" }).success).toBe(false)
+  })
+
+  it("accepts Drive site list filters and routes site handlers", async () => {
+    const listRequest = accountIpcModule.methods.listDriveSites.request
+    expect(listRequest).toBeDefined()
+    if (!listRequest) throw new Error("expected drive site list request schema")
+
+    expect(listRequest.parse({ offset: 0, limit: 50, search: "原型", status: "active" })).toEqual({
+      offset: 0,
+      limit: 50,
+      search: "原型",
+      status: "active",
+    })
+    expect(listRequest.safeParse({ offset: 0, limit: 50, status: "unknown" }).success).toBe(false)
+
+    await accountIpcModule.methods.preflightDriveSite.handler({} as IpcHandlerContext, { sourceFolderItemId: "folder-1" })
+    await accountIpcModule.methods.createDriveSite.handler({} as IpcHandlerContext, {
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+    await accountIpcModule.methods.updateDriveSiteAccess.handler({} as IpcHandlerContext, {
+      siteId: "site_abc",
+      accessMode: "password",
+      password: "secret",
+      expiresIn: "7d",
+    })
+    await accountIpcModule.methods.disableDriveSite.handler({} as IpcHandlerContext, { siteId: "site_abc" })
+    await accountIpcModule.methods.enableDriveSite.handler({} as IpcHandlerContext, { siteId: "site_abc" })
+    await accountIpcModule.methods.deleteDriveSite.handler({} as IpcHandlerContext, { siteId: "site_abc" })
+    await accountIpcModule.methods.republishDriveSite.handler({} as IpcHandlerContext, { siteId: "site_abc", entryPath: "index.html" })
+
+    expect(accountService.preflightDriveSite).toHaveBeenCalledWith({ sourceFolderItemId: "folder-1" })
+    expect(accountService.createDriveSite).toHaveBeenCalledWith({
+      sourceFolderItemId: "folder-1",
+      name: "产品原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+    expect(accountService.updateDriveSiteAccess).toHaveBeenCalledWith({
+      siteId: "site_abc",
+      accessMode: "password",
+      password: "secret",
+      expiresIn: "7d",
+    })
+    expect(accountService.disableDriveSite).toHaveBeenCalledWith("site_abc")
+    expect(accountService.enableDriveSite).toHaveBeenCalledWith("site_abc")
+    expect(accountService.deleteDriveSite).toHaveBeenCalledWith("site_abc")
+    expect(accountService.republishDriveSite).toHaveBeenCalledWith({ siteId: "site_abc", entryPath: "index.html" })
   })
 
   it("returns owner drive item preview URLs", async () => {
