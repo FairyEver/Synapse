@@ -38,6 +38,34 @@ describe("DrivePublicAssetService", () => {
     expect(completed.name).toBe("logo.png")
   })
 
+  it("rejects stale concurrent public asset upload reservations before reserved quota exceeds the limit", async () => {
+    prisma.__debug.options.staleUsageReads = true
+    await prisma.driveUsage.upsert({
+      where: { userId: "user-1" },
+      create: { userId: "user-1", usedBytes: 0n, reservedBytes: 0n, quotaBytes: 10n },
+      update: {},
+    })
+
+    await service.prepareUpload("user-1", {
+      name: "first.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+
+    await expect(service.prepareUpload("user-1", {
+      name: "second.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })).rejects.toThrow("云盘空间不足。")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(8n)
+    expect(await prisma.driveUploadSession.findMany()).toHaveLength(1)
+    expect([...prisma.__debug.items.values()]).toHaveLength(1)
+  })
+
   it("cleans public app URL cache through upload session lifecycle cleanup", async () => {
     const prepared = await service.prepareUpload("user-1", {
       name: "logo.png",
@@ -151,6 +179,38 @@ describe("DrivePublicAssetService", () => {
 
     expect(replaced.assetId).toBe(asset.assetId)
     expect(replaced.name).toBe("logo.webp")
+  })
+
+  it("rejects stale concurrent public asset replace reservations before reserved quota exceeds the limit", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 1n,
+    })
+    prisma.__debug.options.staleUsageReads = true
+    await prisma.driveUsage.update({
+      where: { userId: "user-1" },
+      data: { usedBytes: 0n, reservedBytes: 0n, quotaBytes: 10n },
+    })
+
+    await service.prepareReplace("user-1", asset.assetId, {
+      name: "first.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })
+
+    await expect(service.prepareReplace("user-1", asset.assetId, {
+      name: "second.png",
+      size: "8",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.example",
+    })).rejects.toThrow("云盘空间不足。")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(8n)
+    expect(await prisma.driveUploadSession.findMany()).toHaveLength(1)
   })
 
   it("rejects public asset replace prepare when MIME does not match the extension", async () => {
@@ -880,6 +940,7 @@ function createLifecycleMemory(prisma: ReturnType<typeof createPrismaMemory>): L
 }
 
 function createPrismaMemory() {
+  const options = { staleUsageReads: false }
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
   const items = new Map<string, any>()
@@ -911,6 +972,14 @@ function createPrismaMemory() {
       }
       return Promise.all(input)
     },
+    $executeRaw: async (_strings: TemplateStringsArray | string, requestedBytes: bigint, userId: string, requestedBytesForCheck: bigint) => {
+      const usage = usages.get(userId)
+      if (!usage) return 0
+      if (usage.usedBytes + usage.reservedBytes + requestedBytesForCheck > usage.quotaBytes) return 0
+      usage.reservedBytes += requestedBytes
+      usage.updatedAt = now()
+      return 1
+    },
     user: {
       create: async ({ data }: any) => {
         users.set(data.id, data)
@@ -924,10 +993,10 @@ function createPrismaMemory() {
     driveUsage: {
       upsert: async ({ where, create }: any) => {
         const existing = usages.get(where.userId)
-        if (existing) return existing
+        if (existing) return options.staleUsageReads ? { ...existing, reservedBytes: 0n } : existing
         const usage = { ...create, updatedAt: now() }
         usages.set(where.userId, usage)
-        return usage
+        return options.staleUsageReads ? { ...usage, reservedBytes: 0n } : usage
       },
       update: async ({ where, data }: any) => {
         const usage = usages.get(where.userId)
@@ -1103,7 +1172,7 @@ function createPrismaMemory() {
       },
       count: async ({ where }: any = {}) => [...publicAssetAccessLogs.values()].filter((log) => matchesWhere(log, where ?? {})).length,
     },
-    __debug: { publicAssets, publicAssetRevisions, publicAssetAccessLogs, usages, sessions, items },
+    __debug: { publicAssets, publicAssetRevisions, publicAssetAccessLogs, usages, sessions, items, options },
   }
   return prisma
 }
