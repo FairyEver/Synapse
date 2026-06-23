@@ -146,6 +146,7 @@ import { getMcpServers } from "../database/mcp-installer"
 import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
+import { WorkflowParamPresetService } from "../services/workflow/workflow-param-preset-service"
 import { WorkflowPackageService } from "../services/workflow/workflow-package-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
@@ -1702,15 +1703,24 @@ export const gitHistoryServiceDescriptor: ServiceDescriptor<GitHistoryService> =
   },
 }
 
+export const coreWorkflowParamPresetServiceDescriptor: ServiceDescriptor<WorkflowParamPresetService> = {
+  id: "core.workflow.param-presets",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    return new WorkflowParamPresetService(ctx.registry.get<DataRepository>("core.data-repository"))
+  },
+}
+
 export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
   id: "core.workflow",
   criticality: "degraded",
-  dependsOn: ["core.data-repository"],
+  dependsOn: ["core.data-repository", "core.workflow.param-presets"],
   create(ctx) {
     const dataRepo = ctx.registry.get<DataRepository>("core.data-repository")
     return new WorkflowService(dataRepo, async () => ({
       configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
-    }))
+    }), ctx.registry.get<WorkflowParamPresetService>("core.workflow.param-presets"))
   },
 }
 

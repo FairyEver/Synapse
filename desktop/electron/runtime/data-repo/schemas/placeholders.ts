@@ -944,6 +944,35 @@ export const opsDiagnosticsSchema: NamespaceSchema<OpsDiagnosticsEntryV1> = {
     && typeof (v as OpsDiagnosticsEntryV1).updatedAt === "string",
 }
 
+export interface WorkflowParamPresetEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  workflowId: string
+  name: string
+  values: Record<string, string>
+  createdAt: number
+  updatedAt: number
+}
+
+export const workflowParamPresetsSchema: NamespaceSchema<WorkflowParamPresetEntryV1> = {
+  name: "workflow.param-presets",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is WorkflowParamPresetEntryV1 =>
+    isAnyRecord<WorkflowParamPresetEntryV1>(v)
+    && (v as WorkflowParamPresetEntryV1).schemaVersion === 1
+    && typeof (v as WorkflowParamPresetEntryV1).id === "string"
+    && (v as WorkflowParamPresetEntryV1).id.length > 0
+    && typeof (v as WorkflowParamPresetEntryV1).workflowId === "string"
+    && (v as WorkflowParamPresetEntryV1).workflowId.length > 0
+    && typeof (v as WorkflowParamPresetEntryV1).name === "string"
+    && (v as WorkflowParamPresetEntryV1).name.length > 0
+    && isStringRecord((v as WorkflowParamPresetEntryV1).values)
+    && typeof (v as WorkflowParamPresetEntryV1).createdAt === "number"
+    && typeof (v as WorkflowParamPresetEntryV1).updatedAt === "number",
+}
+
 export interface WorkflowEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1

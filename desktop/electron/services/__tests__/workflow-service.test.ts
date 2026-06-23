@@ -85,6 +85,17 @@ describe("WorkflowService", () => {
     await svc.save(def); await svc.delete(def.id)
     expect(await svc.get(def.id)).toBeNull()
   })
+  it("cleans workflow parameter presets when deleting a workflow", async () => {
+    const { repo, svc } = createRepo()
+    const cleanup = { deleteForWorkflow: vi.fn(async () => undefined) }
+    const withCleanup = new WorkflowService(repo, undefined, cleanup)
+    const def = makeDef()
+
+    await svc.save(def)
+    await withCleanup.delete(def.id)
+
+    expect(cleanup.deleteForWorkflow).toHaveBeenCalledWith(def.id)
+  })
   it("returns empty list when no workflows exist", async () => {
     const { svc } = createRepo()
     const list = await svc.list()

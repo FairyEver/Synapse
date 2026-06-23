@@ -6,6 +6,7 @@ import { createMainLogger } from "../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { sanitizeAgentError } from "./workflow-utils"
 import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
+import type { WorkflowParamPresetService } from "./workflow-param-preset-service"
 
 const logger = createMainLogger("service.workflow")
 
@@ -21,10 +22,16 @@ export class WorkflowService {
   private _seq = 0
   private readonly workflowsNamespace: DataNamespace<WorkflowEntryV1>
   private readonly validationOptionsProvider?: WorkflowValidationOptionsProvider
+  private readonly paramPresetService?: Pick<WorkflowParamPresetService, "deleteForWorkflow">
 
-  constructor(dataRepository: DataRepository, validationOptionsProvider?: WorkflowValidationOptionsProvider) {
+  constructor(
+    dataRepository: DataRepository,
+    validationOptionsProvider?: WorkflowValidationOptionsProvider,
+    paramPresetService?: Pick<WorkflowParamPresetService, "deleteForWorkflow">,
+  ) {
     this.workflowsNamespace = dataRepository.namespace<WorkflowEntryV1>("workflows")
     this.validationOptionsProvider = validationOptionsProvider
+    this.paramPresetService = paramPresetService
   }
 
   private versionHash(def: WorkflowDefinition): string {
@@ -192,6 +199,7 @@ export class WorkflowService {
     logger.info("workflow deleting", { id })
     try {
       await this.workflowsNamespace.remove(id)
+      await this.paramPresetService?.deleteForWorkflow(id)
       logger.info("workflow deleted", { id })
     } catch (err) {
       logger.warn("workflow delete error", {

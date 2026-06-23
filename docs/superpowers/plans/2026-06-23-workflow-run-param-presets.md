@@ -185,7 +185,7 @@ describe("WorkflowParamPresetService", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/workflow-param-preset-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-param-preset-service.test.ts
 ```
 
 Expected: FAIL with missing exports for `workflowParamPresetsSchema` and missing module `workflow-param-preset-service`.
@@ -439,7 +439,7 @@ In `desktop/electron/services/__tests__/workflow-service.test.ts`, add this test
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/workflow-param-preset-service.test.ts desktop/electron/services/__tests__/workflow-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-param-preset-service.test.ts electron/services/__tests__/workflow-service.test.ts
 ```
 
 Expected: PASS.
@@ -538,7 +538,7 @@ In `desktop/electron/modules/workflow/__tests__/ipc.test.ts`, add this test near
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/modules/workflow/__tests__/ipc.test.ts --testNamePattern "workflow parameter preset IPC"
+pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests__/ipc.test.ts --testNamePattern "workflow parameter preset IPC"
 ```
 
 Expected: FAIL because the three channels are not registered.
@@ -675,7 +675,7 @@ expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:workflow:p
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/modules/workflow/__tests__/ipc.test.ts desktop/electron/__tests__/preload.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests__/ipc.test.ts electron/__tests__/preload.test.ts
 ```
 
 Expected: PASS.
@@ -864,7 +864,7 @@ Add these tests:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/__tests__/run-params-dialog.test.tsx
 ```
 
 Expected: FAIL because `RunParamsDialog` lacks `workflowId`, preset loading, preset controls, save dialog, and delete behavior.
@@ -1338,7 +1338,7 @@ Use this structure for the return body:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/__tests__/run-params-dialog.test.tsx
 ```
 
 Expected: PASS.
@@ -1372,7 +1372,7 @@ vi.mock("../run-params-dialog", () => ({
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx desktop/src/modules/workflow/editor/__tests__/editor-app.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/__tests__/workflow-list.test.tsx src/modules/workflow/editor/__tests__/editor-app.test.tsx
 ```
 
 Expected: PASS.
@@ -1406,13 +1406,13 @@ Run:
 
 ```bash
 pnpm --filter @synapse/desktop exec vitest run \
-  desktop/electron/services/__tests__/workflow-param-preset-service.test.ts \
-  desktop/electron/services/__tests__/workflow-service.test.ts \
-  desktop/electron/modules/workflow/__tests__/ipc.test.ts \
-  desktop/electron/__tests__/preload.test.ts \
-  desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx \
-  desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx \
-  desktop/src/modules/workflow/editor/__tests__/editor-app.test.tsx
+  electron/services/__tests__/workflow-param-preset-service.test.ts \
+  electron/services/__tests__/workflow-service.test.ts \
+  electron/modules/workflow/__tests__/ipc.test.ts \
+  electron/__tests__/preload.test.ts \
+  src/modules/workflow/components/__tests__/run-params-dialog.test.tsx \
+  src/modules/workflow/components/__tests__/workflow-list.test.tsx \
+  src/modules/workflow/editor/__tests__/editor-app.test.tsx
 ```
 
 Expected: PASS.
