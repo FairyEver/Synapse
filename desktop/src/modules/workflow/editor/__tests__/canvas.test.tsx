@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { WorkflowDefinition } from "@/types/workflow"
 import type { WorkflowCanvasHandle } from "../canvas"
+import { nodeTypeRegistry } from "../../../../../workflow-nodes/registry"
 
 const { fitViewMock, setViewportMock, reactFlowProps, controlsProps } = vi.hoisted(() => ({
   fitViewMock: vi.fn(),
@@ -195,6 +196,70 @@ describe("WorkflowCanvas", () => {
     })
 
     expect(onNodeSelect).toHaveBeenCalledWith("prompt-1")
+  })
+
+  it("uses all Claude Code setting sources for new nodes", async () => {
+    vi.mocked(nodeTypeRegistry.getManifest).mockReturnValue({
+      type: "claude_code",
+      title: "Claude Code",
+      icon: () => null,
+      color: "bg-primary/10",
+      defaultConfig: {
+        variables: [],
+        prompt: "",
+        permissionMode: "acceptEdits",
+        outputFormat: "stream-json",
+        verbose: true,
+        safeMode: false,
+        bareMode: false,
+        noSessionPersistence: false,
+        settingSources: ["user", "project", "local"],
+        strictMcpConfig: false,
+        additionalDirectories: [],
+        allowedTools: [],
+        disallowedTools: [],
+        captureDebugArtifacts: true,
+      },
+      ports: { inputs: [], outputs: [] },
+      configFields: [],
+      configSchema: {} as never,
+    })
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("claude-node-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onChange = vi.fn()
+
+    await act(async () => {
+      root.render(<WorkflowCanvas definition={definition()} onChange={onChange} />)
+    })
+
+    await act(async () => {
+      const onDrop = reactFlowProps.at(-1)?.onDrop as (event: {
+        preventDefault: () => void
+        clientX: number
+        clientY: number
+        dataTransfer: { getData: (key: string) => string }
+      }) => void
+      onDrop({
+        preventDefault: vi.fn(),
+        clientX: 100,
+        clientY: 120,
+        dataTransfer: {
+          getData: (key) => key === "application/workflow-node-type" ? "claude_code" : "",
+        },
+      })
+    })
+
+    const nextDefinition = onChange.mock.lastCall?.[0] as WorkflowDefinition | undefined
+    expect(nextDefinition?.nodes).toContainEqual(expect.objectContaining({
+      id: "claude-node-1",
+      type: "claude_code",
+      config: expect.objectContaining({
+        settingSources: ["user", "project", "local"],
+      }),
+    }))
   })
 })
 
