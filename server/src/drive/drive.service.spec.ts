@@ -342,6 +342,30 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(27n)
   })
 
+  it("rejects restoring the current file version", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const currentItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: item.id } })
+    const current = (await prisma.driveFileVersion.findMany({ where: { itemId: item.id } }))
+      .find((version: { readonly storageKey: string }) => version.storageKey === currentItem.storageKey)
+    if (!current) throw new Error("current version not found")
+    vi.mocked(storage.copyObject).mockClear()
+
+    await expect(service.restoreFileVersion("user-1", item.id, current.id)).rejects.toThrow("不能恢复当前版本。")
+
+    expect(storage.copyObject).not.toHaveBeenCalled()
+    const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
+    expect(versions.items).toHaveLength(1)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+  })
+
   it("cleans up copied restore objects when the restore transaction fails", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)

@@ -297,6 +297,7 @@ export class DriveService implements OnApplicationBootstrap {
   async restoreFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    if (item.storageKey === version.storageKey) throw new BadRequestException("不能恢复当前版本。")
     const usage = await ensureUsage(this.prisma, userId)
     if (usage.usedBytes + usage.reservedBytes + version.size > usage.quotaBytes) {
       throw new BadRequestException("云盘空间不足。")
