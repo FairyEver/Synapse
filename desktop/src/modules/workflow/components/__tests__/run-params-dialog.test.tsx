@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -44,29 +44,20 @@ beforeEach(() => {
   if (!HTMLElement.prototype.releasePointerCapture) {
     HTMLElement.prototype.releasePointerCapture = vi.fn()
   }
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = vi.fn()
+  }
   mocks.presetList.mockResolvedValue([])
   mocks.presetSave.mockResolvedValue({
     id: "preset-saved",
     workflowId: "workflow-1",
-    name: "运行预设",
+    name: "新预设",
     values: {},
     createdAt: 1,
     updatedAt: 1,
   })
-  Object.defineProperty(window, "synapse", {
-    configurable: true,
-    value: {
-      workflow: {
-        chooseParamFile: mocks.chooseParamFile,
-        chooseParamDirectory: mocks.chooseParamDirectory,
-      },
-      workflowParamPresets: {
-        list: mocks.presetList,
-        save: mocks.presetSave,
-        delete: mocks.presetDelete,
-      },
-    },
-  })
+  mocks.presetDelete.mockResolvedValue(undefined)
+  installBridge()
 })
 
 afterEach(() => {
@@ -77,8 +68,49 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
+
+function installBridge() {
+  ;(window as unknown as { synapse: unknown }).synapse = {
+    workflow: {
+      chooseParamFile: mocks.chooseParamFile,
+      chooseParamDirectory: mocks.chooseParamDirectory,
+    },
+    workflowParamPresets: {
+      list: mocks.presetList,
+      save: mocks.presetSave,
+      delete: mocks.presetDelete,
+    },
+  }
+}
+
+async function renderDialog(props: Partial<ComponentProps<typeof RunParamsDialog>> = {}) {
+  const onConfirm = vi.fn(async () => undefined)
+  const onCancel = vi.fn()
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  await act(async () => {
+    root.render(
+      <RunParamsDialog
+        open
+        workflowId="workflow-1"
+        params={[
+          { name: "topic", type: "text", default: "" },
+          { name: "count", type: "number", default: 3 },
+        ]}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+        {...props}
+      />,
+    )
+  })
+  await flushPromises()
+  return { onConfirm, onCancel }
+}
 
 describe("RunParamsDialog", () => {
   it("tracks parameterized run submits without recording parameter values", async () => {
@@ -104,11 +136,8 @@ describe("RunParamsDialog", () => {
       )
     })
 
-    const form = document.body.querySelector("form")
-    expect(form).toBeDefined()
-
     await act(async () => {
-      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     })
 
     expect(onConfirm).toHaveBeenCalledWith(
@@ -135,37 +164,37 @@ describe("RunParamsDialog", () => {
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("secret")
   })
 
-  it("submits file and directory params as local path resource refs", async () => {
-    const onConfirm = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
+  it("loads workflow-scoped presets and applies a selected preset", async () => {
+    mocks.presetList.mockResolvedValue([
+      { id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret preset", count: "9", stale: "ignored" }, createdAt: 1, updatedAt: 2 },
+    ])
+    await renderDialog()
 
+    expect(mocks.presetList).toHaveBeenCalledWith("workflow-1")
     await act(async () => {
-      root.render(
-        <RunParamsDialog
-          open
-          workflowId="workflow-1"
-          params={[
-            { name: "input_file", type: "file", default: null },
-            { name: "input_dir", type: "directory", default: null },
-          ]}
-          onConfirm={onConfirm}
-          onCancel={vi.fn()}
-        />,
-      )
+      document.body.querySelector<HTMLButtonElement>('[role="combobox"]')?.click()
+    })
+    await act(async () => {
+      clickOption("课程")
     })
 
-    const fileInput = document.body.querySelector<HTMLInputElement>("#input_file")
-    const dirInput = document.body.querySelector<HTMLInputElement>("#input_dir")
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")?.value).toBe("secret preset")
+    expect(document.body.querySelector<HTMLInputElement>("#count")?.value).toBe("9")
+  })
+
+  it("submits file and directory params as local path resource refs", async () => {
+    const onConfirm = vi.fn()
+    await renderDialog({
+      params: [
+        { name: "input_file", type: "file", default: null },
+        { name: "input_dir", type: "directory", default: null },
+      ],
+      onConfirm,
+    })
 
     await act(async () => {
-      setter?.call(fileInput, "/tmp/input.txt")
-      fileInput?.dispatchEvent(new Event("input", { bubbles: true }))
-      setter?.call(dirInput, "/tmp/work")
-      dirInput?.dispatchEvent(new Event("input", { bubbles: true }))
+      setControlValue(document.body.querySelector<HTMLInputElement>("#input_file"), "/tmp/input.txt")
+      setControlValue(document.body.querySelector<HTMLInputElement>("#input_dir"), "/tmp/work")
     })
 
     await act(async () => {
@@ -190,118 +219,80 @@ describe("RunParamsDialog", () => {
     }))
   })
 
-  it("saves current values as a preset before running", async () => {
-    const onConfirm = vi.fn()
-    mocks.presetSave.mockResolvedValue({
-      id: "preset-1",
-      workflowId: "workflow-1",
-      name: "周报",
-      values: { topic: "draft" },
-      createdAt: 1,
-      updatedAt: 2,
-    })
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
+  it("saves a new preset before running and does not track parameter values", async () => {
+    mocks.presetSave.mockResolvedValue({ id: "preset-2", workflowId: "workflow-1", name: "新预设", values: { topic: "secret" }, createdAt: 1, updatedAt: 1 })
+    const { onConfirm } = await renderDialog()
 
     await act(async () => {
-      root.render(
-        <RunParamsDialog
-          open
-          workflowId="workflow-1"
-          params={[{ name: "topic", type: "text", default: "" }]}
-          onConfirm={onConfirm}
-          onCancel={vi.fn()}
-        />,
-      )
+      setControlValue(document.body.querySelector<HTMLTextAreaElement>("#topic"), "secret")
     })
-
-    await act(async () => {
-      setControlValue(document.body.querySelector<HTMLTextAreaElement>("#topic"), "draft")
-    })
-
     await act(async () => {
       clickButton("保存为预设并运行")
     })
-
+    const nameInput = document.body.querySelector<HTMLInputElement>('input[aria-label="预设名称"]')
+    expect(nameInput?.value).toMatch(/^新预设 /)
     await act(async () => {
-      setControlValue(document.body.querySelector<HTMLInputElement>("#workflow-param-preset-name"), "周报")
-      document.body.querySelector("#workflow-param-preset-name")?.closest("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      setControlValue(nameInput, "新预设")
+    })
+    await act(async () => {
+      clickButton("保存并运行")
     })
 
-    expect(mocks.presetSave).toHaveBeenCalledWith({
-      workflowId: "workflow-1",
-      name: "周报",
-      values: { topic: "draft" },
-      overwritePresetId: undefined,
-    })
-    expect(onConfirm).toHaveBeenCalledWith(
-      { topic: "draft" },
-      { topic: "draft" },
-    )
-    expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({
-        workflowId: "workflow-1",
-        selectedPresetId: "preset-1",
-        savedPreset: true,
-      }),
-    }))
-    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("draft")
+    expect(mocks.presetSave).toHaveBeenCalledWith({ workflowId: "workflow-1", name: "新预设", values: { topic: "secret", count: "3" } })
+    expect(onConfirm).toHaveBeenCalledWith({ topic: "secret", count: 3 }, { topic: "secret", count: "3" })
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("secret")
   })
 
-  it("deletes the selected preset without clearing current form values", async () => {
-    mocks.presetSave.mockResolvedValue({
-      id: "preset-a",
-      workflowId: "workflow-1",
-      name: "常用",
-      values: { topic: "preset topic" },
-      createdAt: 1,
-      updatedAt: 2,
-    })
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
+  it("requires overwrite confirmation for duplicate preset names", async () => {
+    mocks.presetList.mockResolvedValue([
+      { id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "old" }, createdAt: 1, updatedAt: 1 },
+    ])
+    mocks.presetSave.mockResolvedValueOnce({ id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret" }, createdAt: 1, updatedAt: 2 })
+    const { onConfirm } = await renderDialog()
 
     await act(async () => {
-      root.render(
-        <RunParamsDialog
-          open
-          workflowId="workflow-1"
-          params={[{ name: "topic", type: "text", default: "" }]}
-          onConfirm={vi.fn()}
-          onCancel={vi.fn()}
-        />,
-      )
-    })
-
-    await act(async () => {
-      setControlValue(document.body.querySelector<HTMLTextAreaElement>("#topic"), "preset topic")
+      setControlValue(document.body.querySelector<HTMLTextAreaElement>("#topic"), "secret")
     })
     await act(async () => {
       clickButton("保存为预设并运行")
     })
     await act(async () => {
-      setControlValue(document.body.querySelector<HTMLInputElement>("#workflow-param-preset-name"), "常用")
-      document.body.querySelector("#workflow-param-preset-name")?.closest("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      setControlValue(document.body.querySelector<HTMLInputElement>('input[aria-label="预设名称"]'), "课程")
     })
-    await waitFor(() => mocks.presetSave.mock.calls.length === 1)
     await act(async () => {
-      await mocks.presetSave.mock.results[0]?.value
-      await Promise.resolve()
-      await Promise.resolve()
+      clickButton("保存并运行")
     })
-    await waitFor(() => document.body.querySelector<HTMLButtonElement>("[aria-label='删除预设']")?.disabled === false)
+    expect(document.body.textContent).toContain("覆盖预设？")
 
-    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")?.value).toBe("preset topic")
+    await act(async () => {
+      clickButton("覆盖并运行")
+    })
 
+    expect(mocks.presetSave).toHaveBeenCalledWith({ workflowId: "workflow-1", name: "课程", values: { topic: "secret", count: "3" }, overwritePresetId: "preset-1" })
+    expect(onConfirm).toHaveBeenCalled()
+  })
+
+  it("deletes the selected preset without clearing the current form", async () => {
+    mocks.presetList.mockResolvedValue([
+      { id: "preset-1", workflowId: "workflow-1", name: "课程", values: { topic: "secret preset", count: "9" }, createdAt: 1, updatedAt: 2 },
+    ])
+    await renderDialog()
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[role="combobox"]')?.click()
+    })
+    await act(async () => {
+      clickOption("课程")
+    })
     await act(async () => {
       document.body.querySelector<HTMLButtonElement>("[aria-label='删除预设']")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
     })
+    await act(async () => {
+      clickButton("删除")
+    })
 
-    expect(mocks.presetDelete).toHaveBeenCalledWith("preset-a")
-    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")?.value).toBe("preset topic")
+    expect(mocks.presetDelete).toHaveBeenCalledWith("preset-1")
+    expect(document.body.querySelector<HTMLTextAreaElement>("#topic")?.value).toBe("secret preset")
   })
 })
 
@@ -320,12 +311,15 @@ function clickButton(label: string) {
   button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (predicate()) return
-    await act(async () => {
-      await Promise.resolve()
-    })
-  }
-  throw new Error("Timed out waiting for dialog update")
+function clickOption(label: string) {
+  const options = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+  const option = options.find((item) => item.textContent?.trim() === label)
+  expect(option).toBeTruthy()
+  option?.click()
+}
+
+async function flushPromises(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve()
+  })
 }

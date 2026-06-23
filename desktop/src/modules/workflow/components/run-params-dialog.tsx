@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -9,8 +8,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
@@ -44,12 +43,15 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [presets, setPresets] = useState<WorkflowParamPreset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_PRESET_VALUE)
   const [presetsLoading, setPresetsLoading] = useState(false)
-  const [selectedPresetId, setSelectedPresetId] = useState(NO_PRESET_VALUE)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [presetName, setPresetName] = useState("")
   const [presetNameError, setPresetNameError] = useState("")
-  const [overwriteCandidate, setOverwriteCandidate] = useState<WorkflowParamPreset | null>(null)
+  const [savingPreset, setSavingPreset] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletingPreset, setDeletingPreset] = useState(false)
+  const [overwriteConfirm, setOverwriteConfirm] = useState<WorkflowParamPreset | null>(null)
 
   const paramCounts = useMemo(() => ({
     number: params.filter((param) => param.type === "number").length,
@@ -58,8 +60,10 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     directory: params.filter((param) => param.type === "directory").length,
   }), [params])
 
-  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId)
-  const hasSelectedPreset = selectedPresetId !== NO_PRESET_VALUE && selectedPresetId.length > 0
+  const selectedPreset = useMemo(
+    () => presets.find((preset) => preset.id === selectedPresetId) ?? null,
+    [presets, selectedPresetId],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -67,28 +71,30 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     setErrors({})
     setSelectedPresetId(NO_PRESET_VALUE)
     setSaveDialogOpen(false)
-    setOverwriteCandidate(null)
     setPresetName("")
     setPresetNameError("")
-    setPresets([])
+    setOverwriteConfirm(null)
+    setDeleteConfirmOpen(false)
     setValues(buildInitialValues(params, lastValues))
-  }, [open, params, lastValues])
 
-  useEffect(() => {
-    if (!open || params.length === 0) {
+    const presetBridge = window.synapse?.workflowParamPresets
+    if (!presetBridge || !workflowId || params.length === 0) {
       setPresets([])
+      setPresetsLoading(false)
       return
     }
-    const presetBridge = window.synapse?.workflowParamPresets
-    if (!presetBridge) return
+
     let cancelled = false
     setPresetsLoading(true)
     presetBridge.list(workflowId)
-      .then((nextPresets) => {
-        if (!cancelled) setPresets((current) => mergePresetLists(nextPresets, current))
+      .then((items) => {
+        if (!cancelled) setPresets(items)
       })
       .catch(() => {
-        if (!cancelled) toast.error("读取预设失败")
+        if (!cancelled) {
+          setPresets([])
+          toast.error("读取预设失败")
+        }
       })
       .finally(() => {
         if (!cancelled) setPresetsLoading(false)
@@ -96,7 +102,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     return () => {
       cancelled = true
     }
-  }, [open, params.length, workflowId])
+  }, [open, params, lastValues, workflowId])
 
   function validate(): boolean {
     const next: Record<string, string> = {}
@@ -115,7 +121,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     return Object.keys(next).length === 0
   }
 
-  const parseValues = (): Record<string, unknown> => {
+  function parseValues(): Record<string, unknown> {
     const parsed: Record<string, unknown> = {}
     for (const param of params) {
       if (param.type === "number") {
@@ -133,8 +139,21 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     return parsed
   }
 
-  const runWithCurrentValues = async (savedPreset?: WorkflowParamPreset) => {
-    const parsed = parseValues()
+  function clearError(paramName: string): void {
+    if (!errors[paramName]) return
+    setErrors((current) => {
+      const next = { ...current }
+      delete next[paramName]
+      return next
+    })
+  }
+
+  function updateValue(name: string, nextValue: string): void {
+    setValues((current) => ({ ...current, [name]: nextValue }))
+    clearError(name)
+  }
+
+  function trackSubmit(savedPreset: boolean, presetId?: string): void {
     track({
       component: "workflow",
       name: "workflow-run-params-submit",
@@ -148,106 +167,119 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
         fileParamCount: paramCounts.file,
         directoryParamCount: paramCounts.directory,
         hasLastValues: Boolean(lastValues),
-        selectedPresetId: savedPreset?.id ?? (selectedPresetId === NO_PRESET_VALUE ? undefined : selectedPresetId),
-        savedPreset: Boolean(savedPreset),
+        selectedPresetId: presetId,
+        savedPreset,
       },
     })
-    await onConfirm(parsed, values)
   }
 
-  const submitRun = async (savedPreset?: WorkflowParamPreset) => {
-    if (submitting) return
+  async function runWithCurrentValues(savedPreset?: WorkflowParamPreset): Promise<void> {
+    trackSubmit(Boolean(savedPreset), savedPreset?.id ?? selectedPreset?.id)
+    await onConfirm(parseValues(), values)
+  }
+
+  async function handleSubmit(event?: FormEvent): Promise<void> {
+    event?.preventDefault()
+    if (submitting || savingPreset) return
     if (!validate()) return
     setSubmitting(true)
     try {
-      await runWithCurrentValues(savedPreset)
+      await runWithCurrentValues()
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleSubmit = (event?: React.FormEvent) => {
-    event?.preventDefault()
-    void submitRun()
+  function handlePresetSelect(presetId: string): void {
+    setSelectedPresetId(presetId)
+    const preset = presets.find((item) => item.id === presetId)
+    if (!preset) {
+      setValues(buildInitialValues(params, lastValues))
+      return
+    }
+    setValues(buildInitialValues(params, preset.values))
+    setErrors({})
   }
 
-  const openSavePresetDialog = () => {
-    if (submitting) return
+  function handleOpenSaveDialog(): void {
+    if (submitting || savingPreset) return
     if (!validate()) return
-    setPresetName(defaultPresetName(selectedPreset))
+    setPresetName(selectedPreset?.name ?? nextPresetName(presets))
     setPresetNameError("")
     setSaveDialogOpen(true)
   }
 
-  const handlePresetNameSubmit = async (event?: React.FormEvent) => {
-    event?.preventDefault()
-    const trimmedName = presetName.trim()
-    if (!trimmedName) {
+  async function savePresetAndRun(overwritePresetId?: string): Promise<void> {
+    if (!validate()) return
+    const name = presetName.trim()
+    if (!name) {
       setPresetNameError("请输入名称")
       return
     }
-    const duplicate = presets.find((preset) => preset.name === trimmedName)
-    if (duplicate) {
+
+    const existing = presets.find((preset) => preset.name === name)
+    if (existing && !overwritePresetId) {
       setSaveDialogOpen(false)
-      setOverwriteCandidate(duplicate)
+      setOverwriteConfirm(existing)
       return
     }
-    await savePresetAndSubmit(trimmedName)
-  }
 
-  const savePresetAndSubmit = async (name: string, overwritePresetId?: string) => {
     const presetBridge = window.synapse?.workflowParamPresets
     if (!presetBridge) {
       toast.error("保存预设失败")
       return
     }
-    setSubmitting(true)
+
+    setSavingPreset(true)
     try {
       const saved = await presetBridge.save({
         workflowId,
         name,
         values,
-        overwritePresetId,
+        ...(overwritePresetId ? { overwritePresetId } : {}),
       })
       setPresets((current) => upsertPreset(current, saved))
       setSelectedPresetId(saved.id)
       setSaveDialogOpen(false)
-      setOverwriteCandidate(null)
+      setOverwriteConfirm(null)
       toast("预设已保存")
-      await runWithCurrentValues(saved)
+      setSubmitting(true)
+      try {
+        await runWithCurrentValues(saved)
+      } finally {
+        setSubmitting(false)
+      }
     } catch {
-      toast.error("保存预设失败")
+      if (existing && !overwritePresetId) {
+        setSaveDialogOpen(false)
+        setOverwriteConfirm(existing)
+      } else {
+        toast.error("保存预设失败")
+      }
     } finally {
-      setSubmitting(false)
+      setSavingPreset(false)
     }
   }
 
-  const handleSelectPreset = (presetId: string) => {
-    if (!presetId) return
-    setSelectedPresetId(presetId)
-    if (presetId === NO_PRESET_VALUE) return
-    const preset = presets.find((item) => item.id === presetId)
-    if (!preset) return
-    setValues(buildInitialValues(params, preset.values))
-    setErrors({})
-  }
-
-  const handleDeleteSelectedPreset = async () => {
-    if (!hasSelectedPreset) return
+  async function handleDeletePreset(): Promise<void> {
+    if (!selectedPreset) return
     const presetBridge = window.synapse?.workflowParamPresets
     if (!presetBridge) return
-    const presetId = selectedPreset?.id ?? selectedPresetId
+    setDeletingPreset(true)
     try {
-      await presetBridge.delete(presetId)
-      setPresets((current) => current.filter((preset) => preset.id !== presetId))
+      await presetBridge.delete(selectedPreset.id)
+      setPresets((current) => current.filter((preset) => preset.id !== selectedPreset.id))
       setSelectedPresetId(NO_PRESET_VALUE)
+      setDeleteConfirmOpen(false)
       toast("预设已删除")
     } catch {
       toast.error("删除预设失败")
+    } finally {
+      setDeletingPreset(false)
     }
   }
 
-  const chooseResourcePath = async (param: WorkflowParam) => {
+  async function chooseResourcePath(param: WorkflowParam): Promise<void> {
     if (param.type !== "file" && param.type !== "directory") return
     const selectedPath = param.type === "file"
       ? await window.synapse?.workflow.chooseParamFile?.()
@@ -256,124 +288,115 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     updateValue(param.name, selectedPath)
   }
 
-  const updateValue = (name: string, nextValue: string) => {
-    setValues((current) => ({ ...current, [name]: nextValue }))
-    if (errors[name]) {
-      setErrors((prev) => {
-        const next = { ...prev }
-        delete next[name]
-        return next
-      })
-    }
-  }
-
   return (
     <>
-      <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting) onCancel() }}>
+      <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting && !savingPreset) onCancel() }}>
         <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(event) => { void handleSubmit(event) }} className="grid gap-3">
             <DialogHeader>
               <DialogTitle>设置运行参数</DialogTitle>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {params.length === 0 ? (
-                <p className="text-sm text-muted-foreground">此工作流无需参数。</p>
-              ) : (
-                <>
-                  <div className="grid gap-2 border-b pb-4">
-                    <div className="grid gap-1.5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
-                      <Label htmlFor="workflow-param-preset">从预设选择</Label>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Select value={selectedPresetId} onValueChange={handleSelectPreset}>
-                          <SelectTrigger id="workflow-param-preset" className="w-full">
-                            <SelectValue placeholder={presetsLoading ? "读取中" : "选择预设"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NO_PRESET_VALUE}>不使用预设</SelectItem>
-                            {presets.map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label="删除预设"
-                          disabled={!hasSelectedPreset || submitting}
-                          onClick={() => void handleDeleteSelectedPreset()}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
+            {params.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="workflow-run-param-preset">预设</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedPresetId}
+                    onValueChange={handlePresetSelect}
+                    disabled={presetsLoading || submitting || savingPreset}
+                  >
+                    <SelectTrigger id="workflow-run-param-preset" className="w-full">
+                      <SelectValue placeholder="未选择预设" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_PRESET_VALUE}>未选择预设</SelectItem>
+                      {presets.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!selectedPreset || deletingPreset || submitting || savingPreset}
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    aria-label="删除预设"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            <ScrollArea className="max-h-[60vh] pr-2">
+              <div className="grid gap-3 py-1">
+                {params.length === 0 && <p className="text-sm text-muted-foreground">此工作流无需参数。</p>}
+                {params.map((param) => (
+                  <div key={param.name} className="grid gap-1.5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
+                    <Label htmlFor={param.name} className="pt-2 leading-5">
+                      {param.description ?? param.name}
+                    </Label>
+                    <div className="grid min-w-0 gap-1.5">
+                      {param.type === "number" ? (
+                        <Input
+                          id={param.name}
+                          type="number"
+                          value={values[param.name] ?? ""}
+                          onChange={(event) => updateValue(param.name, event.target.value)}
+                          aria-invalid={!!errors[param.name]}
+                        />
+                      ) : param.type === "file" || param.type === "directory" ? (
+                        <InputGroup>
+                          <InputGroupInput
+                            id={param.name}
+                            value={values[param.name] ?? ""}
+                            onChange={(event) => updateValue(param.name, event.target.value)}
+                            aria-invalid={!!errors[param.name]}
+                          />
+                          <InputGroupAddon align="inline-end">
+                            <InputGroupButton onClick={() => { void chooseResourcePath(param) }} aria-label="选择路径">
+                              <FolderOpen className="size-3.5" />
+                            </InputGroupButton>
+                          </InputGroupAddon>
+                        </InputGroup>
+                      ) : (
+                        <Textarea
+                          id={param.name}
+                          rows={3}
+                          value={values[param.name] ?? ""}
+                          onChange={(event) => updateValue(param.name, event.target.value)}
+                          aria-invalid={!!errors[param.name]}
+                        />
+                      )}
+                      {errors[param.name] && <p className="text-xs text-destructive">{errors[param.name]}</p>}
                     </div>
                   </div>
-                  <ScrollArea className="max-h-[60vh] pr-2">
-                    <div className="grid gap-4">
-                      {params.map((param) => (
-                        <div key={param.name} className="grid gap-1.5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start">
-                          <Label htmlFor={param.name} className="pt-2">{param.description ?? param.name}</Label>
-                          <div className="grid min-w-0 gap-1.5">
-                            {param.type === "file" || param.type === "directory" ? (
-                              <InputGroup>
-                                <InputGroupInput
-                                  id={param.name}
-                                  value={values[param.name] ?? ""}
-                                  onChange={(event) => updateValue(param.name, event.target.value)}
-                                  aria-invalid={!!errors[param.name]}
-                                />
-                                <InputGroupAddon align="inline-end">
-                                  <InputGroupButton onClick={() => void chooseResourcePath(param)} aria-label="选择路径">
-                                    <FolderOpen className="size-3.5" />
-                                  </InputGroupButton>
-                                </InputGroupAddon>
-                              </InputGroup>
-                            ) : param.type === "text" ? (
-                              <Textarea
-                                id={param.name}
-                                value={values[param.name] ?? ""}
-                                onChange={(event) => updateValue(param.name, event.target.value)}
-                                aria-invalid={!!errors[param.name]}
-                                className="min-h-20"
-                              />
-                            ) : (
-                              <Input
-                                id={param.name}
-                                type="number"
-                                value={values[param.name] ?? ""}
-                                onChange={(event) => updateValue(param.name, event.target.value)}
-                                aria-invalid={!!errors[param.name]}
-                              />
-                            )}
-                            {errors[param.name] && <p className="text-xs text-destructive">{errors[param.name]}</p>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </>
-              )}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>取消</Button>
-              <Button type="button" variant="outline" onClick={openSavePresetDialog} disabled={submitting || params.length === 0}>
-                保存为预设并运行
-              </Button>
-              <Button type="submit" disabled={submitting}>运行</Button>
+              <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting || savingPreset}>取消</Button>
+              {params.length > 0 && (
+                <Button type="button" variant="outline" onClick={handleOpenSaveDialog} disabled={submitting || savingPreset}>
+                  保存为预设并运行
+                </Button>
+              )}
+              <Button type="submit" disabled={submitting || savingPreset}>运行</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={saveDialogOpen} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting) setSaveDialogOpen(false) }}>
+      <Dialog open={saveDialogOpen} onOpenChange={(nextOpen) => { if (!nextOpen && !savingPreset) setSaveDialogOpen(false) }}>
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
-          <form onSubmit={(event) => { void handlePresetNameSubmit(event) }}>
+          <form onSubmit={(event) => { event.preventDefault(); void savePresetAndRun() }} className="grid gap-3">
             <DialogHeader>
               <DialogTitle>保存预设</DialogTitle>
             </DialogHeader>
-            <div className="grid gap-1.5 py-4">
-              <Label htmlFor="workflow-param-preset-name">名称</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="workflow-run-param-preset-name">名称</Label>
               <Input
-                id="workflow-param-preset-name"
+                id="workflow-run-param-preset-name"
+                aria-label="预设名称"
                 value={presetName}
                 onChange={(event) => {
                   setPresetName(event.target.value)
@@ -385,33 +408,40 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
               {presetNameError && <p className="text-xs text-destructive">{presetNameError}</p>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setSaveDialogOpen(false)} disabled={submitting}>取消</Button>
-              <Button type="submit" disabled={submitting}>保存并运行</Button>
+              <Button type="button" variant="ghost" onClick={() => setSaveDialogOpen(false)} disabled={savingPreset}>取消</Button>
+              <Button type="submit" disabled={savingPreset || !presetName.trim()}>保存并运行</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
       <AlertDialog
-        open={Boolean(overwriteCandidate)}
+        open={!!overwriteConfirm}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setOverwriteCandidate(null)
+          if (!nextOpen && !savingPreset) setOverwriteConfirm(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>覆盖同名预设</AlertDialogTitle>
-            <AlertDialogDescription>已存在同名预设，是否覆盖？</AlertDialogDescription>
+            <AlertDialogTitle>覆盖预设？</AlertDialogTitle>
+            <AlertDialogDescription>已存在同名预设。</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setSaveDialogOpen(true)}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (!overwriteCandidate) return
-                void savePresetAndSubmit(overwriteCandidate.name, overwriteCandidate.id)
-              }}
-            >
+            <AlertDialogCancel disabled={savingPreset} onClick={() => setSaveDialogOpen(true)}>取消</AlertDialogCancel>
+            <Button onClick={() => overwriteConfirm && void savePresetAndRun(overwriteConfirm.id)} disabled={savingPreset}>
               覆盖并运行
-            </AlertDialogAction>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除预设？</AlertDialogTitle>
+            <AlertDialogDescription>删除后不可恢复。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingPreset}>取消</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => { void handleDeletePreset() }} disabled={deletingPreset}>删除</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -426,27 +456,20 @@ function buildInitialValues(params: WorkflowParam[], source?: Record<string, str
   ]))
 }
 
-function defaultPresetName(selectedPreset?: WorkflowParamPreset): string {
-  if (selectedPreset) return selectedPreset.name
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const day = String(now.getDate()).padStart(2, "0")
-  const hours = String(now.getHours()).padStart(2, "0")
-  const minutes = String(now.getMinutes()).padStart(2, "0")
-  return `运行预设 ${month}-${day} ${hours}:${minutes}`
+function nextPresetName(existing: readonly WorkflowParamPreset[]): string {
+  const date = new Date().toISOString().slice(0, 10)
+  const base = `新预设 ${date}`
+  const names = new Set(existing.map((preset) => preset.name))
+  if (!names.has(base)) return base
+  let index = 2
+  while (names.has(`${base} ${index}`)) index += 1
+  return `${base} ${index}`
 }
 
 function upsertPreset(presets: WorkflowParamPreset[], nextPreset: WorkflowParamPreset): WorkflowParamPreset[] {
   const next = presets.filter((preset) => preset.id !== nextPreset.id)
   next.push(nextPreset)
   return next.sort((a, b) => b.updatedAt - a.updatedAt)
-}
-
-function mergePresetLists(loaded: WorkflowParamPreset[], current: WorkflowParamPreset[]): WorkflowParamPreset[] {
-  const byId = new Map<string, WorkflowParamPreset>()
-  for (const preset of loaded) byId.set(preset.id, preset)
-  for (const preset of current) byId.set(preset.id, preset)
-  return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRef {
