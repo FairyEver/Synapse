@@ -7,6 +7,10 @@ export function createDriveShareId(): string {
   return `shr_${randomBytes(24).toString("base64url")}`
 }
 
+export function createDriveSiteId(): string {
+  return `site_${randomBytes(24).toString("base64url")}`
+}
+
 export function createDrivePublicAssetId(): string {
   let suffix = ""
   while (suffix.length < 32) {

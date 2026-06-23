@@ -71,6 +71,7 @@ model User {
   driveAnnotationThreads      DriveAnnotationThread[]
   driveAnnotationComments     DriveAnnotationComment[]
   publicAssets                PublicAsset[]
+  driveSites                  DriveSite[]
   contentStoreItems           ContentStoreItem[]
   contentStoreDrafts          ContentStoreDraft[]
   contentStoreInstallSessions ContentStoreInstallSession[]
@@ -345,6 +346,66 @@ model DriveShareEditor {
 
   @@unique([driveShareId, email])
   @@index([email])
+}
+
+model DriveSite {
+  id                  String                @id @default(cuid())
+  siteId              String                @unique @db.VarChar(48)
+  userId              String
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String                @db.VarChar(255)
+  status              String                @db.VarChar(32)
+  accessMode          String                @db.VarChar(32)
+  passwordHash        String?
+  expiresAt           DateTime?
+  currentDeploymentId String?
+  sourceFolderItemId  String?
+  sourceFolderName    String?               @db.VarChar(255)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  disabledAt          DateTime?
+  deletedAt           DateTime?
+  deployments         DriveSiteDeployment[]
+  assets              DriveSiteAsset[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status, updatedAt])
+  @@index([sourceFolderItemId])
+}
+
+model DriveSiteDeployment {
+  id          String           @id @default(cuid())
+  driveSiteId String
+  driveSite   DriveSite        @relation(fields: [driveSiteId], references: [id], onDelete: Cascade)
+  status      String           @db.VarChar(32)
+  entryPath   String           @db.VarChar(1024)
+  fileCount   Int
+  totalBytes  BigInt
+  createdAt   DateTime         @default(now())
+  activatedAt DateTime?
+  error       String?
+  assets      DriveSiteAsset[]
+
+  @@index([driveSiteId, createdAt])
+  @@index([status])
+}
+
+model DriveSiteAsset {
+  id           String              @id @default(cuid())
+  driveSiteId  String
+  driveSite    DriveSite           @relation(fields: [driveSiteId], references: [id], onDelete: Cascade)
+  deploymentId String
+  deployment   DriveSiteDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  sourceItemId String?
+  relativePath String              @db.VarChar(1024)
+  storageKey   String              @unique
+  contentType  String?             @db.VarChar(255)
+  size         BigInt
+  sha256       String?
+
+  @@unique([deploymentId, relativePath])
+  @@index([driveSiteId, deploymentId])
+  @@index([sourceItemId])
 }
 
 model DriveUsage {

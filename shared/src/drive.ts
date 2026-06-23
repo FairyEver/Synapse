@@ -1,12 +1,18 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/share"
 export const DRIVE_PUBLIC_ASSET_PATH_PREFIX = "/files"
+export const DRIVE_SITE_PATH_PREFIX = "/sites"
 export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
 export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
 export const DRIVE_SHARE_BROWSER_PATH_PREFIX = DRIVE_PUBLIC_PATH_PREFIX
 export const DRIVE_MAX_FILE_BYTES = 100 * 1024 * 1024
 export const DRIVE_DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024
+export const DRIVE_SITE_DEFAULT_PAGE_SIZE = 50
+export const DRIVE_SITE_MAX_PAGE_SIZE = 200
+export const DRIVE_SITE_MAX_FILES = 1000
+export const DRIVE_SITE_MAX_TOTAL_BYTES = 200 * 1024 * 1024
 export const DRIVE_MAX_FILE_SIZE_LABEL = "100MB"
 export const DRIVE_DEFAULT_QUOTA_LABEL = "5GB"
+export const DRIVE_SITE_MAX_TOTAL_SIZE_LABEL = "200MB"
 export const DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -31,6 +37,8 @@ export type DriveBrowserEditUnavailableReason = "unsupported" | "truncated" | "l
 export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
 export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy_missing"
 export type DriveTrashItemKind = "normal" | "public_asset"
+export type DriveSiteStatus = "active" | "disabled" | "expired" | "deleted" | "failed"
+export type DriveSiteAccessMode = "public" | "password"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -151,6 +159,62 @@ export interface DriveTrashListPageDto {
   readonly items: readonly DriveTrashItemDto[]
   readonly total: number
   readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DriveSiteCreateInput {
+  readonly sourceFolderItemId: string
+  readonly name: string
+  readonly entryPath?: string | null
+  readonly accessMode: DriveSiteAccessMode
+  readonly password?: string | null
+  readonly expiresIn: DriveAccessExpiresIn
+}
+
+export interface DriveSiteAccessUpdateInput {
+  readonly accessMode: DriveSiteAccessMode
+  readonly password?: string | null
+  readonly expiresIn: DriveAccessExpiresIn
+}
+
+export interface DriveSiteDto {
+  readonly id: string
+  readonly siteId: string
+  readonly name: string
+  readonly status: DriveSiteStatus
+  readonly accessMode: DriveSiteAccessMode
+  readonly url: string
+  readonly expiresAt: string | null
+  readonly sourceFolderItemId: string | null
+  readonly sourceFolderName: string | null
+  readonly entryPath: string | null
+  readonly fileCount: number
+  readonly totalBytes: string
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly lastPublishedAt: string | null
+}
+
+export interface DriveSitePreflightDto {
+  readonly sourceFolderItemId: string
+  readonly sourceFolderName: string
+  readonly htmlFiles: readonly string[]
+  readonly defaultEntryPath: string | null
+  readonly fileCount: number
+  readonly totalBytes: string
+  readonly includesJavaScript: boolean
+}
+
+export interface DriveSiteListPageDto {
+  readonly items: readonly DriveSiteDto[]
+  readonly total: number
+  readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DriveSiteListInput {
+  readonly offset?: number
+  readonly limit?: number
+  readonly search?: string
+  readonly status?: DriveSiteStatus | "all"
 }
 
 export interface DriveFileVersionPinInput {
@@ -486,6 +550,13 @@ export function buildDrivePublicAssetUrl(input: {
   readonly assetId: string
 }): string {
   return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_ASSET_PATH_PREFIX}/${encodeURIComponent(input.assetId)}`
+}
+
+export function buildDriveSiteUrl(input: {
+  readonly publicAppUrl: string
+  readonly siteId: string
+}): string {
+  return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_SITE_PATH_PREFIX}/${encodeURIComponent(input.siteId)}/`
 }
 
 export function isDrivePublicAssetId(value: string): boolean {
