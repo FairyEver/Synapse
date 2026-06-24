@@ -76,6 +76,15 @@ const xtermState = vi.hoisted(() => ({
   webLinksInstances: [] as Array<Record<string, never>>,
 }))
 
+const webglState = vi.hoisted(() => ({
+  instances: [] as Array<{
+    onContextLoss: ReturnType<typeof vi.fn>
+    dispose: ReturnType<typeof vi.fn>
+    clearTextureAtlas: ReturnType<typeof vi.fn>
+    contextLossDispose: ReturnType<typeof vi.fn>
+  }>,
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalBridge
@@ -128,9 +137,23 @@ vi.mock("@xterm/addon-web-links", () => ({
   }),
 }))
 
+vi.mock("@xterm/addon-webgl", () => ({
+  WebglAddon: vi.fn().mockImplementation(function WebglAddonMock() {
+    const instance = {
+      onContextLoss: vi.fn(() => ({ dispose: instance.contextLossDispose })),
+      dispose: vi.fn(),
+      clearTextureAtlas: vi.fn(),
+      contextLossDispose: vi.fn(),
+    }
+    webglState.instances.push(instance)
+    return instance
+  }),
+}))
+
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
 import { Terminal as XtermTerminal } from "@xterm/xterm"
+import { WebglAddon } from "@xterm/addon-webgl"
 import { TerminalModule } from "../index"
 import { EmbeddedSystemAppShell } from "../../../../src/modules/apps/components/embedded-system-app-shell"
 
@@ -182,6 +205,8 @@ beforeEach(() => {
   xtermState.instances = []
   xtermState.fitInstances = []
   xtermState.webLinksInstances = []
+  webglState.instances = []
+  vi.mocked(WebglAddon).mockClear()
   resizeObservers.length = 0
 })
 
@@ -249,6 +274,19 @@ describe("TerminalModule", () => {
         brightBlue: expect.any(String),
       }),
     }))
+  })
+
+  it("loads the WebGL renderer so custom Powerline glyphs are drawn outside the DOM font path", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(WebglAddon).toHaveBeenCalledTimes(1)
+    expect(xtermState.instances[0]?.loadAddon).toHaveBeenCalledWith(webglState.instances[0])
+    expect(xtermState.instances[0]?.open.mock.invocationCallOrder[0])
+      .toBeLessThan(xtermState.instances[0]?.loadAddon.mock.invocationCallOrder.at(-1) ?? 0)
+    expect(webglState.instances[0]?.onContextLoss).toHaveBeenCalled()
   })
 
   it("attaches to a session, streams data, writes input, and cleans up without stopping it", async () => {

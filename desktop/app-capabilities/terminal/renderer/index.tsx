@@ -3,6 +3,7 @@ import { Plus, Square, Terminal as TerminalIcon } from "lucide-react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
+import { WebglAddon } from "@xterm/addon-webgl"
 import "@xterm/xterm/css/xterm.css"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Badge } from "../../../src/components/ui/badge"
@@ -145,6 +146,7 @@ export function TerminalModule() {
     xterm.loadAddon(fitAddon)
     xterm.loadAddon(webLinksAddon)
     xterm.open(container)
+    const webglContextLossDisposable = loadWebglRenderer(xterm)
 
     const resizeSession = () => {
       if (disposed) return
@@ -217,6 +219,7 @@ export function TerminalModule() {
       unsubscribeData()
       unsubscribeSessionChanged()
       inputDisposable.dispose()
+      webglContextLossDisposable?.dispose()
       resizeObserver.disconnect()
       xterm.dispose()
     }
@@ -334,4 +337,19 @@ function getStatusLabel(status: SynapseTerminalSession["status"]): string {
   if (status === "killed") return "已停止"
   if (status === "failed") return "失败"
   return "丢失"
+}
+
+function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
+  try {
+    const webglAddon = new WebglAddon()
+    const contextLossDisposable = webglAddon.onContextLoss(() => {
+      logger.warn("Terminal WebGL renderer context lost; falling back to DOM renderer.")
+      webglAddon.dispose()
+    })
+    xterm.loadAddon(webglAddon)
+    return contextLossDisposable
+  } catch (error) {
+    logger.warn("Terminal WebGL renderer unavailable; falling back to DOM renderer.", { error })
+    return undefined
+  }
 }
