@@ -1,7 +1,6 @@
 import { z } from "zod"
 
 export const terminalSessionStatusSchema = z.enum(["running", "exited", "killed", "failed", "lost"])
-export const terminalAgentControlSchema = z.enum(["disabled", "enabled"])
 
 export const terminalGroupSchema = z.object({
   id: z.string().min(1),
@@ -24,7 +23,6 @@ export const terminalSessionSchema = z.object({
   updatedAt: z.string().min(1),
   startedAt: z.string().min(1),
   endedAt: z.string().min(1).optional(),
-  agentControl: terminalAgentControlSchema,
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
   lastOutputSeq: z.number().int().nonnegative(),
@@ -50,10 +48,18 @@ export const terminalCreateSessionInputSchema = z.object({
   cwd: z.string().min(1).optional(),
   cols: z.number().int().positive().max(500).optional(),
   rows: z.number().int().positive().max(200).optional(),
-  agentControl: z.boolean().optional(),
 }).strict()
 
 export const terminalSessionIdInputSchema = z.object({
+  sessionId: z.string().min(1),
+}).strict()
+
+export const terminalRenameSessionInputSchema = z.object({
+  sessionId: z.string().min(1),
+  title: z.string().min(1).max(120),
+}).strict()
+
+export const terminalDeleteSessionInputSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
@@ -93,6 +99,8 @@ export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>
 export type TerminalCreateGroupInput = z.infer<typeof terminalCreateGroupInputSchema>
 export type TerminalEmptyInput = z.infer<typeof terminalEmptyInputSchema>
 export type TerminalCreateSessionInput = z.infer<typeof terminalCreateSessionInputSchema>
+export type TerminalRenameSessionInput = z.infer<typeof terminalRenameSessionInputSchema>
+export type TerminalDeleteSessionInput = z.infer<typeof terminalDeleteSessionInputSchema>
 export type TerminalReadSessionInput = z.infer<typeof terminalReadSessionInputSchema>
 export type TerminalWriteSessionInput = z.infer<typeof terminalWriteSessionInputSchema>
 export type TerminalResizeSessionInput = z.infer<typeof terminalResizeSessionInputSchema>

@@ -1,15 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus, RotateCcw, Square, Terminal as TerminalIcon } from "lucide-react"
+import { MoreHorizontal, Pencil, Plus, RotateCcw, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import "@xterm/xterm/css/xterm.css"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../src/components/ui/alert-dialog"
 import { Badge } from "../../../src/components/ui/badge"
 import { Button } from "../../../src/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../src/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../src/components/ui/dropdown-menu"
+import { Input } from "../../../src/components/ui/input"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
-import { Switch } from "../../../src/components/ui/switch"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
@@ -32,7 +56,11 @@ export function TerminalModule() {
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [agentControlPending, setAgentControlPending] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
+  const [renameTitle, setRenameTitle] = useState("")
+  const [renameSaving, setRenameSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<SynapseTerminalSession | null>(null)
+  const [deleteSaving, setDeleteSaving] = useState(false)
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
 
   const activeSession = useMemo(() => {
@@ -41,7 +69,6 @@ export function TerminalModule() {
   }, [activeSessionId, sessions])
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
-  const canSetAgentControl = "setAgentControl" in terminalBridge && typeof terminalBridge.setAgentControl === "function"
   const statusLabel = activeSession ? getStatusLabel(activeSession.status) : "未启动"
   const canStopSession = activeSession?.status === "running"
   const canRestartSession = Boolean(activeSession && activeSession.status !== "running")
@@ -101,7 +128,6 @@ export function TerminalModule() {
       cwd: activeSession.cwd,
       cols: activeSession.cols,
       rows: activeSession.rows,
-      agentControl: activeSession.agentControl === "enabled",
     })
   }, [activeSession, createSession])
 
@@ -116,21 +142,52 @@ export function TerminalModule() {
     }
   }, [activeSession, terminalBridge])
 
-  const setAgentControl = useCallback(async (enabled: boolean) => {
-    if (!activeSession || !canSetAgentControl) return
-    setAgentControlPending(true)
+  const openRenameDialog = useCallback((session: SynapseTerminalSession) => {
+    setRenameTarget(session)
+    setRenameTitle(session.title)
+  }, [])
+
+  const renameSession = useCallback(async () => {
+    if (!renameTarget) return
+    const title = renameTitle.trim()
+    if (!title) return
+    setRenameSaving(true)
     try {
-      const session = await terminalBridge.setAgentControl({
-        sessionId: activeSession.id,
-        enabled,
+      const session = await terminalBridge.renameSession({
+        sessionId: renameTarget.id,
+        title: renameTitle,
       })
       setSessions((current) => mergeSession(current, session))
+      setRenameTarget(null)
+      setRenameTitle("")
     } catch (error) {
-      logger.error("Failed to update terminal agent control.", error)
+      logger.error("Failed to rename terminal session.", error)
     } finally {
-      setAgentControlPending(false)
+      setRenameSaving(false)
     }
-  }, [activeSession, canSetAgentControl, terminalBridge])
+  }, [renameTarget, renameTitle, terminalBridge])
+
+  const deleteSession = useCallback(async () => {
+    if (!deleteTarget) return
+    const targetId = deleteTarget.id
+    setDeleteSaving(true)
+    try {
+      await terminalBridge.deleteSession({ sessionId: targetId })
+      setSessions((current) => {
+        const nextSessions = current.filter((session) => session.id !== targetId)
+        setActiveSessionId((currentActiveId) => {
+          if (currentActiveId !== targetId) return currentActiveId
+          return nextSessions[0]?.id ?? null
+        })
+        return nextSessions
+      })
+      setDeleteTarget(null)
+    } catch (error) {
+      logger.error("Failed to delete terminal session.", error)
+    } finally {
+      setDeleteSaving(false)
+    }
+  }, [deleteTarget, terminalBridge])
 
   const headerActions = useMemo(() => (
     <>
@@ -217,6 +274,16 @@ export function TerminalModule() {
     const unsubscribeSessionChanged = terminalBridge.onSessionChanged((session) => {
       setSessions((current) => mergeSession(current, session))
     })
+    const unsubscribeSessionDeleted = terminalBridge.onSessionDeleted((event) => {
+      setSessions((current) => {
+        const nextSessions = current.filter((session) => session.id !== event.sessionId)
+        setActiveSessionId((currentActiveId) => {
+          if (currentActiveId !== event.sessionId) return currentActiveId
+          return nextSessions[0]?.id ?? null
+        })
+        return nextSessions
+      })
+    })
 
     terminalBridge.readSession({
       sessionId: activeSession.id,
@@ -239,6 +306,7 @@ export function TerminalModule() {
       disposed = true
       unsubscribeData()
       unsubscribeSessionChanged()
+      unsubscribeSessionDeleted()
       inputDisposable.dispose()
       webglContextLossDisposable?.dispose()
       resizeObserver.disconnect()
@@ -259,18 +327,45 @@ export function TerminalModule() {
                   <div className="px-2 text-xs font-medium text-muted-foreground">{group.name}</div>
                   <div className="grid gap-1">
                     {group.sessions.map((session) => (
-                      <button
+                      <div
                         key={session.id}
-                        type="button"
                         className={cn(
-                          "grid min-h-10 w-full min-w-0 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "grid min-h-10 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg transition-colors hover:bg-muted",
                           session.id === activeSession?.id ? "bg-muted text-foreground" : "text-foreground",
                         )}
-                        onClick={() => setActiveSessionId(session.id)}
                       >
-                        <span className="truncate font-medium">{session.title}</span>
-                        <span className="truncate text-xs text-muted-foreground">{session.cwd}</span>
-                      </button>
+                        <button
+                          type="button"
+                          className="grid min-h-10 min-w-0 px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => setActiveSessionId(session.id)}
+                        >
+                          <span className="truncate font-medium">{session.title}</span>
+                          <span className="truncate text-xs text-muted-foreground">{session.cwd}</span>
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`终端会话操作：${session.title}`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openRenameDialog(session)}>
+                              <Pencil />
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(session)}>
+                              <Trash2 />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -290,16 +385,6 @@ export function TerminalModule() {
                   <div className="truncate text-sm font-medium">{activeSession.title}</div>
                   <div className="truncate text-xs text-muted-foreground">{activeSession.cwd}</div>
                 </div>
-                {canSetAgentControl ? (
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    Agent 控制
-                    <Switch
-                      checked={activeSession.agentControl === "enabled"}
-                      disabled={agentControlPending}
-                      onCheckedChange={setAgentControl}
-                    />
-                  </label>
-                ) : null}
               </header>
               <div className="dark min-h-0 flex-1 overflow-hidden bg-background p-2">
                 <div ref={terminalContainerRef} className="h-full min-h-0 min-w-0 overflow-hidden rounded-lg border bg-background" />
@@ -315,6 +400,74 @@ export function TerminalModule() {
           )}
         </main>
       </div>
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => {
+        if (!open) {
+          setRenameTarget(null)
+          setRenameTitle("")
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名终端</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入新的终端名称。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="终端名称"
+            value={renameTitle}
+            onChange={(event) => setRenameTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void renameSession()
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={renameSaving}
+              onClick={() => {
+                setRenameTarget(null)
+                setRenameTitle("")
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={renameSaving || !renameTitle.trim()}
+              onClick={() => { void renameSession() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
+        if (!open) setDeleteTarget(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除终端</AlertDialogTitle>
+            <AlertDialogDescription>
+              会停止该终端并删除保留输出。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteSaving}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteSaving}
+              onClick={() => { void deleteSession() }}
+            >
+              删除终端
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SystemAppWindowShell>
   )
 }

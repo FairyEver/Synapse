@@ -68,51 +68,51 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.createSession.channel).toBe("synapse:terminal:session:create")
     expect(terminalIpcModule.methods.getSession.channel).toBe("synapse:terminal:session:get")
     expect(terminalIpcModule.methods.readSession.channel).toBe("synapse:terminal:session:read")
+    expect(terminalIpcModule.methods.renameSession.channel).toBe("synapse:terminal:session:rename")
     expect(terminalIpcModule.methods.writeSession.channel).toBe("synapse:terminal:session:write")
     expect(terminalIpcModule.methods.resizeSession.channel).toBe("synapse:terminal:session:resize")
-    expect(terminalIpcModule.methods.setAgentControl.channel).toBe("synapse:terminal:session:agent-control")
+    expect("setAgentControl" in terminalIpcModule.methods).toBe(false)
+    expect(terminalIpcModule.methods.deleteSession.channel).toBe("synapse:terminal:session:delete")
     expect(terminalIpcModule.methods.stopSession.channel).toBe("synapse:terminal:session:stop")
     expect(terminalIpcModule.events.data.channel).toBe("synapse:terminal:data")
     expect(terminalIpcModule.events.sessionChanged.channel).toBe("synapse:terminal:session-changed")
+    expect(terminalIpcModule.events.sessionDeleted.channel).toBe("synapse:terminal:session-deleted")
   })
 
-  it("writes and stops sessions as the user actor", async () => {
+  it("renames, deletes, writes, and stops sessions as the user actor", async () => {
     const service = createService()
     const ctx = createContext(service)
 
+    await terminalIpcModule.methods.renameSession.handler(ctx, {
+      sessionId: "session-1",
+      title: "Logs",
+    })
     await terminalIpcModule.methods.writeSession.handler(ctx, {
       sessionId: "session-1",
       data: "pwd\n",
+    })
+    await terminalIpcModule.methods.deleteSession.handler(ctx, {
+      sessionId: "session-1",
     })
     await terminalIpcModule.methods.stopSession.handler(ctx, {
       sessionId: "session-1",
       force: true,
     })
 
+    expect(service.renameSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      title: "Logs",
+    })
     expect(service.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       data: "pwd\n",
-      actor: "user",
+    })
+    expect(service.deleteSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
     })
     expect(service.stopSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       force: true,
-      actor: "user",
-    })
-  })
-
-  it("sets agent control through the terminal service", async () => {
-    const service = createService()
-    const ctx = createContext(service)
-
-    await terminalIpcModule.methods.setAgentControl.handler(ctx, {
-      sessionId: "session-1",
-      enabled: true,
-    })
-
-    expect(service.setAgentControl).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      enabled: true,
     })
   })
 
@@ -142,7 +142,6 @@ describe("terminalIpcModule", () => {
       createdAt: "2026-06-24T00:00:00.000Z",
       updatedAt: "2026-06-24T00:00:00.000Z",
       startedAt: "2026-06-24T00:00:00.000Z",
-      agentControl: "disabled",
       cols: 80,
       rows: 24,
       lastOutputSeq: 0,
@@ -151,6 +150,11 @@ describe("terminalIpcModule", () => {
       id: "session-1",
       status: "running",
     }).success).toBe(false)
+
+    expect(terminalIpcModule.events.sessionDeleted.payload.safeParse({
+      sessionId: "session-1",
+    }).success).toBe(true)
+    expect(terminalIpcModule.events.sessionDeleted.payload.safeParse({}).success).toBe(false)
   })
 
   it("is included in registered IPC modules", () => {
@@ -196,6 +200,7 @@ describe("terminalIpcModule", () => {
       },
     })
     ;(service.events as EventEmitter).emit("sessionChanged", createSession())
+    ;(service.events as EventEmitter).emit("sessionDeleted", { sessionId: "session-1" })
 
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:data", {
       sessionId: "session-1",
@@ -208,6 +213,9 @@ describe("terminalIpcModule", () => {
       },
     })
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:session-changed", createSession())
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:session-deleted", {
+      sessionId: "session-1",
+    })
   })
 })
 
@@ -244,9 +252,10 @@ function createService(): Partial<TerminalService> {
       truncated: false,
       firstSeq: 0,
     })),
+    renameSession: vi.fn(() => session),
     writeSession: vi.fn(),
     resizeSession: vi.fn(),
-    setAgentControl: vi.fn(() => session),
+    deleteSession: vi.fn(),
     stopSession: vi.fn(),
     events: new EventEmitter() as TerminalService["events"],
   }
@@ -263,7 +272,6 @@ function createSession() {
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "disabled" as const,
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,

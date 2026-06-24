@@ -7,9 +7,11 @@ import {
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_MCP_TOOL_NAMES,
   TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+  TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_GET_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
+  TERMINAL_SESSION_RENAME_CAPABILITY_ID,
   TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
@@ -60,9 +62,15 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     mutates: false,
   },
   {
+    id: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+    title: "Rename terminal session",
+    description: "Rename a Synapse terminal session.",
+    mutates: true,
+  },
+  {
     id: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
     title: "Write terminal input",
-    description: "Write raw input to an Agent-controlled terminal session.",
+    description: "Write raw input to a Synapse terminal session.",
     mutates: true,
   },
   {
@@ -72,9 +80,15 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     mutates: true,
   },
   {
+    id: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+    title: "Delete terminal session",
+    description: "Delete a Synapse terminal session and its retained output.",
+    mutates: true,
+  },
+  {
     id: TERMINAL_SESSION_STOP_CAPABILITY_ID,
     title: "Stop terminal session",
-    description: "Stop an Agent-controlled terminal session.",
+    description: "Stop a Synapse terminal session.",
     mutates: true,
   },
 ]
@@ -92,8 +106,10 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TERMINAL_MCP_TOOL_NAMES.sessionList]: TERMINAL_SESSION_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionGet]: TERMINAL_SESSION_GET_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionRead]: TERMINAL_SESSION_READ_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.sessionRename]: TERMINAL_SESSION_RENAME_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionWrite]: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionResize]: TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.sessionDelete]: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionStop]: TERMINAL_SESSION_STOP_CAPABILITY_ID,
 }
 
@@ -176,7 +192,6 @@ export function buildAppTools(): McpToolDefinition[] {
           cwd: stringField("Optional existing absolute working directory.", { minLength: 1 }),
           cols: positiveIntField("Optional terminal columns. Defaults to 80.", 500),
           rows: positiveIntField("Optional terminal rows. Defaults to 24.", 200),
-          agentControl: booleanField("When true, allow MCP write and stop operations for this session."),
         },
       },
     },
@@ -208,8 +223,20 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
     {
+      name: TERMINAL_MCP_TOOL_NAMES.sessionRename,
+      description: "Rename a Synapse terminal session.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sessionId: sessionIdProperty,
+          title: stringField("New session title. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 120 }),
+        },
+        required: ["sessionId", "title"],
+      },
+    },
+    {
       name: TERMINAL_MCP_TOOL_NAMES.sessionWrite,
-      description: "Write raw input to an Agent-controlled terminal session. Include a newline to submit a shell command.",
+      description: "Write raw input to a Synapse terminal session. Include a newline to submit a shell command.",
       inputSchema: {
         type: "object",
         properties: {
@@ -233,8 +260,19 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
     {
+      name: TERMINAL_MCP_TOOL_NAMES.sessionDelete,
+      description: "Delete a Synapse terminal session and its retained output. Running sessions are stopped before deletion.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sessionId: sessionIdProperty,
+        },
+        required: ["sessionId"],
+      },
+    },
+    {
       name: TERMINAL_MCP_TOOL_NAMES.sessionStop,
-      description: "Stop an Agent-controlled terminal session.",
+      description: "Stop a Synapse terminal session.",
       inputSchema: {
         type: "object",
         properties: {

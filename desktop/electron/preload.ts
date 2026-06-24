@@ -29,6 +29,7 @@ import type { SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
   SynapseTerminalSession,
+  SynapseTerminalSessionDeletedEvent,
 } from "../src/types/terminal"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
@@ -382,12 +383,14 @@ const IPC_CHANNELS = {
     "createSession": "synapse:terminal:session:create",
     "getSession": "synapse:terminal:session:get",
     "readSession": "synapse:terminal:session:read",
+    "renameSession": "synapse:terminal:session:rename",
     "writeSession": "synapse:terminal:session:write",
     "resizeSession": "synapse:terminal:session:resize",
-    "setAgentControl": "synapse:terminal:session:agent-control",
+    "deleteSession": "synapse:terminal:session:delete",
     "stopSession": "synapse:terminal:session:stop",
     "data": "synapse:terminal:data",
     "sessionChanged": "synapse:terminal:session-changed",
+    "sessionDeleted": "synapse:terminal:session-deleted",
   },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
@@ -746,9 +749,10 @@ const synapseBridge: SynapseBridge = {
     createSession: (input) => invoke(IPC_CHANNELS.terminal.createSession)(input),
     getSession: (input) => invoke(IPC_CHANNELS.terminal.getSession)(input),
     readSession: (input) => invoke(IPC_CHANNELS.terminal.readSession)(input),
+    renameSession: (input) => invoke(IPC_CHANNELS.terminal.renameSession)(input),
     writeSession: (input) => invoke(IPC_CHANNELS.terminal.writeSession)(input),
     resizeSession: (input) => invoke(IPC_CHANNELS.terminal.resizeSession)(input),
-    setAgentControl: (input) => invoke(IPC_CHANNELS.terminal.setAgentControl)(input),
+    deleteSession: (input) => invoke(IPC_CHANNELS.terminal.deleteSession)(input),
     stopSession: (input) => invoke(IPC_CHANNELS.terminal.stopSession)(input),
     onData: createRawPayloadSubscription<SynapseTerminalDataEvent>(
       subscribe,
@@ -757,6 +761,10 @@ const synapseBridge: SynapseBridge = {
     onSessionChanged: createRawPayloadSubscription<SynapseTerminalSession>(
       subscribe,
       IPC_CHANNELS.terminal.sessionChanged,
+    ),
+    onSessionDeleted: createRawPayloadSubscription<SynapseTerminalSessionDeletedEvent>(
+      subscribe,
+      IPC_CHANNELS.terminal.sessionDeleted,
     ),
   },
   git: {

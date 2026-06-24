@@ -54,7 +54,6 @@ Input:
 - `cwd` optional: existing absolute working directory.
 - `cols` optional: terminal columns. Defaults to `80`.
 - `rows` optional: terminal rows. Defaults to `24`.
-- `agentControl` optional: when `true`, allow MCP write and stop operations for this session.
 
 Output:
 
@@ -100,9 +99,22 @@ Output:
 - `firstSeq`: first retained sequence.
 - `truncated`: whether retention trimmed earlier output.
 
+`app_terminal_session_rename`
+
+Rename a terminal session.
+
+Input:
+
+- `sessionId` required: terminal session id.
+- `title` required: new session title. Leading and trailing whitespace is trimmed.
+
+Output:
+
+- Terminal session.
+
 `app_terminal_session_write`
 
-Write raw input to an Agent-controlled terminal session. Include `\n` to submit a shell command.
+Write raw input to a Synapse terminal session. Include `\n` to submit a shell command.
 
 Input:
 
@@ -127,9 +139,21 @@ Output:
 
 - `{ "ok": true }`
 
+`app_terminal_session_delete`
+
+Delete a terminal session and its retained output. Running sessions are stopped before deletion.
+
+Input:
+
+- `sessionId` required: terminal session id.
+
+Output:
+
+- `{ "ok": true }`
+
 `app_terminal_session_stop`
 
-Stop an Agent-controlled terminal session.
+Stop a Synapse terminal session.
 
 Input:
 
@@ -139,5 +163,3 @@ Input:
 Output:
 
 - `{ "ok": true }`
-
-`app_terminal_session_write` and `app_terminal_session_stop` require Agent control to be enabled on the session.
