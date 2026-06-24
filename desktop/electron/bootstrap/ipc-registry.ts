@@ -32,6 +32,11 @@ import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
+import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
+import type { TerminalService } from "../../app-capabilities/terminal/main/service"
+import type { WindowManager } from "../runtime/window"
+
+const terminalEventWiredServices = new WeakSet<TerminalService>()
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -66,7 +71,10 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(accountIpcModule, ctx)
   registry.register(liveIpcModule, ctx)
   registry.register(documentTemplateIpcModule, ctx)
+  registry.register(terminalIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
+
+  wireTerminalEvents(ctx)
 
   return registry
 }
@@ -99,5 +107,20 @@ export const registeredIpcModules: readonly IpcModule[] = [
   accountIpcModule,
   liveIpcModule,
   documentTemplateIpcModule,
+  terminalIpcModule,
   opsIpcModule,
 ]
+
+function wireTerminalEvents(ctx: IpcHandlerContext): void {
+  const terminalService = ctx.resolve<TerminalService>("core.terminal")
+  if (terminalEventWiredServices.has(terminalService)) return
+
+  const windowManager = ctx.resolve<WindowManager>("core.window-manager")
+  terminalService.events.on("data", (payload) => {
+    windowManager.broadcast(terminalIpcModule.events.data.channel, payload)
+  })
+  terminalService.events.on("sessionChanged", (payload) => {
+    windowManager.broadcast(terminalIpcModule.events.sessionChanged.channel, payload)
+  })
+  terminalEventWiredServices.add(terminalService)
+}

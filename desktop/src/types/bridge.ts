@@ -24,6 +24,19 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
+  SynapseTerminalCreateGroupInput,
+  SynapseTerminalCreateSessionInput,
+  SynapseTerminalDataEvent,
+  SynapseTerminalGroup,
+  SynapseTerminalReadSessionInput,
+  SynapseTerminalReadSessionResult,
+  SynapseTerminalResizeSessionInput,
+  SynapseTerminalSession,
+  SynapseTerminalSetAgentControlInput,
+  SynapseTerminalStopSessionInput,
+  SynapseTerminalWriteSessionInput,
+} from "./terminal"
+import type {
   SynapseContentStoreInstallPrepareResult,
   SynapseContentStoreInstallResolveResult,
 } from "./content-store-install"
@@ -804,6 +817,20 @@ export type SynapseBridge = {
     chooseJsonFile: () => Promise<string | null>
     chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
+  }
+  terminal: {
+    listGroups: () => Promise<SynapseTerminalGroup[]>
+    createGroup: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
+    listSessions: () => Promise<SynapseTerminalSession[]>
+    createSession: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
+    getSession: (input: { sessionId: string }) => Promise<SynapseTerminalSession>
+    readSession: (input: SynapseTerminalReadSessionInput) => Promise<SynapseTerminalReadSessionResult>
+    writeSession: (input: SynapseTerminalWriteSessionInput) => Promise<void>
+    resizeSession: (input: SynapseTerminalResizeSessionInput) => Promise<void>
+    setAgentControl: (input: SynapseTerminalSetAgentControlInput) => Promise<SynapseTerminalSession>
+    stopSession: (input: SynapseTerminalStopSessionInput) => Promise<void>
+    onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
+    onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>
