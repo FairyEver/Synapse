@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
   TERMINAL_MCP_TOOL_NAMES,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_RENAME_CAPABILITY_ID,
@@ -53,6 +54,13 @@ describe("App capability domain", () => {
     )
   })
 
+  it("maps terminal group settings MCP tool to its capability", () => {
+    expect(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID).toBe("app.terminal.group.updateSettings")
+    expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]).toBe(
+      TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+    )
+  })
+
   it("marks terminal list tool input schemas as strict empty objects", () => {
     const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
 
@@ -97,6 +105,26 @@ describe("App capability domain", () => {
         sessionId: expect.objectContaining({ type: "string", minLength: 1 }),
       },
       required: ["sessionId"],
+    })
+  })
+
+  it("defines terminal group settings MCP schema", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        groupId: expect.objectContaining({ type: "string", minLength: 1 }),
+        name: expect.objectContaining({ type: "string", minLength: 1, maxLength: 80 }),
+        settings: expect.objectContaining({
+          type: "object",
+          properties: {
+            defaultCwd: expect.objectContaining({ type: "string", minLength: 1 }),
+            startupCommand: expect.objectContaining({ type: "string", minLength: 1 }),
+          },
+        }),
+      },
+      required: ["groupId", "name"],
     })
   })
 

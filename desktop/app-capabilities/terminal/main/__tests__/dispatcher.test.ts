@@ -3,6 +3,7 @@ import {
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+  TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
@@ -98,6 +99,39 @@ describe("createTerminalCapabilityDispatcher", () => {
       name: "  构建  ",
     })
     expect(result).toEqual({ ok: true, data: renamed, affected: 1 })
+  })
+
+  it("dispatches group settings update with parsed input", async () => {
+    const updated = createGroup({
+      name: "构建",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    })
+    const updateGroupSettings = vi.fn(async () => updated)
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { updateGroupSettings } as never,
+    })
+
+    const result = await dispatcher.dispatch(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID, {
+      groupId: "g1",
+      name: "  构建  ",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    }, { source: "mcp-http" })
+
+    expect(updateGroupSettings).toHaveBeenCalledWith({
+      groupId: "g1",
+      name: "  构建  ",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    })
+    expect(result).toEqual({ ok: true, data: updated, affected: 1 })
   })
 
   it("authorizes group delete before calling service as the mcp actor", async () => {

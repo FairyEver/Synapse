@@ -65,6 +65,7 @@ describe("App capability domain", () => {
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
+    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_update_settings).toBe("app.terminal.group.updateSettings")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")
   })
 })

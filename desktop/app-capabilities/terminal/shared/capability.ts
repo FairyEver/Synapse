@@ -8,6 +8,8 @@ export const TERMINAL_GROUP_LIST_CAPABILITY_ID =
   "app.terminal.group.list" as CapabilityId
 export const TERMINAL_GROUP_RENAME_CAPABILITY_ID =
   "app.terminal.group.rename" as CapabilityId
+export const TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID =
+  "app.terminal.group.updateSettings" as CapabilityId
 export const TERMINAL_GROUP_DELETE_CAPABILITY_ID =
   "app.terminal.group.delete" as CapabilityId
 export const TERMINAL_SESSION_CREATE_CAPABILITY_ID =
@@ -33,6 +35,7 @@ export const TERMINAL_MCP_TOOL_NAMES = {
   groupCreate: "app_terminal_group_create",
   groupList: "app_terminal_group_list",
   groupRename: "app_terminal_group_rename",
+  groupUpdateSettings: "app_terminal_group_update_settings",
   groupDelete: "app_terminal_group_delete",
   sessionCreate: "app_terminal_session_create",
   sessionList: "app_terminal_session_list",

@@ -7,6 +7,7 @@ import {
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+  TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
   TERMINAL_MCP_TOOL_NAMES,
   TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
@@ -49,6 +50,12 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     id: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
     title: "Rename terminal group",
     description: "Rename a Synapse terminal group.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+    title: "Update terminal group settings",
+    description: "Update a terminal group's name, default working directory, and startup command.",
     mutates: true,
   },
   {
@@ -135,6 +142,7 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupDelete]: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionCreate]: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionList]: TERMINAL_SESSION_LIST_CAPABILITY_ID,
@@ -249,6 +257,26 @@ export function buildAppTools(): McpToolDefinition[] {
         properties: {
           groupId: stringField("Terminal group id.", { minLength: 1 }),
           name: stringField("New group name. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 80 }),
+        },
+        required: ["groupId", "name"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings,
+      description: "Update a terminal group's name, default working directory, and startup command for future sessions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          name: stringField("Group name. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 80 }),
+          settings: {
+            type: "object",
+            properties: {
+              defaultCwd: stringField("Optional absolute working directory for future sessions in this group.", { minLength: 1 }),
+              startupCommand: stringField("Optional multi-line command text to run automatically in future sessions.", { minLength: 1, maxLength: 64 * 1024 }),
+            },
+            additionalProperties: false,
+          },
         },
         required: ["groupId", "name"],
       },
