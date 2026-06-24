@@ -20,6 +20,10 @@ const bridgeState = vi.hoisted(() => ({
   sessionChangedListener: null as ((session: SynapseTerminalSession) => void) | null,
   dataUnsubscribe: vi.fn(),
   sessionChangedUnsubscribe: vi.fn(),
+  deferredRead: null as null | {
+    promise: Promise<unknown>
+    resolve: (value: unknown) => void
+  },
 }))
 
 const terminalBridge = vi.hoisted(() => ({
@@ -28,13 +32,16 @@ const terminalBridge = vi.hoisted(() => ({
   listSessions: vi.fn(async () => bridgeState.sessions),
   createSession: vi.fn(async () => createSession()),
   getSession: vi.fn(async ({ sessionId }: { sessionId: string }) => getSession(sessionId)),
-  readSession: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-    session: getSession(sessionId),
-    chunks: bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId),
-    nextSeq: bridgeState.nextSeq,
-    truncated: false,
-    firstSeq: bridgeState.chunks[0]?.seq ?? 0,
-  })),
+  readSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    if (bridgeState.deferredRead) return bridgeState.deferredRead.promise
+    return {
+      session: getSession(sessionId),
+      chunks: bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId),
+      nextSeq: bridgeState.nextSeq,
+      truncated: false,
+      firstSeq: bridgeState.chunks[0]?.seq ?? 0,
+    }
+  }),
   writeSession: vi.fn(async () => undefined),
   resizeSession: vi.fn(async () => undefined),
   setAgentControl: vi.fn(async ({ sessionId, enabled }: { sessionId: string; enabled: boolean }) => ({
@@ -154,6 +161,7 @@ beforeEach(() => {
   bridgeState.nextSeq = 0
   bridgeState.dataListener = null
   bridgeState.sessionChangedListener = null
+  bridgeState.deferredRead = null
   bridgeState.dataUnsubscribe.mockClear()
   bridgeState.sessionChangedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
@@ -259,6 +267,39 @@ describe("TerminalModule", () => {
     expect(resizeObservers[0]?.disconnect).toHaveBeenCalled()
     expect(terminalBridge.stopSession).not.toHaveBeenCalled()
   })
+
+  it("does not lose or duplicate data emitted before retained output finishes loading", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const retainedChunk = createChunk({ sessionId: "session-1", seq: 1, data: "ready\r\n" })
+    const liveChunk = createChunk({ sessionId: "session-1", seq: 2, data: "during-read\r\n" })
+    bridgeState.deferredRead = createDeferredRead()
+
+    await renderModule()
+
+    act(() => {
+      bridgeState.dataListener?.({
+        sessionId: "session-1",
+        chunk: liveChunk,
+      })
+    })
+
+    await act(async () => {
+      bridgeState.deferredRead?.resolve({
+        session: getSession("session-1"),
+        chunks: [retainedChunk],
+        nextSeq: 1,
+        truncated: false,
+        firstSeq: 1,
+      })
+      await Promise.resolve()
+    })
+
+    const writes = xtermState.instances[0]?.write.mock.calls.map(([data]) => data)
+    expect(writes).toContain("ready\r\n")
+    expect(writes).toContain("during-read\r\n")
+    expect(writes?.filter((data) => data === "during-read\r\n")).toHaveLength(1)
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -328,4 +369,12 @@ function getSession(sessionId: string): SynapseTerminalSession {
   const session = bridgeState.sessions.find((item) => item.id === sessionId)
   if (!session) throw new Error(`Session not found: ${sessionId}`)
   return session
+}
+
+function createDeferredRead(): NonNullable<typeof bridgeState.deferredRead> {
+  let resolve: (value: unknown) => void = () => undefined
+  const promise = new Promise<unknown>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
 }

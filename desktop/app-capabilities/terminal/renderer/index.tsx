@@ -14,6 +14,7 @@ import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseTerminalGroup,
+  SynapseTerminalOutputChunk,
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
 
@@ -160,8 +161,26 @@ export function TerminalModule() {
       })
     })
 
-    let unsubscribeData: () => void = () => undefined
-    let unsubscribeSessionChanged: () => void = () => undefined
+    let initialReadComplete = false
+    const pendingChunks: SynapseTerminalOutputChunk[] = []
+    const writeChunk = (chunk: SynapseTerminalOutputChunk) => {
+      if (chunk.seq <= lastSeq) return
+      lastSeq = chunk.seq
+      xterm.write(chunk.data)
+    }
+
+    const unsubscribeData = terminalBridge.onData((event) => {
+      if (event.sessionId !== activeSession.id || disposed) return
+      if (!initialReadComplete) {
+        pendingChunks.push(event.chunk)
+        return
+      }
+      writeChunk(event.chunk)
+    })
+
+    const unsubscribeSessionChanged = terminalBridge.onSessionChanged((session) => {
+      setSessions((current) => mergeSession(current, session))
+    })
 
     terminalBridge.readSession({
       sessionId: activeSession.id,
@@ -169,19 +188,13 @@ export function TerminalModule() {
     }).then((result) => {
       if (disposed) return
       for (const chunk of result.chunks) {
-        if (chunk.seq <= lastSeq) continue
-        lastSeq = chunk.seq
-        xterm.write(chunk.data)
+        writeChunk(chunk)
       }
-      lastSeq = Math.max(lastSeq, result.nextSeq)
-      unsubscribeData = terminalBridge.onData((event) => {
-        if (event.sessionId !== activeSession.id || event.chunk.seq <= lastSeq) return
-        lastSeq = event.chunk.seq
-        xterm.write(event.chunk.data)
-      })
-      unsubscribeSessionChanged = terminalBridge.onSessionChanged((session) => {
-        setSessions((current) => mergeSession(current, session))
-      })
+      initialReadComplete = true
+      for (const chunk of pendingChunks.sort((a, b) => a.seq - b.seq)) {
+        writeChunk(chunk)
+      }
+      pendingChunks.length = 0
     }).catch((error) => {
       logger.error("Failed to read terminal output.", error)
     })
