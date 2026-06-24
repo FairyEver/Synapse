@@ -2,39 +2,39 @@
 layout: home
 
 hero:
-  name: Synapse AI Studio
-  text: 跨编辑器 AI 能力管理工具
-  tagline: 集中管理 Rule、Skill 与 Prompt，一键安装到 Claude Code、Cursor、Codex 等编辑器。
+  name: Synapse
+  text: 桌面端 AI 开发能力管理工具
+  tagline: 管理 Rule、Skill、Prompt、Agent、Workflow、Automation、Database 与 MCP 能力。
   image:
     src: /icon.png
     alt: Synapse
   actions:
     - theme: brand
-      text: 快速开始
+      text: 安装 Synapse
       link: /start/install
     - theme: alt
-      text: GitHub
-      link: https://github.com/FairyEver/Synapse
+      text: 查看 Releases
+      link: https://github.com/FairyEver/SynapseAppRelease/releases
 
 features:
-  - title: Rule 与 Skill 管理
-    details: 集中管理可复用的规则和能力包，支持分类、搜索、收藏和版本查看。
+  - title: Resource Repository
+    details: 资源仓库管理 Rule、Skill 和 Prompt，支持本地目录、Git 仓库、版本历史、删除恢复和编辑器安装。
   - title: 跨编辑器安装
-    details: 将内容安装到 Claude Code、Cursor、Codex、Windsurf，可选全局或项目范围。
-  - title: 仓库与团队共享
-    details: 使用本地目录或 Git 仓库维护团队内容，保留变更记录，支持同步和删除恢复。
-  - title: 已有内容迁移
-    details: 扫描编辑器中已有的 Rule 和 Skill，导入到仓库或复制到其他编辑器。
-  - title: Agent
-    details: 配置和管理 AI Agent 工作流，定义执行步骤和触发条件。
-  - title: 内置数据库与 MCP
-    details: 使用内置 Database 管理本地数据表，并将数据服务注册为 MCP Server。
-  - title: 内容发布 MCP
-    details: 通过 MCP 创建、更新和删除 Rule、Skill、Prompt，支持 Skill 附件与目录导入。
-  - title: 自动化定时触发
-    details: 在自动化中使用 cron 或 interval 触发器，支持启停控制和运行记录查看。
-  - title: Token Usage（用量统计）
-    details: 扫描本地 AI 编辑器日志，汇总 token 消耗与费用估算，支持按模型、日期、Agent 多维度查看。
-  - title: 诊断工具
-    details: 检查编辑器配置状态和内容安装情况，快速定位问题。
+    details: 安装目标包括 Claude Code、Cursor、Codex 和 Windsurf，支持全局范围和项目范围。
+  - title: Agent Runtime
+    details: Agent 会话绑定项目和 agentType，记录消息、工具、权限、错误、结果和 transcript。
+  - title: Workflow
+    details: Workflow 使用 DAG 定义节点执行，支持 prompt、switch、HTTP、script、workflow call、Codex、Claude Code 和 end 节点。
+  - title: Automation
+    details: Automation 使用一个 trigger 和一个 executor 运行任务，支持 cron、interval、webhook、命令、脚本、HTTP、Agent 和 Workflow。
+  - title: Knowledge Base
+    details: Knowledge Base 是 Synapse 托管项目，使用托管 runtime、原始资料目录和知识库专用 Agent 行为。
+  - title: Drive
+    details: Drive 提供云盘文件、文件夹、分享、版本、站点发布、直链资源、回收站和整理 MCP。
+  - title: Database
+    details: Database 管理本地表、字段、行、导入导出、筛选、SQL 和对应 MCP 能力。
+  - title: Usage And Pricing
+    details: 用量监控读取本机 Claude Code 和 Codex 记录，价格管理维护模型价格规则和预设。
+  - title: App Capabilities
+    details: 系统 App 包括资源仓库、Git、本地数据库、模板生成文档、IDE 管理、用量监控和价格管理。
 ---

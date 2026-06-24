@@ -2,8 +2,8 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   lang: 'zh-CN',
-  title: 'Synapse AI Studio',
-  description: 'Where Ideas Connect - 跨编辑器 Rule、Skill 与本地工作流管理工具',
+  title: 'Synapse',
+  description: 'Synapse desktop developer documentation',
 
   lastUpdated: true,
   cleanUrls: true,
@@ -26,16 +26,15 @@ export default defineConfig({
 
     nav: [
       { text: '首页', link: '/' },
-      { text: '快速开始', link: '/start/install' },
-      { text: '用户指南', link: '/guide/concepts' },
-      { text: '团队协作', link: '/team/repository-structure' },
-      { text: '高级功能', link: '/advanced/' },
-      { text: '开发者', link: '/developer/' },
-      { text: '参考', link: '/reference/synapse-mcp-capabilities' }
+      { text: '开始', link: '/start/install' },
+      { text: 'Capabilities', link: '/advanced/' },
+      { text: 'MCP', link: '/reference/synapse-mcp-capabilities' },
+      { text: 'Developer', link: '/developer/' },
+      { text: 'Reference', link: '/reference/glossary' }
     ],
 
     sidebar: {
-      '/start/': [{ text: '快速开始', items: [
+      '/start/': [{ text: '开始', items: [
         { text: '下载与安装', link: '/start/install' },
         { text: '配置内容仓库', link: '/start/repository' },
         { text: '安装第一个内容', link: '/start/first-install' }
@@ -44,6 +43,7 @@ export default defineConfig({
         { text: '核心概念', link: '/guide/concepts' },
         { text: 'Rule', link: '/guide/rules' },
         { text: 'Skill', link: '/guide/skills' },
+        { text: 'Prompt', link: '/guide/prompts' },
         { text: '编辑器安装', link: '/guide/editors' },
         { text: '设置', link: '/guide/settings' }
       ]}],
@@ -52,13 +52,20 @@ export default defineConfig({
         { text: '内容编写', link: '/team/content-authoring' },
         { text: '分享与审核', link: '/team/share-review' }
       ]}],
-      '/advanced/': [{ text: '高级功能', items: [
+      '/advanced/': [{ text: 'Capabilities', items: [
         { text: '总览', link: '/advanced/' },
+        { text: '系统 Apps', link: '/advanced/system-apps' },
         { text: 'Agent', link: '/advanced/agent' },
+        { text: 'Workflow', link: '/advanced/workflow' },
+        { text: 'Automation', link: '/advanced/automation' },
+        { text: 'Knowledge Base', link: '/advanced/knowledge-base' },
+        { text: 'Drive', link: '/advanced/drive' },
         { text: 'Prompts', link: '/advanced/prompts' },
         { text: 'Content MCP', link: '/advanced/content-mcp' },
         { text: 'Database', link: '/advanced/database' },
-        { text: 'Task Scheduler', link: '/advanced/task-scheduler' },
+        { text: 'Document Template', link: '/advanced/document-template' },
+        { text: 'Git', link: '/advanced/git' },
+        { text: 'Model Price', link: '/advanced/model-price' },
         { text: 'Token Usage', link: '/advanced/token-usage' },
         { text: 'Editor Scan', link: '/advanced/editor-scan' },
         { text: 'Diagnostics', link: '/advanced/diagnostics' }
@@ -80,12 +87,12 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/FairyEver/Synapse' }
+      { icon: 'github', link: 'https://github.com/FairyEver/SynapseAppRelease/releases' }
     ],
 
     footer: {
-      message: 'Where Ideas Connect',
-      copyright: `Copyright © ${new Date().getFullYear()} Synapse AI Studio`
+      message: 'Synapse desktop documentation',
+      copyright: `Copyright © ${new Date().getFullYear()} Synapse`
     },
 
     outline: {

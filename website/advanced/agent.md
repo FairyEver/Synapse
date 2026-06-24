@@ -1,14 +1,14 @@
-# Agent（智能体）
+# Agent
 
 <!-- Sources: desktop/src/modules/agent/index.tsx; desktop/src/modules/agent/hooks/use-agent-chat.ts; desktop/src/modules/agent/components/agent-session-sidebar.tsx; desktop/src/modules/agent/components/agent-permission-panel.tsx; desktop/src/modules/agent/components/agent-timeline.tsx; desktop/src/modules/agent/live-sync.ts; desktop/src/modules/agent/project-resolution.ts; desktop/electron/modules/agent/ipc.ts -->
 
 ## 功能范围
 
-Agent 是高级本地运行时入口，适用于已配置 CLI、provider 和项目范围的工作流；常规内容管理流程仍以 Rule / Skill 的维护、安装和分享为主。页面根据当前激活仓库和全局项目配置选择可用项目；若当前仓库路径匹配某个项目路径，则优先使用该项目。
+Agent 是本地运行时入口，适用于已配置 CLI、provider、模型和项目的会话。会话必须绑定 `agentType`，运行时状态按 conversation 隔离。
 
-用户可在同一页面中管理本地 Agent 会话、查看运行时间线、向已配置的运行时发送输入、使用命令面板、复制当前会话 transcript，并查看当前 Agent 的 CLI 标签、活跃 provider 和模型。时间线支持消息、thinking、tool call、tool result、permission request、error 和 result 等记录。
+页面可管理本地 Agent 会话、查看运行 timeline、发送输入、复制 transcript，并查看当前 Agent 的 CLI 标签、provider 和模型。timeline 支持 message、thinking、tool call、tool result、permission request、error 和 result 等记录。
 
-Agent 请求权限时，页面显示工具名称和输入内容，并提供允许或拒绝操作。会话侧栏显示会话更新时间和未读数。
+Agent 请求权限时，页面显示工具名称和输入摘要，并提供允许或拒绝操作。会话侧栏显示会话更新时间和未读数。
 
 ## 使用方式
 
@@ -16,9 +16,15 @@ Agent 请求权限时，页面显示工具名称和输入内容，并提供允�
 
 选择侧栏的新建按钮创建会话，选择会话项切换会话，选择刷新可重新读取会话、权限、provider 和命令列表。删除会话前将显示确认框；确认后删除会话记录。
 
-选择“命令”打开命令面板，可搜索并发送已发布命令。选择命令后，页面将 `/<命令名>` 作为消息发送给 Agent。
+slash menu 和命令菜单只负责插入命令文本，例如 `/<name>`。是否发送由用户在 composer 中确认。
 
-选择“复制”后，页面读取当前会话时间线并复制格式化后的 transcript。仅存在可用项目且当前时间线不为空时，复制按钮可用。
+选择复制后，页面读取当前会话 timeline 并复制格式化后的 transcript。仅存在可用项目且当前 timeline 不为空时，复制按钮可用。
+
+## Knowledge Base
+
+Knowledge Base 会话会解析到托管 backing directory，并加载知识库 runtime。普通项目不会加载 Knowledge Base plugin、skill、hook、prompt 或快捷动作。
+
+Native slash passthrough 只记录命令名，不记录参数正文、路径列表或其他用户输入内容。
 
 ## 注意事项
 

@@ -4,7 +4,7 @@
 
 ## 创建内容
 
-创建 Rule 或 Skill 时，Synapse 使用当前激活仓库和仓库身份保存内容。内容写入仓库目录，并生成新的内容 ID 与历史版本。
+创建 Rule、Skill 或 Prompt 时，Synapse 使用当前激活仓库和仓库身份保存内容。内容写入仓库目录，并生成新的内容 ID 与历史版本。
 
 创建完成后，Synapse 记录 `id`、`type`、`title`、`latestHistoryDirname` 和 `modifiedAt`。若仓库不是 Git 仓库，Synapse 刷新内容索引并显示本地保存结果。
 
@@ -27,9 +27,11 @@
 
 创建、更新和恢复先保存并创建提交，随后将推送任务加入待同步队列。删除和永久删除先将提交加入待同步队列，再尝试推送；若推送成功，系统清除对应待同步记录。
 
-## 审核
+## 冲突
 
 更新、删除或恢复内容时，Synapse 检查 `baseHistoryDirname`。若当前最新历史版本与请求中的基础版本不同，并且请求未包含 `force`，结果将返回 `status: "conflict"`，同时返回最新版本目录名、修改时间和修改者显示名。
+
+## 审核
 
 Synapse 目前不内置单独的审核状态或审批队列。团队可使用 Git 平台审核 Synapse 创建的普通 Git commit。
 

@@ -1,6 +1,6 @@
-# Content MCP（内容发布）
+# Content MCP
 
-<!-- Sources: desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/content-dispatcher.ts; desktop/electron/services/content-capability-validator.ts; desktop/electron/services/content-skill-source-service.ts; desktop/electron/services/content-icon-image-service.ts; desktop/electron/services/content-submission-service.ts; desktop/resources/templates/skills/synapse-content-mcp/content.md -->
+<!-- Sources: desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/content-dispatcher.ts; desktop/electron/services/content-capability-validator.ts; desktop/electron/services/content-skill-source-service.ts; desktop/electron/services/content-icon-image-service.ts; desktop/electron/services/content-submission-service.ts; desktop/resources/templates/skills/synapse-skill/files/content -->
 
 ## 功能范围
 
@@ -41,4 +41,4 @@ Skill 附件会进行路径归一化、重复路径检查、大小检查和敏�
 
 ## 内置 Skill
 
-Synapse 内置 `synapse-content-mcp` Skill，用于指导 Agent 使用 Content MCP。该 Skill 会说明工具边界、默认流程、所有权规则、图片规则和 Skill 附件规则。
+Synapse MCP 的内置 Skill 已合并为 `synapse-skill`。Content 域说明位于该模板的 content 文件中，用于指导 Agent 使用 Content MCP。

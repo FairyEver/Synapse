@@ -1,10 +1,12 @@
 # 安装第一个内容
 
-<!-- Sources: desktop/README.md; website/guide/features.md; website/guide/concepts.md -->
+<!-- Sources: desktop/src/modules/content/components/content-install-dialog.tsx; desktop/electron/services/editor-install-service.ts; website/guide/editors.md -->
 
-## 选择 Rule 或 Skill
+## 选择内容类型
 
-在 **Rules** 或 **Skills** 中选择要安装的内容。Rule 是纯文本指令，Skill 是包含主说明和附件的能力包。
+在资源仓库中选择 Rule 或 Skill。Rule 是纯文本指令，Skill 是包含主说明和附件的能力包。
+
+Prompt 由 Synapse 管理和版本化，不作为编辑器安装目标。
 
 ## 选择编辑器
 
@@ -20,4 +22,4 @@
 
 ## 安装后检查
 
-安装完成后，重新打开编辑器，以便编辑器加载已写入的 Rule 或 Skill。
+安装完成后，重新打开目标编辑器，以便编辑器加载已写入的 Rule 或 Skill。

@@ -1,17 +1,17 @@
 # 本地开发
 
-<!-- Sources: README.md; desktop/README.md; server/README.md; package.json; desktop/package.json; website/package.json -->
+<!-- Sources: package.json; desktop/package.json; website/package.json; pnpm-workspace.yaml; AGENTS.md -->
 
 ## 环境要求
 
 - Node.js 20+
 - pnpm 10.22.0
 - Git
-- Docker / Docker Compose
+- Docker / Docker Compose（运行 server 时需要）
 
 ## 安装依赖
 
-在仓库根目录安装整个 workspace 的依赖：
+在仓库根目录安装 workspace 依赖：
 
 ```bash
 pnpm install
@@ -19,14 +19,20 @@ pnpm install
 
 ## 启动与停止
 
-根目录提供本地开发环境入口：
+根目录提供按范围启动的脚本：
 
-```bash
-pnpm dev
-pnpm quit
-```
+| 命令 | 范围 |
+| --- | --- |
+| `pnpm dev` | desktop 和 server |
+| `pnpm dev:desktop` | 桌面端 |
+| `pnpm dev:server` | server API、dashboard 和 compose 服务 |
+| `pnpm dev:website` | 文档站 |
+| `pnpm quit` | 停止全部开发进程 |
+| `pnpm quit:desktop` | 停止桌面端 |
+| `pnpm quit:server` | 停止 server 和 compose 服务 |
+| `pnpm quit:website` | 停止文档站 |
 
-`pnpm dev` 启动文档站、桌面端、PostgreSQL、Prisma migration 和后端服务。`pnpm quit` 用于停止本地开发环境。
+只修改网站时，不需要启动桌面端或 server。
 
 ## 常用检查
 

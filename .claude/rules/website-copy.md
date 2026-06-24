@@ -11,21 +11,21 @@ paths:
 
 ## 1. 产品定位基线
 
-Synapse 是一款面向开发者和技术团队的专业工具软件。所有文案必须基于以下事实：
+Synapse 网站是面向开发者和技术团队的桌面端功能文档。所有文案必须基于当前仓库实现、`PRODUCT.md`、`docs/reference/product-context.md` 和 capability registry。
 
-- 跨编辑器的 AI Rules & Skills 管理桌面应用
-- 支持 Claude Code、Cursor、Codex
-- 内容存储在用户自有的本地目录 / Git 仓库，不托管数据
-- 提供浏览、搜索、安装、创建、分享功能
-- 支持 macOS 和 Windows
+- Synapse 是跨编辑器的 AI capability 管理桌面应用。
+- 桌面端公开能力包括 Resource Repository、Rule、Skill、Prompt、编辑器安装、Agent、Workflow、Automation、Knowledge Base、Drive、Database、Usage Analysis、Model Price、Git、Diagnostics、系统 App 和 Synapse MCP。
+- 编辑器安装目标包括 Claude Code、Cursor、Codex 和 Windsurf。
+- 内容仓库可以是本地目录或 Git 仓库；云盘、账号、分享等能力按当前桌面端公开入口描述。
+- 安装包通过 GitHub Releases 发布，公开下载链接使用 `https://github.com/FairyEver/SynapseAppRelease/releases`。
 
-不得描述产品尚未实现的功能。不得暗示产品具备 AI 对话、知识库、RAG、自动化编排等不存在的能力。
+不得描述产品尚未实现的功能。涉及 server、dashboard、管理员后台或未来规划时，除非当前网站页面明确需要，否则不要写入网站正文。
 
 ## 2. 语气与调性
 
 ### 目标调性
 
-专业、克制、可信。像一份优秀的技术产品文档，而非营销材料。
+专业、克制、可信。像一份开发者文档，而非营销材料。
 
 参考标杆：Stripe Docs、Tailwind CSS Docs、Vercel Docs — 简洁、精确、尊重读者智商。
 
@@ -33,7 +33,7 @@ Synapse 是一款面向开发者和技术团队的专业工具软件。所有文
 
 - 使用陈述句，直接说明事实和功能
 - 第二人称"你"可以用，但不要过度亲昵（不要"你只需要"、"你会发现"这类引导式语气）
-- 技术术语保持原文（Rule、Skill、Git、CLI），不做不必要的翻译或解释
+- 技术术语保持原文（Rule、Skill、Prompt、Agent、Workflow、Automation、MCP、Git、CLI），不做不必要的翻译或解释
 - 假设读者具备基本的开发工具使用经验
 
 ## 3. 禁止清单
@@ -104,6 +104,13 @@ Synapse 是一款面向开发者和技术团队的专业工具软件。所有文
 |----------|--------|
 | Rule | 规则（作为产品概念时） |
 | Skill | 能力包（作为产品概念时） |
+| Prompt | 提示词（作为产品概念时） |
+| Agent | 智能体（作为产品概念时） |
+| Workflow | 工作流（作为产品概念时） |
+| Automation | 自动化（作为产品概念时） |
+| Knowledge Base | 知识库（作为产品概念时） |
+| Drive | 云盘（作为产品概念时） |
+| Database | 数据库（作为产品概念时） |
 | 仓库 | 数据源、内容库 |
 | 项目 | 工作目录（作为产品概念时） |
 | 安装 | 部署、写入、放置 |
@@ -114,7 +121,7 @@ Synapse 是一款面向开发者和技术团队的专业工具软件。所有文
 ## 6. 格式规范
 
 - 产品名 `Synapse` 首字母大写，不缩写
-- 编辑器名称使用官方写法：Claude Code、Cursor、Codex
+- 编辑器名称使用官方写法：Claude Code、Cursor、Codex、Windsurf
 - 文件格式用 code 标记：`.md`、`.zip`、`.dmg`
 - 路径和命令用 code 标记：`git clone`、`Settings`
 - 中英文之间加空格：`支持 Claude Code 的全局安装`

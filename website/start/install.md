@@ -1,10 +1,10 @@
 # 下载与安装
 
-<!-- Sources: README.md; website/guide/download.md -->
+<!-- Sources: website/.vitepress/config.mts; package.json; desktop/package.json -->
 
 ## 下载
 
-安装包统一在 GitHub Releases 发布：
+安装包在 GitHub Releases 发布：
 
 - [Synapse Releases](https://github.com/FairyEver/SynapseAppRelease/releases)
 

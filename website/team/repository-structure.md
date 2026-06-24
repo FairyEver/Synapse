@@ -1,4 +1,4 @@
-<!-- Sources: desktop/electron/services/repository-structure-service.ts; desktop/electron/services/repository-store.ts; desktop/electron/services/content-history-service.ts; desktop/electron/services/attachments-pool-service.ts; desktop/src/config/content-types/{index,types,rule,skill,prompt}.ts; desktop/src/lib/config.ts; desktop/src/types/config.ts; desktop/src/types/content.ts -->
+<!-- Sources: desktop/electron/services/repository-structure-service.ts; desktop/electron/services/repository-store.ts; desktop/electron/services/content-history-service.ts; desktop/electron/services/attachments-pool-service.ts; desktop/src/config/content-types/{index,types,rule,skill,prompt}.ts; desktop/src/types/content.ts -->
 
 # 仓库结构
 
@@ -24,13 +24,13 @@ Synapse 仓库是一个本地目录。仓库记录包含 `uuid`、`name`、`loca
 
 Rule 的默认仓库目录是 `rules`，内容类型为 `rule`。Rule 支持正文、下载、复制和安装到编辑器，无需附件列表。
 
-Rule 的 `meta.json` 保存内容 ID、类型、创建者和创建时间。每个历史版本的 `snapshot.json` 保存标题、名称、简介、分类、图标信息、修改者、修改时间和删除状态；`main.md` 保存 Rule 正文。
-
 ## Skills
 
 Skill 的默认仓库目录是 `skills`，内容类型为 `skill`。Skill 支持附件，创建和更新时需要提供 `files` 附件列表。
 
-Skill 的内容结构与 Rule 相同：`meta.json` 保存固定元数据，`history/<版本>/snapshot.json` 保存版本摘要，`history/<版本>/main.md` 保存主说明。附件列表写入 `history/<版本>/attachments.json`，附件内容写入 `system/blobs`。
+## Prompts
+
+Prompt 的默认仓库目录是 `prompts`，内容类型为 `prompt`。Prompt 支持正文、版本查看和 Content MCP 维护，不支持附件和编辑器安装。
 
 ## Git 仓库与本地目录
 

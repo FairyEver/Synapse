@@ -1,63 +1,48 @@
-<!-- Sources: desktop/src/modules/rules/index.tsx; desktop/src/modules/rules/utils.ts; desktop/src/modules/skills/index.tsx; desktop/src/modules/skills/utils.ts; desktop/src/modules/settings/data.ts; desktop/src/modules/settings/components/repository-list-editor.tsx; desktop/src/modules/settings/components/project-list-editor.tsx; desktop/src/modules/content/components/content-browser-page.tsx; desktop/src/config/content-types/rule.ts; desktop/src/config/content-types/skill.ts; desktop/src/definitions/editor/*/{editor,adapter,install}.ts -->
+<!-- Sources: PRODUCT.md; docs/reference/product-context.md; desktop/src/types/content.ts; desktop/src/types/config.ts; desktop/src/lib/editor-registry.ts; desktop/synapse-capabilities/shared/registry.ts -->
 
 # 核心概念
 
-Synapse 目前围绕四个核心概念组织使用流程：Rule、Skill、仓库和项目。
+## Rule
 
-## Rule（规则）
+Rule 是一段可复用的 Markdown 正文，不包含附件。适合保存行为约束、输出规范、审查清单和项目约定。
 
-Rule 是一段可复用的 Markdown 正文，不包含附件，适合保存行为约束、输出规范、审查清单等文本规则。
+Rule 有标题、名称、简介、分类、正文、外观字段和历史版本。名称在安装到编辑器时作为文件名或规则标识。
 
-Rule 有标题、名称、简介、分类和正文。名称在安装到编辑器时作为文件名或规则标识。
+## Skill
 
-Rule 支持浏览、搜索、排序、收藏、最近浏览、最近删除、下载和安装到编辑器。
+Skill 是由主说明和附件组成的能力包。安装到编辑器时，Synapse 写入 Skill 目录，并保留附件结构。
 
-## Skill（能力包）
+Skill 适合包含模板、示例、脚本、配置文件或较长参考资料的能力。
 
-Skill 是由主说明和附件组成的能力包，适合保存需要文件材料配合的工作流。
+## Prompt
 
-Skill 有中文标题、标识名称、简介、分类、主说明和附件。标识名称在安装到编辑器时作为目录名。
-
-附件可来自文件或文件夹；目录结构将被保留。安装后写入一个 Skill 目录，目录中包含 `SKILL.md` 和附件。
+Prompt 是可版本化的提示词资源。它包含标题、简介、分类、正文和外观字段，不包含附件，也不作为编辑器安装目标。
 
 ## 仓库
 
-仓库是 Synapse 管理 Rule 和 Skill 的本地目录。设置页中的对应入口是”仓库”和”本地仓库目录”。
+仓库是 Synapse 管理 Rule、Skill 和 Prompt 的本地目录。仓库可以是普通目录，也可以位于 Git 仓库中。
 
-可选择现有文件夹加入仓库列表，也可新建本地仓库。仓库记录可修改名称和路径，也可从 Synapse 中移除。移除仓库记录不会删除对应本地目录。
+仓库目录存放内容元数据、历史版本、附件引用和二进制附件池。
 
 ## 项目
 
-项目是 Rule 或 Skill 的项目级安装目标。设置页中的对应入口是“项目”和“本地项目”。
+项目是编辑器安装、Agent 会话、Workflow 节点和 Automation 作用域的运行范围。项目级安装会将 Rule 或 Skill 写入所选项目目录下对应编辑器的位置。
 
-安装到项目时，安装对话框使用项目路径解析编辑器目标位置。安装时也可浏览其他目录。
-
-仓库与项目的区别：
-
-| 概念 | 作用 |
-| --- | --- |
-| 仓库 | Synapse 读取和保存 Rule、Skill 的来源目录 |
-| 项目 | Rule、Skill 安装到编辑器时使用的目标目录 |
+Knowledge Base 是特殊项目类型。界面显示虚拟路径 `synapse-kb://<id>`，真实目录由 Synapse 管理。
 
 ## 编辑器安装范围
 
-Synapse 目前支持 Cursor、Codex、Claude Code 和 Windsurf。以上编辑器均支持 Skill 的全局安装和项目级安装。
+Synapse 支持全局安装和项目级安装。
 
-Rule 的项目级安装支持 Cursor、Codex、Claude Code、Windsurf。Rule 的全局安装支持 Codex、Claude Code、Windsurf；Cursor 全局 Rule 目前不支持。
+| 范围 | 写入位置 | 生效范围 |
+| --- | --- | --- |
+| 全局 | 编辑器用户目录 | 当前用户的所有项目 |
+| 项目级 | 所选项目目录 | 指定项目 |
 
-安装路径遵循各编辑器的约定。项目级安装写入所选项目目录，全局安装写入编辑器用户目录。
+支持范围取决于编辑器和内容类型。安装前会显示目标状态。
 
-```text
-仓库
-  Rule / Skill
-    ↓ 浏览、搜索、下载
-Synapse
-    ↓ 安装
-全局编辑器目录 或 项目目录
-```
+## MCP 能力
 
-继续阅读：
+Synapse MCP 将桌面端能力暴露给外部 Agent。当前领域包括 app、database、model_price、repository、automation、variable、workflow、content 和 drive。
 
-- [Rule](/guide/rules)
-- [Skill](/guide/skills)
-- [编辑器安装](/guide/editors)
+了解更多：[Synapse MCP 能力](/reference/synapse-mcp-capabilities)。

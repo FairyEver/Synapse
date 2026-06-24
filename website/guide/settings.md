@@ -1,41 +1,37 @@
-<!-- Sources: desktop/src/modules/settings/index.tsx; desktop/src/modules/settings/data.ts; desktop/src/modules/settings/types.ts; desktop/src/modules/settings/components/repository-list-editor.tsx; desktop/src/modules/settings/components/project-list-editor.tsx; desktop/src/modules/settings/components/identity-panel.tsx; desktop/src/modules/settings/components/about-panel.tsx; desktop/src/modules/settings/components/tools-panel.tsx; desktop/src/modules/settings/components/diagnostics-panel.tsx; desktop/src/modules/settings/components/log-export-panel.tsx -->
-
 # 设置
+
+<!-- Sources: desktop/src/modules/settings/data.ts; desktop/src/types/config.ts; desktop/src/modules/settings/components/project-list-editor.tsx; desktop/src/modules/settings/components/provider-panel.tsx; desktop/src/modules/settings/components/diagnostics-panel.tsx -->
 
 ## 仓库
 
-“仓库”页的对应设置项为“本地仓库目录”。
+仓库设置用于管理 Synapse 内容仓库。每个仓库记录名称、本地路径和内容目录映射。
 
-可选择现有文件夹加入仓库列表，也可新建本地仓库。新建时需填写仓库名称和保存位置。
+添加仓库后，Synapse 读取其中的 Rule、Skill 和 Prompt，并在资源仓库中展示。
 
-已有仓库可修改名称和路径，也可从 Synapse 的仓库记录中删除。删除本地配置仅移除 Synapse 中的仓库记录，不会删除本地目录。
+## 项目和知识库
 
-仓库列表提供初始化入口。初始化将清空该目录下除 `.git/` 目录之外的内容，界面显示确认。
+项目设置用于保存 Agent、Workflow、Automation 和项目级安装可用的目标。普通项目记录名称和本地路径。
 
-## 项目
+Knowledge Base 项目由 Synapse 创建和管理，显示为 `synapse-kb://<id>`，资料管理入口位于项目列表。
 
-“项目”页的对应设置项为“本地项目”。
+## 模型与供应商
 
-可添加项目并填写项目名称和项目路径；也可浏览目录自动带入路径。已有项目可修改或删除。
+模型与供应商设置保存 Agent 和 Workflow 使用的 provider、endpoint、模型名称、默认模型档位和环境变量。
 
-项目将在 Rule 和 Skill 的项目级安装流程中作为可选择的目标目录。
+Synapse 在运行 Agent 或 Workflow prompt 节点时读取当前 provider 配置。敏感字段不应写入网站示例。
 
-## 用户信息
+## 提示词片段
 
-“通用”页包含“外观”和本地用户信息。
+提示词片段是 Agent composer 的全局输入片段。片段在设置中维护，在 Agent 输入框中插入，不自动发送。
 
-外观可选“浅色”“深色”“跟随系统”。本地用户信息显示“用户 ID（本地）”，支持复制，也支持通过“接续已有身份”打开身份接续流程。
+## 私人令牌
 
-## 更新
+私人令牌用于内容安装占位符替换和 MCP variable 能力。变量值属于敏感数据，列表接口不返回明文。
 
-“关于”页显示 Synapse 标识、当前版本和软件更新状态。
+## 本机 IDE
 
-可用操作随状态变化：检查更新、取消下载、重启安装。下载中显示下载进度；下载完成后提示重启后完成安装。
+本机 IDE 设置用于维护编辑器目录、Claude Code 集成和 Agent runtime 状态。
 
-## 诊断入口
+## 诊断日志
 
-设置中包含两个诊断入口。
-
-“诊断”页可运行诊断、导出诊断包、复制摘要。运行后显示结论、本机信息、应用信息、当前上下文，以及兼容性和检查项。
-
-“调试”页包含日志和诊断概览。日志支持导出全部日志、复制到剪贴板、删除全部日志和打开日志目录；诊断概览可刷新并显示版本、单实例、Side-channel、Webhook、Relay、平台、Windows 环境、PATH 和用户数据等状态。
+诊断面板用于运行本机检查、复制诊断摘要和导出诊断包。排障时优先使用该入口生成当前环境信息。
