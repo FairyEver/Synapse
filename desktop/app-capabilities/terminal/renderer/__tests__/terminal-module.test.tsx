@@ -302,13 +302,16 @@ describe("TerminalModule", () => {
 
     await renderEmbeddedModule()
 
-    expect(document.body.textContent).toContain("丢失")
-    expect(document.body.textContent).toContain("重开终端")
+    const actions = document.querySelector("[data-embedded-system-app-actions]")
+    expect(actions?.textContent).toContain("新建终端")
+    expect(actions?.textContent).not.toContain("在此处新开")
+    expect(document.body.textContent).toContain("已断开")
+    expect(document.body.textContent).toContain("在此处新开")
     expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
       disableStdin: true,
     }))
 
-    await clickButton("重开终端")
+    await clickButton("在此处新开")
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       groupId: "group-1",

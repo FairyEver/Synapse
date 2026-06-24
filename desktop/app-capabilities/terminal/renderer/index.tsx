@@ -190,24 +190,11 @@ export function TerminalModule() {
   }, [deleteTarget, terminalBridge])
 
   const headerActions = useMemo(() => (
-    <>
-      <Badge variant="outline">{statusLabel}</Badge>
-      {canRestartSession ? (
-        <Button type="button" size="sm" variant="outline" onClick={() => { void restartActiveSession() }}>
-          <RotateCcw data-icon="inline-start" />
-          重开终端
-        </Button>
-      ) : null}
-      <Button type="button" size="sm" onClick={() => { void createSession() }}>
-        <Plus data-icon="inline-start" />
-        新建终端
-      </Button>
-      <Button type="button" size="sm" variant="outline" disabled={!canStopSession} onClick={stopCurrentSession}>
-        <Square data-icon="inline-start" />
-        停止会话
-      </Button>
-    </>
-  ), [canRestartSession, canStopSession, createSession, restartActiveSession, statusLabel, stopCurrentSession])
+    <Button type="button" size="sm" onClick={() => { void createSession() }}>
+      <Plus data-icon="inline-start" />
+      新建终端
+    </Button>
+  ), [createSession])
 
   useEffect(() => {
     const container = terminalContainerRef.current
@@ -385,6 +372,21 @@ export function TerminalModule() {
                   <div className="truncate text-sm font-medium">{activeSession.title}</div>
                   <div className="truncate text-xs text-muted-foreground">{activeSession.cwd}</div>
                 </div>
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                  <Badge variant="outline">{statusLabel}</Badge>
+                  {canRestartSession ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => { void restartActiveSession() }}>
+                      <RotateCcw data-icon="inline-start" />
+                      在此处新开
+                    </Button>
+                  ) : null}
+                  {canStopSession ? (
+                    <Button type="button" size="sm" variant="outline" onClick={stopCurrentSession}>
+                      <Square data-icon="inline-start" />
+                      停止会话
+                    </Button>
+                  ) : null}
+                </div>
               </header>
               <div className="dark min-h-0 flex-1 overflow-hidden bg-background p-2">
                 <div ref={terminalContainerRef} className="h-full min-h-0 min-w-0 overflow-hidden rounded-lg border bg-background" />
@@ -510,7 +512,7 @@ function getStatusLabel(status: SynapseTerminalSession["status"]): string {
   if (status === "exited") return "已退出"
   if (status === "killed") return "已停止"
   if (status === "failed") return "失败"
-  return "丢失"
+  return "已断开"
 }
 
 function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
