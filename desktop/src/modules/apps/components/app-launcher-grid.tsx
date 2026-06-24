@@ -1,4 +1,3 @@
-import { ChevronRight } from "lucide-react"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
 
 type AppLauncherGridProps = {
@@ -20,27 +19,29 @@ const appDescriptions = {
 
 export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
   return (
-    <div className="divide-y divide-border">
+    <div
+      data-app-launcher-grid
+      className="grid grid-cols-2 justify-items-center gap-x-8 gap-y-10 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5"
+    >
       {apps.map((app) => (
         <button
           key={app.id}
           type="button"
-          className="flex min-h-16 w-full items-center gap-3 py-2 pl-3 pr-7 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="group flex h-40 w-full max-w-36 flex-col items-center justify-start rounded-xl px-3 py-4 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
           onClick={() => onOpenApp(app.id)}
         >
           <img
             src={app.icon}
             alt=""
-            className="size-14 shrink-0 object-cover"
+            className="size-20 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             draggable={false}
           />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium leading-tight">{app.name}</span>
-            <span className="mt-1 block truncate text-xs text-muted-foreground">
+          <span className="mt-3 flex min-w-0 flex-1 flex-col items-center">
+            <span className="block max-w-full truncate text-sm font-medium leading-tight text-foreground">{app.name}</span>
+            <span className="mt-1 line-clamp-2 text-xs leading-snug text-muted-foreground">
               {appDescriptions[app.id]}
             </span>
           </span>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       ))}
     </div>
