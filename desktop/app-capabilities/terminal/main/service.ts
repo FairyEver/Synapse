@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { statSync } from "node:fs"
+import { chmodSync, existsSync, statSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import * as pty from "node-pty"
@@ -387,6 +387,7 @@ export function createTerminalService(deps: {
 }
 
 function spawnNodePty(input: SpawnPtyInput): PtyLike {
+  ensureNodePtySpawnHelperExecutable()
   return pty.spawn(input.shell, [], {
     name: "xterm-256color",
     cwd: input.cwd,
@@ -394,6 +395,35 @@ function spawnNodePty(input: SpawnPtyInput): PtyLike {
     rows: input.rows,
     env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
   })
+}
+
+function ensureNodePtySpawnHelperExecutable(): void {
+  if (os.platform() === "win32") return
+
+  const packageRoot = path.dirname(require.resolve("node-pty/package.json"))
+  const helperCandidates = [
+    path.join(packageRoot, "build", "Release", "spawn-helper"),
+    path.join(packageRoot, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"),
+  ]
+
+  for (const helperPath of helperCandidates) {
+    ensureExecutableIfPresent(resolveUnpackedPath(helperPath))
+  }
+}
+
+export function ensureExecutableIfPresent(filePath: string): void {
+  if (!existsSync(filePath)) return
+
+  const mode = statSync(filePath).mode
+  if ((mode & 0o111) !== 0) return
+
+  chmodSync(filePath, mode | 0o755)
+}
+
+function resolveUnpackedPath(filePath: string): string {
+  return filePath
+    .replace("app.asar", "app.asar.unpacked")
+    .replace("node_modules.asar", "node_modules.asar.unpacked")
 }
 
 function defaultShell(): string {

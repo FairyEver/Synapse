@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { createTerminalService, type PtyLike, type TerminalService } from "../service"
+import { createTerminalService, ensureExecutableIfPresent, type PtyLike, type TerminalService } from "../service"
 import type { TerminalStore, TerminalStoreState } from "../store"
 import type { TerminalGroup, TerminalOutputChunk, TerminalSession } from "../../shared/schema"
 
@@ -55,6 +55,16 @@ afterEach(async () => {
 })
 
 describe("TerminalService", () => {
+  it("marks a present node-pty spawn helper as executable", async () => {
+    const helperPath = path.join(tempDir, "spawn-helper")
+    await writeFile(helperPath, "#!/bin/sh\n")
+    await chmod(helperPath, 0o644)
+
+    ensureExecutableIfPresent(helperPath)
+
+    expect((await stat(helperPath)).mode & 0o111).not.toBe(0)
+  })
+
   it("creates a session and records output", async () => {
     const store = createMemoryStore()
     const pty = new FakePty()
