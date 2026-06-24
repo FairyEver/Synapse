@@ -10,6 +10,7 @@ import type {
   TerminalRenameGroupInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
+  TerminalRunStartupCommandInput,
   TerminalSession,
   TerminalStopSessionInput,
   TerminalUpdateGroupSettingsInput,
@@ -31,6 +32,7 @@ export type SynapseTerminalReadSessionResult = TerminalReadSessionResult
 export type SynapseTerminalWriteSessionInput = TerminalWriteSessionInput
 export type SynapseTerminalResizeSessionInput = TerminalResizeSessionInput
 export type SynapseTerminalStopSessionInput = TerminalStopSessionInput
+export type SynapseTerminalRunStartupCommandInput = TerminalRunStartupCommandInput
 
 export type SynapseTerminalDataEvent = {
   readonly sessionId: string

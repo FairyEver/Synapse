@@ -108,6 +108,8 @@ export const terminalStopSessionInputSchema = z.object({
   force: z.boolean().optional(),
 }).strict()
 
+export const terminalRunStartupCommandInputSchema = terminalSessionIdInputSchema
+
 export const terminalReadSessionResultSchema = z.object({
   session: terminalSessionSchema,
   chunks: z.array(terminalOutputChunkSchema),
@@ -132,4 +134,5 @@ export type TerminalReadSessionInput = z.infer<typeof terminalReadSessionInputSc
 export type TerminalWriteSessionInput = z.infer<typeof terminalWriteSessionInputSchema>
 export type TerminalResizeSessionInput = z.infer<typeof terminalResizeSessionInputSchema>
 export type TerminalStopSessionInput = z.infer<typeof terminalStopSessionInputSchema>
+export type TerminalRunStartupCommandInput = z.infer<typeof terminalRunStartupCommandInputSchema>
 export type TerminalReadSessionResult = z.infer<typeof terminalReadSessionResultSchema>

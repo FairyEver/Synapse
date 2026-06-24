@@ -377,6 +377,7 @@ const IPC_CHANNELS = {
     "generateDocx": "synapse:document-template:docx:generate",
   },
   "terminal": {
+    "chooseDefaultCwd": "synapse:terminal:group:choose-default-cwd",
     "listGroups": "synapse:terminal:group:list",
     "createGroup": "synapse:terminal:group:create",
     "renameGroup": "synapse:terminal:group:rename",
@@ -391,6 +392,7 @@ const IPC_CHANNELS = {
     "resizeSession": "synapse:terminal:session:resize",
     "deleteSession": "synapse:terminal:session:delete",
     "stopSession": "synapse:terminal:session:stop",
+    "runStartupCommand": "synapse:terminal:session:run-startup-command",
     "data": "synapse:terminal:data",
     "sessionChanged": "synapse:terminal:session-changed",
     "sessionDeleted": "synapse:terminal:session-deleted",
@@ -757,6 +759,7 @@ const synapseBridge: SynapseBridge = {
     generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
   },
   terminal: {
+    chooseDefaultCwd: () => invoke(IPC_CHANNELS.terminal.chooseDefaultCwd)(),
     listGroups: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
     createGroup: (input) => invoke(IPC_CHANNELS.terminal.createGroup)(input),
     renameGroup: (input) => invoke(IPC_CHANNELS.terminal.renameGroup)(input),
@@ -771,6 +774,7 @@ const synapseBridge: SynapseBridge = {
     resizeSession: (input) => invoke(IPC_CHANNELS.terminal.resizeSession)(input),
     deleteSession: (input) => invoke(IPC_CHANNELS.terminal.deleteSession)(input),
     stopSession: (input) => invoke(IPC_CHANNELS.terminal.stopSession)(input),
+    runStartupCommand: (input) => invoke(IPC_CHANNELS.terminal.runStartupCommand)(input),
     onData: createRawPayloadSubscription<SynapseTerminalDataEvent>(
       subscribe,
       IPC_CHANNELS.terminal.data,

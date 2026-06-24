@@ -1,3 +1,4 @@
+import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
@@ -15,6 +16,7 @@ import {
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
+  terminalRunStartupCommandInputSchema,
   terminalSessionIdInputSchema,
   terminalSessionSchema,
   terminalStopSessionInputSchema,
@@ -91,6 +93,23 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGroupSchema,
       handler: (ctx, request: z.infer<typeof terminalUpdateGroupSettingsInputSchema>) =>
         resolveTerminalService(ctx).updateGroupSettings(request),
+    },
+    chooseDefaultCwd: {
+      channel: "synapse:terminal:group:choose-default-cwd",
+      kind: "invoke",
+      request: z.void().optional(),
+      response: z.string().nullable(),
+      handler: async () => {
+        const parentWindow = focusedWindow()
+        const options = {
+          title: "选择默认目录",
+          properties: ["openDirectory"] as Electron.OpenDialogOptions["properties"],
+        }
+        const result = parentWindow
+          ? await dialog.showOpenDialog(parentWindow, options)
+          : await dialog.showOpenDialog(options)
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
     },
     deleteGroup: {
       channel: "synapse:terminal:group:delete",
@@ -171,6 +190,14 @@ export const terminalIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof terminalStopSessionInputSchema>) =>
         resolveTerminalService(ctx).stopSession(request),
     },
+    runStartupCommand: {
+      channel: "synapse:terminal:session:run-startup-command",
+      kind: "invoke",
+      request: terminalRunStartupCommandInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalRunStartupCommandInputSchema>) =>
+        resolveTerminalService(ctx).runStartupCommand(request),
+    },
   },
   events: {
     data: {
@@ -189,4 +216,10 @@ export const terminalIpcModule: IpcModule = {
       payload: terminalSessionDeletedEventPayloadSchema,
     },
   },
+}
+
+function focusedWindow(): Electron.BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow()
+    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
+    ?? undefined
 }

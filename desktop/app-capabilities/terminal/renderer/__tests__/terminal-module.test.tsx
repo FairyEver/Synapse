@@ -30,6 +30,7 @@ const bridgeState = vi.hoisted(() => ({
 }))
 
 const terminalBridge = vi.hoisted(() => ({
+  chooseDefaultCwd: vi.fn(async () => "/repo/app"),
   listGroups: vi.fn(async () => bridgeState.groups),
   createGroup: vi.fn(async ({ name }: { name: string }) => {
     const group = createGroup({
@@ -113,6 +114,7 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId !== sessionId)
   }),
   stopSession: vi.fn(async () => undefined),
+  runStartupCommand: vi.fn(async () => undefined),
   onData: vi.fn((listener: (event: SynapseTerminalDataEvent) => void) => {
     bridgeState.dataListener = listener
     return bridgeState.dataUnsubscribe
@@ -172,7 +174,9 @@ vi.mock("@xterm/xterm", () => ({
   Terminal: vi.fn().mockImplementation(function TerminalMock() {
     const instance = {
       open: vi.fn(),
-      write: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.()
+      }),
       loadAddon: vi.fn(),
       onData: vi.fn((listener: (data: string) => void) => {
         instance.inputListener = listener
@@ -268,6 +272,7 @@ beforeEach(() => {
   bridgeState.sessionChangedUnsubscribe.mockClear()
   bridgeState.sessionDeletedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
+  terminalBridge.chooseDefaultCwd.mockClear()
   terminalBridge.createGroup.mockClear()
   terminalBridge.renameGroup.mockClear()
   terminalBridge.updateGroupSettings.mockClear()
@@ -281,6 +286,7 @@ beforeEach(() => {
   terminalBridge.resizeSession.mockClear()
   terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
+  terminalBridge.runStartupCommand.mockClear()
   toastState.error.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
@@ -493,6 +499,30 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("开发")
   })
 
+  it("chooses a default directory when updating terminal group settings", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-build",
+      name: "构建",
+    })]
+    bridgeState.sessions = []
+    terminalBridge.chooseDefaultCwd.mockResolvedValueOnce("/repo/chosen")
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("设置")
+    await clickButton("选择")
+    await clickButton("保存")
+
+    expect(terminalBridge.chooseDefaultCwd).toHaveBeenCalled()
+    expect(terminalBridge.updateGroupSettings).toHaveBeenCalledWith({
+      groupId: "group-build",
+      name: "构建",
+      settings: {
+        defaultCwd: "/repo/chosen",
+      },
+    })
+  })
+
   it("shows an error when creating a terminal from a group fails", async () => {
     bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
     bridgeState.sessions = []
@@ -643,7 +673,8 @@ describe("TerminalModule", () => {
       sessionId: "session-1",
       afterSeq: 0,
     })
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n")
+    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n", expect.any(Function))
+    expect(terminalBridge.runStartupCommand).toHaveBeenCalledWith({ sessionId: "session-1" })
 
     await act(async () => {
       xtermState.instances[0]?.emitInput("pwd\r")
@@ -671,7 +702,7 @@ describe("TerminalModule", () => {
       resizeObservers[0]?.trigger()
     })
 
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("next\r\n")
+    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("next\r\n", expect.any(Function))
     expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("old")
     expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("other")
     expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
@@ -691,6 +722,27 @@ describe("TerminalModule", () => {
     expect(xtermState.instances[0]?.dispose).toHaveBeenCalled()
     expect(resizeObservers[0]?.disconnect).toHaveBeenCalled()
     expect(terminalBridge.stopSession).not.toHaveBeenCalled()
+  })
+
+  it("does not mark startup ready for control-only terminal output", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.chunks = [
+      createChunk({ sessionId: "session-1", seq: 1, data: "\u001b[?2004h" }),
+    ]
+
+    await renderModule()
+
+    expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
+
+    act(() => {
+      bridgeState.dataListener?.({
+        sessionId: "session-1",
+        chunk: createChunk({ sessionId: "session-1", seq: 2, data: "(base) $ " }),
+      })
+    })
+
+    expect(terminalBridge.runStartupCommand).toHaveBeenCalledWith({ sessionId: "session-1" })
   })
 
   it("does not lose or duplicate data emitted before retained output finishes loading", async () => {

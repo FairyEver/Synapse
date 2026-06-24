@@ -220,10 +220,40 @@ describe("TerminalService", () => {
     expect(service.listSessions()).toEqual([])
   })
 
-  it("writes group startup command after spawning the pty", async () => {
+  it("runs group startup command only after the renderer marks the session ready", async () => {
     const group = createGroup({
       settings: {
         startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    const pty = new FakePty()
+    const spawnInputs: Array<{ shell: string; cwd: string; cols: number; rows: number }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty], spawnInputs },
+    )
+
+    const session = await service.createSession({ groupId: group.id })
+    pty.emitData("\u001b[?2004h")
+    pty.emitData("(base) $ ")
+
+    expect(spawnInputs).toEqual([expect.objectContaining({ shell: "/bin/zsh" })])
+    expect(pty.write).not.toHaveBeenCalled()
+
+    service.runStartupCommand({ sessionId: session.id })
+
+    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+    expect(pty.write).toHaveBeenCalledTimes(1)
+
+    service.runStartupCommand({ sessionId: session.id })
+
+    expect(pty.write).toHaveBeenCalledTimes(1)
+  })
+
+  it("filters startup command echo while keeping command output", async () => {
+    const group = createGroup({
+      settings: {
+        startupCommand: "ls",
       },
     })
     const pty = new FakePty()
@@ -231,10 +261,18 @@ describe("TerminalService", () => {
       createMemoryStore({ groups: [group], sessions: [], output: [] }),
       { ptys: [pty] },
     )
+    const onData = vi.fn()
+    service.events.on("data", onData)
 
-    await service.createSession({ groupId: group.id })
+    const session = await service.createSession({ groupId: group.id })
+    service.runStartupCommand({ sessionId: session.id })
+    pty.emitData("ls\r\n")
+    pty.emitData("README.md\r\n")
+    await service.flushPersistQueue()
 
-    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+    expect(onData).toHaveBeenCalledTimes(1)
+    expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data))
+      .toEqual(["README.md\r\n"])
   })
 
   it("does not write an empty startup command", async () => {

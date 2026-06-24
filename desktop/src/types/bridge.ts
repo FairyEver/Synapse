@@ -45,6 +45,7 @@ import type {
   SynapseTerminalRenameGroupInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalResizeSessionInput,
+  SynapseTerminalRunStartupCommandInput,
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
   SynapseTerminalStopSessionInput,
@@ -834,6 +835,7 @@ export type SynapseBridge = {
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
   }
   terminal: {
+    chooseDefaultCwd: () => Promise<string | null>
     listGroups: () => Promise<SynapseTerminalGroup[]>
     createGroup: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
     renameGroup: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
@@ -848,6 +850,7 @@ export type SynapseBridge = {
     resizeSession: (input: SynapseTerminalResizeSessionInput) => Promise<void>
     deleteSession: (input: SynapseTerminalDeleteSessionInput) => Promise<void>
     stopSession: (input: SynapseTerminalStopSessionInput) => Promise<void>
+    runStartupCommand: (input: SynapseTerminalRunStartupCommandInput) => Promise<void>
     onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
     onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
     onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void

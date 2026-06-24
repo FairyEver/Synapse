@@ -18,6 +18,7 @@ import type {
   TerminalRenameGroupInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
+  TerminalRunStartupCommandInput,
   TerminalSession,
   TerminalStopSessionInput,
   TerminalUpdateGroupSettingsInput,
@@ -42,6 +43,10 @@ type TerminalRuntime = {
   pty: PtyLike
   buffer: TerminalOutputBuffer
   disposables: PtyDisposable[]
+}
+
+type StartupEchoFilter = {
+  pending: string[]
 }
 
 type SpawnPtyInput = {
@@ -70,6 +75,8 @@ export function createTerminalService(deps: {
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
+  const pendingStartupCommands = new Map<string, string>()
+  const startupEchoFilters = new Map<string, StartupEchoFilter>()
   const outputRetentionBytes = deps.outputRetentionBytes ?? TERMINAL_SESSION_OUTPUT_RETENTION_BYTES
   let persistInFlight: Promise<void> | undefined
   let persistPending = false
@@ -174,9 +181,50 @@ export function createTerminalService(deps: {
     const runtime = runtimes.get(sessionId)
     if (!runtime) return
     runtimes.delete(sessionId)
+    pendingStartupCommands.delete(sessionId)
+    startupEchoFilters.delete(sessionId)
     for (const disposable of runtime.disposables) {
       disposable.dispose()
     }
+  }
+
+  function runPendingStartupCommand(sessionId: string): void {
+    const command = pendingStartupCommands.get(sessionId)
+    if (!command) return
+    const runtime = getRunningRuntime(sessionId)
+    pendingStartupCommands.delete(sessionId)
+    startupEchoFilters.set(sessionId, createStartupEchoFilter(command))
+    runtime.pty.write(appendTerminalNewline(command))
+  }
+
+  function filterStartupCommandEcho(sessionId: string, data: string): string {
+    const filter = startupEchoFilters.get(sessionId)
+    if (!filter) return data
+
+    let remainingData = data
+    while (filter.pending.length > 0 && remainingData) {
+      const pendingEcho = filter.pending[0]
+      if (!pendingEcho) {
+        filter.pending.shift()
+        continue
+      }
+      if (pendingEcho.startsWith(remainingData)) {
+        filter.pending[0] = pendingEcho.slice(remainingData.length)
+        remainingData = ""
+        break
+      }
+      if (remainingData.startsWith(pendingEcho)) {
+        remainingData = remainingData.slice(pendingEcho.length)
+        filter.pending.shift()
+        continue
+      }
+      break
+    }
+
+    if (filter.pending.length === 0 || remainingData) {
+      startupEchoFilters.delete(sessionId)
+    }
+    return remainingData
   }
 
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
@@ -185,7 +233,10 @@ export function createTerminalService(deps: {
       const current = sessions.get(session.id)
       if (!runtime || !current || current.status !== "running") return
 
-      const chunk = runtime.buffer.append(session.id, data)
+      const filteredData = filterStartupCommandEcho(session.id, data)
+      if (!filteredData) return
+
+      const chunk = runtime.buffer.append(session.id, filteredData)
       const updated = { ...current, lastOutputSeq: chunk.seq, updatedAt: now() }
       sessions.set(session.id, updated)
       events.emit("data", { sessionId: session.id, chunk })
@@ -242,6 +293,8 @@ export function createTerminalService(deps: {
       sessions.clear()
       buffers.clear()
       runtimes.clear()
+      pendingStartupCommands.clear()
+      startupEchoFilters.clear()
 
       const state = await deps.store.loadState()
       for (const group of state.groups) groups.set(group.id, group)
@@ -390,12 +443,13 @@ export function createTerminalService(deps: {
         lastOutputSeq: 0,
       }
       const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
+      const startupCommand = group.settings?.startupCommand
       const child = deps.spawnPty?.({ shell, cwd, cols, rows }) ?? spawnNodePty({ shell, cwd, cols, rows })
       buffers.set(session.id, buffer)
       sessions.set(session.id, session)
       attachRuntime(session, child, buffer)
-      if (group.settings?.startupCommand) {
-        child.write(appendTerminalNewline(group.settings.startupCommand))
+      if (startupCommand) {
+        pendingStartupCommands.set(session.id, startupCommand)
       }
       await flushPersist()
       return session
@@ -434,6 +488,10 @@ export function createTerminalService(deps: {
     writeSession(input: TerminalWriteSessionInput): void {
       getSessionOrThrow(input.sessionId)
       getRunningRuntime(input.sessionId).pty.write(input.data)
+    },
+    runStartupCommand(input: TerminalRunStartupCommandInput): void {
+      getSessionOrThrow(input.sessionId)
+      runPendingStartupCommand(input.sessionId)
     },
     async resizeSession(input: TerminalResizeSessionInput): Promise<void> {
       const runtime = getRunningRuntime(input.sessionId)
@@ -533,6 +591,15 @@ function normalizeGroupSettings(settings: TerminalGroupSettings | undefined): Te
 function normalizeStartupCommand(command: string | undefined): string | undefined {
   const normalized = command?.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
   return normalized || undefined
+}
+
+function createStartupEchoFilter(command: string): StartupEchoFilter {
+  return {
+    pending: command
+      .split("\n")
+      .map((line) => `${line}\r\n`)
+      .filter((line) => line.trim().length > 0),
+  }
 }
 
 function validateAbsoluteCwdInput(cwd: string): string {

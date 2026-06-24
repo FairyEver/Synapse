@@ -78,6 +78,7 @@ export function TerminalModule() {
   const [groupSettingsDefaultCwd, setGroupSettingsDefaultCwd] = useState("")
   const [groupSettingsStartupCommand, setGroupSettingsStartupCommand] = useState("")
   const [groupSettingsSaving, setGroupSettingsSaving] = useState(false)
+  const [groupSettingsChoosingDirectory, setGroupSettingsChoosingDirectory] = useState(false)
   const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
@@ -267,7 +268,23 @@ export function TerminalModule() {
     setGroupSettingsName("")
     setGroupSettingsDefaultCwd("")
     setGroupSettingsStartupCommand("")
+    setGroupSettingsChoosingDirectory(false)
   }, [])
+
+  const chooseGroupSettingsDefaultCwd = useCallback(async () => {
+    setGroupSettingsChoosingDirectory(true)
+    try {
+      const selectedPath = await terminalBridge.chooseDefaultCwd()
+      if (selectedPath) {
+        setGroupSettingsDefaultCwd(selectedPath)
+      }
+    } catch (error) {
+      logger.error("Failed to choose terminal group default cwd.", error)
+      toast.error("选择默认目录失败")
+    } finally {
+      setGroupSettingsChoosingDirectory(false)
+    }
+  }, [terminalBridge])
 
   const saveGroupSettings = useCallback(async () => {
     if (!groupSettingsTarget) return
@@ -309,6 +326,7 @@ export function TerminalModule() {
     setTerminalReadError(null)
     let disposed = false
     let lastSeq = 0
+    let startupCommandRequested = false
     const xterm = new Terminal(createTerminalRenderingOptions({
       container,
       disableStdin: activeSession.status !== "running",
@@ -351,9 +369,21 @@ export function TerminalModule() {
 
     let initialReadComplete = false
     const pendingChunks: SynapseTerminalOutputChunk[] = []
+    const requestStartupCommand = () => {
+      if (disposed || startupCommandRequested) return
+      startupCommandRequested = true
+      void terminalBridge.runStartupCommand({ sessionId: activeSession.id }).catch((error) => {
+        logger.warn("Failed to run terminal startup command.", error)
+      })
+    }
+
     const writeChunk = (chunk: SynapseTerminalOutputChunk) => {
       if (chunk.seq <= lastSeq) return
       lastSeq = chunk.seq
+      if (hasPrintableTerminalText(chunk.data)) {
+        xterm.write(chunk.data, requestStartupCommand)
+        return
+      }
       xterm.write(chunk.data)
     }
 
@@ -614,14 +644,25 @@ export function TerminalModule() {
                 autoFocus
               />
             </label>
-            <label className="grid gap-1.5">
+            <div className="grid gap-1.5">
               <span className="text-sm font-medium">默认目录</span>
-              <Input
-                aria-label="默认目录"
-                value={groupSettingsDefaultCwd}
-                onChange={(event) => setGroupSettingsDefaultCwd(event.target.value)}
-              />
-            </label>
+              <div className="flex gap-2">
+                <Input
+                  aria-label="默认目录"
+                  value={groupSettingsDefaultCwd}
+                  onChange={(event) => setGroupSettingsDefaultCwd(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={groupSettingsSaving || groupSettingsChoosingDirectory}
+                  onClick={() => { void chooseGroupSettingsDefaultCwd() }}
+                >
+                  <FolderOpen data-icon="inline-start" />
+                  选择
+                </Button>
+              </div>
+            </div>
             <label className="grid gap-1.5">
               <span className="text-sm font-medium">启动命令</span>
               <Textarea
@@ -769,6 +810,14 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
       <span className="sr-only">{label}</span>
     </span>
   )
+}
+
+function hasPrintableTerminalText(data: string): boolean {
+  const withoutEscapeSequences = data
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, "")
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1B[ -/]*[@-~]/g, "")
+  return /[^\s\x00-\x1F\x7F]/u.test(withoutEscapeSequences)
 }
 
 function groupSessions(

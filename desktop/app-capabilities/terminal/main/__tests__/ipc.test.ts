@@ -7,6 +7,10 @@ import type { WindowManager } from "../../../../electron/runtime/window"
 import type { TerminalService } from "../service"
 import { terminalIpcModule } from "../ipc"
 
+const electronDialogMock = vi.hoisted(() => ({
+  showOpenDialog: vi.fn(),
+}))
+
 vi.mock("electron", () => ({
   app: {
     getPath: (which: string) => `/tmp/synapse-terminal-ipc-test-${which}`,
@@ -25,7 +29,7 @@ vi.mock("electron", () => ({
       return null
     }
   },
-  dialog: {},
+  dialog: electronDialogMock,
   ipcMain: { handle: () => {}, on: () => {} },
   shell: {},
   Tray: class {},
@@ -66,6 +70,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.createGroup.channel).toBe("synapse:terminal:group:create")
     expect(terminalIpcModule.methods.renameGroup.channel).toBe("synapse:terminal:group:rename")
     expect(terminalIpcModule.methods.updateGroupSettings.channel).toBe("synapse:terminal:group:update-settings")
+    expect(terminalIpcModule.methods.chooseDefaultCwd.channel).toBe("synapse:terminal:group:choose-default-cwd")
     expect(terminalIpcModule.methods.deleteGroup.channel).toBe("synapse:terminal:group:delete")
     expect(terminalIpcModule.methods.listSessions.channel).toBe("synapse:terminal:session:list")
     expect(terminalIpcModule.methods.createSession.channel).toBe("synapse:terminal:session:create")
@@ -77,9 +82,25 @@ describe("terminalIpcModule", () => {
     expect("setAgentControl" in terminalIpcModule.methods).toBe(false)
     expect(terminalIpcModule.methods.deleteSession.channel).toBe("synapse:terminal:session:delete")
     expect(terminalIpcModule.methods.stopSession.channel).toBe("synapse:terminal:session:stop")
+    expect(terminalIpcModule.methods.runStartupCommand.channel).toBe("synapse:terminal:session:run-startup-command")
     expect(terminalIpcModule.events.data.channel).toBe("synapse:terminal:data")
     expect(terminalIpcModule.events.sessionChanged.channel).toBe("synapse:terminal:session-changed")
     expect(terminalIpcModule.events.sessionDeleted.channel).toBe("synapse:terminal:session-deleted")
+  })
+
+  it("chooses a terminal group default cwd through the native directory dialog", async () => {
+    electronDialogMock.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ["/Users/liyang/project"],
+    })
+
+    await expect(terminalIpcModule.methods.chooseDefaultCwd.handler(createContext(createService()), undefined))
+      .resolves.toBe("/Users/liyang/project")
+
+    expect(electronDialogMock.showOpenDialog).toHaveBeenCalledWith({
+      title: "选择默认目录",
+      properties: ["openDirectory"],
+    })
   })
 
   it("renames and deletes groups plus sessions as the user actor", async () => {
@@ -116,6 +137,9 @@ describe("terminalIpcModule", () => {
       sessionId: "session-1",
       force: true,
     })
+    await terminalIpcModule.methods.runStartupCommand.handler(ctx, {
+      sessionId: "session-1",
+    })
 
     expect(service.renameGroup).toHaveBeenCalledWith({
       groupId: "group-1",
@@ -146,6 +170,9 @@ describe("terminalIpcModule", () => {
     expect(service.stopSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       force: true,
+    })
+    expect(service.runStartupCommand).toHaveBeenCalledWith({
+      sessionId: "session-1",
     })
   })
 
@@ -300,6 +327,7 @@ function createService(): Partial<TerminalService> {
     resizeSession: vi.fn(),
     deleteSession: vi.fn(),
     stopSession: vi.fn(),
+    runStartupCommand: vi.fn(),
     events: new EventEmitter() as TerminalService["events"],
   }
 }
