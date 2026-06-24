@@ -281,10 +281,11 @@ describe("TerminalService", () => {
     const session = await service.createSession({})
 
     blockSaves = true
-    pty.emitData("one")
-    pty.emitData("two")
-    pty.emitData("three")
+    for (let index = 0; index < 100; index += 1) {
+      pty.emitData(`chunk-${index}`)
+    }
     expect(saveStarted).toHaveLength(1)
+    expect(service.getPersistDiagnostics().idleWaiterCount).toBe(0)
 
     saveStarted.shift()?.()
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -294,8 +295,9 @@ describe("TerminalService", () => {
 
     const outputSaves = saveCalls.filter((state) => state.output.length > 0)
     expect(outputSaves).toHaveLength(2)
-    expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(3)
-    expect(store.state.output.map((chunk) => chunk.data)).toEqual(["one", "two", "three"])
+    expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(100)
+    expect(store.state.output).toHaveLength(100)
+    expect(store.state.output.at(-1)?.data).toBe("chunk-99")
   })
 
   it("surfaces and logs persistence failures", async () => {

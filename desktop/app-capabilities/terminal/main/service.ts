@@ -88,12 +88,15 @@ export function createTerminalService(deps: {
     }
   }
 
-  function persist(): Promise<void> {
-    if (persistInFlight) {
-      persistPending = true
-      return waitForPersistIdle()
+  function schedulePersist(): void {
+    persistPending = true
+    if (!persistInFlight) {
+      persistInFlight = runPersistLoop()
     }
-    persistInFlight = runPersistLoop()
+  }
+
+  function flushPersist(): Promise<void> {
+    schedulePersist()
     return waitForPersistIdle()
   }
 
@@ -176,7 +179,7 @@ export function createTerminalService(deps: {
       const updated = { ...current, lastOutputSeq: chunk.seq, updatedAt: now() }
       sessions.set(session.id, updated)
       events.emit("data", { sessionId: session.id, chunk })
-      void persist().catch(() => undefined)
+      schedulePersist()
     })
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
@@ -194,7 +197,7 @@ export function createTerminalService(deps: {
       }
       sessions.set(session.id, updated)
       events.emit("sessionChanged", updated)
-      void persist().catch(() => undefined)
+      void flushPersist()
     })
     runtimes.set(session.id, {
       pty: child,
@@ -233,7 +236,7 @@ export function createTerminalService(deps: {
         }))
       }
 
-      await persist()
+      await flushPersist()
     },
     async stop() {
       const timestamp = now()
@@ -255,13 +258,20 @@ export function createTerminalService(deps: {
           cleanupRuntime(sessionId)
         }
       }
-      await persist()
+      await flushPersist()
     },
     flushPersistQueue() {
       return waitForPersistIdle()
     },
     getLastPersistError() {
       return lastPersistError
+    },
+    getPersistDiagnostics() {
+      return {
+        inFlight: Boolean(persistInFlight),
+        pending: persistPending,
+        idleWaiterCount: persistIdleWaiters.length,
+      }
     },
     listGroups(): TerminalGroup[] {
       return [...groups.values()].sort((left, right) => left.sortOrder - right.sortOrder)
@@ -276,7 +286,7 @@ export function createTerminalService(deps: {
         sortOrder: groups.size,
       }
       groups.set(group.id, group)
-      await persist()
+      await flushPersist()
       return group
     },
     listSessions(): TerminalSession[] {
@@ -314,7 +324,7 @@ export function createTerminalService(deps: {
       buffers.set(session.id, buffer)
       sessions.set(session.id, session)
       attachRuntime(session, child, buffer)
-      await persist()
+      await flushPersist()
       return session
     },
     readSession(input: TerminalReadSessionInput): TerminalReadSessionResult {
@@ -349,7 +359,7 @@ export function createTerminalService(deps: {
       const session = getSessionOrThrow(input.sessionId)
       sessions.set(session.id, { ...session, cols: input.cols, rows: input.rows, updatedAt: now() })
       runtime.pty.resize(input.cols, input.rows)
-      await persist()
+      await flushPersist()
     },
     async setAgentControl(input: { sessionId: string; enabled: boolean }): Promise<TerminalSession> {
       const session = getSessionOrThrow(input.sessionId)
@@ -359,7 +369,7 @@ export function createTerminalService(deps: {
         updatedAt: now(),
       }
       sessions.set(session.id, updated)
-      await persist()
+      await flushPersist()
       return updated
     },
     async stopSession(input: TerminalStopSessionInput & { actor: TerminalActor }): Promise<void> {
@@ -371,7 +381,7 @@ export function createTerminalService(deps: {
       const timestamp = now()
       sessions.set(session.id, { ...session, status: "killed", updatedAt: timestamp, endedAt: timestamp })
       runtime.pty.kill()
-      await persist()
+      await flushPersist()
     },
   }
 }

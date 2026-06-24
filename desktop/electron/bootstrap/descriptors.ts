@@ -293,9 +293,10 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   id: "core.terminal",
   criticality: "degraded",
-  create() {
+  create(ctx) {
     return createTerminalService({
       store: createTerminalStore({ baseDir: path.join(app.getPath("userData"), "terminal") }),
+      logger: ctx.logger.child("terminal"),
     })
   },
   async start(instance) {
