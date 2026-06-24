@@ -1,6 +1,6 @@
 # Synapse Workflow MCP
 
-You have access to Synapse Workflow MCP tools for creating, editing, validating, and running Synapse workflow definitions. Synapse workflows are DAG-based: nodes execute in topological order, and independent nodes run in parallel. When you add, delete, or reconnect workflow nodes, finish by calling `workflow_layout_update` so the saved workflow opens with a clean layout in the UI.
+You have access to Synapse Workflow MCP tools for creating, editing, validating, and running Synapse workflow definitions. Synapse workflows are DAG-based: nodes execute in topological order, and independent nodes run in parallel. When you add, delete, or reconnect workflow nodes, finish by calling `app_workflow_layout_update` so the saved workflow opens with a clean layout in the UI.
 
 ## Scope Boundary
 
@@ -29,7 +29,7 @@ Only **prompt** and **switch** nodes require a provider (AI service), model tier
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags. For claude_code config, set Claude Code CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `permissionMode`, `model`, `settingSources`, `settingsPath`, `mcpConfigPath`, `allowedTools`, `disallowedTools`, `additionalDirectories`, and debug flags. Do not set `providerId` or `modelTier` on codex or claude_code nodes.
 - **Project validity** — Any effective codex/claude_code `projectId` (node override or inherited `defaultProjectId`) must refer to a currently configured Synapse project or repository. If a project was deleted, update the workflow default or the local CLI node before saving or running.
 
-To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
+To discover available providers, call `app_workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
 ```json
 { "id": "provider-id", "name": "Provider Name", "models": { "default": "model-name", "haiku": "...", "sonnet": "...", "opus": "..." } }
 ```
@@ -46,23 +46,23 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 
 ## Creating a Workflow (Standard Flow)
 
-1. Call `workflow_node_type_list` to see available node types.
-2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
-3. Call `workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
-4. If defaults were not set during create, call `workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `workflow_definition_update`.
-5. Call `workflow_param_update` to define input parameters.
+1. Call `app_workflow_node_type_list` to see available node types.
+2. Call `app_workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
+3. Call `app_workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
+4. If defaults were not set during create, call `app_workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `app_workflow_definition_update`.
+5. Call `app_workflow_param_update` to define input parameters.
 6. Choose one save strategy:
-   - For complex graphs, fetch the workflow, build the complete valid DAG locally, then call `workflow_definition_update`.
-   - For incremental edits, create each new node with a schema-valid `node.config` and already connected by passing `incomingEdges` and/or `outgoingEdges` to `workflow_node_create`. This keeps strict validation intact because disconnected intermediate nodes are not saved.
+   - For complex graphs, fetch the workflow, build the complete valid DAG locally, then call `app_workflow_definition_update`.
+   - For incremental edits, create each new node with a schema-valid `node.config` and already connected by passing `incomingEdges` and/or `outgoingEdges` to `app_workflow_node_create`. This keeps strict validation intact because disconnected intermediate nodes are not saved.
    - A useful incremental pattern is to build from the existing End node backward: create the node with `outgoingEdges: [{ "to": "end-node-id" }]`, then add or update upstream connected nodes.
-7. Use `workflow_edge_create` for extra structural edges only when the graph remains valid after that single edge is saved. For switch nodes, include a `branch` field matching a branch id.
-8. Update node configs with `workflow_node_update`: add final prompt templates, Codex/Claude Code CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.
-9. Call `workflow_layout_update` after node/edge changes.
-10. Call `workflow_definition_inspect` and fix errors before executing.
-11. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
-12. Poll `workflow_run_get` with the runId (2-3 second intervals) until status is `completed` or `failed`.
+7. Use `app_workflow_edge_create` for extra structural edges only when the graph remains valid after that single edge is saved. For switch nodes, include a `branch` field matching a branch id.
+8. Update node configs with `app_workflow_node_update`: add final prompt templates, Codex/Claude Code CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.
+9. Call `app_workflow_layout_update` after node/edge changes.
+10. Call `app_workflow_definition_inspect` and fix errors before executing.
+11. Call `app_workflow_run_execute` with params to start execution. Returns `{ runId }`.
+12. Poll `app_workflow_run_get` with the runId (2-3 second intervals) until status is `completed` or `failed`.
 
-Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `workflow_node_create` calls or a full `workflow_definition_update` instead.
+Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `app_workflow_node_create` calls or a full `app_workflow_definition_update` instead.
 
 Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or preserve node IDs containing path separators, `..`, absolute paths, or spaces.
 
@@ -80,9 +80,9 @@ For `file` and `directory`, the parameter value is a resource reference, not fil
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
 ```
 
-For directories, use `"entryType": "directory"` and a directory path. When calling `workflow_run_execute` from MCP, you may pass either this object or a plain local path string. Synapse normalizes plain strings to `local_path`, verifies that the path exists, and checks the expected file/directory kind before the run starts.
+For directories, use `"entryType": "directory"` and a directory path. When calling `app_workflow_run_execute` from MCP, you may pass either this object or a plain local path string. Synapse normalizes plain strings to `local_path`, verifies that the path exists, and checks the expected file/directory kind before the run starts.
 
-When defining defaults with `workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above. Do not inline file bytes into params.
+When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above. Do not inline file bytes into params.
 
 ## Variable Bindings
 
@@ -110,7 +110,7 @@ Config fields:
 - `paramBindings` — object whose keys are child param names and whose values are typed bindings. Use this for file/directory child params so resource references pass through without becoming strings.
 
 Recommended MCP flow:
-1. Call `workflow_definition_list` to find the child workflow ID, then `workflow_definition_get` to read its current `params`.
+1. Call `app_workflow_definition_list` to find the child workflow ID, then `app_workflow_definition_get` to read its current `params`.
 2. Create the workflow_call node with minimal valid config:
    ```json
    { "workflowId": "child-workflow-id", "variables": [], "paramTemplates": {}, "paramBindings": {} }
@@ -133,7 +133,7 @@ Recommended MCP flow:
      }
    }
    ```
-5. Run `workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
+5. Run `app_workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
 
 Do not put both `paramTemplates.<name>` and `paramBindings.<name>` on the same child parameter. For file/directory child params, prefer a `paramBindings` value binding from a parent file/directory param with the same resource kind.
 
@@ -246,20 +246,20 @@ Switch branches are mutually exclusive paths:
 ## Best Practices
 
 - Always store returned `nodeId` and `edgeId` after creation — you cannot retrieve them later without fetching the full definition.
-- Call `workflow_node_type_describe` with a node type to get its full config JSON Schema and available providers before configuring.
+- Call `app_workflow_node_type_describe` with a node type to get its full config JSON Schema and available providers before configuring.
 - Always query available providers before setting `providerId` — do not guess provider IDs.
 - Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every prompt/switch node. Codex and Claude Code nodes inherit `defaultProjectId` and `defaultNodeTimeoutMins`, but not provider/model defaults.
-- For codex nodes, use `workflow_node_type_describe` and configure Codex CLI fields directly; do not set `providerId` or `modelTier`.
-- For claude_code nodes, use `workflow_node_type_describe` and configure Claude Code CLI fields directly; do not set `providerId` or `modelTier`.
+- For codex nodes, use `app_workflow_node_type_describe` and configure Codex CLI fields directly; do not set `providerId` or `modelTier`.
+- For claude_code nodes, use `app_workflow_node_type_describe` and configure Claude Code CLI fields directly; do not set `providerId` or `modelTier`.
 - For workflow_call nodes, configure child workflow params explicitly from the child workflow's current `params`; do not invent param names without reading the child definition.
-- Validate with `workflow_definition_inspect` before executing.
+- Validate with `app_workflow_definition_inspect` before executing.
 - Treat `duplicate_switch_branch_targets` warnings as a likely wiring mistake unless the workflow intentionally merges branches immediately.
 - Build incrementally with connected saves: create nodes with `incomingEdges`/`outgoingEdges` or use full-definition updates → configure variables → auto-layout → validate → run.
 - For complex workflows, sketch the DAG structure first (which nodes, which edges) before making calls.
-- After creating, deleting, or reconnecting nodes, call `workflow_layout_update` before the final validation or handoff. This method recalculates node positions without opening the UI.
+- After creating, deleting, or reconnecting nodes, call `app_workflow_layout_update` before the final validation or handoff. This method recalculates node positions without opening the UI.
 - Avoid long chains of large prompt nodes. Independent prompt nodes run in parallel; use that when possible.
 - Do not satisfy a requested node count by making every step a serial AI call. Use `script` nodes for deterministic formatting/filtering, pass summaries instead of full upstream output, and keep the final prompt's input small.
-- If a run waits longer than expected, inspect `workflow_run_get` for the running/failed node, `durationMs`, configured `timeoutMins`/`defaultNodeTimeoutMins`, and upstream input size. Prompt/switch/codex/claude_code default to 60 minutes unless configured otherwise. For tests or short jobs, set an explicit shorter timeout; for real failures, shorten the prompt/context, split work into parallel branches, or move non-AI transformation into a `script` node before increasing timeout.
+- If a run waits longer than expected, inspect `app_workflow_run_get` for the running/failed node, `durationMs`, configured `timeoutMins`/`defaultNodeTimeoutMins`, and upstream input size. Prompt/switch/codex/claude_code default to 60 minutes unless configured otherwise. For tests or short jobs, set an explicit shorter timeout; for real failures, shorten the prompt/context, split work into parallel branches, or move non-AI transformation into a `script` node before increasing timeout.
 
 ## API Reference
 

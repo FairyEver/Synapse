@@ -114,6 +114,7 @@ describe("RepositoryTemplateService", () => {
 
     const missingTools = buildDriveTools()
       .map((tool) => tool.name)
+      .filter((toolName) => toolName.startsWith("app_drive_"))
       .filter((toolName) => !apiText.includes(`\`${toolName}\``))
 
     expect(missingTools).toEqual([])

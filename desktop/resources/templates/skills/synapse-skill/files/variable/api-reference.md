@@ -1,10 +1,10 @@
-# Synapse 变量 MCP API Reference
+# Synapse Settings Variable MCP API Reference
 
 All tools are accessed through the `synapse-mcp` MCP server. Each tool maps to the same canonical Synapse API action.
 
 ## Safe Variable View
 
-Tools return this safe view unless `variable_item_get` is called with `includeValue: true`:
+Tools return this safe view unless `app_settings_variable_item_get` is called with `includeValue: true`:
 
 ```json
 {
@@ -18,9 +18,9 @@ Tools return this safe view unless `variable_item_get` is called with `includeVa
 
 ## Tools
 
-### variable_item_list
+### app_settings_variable_item_list
 
-Canonical action: `variable.item.list`
+Canonical action: `app.settings.variable.item.list`
 
 Input:
 
@@ -43,9 +43,9 @@ This tool never returns values.
 
 Requires `secret.read` permission and records an audit event without variable values or descriptions.
 
-### variable_item_get
+### app_settings_variable_item_get
 
-Canonical action: `variable.item.get`
+Canonical action: `app.settings.variable.item.get`
 
 Input without value:
 
@@ -68,9 +68,9 @@ Use `includeValue: true` only when the user explicitly needs the stored value.
 
 Both metadata reads and value reads require `secret.read` permission. Audit records must not include stored values.
 
-### variable_item_create
+### app_settings_variable_item_create
 
-Canonical action: `variable.item.create`
+Canonical action: `app.settings.variable.item.create`
 
 Input:
 
@@ -84,9 +84,9 @@ Input:
 
 Fails if a variable with the same name already exists, case-insensitively.
 
-### variable_item_update
+### app_settings_variable_item_update
 
-Canonical action: `variable.item.update`
+Canonical action: `app.settings.variable.item.update`
 
 Input:
 
@@ -101,9 +101,9 @@ Input:
 
 Only provided fields change. Pass `description: ""` to clear the description.
 
-### variable_item_upsert
+### app_settings_variable_item_upsert
 
-Canonical action: `variable.item.upsert`
+Canonical action: `app.settings.variable.item.upsert`
 
 Input:
 
@@ -117,9 +117,9 @@ Input:
 
 Creates the variable if missing, or updates provided fields if it already exists. Creating through upsert requires `value`.
 
-### variable_item_delete
+### app_settings_variable_item_delete
 
-Canonical action: `variable.item.delete`
+Canonical action: `app.settings.variable.item.delete`
 
 Input:
 
@@ -135,13 +135,13 @@ Deletes one variable and returns only the safe variable view.
 
 ### Set a user variable
 
-1. Call `variable_item_upsert`.
+1. Call `app_settings_variable_item_upsert`.
 2. Report the variable name and whether it was created or updated.
 3. Do not include the value in the response.
 
 ### Read a value
 
 1. Confirm the user needs the stored value.
-2. Call `variable_item_get` with `includeValue: true`.
+2. Call `app_settings_variable_item_get` with `includeValue: true`.
 3. Use the value for the requested task.
 4. Do not repeat the value in the final answer unless the user explicitly asked to see it.

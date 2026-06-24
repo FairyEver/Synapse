@@ -4,7 +4,7 @@ All tools are accessed through the `synapse-mcp` MCP server. Each tool maps to t
 
 ## Discovery
 
-### automation_trigger_type_list
+### app_automation_trigger_type_list
 
 Input:
 
@@ -14,7 +14,7 @@ Input:
 
 Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, and optional `variables`.
 
-### automation_executor_type_list
+### app_automation_executor_type_list
 
 Input:
 
@@ -28,7 +28,7 @@ Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig
 
 ## Items
 
-### automation_item_list
+### app_automation_item_list
 
 Input:
 
@@ -42,7 +42,7 @@ Input:
 
 All fields are optional. Returns public item summaries. `enabled` and `scope` filters are applied before `limit`, so use `limit` for bounded list/lookup flows on large Automation sets.
 
-### automation_item_get
+### app_automation_item_get
 
 Input:
 
@@ -52,9 +52,9 @@ Input:
 
 Returns one public item summary or `null`.
 
-### automation_item_create
+### app_automation_item_create
 
-For command or script executors, the dispatcher applies the `defaultConfig` returned by `automation_executor_type_list` before validation. Provide the user-requested command, script, timeout, or environment fields, and include `shell` only when the user explicitly requests a non-default shell.
+For command or script executors, the dispatcher applies the `defaultConfig` returned by `app_automation_executor_type_list` before validation. Provide the user-requested command, script, timeout, or environment fields, and include `shell` only when the user explicitly requests a non-default shell.
 
 Input:
 
@@ -98,7 +98,7 @@ Workflow executor example:
 
 Returns a public item summary.
 
-### automation_item_update
+### app_automation_item_update
 
 Input:
 
@@ -117,7 +117,7 @@ Input:
 
 Returns a public item summary. `trigger` and `executor` patches replace the corresponding stored refs.
 
-### automation_item_delete
+### app_automation_item_delete
 
 Input:
 
@@ -131,7 +131,7 @@ Returns:
 { "deleted": true }
 ```
 
-### automation_item_enable
+### app_automation_item_enable
 
 Input:
 
@@ -141,7 +141,7 @@ Input:
 
 Returns a public item summary.
 
-### automation_item_disable
+### app_automation_item_disable
 
 Input:
 
@@ -153,7 +153,7 @@ Returns a public item summary.
 
 ## Runs
 
-### automation_run_execute
+### app_automation_run_execute
 
 Input:
 
@@ -163,7 +163,7 @@ Input:
 
 Returns a safe run summary. If the Automation is missing or no run starts, the tool fails instead of returning a successful empty result.
 
-### automation_run_disable
+### app_automation_run_disable
 
 Input:
 
@@ -185,7 +185,7 @@ If the run already finished, the result can include:
 
 If the run is missing or no longer active, the tool fails instead of returning a successful empty stop result.
 
-### automation_run_list
+### app_automation_run_list
 
 Input:
 
@@ -195,7 +195,7 @@ Input:
 
 Returns recent safe run summaries. `limit` defaults to 20 and caps at 100.
 
-### automation_webhook_list
+### app_automation_webhook_list
 
 Input:
 
@@ -223,7 +223,7 @@ Use `publicId` as `trigger.config.webhookPublicId`. This result does not include
 
 ## Runtime
 
-### automation_runtime_inspect
+### app_automation_runtime_inspect
 
 Input:
 

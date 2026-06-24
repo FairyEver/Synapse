@@ -6,14 +6,14 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 ## Discovery
 
-### workflow_node_type_list
+### app_workflow_node_type_list
 
 List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
 
-### workflow_node_type_describe
+### app_workflow_node_type_describe
 
 Get full manifest and config JSON Schema for a node type.
 
@@ -25,7 +25,7 @@ Get full manifest and config JSON Schema for a node type.
 
 ## Node Type Config Reference
 
-These are the key config fields for each node type. Always call `workflow_node_type_describe` for the full JSON Schema.
+These are the key config fields for each node type. Always call `app_workflow_node_type_describe` for the full JSON Schema.
 
 ### prompt
 
@@ -80,7 +80,7 @@ No provider needed on the call node. It invokes another saved workflow and retur
 - `paramTemplates` (object) — child text/number param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
 - `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`.
 
-Before configuring child params, call `workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
 ### codex
 
@@ -187,20 +187,20 @@ The node passes the prompt as the `claude -p` query argument and returns only Cl
 
 ## Read
 
-### workflow_definition_list
+### app_workflow_definition_list
 
 List all workflow definitions.
 
 **Params:** none
 **Returns:** `[{ id, name, description?, version, nodeCount, createdAt, updatedAt }]`
 
-### workflow_definition_get
+### app_workflow_definition_get
 
 Get full workflow definition by ID.
 
 **Params:** `workflowId` (string, required)
 **Returns:** Full `WorkflowDefinition` object (nodes, edges, params, `defaultProjectId?`, `defaultProviderId?`, `defaultModelTier?`, `defaultNodeTimeoutMins?`) or `null`
-### workflow_definition_inspect
+### app_workflow_definition_inspect
 
 Validate a workflow definition without saving.
 
@@ -208,7 +208,7 @@ Validate a workflow definition without saving.
 **Returns:** `{ valid, errors, warnings }`
 **Notes:** Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
 
-### workflow_run_get
+### app_workflow_run_get
 
 Get execution status by run ID.
 
@@ -217,7 +217,7 @@ Get execution status by run ID.
 **Notes:** Checks in-memory active runs first, then persisted snapshots.
 Node results include `durationMs` when available. For failures, inspect the failed node's `error`, `durationMs`, effective provider/model/project fields, timeout config, and upstream input size before retrying.
 
-### workflow_run_list
+### app_workflow_run_list
 
 List run history for a workflow (newest first).
 
@@ -228,7 +228,7 @@ List run history for a workflow (newest first).
 
 ## Write (Whole Definition)
 
-### workflow_definition_create
+### app_workflow_definition_create
 
 Create a new empty workflow with a default end node.
 
@@ -236,7 +236,7 @@ Create a new empty workflow with a default end node.
 **Returns:** `{ id, versionHash }`
 **Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Codex and Claude Code nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex/claude_code node.
 
-### workflow_definition_update
+### app_workflow_definition_update
 
 Replace a full workflow definition. Validates before saving.
 
@@ -244,9 +244,9 @@ Replace a full workflow definition. Validates before saving.
 **Returns:** `{ versionHash }`
 **Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults.
 
-### workflow_definition_delete
+### app_workflow_definition_delete
 
-Delete a workflow. Cancels active runs and removes snapshots.
+Delete a app.workflow. Cancels active runs and removes snapshots.
 
 **Params:** `workflowId` (string, required)
 **Returns:** `{ ok: true }`
@@ -255,19 +255,19 @@ Delete a workflow. Cancels active runs and removes snapshots.
 
 ## Write (Atomic Mutations)
 
-### workflow_node_create
+### app_workflow_node_create
 
-Add a node to a workflow.
+Add a node to a app.workflow.
 
 **Params:** `workflowId` (string, required), `node: { name, type, config, position? }`, `incomingEdges?`, `outgoingEdges?`
 **Returns:** `{ nodeId, versionHash, edgeIds?, validation? }`
-**Notes:** `node.config` is required and must match the selected node type schema from `workflow_node_type_describe`. Position auto-calculated if omitted. Strict validation runs before saving, so disconnected placeholder nodes are rejected. Workflow node IDs must use only letters, numbers, `_`, or `-`; never use path separators, `..`, absolute paths, or spaces. Use `incomingEdges` / `outgoingEdges` to create a node and its connecting edges in the same validated mutation, or use `workflow_definition_update` for a complete DAG rewrite. Save `nodeId` and returned `edgeIds` for later updates.
+**Notes:** `node.config` is required and must match the selected node type schema from `app_workflow_node_type_describe`. Position auto-calculated if omitted. Strict validation runs before saving, so disconnected placeholder nodes are rejected. Workflow node IDs must use only letters, numbers, `_`, or `-`; never use path separators, `..`, absolute paths, or spaces. Use `incomingEdges` / `outgoingEdges` to create a node and its connecting edges in the same validated mutation, or use `app_workflow_definition_update` for a complete DAG rewrite. Save `nodeId` and returned `edgeIds` for later updates.
 
 `incomingEdges` items are `{ from, branch? }`, where `from` is an existing upstream node ID. Include `branch` when the upstream node is a switch.
 
 `outgoingEdges` items are `{ to, branch? }`, where `to` is an existing downstream node ID. Include `branch` only when the new node is a switch.
 
-### workflow_node_update
+### app_workflow_node_update
 
 Update a node's name, position, or config.
 
@@ -275,7 +275,7 @@ Update a node's name, position, or config.
 **Returns:** `{ versionHash, validation? }`
 **Notes:** `config` is replaced entirely (not merged with existing).
 
-### workflow_node_delete
+### app_workflow_node_delete
 
 Delete a node and all connected edges.
 
@@ -283,7 +283,7 @@ Delete a node and all connected edges.
 **Returns:** `{ removedEdgeCount, versionHash, validation? }`
 **Notes:** Cannot delete the end node — will throw an error.
 
-### workflow_edge_create
+### app_workflow_edge_create
 
 Add a directed edge between two nodes.
 
@@ -291,14 +291,14 @@ Add a directed edge between two nodes.
 **Returns:** `{ edgeId, versionHash, validation? }`
 **Notes:** Include `branch` for edges from switch nodes. Switch branches are mutually exclusive; connect each branch only to its own downstream nodes. If multiple branches connect to the same multi-node target set, validation returns a `duplicate_switch_branch_targets` warning.
 
-### workflow_edge_delete
+### app_workflow_edge_delete
 
 Delete an edge by ID.
 
 **Params:** `workflowId` (string, required), `edgeId` (string, required)
 **Returns:** `{ versionHash, validation? }`
 
-### workflow_param_update
+### app_workflow_param_update
 
 Replace the workflow's parameter list entirely.
 
@@ -316,7 +316,7 @@ Use `"entryType": "directory"` for directory params. Defaults store a reference,
 
 ## Layout
 
-### workflow_layout_update
+### app_workflow_layout_update
 
 Reposition all nodes using the same pure auto-layout algorithm as the UI editor. Saves the updated positions.
 
@@ -328,13 +328,13 @@ Reposition all nodes using the same pure auto-layout algorithm as the UI editor.
 
 ## Execute
 
-### workflow_run_execute
+### app_workflow_run_execute
 
 Execute a workflow with parameters.
 
 **Params:** `workflowId` (string, required), `params?` (object — key-value matching param definitions)
 **Returns:** `{ runId }`
-**Notes:** Poll `workflow_run_get` with the returned runId to track progress. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
+**Notes:** Poll `app_workflow_run_get` with the returned runId to track progress. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
 
 ```json
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }
@@ -342,7 +342,7 @@ Execute a workflow with parameters.
 
 The path must exist and match the param kind before the run starts. Remote or Drive-backed resource kinds should remain explicit objects for future compatibility; unsupported kinds are rejected instead of silently stringified.
 
-### workflow_run_disable
+### app_workflow_run_disable
 
 Cancel a running workflow execution.
 

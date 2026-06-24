@@ -1,8 +1,8 @@
-# Synapse Content MCP API Reference
+# Synapse Resource Repository MCP API Reference
 
 ## Describe
 
-`content_type_describe`
+`app_resource_repository_type_describe`
 
 Parameters:
 
@@ -16,7 +16,7 @@ Returns content categories, allowed icon values, allowed background colors, name
 
 ## List And Get
 
-`content_rule_list`, `content_skill_list`, `content_prompt_list`
+`app_resource_repository_rule_list`, `app_resource_repository_skill_list`, `app_resource_repository_prompt_list`
 
 Parameters:
 
@@ -24,7 +24,7 @@ Parameters:
 { "includeDeleted": false }
 ```
 
-`content_rule_get`, `content_skill_get`, `content_prompt_get`
+`app_resource_repository_rule_get`, `app_resource_repository_skill_get`, `app_resource_repository_prompt_get`
 
 Parameters:
 
@@ -36,7 +36,7 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 
 ## Create
 
-`content_rule_create`
+`app_resource_repository_rule_create`
 
 ```json
 {
@@ -53,7 +53,7 @@ Use `latestHistoryDirname` from `get` when updating or deleting.
 
 Rule `name` may use lowercase letters, numbers, hyphens, and dots. It is limited to 64 characters, must start and end with a lowercase letter or number, and rejects Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`; the reserved segment before a dot is also rejected, so `con.rule` is invalid.
 
-`content_skill_create`
+`app_resource_repository_skill_create`
 
 ```json
 {
@@ -92,7 +92,7 @@ To import an existing Skill directory:
 
 `sourceDirectoryPath` imports the Skill main file and non-hidden attachments. Directory imports are limited to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total.
 
-`content_prompt_create`
+`app_resource_repository_prompt_create`
 
 ```json
 {
@@ -108,7 +108,7 @@ To import an existing Skill directory:
 
 ## Update
 
-`content_rule_update`, `content_skill_update`, `content_prompt_update`
+`app_resource_repository_rule_update`, `app_resource_repository_skill_update`, `app_resource_repository_prompt_update`
 
 Update payloads use the same fields as create, plus:
 
@@ -121,11 +121,11 @@ Update payloads use the same fields as create, plus:
 
 Updates are rejected unless the current repository profile created the resource.
 
-For `content_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
+For `app_resource_repository_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
 
 ## Delete
 
-`content_rule_delete`, `content_skill_delete`, `content_prompt_delete`
+`app_resource_repository_rule_delete`, `app_resource_repository_skill_delete`, `app_resource_repository_prompt_delete`
 
 ```json
 {

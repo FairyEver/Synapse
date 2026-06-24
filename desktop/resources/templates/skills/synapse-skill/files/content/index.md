@@ -1,10 +1,10 @@
-# Synapse Content MCP
+# Synapse Resource Repository MCP
 
-You have access to Synapse Content MCP tools for publishing and managing repository content resources: Rules, Skills, and Prompts.
+You have access to Synapse Resource Repository MCP tools for publishing and managing repository resources: Rules, Skills, and Prompts.
 
 ## Scope Boundary
 
-Use this skill only for Synapse content resources:
+Use this skill only for Synapse Resource Repository resources:
 
 - Rules
 - Skills
@@ -14,23 +14,23 @@ Do not use this skill for database records, scheduler tasks, workflow definition
 
 ## Default Flow
 
-1. Call `content_type_describe` before create or update to discover valid categories, icons, background colors, name constraints, and attachment constraints.
-2. Choose the resource-specific tool group: `content_rule_*`, `content_skill_*`, or `content_prompt_*`.
-3. For updates and deletes, call the matching `content_*_get` first and pass `latestHistoryDirname` as `baseHistoryDirname`.
+1. Call `app_resource_repository_type_describe` before create or update to discover valid categories, icons, background colors, name constraints, and attachment constraints.
+2. Choose the resource-specific tool group: `app_resource_repository_rule_*`, `app_resource_repository_skill_*`, or `app_resource_repository_prompt_*`.
+3. For updates and deletes, call the matching `app_resource_repository_*_get` first and pass `latestHistoryDirname` as `baseHistoryDirname`.
 4. After create, update, or delete, report the returned id, status, title, and latest history version.
 
 ## Ownership Rules
 
-Updates and deletes are allowed only for resources created by the current repository profile. If the user asks to update or delete someone else's resource, say that Content MCP can only mutate resources created by the current user.
+Updates and deletes are allowed only for resources created by the current repository profile. If the user asks to update or delete someone else's resource, say that Resource Repository MCP can only mutate resources created by the current user.
 
-Do not pass `force`; Content MCP does not support force update or force delete.
+Do not pass `force`; Resource Repository MCP does not support force update or force delete.
 
 ## Appearance Rules
 
 For built-in icon backgrounds:
 
 - Use `iconType: "icon"`.
-- Choose `icon` and `iconBg` from `content_type_describe`.
+- Choose `icon` and `iconBg` from `app_resource_repository_type_describe`.
 
 For image backgrounds:
 
