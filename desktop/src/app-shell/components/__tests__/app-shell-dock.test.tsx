@@ -16,9 +16,12 @@ const apps = [
 describe("AppShellDock", () => {
   const roots: Root[] = []
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const root of roots.splice(0)) {
-      root.unmount()
+      await act(async () => {
+        root.unmount()
+        await Promise.resolve()
+      })
     }
     document.body.innerHTML = ""
   })
@@ -35,7 +38,12 @@ describe("AppShellDock", () => {
       await Promise.resolve()
     })
 
-    expect(findButtonByLabel("对话").getAttribute("aria-current")).toBe("page")
+    const activeButton = findButtonByLabel("对话")
+    expect(activeButton.getAttribute("aria-current")).toBe("page")
+    const activeIndicator = activeButton.querySelector("[data-slot='app-shell-dock-active-indicator']")
+    expect(activeIndicator?.getAttribute("aria-hidden")).toBe("true")
+    expect(findButtonByLabel("应用").querySelector("[data-slot='app-shell-dock-active-indicator']")).toBeNull()
+
     await act(async () => {
       findButtonByLabel("应用").click()
       await Promise.resolve()
