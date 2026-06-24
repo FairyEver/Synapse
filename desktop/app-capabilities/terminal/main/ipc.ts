@@ -18,6 +18,7 @@ import {
   terminalSessionIdInputSchema,
   terminalSessionSchema,
   terminalStopSessionInputSchema,
+  terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
 } from "../shared/schema"
 
@@ -82,6 +83,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGroupSchema,
       handler: (ctx, request: z.infer<typeof terminalRenameGroupInputSchema>) =>
         resolveTerminalService(ctx).renameGroup(request),
+    },
+    updateGroupSettings: {
+      channel: "synapse:terminal:group:update-settings",
+      kind: "invoke",
+      request: terminalUpdateGroupSettingsInputSchema,
+      response: terminalGroupSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateGroupSettingsInputSchema>) =>
+        resolveTerminalService(ctx).updateGroupSettings(request),
     },
     deleteGroup: {
       channel: "synapse:terminal:group:delete",

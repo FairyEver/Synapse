@@ -3,6 +3,7 @@ import {
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+  TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
@@ -98,6 +99,126 @@ describe("createTerminalCapabilityDispatcher", () => {
       name: "  构建  ",
     })
     expect(result).toEqual({ ok: true, data: renamed, affected: 1 })
+  })
+
+  it("dispatches group settings update with parsed input", async () => {
+    const updated = createGroup({
+      name: "构建",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    })
+    const updateGroupSettings = vi.fn(async () => updated)
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { updateGroupSettings } as never,
+    })
+
+    const result = await dispatcher.dispatch(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID, {
+      groupId: "g1",
+      name: "  构建  ",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    }, { source: "mcp-http" })
+
+    expect(updateGroupSettings).toHaveBeenCalledWith({
+      groupId: "g1",
+      name: "  构建  ",
+      settings: {
+        defaultCwd: "/tmp",
+        startupCommand: "pnpm dev",
+      },
+    })
+    expect(result).toEqual({ ok: true, data: updated, affected: 1 })
+  })
+
+  it("authorizes group settings updates before calling service as the mcp actor", async () => {
+    const updated = createGroup({
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    })
+    const updateGroupSettings = vi.fn(async () => updated)
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { updateGroupSettings } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await dispatcher.dispatch(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID, {
+      groupId: "g1",
+      name: "Default",
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    }, { source: "mcp-http" })
+
+    expect(updateGroupSettings).toHaveBeenCalledWith({
+      groupId: "g1",
+      name: "Default",
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "g1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+        boundary: "terminal.mcp.updateGroupSettings",
+        groupId: "g1",
+        byteCount: Buffer.byteLength("pnpm dev"),
+      },
+    }))
+  })
+
+  it("records denied group settings update audits and does not call service", async () => {
+    const updateGroupSettings = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { updateGroupSettings } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID, {
+      groupId: "g1",
+      name: "Default",
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    }, { source: "mcp-http" })).rejects.toThrow("blocked by policy")
+
+    expect(updateGroupSettings).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "g1",
+      outcome: "denied",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+        boundary: "terminal.mcp.updateGroupSettings",
+        groupId: "g1",
+        byteCount: Buffer.byteLength("pnpm dev"),
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
   })
 
   it("authorizes group delete before calling service as the mcp actor", async () => {

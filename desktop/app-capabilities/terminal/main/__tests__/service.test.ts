@@ -128,6 +128,130 @@ describe("TerminalService", () => {
     expect(store.state.groups).toEqual([expect.objectContaining({ id: group.id, name: "构建" })])
   })
 
+  it("updates terminal group settings and persists the update", async () => {
+    const group = createGroup({ name: "默认分组" })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const updated = await service.updateGroupSettings({
+      groupId: group.id,
+      name: "  构建  ",
+      settings: {
+        defaultCwd: tempDir,
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+
+    expect(updated).toMatchObject({
+      id: group.id,
+      name: "构建",
+      settings: {
+        defaultCwd: tempDir,
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    expect(store.state.groups).toEqual([expect.objectContaining({
+      id: group.id,
+      name: "构建",
+      settings: {
+        defaultCwd: tempDir,
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })])
+  })
+
+  it("uses explicit cwd before group default cwd", async () => {
+    const explicitDir = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-explicit-"))
+    const group = createGroup({
+      settings: {
+        defaultCwd: tempDir,
+      },
+    })
+    const pty = new FakePty()
+    const spawnInputs: Array<{ cwd: string }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty], spawnInputs },
+    )
+
+    const session = await service.createSession({ groupId: group.id, cwd: explicitDir })
+
+    expect(session.cwd).toBe(explicitDir)
+    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: explicitDir })])
+    await rm(explicitDir, { recursive: true, force: true })
+  })
+
+  it("uses group default cwd when create session has no explicit cwd", async () => {
+    const group = createGroup({
+      settings: {
+        defaultCwd: tempDir,
+      },
+    })
+    const pty = new FakePty()
+    const spawnInputs: Array<{ cwd: string }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty], spawnInputs },
+    )
+
+    const session = await service.createSession({ groupId: group.id })
+
+    expect(session.cwd).toBe(tempDir)
+    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir })])
+  })
+
+  it("rejects invalid group default cwd before spawning a pty", async () => {
+    const group = createGroup({
+      settings: {
+        defaultCwd: path.join(tempDir, "missing"),
+        startupCommand: "pnpm dev",
+      },
+    })
+    const spawnInputs: Array<{ cwd: string }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [new FakePty()], spawnInputs },
+    )
+
+    await expect(service.createSession({ groupId: group.id }))
+      .rejects.toThrow("Terminal cwd must be an existing absolute path")
+
+    expect(spawnInputs).toEqual([])
+    expect(service.listSessions()).toEqual([])
+  })
+
+  it("writes group startup command after spawning the pty", async () => {
+    const group = createGroup({
+      settings: {
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await service.createSession({ groupId: group.id })
+
+    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+  })
+
+  it("does not write an empty startup command", async () => {
+    const group = createGroup({
+      settings: {},
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await service.createSession({ groupId: group.id })
+
+    expect(pty.write).not.toHaveBeenCalled()
+  })
+
   it("rejects empty renamed terminal group names", async () => {
     const group = createGroup()
     const service = await createStartedService(createMemoryStore({ groups: [group], sessions: [], output: [] }))
@@ -485,6 +609,7 @@ async function createStartedService(
   store: TerminalStore,
   options: {
     ptys?: FakePty[]
+    spawnInputs?: Array<{ shell: string; cwd: string; cols: number; rows: number }>
     logger?: { warn(message: string, meta?: Record<string, unknown>): void }
   } = {},
 ): Promise<TerminalService> {
@@ -495,7 +620,8 @@ async function createStartedService(
     resolveDefaultShell: () => "/bin/zsh",
     resolveDefaultCwd: () => tempDir,
     logger: options.logger,
-    spawnPty: () => {
+    spawnPty: (input) => {
+      options.spawnInputs?.push(input)
       const next = queue.shift()
       if (!next) throw new Error("No fake pty available")
       return next
