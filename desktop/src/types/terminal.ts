@@ -12,6 +12,7 @@ import type {
   TerminalResizeSessionInput,
   TerminalSession,
   TerminalStopSessionInput,
+  TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../../app-capabilities/terminal/shared/schema"
 
@@ -20,6 +21,7 @@ export type SynapseTerminalSession = TerminalSession
 export type SynapseTerminalOutputChunk = TerminalOutputChunk
 export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
+export type SynapseTerminalUpdateGroupSettingsInput = TerminalUpdateGroupSettingsInput
 export type SynapseTerminalDeleteGroupInput = TerminalDeleteGroupInput
 export type SynapseTerminalCreateSessionInput = TerminalCreateSessionInput
 export type SynapseTerminalRenameSessionInput = TerminalRenameSessionInput

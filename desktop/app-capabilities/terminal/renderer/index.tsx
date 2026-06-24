@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CircleDot, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../src/components/ui/dropdown-menu"
 import { Input } from "../../../src/components/ui/input"
+import { Textarea } from "../../../src/components/ui/textarea"
 import {
   ModuleSidebar,
   ModuleSidebarGroup,
@@ -72,6 +73,11 @@ export function TerminalModule() {
   const [groupSaving, setGroupSaving] = useState(false)
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroup | null>(null)
   const [deleteGroupSaving, setDeleteGroupSaving] = useState(false)
+  const [groupSettingsTarget, setGroupSettingsTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [groupSettingsName, setGroupSettingsName] = useState("")
+  const [groupSettingsDefaultCwd, setGroupSettingsDefaultCwd] = useState("")
+  const [groupSettingsStartupCommand, setGroupSettingsStartupCommand] = useState("")
+  const [groupSettingsSaving, setGroupSettingsSaving] = useState(false)
   const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
@@ -152,6 +158,13 @@ export function TerminalModule() {
     setGroupDialogMode("rename")
     setGroupRenameTarget(group)
     setGroupName(group.name)
+  }, [])
+
+  const openGroupSettingsDialog = useCallback((group: SynapseTerminalGroup) => {
+    setGroupSettingsTarget(group)
+    setGroupSettingsName(group.name)
+    setGroupSettingsDefaultCwd(group.settings?.defaultCwd ?? "")
+    setGroupSettingsStartupCommand(group.settings?.startupCommand ?? "")
   }, [])
 
   const saveGroup = useCallback(async () => {
@@ -248,6 +261,46 @@ export function TerminalModule() {
       setDeleteGroupSaving(false)
     }
   }, [deleteGroupTarget, sessions, terminalBridge])
+
+  const resetGroupSettingsDialog = useCallback(() => {
+    setGroupSettingsTarget(null)
+    setGroupSettingsName("")
+    setGroupSettingsDefaultCwd("")
+    setGroupSettingsStartupCommand("")
+  }, [])
+
+  const saveGroupSettings = useCallback(async () => {
+    if (!groupSettingsTarget) return
+    const name = groupSettingsName.trim()
+    if (!name) return
+    const defaultCwd = groupSettingsDefaultCwd.trim()
+    const startupCommand = groupSettingsStartupCommand.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+    setGroupSettingsSaving(true)
+    try {
+      const group = await terminalBridge.updateGroupSettings({
+        groupId: groupSettingsTarget.id,
+        name,
+        settings: {
+          ...(defaultCwd ? { defaultCwd } : {}),
+          ...(startupCommand ? { startupCommand } : {}),
+        },
+      })
+      setGroups((current) => current.map((item) => item.id === group.id ? group : item))
+      resetGroupSettingsDialog()
+    } catch (error) {
+      logger.error("Failed to update terminal group settings.", error)
+      toast.error("保存分组设置失败")
+    } finally {
+      setGroupSettingsSaving(false)
+    }
+  }, [
+    groupSettingsDefaultCwd,
+    groupSettingsName,
+    groupSettingsStartupCommand,
+    groupSettingsTarget,
+    resetGroupSettingsDialog,
+    terminalBridge,
+  ])
 
   const headerActions = useMemo(() => (
     <Button type="button" size="sm" onClick={() => { void createSession() }}>
@@ -428,6 +481,10 @@ export function TerminalModule() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openGroupSettingsDialog(group)}>
+                            <Settings />
+                            设置
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
                             <Pencil />
                             重命名
@@ -540,6 +597,63 @@ export function TerminalModule() {
               type="button"
               disabled={groupSaving || !groupName.trim()}
               onClick={() => { void saveGroup() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={groupSettingsTarget !== null} onOpenChange={(open) => {
+        if (!open) resetGroupSettingsDialog()
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>分组设置</DialogTitle>
+            <DialogDescription className="sr-only">
+              设置分组名称、默认目录和启动命令。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <label className="grid gap-1.5">
+              <span className="text-sm font-medium">分组名称</span>
+              <Input
+                aria-label="分组名称"
+                value={groupSettingsName}
+                onChange={(event) => setGroupSettingsName(event.target.value)}
+                autoFocus
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-sm font-medium">默认目录</span>
+              <Input
+                aria-label="默认目录"
+                value={groupSettingsDefaultCwd}
+                onChange={(event) => setGroupSettingsDefaultCwd(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-sm font-medium">启动命令</span>
+              <Textarea
+                aria-label="启动命令"
+                value={groupSettingsStartupCommand}
+                onChange={(event) => setGroupSettingsStartupCommand(event.target.value)}
+                rows={5}
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={groupSettingsSaving}
+              onClick={resetGroupSettingsDialog}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={groupSettingsSaving || !groupSettingsName.trim()}
+              onClick={() => { void saveGroupSettings() }}
             >
               保存
             </Button>

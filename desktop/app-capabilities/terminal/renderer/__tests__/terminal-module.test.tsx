@@ -9,6 +9,7 @@ import type {
   SynapseTerminalGroup,
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
+  SynapseTerminalUpdateGroupSettingsInput,
 } from "../../../../src/types/terminal"
 
 const bridgeState = vi.hoisted(() => ({
@@ -45,6 +46,19 @@ const terminalBridge = vi.hoisted(() => ({
       name: name.trim(),
       createdAt: "2026-06-24T00:00:00.000Z",
       updatedAt: "2026-06-24T00:02:00.000Z",
+      sortOrder: 0,
+    } as SynapseTerminalGroup
+    bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
+    return group
+  }),
+  updateGroupSettings: vi.fn(async ({ groupId, name, settings }: SynapseTerminalUpdateGroupSettingsInput) => {
+    const group = {
+      ...bridgeState.groups.find((item) => item.id === groupId),
+      id: groupId,
+      name: name.trim(),
+      settings,
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:03:00.000Z",
       sortOrder: 0,
     } as SynapseTerminalGroup
     bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
@@ -256,6 +270,7 @@ beforeEach(() => {
   terminalBridge.listGroups.mockClear()
   terminalBridge.createGroup.mockClear()
   terminalBridge.renameGroup.mockClear()
+  terminalBridge.updateGroupSettings.mockClear()
   terminalBridge.deleteGroup.mockClear()
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
@@ -454,6 +469,47 @@ describe("TerminalModule", () => {
       name: "  发布  ",
     })
     expect(document.body.textContent).toContain("发布")
+  })
+
+  it("updates terminal group settings from the group menu", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-build",
+      name: "构建",
+      settings: {
+        defaultCwd: "/repo/old",
+        startupCommand: "pnpm test",
+      },
+    })]
+    bridgeState.sessions = []
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("设置")
+    await changeInput("分组名称", "开发")
+    await changeInput("默认目录", "/repo/app")
+    await changeTextarea("启动命令", "nvm use\npnpm dev")
+    await clickButton("保存")
+
+    expect(terminalBridge.updateGroupSettings).toHaveBeenCalledWith({
+      groupId: "group-build",
+      name: "开发",
+      settings: {
+        defaultCwd: "/repo/app",
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    expect(document.body.textContent).toContain("开发")
+  })
+
+  it("shows an error when creating a terminal from a group fails", async () => {
+    bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
+    bridgeState.sessions = []
+    terminalBridge.createSession.mockRejectedValueOnce(new Error("Terminal cwd must be an existing absolute path"))
+
+    await renderModule()
+    await clickButtonByTitle("新建终端")
+
+    expect(toastState.error).toHaveBeenCalledWith("新建终端失败")
   })
 
   it("deletes a terminal group with sessions and selects the next remaining session", async () => {
@@ -769,6 +825,19 @@ async function changeInput(label: string, value: string): Promise<void> {
       valueSetter?.call(input, value)
       input.dispatchEvent(new Event("input", { bubbles: true }))
       input.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    await Promise.resolve()
+  })
+}
+
+async function changeTextarea(label: string, value: string): Promise<void> {
+  const textarea = document.body.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)
+  await act(async () => {
+    if (textarea) {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+      valueSetter?.call(textarea, value)
+      textarea.dispatchEvent(new Event("input", { bubbles: true }))
+      textarea.dispatchEvent(new Event("change", { bubbles: true }))
     }
     await Promise.resolve()
   })
