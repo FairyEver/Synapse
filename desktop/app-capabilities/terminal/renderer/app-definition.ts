@@ -7,7 +7,7 @@ export const terminalAppDefinition = {
   type: "system",
   name: "终端",
   windowTitle: "终端",
-  dock: { pinnedByDefault: false, order: 250 },
+  dock: { pinnedByDefault: true, order: 45 },
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_terminal",

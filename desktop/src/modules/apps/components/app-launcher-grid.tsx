@@ -1,5 +1,4 @@
 import type { SynapseSystemAppManifest } from "@/modules/apps/types"
-import { SYSTEM_APP_DOCK_DRAG_TYPE } from "../dock-drag"
 
 type AppLauncherGridProps = {
   readonly apps: readonly SynapseSystemAppManifest[]
@@ -16,12 +15,7 @@ export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
         <button
           key={app.id}
           type="button"
-          draggable
           className="group flex h-36 w-32 flex-col items-center justify-start rounded-md px-3 py-3 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
-          onDragStart={(event) => {
-            event.dataTransfer.effectAllowed = "move"
-            event.dataTransfer.setData(SYSTEM_APP_DOCK_DRAG_TYPE, app.id)
-          }}
           onClick={() => onOpenApp(app.id)}
         >
           <img

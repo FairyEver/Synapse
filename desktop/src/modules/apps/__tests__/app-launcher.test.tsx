@@ -150,16 +150,10 @@ describe("AppsModule", () => {
     expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
   })
 
-  it("sets app id when dragging launcher icons", async () => {
+  it("does not expose draggable launcher icons", async () => {
     await renderAppsModule(roots)
 
-    const dataTransfer = createDataTransfer()
-    await act(async () => {
-      findButton("本地数据库").dispatchEvent(createDragEvent("dragstart", dataTransfer))
-      await Promise.resolve()
-    })
-
-    expect(dataTransfer.setData).toHaveBeenCalledWith("application/x-synapse-system-app-id", "database")
+    expect(findButton("本地数据库").getAttribute("draggable")).toBeNull()
   })
 
   it("opens the embedded app in a new window from the host toolbar", async () => {
@@ -251,24 +245,4 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
-}
-
-function createDragEvent(type: string, dataTransfer: DataTransfer): Event {
-  const event = new Event(type, { bubbles: true, cancelable: true })
-  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
-  return event
-}
-
-function createDataTransfer(): DataTransfer {
-  return {
-    getData: vi.fn(),
-    setData: vi.fn(),
-    clearData: vi.fn(),
-    dropEffect: "move",
-    effectAllowed: "move",
-    files: [] as unknown as FileList,
-    items: [] as unknown as DataTransferItemList,
-    types: [],
-    setDragImage: vi.fn(),
-  } as unknown as DataTransfer
 }

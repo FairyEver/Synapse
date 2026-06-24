@@ -9,6 +9,7 @@ describe("app Dock order", () => {
       "drive",
       "automation",
       "workflow",
+      "terminal",
       "settings",
       "launcher",
     ])
@@ -19,18 +20,22 @@ describe("app Dock order", () => {
       "agent",
       "drive",
       "automation",
+      "terminal",
       "settings",
       "launcher",
     ])
   })
 
-  it("merges user pinned apps into Dock order without duplicates", () => {
+  it("ignores user pinned app order", () => {
     expect(listDockApps(
       listSystemApps(),
       { workflowEntryVisible: false, dockAppIds: ["database", "agent", "launcher"] },
     ).map((app) => app.id)).toEqual([
-      "database",
       "agent",
+      "drive",
+      "automation",
+      "terminal",
+      "settings",
       "launcher",
     ])
   })
