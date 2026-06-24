@@ -303,7 +303,9 @@ export function TerminalModule() {
   }, [activeSession, terminalBridge])
 
   return (
-    <SystemAppWindowShell>
+    <SystemAppWindowShell
+      actions={headerActions}
+    >
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1">
         <aside className="max-h-48 min-h-0 border-b bg-surface md:max-h-none md:border-b-0 md:border-r">
           <ScrollArea className="h-full">

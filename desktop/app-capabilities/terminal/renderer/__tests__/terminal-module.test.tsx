@@ -266,13 +266,13 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
-  it("keeps terminal actions inside the terminal surface when embedded", async () => {
+  it("renders the global new terminal action in the embedded header", async () => {
     await renderEmbeddedModule()
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
-    expect(actions?.textContent).not.toContain("新建终端")
+    expect(actions?.textContent).toContain("新建终端")
 
-    await clickButton("新建终端")
+    await clickButton("新建终端", actions ?? document.body)
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       cols: 80,
@@ -535,6 +535,7 @@ async function renderEmbeddedModule(): Promise<void> {
         <TerminalModule />
       </EmbeddedSystemAppShell>,
     )
+    await Promise.resolve()
     await Promise.resolve()
   })
 }
