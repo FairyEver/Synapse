@@ -35,7 +35,7 @@ jobs:
             os: macos-latest
             package_script: package:mac:compiled
           - label: Windows
-            os: windows-latest
+            os: windows-2022
             package_script: package:win:compiled
     steps:
       - name: Checkout repository
@@ -101,7 +101,7 @@ jobs:
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
       - name: Package Windows installer
-        if: matrix.os == 'windows-latest'
+        if: matrix.label == 'Windows'
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
       - name: Verify packaged app

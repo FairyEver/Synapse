@@ -48,7 +48,7 @@ jobs:
 
   desktop-windows:
     name: Desktop Windows typecheck + package
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         shell: bash

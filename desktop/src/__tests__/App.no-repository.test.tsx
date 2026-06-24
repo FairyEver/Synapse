@@ -61,7 +61,10 @@ vi.mock("@/app-shell/active-repository-switch", () => ({
 }))
 
 vi.mock("@/app-shell/config", () => ({
-  useAppConfig: () => ({ resetKey: "test" }),
+  useAppConfig: () => ({
+    config: { global: { dockAppIds: [] } },
+    resetKey: "test",
+  }),
 }))
 
 vi.mock("@/app-shell/use-repository-manager", () => ({
@@ -178,7 +181,7 @@ describe("App without repositories", () => {
 
     expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
     expect(document.body.textContent).toContain("Dock")
-    expect(document.body.textContent).toContain("应用模块")
+    expect(document.body.textContent).toContain("对话模块")
   })
 })
 

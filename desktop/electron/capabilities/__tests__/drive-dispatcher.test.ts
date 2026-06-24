@@ -44,7 +44,7 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("exposes the full Drive MCP tool set without legacy gaps", () => {
-    expect(buildDriveTools().map((tool) => tool.name)).toEqual([
+    const legacyToolNames = [
       "drive_item_list",
       "drive_item_get",
       "drive_file_upload",
@@ -87,6 +87,11 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_trash_list",
       "drive_trash_delete",
       "drive_item_restore",
+    ]
+
+    expect(buildDriveTools().map((tool) => tool.name)).toEqual([
+      ...legacyToolNames.map((name) => name.replace(/^drive_/, "app_drive_")),
+      ...legacyToolNames,
     ])
   })
 

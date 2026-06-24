@@ -53,6 +53,6 @@ describe("desktop release workflow", () => {
 
     expect(workflowText).not.toContain(linuxRunner)
     expect(workflowText).toContain("runs-on: macos-latest")
-    expect(workflowText).toContain("os: windows-latest")
+    expect(workflowText).toContain("os: windows-2022")
   })
 })
