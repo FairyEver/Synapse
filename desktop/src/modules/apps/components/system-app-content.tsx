@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import {
@@ -22,8 +22,13 @@ import { DocumentTemplateModule } from "../../../../app-capabilities/document-te
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
-import { listSystemApps } from "../registry"
-import type { SynapseSystemAppId } from "../types"
+import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
+import { getSystemAppManifest, listSystemApps } from "../registry"
+import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../types"
+
+type AppsBridge = {
+  readonly openSystemApp?: (targetAppId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
+}
 
 type SystemAppContentProps = {
   readonly appId: SynapseSystemAppId
@@ -59,15 +64,12 @@ function SystemAppContent({
   if (appId === "drive") return <DriveModule />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {
-    if (resourceContentOpenRequest) {
-      return (
-        <ResourceRepositoryModule
-          initialContentOpenRequest={resourceContentOpenRequest}
-          onInitialContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
-        />
-      )
-    }
-    return <LauncherContent />
+    return (
+      <LauncherContent
+        pendingContentOpenRequest={resourceContentOpenRequest}
+        onPendingContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
+      />
+    )
   }
   if (appId === "settings") return <SettingsModule />
   if (appId === "resource-repository") {
@@ -90,18 +92,74 @@ function SystemAppContent({
   return null
 }
 
-function LauncherContent() {
-  const openApp = async (appId: SynapseSystemAppId) => {
-    if (appId === "launcher") return
+function LauncherContent({
+  pendingContentOpenRequest = null,
+  onPendingContentOpenRequestConsumed,
+}: {
+  readonly pendingContentOpenRequest?: ContentOpenRequest | null
+  readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+}) {
+  const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
+  const [resourceContentOpenRequest, setResourceContentOpenRequest] =
+    useState<ContentOpenRequest | null>(null)
+
+  useEffect(() => {
+    if (!pendingContentOpenRequest) return
+    setActiveAppId("resource-repository")
+    setResourceContentOpenRequest(pendingContentOpenRequest)
+  }, [pendingContentOpenRequest])
+
+  const openApp = useCallback((appId: SynapseSystemAppId) => {
+    setActiveAppId(appId)
+  }, [])
+
+  const openAppWindow = async (appId: SynapseSystemAppId) => {
     try {
-      await (getSynapseBridge() as ReturnType<typeof getSynapseBridge> & {
-        readonly apps?: {
-          readonly openSystemApp?: (targetAppId: SynapseSystemAppId) => Promise<void>
-        }
-      } | undefined)?.apps?.openSystemApp?.(appId)
+      const appsBridge = (getSynapseBridge() as ReturnType<typeof getSynapseBridge> & {
+        readonly apps?: AppsBridge
+      } | undefined)?.apps
+      if (!appsBridge?.openSystemApp) {
+        throw new Error("System app window bridge is unavailable.")
+      }
+      await appsBridge.openSystemApp(appId)
+      setActiveAppId(null)
+      setResourceContentOpenRequest(null)
     } catch {
       toast.error("打开应用失败")
     }
+  }
+
+  const openResourceRepository = useCallback((request: ContentOpenRequest) => {
+    setActiveAppId("resource-repository")
+    setResourceContentOpenRequest(request)
+  }, [])
+
+  const handleResourceContentOpenRequestConsumed = useCallback((requestId: string) => {
+    setResourceContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+    if (pendingContentOpenRequest?.requestId === requestId) {
+      onPendingContentOpenRequestConsumed?.(requestId)
+    }
+  }, [onPendingContentOpenRequestConsumed, pendingContentOpenRequest])
+
+  const activeApp = activeAppId ? getSystemAppManifest(activeAppId) : null
+  if (activeApp) {
+    return (
+      <EmbeddedSystemAppShell
+        appName={activeApp.name}
+        onBack={() => {
+          setActiveAppId(null)
+          setResourceContentOpenRequest(null)
+        }}
+        onOpenWindow={() => void openAppWindow(activeApp.id)}
+      >
+        <SystemAppContent
+          appId={activeApp.id}
+          resourceContentOpenRequest={resourceContentOpenRequest}
+          onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
+          onContentOpenRequest={openResourceRepository}
+        />
+      </EmbeddedSystemAppShell>
+    )
   }
 
   return (
@@ -109,7 +167,10 @@ function LauncherContent() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
-            <AppLauncherGrid apps={listSystemApps()} onOpenApp={(appId) => void openApp(appId)} />
+            <AppLauncherGrid
+              apps={listSystemApps().filter((app) => app.id !== "launcher")}
+              onOpenApp={openApp}
+            />
           </div>
         </div>
       </ScrollArea>

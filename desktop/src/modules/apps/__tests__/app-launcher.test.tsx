@@ -91,7 +91,7 @@ describe("AppsModule", () => {
     expect(findButton("工作流")).toBeTruthy()
     expect(findButton("云盘")).toBeTruthy()
     expect(findButton("自动化")).toBeTruthy()
-    expect(findButton("应用")).toBeTruthy()
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "应用")).toBe(false)
     expect(findButton("设置")).toBeTruthy()
     expect(findButton("资源仓库")).toBeTruthy()
     expect(findButton("Git")).toBeTruthy()

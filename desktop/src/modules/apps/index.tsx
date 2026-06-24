@@ -93,7 +93,10 @@ export function AppsModule({
       <ScrollArea className="min-h-0 flex-1">
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
-            <AppLauncherGrid apps={listSystemApps()} onOpenApp={openApp} />
+            <AppLauncherGrid
+              apps={listSystemApps().filter((app) => app.id !== "launcher")}
+              onOpenApp={openApp}
+            />
           </div>
         </div>
       </ScrollArea>
