@@ -6,6 +6,12 @@ type AppLauncherGridProps = {
 }
 
 const appDescriptions = {
+  agent: "Agent 会话",
+  workflow: "流程编排",
+  drive: "文件与分享",
+  automation: "触发器与运行",
+  launcher: "系统应用",
+  settings: "系统配置",
   "resource-repository": "技能、规则、提示词",
   git: "仓库、提交、同步",
   database: "表、字段、数据记录",

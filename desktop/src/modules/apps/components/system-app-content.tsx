@@ -1,17 +1,27 @@
 import { useEffect } from "react"
+import { toast } from "sonner"
 import {
   subscribeContentOpenRequest,
   type ContentOpenRequest,
 } from "@/app-shell/content-navigation"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { AgentModule } from "@/modules/agent"
+import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
+import { DriveModule } from "@/modules/drive"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
 import { ResourceRepositoryModule } from "@/modules/resource-repository"
+import { SettingsModule } from "@/modules/settings"
 import { UsageMonitorModule } from "@/modules/usage-analysis"
+import { WorkflowModule } from "@/modules/workflow"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
+import { AppLauncherGrid } from "./app-launcher-grid"
+import { listSystemApps } from "../registry"
 import type { SynapseSystemAppId } from "../types"
 
 type SystemAppContentProps = {
@@ -32,6 +42,12 @@ function SystemAppContent({
     return subscribeContentOpenRequest(onContentOpenRequest)
   }, [appId, onContentOpenRequest])
 
+  if (appId === "agent") return <AgentModule />
+  if (appId === "workflow") return <WorkflowModule />
+  if (appId === "drive") return <DriveModule />
+  if (appId === "automation") return <AutomationModule />
+  if (appId === "launcher") return <LauncherContent />
+  if (appId === "settings") return <SettingsModule />
   if (appId === "resource-repository") {
     return (
       <ResourceRepositoryModule
@@ -50,6 +66,33 @@ function SystemAppContent({
   if (appId === "model-price") return <ModelPriceModule />
 
   return null
+}
+
+function LauncherContent() {
+  const openApp = async (appId: SynapseSystemAppId) => {
+    if (appId === "launcher") return
+    try {
+      await (getSynapseBridge() as ReturnType<typeof getSynapseBridge> & {
+        readonly apps?: {
+          readonly openSystemApp?: (targetAppId: SynapseSystemAppId) => Promise<void>
+        }
+      } | undefined)?.apps?.openSystemApp?.(appId)
+    } catch {
+      toast.error("打开应用失败")
+    }
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-full px-6 py-7">
+          <div className="mx-auto max-w-4xl">
+            <AppLauncherGrid apps={listSystemApps()} onOpenApp={(appId) => void openApp(appId)} />
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
+  )
 }
 
 export { SystemAppContent }

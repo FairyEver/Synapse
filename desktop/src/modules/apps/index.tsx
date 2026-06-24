@@ -37,6 +37,10 @@ export function AppsModule({
   }, [pendingContentOpenRequest])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
+    if (appId === "launcher") {
+      setActiveAppId(null)
+      return
+    }
     setActiveAppId(appId)
   }, [])
 
