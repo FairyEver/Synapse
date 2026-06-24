@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  TERMINAL_GROUP_LIST_CAPABILITY_ID,
+  TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
@@ -7,6 +9,30 @@ import {
 import { createTerminalCapabilityDispatcher } from "../dispatcher"
 
 describe("createTerminalCapabilityDispatcher", () => {
+  it("rejects extra params for group list", async () => {
+    const listGroups = vi.fn(() => [])
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { listGroups } as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_GROUP_LIST_CAPABILITY_ID, {
+      unexpected: true,
+    }, { source: "mcp-http" })).rejects.toThrow()
+    expect(listGroups).not.toHaveBeenCalled()
+  })
+
+  it("rejects extra params for session list", async () => {
+    const listSessions = vi.fn(() => [])
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { listSessions } as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_SESSION_LIST_CAPABILITY_ID, {
+      unexpected: true,
+    }, { source: "mcp-http" })).rejects.toThrow()
+    expect(listSessions).not.toHaveBeenCalled()
+  })
+
   it("dispatches read with parsed input", async () => {
     const readSession = vi.fn(() => ({
       session: createSession(),

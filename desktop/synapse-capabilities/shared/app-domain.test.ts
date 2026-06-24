@@ -31,4 +31,19 @@ describe("App capability domain", () => {
       TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
     )
   })
+
+  it("marks terminal list tool input schemas as strict empty objects", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.groupList)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    })
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionList)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    })
+  })
 })

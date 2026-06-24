@@ -42,6 +42,8 @@ export const terminalCreateGroupInputSchema = z.object({
   name: z.string().min(1).max(80),
 }).strict()
 
+export const terminalEmptyInputSchema = z.object({}).strict()
+
 export const terminalCreateSessionInputSchema = z.object({
   groupId: z.string().min(1).optional(),
   title: z.string().min(1).max(120).optional(),
@@ -89,6 +91,7 @@ export type TerminalGroup = z.infer<typeof terminalGroupSchema>
 export type TerminalSession = z.infer<typeof terminalSessionSchema>
 export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>
 export type TerminalCreateGroupInput = z.infer<typeof terminalCreateGroupInputSchema>
+export type TerminalEmptyInput = z.infer<typeof terminalEmptyInputSchema>
 export type TerminalCreateSessionInput = z.infer<typeof terminalCreateSessionInputSchema>
 export type TerminalReadSessionInput = z.infer<typeof terminalReadSessionInputSchema>
 export type TerminalWriteSessionInput = z.infer<typeof terminalWriteSessionInputSchema>

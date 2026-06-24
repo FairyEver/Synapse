@@ -116,6 +116,11 @@ const nonnegativeIntField = (description: string) => ({
 const booleanField = (description: string) => ({ type: "boolean", description })
 
 const sessionIdProperty = stringField("Terminal session id.", { minLength: 1 })
+const strictEmptyInputSchema = {
+  type: "object" as const,
+  properties: {},
+  additionalProperties: false,
+}
 
 export function buildAppTools(): McpToolDefinition[] {
   return [
@@ -158,7 +163,7 @@ export function buildAppTools(): McpToolDefinition[] {
     {
       name: TERMINAL_MCP_TOOL_NAMES.groupList,
       description: "List Synapse terminal groups.",
-      inputSchema: { type: "object", properties: {} },
+      inputSchema: strictEmptyInputSchema,
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.sessionCreate,
@@ -178,7 +183,7 @@ export function buildAppTools(): McpToolDefinition[] {
     {
       name: TERMINAL_MCP_TOOL_NAMES.sessionList,
       description: "List Synapse terminal sessions.",
-      inputSchema: { type: "object", properties: {} },
+      inputSchema: strictEmptyInputSchema,
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.sessionGet,

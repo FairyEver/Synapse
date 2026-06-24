@@ -13,6 +13,7 @@ import {
 import {
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalEmptyInputSchema,
   terminalReadSessionInputSchema,
   terminalResizeSessionInputSchema,
   terminalSessionIdInputSchema,
@@ -34,12 +35,14 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: await deps.service.createGroup(terminalCreateGroupInputSchema.parse(params)), affected: 1 }
       }
       if (action === TERMINAL_GROUP_LIST_CAPABILITY_ID) {
+        terminalEmptyInputSchema.parse(params)
         return { ok: true, data: deps.service.listGroups(), affected: 0 }
       }
       if (action === TERMINAL_SESSION_CREATE_CAPABILITY_ID) {
         return { ok: true, data: await deps.service.createSession(terminalCreateSessionInputSchema.parse(params)), affected: 1 }
       }
       if (action === TERMINAL_SESSION_LIST_CAPABILITY_ID) {
+        terminalEmptyInputSchema.parse(params)
         return { ok: true, data: deps.service.listSessions(), affected: 0 }
       }
       if (action === TERMINAL_SESSION_GET_CAPABILITY_ID) {
