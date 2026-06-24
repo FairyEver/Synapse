@@ -23,6 +23,9 @@ export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 // 配置备份导入文件最大字节数：限制设置页从外部 JSON 恢复配置时主进程读取和解析的单文件体积。
 export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
+// 终端会话单个 session 的输出保留上限：限制后台任务长时间输出占用内存和磁盘，超出后按最旧输出滚动清理。
+export const TERMINAL_SESSION_OUTPUT_RETENTION_BYTES = 10 * 1024 * 1024
+
 // Data Store 单表导出最大行数：限制表级导出一次可处理的记录数量，避免主进程长时间构造超大 SQL。
 export const DATA_STORE_TABLE_EXPORT_MAX_ROWS = 10_000
 

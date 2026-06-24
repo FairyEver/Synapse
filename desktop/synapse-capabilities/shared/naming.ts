@@ -12,12 +12,14 @@ const CAPABILITY_ACTIONS = [
   "enable",
   "disable",
   "read",
+  "write",
   "execute",
   "reorder",
   "move",
   "upload",
   "restore",
   "generate",
+  "stop",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]

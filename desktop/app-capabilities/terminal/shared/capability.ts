@@ -1,0 +1,34 @@
+import type { CapabilityId } from "../../../synapse-capabilities/shared/naming"
+
+export const TERMINAL_APP_ID = "terminal" as const
+
+export const TERMINAL_GROUP_CREATE_CAPABILITY_ID =
+  "app.terminal.group.create" as CapabilityId
+export const TERMINAL_GROUP_LIST_CAPABILITY_ID =
+  "app.terminal.group.list" as CapabilityId
+export const TERMINAL_SESSION_CREATE_CAPABILITY_ID =
+  "app.terminal.session.create" as CapabilityId
+export const TERMINAL_SESSION_LIST_CAPABILITY_ID =
+  "app.terminal.session.list" as CapabilityId
+export const TERMINAL_SESSION_GET_CAPABILITY_ID =
+  "app.terminal.session.get" as CapabilityId
+export const TERMINAL_SESSION_READ_CAPABILITY_ID =
+  "app.terminal.session.read" as CapabilityId
+export const TERMINAL_SESSION_WRITE_CAPABILITY_ID =
+  "app.terminal.session.write" as CapabilityId
+export const TERMINAL_SESSION_RESIZE_CAPABILITY_ID =
+  "app.terminal.session.update" as CapabilityId
+export const TERMINAL_SESSION_STOP_CAPABILITY_ID =
+  "app.terminal.session.stop" as CapabilityId
+
+export const TERMINAL_MCP_TOOL_NAMES = {
+  groupCreate: "app_terminal_group_create",
+  groupList: "app_terminal_group_list",
+  sessionCreate: "app_terminal_session_create",
+  sessionList: "app_terminal_session_list",
+  sessionGet: "app_terminal_session_get",
+  sessionRead: "app_terminal_session_read",
+  sessionWrite: "app_terminal_session_write",
+  sessionResize: "app_terminal_session_resize",
+  sessionStop: "app_terminal_session_stop",
+} as const
