@@ -117,9 +117,11 @@ describe("AppsModule", () => {
     await renderAppsModule(roots)
 
     expect(document.querySelector("[data-app-launcher-grid]")).toBeTruthy()
-    expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("grid")
-    expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("w-fit")
-    expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("lg:grid-cols-5")
+    const gridClasses = Array.from(document.querySelector("[data-app-launcher-grid]")?.classList ?? [])
+    expect(gridClasses).toContain("grid")
+    expect(gridClasses).toContain("w-fit")
+    expect(gridClasses).toContain("grid-cols-5")
+    expect(gridClasses).not.toContain("lg:grid-cols-5")
     expect(findButton("资源仓库").className).toContain("h-36")
     expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(0)
     expect(document.querySelector(".lucide-external-link")).toBeNull()
@@ -140,6 +142,18 @@ describe("AppsModule", () => {
     expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("主视图")
     expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("App 操作")
     expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
+  })
+
+  it("sets app id when dragging launcher icons", async () => {
+    await renderAppsModule(roots)
+
+    const dataTransfer = createDataTransfer()
+    await act(async () => {
+      findButton("本地数据库").dispatchEvent(createDragEvent("dragstart", dataTransfer))
+      await Promise.resolve()
+    })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith("application/x-synapse-system-app-id", "database")
   })
 
   it("opens the embedded app in a new window from the host toolbar", async () => {
@@ -228,4 +242,24 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
+}
+
+function createDragEvent(type: string, dataTransfer: DataTransfer): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
+  return event
+}
+
+function createDataTransfer(): DataTransfer {
+  return {
+    getData: vi.fn(),
+    setData: vi.fn(),
+    clearData: vi.fn(),
+    dropEffect: "move",
+    effectAllowed: "move",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [],
+    setDragImage: vi.fn(),
+  } as unknown as DataTransfer
 }

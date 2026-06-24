@@ -75,7 +75,7 @@ describe("SystemAppWindowShell", () => {
     const onValueChange = vi.fn()
 
     await renderShell(roots, (
-      <EmbeddedSystemAppShell appName="资源仓库" onBack={vi.fn()} onOpenWindow={vi.fn()}>
+      <EmbeddedSystemAppShell appName="资源仓库" mode="launcher" onBack={vi.fn()} onOpenWindow={vi.fn()}>
         <SystemAppWindowShell
           tabs={tabs}
           value="one"
@@ -101,7 +101,7 @@ describe("SystemAppWindowShell", () => {
 
     await act(async () => {
       root.render(
-        <EmbeddedSystemAppShell appName="资源仓库" onBack={vi.fn()} onOpenWindow={vi.fn()}>
+        <EmbeddedSystemAppShell appName="资源仓库" mode="launcher" onBack={vi.fn()} onOpenWindow={vi.fn()}>
           <SystemAppWindowShell
             tabs={tabs}
             value="one"
@@ -119,7 +119,7 @@ describe("SystemAppWindowShell", () => {
 
     await act(async () => {
       root.render(
-        <EmbeddedSystemAppShell appName="资源仓库" onBack={vi.fn()} onOpenWindow={vi.fn()}>
+        <EmbeddedSystemAppShell appName="资源仓库" mode="launcher" onBack={vi.fn()} onOpenWindow={vi.fn()}>
           <div>应用列表</div>
         </EmbeddedSystemAppShell>,
       )

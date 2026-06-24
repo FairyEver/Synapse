@@ -1,6 +1,6 @@
-import icon from "../database/assets/icon.png"
 import type { SynapseSystemAppManifest } from "@/modules/apps/types"
 import { driveAppDefinition } from "./app-definition"
+import icon from "./assets/icon.png"
 
 export const driveAppManifest = {
   ...driveAppDefinition,

@@ -38,7 +38,14 @@ import { ContentWindowPage } from "@/modules/content/components/content-window-p
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
 import { listDockApps } from "@/modules/apps/dock"
-import { listSystemApps } from "@/modules/apps/registry"
+import {
+  addUserPinnedDockAppId,
+  readUserPinnedDockAppIds,
+  removeUserPinnedDockAppId,
+  writeUserPinnedDockAppIds,
+} from "@/modules/apps/dock-pins"
+import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
+import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
@@ -61,6 +68,7 @@ function MainApp() {
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
+  const [userPinnedDockAppIds, setUserPinnedDockAppIds] = useState(() => readUserPinnedDockAppIds())
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
   // 检查是否需要显示空状态页面
@@ -142,9 +150,28 @@ function MainApp() {
   }, [activeAppId, setActiveAppId, workflowEntryVisible])
 
   const dockApps = useMemo(
-    () => listDockApps(listSystemApps(), { workflowEntryVisible }),
-    [workflowEntryVisible],
+    () => listDockApps(listSystemApps(), { workflowEntryVisible, userPinnedAppIds: userPinnedDockAppIds }),
+    [userPinnedDockAppIds, workflowEntryVisible],
   )
+
+  const pinDockApp = useCallback((appId: SynapseSystemAppId) => {
+    const app = getSystemAppManifest(appId)
+    if (!app || app.dock.pinnedByDefault) return
+
+    setUserPinnedDockAppIds((current) => {
+      const next = addUserPinnedDockAppId(current, appId)
+      writeUserPinnedDockAppIds(window.localStorage, next)
+      return next
+    })
+  }, [])
+
+  const unpinDockApp = useCallback((appId: SynapseSystemAppId) => {
+    setUserPinnedDockAppIds((current) => {
+      const next = removeUserPinnedDockAppId(current, appId)
+      writeUserPinnedDockAppIds(window.localStorage, next)
+      return next
+    })
+  }, [])
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
@@ -233,6 +260,9 @@ function MainApp() {
             apps={dockApps}
             value={activeAppId}
             onValueChange={(value) => setActiveAppId(value, "navigation")}
+            onPinApp={pinDockApp}
+            canUnpinApp={(appId) => userPinnedDockAppIds.includes(appId)}
+            onUnpinApp={unpinDockApp}
           />
         }
         actions={accountUiVisible ? (
@@ -243,15 +273,17 @@ function MainApp() {
       >
         <div className="flex h-full min-h-0 flex-col">
           <ErrorBoundary fallbackTitle="应用出现问题">
-            <SystemAppContent
-              appId={activeAppId}
-              resourceContentOpenRequest={pendingAppContentOpenRequest}
-              onResourceContentOpenRequestConsumed={(requestId) => {
-                setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
-              }}
-              pendingAgentSession={pendingAgentSession}
-              onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
-            />
+            <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
+              <SystemAppContent
+                appId={activeAppId}
+                resourceContentOpenRequest={pendingAppContentOpenRequest}
+                onResourceContentOpenRequestConsumed={(requestId) => {
+                  setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+                }}
+                pendingAgentSession={pendingAgentSession}
+                onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
+              />
+            </EmbeddedSystemAppShell>
           </ErrorBoundary>
         </div>
         <KnowledgeBaseStorageMigrationDialog

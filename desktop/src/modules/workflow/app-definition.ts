@@ -6,7 +6,7 @@ export const workflowAppDefinition = {
   type: "system",
   name: "工作流",
   windowTitle: "工作流",
-  dock: { pinnedByDefault: true, order: 20, visibility: "workflow-entry-enabled" },
+  dock: { pinnedByDefault: true, order: 40, visibility: "workflow-entry-enabled" },
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_workflow",

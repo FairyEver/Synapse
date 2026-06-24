@@ -6,11 +6,11 @@ describe("app Dock order", () => {
   it("keeps pinned apps in the requested left-to-right order", () => {
     expect(listDockApps(listSystemApps(), { workflowEntryVisible: true }).map((app) => app.id)).toEqual([
       "agent",
-      "workflow",
       "drive",
       "automation",
-      "launcher",
+      "workflow",
       "settings",
+      "launcher",
     ])
   })
 
@@ -19,8 +19,22 @@ describe("app Dock order", () => {
       "agent",
       "drive",
       "automation",
-      "launcher",
       "settings",
+      "launcher",
+    ])
+  })
+
+  it("merges user pinned apps into Dock order without duplicates", () => {
+    expect(listDockApps(
+      listSystemApps(),
+      { workflowEntryVisible: false, userPinnedAppIds: ["database", "agent"] },
+    ).map((app) => app.id)).toEqual([
+      "agent",
+      "drive",
+      "automation",
+      "settings",
+      "launcher",
+      "database",
     ])
   })
 })

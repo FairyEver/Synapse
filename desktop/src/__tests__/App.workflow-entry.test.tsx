@@ -141,29 +141,46 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/apps/components/system-app-content", () => ({
-  SystemAppContent: ({
-    appId,
-    resourceContentOpenRequest,
-    onResourceContentOpenRequestConsumed,
-  }: {
-    appId: string
-    resourceContentOpenRequest?: ContentOpenRequest | null
-    onResourceContentOpenRequestConsumed?: (requestId: string) => void
-  }) => (
-    <div>
-      {appId === "agent" ? "对话模块" : appId === "launcher" ? "应用模块" : appId === "workflow" ? "工作流模块" : appId}
-      {resourceContentOpenRequest ? (
-        <button
-          type="button"
-          onClick={() => onResourceContentOpenRequestConsumed?.(resourceContentOpenRequest.requestId)}
-        >
-          {resourceContentOpenRequest.contentType}:{resourceContentOpenRequest.kind}
-        </button>
-      ) : null}
-    </div>
-  ),
-}))
+vi.mock("@/modules/apps/components/system-app-content", async () => {
+  const { useEffect } = await import("react")
+  const { useSystemAppHeaderSlot } = await import("@/modules/apps/components/system-app-header-slot")
+
+  return {
+    SystemAppContent: ({
+      appId,
+      resourceContentOpenRequest,
+      onResourceContentOpenRequestConsumed,
+    }: {
+      appId: string
+      resourceContentOpenRequest?: ContentOpenRequest | null
+      onResourceContentOpenRequestConsumed?: (requestId: string) => void
+    }) => {
+      const { setSlot } = useSystemAppHeaderSlot()
+
+      useEffect(() => {
+        if (appId !== "settings") return undefined
+        setSlot({
+          actions: <button type="button">设置操作</button>,
+        })
+        return () => setSlot(null)
+      }, [appId, setSlot])
+
+      return (
+        <div>
+          {appId === "agent" ? "对话模块" : appId === "launcher" ? "应用模块" : appId === "workflow" ? "工作流模块" : appId}
+          {resourceContentOpenRequest ? (
+            <button
+              type="button"
+              onClick={() => onResourceContentOpenRequestConsumed?.(resourceContentOpenRequest.requestId)}
+            >
+              {resourceContentOpenRequest.contentType}:{resourceContentOpenRequest.kind}
+            </button>
+          ) : null}
+        </div>
+      )
+    },
+  }
+})
 vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
 vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
@@ -210,8 +227,8 @@ describe("App workflow entry visibility", () => {
       "对话",
       "云盘",
       "自动化",
-      "应用",
       "设置",
+      "应用",
     ])
   })
 
@@ -228,6 +245,21 @@ describe("App workflow entry visibility", () => {
     expect(document.body.textContent).toContain("应用模块")
   })
 
+  it("renders Dock app header slots without launcher controls", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      findTopNavigationButton("设置").click()
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector("[data-embedded-system-app-header]")?.textContent).toContain("设置操作")
+    expect(document.querySelector("button[aria-label='返回应用列表']")).toBeNull()
+    expect(document.querySelector("button[aria-label='新窗口打开']")).toBeNull()
+  })
+
   it("places workflow in the configured order when the workflow entry is visible", async () => {
     mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
 
@@ -235,11 +267,11 @@ describe("App workflow entry visibility", () => {
 
     expect(topNavigationLabels()).toEqual([
       "对话",
-      "工作流",
       "云盘",
       "自动化",
-      "应用",
+      "工作流",
       "设置",
+      "应用",
     ])
   })
 

@@ -20,6 +20,7 @@ type AccountUserControlProps = {
 }
 
 const logger = createRendererLogger("account-user-control")
+const toolbarButtonClassName = "h-9 px-3 has-data-[icon=inline-start]:pl-3 has-data-[icon=inline-end]:pr-3"
 
 function getDisplayName(state: SynapseAccountState): string | null {
   if (state.status !== "authenticated") return null
@@ -142,6 +143,7 @@ function AccountUserControl({
       <Button
         variant="ghost"
         size="sm"
+        className={toolbarButtonClassName}
         disabled={isActionPending}
         onClick={isAuthenticating ? handleCancelLogin : handleLogin}
       >
@@ -158,7 +160,7 @@ function AccountUserControl({
   return (
     <DropdownMenu data-track="account-user-menu">
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="max-w-48">
+        <Button variant="ghost" size="sm" className={`${toolbarButtonClassName} max-w-48`}>
           <CircleUserRound data-icon="inline-start" />
           <span className="truncate">{getAccountTitle(state)}</span>
           {isAccountOffline(state) ? (

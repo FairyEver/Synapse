@@ -43,6 +43,53 @@ describe("AppShellDock", () => {
 
     expect(onValueChange).toHaveBeenCalledWith("launcher")
   })
+
+  it("pins an app dropped from the launcher", async () => {
+    const onPinApp = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AppShellDock apps={apps} value="agent" onValueChange={vi.fn()} onPinApp={onPinApp} />)
+      await Promise.resolve()
+    })
+
+    const nav = document.querySelector("[data-track='app-shell-dock']")
+    const dataTransfer = createDataTransfer("database")
+
+    await act(async () => {
+      nav?.dispatchEvent(createDragEvent("dragover", dataTransfer))
+      nav?.dispatchEvent(createDragEvent("drop", dataTransfer))
+      await Promise.resolve()
+    })
+
+    expect(onPinApp).toHaveBeenCalledWith("database")
+  })
+
+  it("marks only removable Dock apps as unpinnable", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AppShellDock
+          apps={apps}
+          value="agent"
+          onValueChange={vi.fn()}
+          canUnpinApp={(appId) => appId === "launcher"}
+          onUnpinApp={vi.fn()}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBeNull()
+    expect(findButtonByLabel("应用").getAttribute("data-can-unpin")).toBe("true")
+  })
 })
 
 function findButtonByLabel(label: string): HTMLButtonElement {
@@ -53,4 +100,24 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
+}
+
+function createDragEvent(type: string, dataTransfer: DataTransfer): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
+  return event
+}
+
+function createDataTransfer(appId: string): DataTransfer {
+  return {
+    getData: vi.fn((type: string) => type === "application/x-synapse-system-app-id" ? appId : ""),
+    setData: vi.fn(),
+    clearData: vi.fn(),
+    dropEffect: "move",
+    effectAllowed: "move",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: ["application/x-synapse-system-app-id"],
+    setDragImage: vi.fn(),
+  } as unknown as DataTransfer
 }

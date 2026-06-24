@@ -6,7 +6,7 @@ export const automationAppDefinition = {
   type: "system",
   name: "自动化",
   windowTitle: "自动化",
-  dock: { pinnedByDefault: true, order: 40 },
+  dock: { pinnedByDefault: true, order: 30 },
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_automation",

@@ -6,7 +6,7 @@ export const driveAppDefinition = {
   type: "system",
   name: "云盘",
   windowTitle: "云盘",
-  dock: { pinnedByDefault: true, order: 30 },
+  dock: { pinnedByDefault: true, order: 20 },
   window: { openable: true },
   capabilities: {
     primaryMcpPrefix: "app_drive",
