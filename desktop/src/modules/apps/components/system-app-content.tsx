@@ -10,6 +10,7 @@ import { ModelPriceModule } from "@/modules/model-price"
 import { ResourceRepositoryModule } from "@/modules/resource-repository"
 import { UsageMonitorModule } from "@/modules/usage-analysis"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
+import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import type { SynapseSystemAppId } from "../types"
 
 type SystemAppContentProps = {
@@ -40,6 +41,7 @@ function SystemAppContent({
   }
   if (appId === "database") return <DatabaseModule />
   if (appId === "document-template") return <DocumentTemplateModule />
+  if (appId === "screenshot") return <ScreenshotModule />
   if (appId === "git") return <GitModule />
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />

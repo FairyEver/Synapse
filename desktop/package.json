@@ -67,6 +67,7 @@
     "lucide-react": "1.8.0",
     "markdown-it": "^14.1.1",
     "markdown-it-container": "^4.0.0",
+    "node-screenshots": "0.2.8",
     "pizzip": "^3.2.0",
     "qrcode": "^1.5.4",
     "radix-ui": "^1.4.3",
@@ -139,6 +140,7 @@
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude",
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe",
+      "node_modules/node-screenshots*/**",
       "dist-electron/action-packages/shared/**",
       "dist-electron/electron/services/usage-analysis/**",
       "dist-electron/electron/services/model-price/**",

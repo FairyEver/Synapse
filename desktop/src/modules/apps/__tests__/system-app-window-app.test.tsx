@@ -35,6 +35,10 @@ vi.mock("@/modules/model-price", () => ({
   ModelPriceModule: () => <div>价格窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/screenshot/renderer", () => ({
+  ScreenshotModule: () => <div>截图窗口</div>,
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {

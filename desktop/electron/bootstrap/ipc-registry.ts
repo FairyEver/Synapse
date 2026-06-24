@@ -32,6 +32,7 @@ import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
+import { screenshotIpcModule } from "../../app-capabilities/screenshot/main/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -66,6 +67,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(accountIpcModule, ctx)
   registry.register(liveIpcModule, ctx)
   registry.register(documentTemplateIpcModule, ctx)
+  registry.register(screenshotIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
   return registry
@@ -99,5 +101,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   accountIpcModule,
   liveIpcModule,
   documentTemplateIpcModule,
+  screenshotIpcModule,
   opsIpcModule,
 ]

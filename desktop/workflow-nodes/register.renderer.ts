@@ -16,6 +16,7 @@ import { workflowCallNodeManifest } from "./workflow-call/manifest"
 import { codexNodeManifest } from "./codex/manifest"
 import { claudeCodeNodeManifest } from "./claude-code/manifest"
 import { documentTemplateNodeManifest } from "../app-capabilities/document-template/workflow-node/manifest"
+import { screenshotNodeManifest } from "../app-capabilities/screenshot/workflow-node/manifest"
 
 nodeTypeRegistry.registerManifest(promptNodeManifest)
 nodeTypeRegistry.registerManifest(switchNodeManifest)
@@ -26,3 +27,4 @@ nodeTypeRegistry.registerManifest(workflowCallNodeManifest)
 nodeTypeRegistry.registerManifest(codexNodeManifest)
 nodeTypeRegistry.registerManifest(claudeCodeNodeManifest)
 nodeTypeRegistry.registerManifest(documentTemplateNodeManifest)
+nodeTypeRegistry.registerManifest(screenshotNodeManifest)

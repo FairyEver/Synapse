@@ -17,6 +17,7 @@ import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/c
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
+import { ScreenshotNodeCard } from "../../../../app-capabilities/screenshot/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
@@ -27,6 +28,7 @@ import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
+import type { ScreenshotNodeConfig } from "../../../../app-capabilities/screenshot/workflow-node/schema"
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
@@ -259,6 +261,26 @@ function RunnerDocumentTemplateNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+function RunnerScreenshotNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const result = nodeResults[id]
+  const name = (data as { name?: string }).name
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <ScreenshotNodeCard
+        config={data as ScreenshotNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
 export const runnerNodeTypes = {
   prompt: RunnerPromptNodeWrapper,
   switch: RunnerSwitchNodeWrapper,
@@ -269,4 +291,5 @@ export const runnerNodeTypes = {
   codex: RunnerCodexNodeWrapper,
   claude_code: RunnerClaudeCodeNodeWrapper,
   document_template_docx_generate: RunnerDocumentTemplateNodeWrapper,
+  screenshot_capture: RunnerScreenshotNodeWrapper,
 }

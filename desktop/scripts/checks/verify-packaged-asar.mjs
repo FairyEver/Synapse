@@ -283,6 +283,51 @@ function verifyClaudeRuntime(unpackedPath, failures) {
   failures.push(`Claude SDK native binary is missing: ${expectedRelativePaths.join(" or ")}`)
 }
 
+function nodeScreenshotsPackageNames(platform, arch) {
+  if (platform === "darwin") {
+    return [`node-screenshots-darwin-${arch}`]
+  }
+  if (platform === "win32") {
+    return [`node-screenshots-win32-${arch}-msvc`]
+  }
+  if (platform === "linux") {
+    if (arch === "x64") {
+      return ["node-screenshots-linux-x64-gnu", "node-screenshots-linux-x64-musl"]
+    }
+    if (arch === "arm64") {
+      return ["node-screenshots-linux-arm64-gnu"]
+    }
+    if (arch === "loong64") {
+      return ["node-screenshots-linux-loong64-gnu"]
+    }
+  }
+  return []
+}
+
+function nodeScreenshotsBinaryName(packageName) {
+  return `node-screenshots.${packageName.replace("node-screenshots-", "")}.node`
+}
+
+function verifyNodeScreenshotsRuntime(unpackedPath, failures) {
+  const platform = process.env.SYNAPSE_PACKAGED_ASAR_PLATFORM || process.platform
+  const arch = process.env.SYNAPSE_PACKAGED_ASAR_ARCH || process.arch
+  const expectedPackages = nodeScreenshotsPackageNames(platform, arch)
+
+  if (expectedPackages.length === 0) {
+    failures.push(`Unsupported node-screenshots native platform: ${platform}-${arch}`)
+    return
+  }
+
+  const expectedRelativePaths = expectedPackages.map((packageName) =>
+    path.join("node_modules", packageName, nodeScreenshotsBinaryName(packageName))
+  )
+  if (expectedRelativePaths.some((relativePath) => existsSync(path.join(unpackedPath, relativePath)))) {
+    return
+  }
+
+  failures.push(`node-screenshots native binding is missing: ${expectedRelativePaths.join(" or ")}`)
+}
+
 function verifyExtraResources(resourcesPath, failures) {
   for (const resource of requiredExtraResourceFiles) {
     const filePath = path.join(resourcesPath, resource.relativePath)
@@ -403,6 +448,7 @@ function verifyResources(resourcesPath, label) {
   )
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
+  verifyNodeScreenshotsRuntime(unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)
 
   if (failures.length > 0) {

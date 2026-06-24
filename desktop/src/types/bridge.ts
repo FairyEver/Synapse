@@ -24,6 +24,16 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
+  ScreenshotArtifact,
+  ScreenshotCaptureInput,
+  ScreenshotCaptureToFileInput,
+  ScreenshotClipboardResult,
+  ScreenshotInteractiveCaptureInput,
+  ScreenshotRegion,
+  ScreenshotSaveArtifactInput,
+  ScreenshotSaveResult,
+} from "../../app-capabilities/screenshot/shared/schema"
+import type {
   SynapseContentStoreInstallPrepareResult,
   SynapseContentStoreInstallResolveResult,
 } from "./content-store-install"
@@ -804,6 +814,17 @@ export type SynapseBridge = {
     chooseJsonFile: () => Promise<string | null>
     chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
+  }
+  screenshot: {
+    capture: (input: ScreenshotCaptureInput) => Promise<ScreenshotArtifact>
+    captureToFile: (input: ScreenshotCaptureToFileInput) => Promise<ScreenshotSaveResult>
+    saveArtifact: (input: ScreenshotSaveArtifactInput) => Promise<ScreenshotSaveResult>
+    copyToClipboard: (input: ScreenshotCaptureInput) => Promise<ScreenshotClipboardResult>
+    copyArtifactToClipboard: (input: ScreenshotArtifact) => Promise<ScreenshotClipboardResult>
+    startInteractiveCapture: (input?: ScreenshotInteractiveCaptureInput) => Promise<ScreenshotArtifact | null>
+    completeInteractiveCapture: (input: ScreenshotRegion) => Promise<boolean>
+    cancelInteractiveCapture: () => Promise<boolean>
+    chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>

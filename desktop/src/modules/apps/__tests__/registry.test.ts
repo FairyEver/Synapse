@@ -16,6 +16,7 @@ describe("system app registry", () => {
       "git",
       "database",
       "document-template",
+      "screenshot",
       "editor-scan",
       "usage-monitor",
       "model-price",
@@ -38,7 +39,7 @@ describe("system app registry", () => {
     const definitions = listSystemAppDefinitions()
     expect(definitions.map((app) => app.id)).toEqual(listSystemApps().map((app) => app.id))
     expect(definitions.every((app) => !("icon" in app))).toBe(true)
-    expect(getSystemAppDefinition("model-price")?.windowTitle).toBe("价格管理")
+    expect(getSystemAppDefinition("screenshot")?.windowTitle).toBe("截图")
   })
 
   it("gets and parses known app ids only", () => {
