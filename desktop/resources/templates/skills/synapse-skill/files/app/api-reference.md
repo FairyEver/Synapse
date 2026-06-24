@@ -18,3 +18,126 @@ Output:
 - `fileName`: generated file name.
 - `size`: generated file size in bytes.
 - `generatedAt`: ISO timestamp.
+
+## Terminal
+
+`app_terminal_group_create`
+
+Create a terminal group.
+
+Input:
+
+- `name` required: group name.
+
+Output:
+
+- Terminal group.
+
+`app_terminal_group_list`
+
+List terminal groups.
+
+Input: none.
+
+Output:
+
+- Terminal groups.
+
+`app_terminal_session_create`
+
+Create a Synapse-managed terminal session using the user's default shell.
+
+Input:
+
+- `groupId` optional: terminal group id.
+- `title` optional: session title.
+- `cwd` optional: existing absolute working directory.
+- `cols` optional: terminal columns. Defaults to `80`.
+- `rows` optional: terminal rows. Defaults to `24`.
+- `agentControl` optional: when `true`, allow MCP write and stop operations for this session.
+
+Output:
+
+- Terminal session.
+
+`app_terminal_session_list`
+
+List terminal sessions.
+
+Input: none.
+
+Output:
+
+- Terminal sessions.
+
+`app_terminal_session_get`
+
+Get terminal session status.
+
+Input:
+
+- `sessionId` required: terminal session id.
+
+Output:
+
+- Terminal session.
+
+`app_terminal_session_read`
+
+Read retained terminal output.
+
+Input:
+
+- `sessionId` required: terminal session id.
+- `afterSeq` optional: return output after this sequence.
+- `limitBytes` optional: maximum bytes to read. Maximum `1048576`.
+
+Output:
+
+- `session`: terminal session.
+- `chunks`: retained output chunks.
+- `nextSeq`: next output sequence cursor.
+- `firstSeq`: first retained sequence.
+- `truncated`: whether retention trimmed earlier output.
+
+`app_terminal_session_write`
+
+Write raw input to an Agent-controlled terminal session. Include `\n` to submit a shell command.
+
+Input:
+
+- `sessionId` required: terminal session id.
+- `data` required: raw terminal input.
+
+Output:
+
+- `{ "ok": true }`
+
+`app_terminal_session_resize`
+
+Resize a running terminal session.
+
+Input:
+
+- `sessionId` required: terminal session id.
+- `cols` required: terminal columns.
+- `rows` required: terminal rows.
+
+Output:
+
+- `{ "ok": true }`
+
+`app_terminal_session_stop`
+
+Stop an Agent-controlled terminal session.
+
+Input:
+
+- `sessionId` required: terminal session id.
+- `force` optional: force stop when supported.
+
+Output:
+
+- `{ "ok": true }`
+
+`app_terminal_session_write` and `app_terminal_session_stop` require Agent control to be enabled on the session.

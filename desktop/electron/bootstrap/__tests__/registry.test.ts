@@ -234,6 +234,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow.engine",
       "core.permission-guard",
       "core.audit-sink",
+      "core.terminal",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
