@@ -28,6 +28,10 @@ import {
 } from "../../synapse-capabilities/shared/app-domain"
 import { TERMINAL_MCP_TOOL_NAMES } from "../../app-capabilities/terminal/shared/capability"
 import {
+  SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
+  SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
+} from "../../app-capabilities/screenshot/shared/capability"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -56,8 +60,12 @@ describe("App capability domain", () => {
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
       "app_document_template_docx_generate",
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
+      SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
+      SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
+    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
+    expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")
   })
 })
 

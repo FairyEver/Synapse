@@ -30,7 +30,34 @@ const bridgeState = vi.hoisted(() => ({
 
 const terminalBridge = vi.hoisted(() => ({
   listGroups: vi.fn(async () => bridgeState.groups),
-  createGroup: vi.fn(async () => createGroup()),
+  createGroup: vi.fn(async ({ name }: { name: string }) => {
+    const group = createGroup({
+      id: `group-${bridgeState.groups.length + 1}`,
+      name: name.trim(),
+      sortOrder: bridgeState.groups.length,
+    })
+    return group
+  }),
+  renameGroup: vi.fn(async ({ groupId, name }: { groupId: string; name: string }) => {
+    const group = {
+      ...bridgeState.groups.find((item) => item.id === groupId),
+      id: groupId,
+      name: name.trim(),
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:02:00.000Z",
+      sortOrder: 0,
+    } as SynapseTerminalGroup
+    bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
+    return group
+  }),
+  deleteGroup: vi.fn(async ({ groupId }: { groupId: string }) => {
+    const removedSessionIds = new Set(bridgeState.sessions
+      .filter((session) => session.groupId === groupId)
+      .map((session) => session.id))
+    bridgeState.groups = bridgeState.groups.filter((group) => group.id !== groupId)
+    bridgeState.sessions = bridgeState.sessions.filter((session) => session.groupId !== groupId)
+    bridgeState.chunks = bridgeState.chunks.filter((chunk) => !removedSessionIds.has(chunk.sessionId))
+  }),
   listSessions: vi.fn(async () => bridgeState.sessions),
   createSession: vi.fn(async (input: {
     groupId?: string
@@ -220,6 +247,8 @@ beforeEach(() => {
   bridgeState.sessionDeletedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
   terminalBridge.createGroup.mockClear()
+  terminalBridge.renameGroup.mockClear()
+  terminalBridge.deleteGroup.mockClear()
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
   terminalBridge.getSession.mockClear()
@@ -344,6 +373,70 @@ describe("TerminalModule", () => {
       title: "  构建日志  ",
     })
     expect(document.body.textContent).toContain("构建日志")
+  })
+
+  it("creates an empty terminal group and keeps it visible", async () => {
+    await renderModule()
+
+    await clickButton("新建分组")
+    await changeInput("分组名称", "  构建  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.createGroup).toHaveBeenCalledWith({ name: "构建" })
+    expect(document.body.textContent).toContain("构建")
+  })
+
+  it("creates a terminal session from a group menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("新建终端")
+
+    expect(terminalBridge.createSession).toHaveBeenCalledWith({
+      groupId: "group-build",
+      cols: 80,
+      rows: 24,
+    })
+  })
+
+  it("renames a terminal group from the group menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("重命名")
+    await changeInput("分组名称", "  发布  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameGroup).toHaveBeenCalledWith({
+      groupId: "group-build",
+      name: "  发布  ",
+    })
+    expect(document.body.textContent).toContain("发布")
+  })
+
+  it("deletes a terminal group with sessions and selects the next remaining session", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-build", name: "构建", sortOrder: 0 }),
+      createGroup({ id: "group-logs", name: "日志", sortOrder: 1 }),
+    ]
+    bridgeState.sessions = [
+      createSession({ id: "session-1", groupId: "group-build", title: "构建终端", updatedAt: "2026-06-24T00:02:00.000Z" }),
+      createSession({ id: "session-2", groupId: "group-logs", title: "日志终端", updatedAt: "2026-06-24T00:01:00.000Z" }),
+    ]
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("删除")
+    await clickButton("删除分组")
+
+    expect(terminalBridge.deleteGroup).toHaveBeenCalledWith({ groupId: "group-build" })
+    expect(document.body.textContent).not.toContain("构建终端")
+    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
+      sessionId: "session-2",
+      afterSeq: 0,
+    })
   })
 
   it("deletes the active terminal session and selects the next session", async () => {
@@ -548,6 +641,21 @@ async function clickButton(text: string, root: ParentNode = document.body): Prom
 async function clickSessionMenu(title: string): Promise<void> {
   const button = Array.from(document.body.querySelectorAll("button"))
     .find((item) => item.getAttribute("aria-label") === `终端会话操作：${title}`)
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      ctrlKey: false,
+    }))
+    button?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+    button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickGroupMenu(name: string): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.getAttribute("aria-label") === `终端分组操作：${name}`)
   await act(async () => {
     button?.dispatchEvent(new MouseEvent("pointerdown", {
       bubbles: true,

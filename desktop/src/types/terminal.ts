@@ -1,11 +1,13 @@
 import type {
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
   TerminalGroup,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
+  TerminalRenameGroupInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
   TerminalSession,
@@ -17,6 +19,8 @@ export type SynapseTerminalGroup = TerminalGroup
 export type SynapseTerminalSession = TerminalSession
 export type SynapseTerminalOutputChunk = TerminalOutputChunk
 export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
+export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
+export type SynapseTerminalDeleteGroupInput = TerminalDeleteGroupInput
 export type SynapseTerminalCreateSessionInput = TerminalCreateSessionInput
 export type SynapseTerminalRenameSessionInput = TerminalRenameSessionInput
 export type SynapseTerminalDeleteSessionInput = TerminalDeleteSessionInput
