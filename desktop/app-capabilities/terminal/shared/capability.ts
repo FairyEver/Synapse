@@ -35,7 +35,7 @@ export const TERMINAL_MCP_TOOL_NAMES = {
   groupCreate: "app_terminal_group_create",
   groupList: "app_terminal_group_list",
   groupRename: "app_terminal_group_rename",
-  groupUpdateSettings: "app_terminal_group_update_settings",
+  groupUpdateSettings: "app_terminal_group_updateSettings",
   groupDelete: "app_terminal_group_delete",
   sessionCreate: "app_terminal_session_create",
   sessionList: "app_terminal_session_list",

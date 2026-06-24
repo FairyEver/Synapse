@@ -84,7 +84,7 @@ export const TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID =
 Add the tool name to `TERMINAL_MCP_TOOL_NAMES` after `groupRename`:
 
 ```ts
-groupUpdateSettings: "app_terminal_group_update_settings",
+groupUpdateSettings: "app_terminal_group_updateSettings",
 ```
 
 - [ ] **Step 5: Run focused type/schema tests**
@@ -589,7 +589,7 @@ Add a tool definition after `groupRename`:
 In `desktop/tests/unit/synapse-capabilities.test.ts`, update assertions that mention terminal group tools:
 
 ```ts
-expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_update_settings).toBe("app.terminal.group.updateSettings")
+expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_updateSettings).toBe("app.terminal.group.updateSettings")
 ```
 
 Keep the existing `Object.values(TERMINAL_MCP_TOOL_NAMES)` assertion so the new tool is covered automatically.
@@ -922,13 +922,13 @@ git commit -m "feat(terminal): add group settings dialog"
 In `desktop/resources/templates/skills/synapse-skill/files/app/index.md`, update the terminal rules bullet:
 
 ```md
-- Use `app_terminal_group_create`, `app_terminal_group_update_settings`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions.
+- Use `app_terminal_group_create`, `app_terminal_group_updateSettings`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions.
 ```
 
 Add a focused rule after it:
 
 ```md
-- Use `app_terminal_group_update_settings` when future sessions in a group should start from a default directory or run startup commands.
+- Use `app_terminal_group_updateSettings` when future sessions in a group should start from a default directory or run startup commands.
 ```
 
 - [ ] **Step 2: Update built-in app API reference**
@@ -936,7 +936,7 @@ Add a focused rule after it:
 In `desktop/resources/templates/skills/synapse-skill/files/app/api-reference.md`, add this section after `app_terminal_group_rename`:
 
 ```md
-`app_terminal_group_update_settings`
+`app_terminal_group_updateSettings`
 
 Update a terminal group's name, default working directory, and startup command for future sessions.
 

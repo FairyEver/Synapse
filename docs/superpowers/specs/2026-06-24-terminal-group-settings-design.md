@@ -81,7 +81,7 @@ The action updates the group name and settings together from the settings dialog
 Expose the new action through IPC and MCP:
 
 - Capability id: `app.terminal.group.updateSettings`
-- MCP tool name: `app_terminal_group_update_settings`
+- MCP tool name: `app_terminal_group_updateSettings`
 - IPC method: `updateGroupSettings`
 
 `createSession` resolves cwd in this order:

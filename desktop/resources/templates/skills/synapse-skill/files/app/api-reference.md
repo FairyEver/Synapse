@@ -56,7 +56,7 @@ Output:
 
 - Terminal group.
 
-`app_terminal_group_update_settings`
+`app_terminal_group_updateSettings`
 
 Update a terminal group's name, default working directory, and startup command for future sessions.
 
