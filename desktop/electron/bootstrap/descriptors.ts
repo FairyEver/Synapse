@@ -817,6 +817,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const terminalDispatcher = createTerminalCapabilityDispatcher({
       service: terminalService,
+      permissionGuard,
+      auditSink,
     })
 
     const actionRouter = createSynapseActionRouter({

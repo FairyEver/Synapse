@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
+  TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
@@ -58,10 +59,98 @@ describe("createTerminalCapabilityDispatcher", () => {
     })
   })
 
-  it("writes as the mcp actor", async () => {
+  it("authorizes and audits agent-controlled session creation", async () => {
+    const createSessionService = vi.fn(async () => createSession())
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { createSession: createSessionService } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await dispatcher.dispatch(TERMINAL_SESSION_CREATE_CAPABILITY_ID, {
+      cwd: "/tmp",
+      agentControl: true,
+    }, { source: "mcp-http" })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "shell.exec",
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      resource: "/tmp",
+      context: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+        boundary: "terminal.mcp.agentControl",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "/tmp",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+        boundary: "terminal.mcp.agentControl",
+      },
+    }))
+    expect(createSessionService).toHaveBeenCalledWith({
+      cwd: "/tmp",
+      agentControl: true,
+    })
+  })
+
+  it("records denied write audits without input data and does not call service", async () => {
     const writeSession = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
     const dispatcher = createTerminalCapabilityDispatcher({
       service: { writeSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_SESSION_WRITE_CAPABILITY_ID, {
+      sessionId: "s1",
+      data: "secret input\n",
+    }, { source: "mcp-http" })).rejects.toThrow("blocked by policy")
+
+    expect(writeSession).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "denied",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
+        boundary: "terminal.mcp.writeSession",
+        sessionId: "s1",
+        byteCount: Buffer.byteLength("secret input\n"),
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret input")
+  })
+
+  it("authorizes writes before calling service as the mcp actor", async () => {
+    const writeSession = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { writeSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
     })
 
     await dispatcher.dispatch(TERMINAL_SESSION_WRITE_CAPABILITY_ID, {
@@ -74,12 +163,30 @@ describe("createTerminalCapabilityDispatcher", () => {
       data: "pwd\n",
       actor: "mcp",
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_WRITE_CAPABILITY_ID,
+        boundary: "terminal.mcp.writeSession",
+        sessionId: "s1",
+        byteCount: Buffer.byteLength("pwd\n"),
+      },
+    }))
   })
 
-  it("stops as the mcp actor", async () => {
+  it("authorizes stop before calling service as the mcp actor", async () => {
     const stopSession = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
     const dispatcher = createTerminalCapabilityDispatcher({
       service: { stopSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
     })
 
     await dispatcher.dispatch(TERMINAL_SESSION_STOP_CAPABILITY_ID, {
@@ -92,6 +199,18 @@ describe("createTerminalCapabilityDispatcher", () => {
       force: true,
       actor: "mcp",
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_STOP_CAPABILITY_ID,
+        boundary: "terminal.mcp.stopSession",
+        sessionId: "s1",
+        force: true,
+      },
+    }))
   })
 
   it("rejects unknown actions", async () => {

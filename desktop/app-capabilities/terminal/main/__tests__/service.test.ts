@@ -154,8 +154,9 @@ describe("TerminalService", () => {
   })
 
   it("stopSession marks killed and calls pty.kill; MCP stop is blocked without agent control", async () => {
+    const store = createMemoryStore()
     const pty = new FakePty()
-    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+    const service = await createStartedService(store, { ptys: [pty] })
     const session = await service.createSession({})
 
     await expect(service.stopSession({ sessionId: session.id, actor: "mcp" }))
@@ -166,6 +167,7 @@ describe("TerminalService", () => {
 
     expect(pty.kill).toHaveBeenCalledTimes(1)
     expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
+    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("killed")
   })
 
   it("stopSession throws when the session is not running", async () => {
@@ -253,17 +255,22 @@ describe("TerminalService", () => {
     expect(store.state.output.map((chunk) => chunk.data)).toEqual(["one", "two", "three"])
   })
 
-  it("stop kills live ptys and persists sessions as not running", async () => {
+  it("stop kills live ptys and persists sessions as lost", async () => {
     const store = createMemoryStore()
     const pty = new FakePty()
     const service = await createStartedService(store, { ptys: [pty] })
     const session = await service.createSession({})
+    pty.kill.mockImplementation(() => pty.emitExit({ exitCode: 143, signal: 15 }))
 
     await service.stop()
 
     expect(pty.kill).toHaveBeenCalledTimes(1)
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
-    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("killed")
+    expect(service.getSession({ sessionId: session.id })).toMatchObject({
+      status: "lost",
+      exitCode: 143,
+      signal: 15,
+    })
+    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("lost")
     expect(() => service.writeSession({ sessionId: session.id, data: "x", actor: "user" }))
       .toThrow("Terminal session is not running")
   })

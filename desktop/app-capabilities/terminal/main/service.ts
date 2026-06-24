@@ -189,7 +189,7 @@ export function createTerminalService(deps: {
       const timestamp = now()
       const updated: TerminalSession = {
         ...current,
-        status: current.status === "killed" ? "killed" : "exited",
+        status: current.status === "killed" || current.status === "lost" ? current.status : "exited",
         exitCode: event.exitCode,
         signal: event.signal,
         updatedAt: timestamp,
@@ -245,7 +245,7 @@ export function createTerminalService(deps: {
         if (current?.status === "running") {
           const updated: TerminalSession = {
             ...current,
-            status: "killed",
+            status: "lost",
             updatedAt: timestamp,
             endedAt: current.endedAt ?? timestamp,
           }
