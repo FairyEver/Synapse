@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
@@ -44,7 +45,7 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
     },
     async saveState(state) {
       const parsed = parseTerminalStoreState(state)
-      const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+      const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
       await mkdir(options.baseDir, { recursive: true })
       try {
         await writeFile(tempPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8")
