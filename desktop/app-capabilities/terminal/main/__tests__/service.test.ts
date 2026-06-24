@@ -113,6 +113,31 @@ describe("TerminalService", () => {
     }))
   })
 
+  it("renames a group with a trimmed name and persists the update", async () => {
+    const group = createGroup({ name: "默认分组" })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const updated = await withGroupActions(service).renameGroup({
+      groupId: group.id,
+      name: "  构建  ",
+    })
+
+    expect(updated).toMatchObject({ id: group.id, name: "构建" })
+    expect(service.listGroups()).toEqual([expect.objectContaining({ id: group.id, name: "构建" })])
+    expect(store.state.groups).toEqual([expect.objectContaining({ id: group.id, name: "构建" })])
+  })
+
+  it("rejects empty renamed terminal group names", async () => {
+    const group = createGroup()
+    const service = await createStartedService(createMemoryStore({ groups: [group], sessions: [], output: [] }))
+
+    await expect(withGroupActions(service).renameGroup({
+      groupId: group.id,
+      name: "   ",
+    })).rejects.toThrow("Terminal group name is required")
+  })
+
   it("rejects empty renamed terminal titles", async () => {
     const service = await createStartedService(createMemoryStore(), { ptys: [new FakePty()] })
     const session = await service.createSession({ title: "Shell" })
@@ -176,6 +201,69 @@ describe("TerminalService", () => {
     expect(store.state.output).toEqual([])
     expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
       .toThrow("Terminal session not found")
+  })
+
+  it("deletes an empty group and persists the update", async () => {
+    const group = createGroup()
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    await withGroupActions(service).deleteGroup({ groupId: group.id })
+
+    expect(service.listGroups()).toEqual([])
+    expect(store.state.groups).toEqual([])
+  })
+
+  it("deletes a non-empty group with sessions and retained output", async () => {
+    const group = createGroup()
+    const session = createSession({ status: "exited", endedAt: "2026-06-24T00:00:03.000Z", lastOutputSeq: 2 })
+    const otherGroup = createGroup({ id: "g2", name: "Other", sortOrder: 1 })
+    const otherSession = createSession({ id: "s2", groupId: "g2" })
+    const store = createMemoryStore({
+      groups: [group, otherGroup],
+      sessions: [session, otherSession],
+      output: [
+        createOutput({ sessionId: session.id, seq: 1, data: "old" }),
+        createOutput({ sessionId: otherSession.id, seq: 1, data: "keep" }),
+      ],
+    })
+    const service = await createStartedService(store)
+    const onSessionDeleted = vi.fn()
+    service.events.on("sessionDeleted", onSessionDeleted)
+
+    await withGroupActions(service).deleteGroup({ groupId: group.id })
+
+    expect(service.listGroups()).toEqual([expect.objectContaining({ id: "g2" })])
+    expect(service.listSessions()).toEqual([expect.objectContaining({ id: "s2" })])
+    expect(store.state.output).toEqual([expect.objectContaining({ sessionId: "s2", data: "keep" })])
+    expect(onSessionDeleted).toHaveBeenCalledWith({ sessionId: session.id })
+  })
+
+  it("deletes a group with a running session by killing the pty without reviving it on exit", async () => {
+    const store = createMemoryStore()
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty] })
+    const session = await service.createSession({})
+    pty.emitData("active")
+    await service.flushPersistQueue()
+
+    await withGroupActions(service).deleteGroup({ groupId: session.groupId })
+    pty.emitExit({ exitCode: 143, signal: 15 })
+    await service.flushPersistQueue()
+
+    expect(pty.kill).toHaveBeenCalledTimes(1)
+    expect(service.listGroups()).toEqual([])
+    expect(service.listSessions()).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(() => service.getSession({ sessionId: session.id }))
+      .toThrow("Terminal session not found")
+  })
+
+  it("throws when deleting a missing group", async () => {
+    const service = await createStartedService(createMemoryStore())
+
+    await expect(withGroupActions(service).deleteGroup({ groupId: "missing" }))
+      .rejects.toThrow("Terminal group not found")
   })
 
   it("marks restored running sessions as lost", async () => {
@@ -481,5 +569,15 @@ function withSessionActions(service: TerminalService): TerminalService & {
   return service as TerminalService & {
     renameSession(input: { sessionId: string; title: string }): Promise<TerminalSession>
     deleteSession(input: { sessionId: string }): Promise<void>
+  }
+}
+
+function withGroupActions(service: TerminalService): TerminalService & {
+  renameGroup(input: { groupId: string; name: string }): Promise<TerminalGroup>
+  deleteGroup(input: { groupId: string }): Promise<void>
+} {
+  return service as TerminalService & {
+    renameGroup(input: { groupId: string; name: string }): Promise<TerminalGroup>
+    deleteGroup(input: { groupId: string }): Promise<void>
   }
 }

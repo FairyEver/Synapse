@@ -21,9 +21,11 @@ Use Terminal tools when you need to work inside a Synapse-managed shell session.
 Rules:
 
 - Create a session with `app_terminal_session_create`, then read retained output with `app_terminal_session_read`.
+- Use `app_terminal_group_create`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions.
 - Use `afterSeq` from prior reads to avoid rereading the same output.
 - `app_terminal_session_write` writes raw terminal input; include `\n` when the shell should submit a command.
 - Use `app_terminal_session_rename` for display names and `app_terminal_session_delete` to remove a session plus retained output.
+- Deleting a terminal group removes every session in it. Running sessions are stopped before deletion.
 - Deleting a running terminal session stops it before removing the record.
 - Do not use Terminal tools as a broad command runner when a narrower MCP tool exists.
 

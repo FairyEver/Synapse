@@ -62,6 +62,12 @@ export function TerminalModule() {
   const [renameSaving, setRenameSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<SynapseTerminalSession | null>(null)
   const [deleteSaving, setDeleteSaving] = useState(false)
+  const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
+  const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [groupName, setGroupName] = useState("")
+  const [groupSaving, setGroupSaving] = useState(false)
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [deleteGroupSaving, setDeleteGroupSaving] = useState(false)
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
 
   const activeSession = useMemo(() => {
@@ -148,6 +154,43 @@ export function TerminalModule() {
     setRenameTitle(session.title)
   }, [])
 
+  const openCreateGroupDialog = useCallback(() => {
+    setGroupDialogMode("create")
+    setGroupRenameTarget(null)
+    setGroupName("")
+  }, [])
+
+  const openRenameGroupDialog = useCallback((group: SynapseTerminalGroup) => {
+    setGroupDialogMode("rename")
+    setGroupRenameTarget(group)
+    setGroupName(group.name)
+  }, [])
+
+  const saveGroup = useCallback(async () => {
+    const name = groupName.trim()
+    if (!name) return
+    setGroupSaving(true)
+    try {
+      if (groupDialogMode === "rename" && groupRenameTarget) {
+        const group = await terminalBridge.renameGroup({
+          groupId: groupRenameTarget.id,
+          name: groupName,
+        })
+        setGroups((current) => current.map((item) => item.id === group.id ? group : item))
+      } else {
+        const group = await terminalBridge.createGroup({ name })
+        setGroups((current) => mergeGroup(current, group))
+      }
+      setGroupDialogMode(null)
+      setGroupRenameTarget(null)
+      setGroupName("")
+    } catch (error) {
+      logger.error("Failed to save terminal group.", error)
+    } finally {
+      setGroupSaving(false)
+    }
+  }, [groupDialogMode, groupName, groupRenameTarget, terminalBridge])
+
   const renameSession = useCallback(async () => {
     if (!renameTarget) return
     const title = renameTitle.trim()
@@ -189,6 +232,32 @@ export function TerminalModule() {
       setDeleteSaving(false)
     }
   }, [deleteTarget, terminalBridge])
+
+  const deleteGroup = useCallback(async () => {
+    if (!deleteGroupTarget) return
+    const groupId = deleteGroupTarget.id
+    const removedSessionIds = new Set(sessions
+      .filter((session) => session.groupId === groupId)
+      .map((session) => session.id))
+    setDeleteGroupSaving(true)
+    try {
+      await terminalBridge.deleteGroup({ groupId })
+      setGroups((current) => current.filter((group) => group.id !== groupId))
+      setSessions((current) => {
+        const nextSessions = current.filter((session) => session.groupId !== groupId)
+        setActiveSessionId((currentActiveId) => {
+          if (!currentActiveId || !removedSessionIds.has(currentActiveId)) return currentActiveId
+          return nextSessions[0]?.id ?? null
+        })
+        return nextSessions
+      })
+      setDeleteGroupTarget(null)
+    } catch (error) {
+      logger.error("Failed to delete terminal group.", error)
+    } finally {
+      setDeleteGroupSaving(false)
+    }
+  }, [deleteGroupTarget, sessions, terminalBridge])
 
   const headerActions = useMemo(() => (
     <Button type="button" size="sm" onClick={() => { void createSession() }}>
@@ -310,6 +379,12 @@ export function TerminalModule() {
         <aside className="max-h-48 min-h-0 border-b bg-surface md:max-h-none md:border-b-0 md:border-r">
           <ScrollArea className="h-full">
             <div className="grid gap-2 p-2">
+              <div className="flex items-center justify-end">
+                <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
+                  <Plus data-icon="inline-start" />
+                  新建分组
+                </Button>
+              </div>
               {loading ? (
                 <div className="grid gap-2">
                   <Skeleton className="h-4 w-16" />
@@ -319,7 +394,37 @@ export function TerminalModule() {
                 </div>
               ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
                 <div key={group.id} className="grid gap-1">
-                  <div className="px-2 text-xs font-medium text-muted-foreground">{group.name}</div>
+                  <div className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 px-2">
+                    <div className="truncate text-xs font-medium text-muted-foreground">{group.name}</div>
+                    {group.id !== "ungrouped" ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={`终端分组操作：${group.name}`}
+                          >
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => { void createSession({ groupId: group.id }) }}>
+                            <TerminalIcon />
+                            新建终端
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
+                            <Pencil />
+                            重命名
+                          </DropdownMenuItem>
+                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteGroupTarget(group)}>
+                            <Trash2 />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
+                  </div>
                   <div className="grid gap-1">
                     {group.sessions.map((session) => (
                       <div
@@ -410,6 +515,55 @@ export function TerminalModule() {
           )}
         </main>
       </div>
+      <Dialog open={groupDialogMode !== null} onOpenChange={(open) => {
+        if (!open) {
+          setGroupDialogMode(null)
+          setGroupRenameTarget(null)
+          setGroupName("")
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{groupDialogMode === "rename" ? "重命名分组" : "新建分组"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入分组名称。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="分组名称"
+            value={groupName}
+            onChange={(event) => setGroupName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void saveGroup()
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={groupSaving}
+              onClick={() => {
+                setGroupDialogMode(null)
+                setGroupRenameTarget(null)
+                setGroupName("")
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={groupSaving || !groupName.trim()}
+              onClick={() => { void saveGroup() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
         if (!open) {
           setRenameTarget(null)
@@ -478,6 +632,27 @@ export function TerminalModule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
+        if (!open) setDeleteGroupTarget(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除分组</AlertDialogTitle>
+            <AlertDialogDescription>
+              会删除该分组下的终端会话，运行中的会话会停止。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteGroupSaving}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteGroupSaving}
+              onClick={() => { void deleteGroup() }}
+            >
+              删除分组
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SystemAppWindowShell>
   )
 }
@@ -485,13 +660,12 @@ export function TerminalModule() {
 function groupSessions(
   groups: readonly SynapseTerminalGroup[],
   sessions: readonly SynapseTerminalSession[],
-): Array<{ id: string; name: string; sessions: SynapseTerminalSession[] }> {
+): Array<SynapseTerminalGroup & { sessions: SynapseTerminalSession[] }> {
   const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
   const grouped = sortedGroups.map((group) => ({
-    id: group.id,
-    name: group.name,
+    ...group,
     sessions: sessions.filter((session) => session.groupId === group.id),
-  })).filter((group) => group.sessions.length > 0)
+  }))
   const groupedSessionIds = new Set(grouped.flatMap((group) => group.sessions.map((session) => session.id)))
   const ungrouped = sessions.filter((session) => !groupedSessionIds.has(session.id))
 
@@ -501,6 +675,9 @@ function groupSessions(
     {
       id: "ungrouped",
       name: "会话",
+      createdAt: "",
+      updatedAt: "",
+      sortOrder: Number.MAX_SAFE_INTEGER,
       sessions: ungrouped,
     },
   ]
@@ -513,6 +690,16 @@ function mergeSession(
   return sessions.some((item) => item.id === session.id)
     ? sessions.map((item) => item.id === session.id ? session : item)
     : [...sessions, session]
+}
+
+function mergeGroup(
+  groups: readonly SynapseTerminalGroup[],
+  group: SynapseTerminalGroup,
+): SynapseTerminalGroup[] {
+  const nextGroups = groups.some((item) => item.id === group.id)
+    ? groups.map((item) => item.id === group.id ? group : item)
+    : [...groups, group]
+  return nextGroups.sort((left, right) => left.sortOrder - right.sortOrder)
 }
 
 function getStatusLabel(status: SynapseTerminalSession["status"]): string {

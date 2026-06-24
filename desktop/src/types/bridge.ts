@@ -37,10 +37,12 @@ import type {
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalDataEvent,
+  SynapseTerminalDeleteGroupInput,
   SynapseTerminalDeleteSessionInput,
   SynapseTerminalGroup,
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
+  SynapseTerminalRenameGroupInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalResizeSessionInput,
   SynapseTerminalSession,
@@ -833,6 +835,8 @@ export type SynapseBridge = {
   terminal: {
     listGroups: () => Promise<SynapseTerminalGroup[]>
     createGroup: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
+    renameGroup: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
+    deleteGroup: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
     listSessions: () => Promise<SynapseTerminalSession[]>
     createSession: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
     getSession: (input: { sessionId: string }) => Promise<SynapseTerminalSession>

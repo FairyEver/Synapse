@@ -43,6 +43,31 @@ Output:
 
 - Terminal groups.
 
+`app_terminal_group_rename`
+
+Rename a terminal group.
+
+Input:
+
+- `groupId` required: terminal group id.
+- `name` required: new group name. Leading and trailing whitespace is trimmed.
+
+Output:
+
+- Terminal group.
+
+`app_terminal_group_delete`
+
+Delete a terminal group and every terminal session in it. Running sessions are stopped before deletion.
+
+Input:
+
+- `groupId` required: terminal group id.
+
+Output:
+
+- `{ "ok": true }`
+
 `app_terminal_session_create`
 
 Create a Synapse-managed terminal session using the user's default shell.

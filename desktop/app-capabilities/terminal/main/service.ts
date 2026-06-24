@@ -8,11 +8,13 @@ import { TERMINAL_SESSION_OUTPUT_RETENTION_BYTES } from "../../../config"
 import type {
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
   TerminalGroup,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
+  TerminalRenameGroupInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
   TerminalSession,
@@ -151,6 +153,12 @@ export function createTerminalService(deps: {
     return session
   }
 
+  function getGroupOrThrow(groupId: string): TerminalGroup {
+    const group = groups.get(groupId)
+    if (!group) throw new Error("Terminal group not found")
+    return group
+  }
+
   function getRunningRuntime(sessionId: string): TerminalRuntime {
     const session = getSessionOrThrow(sessionId)
     const runtime = runtimes.get(sessionId)
@@ -204,6 +212,25 @@ export function createTerminalService(deps: {
       buffer,
       disposables: [dataDisposable, exitDisposable],
     })
+  }
+
+  function deleteSessionRecord(sessionId: string): void {
+    const session = getSessionOrThrow(sessionId)
+    const runtime = runtimes.get(session.id)
+    if (runtime) {
+      cleanupRuntime(session.id)
+      try {
+        runtime.pty.kill()
+      } catch (error) {
+        deps.logger?.warn("Terminal service failed to kill deleted session runtime.", {
+          error,
+          sessionId: session.id,
+        })
+      }
+    }
+    sessions.delete(session.id)
+    buffers.delete(session.id)
+    events.emit("sessionDeleted", { sessionId: session.id })
   }
 
   return {
@@ -277,10 +304,13 @@ export function createTerminalService(deps: {
       return [...groups.values()].sort((left, right) => left.sortOrder - right.sortOrder)
     },
     async createGroup(input: TerminalCreateGroupInput): Promise<TerminalGroup> {
+      const name = input.name.trim()
+      if (!name) throw new Error("Terminal group name is required")
+      if (name.length > 80) throw new Error("Terminal group name is too long")
       const timestamp = now()
       const group: TerminalGroup = {
         id: randomUUID(),
-        name: input.name,
+        name,
         createdAt: timestamp,
         updatedAt: timestamp,
         sortOrder: groups.size,
@@ -288,6 +318,25 @@ export function createTerminalService(deps: {
       groups.set(group.id, group)
       await flushPersist()
       return group
+    },
+    async renameGroup(input: TerminalRenameGroupInput): Promise<TerminalGroup> {
+      const group = getGroupOrThrow(input.groupId)
+      const name = input.name.trim()
+      if (!name) throw new Error("Terminal group name is required")
+      if (name.length > 80) throw new Error("Terminal group name is too long")
+      const updated = { ...group, name, updatedAt: now() }
+      groups.set(group.id, updated)
+      await flushPersist()
+      return updated
+    },
+    async deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
+      const group = getGroupOrThrow(input.groupId)
+      const groupSessions = [...sessions.values()].filter((session) => session.groupId === group.id)
+      for (const session of groupSessions) {
+        deleteSessionRecord(session.id)
+      }
+      groups.delete(group.id)
+      await flushPersist()
     },
     listSessions(): TerminalSession[] {
       return [...sessions.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -369,22 +418,7 @@ export function createTerminalService(deps: {
       await flushPersist()
     },
     async deleteSession(input: TerminalDeleteSessionInput): Promise<void> {
-      const session = getSessionOrThrow(input.sessionId)
-      const runtime = runtimes.get(session.id)
-      if (runtime) {
-        cleanupRuntime(session.id)
-        try {
-          runtime.pty.kill()
-        } catch (error) {
-          deps.logger?.warn("Terminal service failed to kill deleted session runtime.", {
-            error,
-            sessionId: session.id,
-          })
-        }
-      }
-      sessions.delete(session.id)
-      buffers.delete(session.id)
-      events.emit("sessionDeleted", { sessionId: session.id })
+      deleteSessionRecord(input.sessionId)
       await flushPersist()
     },
     async stopSession(input: TerminalStopSessionInput): Promise<void> {

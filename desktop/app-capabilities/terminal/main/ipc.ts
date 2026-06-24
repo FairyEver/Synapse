@@ -6,11 +6,13 @@ import type { TerminalService } from "./service"
 import {
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
   terminalGroupSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
+  terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
   terminalSessionIdInputSchema,
@@ -72,6 +74,22 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGroupSchema,
       handler: (ctx, request: z.infer<typeof terminalCreateGroupInputSchema>) =>
         resolveTerminalService(ctx).createGroup(request),
+    },
+    renameGroup: {
+      channel: "synapse:terminal:group:rename",
+      kind: "invoke",
+      request: terminalRenameGroupInputSchema,
+      response: terminalGroupSchema,
+      handler: (ctx, request: z.infer<typeof terminalRenameGroupInputSchema>) =>
+        resolveTerminalService(ctx).renameGroup(request),
+    },
+    deleteGroup: {
+      channel: "synapse:terminal:group:delete",
+      kind: "invoke",
+      request: terminalDeleteGroupInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalDeleteGroupInputSchema>) =>
+        resolveTerminalService(ctx).deleteGroup(request),
     },
     listSessions: {
       channel: "synapse:terminal:session:list",

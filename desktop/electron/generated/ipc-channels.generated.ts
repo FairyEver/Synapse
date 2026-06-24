@@ -258,6 +258,8 @@ export const IPC_CHANNELS = {
   "terminal": {
     "listGroups": "synapse:terminal:group:list",
     "createGroup": "synapse:terminal:group:create",
+    "renameGroup": "synapse:terminal:group:rename",
+    "deleteGroup": "synapse:terminal:group:delete",
     "listSessions": "synapse:terminal:session:list",
     "createSession": "synapse:terminal:session:create",
     "getSession": "synapse:terminal:session:get",

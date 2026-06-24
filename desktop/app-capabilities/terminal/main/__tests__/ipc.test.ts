@@ -64,6 +64,8 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.id).toBe("terminal")
     expect(terminalIpcModule.methods.listGroups.channel).toBe("synapse:terminal:group:list")
     expect(terminalIpcModule.methods.createGroup.channel).toBe("synapse:terminal:group:create")
+    expect(terminalIpcModule.methods.renameGroup.channel).toBe("synapse:terminal:group:rename")
+    expect(terminalIpcModule.methods.deleteGroup.channel).toBe("synapse:terminal:group:delete")
     expect(terminalIpcModule.methods.listSessions.channel).toBe("synapse:terminal:session:list")
     expect(terminalIpcModule.methods.createSession.channel).toBe("synapse:terminal:session:create")
     expect(terminalIpcModule.methods.getSession.channel).toBe("synapse:terminal:session:get")
@@ -79,10 +81,17 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.events.sessionDeleted.channel).toBe("synapse:terminal:session-deleted")
   })
 
-  it("renames, deletes, writes, and stops sessions as the user actor", async () => {
+  it("renames and deletes groups plus sessions as the user actor", async () => {
     const service = createService()
     const ctx = createContext(service)
 
+    await terminalIpcModule.methods.renameGroup.handler(ctx, {
+      groupId: "group-1",
+      name: "构建",
+    })
+    await terminalIpcModule.methods.deleteGroup.handler(ctx, {
+      groupId: "group-1",
+    })
     await terminalIpcModule.methods.renameSession.handler(ctx, {
       sessionId: "session-1",
       title: "Logs",
@@ -99,6 +108,13 @@ describe("terminalIpcModule", () => {
       force: true,
     })
 
+    expect(service.renameGroup).toHaveBeenCalledWith({
+      groupId: "group-1",
+      name: "构建",
+    })
+    expect(service.deleteGroup).toHaveBeenCalledWith({
+      groupId: "group-1",
+    })
     expect(service.renameSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       title: "Logs",
@@ -242,6 +258,8 @@ function createService(): Partial<TerminalService> {
   return {
     listGroups: vi.fn(() => []),
     createGroup: vi.fn(),
+    renameGroup: vi.fn(),
+    deleteGroup: vi.fn(),
     listSessions: vi.fn(() => []),
     createSession: vi.fn(),
     getSession: vi.fn(() => session),

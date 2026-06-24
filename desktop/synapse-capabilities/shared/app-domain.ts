@@ -4,7 +4,9 @@ import {
 } from "../../app-capabilities/document-template/shared/capability"
 import {
   TERMINAL_GROUP_CREATE_CAPABILITY_ID,
+  TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
+  TERMINAL_GROUP_RENAME_CAPABILITY_ID,
   TERMINAL_MCP_TOOL_NAMES,
   TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
@@ -42,6 +44,18 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     title: "List terminal groups",
     description: "List Synapse terminal groups.",
     mutates: false,
+  },
+  {
+    id: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+    title: "Rename terminal group",
+    description: "Rename a Synapse terminal group.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
+    title: "Delete terminal group",
+    description: "Delete a Synapse terminal group and all sessions in it.",
+    mutates: true,
   },
   {
     id: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
@@ -120,6 +134,8 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupCreate]: TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupDelete]: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionCreate]: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionList]: TERMINAL_SESSION_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionGet]: TERMINAL_SESSION_GET_CAPABILITY_ID,
@@ -224,6 +240,29 @@ export function buildAppTools(): McpToolDefinition[] {
       name: TERMINAL_MCP_TOOL_NAMES.groupList,
       description: "List Synapse terminal groups.",
       inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupRename,
+      description: "Rename a Synapse terminal group.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          name: stringField("New group name. Leading and trailing whitespace is trimmed.", { minLength: 1, maxLength: 80 }),
+        },
+        required: ["groupId", "name"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupDelete,
+      description: "Delete a Synapse terminal group and every terminal session in it. Running sessions are stopped before deletion.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+        },
+        required: ["groupId"],
+      },
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.sessionCreate,

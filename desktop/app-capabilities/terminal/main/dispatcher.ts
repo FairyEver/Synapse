@@ -2,7 +2,9 @@ import type { DispatchContext, DispatchResult } from "../../../synapse-capabilit
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../../../electron/runtime/security"
 import {
   TERMINAL_GROUP_CREATE_CAPABILITY_ID,
+  TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
+  TERMINAL_GROUP_RENAME_CAPABILITY_ID,
   TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_GET_CAPABILITY_ID,
@@ -16,9 +18,11 @@ import {
 import {
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
   terminalEmptyInputSchema,
   terminalReadSessionInputSchema,
+  terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
   terminalSessionIdInputSchema,
@@ -48,6 +52,20 @@ export function createTerminalCapabilityDispatcher(deps: {
       if (action === TERMINAL_GROUP_LIST_CAPABILITY_ID) {
         terminalEmptyInputSchema.parse(params)
         return { ok: true, data: deps.service.listGroups(), affected: 0 }
+      }
+      if (action === TERMINAL_GROUP_RENAME_CAPABILITY_ID) {
+        return { ok: true, data: await deps.service.renameGroup(terminalRenameGroupInputSchema.parse(params)), affected: 1 }
+      }
+      if (action === TERMINAL_GROUP_DELETE_CAPABILITY_ID) {
+        const parsed = terminalDeleteGroupInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
+          resource: parsed.groupId,
+          boundary: "terminal.mcp.deleteGroup",
+          groupId: parsed.groupId,
+        })
+        await deps.service.deleteGroup(parsed)
+        return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_CREATE_CAPABILITY_ID) {
         return { ok: true, data: await deps.service.createSession(terminalCreateSessionInputSchema.parse(params)), affected: 1 }
@@ -120,6 +138,7 @@ async function authorizeTerminalControl(
     readonly capabilityAction: string
     readonly resource: string
     readonly boundary: string
+    readonly groupId?: string
     readonly sessionId?: string
     readonly byteCount?: number
     readonly force?: boolean
@@ -131,6 +150,7 @@ async function authorizeTerminalControl(
     source: context.source ?? "api",
     capabilityAction: input.capabilityAction,
     boundary: input.boundary,
+    ...(input.groupId ? { groupId: input.groupId } : {}),
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.byteCount === undefined ? {} : { byteCount: input.byteCount }),
     ...(input.force === undefined ? {} : { force: input.force }),
