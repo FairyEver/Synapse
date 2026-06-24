@@ -46,6 +46,20 @@ describe("terminal output buffer", () => {
     expect(result.chunks.map((chunk) => chunk.data)).toEqual(["a", "b"])
   })
 
+  it("retains the newest chunk when it exceeds the byte limit", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 3 })
+
+    const appended = buffer.append("s1", "12345")
+
+    expect(buffer.snapshot()).toEqual([appended])
+    expect(buffer.read({ afterSeq: 0, limitBytes: 100 })).toMatchObject({
+      chunks: [appended],
+      firstSeq: 1,
+      nextSeq: 1,
+      truncated: false,
+    })
+  })
+
   it("limits reads by requested byte count", () => {
     const buffer = createTerminalOutputBuffer({ maxBytes: 100 })
 

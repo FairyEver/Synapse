@@ -7,6 +7,47 @@ import type { TerminalGroup, TerminalOutputChunk, TerminalSession } from "../../
 
 let tempDir = ""
 
+function createValidGroup(overrides: Partial<TerminalGroup> = {}): TerminalGroup {
+  return {
+    id: "g1",
+    name: "Default",
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt: "2026-06-24T00:00:00.000Z",
+    sortOrder: 0,
+    ...overrides,
+  }
+}
+
+function createValidSession(overrides: Partial<TerminalSession> = {}): TerminalSession {
+  return {
+    id: "s1",
+    groupId: "g1",
+    title: "zsh",
+    cwd: tempDir,
+    shell: "/bin/zsh",
+    status: "running",
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt: "2026-06-24T00:00:00.000Z",
+    startedAt: "2026-06-24T00:00:00.000Z",
+    agentControl: "disabled",
+    cols: 80,
+    rows: 24,
+    lastOutputSeq: 1,
+    ...overrides,
+  }
+}
+
+function createValidOutput(overrides: Partial<TerminalOutputChunk> = {}): TerminalOutputChunk {
+  return {
+    sessionId: "s1",
+    seq: 1,
+    data: "hello",
+    createdAt: "2026-06-24T00:00:01.000Z",
+    source: "pty",
+    ...overrides,
+  }
+}
+
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-store-"))
 })
@@ -17,35 +58,9 @@ afterEach(async () => {
 
 describe("terminal store", () => {
   it("persists groups, sessions, and output chunks", async () => {
-    const group: TerminalGroup = {
-      id: "g1",
-      name: "Default",
-      createdAt: "2026-06-24T00:00:00.000Z",
-      updatedAt: "2026-06-24T00:00:00.000Z",
-      sortOrder: 0,
-    }
-    const session: TerminalSession = {
-      id: "s1",
-      groupId: "g1",
-      title: "zsh",
-      cwd: tempDir,
-      shell: "/bin/zsh",
-      status: "running",
-      createdAt: "2026-06-24T00:00:00.000Z",
-      updatedAt: "2026-06-24T00:00:00.000Z",
-      startedAt: "2026-06-24T00:00:00.000Z",
-      agentControl: "disabled",
-      cols: 80,
-      rows: 24,
-      lastOutputSeq: 1,
-    }
-    const output: TerminalOutputChunk = {
-      sessionId: "s1",
-      seq: 1,
-      data: "hello",
-      createdAt: "2026-06-24T00:00:01.000Z",
-      source: "pty",
-    }
+    const group = createValidGroup()
+    const session = createValidSession()
+    const output = createValidOutput()
 
     await createTerminalStore({ baseDir: tempDir }).saveState({
       groups: [group],
@@ -70,35 +85,9 @@ describe("terminal store", () => {
 
   it("rejects invalid state on save", async () => {
     const store = createTerminalStore({ baseDir: tempDir })
-    const validGroup: TerminalGroup = {
-      id: "g1",
-      name: "Default",
-      createdAt: "2026-06-24T00:00:00.000Z",
-      updatedAt: "2026-06-24T00:00:00.000Z",
-      sortOrder: 0,
-    }
-    const validSession: TerminalSession = {
-      id: "s1",
-      groupId: "g1",
-      title: "zsh",
-      cwd: tempDir,
-      shell: "/bin/zsh",
-      status: "running",
-      createdAt: "2026-06-24T00:00:00.000Z",
-      updatedAt: "2026-06-24T00:00:00.000Z",
-      startedAt: "2026-06-24T00:00:00.000Z",
-      agentControl: "disabled",
-      cols: 80,
-      rows: 24,
-      lastOutputSeq: 1,
-    }
-    const validOutput: TerminalOutputChunk = {
-      sessionId: "s1",
-      seq: 1,
-      data: "hello",
-      createdAt: "2026-06-24T00:00:01.000Z",
-      source: "pty",
-    }
+    const validGroup = createValidGroup()
+    const validSession = createValidSession()
+    const validOutput = createValidOutput()
 
     await expect(store.saveState({
       groups: [{ ...validGroup, id: "" }],
@@ -125,5 +114,57 @@ describe("terminal store", () => {
     }), "utf8")
 
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).rejects.toThrow()
+  })
+
+  it("rejects duplicate group and session ids", async () => {
+    const store = createTerminalStore({ baseDir: tempDir })
+    const group = createValidGroup()
+    const session = createValidSession()
+
+    await expect(store.saveState({
+      groups: [group, createValidGroup({ name: "Other" })],
+      sessions: [session],
+      output: [createValidOutput()],
+    })).rejects.toThrow("Duplicate terminal group id")
+    await expect(store.saveState({
+      groups: [group],
+      sessions: [session, createValidSession({ title: "Other" })],
+      output: [createValidOutput()],
+    })).rejects.toThrow("Duplicate terminal session id")
+  })
+
+  it("rejects sessions that reference missing groups", async () => {
+    const store = createTerminalStore({ baseDir: tempDir })
+
+    await expect(store.saveState({
+      groups: [createValidGroup()],
+      sessions: [createValidSession({ groupId: "missing" })],
+      output: [],
+    })).rejects.toThrow("Unknown terminal session group")
+
+    await writeFile(path.join(tempDir, "terminal-state.json"), JSON.stringify({
+      groups: [createValidGroup()],
+      sessions: [createValidSession({ groupId: "missing" })],
+      output: [],
+    }), "utf8")
+    await expect(store.loadState()).rejects.toThrow("Unknown terminal session group")
+  })
+
+  it("rejects output for missing sessions and duplicate output sequences", async () => {
+    const store = createTerminalStore({ baseDir: tempDir })
+
+    await expect(store.saveState({
+      groups: [createValidGroup()],
+      sessions: [createValidSession()],
+      output: [createValidOutput({ sessionId: "missing" })],
+    })).rejects.toThrow("Unknown terminal output session")
+    await expect(store.saveState({
+      groups: [createValidGroup()],
+      sessions: [createValidSession()],
+      output: [
+        createValidOutput(),
+        createValidOutput({ data: "again" }),
+      ],
+    })).rejects.toThrow("Duplicate terminal output seq")
   })
 })

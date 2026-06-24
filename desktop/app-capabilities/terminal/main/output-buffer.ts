@@ -75,7 +75,7 @@ export function createTerminalOutputBuffer(options: {
   }
 
   function prune(): void {
-    while (totalBytes > options.maxBytes && entries.length > 0) {
+    while (totalBytes > options.maxBytes && entries.length > 1) {
       const removed = entries.shift()
       if (removed) totalBytes -= removed.byteLength
     }
