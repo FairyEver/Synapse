@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
+import type { WindowManager } from "../../../electron/runtime/window"
 import type { TerminalService } from "./service"
 import {
   terminalCreateGroupInputSchema,
@@ -26,8 +27,28 @@ const terminalDataEventPayloadSchema = z.object({
   chunk: terminalOutputChunkSchema,
 })
 
+const terminalEventWiredServices = new WeakSet<TerminalService>()
+
 function resolveTerminalService(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): TerminalService {
-  return ctx.resolve<TerminalService>("core.terminal")
+  const service = ctx.resolve<TerminalService>("core.terminal")
+  wireTerminalEvents(ctx, service)
+  return service
+}
+
+function wireTerminalEvents(
+  ctx: Parameters<IpcModule["methods"][string]["handler"]>[0],
+  service: TerminalService,
+): void {
+  if (terminalEventWiredServices.has(service)) return
+
+  const windowManager = ctx.resolve<WindowManager>("core.window-manager")
+  service.events.on("data", (payload) => {
+    windowManager.broadcast(terminalIpcModule.events.data.channel, payload)
+  })
+  service.events.on("sessionChanged", (payload) => {
+    windowManager.broadcast(terminalIpcModule.events.sessionChanged.channel, payload)
+  })
+  terminalEventWiredServices.add(service)
 }
 
 export const terminalIpcModule: IpcModule = {

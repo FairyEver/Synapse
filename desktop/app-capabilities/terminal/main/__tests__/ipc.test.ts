@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
+import { EventEmitter } from "node:events"
 
-import { registeredIpcModules } from "../../../../electron/bootstrap/ipc-registry"
+import { createIpcRegistry, registeredIpcModules } from "../../../../electron/bootstrap/ipc-registry"
 import type { IpcHandlerContext } from "../../../../electron/runtime/ipc/types"
+import type { WindowManager } from "../../../../electron/runtime/window"
 import type { TerminalService } from "../service"
 import { terminalIpcModule } from "../ipc"
 
@@ -154,36 +156,81 @@ describe("terminalIpcModule", () => {
   it("is included in registered IPC modules", () => {
     expect(registeredIpcModules).toContain(terminalIpcModule)
   })
+
+  it("does not resolve the terminal service during IPC registry setup", () => {
+    const resolved: string[] = []
+
+    expect(() =>
+      createIpcRegistry({
+        moduleId: "main",
+        resolve: <T>(serviceId: string): T => {
+          resolved.push(serviceId)
+          if (serviceId === "core.terminal") {
+            throw new Error("core.terminal is not running")
+          }
+          if (serviceId === "core.window-manager") {
+            return createWindowManager() as T
+          }
+          return {} as T
+        },
+      }),
+    ).not.toThrow()
+
+    expect(resolved).not.toContain("core.terminal")
+  })
+
+  it("wires terminal event forwarding after a terminal IPC method resolves the service", async () => {
+    const service = createService()
+    const windowManager = createWindowManager()
+    const ctx = createContext(service, windowManager)
+
+    await terminalIpcModule.methods.listGroups.handler(ctx, undefined)
+    ;(service.events as EventEmitter).emit("data", {
+      sessionId: "session-1",
+      chunk: {
+        sessionId: "session-1",
+        seq: 1,
+        data: "hello",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        source: "pty",
+      },
+    })
+    ;(service.events as EventEmitter).emit("sessionChanged", createSession())
+
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:data", {
+      sessionId: "session-1",
+      chunk: {
+        sessionId: "session-1",
+        seq: 1,
+        data: "hello",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        source: "pty",
+      },
+    })
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:terminal:session-changed", createSession())
+  })
 })
 
-function createContext(service: Partial<TerminalService>): IpcHandlerContext {
+function createContext(
+  service: Partial<TerminalService>,
+  windowManager: Partial<WindowManager> = createWindowManager(),
+): IpcHandlerContext {
   return {
     moduleId: "terminal",
     resolve: <T>(serviceId: string): T => {
-      if (serviceId !== "core.terminal") {
-        throw new Error(`Unexpected service: ${serviceId}`)
+      if (serviceId === "core.terminal") {
+        return service as T
       }
-      return service as T
+      if (serviceId === "core.window-manager") {
+        return windowManager as T
+      }
+      throw new Error(`Unexpected service: ${serviceId}`)
     },
   }
 }
 
 function createService(): Partial<TerminalService> {
-  const session = {
-    id: "session-1",
-    groupId: "group-1",
-    title: "zsh",
-    cwd: "/Users/liyang",
-    shell: "/bin/zsh",
-    status: "running" as const,
-    createdAt: "2026-06-24T00:00:00.000Z",
-    updatedAt: "2026-06-24T00:00:00.000Z",
-    startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "disabled" as const,
-    cols: 80,
-    rows: 24,
-    lastOutputSeq: 0,
-  }
+  const session = createSession()
   return {
     listGroups: vi.fn(() => []),
     createGroup: vi.fn(),
@@ -201,9 +248,30 @@ function createService(): Partial<TerminalService> {
     resizeSession: vi.fn(),
     setAgentControl: vi.fn(() => session),
     stopSession: vi.fn(),
-    events: {
-      on: vi.fn(),
-      off: vi.fn(),
-    } as unknown as TerminalService["events"],
+    events: new EventEmitter() as TerminalService["events"],
+  }
+}
+
+function createSession() {
+  return {
+    id: "session-1",
+    groupId: "group-1",
+    title: "zsh",
+    cwd: "/Users/liyang",
+    shell: "/bin/zsh",
+    status: "running" as const,
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt: "2026-06-24T00:00:00.000Z",
+    startedAt: "2026-06-24T00:00:00.000Z",
+    agentControl: "disabled" as const,
+    cols: 80,
+    rows: 24,
+    lastOutputSeq: 0,
+  }
+}
+
+function createWindowManager(): Pick<WindowManager, "broadcast"> {
+  return {
+    broadcast: vi.fn(() => 1),
   }
 }
