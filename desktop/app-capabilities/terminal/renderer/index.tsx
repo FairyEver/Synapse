@@ -17,6 +17,7 @@ import type {
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
+import { createTerminalRenderingOptions } from "./terminal-rendering"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -135,12 +136,10 @@ export function TerminalModule() {
 
     let disposed = false
     let lastSeq = 0
-    const xterm = new Terminal({
-      cursorBlink: true,
-      convertEol: true,
-      scrollback: 5000,
+    const xterm = new Terminal(createTerminalRenderingOptions({
+      container,
       disableStdin: activeSession.status !== "running",
-    })
+    }))
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon()
     xterm.loadAddon(fitAddon)
@@ -278,7 +277,7 @@ export function TerminalModule() {
                   </label>
                 ) : null}
               </header>
-              <div className="min-h-0 flex-1 overflow-hidden bg-background p-2">
+              <div className="dark min-h-0 flex-1 overflow-hidden bg-background p-2">
                 <div ref={terminalContainerRef} className="h-full min-h-0 min-w-0 overflow-hidden rounded-lg border bg-background" />
               </div>
             </>

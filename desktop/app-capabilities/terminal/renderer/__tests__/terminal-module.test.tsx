@@ -130,6 +130,7 @@ vi.mock("@xterm/addon-web-links", () => ({
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
+import { Terminal as XtermTerminal } from "@xterm/xterm"
 import { TerminalModule } from "../index"
 import { EmbeddedSystemAppShell } from "../../../../src/modules/apps/components/embedded-system-app-shell"
 
@@ -177,6 +178,7 @@ beforeEach(() => {
   terminalBridge.stopSession.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
+  vi.mocked(XtermTerminal).mockClear()
   xtermState.instances = []
   xtermState.fitInstances = []
   xtermState.webLinksInstances = []
@@ -221,6 +223,30 @@ describe("TerminalModule", () => {
       rows: 24,
     })
     expect(document.body.textContent).toContain("Session 1")
+  })
+
+  it("creates xterm with iTerm-like rendering defaults", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      customGlyphs: true,
+      cursorStyle: "block",
+      fontFamily: expect.stringContaining("MesloLGS NF"),
+      fontSize: expect.any(Number),
+      letterSpacing: 0,
+      lineHeight: expect.any(Number),
+      theme: expect.objectContaining({
+        background: expect.any(String),
+        foreground: expect.any(String),
+        cursor: expect.any(String),
+        selectionBackground: expect.any(String),
+        blue: expect.any(String),
+        brightBlue: expect.any(String),
+      }),
+    }))
   })
 
   it("attaches to a session, streams data, writes input, and cleans up without stopping it", async () => {
