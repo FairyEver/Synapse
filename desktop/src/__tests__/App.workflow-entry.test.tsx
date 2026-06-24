@@ -19,8 +19,6 @@ const mocks = vi.hoisted(() => ({
   getStates: vi.fn(),
   lastDockProps: null as null | {
     apps: Array<{ id: string; name: string }>
-    onMoveApp?: (appId: string, targetAppId?: string) => void
-    onUnpinApp?: (appId: string) => void
     onValueChange: (value: string) => void
   },
   openSystemApp: vi.fn(async () => undefined),
@@ -53,8 +51,6 @@ vi.mock("@/app-shell/components/app-shell-layout", () => ({
 vi.mock("@/app-shell/components/app-shell-dock", () => ({
   AppShellDock: (props: {
     apps: Array<{ id: string; name: string }>
-    onMoveApp?: (appId: string, targetAppId?: string) => void
-    onUnpinApp?: (appId: string) => void
     onValueChange: (value: string) => void
   }) => {
     mocks.lastDockProps = props
@@ -256,6 +252,7 @@ describe("App workflow entry visibility", () => {
       "对话",
       "云盘",
       "自动化",
+      "终端",
       "设置",
       "应用",
     ])
@@ -299,22 +296,23 @@ describe("App workflow entry visibility", () => {
       "云盘",
       "自动化",
       "工作流",
+      "终端",
       "设置",
       "应用",
     ])
   })
 
-  it("uses the first visible Dock app as the default main view", async () => {
+  it("uses the fixed first visible Dock app as the default main view", async () => {
     mocks.currentConfig.global.dockAppIds = ["drive", "agent", "launcher"]
     mocks.getStates.mockResolvedValue({})
 
     await renderApp()
 
-    expect(document.body.textContent).toContain("drive")
-    expect(document.body.textContent).not.toContain("对话模块")
+    expect(document.body.textContent).toContain("对话模块")
+    expect(document.body.textContent).not.toContain("drive")
   })
 
-  it("falls back to the first visible Dock app when workflow becomes hidden", async () => {
+  it("falls back to the fixed first visible Dock app when workflow becomes hidden", async () => {
     mocks.currentConfig.global.dockAppIds = ["workflow", "drive", "launcher"]
     mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
 
@@ -328,42 +326,18 @@ describe("App workflow entry visibility", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("drive")
+    expect(document.body.textContent).toContain("对话模块")
     expect(document.body.textContent).not.toContain("工作流模块")
   })
 
-  it("updates the user Dock config when an app is removed", async () => {
+  it("does not expose Dock config mutation handlers", async () => {
     mocks.getStates.mockResolvedValue({})
 
     await renderApp()
 
-    await act(async () => {
-      mocks.lastDockProps?.onUnpinApp?.("agent")
-      await Promise.resolve()
-    })
-
-    expect(mocks.updateConfig).toHaveBeenCalledWith({
-      global: {
-        dockAppIds: ["drive", "automation", "workflow", "settings", "launcher"],
-      },
-    })
-  })
-
-  it("updates the user Dock config when apps are reordered", async () => {
-    mocks.getStates.mockResolvedValue({})
-
-    await renderApp()
-
-    await act(async () => {
-      mocks.lastDockProps?.onMoveApp?.("drive", "agent")
-      await Promise.resolve()
-    })
-
-    expect(mocks.updateConfig).toHaveBeenCalledWith({
-      global: {
-        dockAppIds: ["drive", "agent", "automation", "workflow", "settings", "launcher"],
-      },
-    })
+    expect(mocks.lastDockProps).not.toHaveProperty("onUnpinApp")
+    expect(mocks.lastDockProps).not.toHaveProperty("onMoveApp")
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
   })
 
   it("opens resource content requests inside the Apps module", async () => {

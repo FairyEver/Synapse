@@ -57,81 +57,21 @@ describe("AppShellDock", () => {
     expect(onValueChange).toHaveBeenCalledWith("launcher")
   })
 
-  it("pins an app dropped from the launcher", async () => {
-    const onPinApp = vi.fn()
+  it("does not expose drag or unpin affordances", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
     roots.push(root)
 
     await act(async () => {
-      root.render(<AppShellDock apps={apps} value="agent" onValueChange={vi.fn()} onPinApp={onPinApp} />)
+      root.render(<AppShellDock apps={apps} value="agent" onValueChange={vi.fn()} />)
       await Promise.resolve()
     })
 
     const nav = document.querySelector("[data-track='app-shell-dock']")
-    const dataTransfer = createDataTransfer("database")
-
-    await act(async () => {
-      nav?.dispatchEvent(createDragEvent("dragover", dataTransfer))
-      nav?.dispatchEvent(createDragEvent("drop", dataTransfer))
-      await Promise.resolve()
-    })
-
-    expect(onPinApp).toHaveBeenCalledWith("database")
-  })
-
-  it("marks every Dock app except the launcher as unpinnable", async () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <AppShellDock
-          apps={apps}
-          value="agent"
-          onValueChange={vi.fn()}
-          canUnpinApp={(appId) => appId !== "launcher"}
-          onUnpinApp={vi.fn()}
-        />,
-      )
-      await Promise.resolve()
-    })
-
-    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBe("true")
-    expect(findButtonByLabel("应用").getAttribute("data-can-unpin")).toBeNull()
-  })
-
-  it("moves a Dock app before the drop target", async () => {
-    const onMoveApp = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <AppShellDock
-          apps={apps}
-          value="agent"
-          onValueChange={vi.fn()}
-          onMoveApp={onMoveApp}
-        />,
-      )
-      await Promise.resolve()
-    })
-
-    const dataTransfer = createDataTransfer("drive")
-
-    await act(async () => {
-      findButtonByLabel("对话").dispatchEvent(createDragEvent("dragover", dataTransfer))
-      findButtonByLabel("对话").dispatchEvent(createDragEvent("drop", dataTransfer))
-      await Promise.resolve()
-    })
-
-    expect(onMoveApp).toHaveBeenCalledWith("drive", "agent")
+    expect(nav?.getAttribute("draggable")).toBeNull()
+    expect(findButtonByLabel("对话").getAttribute("draggable")).toBeNull()
+    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBeNull()
   })
 })
 
@@ -143,24 +83,4 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
-}
-
-function createDragEvent(type: string, dataTransfer: DataTransfer): Event {
-  const event = new Event(type, { bubbles: true, cancelable: true })
-  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
-  return event
-}
-
-function createDataTransfer(appId: string): DataTransfer {
-  return {
-    getData: vi.fn((type: string) => type === "application/x-synapse-system-app-id" ? appId : ""),
-    setData: vi.fn(),
-    clearData: vi.fn(),
-    dropEffect: "move",
-    effectAllowed: "move",
-    files: [] as unknown as FileList,
-    items: [] as unknown as DataTransferItemList,
-    types: ["application/x-synapse-system-app-id"],
-    setDragImage: vi.fn(),
-  } as unknown as DataTransfer
 }

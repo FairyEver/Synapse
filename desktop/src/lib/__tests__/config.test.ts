@@ -678,6 +678,7 @@ describe("Synapse user variables config", () => {
       "drive",
       "automation",
       "workflow",
+      "terminal",
       "settings",
       "launcher",
     ])
@@ -692,6 +693,14 @@ describe("Synapse user variables config", () => {
       },
     })
 
-    expect(config.global.dockAppIds).toEqual(["database", "launcher"])
+    expect(config.global.dockAppIds).toEqual([
+      "agent",
+      "drive",
+      "automation",
+      "workflow",
+      "terminal",
+      "settings",
+      "launcher",
+    ])
   })
 })

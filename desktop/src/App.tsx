@@ -38,11 +38,8 @@ import { ContentWindowPage } from "@/modules/content/components/content-window-p
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
 import {
-  addDockAppId,
   listDockApps,
-  moveDockAppId,
   normalizeDockAppIds,
-  removeDockAppId,
   resolveDefaultDockAppId,
 } from "@/modules/apps/dock"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
@@ -57,7 +54,7 @@ type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-
 const logger = createRendererLogger("app")
 
 function MainApp() {
-  const { config, updateConfig } = useAppConfig()
+  const { config } = useAppConfig()
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
@@ -164,44 +161,6 @@ function MainApp() {
     [dockAppIds, workflowEntryVisible],
   )
 
-  const updateDockAppIds = useCallback((nextDockAppIds: SynapseSystemAppId[]) => {
-    void Promise.resolve(updateConfig({
-      global: {
-        dockAppIds: nextDockAppIds,
-      },
-    })).catch((error) => {
-      logger.error("Failed to update Dock app config.", error)
-    })
-  }, [updateConfig])
-
-  const pinDockApp = useCallback((appId: SynapseSystemAppId) => {
-    const app = getSystemAppManifest(appId)
-    if (!app) return
-
-    const next = addDockAppId(dockAppIds, appId)
-    if (next.join("\0") === dockAppIds.join("\0")) return
-    updateDockAppIds(next)
-  }, [dockAppIds, updateDockAppIds])
-
-  const unpinDockApp = useCallback((appId: SynapseSystemAppId) => {
-    const next = removeDockAppId(dockAppIds, appId)
-    if (next.join("\0") === dockAppIds.join("\0")) return
-    updateDockAppIds(next)
-
-    if (activeAppIdRef.current === appId) {
-      setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
-        dockAppIds: next,
-        workflowEntryVisible,
-      }), "navigation")
-    }
-  }, [dockAppIds, setActiveAppId, updateDockAppIds, workflowEntryVisible])
-
-  const moveDockApp = useCallback((appId: SynapseSystemAppId, beforeAppId?: SynapseSystemAppId) => {
-    const next = moveDockAppId(dockAppIds, appId, beforeAppId)
-    if (next.join("\0") === dockAppIds.join("\0")) return
-    updateDockAppIds(next)
-  }, [dockAppIds, updateDockAppIds])
-
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
     // 如果已经显示空状态页面，不需要再轮询
@@ -289,10 +248,6 @@ function MainApp() {
             apps={dockApps}
             value={activeAppId}
             onValueChange={(value) => setActiveAppId(value, "navigation")}
-            onPinApp={pinDockApp}
-            canUnpinApp={(appId) => appId !== "launcher"}
-            onUnpinApp={unpinDockApp}
-            onMoveApp={moveDockApp}
           />
         }
         actions={accountUiVisible ? (

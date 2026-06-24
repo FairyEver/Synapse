@@ -2,63 +2,53 @@ import { describe, expect, it } from "vitest"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { listSystemApps } from "../registry"
 import {
-  addDockAppId,
   DEFAULT_DOCK_APP_IDS,
   listDockApps,
-  moveDockAppId,
   normalizeDockAppIds,
-  removeDockAppId,
   resolveDefaultDockAppId,
 } from "../dock"
 
 describe("app Dock model", () => {
-  it("seeds the default Dock with workflow before launcher", () => {
+  it("seeds the fixed default Dock with terminal before settings", () => {
     expect(DEFAULT_DOCK_APP_IDS).toEqual([
       "agent",
       "drive",
       "automation",
       "workflow",
+      "terminal",
       "settings",
       "launcher",
     ])
   })
 
-  it("normalizes stored Dock ids while keeping launcher fixed", () => {
-    expect(normalizeDockAppIds(["database", "ghost", "database"])).toEqual(["database", "launcher"])
-    expect(normalizeDockAppIds([])).toEqual(["launcher"])
+  it("ignores stored custom Dock ids and returns the fixed default", () => {
+    expect(normalizeDockAppIds(["database", "ghost", "database"])).toEqual(DEFAULT_DOCK_APP_IDS)
+    expect(normalizeDockAppIds([])).toEqual(DEFAULT_DOCK_APP_IDS)
     expect(normalizeDockAppIds(undefined)).toEqual(DEFAULT_DOCK_APP_IDS)
   })
 
-  it("filters hidden workflow from the visible Dock without deleting it from config", () => {
+  it("filters hidden workflow from the fixed visible Dock", () => {
     const dockAppIds = ["workflow", "database", "launcher"] as const
 
     expect(listDockApps(listSystemApps(), { dockAppIds, workflowEntryVisible: false }).map((app) => app.id))
-      .toEqual(["database", "launcher"])
+      .toEqual(["agent", "drive", "automation", "terminal", "settings", "launcher"])
     expect(listDockApps(listSystemApps(), { dockAppIds, workflowEntryVisible: true }).map((app) => app.id))
-      .toEqual(["workflow", "database", "launcher"])
+      .toEqual(DEFAULT_DOCK_APP_IDS)
   })
 
-  it("resolves the default app from the first visible Dock item", () => {
+  it("resolves the default app from the fixed visible Dock", () => {
     expect(resolveDefaultDockAppId(listSystemApps(), {
       dockAppIds: ["workflow", "drive", "launcher"],
       workflowEntryVisible: false,
-    })).toBe("drive")
+    })).toBe("agent")
     expect(resolveDefaultDockAppId(listSystemApps(), {
       dockAppIds: ["workflow", "drive", "launcher"],
       workflowEntryVisible: true,
-    })).toBe("workflow")
+    })).toBe("agent")
     expect(resolveDefaultDockAppId(listSystemApps(), {
       dockAppIds: ["launcher"],
       workflowEntryVisible: false,
-    })).toBe("launcher")
-  })
-
-  it("adds, removes, and moves Dock apps without duplicates", () => {
-    expect(addDockAppId(["agent", "launcher"], "database")).toEqual(["agent", "database", "launcher"])
-    expect(addDockAppId(["agent", "database", "launcher"], "database")).toEqual(["agent", "database", "launcher"])
-    expect(removeDockAppId(["agent", "launcher"], "agent")).toEqual(["launcher"])
-    expect(removeDockAppId(["agent", "launcher"], "launcher")).toEqual(["agent", "launcher"])
-    expect(moveDockAppId(["agent", "drive", "launcher"], "drive", "agent")).toEqual(["drive", "agent", "launcher"])
+    })).toBe("agent")
   })
 
   it("treats workflow visibility as a cheat-code controlled capability", () => {
