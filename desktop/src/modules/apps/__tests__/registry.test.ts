@@ -10,8 +10,14 @@ import {
 } from "../registry"
 
 describe("system app registry", () => {
-  it("lists the fixed first-phase system apps in launcher order", () => {
+  it("lists all system apps in launcher order", () => {
     expect(listSystemApps().map((app) => app.id)).toEqual([
+      "agent",
+      "workflow",
+      "drive",
+      "automation",
+      "launcher",
+      "settings",
       "resource-repository",
       "git",
       "database",
@@ -24,6 +30,29 @@ describe("system app registry", () => {
     ])
   })
 
+  it("exposes stable namespaces and Dock metadata", () => {
+    expect(getSystemAppManifest("launcher")).toMatchObject({
+      id: "launcher",
+      namespace: "launcher",
+      name: "应用",
+      dock: { pinnedByDefault: true, order: 50 },
+    })
+    expect(getSystemAppManifest("database")).toMatchObject({
+      namespace: "database",
+      capabilities: {
+        primaryMcpPrefix: "app_database",
+        legacyMcpPrefixes: ["database"],
+      },
+    })
+    expect(getSystemAppManifest("resource-repository")).toMatchObject({
+      namespace: "resource_repository",
+      capabilities: {
+        primaryMcpPrefix: "app_resource_repository",
+        legacyMcpPrefixes: ["content"],
+      },
+    })
+  })
+
   it("marks every system app as fixed", () => {
     for (const app of listSystemApps()) {
       expect(app.type).toBe("system")
@@ -33,6 +62,10 @@ describe("system app registry", () => {
       expect(app.icon).toMatch(/\.png/)
       expect(app.name.length).toBeGreaterThan(0)
       expect(app.windowTitle.length).toBeGreaterThan(0)
+      expect(app.namespace.length).toBeGreaterThan(0)
+      expect(app.dock).toBeDefined()
+      expect(app.window).toBeDefined()
+      expect(app.capabilities?.primaryMcpPrefix).toMatch(/^app_[a-z0-9_]+$/)
     }
   })
 
@@ -47,6 +80,7 @@ describe("system app registry", () => {
   it("gets and parses known app ids only", () => {
     expect(getSystemAppManifest("database")?.name).toBe("本地数据库")
     expect(getSystemAppManifest("unknown")).toBeNull()
+    expect(parseSystemAppId("launcher")).toBe("launcher")
     expect(parseSystemAppId("usage-monitor")).toBe("usage-monitor")
     expect(parseSystemAppId("unknown")).toBeNull()
   })

@@ -1,15 +1,15 @@
 import type { SynapseSystemAppDefinition } from "../apps/types"
 
-export const gitAppDefinition = {
-  id: "git",
-  namespace: "git",
+export const driveAppDefinition = {
+  id: "drive",
+  namespace: "drive",
   type: "system",
-  name: "Git",
-  windowTitle: "Git",
-  dock: { pinnedByDefault: false, order: 220 },
+  name: "云盘",
+  windowTitle: "云盘",
+  dock: { pinnedByDefault: true, order: 30 },
   window: { openable: true },
   capabilities: {
-    primaryMcpPrefix: "app_git",
+    primaryMcpPrefix: "app_drive",
   },
   removable: false,
   renameable: false,
