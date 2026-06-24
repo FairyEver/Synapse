@@ -32,6 +32,7 @@ type AppsBridge = {
 
 type SystemAppContentProps = {
   readonly appId: SynapseSystemAppId
+  readonly workflowEntryVisible?: boolean
   readonly resourceContentOpenRequest?: ContentOpenRequest | null
   readonly onResourceContentOpenRequestConsumed?: (requestId: string) => void
   readonly onContentOpenRequest?: (request: ContentOpenRequest) => void
@@ -41,6 +42,7 @@ type SystemAppContentProps = {
 
 function SystemAppContent({
   appId,
+  workflowEntryVisible = false,
   resourceContentOpenRequest = null,
   onResourceContentOpenRequestConsumed,
   onContentOpenRequest,
@@ -60,7 +62,7 @@ function SystemAppContent({
       />
     )
   }
-  if (appId === "workflow") return <WorkflowModule />
+  if (appId === "workflow") return workflowEntryVisible ? <WorkflowModule /> : null
   if (appId === "drive") return <DriveModule />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {
@@ -68,6 +70,7 @@ function SystemAppContent({
       <LauncherContent
         pendingContentOpenRequest={resourceContentOpenRequest}
         onPendingContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
+        workflowEntryVisible={workflowEntryVisible}
       />
     )
   }
@@ -95,9 +98,11 @@ function SystemAppContent({
 function LauncherContent({
   pendingContentOpenRequest = null,
   onPendingContentOpenRequestConsumed,
+  workflowEntryVisible = false,
 }: {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  readonly workflowEntryVisible?: boolean
 }) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
@@ -154,6 +159,7 @@ function LauncherContent({
       >
         <SystemAppContent
           appId={activeApp.id}
+          workflowEntryVisible={workflowEntryVisible}
           resourceContentOpenRequest={resourceContentOpenRequest}
           onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
           onContentOpenRequest={openResourceRepository}
@@ -168,7 +174,7 @@ function LauncherContent({
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
-              apps={listLaunchableSystemApps()}
+              apps={listLaunchableSystemApps({ workflowEntryVisible })}
               onOpenApp={openApp}
             />
           </div>

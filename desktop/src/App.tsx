@@ -37,38 +37,40 @@ import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
-import { listDockApps } from "@/modules/apps/dock"
 import {
-  addUserPinnedDockAppId,
-  readUserPinnedDockAppIds,
-  removeUserPinnedDockAppId,
-  writeUserPinnedDockAppIds,
-} from "@/modules/apps/dock-pins"
+  addDockAppId,
+  listDockApps,
+  moveDockAppId,
+  normalizeDockAppIds,
+  removeDockAppId,
+  resolveDefaultDockAppId,
+} from "@/modules/apps/dock"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
-import { DEFAULT_SYSTEM_APP_ID } from "../config"
 
 type ActiveAppId = SynapseSystemAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 
 const logger = createRendererLogger("app")
 
-const DEFAULT_ACTIVE_APP_ID: ActiveAppId = DEFAULT_SYSTEM_APP_ID as SynapseSystemAppId
-
 function MainApp() {
+  const { config, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
-  const [activeAppId, setActiveAppIdRaw] = useState<ActiveAppId>(() => hasRepositories ? DEFAULT_ACTIVE_APP_ID : "agent")
+  const initialDockAppId = resolveDefaultDockAppId(listSystemApps(), {
+    dockAppIds: config.global.dockAppIds,
+    workflowEntryVisible: false,
+  })
+  const [activeAppId, setActiveAppIdRaw] = useState<ActiveAppId>(() => hasRepositories ? initialDockAppId : "agent")
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
-  const [userPinnedDockAppIds, setUserPinnedDockAppIds] = useState(() => readUserPinnedDockAppIds())
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
   // 检查是否需要显示空状态页面
@@ -103,10 +105,10 @@ function MainApp() {
   )
 
   useEffect(() => {
-    if (!hasRepositories && activeAppIdRef.current === DEFAULT_ACTIVE_APP_ID) {
+    if (!hasRepositories && activeAppIdRef.current === initialDockAppId) {
       setActiveAppId("agent", "navigation")
     }
-  }, [hasRepositories, setActiveAppId])
+  }, [hasRepositories, initialDockAppId, setActiveAppId])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -145,33 +147,60 @@ function MainApp() {
 
   useEffect(() => {
     if (activeAppId === "workflow" && !workflowEntryVisible) {
-      setActiveAppId(DEFAULT_ACTIVE_APP_ID, "cheat-code")
+      setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
+        dockAppIds: config.global.dockAppIds,
+        workflowEntryVisible: false,
+      }), "cheat-code")
     }
-  }, [activeAppId, setActiveAppId, workflowEntryVisible])
+  }, [activeAppId, config.global.dockAppIds, setActiveAppId, workflowEntryVisible])
+
+  const dockAppIds = useMemo(
+    () => normalizeDockAppIds(config.global.dockAppIds),
+    [config.global.dockAppIds],
+  )
 
   const dockApps = useMemo(
-    () => listDockApps(listSystemApps(), { workflowEntryVisible, userPinnedAppIds: userPinnedDockAppIds }),
-    [userPinnedDockAppIds, workflowEntryVisible],
+    () => listDockApps(listSystemApps(), { workflowEntryVisible, dockAppIds }),
+    [dockAppIds, workflowEntryVisible],
   )
+
+  const updateDockAppIds = useCallback((nextDockAppIds: SynapseSystemAppId[]) => {
+    void Promise.resolve(updateConfig({
+      global: {
+        dockAppIds: nextDockAppIds,
+      },
+    })).catch((error) => {
+      logger.error("Failed to update Dock app config.", error)
+    })
+  }, [updateConfig])
 
   const pinDockApp = useCallback((appId: SynapseSystemAppId) => {
     const app = getSystemAppManifest(appId)
-    if (!app || app.dock.pinnedByDefault) return
+    if (!app) return
 
-    setUserPinnedDockAppIds((current) => {
-      const next = addUserPinnedDockAppId(current, appId)
-      writeUserPinnedDockAppIds(window.localStorage, next)
-      return next
-    })
-  }, [])
+    const next = addDockAppId(dockAppIds, appId)
+    if (next.join("\0") === dockAppIds.join("\0")) return
+    updateDockAppIds(next)
+  }, [dockAppIds, updateDockAppIds])
 
   const unpinDockApp = useCallback((appId: SynapseSystemAppId) => {
-    setUserPinnedDockAppIds((current) => {
-      const next = removeUserPinnedDockAppId(current, appId)
-      writeUserPinnedDockAppIds(window.localStorage, next)
-      return next
-    })
-  }, [])
+    const next = removeDockAppId(dockAppIds, appId)
+    if (next.join("\0") === dockAppIds.join("\0")) return
+    updateDockAppIds(next)
+
+    if (activeAppIdRef.current === appId) {
+      setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
+        dockAppIds: next,
+        workflowEntryVisible,
+      }), "navigation")
+    }
+  }, [dockAppIds, setActiveAppId, updateDockAppIds, workflowEntryVisible])
+
+  const moveDockApp = useCallback((appId: SynapseSystemAppId, beforeAppId?: SynapseSystemAppId) => {
+    const next = moveDockAppId(dockAppIds, appId, beforeAppId)
+    if (next.join("\0") === dockAppIds.join("\0")) return
+    updateDockAppIds(next)
+  }, [dockAppIds, updateDockAppIds])
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
@@ -261,8 +290,9 @@ function MainApp() {
             value={activeAppId}
             onValueChange={(value) => setActiveAppId(value, "navigation")}
             onPinApp={pinDockApp}
-            canUnpinApp={(appId) => userPinnedDockAppIds.includes(appId)}
+            canUnpinApp={(appId) => appId !== "launcher"}
             onUnpinApp={unpinDockApp}
+            onMoveApp={moveDockApp}
           />
         }
         actions={accountUiVisible ? (
@@ -276,6 +306,7 @@ function MainApp() {
             <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
               <SystemAppContent
                 appId={activeAppId}
+                workflowEntryVisible={workflowEntryVisible}
                 resourceContentOpenRequest={pendingAppContentOpenRequest}
                 onResourceContentOpenRequestConsumed={(requestId) => {
                   setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)

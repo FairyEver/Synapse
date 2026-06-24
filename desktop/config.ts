@@ -69,9 +69,3 @@ export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
 
 // CC Switch SQLite Provider 导入最大行数：限制设置页预览 cc-switch.db 时单次读取的 Claude provider 数量。
 export const CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS = 500
-
-// 默认激活的系统应用：主窗口有内容仓库时默认进入应用启动器。
-export const DEFAULT_SYSTEM_APP_ID = "launcher"
-
-// 旧顶部 tab 默认值兼容别名：迁移期保留，后续代码应使用 DEFAULT_SYSTEM_APP_ID。
-export const DEFAULT_APP_NAVIGATION_TAB_ID = DEFAULT_SYSTEM_APP_ID

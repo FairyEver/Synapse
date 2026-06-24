@@ -38,8 +38,12 @@ export function listSystemApps(): readonly SynapseSystemAppManifest[] {
   return systemApps
 }
 
-export function listLaunchableSystemApps(): readonly SynapseSystemAppManifest[] {
-  return systemApps.filter((app) => app.id !== "launcher")
+export function listLaunchableSystemApps(options?: {
+  readonly workflowEntryVisible?: boolean
+}): readonly SynapseSystemAppManifest[] {
+  return systemApps
+    .filter((app) => app.id !== "launcher")
+    .filter((app) => app.id !== "workflow" || options?.workflowEntryVisible === true)
 }
 
 export function getSystemAppManifest(appId: string): SynapseSystemAppManifest | null {

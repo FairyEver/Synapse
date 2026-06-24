@@ -4,6 +4,7 @@ import { app } from "electron"
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { configStore } from "../../../services/config-store"
 import { configIpcModule } from "../ipc"
+import { DEFAULT_DOCK_APP_IDS } from "../../../../src/modules/apps/dock"
 import type { SynapseConfig } from "../../../../src/types/config"
 
 const mocks = vi.hoisted(() => ({
@@ -574,6 +575,7 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
       contentSortOrder: "modified-desc",
       variables: [],
       knowledgeBaseStorage: { mode: "default" },
+      dockAppIds: [...DEFAULT_DOCK_APP_IDS],
     },
     agent: {
       defaultPermissionMode: "default",

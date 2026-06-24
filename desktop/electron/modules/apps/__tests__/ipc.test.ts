@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 import { appsIpcModule } from "../ipc"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "../../../../src/lib/cheat-codes/names"
 
 const systemAppWindowServiceMock = vi.hoisted(() => ({
   open: vi.fn(async () => undefined),
@@ -8,12 +9,22 @@ const systemAppWindowServiceMock = vi.hoisted(() => ({
 const createDefaultSystemAppWindowServiceMock = vi.hoisted(() =>
   vi.fn(() => systemAppWindowServiceMock),
 )
+const cheatCodeStateServiceMock = vi.hoisted(() => ({
+  getStates: vi.fn(async () => ({})),
+}))
 
 vi.mock("../../../services/system-app-window-service", () => ({
   createDefaultSystemAppWindowService: createDefaultSystemAppWindowServiceMock,
 }))
 
 describe("appsIpcModule", () => {
+  beforeEach(() => {
+    systemAppWindowServiceMock.open.mockClear()
+    createDefaultSystemAppWindowServiceMock.mockClear()
+    cheatCodeStateServiceMock.getStates.mockReset()
+    cheatCodeStateServiceMock.getStates.mockResolvedValue({})
+  })
+
   it("declares open system app channel", () => {
     expect(appsIpcModule.id).toBe("apps")
     expect(appsIpcModule.methods.openSystemApp.channel).toBe("synapse:apps:open-system-app")
@@ -49,11 +60,30 @@ describe("appsIpcModule", () => {
       contentOpenRequest,
     })
   })
+
+  it("rejects direct workflow windows while the workflow entry is hidden", async () => {
+    cheatCodeStateServiceMock.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: false })
+
+    await expect(
+      appsIpcModule.methods.openSystemApp.handler(createContext({}), { appId: "workflow" }),
+    ).rejects.toThrow("工作流入口未启用")
+
+    expect(systemAppWindowServiceMock.open).not.toHaveBeenCalled()
+  })
+
+  it("opens direct workflow windows when the workflow entry is visible", async () => {
+    cheatCodeStateServiceMock.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
+
+    await appsIpcModule.methods.openSystemApp.handler(createContext({}), { appId: "workflow" })
+
+    expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("workflow", undefined)
+  })
 })
 
 function createContext(windowManager: unknown): IpcHandlerContext {
   const resolve = <T,>(serviceId: string): T => {
     if (serviceId === "core.window-manager") return windowManager as T
+    if (serviceId === "core.cheat-code-state") return cheatCodeStateServiceMock as T
     throw new Error(`Unexpected service id: ${serviceId}`)
   }
 

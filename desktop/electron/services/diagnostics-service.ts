@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 
 import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../src/constants/defaults"
+import { DEFAULT_DOCK_APP_IDS } from "../../src/modules/apps/dock"
 import type { SynapseConfig } from "../../src/types/config"
 import {
   buildDiagnosticsSummary,
@@ -1824,6 +1825,7 @@ function createEmptyConfig(): SynapseConfig {
       contentSortOrder: "modified-desc",
       variables: [],
       knowledgeBaseStorage: { mode: "default" },
+      dockAppIds: [...DEFAULT_DOCK_APP_IDS],
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

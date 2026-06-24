@@ -2,7 +2,6 @@ import {
   OPEN_AGENT_SESSION_EVENT,
   type OpenAgentSessionPayload,
 } from "@/types/agent-navigation"
-import { DEFAULT_SYSTEM_APP_ID } from "../../config"
 
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:open-settings-account"
@@ -18,7 +17,7 @@ type WatchNextAgentSessionPayload = {
   sessionKeyPrefix?: string
 }
 type RequestedSettingsCategory = "account" | "repositories" | "about"
-let currentAppId = DEFAULT_SYSTEM_APP_ID
+let currentAppId = "agent"
 let requestedSettingsCategory: RequestedSettingsCategory | null = null
 
 function requestOpenSettingsTab(): void {

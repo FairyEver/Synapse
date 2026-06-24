@@ -1,7 +1,10 @@
 import { z } from "zod"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
+import { CHEAT_CODE_STATE_SERVICE_ID, type CheatCodeStateService } from "../../services/cheat-code-state-service"
 import { createDefaultSystemAppWindowService } from "../../services/system-app-window-service"
+import { WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT } from "../../../config"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "../../../src/lib/cheat-codes/names"
 import { SYSTEM_APP_IDS } from "../../../src/modules/apps/types"
 
 const systemAppIdSchema = z.enum(SYSTEM_APP_IDS)
@@ -47,6 +50,18 @@ function getSystemAppWindowService(windowManager: WindowManager): SystemAppWindo
   return cachedSystemAppWindowService
 }
 
+async function assertSystemAppVisible(ctx: IpcHandlerContext, appId: OpenSystemAppRequest["appId"]): Promise<void> {
+  if (appId !== "workflow" || WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT) {
+    return
+  }
+
+  const cheatCodeStateService = ctx.resolve<Pick<CheatCodeStateService, "getStates">>(CHEAT_CODE_STATE_SERVICE_ID)
+  const states = await cheatCodeStateService.getStates([WORKFLOW_ENTRY_CHEAT_CODE_NAME])
+  if (states[WORKFLOW_ENTRY_CHEAT_CODE_NAME] !== true) {
+    throw new Error("工作流入口未启用。")
+  }
+}
+
 export const appsIpcModule: IpcModule = {
   id: "apps",
   methods: {
@@ -56,6 +71,7 @@ export const appsIpcModule: IpcModule = {
       request: openSystemAppRequestSchema,
       response: z.void(),
       handler: async (ctx, request: OpenSystemAppRequest) => {
+        await assertSystemAppVisible(ctx, request.appId)
         const service = getSystemAppWindowService(ctx.resolve<WindowManager>("core.window-manager"))
         await service.open(request.appId, request.options)
       },

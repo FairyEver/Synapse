@@ -58,9 +58,17 @@ describe("system app registry", () => {
     const launchableAppIds = listLaunchableSystemApps().map((app) => app.id)
 
     expect(launchableAppIds).not.toContain("launcher")
+    expect(launchableAppIds).not.toContain("workflow")
     expect(launchableAppIds).toContain("database")
     expect(launchableAppIds).toContain("resource-repository")
-    expect(launchableAppIds).toEqual(listSystemApps().map((app) => app.id).filter((id) => id !== "launcher"))
+    expect(launchableAppIds).toEqual(listSystemApps().map((app) => app.id).filter((id) => id !== "launcher" && id !== "workflow"))
+  })
+
+  it("filters hidden workflow from launchable apps", () => {
+    expect(listLaunchableSystemApps({ workflowEntryVisible: false }).map((app) => app.id))
+      .not.toContain("workflow")
+    expect(listLaunchableSystemApps({ workflowEntryVisible: true }).map((app) => app.id))
+      .toContain("workflow")
   })
 
   it("marks every system app as fixed", () => {

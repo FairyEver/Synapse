@@ -4,7 +4,7 @@ import { listSystemApps } from "@/modules/apps/registry"
 
 describe("app Dock order", () => {
   it("keeps pinned apps in the requested left-to-right order", () => {
-    expect(listDockApps(listSystemApps(), { workflowEntryVisible: true }).map((app) => app.id)).toEqual([
+    expect(listDockApps(listSystemApps(), { dockAppIds: undefined, workflowEntryVisible: true }).map((app) => app.id)).toEqual([
       "agent",
       "drive",
       "automation",
@@ -15,7 +15,7 @@ describe("app Dock order", () => {
   })
 
   it("hides workflow when the workflow entry is not visible", () => {
-    expect(listDockApps(listSystemApps(), { workflowEntryVisible: false }).map((app) => app.id)).toEqual([
+    expect(listDockApps(listSystemApps(), { dockAppIds: undefined, workflowEntryVisible: false }).map((app) => app.id)).toEqual([
       "agent",
       "drive",
       "automation",
@@ -27,14 +27,11 @@ describe("app Dock order", () => {
   it("merges user pinned apps into Dock order without duplicates", () => {
     expect(listDockApps(
       listSystemApps(),
-      { workflowEntryVisible: false, userPinnedAppIds: ["database", "agent"] },
+      { workflowEntryVisible: false, dockAppIds: ["database", "agent", "launcher"] },
     ).map((app) => app.id)).toEqual([
-      "agent",
-      "drive",
-      "automation",
-      "settings",
-      "launcher",
       "database",
+      "agent",
+      "launcher",
     ])
   })
 })

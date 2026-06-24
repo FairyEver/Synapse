@@ -8,6 +8,7 @@ import { AppShellDock } from "../app-shell-dock"
 
 const apps = [
   { id: "agent", name: "对话", icon: "/agent.png" },
+  { id: "drive", name: "云盘", icon: "/drive.png" },
   { id: "launcher", name: "应用", icon: "/launcher.png" },
 ] as const
 
@@ -76,7 +77,7 @@ describe("AppShellDock", () => {
     expect(onPinApp).toHaveBeenCalledWith("database")
   })
 
-  it("marks only removable Dock apps as unpinnable", async () => {
+  it("marks every Dock app except the launcher as unpinnable", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -88,15 +89,45 @@ describe("AppShellDock", () => {
           apps={apps}
           value="agent"
           onValueChange={vi.fn()}
-          canUnpinApp={(appId) => appId === "launcher"}
+          canUnpinApp={(appId) => appId !== "launcher"}
           onUnpinApp={vi.fn()}
         />,
       )
       await Promise.resolve()
     })
 
-    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBeNull()
-    expect(findButtonByLabel("应用").getAttribute("data-can-unpin")).toBe("true")
+    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBe("true")
+    expect(findButtonByLabel("应用").getAttribute("data-can-unpin")).toBeNull()
+  })
+
+  it("moves a Dock app before the drop target", async () => {
+    const onMoveApp = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AppShellDock
+          apps={apps}
+          value="agent"
+          onValueChange={vi.fn()}
+          onMoveApp={onMoveApp}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    const dataTransfer = createDataTransfer("drive")
+
+    await act(async () => {
+      findButtonByLabel("对话").dispatchEvent(createDragEvent("dragover", dataTransfer))
+      findButtonByLabel("对话").dispatchEvent(createDragEvent("drop", dataTransfer))
+      await Promise.resolve()
+    })
+
+    expect(onMoveApp).toHaveBeenCalledWith("drive", "agent")
   })
 })
 

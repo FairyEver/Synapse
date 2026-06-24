@@ -1,6 +1,7 @@
 import type { SynapseContentType } from "./content"
 import type { SynapseAgentPermissionMode } from "./agent"
 import type { ModelTier } from "./provider-model"
+import type { SynapseSystemAppId } from "../modules/apps/types"
 
 export const SYNAPSE_CONTENT_SORT_OPTIONS = [
   "modified-desc",
@@ -81,6 +82,7 @@ export type SynapseGlobalConfig = {
   contentSortOrder: SynapseContentSortOrder
   variables: SynapseVariable[]
   knowledgeBaseStorage: SynapseKnowledgeBaseStorageConfig
+  dockAppIds: SynapseSystemAppId[]
 }
 
 export type SynapseAgentGlobalConfig = {

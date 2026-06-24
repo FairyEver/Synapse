@@ -16,6 +16,7 @@ import {
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
 import { MODEL_TIERS } from "../types/provider-model"
+import { normalizeDockAppIds } from "../modules/apps/dock"
 import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
@@ -235,6 +236,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "knowledgeBaseStorage") && !isRecord(value.knowledgeBaseStorage)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "dockAppIds") && !Array.isArray(value.dockAppIds)) {
     return true
   }
 
@@ -629,6 +634,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
       : DEFAULT_CONTENT_SORT_ORDER,
     variables: normalizeVariableList(value.variables),
     knowledgeBaseStorage: normalizeKnowledgeBaseStorage(value.knowledgeBaseStorage),
+    dockAppIds: normalizeDockAppIds(Array.isArray(value.dockAppIds) ? value.dockAppIds : undefined),
   }
 }
 

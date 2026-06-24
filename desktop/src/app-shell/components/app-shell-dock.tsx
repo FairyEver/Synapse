@@ -25,6 +25,7 @@ type AppShellDockProps = {
   readonly onPinApp?: (value: SynapseSystemAppId) => void
   readonly canUnpinApp?: (value: SynapseSystemAppId) => boolean
   readonly onUnpinApp?: (value: SynapseSystemAppId) => void
+  readonly onMoveApp?: (value: SynapseSystemAppId, beforeValue?: SynapseSystemAppId) => void
 }
 
 export function AppShellDock({
@@ -34,9 +35,10 @@ export function AppShellDock({
   onPinApp,
   canUnpinApp,
   onUnpinApp,
+  onMoveApp,
 }: AppShellDockProps) {
   const handleDragOver = (event: DragEvent<HTMLElement>) => {
-    if (!onPinApp) return
+    if (!onPinApp && !onMoveApp) return
     const appId = event.dataTransfer.getData(SYSTEM_APP_DOCK_DRAG_TYPE)
     if (!isSystemAppId(appId)) return
     event.preventDefault()
@@ -44,11 +46,15 @@ export function AppShellDock({
   }
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
-    if (!onPinApp) return
+    if (!onPinApp && !onMoveApp) return
     const appId = event.dataTransfer.getData(SYSTEM_APP_DOCK_DRAG_TYPE)
     if (!isSystemAppId(appId)) return
     event.preventDefault()
-    onPinApp(appId)
+    if (apps.some((app) => app.id === appId)) {
+      onMoveApp?.(appId)
+      return
+    }
+    onPinApp?.(appId)
   }
 
   return (
@@ -64,6 +70,26 @@ export function AppShellDock({
             {apps.map((app) => {
               const active = app.id === value
               const unpinnable = Boolean(canUnpinApp?.(app.id) && onUnpinApp)
+              const handleAppDragOver = (event: DragEvent<HTMLButtonElement>) => {
+                if (!onMoveApp) return
+                const appId = event.dataTransfer.getData(SYSTEM_APP_DOCK_DRAG_TYPE)
+                if (!isSystemAppId(appId) || appId === app.id) return
+                event.preventDefault()
+                event.stopPropagation()
+                event.dataTransfer.dropEffect = "move"
+              }
+              const handleAppDrop = (event: DragEvent<HTMLButtonElement>) => {
+                if (!onMoveApp) return
+                const appId = event.dataTransfer.getData(SYSTEM_APP_DOCK_DRAG_TYPE)
+                if (!isSystemAppId(appId) || appId === app.id) return
+                event.preventDefault()
+                event.stopPropagation()
+                onMoveApp(appId, app.id)
+              }
+              const handleAppDragStart = (event: DragEvent<HTMLButtonElement>) => {
+                event.dataTransfer.setData(SYSTEM_APP_DOCK_DRAG_TYPE, app.id)
+                event.dataTransfer.effectAllowed = "move"
+              }
 
               return (
                 <ContextMenu key={app.id}>
@@ -78,6 +104,10 @@ export function AppShellDock({
                           aria-label={app.name}
                           aria-current={active ? "page" : undefined}
                           data-can-unpin={unpinnable ? "true" : undefined}
+                          draggable
+                          onDragStart={handleAppDragStart}
+                          onDragOver={handleAppDragOver}
+                          onDrop={handleAppDrop}
                           onClick={() => onValueChange(app.id)}
                         >
                           <img src={app.icon} alt="" className="size-10 object-contain" draggable={false} />

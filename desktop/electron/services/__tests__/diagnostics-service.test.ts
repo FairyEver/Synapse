@@ -5,6 +5,7 @@ import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../src/constants/defaults"
+import { DEFAULT_DOCK_APP_IDS } from "../../../src/modules/apps/dock"
 import type { SynapseConfig } from "../../../src/types/config"
 import type { SynapseDiagnosticsCheck } from "../../../src/types/diagnostics"
 import type { PackagedClaudeRuntimeStatus } from "../agent-runtime/claude-runtime-binary"
@@ -1338,6 +1339,7 @@ function createConfig(options: {
       contentSortOrder: "modified-desc",
       variables: [],
       knowledgeBaseStorage: options.knowledgeBaseStorage ?? { mode: "default" },
+      dockAppIds: [...DEFAULT_DOCK_APP_IDS],
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

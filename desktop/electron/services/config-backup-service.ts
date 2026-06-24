@@ -4,6 +4,7 @@ import path from "node:path"
 import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../config"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
+import { DEFAULT_DOCK_APP_IDS, normalizeDockAppIds } from "../../src/modules/apps/dock"
 import type {
   SynapseConfigBackup,
   SynapseConfigBackupExportResult,
@@ -85,6 +86,19 @@ function validateKnowledgeBaseStorageConfig(
 
   errors.push("config.global.knowledgeBaseStorage 必须是 default 或包含 rootPath 的 custom。")
   return null
+}
+
+function validateDockAppIds(rawValue: unknown, errors: string[]): SynapseConfig["global"]["dockAppIds"] | null {
+  if (rawValue === undefined) {
+    return [...DEFAULT_DOCK_APP_IDS]
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push("config.global.dockAppIds 必须是数组。")
+    return null
+  }
+
+  return normalizeDockAppIds(rawValue)
 }
 
 function formatValidationErrors(errors: string[]): string {
@@ -705,6 +719,7 @@ function validateConfig(
     global.knowledgeBaseStorage,
     errors,
   )
+  const dockAppIds = validateDockAppIds(global.dockAppIds, errors)
 
   if (
     typeof themeMode !== "string"
@@ -769,6 +784,7 @@ function validateConfig(
     || !SYNAPSE_CONTENT_SORT_OPTIONS.includes(contentSortOrder as (typeof SYNAPSE_CONTENT_SORT_OPTIONS)[number])
     || !normalizedAgent
     || !knowledgeBaseStorage
+    || !dockAppIds
   ) {
     return null
   }
@@ -786,6 +802,7 @@ function validateConfig(
       contentSortOrder: contentSortOrder as SynapseConfigBackup["config"]["global"]["contentSortOrder"],
       variables,
       knowledgeBaseStorage,
+      dockAppIds,
     },
     agent: normalizedAgent,
   }

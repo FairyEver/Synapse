@@ -88,7 +88,7 @@ describe("AppsModule", () => {
 
     expect(document.querySelector("h2")).toBeNull()
     expect(findButton("对话")).toBeTruthy()
-    expect(findButton("工作流")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("工作流")
     expect(findButton("云盘")).toBeTruthy()
     expect(findButton("自动化")).toBeTruthy()
     expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "应用")).toBe(false)
@@ -111,6 +111,12 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("删除")
     expect(document.body.textContent).not.toContain("重命名")
     expect(document.body.textContent).not.toContain("更换图标")
+  })
+
+  it("renders workflow in the launcher when the workflow entry is visible", async () => {
+    await renderAppsModule(roots, { workflowEntryVisible: true })
+
+    expect(findButton("工作流")).toBeTruthy()
   })
 
   it("renders app launch actions as a grid without list arrows", async () => {
@@ -211,14 +217,17 @@ describe("AppsModule", () => {
   })
 })
 
-async function renderAppsModule(roots: Root[]): Promise<void> {
+async function renderAppsModule(
+  roots: Root[],
+  options: { workflowEntryVisible?: boolean } = {},
+): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
   await act(async () => {
-    root.render(<AppsModule />)
+    root.render(<AppsModule workflowEntryVisible={options.workflowEntryVisible} />)
     await Promise.resolve()
   })
 }

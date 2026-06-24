@@ -12,6 +12,7 @@ import type {
 import type { SynapseContentType } from "../types/content"
 import { CONTENT_TYPE_DEFINITIONS } from "../config/content-types"
 import { SYNAPSE_APP_VERSION } from "../lib/app-version"
+import { DEFAULT_DOCK_APP_IDS } from "../modules/apps/dock"
 
 export const DEFAULT_REPOSITORY_CONTENT_DIRECTORIES: Record<SynapseContentType, string> =
   Object.fromEntries(
@@ -91,6 +92,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,
   variables: [],
   knowledgeBaseStorage: DEFAULT_KNOWLEDGE_BASE_STORAGE,
+  dockAppIds: [...DEFAULT_DOCK_APP_IDS],
 }
 
 export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {

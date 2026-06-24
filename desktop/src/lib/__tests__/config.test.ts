@@ -671,4 +671,27 @@ describe("Synapse user variables config", () => {
     expect(next.global.projects).toEqual(current.global.projects)
     expect(next.global.variables).toEqual([{ name: "API_KEY", value: "secret" }])
   })
+
+  it("seeds and normalizes Dock app ids in global config", () => {
+    expect(createDefaultConfig().global.dockAppIds).toEqual([
+      "agent",
+      "drive",
+      "automation",
+      "workflow",
+      "settings",
+      "launcher",
+    ])
+
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        dockAppIds: ["database", "ghost", "database"],
+      },
+    })
+
+    expect(config.global.dockAppIds).toEqual(["database", "launcher"])
+  })
 })

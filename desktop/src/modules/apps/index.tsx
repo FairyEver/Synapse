@@ -20,11 +20,13 @@ function requireAppsBridge(): AppsBridge {
 type AppsModuleProps = {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  readonly workflowEntryVisible?: boolean
 }
 
 export function AppsModule({
   pendingContentOpenRequest = null,
   onPendingContentOpenRequestConsumed,
+  workflowEntryVisible = false,
 }: AppsModuleProps = {}) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
@@ -80,6 +82,7 @@ export function AppsModule({
       >
         <SystemAppContent
           appId={activeApp.id}
+          workflowEntryVisible={workflowEntryVisible}
           resourceContentOpenRequest={resourceContentOpenRequest}
           onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
           onContentOpenRequest={openResourceRepository}
@@ -94,7 +97,7 @@ export function AppsModule({
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
-              apps={listLaunchableSystemApps()}
+              apps={listLaunchableSystemApps({ workflowEntryVisible })}
               onOpenApp={openApp}
             />
           </div>

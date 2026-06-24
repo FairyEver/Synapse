@@ -1,6 +1,7 @@
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../src/constants/defaults"
+import { DEFAULT_DOCK_APP_IDS } from "../../../src/modules/apps/dock"
 import type { SynapseConfig, SynapseRepositoryConfig } from "../../../src/types/config"
 import type { SynapseContentMeta } from "../../../src/types/content"
 
@@ -105,6 +106,7 @@ function createConfig(): SynapseConfig {
       themeMode: "system",
       variables: [],
       knowledgeBaseStorage: { mode: "default" },
+      dockAppIds: [...DEFAULT_DOCK_APP_IDS],
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

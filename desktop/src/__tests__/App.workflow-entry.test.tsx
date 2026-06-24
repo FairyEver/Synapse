@@ -17,7 +17,19 @@ const mocks = vi.hoisted(() => ({
   cheatCodeStateListener: null as null | ((state: { name: string; active: boolean }) => void),
   contentOpenRequestListener: null as null | ((request: ContentOpenRequest) => void),
   getStates: vi.fn(),
+  lastDockProps: null as null | {
+    apps: Array<{ id: string; name: string }>
+    onMoveApp?: (appId: string, targetAppId?: string) => void
+    onUnpinApp?: (appId: string) => void
+    onValueChange: (value: string) => void
+  },
   openSystemApp: vi.fn(async () => undefined),
+  updateConfig: vi.fn(async () => undefined),
+  currentConfig: {
+    global: {
+      dockAppIds: ["agent", "drive", "automation", "workflow", "settings", "launcher"],
+    },
+  },
 }))
 
 vi.mock("@/app-shell/components/app-shell-actions", () => ({
@@ -39,18 +51,24 @@ vi.mock("@/app-shell/components/app-shell-layout", () => ({
 }))
 
 vi.mock("@/app-shell/components/app-shell-dock", () => ({
-  AppShellDock: ({ apps, onValueChange }: {
+  AppShellDock: (props: {
     apps: Array<{ id: string; name: string }>
+    onMoveApp?: (appId: string, targetAppId?: string) => void
+    onUnpinApp?: (appId: string) => void
     onValueChange: (value: string) => void
-  }) => (
-    <div>
-      {apps.map((app) => (
-        <button key={app.id} type="button" onClick={() => onValueChange(app.id)}>
-          {app.name}
-        </button>
-      ))}
-    </div>
-  ),
+  }) => {
+    mocks.lastDockProps = props
+
+    return (
+      <div>
+        {props.apps.map((app) => (
+          <button key={app.id} type="button" onClick={() => props.onValueChange(app.id)}>
+            {app.name}
+          </button>
+        ))}
+      </div>
+    )
+  },
 }))
 
 vi.mock("@/app-shell/components/empty-repository-state", () => ({
@@ -73,7 +91,11 @@ vi.mock("@/app-shell/active-repository-switch", () => ({
 }))
 
 vi.mock("@/app-shell/config", () => ({
-  useAppConfig: () => ({ resetKey: "test" }),
+  useAppConfig: () => ({
+    config: mocks.currentConfig,
+    resetKey: "test",
+    updateConfig: mocks.updateConfig,
+  }),
 }))
 
 vi.mock("@/app-shell/use-repository-manager", () => ({
@@ -202,8 +224,15 @@ let roots: Root[] = []
 beforeEach(() => {
   mocks.cheatCodeStateListener = null
   mocks.contentOpenRequestListener = null
+  mocks.lastDockProps = null
+  mocks.currentConfig = {
+    global: {
+      dockAppIds: ["agent", "drive", "automation", "workflow", "settings", "launcher"],
+    },
+  }
   mocks.getStates.mockReset()
   mocks.openSystemApp.mockClear()
+  mocks.updateConfig.mockReset()
   vi.clearAllMocks()
 })
 
@@ -273,6 +302,68 @@ describe("App workflow entry visibility", () => {
       "设置",
       "应用",
     ])
+  })
+
+  it("uses the first visible Dock app as the default main view", async () => {
+    mocks.currentConfig.global.dockAppIds = ["drive", "agent", "launcher"]
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    expect(document.body.textContent).toContain("drive")
+    expect(document.body.textContent).not.toContain("对话模块")
+  })
+
+  it("falls back to the first visible Dock app when workflow becomes hidden", async () => {
+    mocks.currentConfig.global.dockAppIds = ["workflow", "drive", "launcher"]
+    mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
+
+    await renderApp()
+
+    await act(async () => {
+      mocks.cheatCodeStateListener?.({
+        name: WORKFLOW_ENTRY_CHEAT_CODE_NAME,
+        active: false,
+      })
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("drive")
+    expect(document.body.textContent).not.toContain("工作流模块")
+  })
+
+  it("updates the user Dock config when an app is removed", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      mocks.lastDockProps?.onUnpinApp?.("agent")
+      await Promise.resolve()
+    })
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      global: {
+        dockAppIds: ["drive", "automation", "workflow", "settings", "launcher"],
+      },
+    })
+  })
+
+  it("updates the user Dock config when apps are reordered", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      mocks.lastDockProps?.onMoveApp?.("drive", "agent")
+      await Promise.resolve()
+    })
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      global: {
+        dockAppIds: ["drive", "agent", "automation", "workflow", "settings", "launcher"],
+      },
+    })
   })
 
   it("opens resource content requests inside the Apps module", async () => {
