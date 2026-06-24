@@ -131,6 +131,7 @@ vi.mock("@xterm/addon-web-links", () => ({
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
 import { TerminalModule } from "../index"
+import { EmbeddedSystemAppShell } from "../../../../src/modules/apps/components/embedded-system-app-shell"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -199,6 +200,21 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("新建会话")
 
     await clickButton("新建终端")
+
+    expect(terminalBridge.createSession).toHaveBeenCalledWith({
+      cols: 80,
+      rows: 24,
+    })
+    expect(document.body.textContent).toContain("Session 1")
+  })
+
+  it("creates a terminal session from embedded header actions", async () => {
+    await renderEmbeddedModule()
+
+    const actions = document.querySelector("[data-embedded-system-app-actions]")
+    expect(actions?.textContent).toContain("新建终端")
+
+    await clickButton("新建终端", actions)
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       cols: 80,
@@ -311,8 +327,21 @@ async function renderModule(): Promise<void> {
   })
 }
 
-async function clickButton(text: string): Promise<void> {
-  const button = Array.from(document.body.querySelectorAll("button"))
+async function renderEmbeddedModule(): Promise<void> {
+  const root = createRoot(document.body.appendChild(document.createElement("div")))
+  roots.push(root)
+  await act(async () => {
+    root.render(
+      <EmbeddedSystemAppShell appName="终端" onBack={vi.fn()} onOpenWindow={vi.fn()}>
+        <TerminalModule />
+      </EmbeddedSystemAppShell>,
+    )
+    await Promise.resolve()
+  })
+}
+
+async function clickButton(text: string, root: ParentNode = document.body): Promise<void> {
+  const button = Array.from(root.querySelectorAll("button"))
     .find((item) => item.textContent === text)
   await act(async () => {
     button?.click()

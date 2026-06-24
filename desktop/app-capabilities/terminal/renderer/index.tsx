@@ -70,7 +70,7 @@ export function TerminalModule() {
     }
   }, [refreshSessions])
 
-  const createSession = async () => {
+  const createSession = useCallback(async () => {
     try {
       const session = await terminalBridge.createSession({
         cols: DEFAULT_COLS,
@@ -86,9 +86,9 @@ export function TerminalModule() {
     } catch (error) {
       logger.error("Failed to create terminal session.", error)
     }
-  }
+  }, [terminalBridge])
 
-  const stopCurrentSession = async () => {
+  const stopCurrentSession = useCallback(async () => {
     if (!activeSession) return
     try {
       await terminalBridge.stopSession({ sessionId: activeSession.id })
@@ -97,9 +97,9 @@ export function TerminalModule() {
     } catch (error) {
       logger.error("Failed to stop terminal session.", error)
     }
-  }
+  }, [activeSession, terminalBridge])
 
-  const setAgentControl = async (enabled: boolean) => {
+  const setAgentControl = useCallback(async (enabled: boolean) => {
     if (!activeSession || !canSetAgentControl) return
     setAgentControlPending(true)
     try {
@@ -113,7 +113,21 @@ export function TerminalModule() {
     } finally {
       setAgentControlPending(false)
     }
-  }
+  }, [activeSession, canSetAgentControl, terminalBridge])
+
+  const headerActions = useMemo(() => (
+    <>
+      <Badge variant="outline">{statusLabel}</Badge>
+      <Button type="button" size="sm" onClick={createSession}>
+        <Plus data-icon="inline-start" />
+        新建终端
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={!canStopSession} onClick={stopCurrentSession}>
+        <Square data-icon="inline-start" />
+        停止会话
+      </Button>
+    </>
+  ), [canStopSession, createSession, statusLabel, stopCurrentSession])
 
   useEffect(() => {
     const container = terminalContainerRef.current
@@ -211,19 +225,7 @@ export function TerminalModule() {
 
   return (
     <SystemAppWindowShell
-      actions={(
-        <>
-          <Badge variant="outline">{statusLabel}</Badge>
-          <Button type="button" size="sm" onClick={createSession}>
-            <Plus data-icon="inline-start" />
-            新建终端
-          </Button>
-          <Button type="button" size="sm" variant="outline" disabled={!canStopSession} onClick={stopCurrentSession}>
-            <Square data-icon="inline-start" />
-            停止会话
-          </Button>
-        </>
-      )}
+      actions={headerActions}
     >
       <div className="grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] bg-background">
         <aside className="min-h-0 border-r bg-surface">
