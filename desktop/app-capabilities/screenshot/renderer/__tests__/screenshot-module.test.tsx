@@ -104,12 +104,12 @@ describe("ScreenshotModule", () => {
     renderScreenshotModule(roots)
 
     expect(button("复制").disabled).toBe(true)
-    expect(button("保存").disabled).toBe(true)
+    expect(button("保存到文件").disabled).toBe(true)
 
     await clickButton("截图")
     await clickButton("选择")
     await clickButton("复制")
-    await clickButton("保存")
+    await clickButton("保存到文件")
 
     expect(bridge.screenshot.copyArtifactToClipboard).toHaveBeenCalledWith(artifact)
     expect(bridge.screenshot.saveArtifact).toHaveBeenCalledWith({
@@ -118,6 +118,20 @@ describe("ScreenshotModule", () => {
     })
     expect(bridge.screenshot.copyToClipboard).not.toHaveBeenCalled()
     expect(bridge.screenshot.captureToFile).not.toHaveBeenCalled()
+  })
+
+  it("uses save-location copy and aligned region controls", async () => {
+    renderScreenshotModule(roots)
+
+    await clickLabel("区域")
+
+    const output = document.getElementById("screenshot-output")
+    expect(output).toBeInstanceOf(HTMLInputElement)
+    expect((output as HTMLInputElement).placeholder).toBe("选择保存位置")
+    expect((output as HTMLInputElement).readOnly).toBe(true)
+    expect(document.querySelector("[aria-label='选择保存位置']")).toBeTruthy()
+    expect(document.querySelector("[data-testid='screenshot-region-fields']")).toBeTruthy()
+    expect(document.querySelector("[data-testid='screenshot-region-pick']")).toBeTruthy()
   })
 })
 

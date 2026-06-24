@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog, screen } from "electron"
 import path from "node:path"
 import { z } from "zod"
-import type { IpcModule } from "../../../electron/runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../../electron/runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../../electron/runtime/security"
 import { rendererBaseUrl } from "../../../electron/modules/shared/renderer-base-url"
 import { buildDetachedViewWindowUrl } from "../../../electron/services/detached-view-window-service"
@@ -33,6 +33,7 @@ type ChooseOutputPngRequest = z.infer<typeof chooseOutputPngRequestSchema>
 
 type InteractiveCaptureSession = {
   readonly id: string
+  readonly overlayWebContentsId: number
   overlayWindow: BrowserWindow | null
   readonly resolve: (region: ScreenshotRegion | null) => void
 }
@@ -47,9 +48,9 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: screenshotCaptureInputSchema,
       response: screenshotArtifactSchema,
-      handler: async (_ctx, request: ScreenshotCaptureInput) => {
+      handler: async (ctx, request: ScreenshotCaptureInput) => {
         return runWithScreenshotWindowState(
-          { hideCurrentWindow: request.hideCurrentWindow === true },
+          screenshotWindowOptions(ctx, request.hideCurrentWindow === true),
           (screenshotContext) => createScreenshotService().capture(request, screenshotContext),
         )
       },
@@ -62,7 +63,7 @@ export const screenshotIpcModule: IpcModule = {
       handler: async (ctx, request: ScreenshotCaptureToFileInput) => {
         await authorizeFileAccess(ctx, "fs.write.outside-userdata", request.outputPath, "screenshot.captureToFile.output")
         return runWithScreenshotWindowState(
-          { hideCurrentWindow: request.capture.hideCurrentWindow === true },
+          screenshotWindowOptions(ctx, request.capture.hideCurrentWindow === true),
           (screenshotContext) => createScreenshotService().captureToFile(request, screenshotContext),
         )
       },
@@ -82,9 +83,9 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: screenshotCaptureInputSchema,
       response: screenshotClipboardResultSchema,
-      handler: async (_ctx, request: ScreenshotCaptureInput) => {
+      handler: async (ctx, request: ScreenshotCaptureInput) => {
         return runWithScreenshotWindowState(
-          { hideCurrentWindow: request.hideCurrentWindow === true },
+          screenshotWindowOptions(ctx, request.hideCurrentWindow === true),
           (screenshotContext) => createScreenshotService().captureToClipboard(request, screenshotContext),
         )
       },
@@ -103,12 +104,12 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: screenshotInteractiveCaptureInputSchema,
       response: interactiveCaptureResponseSchema,
-      handler: async (_ctx, request: ScreenshotInteractiveCaptureInput) => {
+      handler: async (ctx, request: ScreenshotInteractiveCaptureInput) => {
         if (interactiveSession) {
           throw new Error("已有截图正在进行")
         }
         return runWithScreenshotWindowState(
-          { hideCurrentWindow: request.hideCurrentWindow === true },
+          screenshotWindowOptions(ctx, request.hideCurrentWindow === true),
           async (screenshotContext) => {
             const region = await openInteractiveOverlay()
             if (!region) return null
@@ -122,9 +123,9 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: screenshotRegionSchema,
       response: z.boolean(),
-      handler: async (_ctx, region: ScreenshotRegion) => {
+      handler: async (ctx, region: ScreenshotRegion) => {
         const session = interactiveSession
-        if (!session) return false
+        if (!session || !isInteractiveSessionSender(session, ctx.senderWebContentsId)) return false
         finishInteractiveSession(session, region)
         return true
       },
@@ -134,9 +135,9 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.boolean(),
-      handler: async () => {
+      handler: async (ctx) => {
         const session = interactiveSession
-        if (!session) return false
+        if (!session || !isInteractiveSessionSender(session, ctx.senderWebContentsId)) return false
         finishInteractiveSession(session, null)
         return true
       },
@@ -146,10 +147,11 @@ export const screenshotIpcModule: IpcModule = {
       kind: "invoke",
       request: chooseOutputPngRequestSchema,
       response: z.string().nullable(),
-      handler: async (_ctx, request: ChooseOutputPngRequest) => {
-        const parentWindow = focusedWindow()
+      handler: async (ctx, request: ChooseOutputPngRequest) => {
+        const parentWindow = windowFromWebContentsId(ctx.senderWebContentsId) ?? focusedWindow()
         const options = {
-          title: "选择输出文件",
+          title: "选择保存位置",
+          buttonLabel: "保存",
           defaultPath: request?.defaultPath ?? "screenshot.png",
           filters: [{ name: "PNG 图片", extensions: ["png"] }],
         }
@@ -163,10 +165,18 @@ export const screenshotIpcModule: IpcModule = {
   events: {},
 }
 
+function screenshotWindowOptions(ctx: IpcHandlerContext, hideCurrentWindow: boolean) {
+  return {
+    hideCurrentWindow,
+    senderWebContentsId: ctx.senderWebContentsId,
+  }
+}
+
 async function openInteractiveOverlay(): Promise<ScreenshotRegion | null> {
   const bounds = combinedDisplayBounds()
   const overlayWindow = new BrowserWindow({
     ...bounds,
+    show: false,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -177,7 +187,7 @@ async function openInteractiveOverlay(): Promise<ScreenshotRegion | null> {
     hasShadow: false,
     title: "截图",
     webPreferences: {
-      preload: path.join(__dirname, "../preload.js"),
+      preload: resolveScreenshotOverlayPreloadPath(__dirname),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -186,13 +196,18 @@ async function openInteractiveOverlay(): Promise<ScreenshotRegion | null> {
   overlayWindow.setAlwaysOnTop(true, "screen-saver")
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
+  let session: InteractiveCaptureSession
   const region = await new Promise<ScreenshotRegion | null>((resolve) => {
-    const session: InteractiveCaptureSession = {
+    session = {
       id: `screenshot:${Date.now()}`,
+      overlayWebContentsId: overlayWindow.webContents.id,
       overlayWindow,
       resolve,
     }
     interactiveSession = session
+    overlayWindow.webContents.on("preload-error", () => {
+      finishInteractiveSession(session, null)
+    })
     overlayWindow.on("closed", () => {
       if (interactiveSession?.id === session.id) {
         finishInteractiveSession(session, null)
@@ -203,11 +218,16 @@ async function openInteractiveOverlay(): Promise<ScreenshotRegion | null> {
       offsetX: String(bounds.x),
       offsetY: String(bounds.y),
     })
-    void overlayWindow.loadURL(buildDetachedViewWindowUrl(rendererBaseUrl(), params))
     overlayWindow.once("ready-to-show", () => {
-      overlayWindow.show()
-      overlayWindow.focus()
+      showOverlayWindow(overlayWindow)
     })
+    void overlayWindow.loadURL(buildDetachedViewWindowUrl(rendererBaseUrl(), params))
+      .then(() => {
+        showOverlayWindow(overlayWindow)
+      })
+      .catch(() => {
+        finishInteractiveSession(session, null)
+      })
   })
   if (!overlayWindow.isDestroyed()) {
     overlayWindow.hide()
@@ -217,6 +237,16 @@ async function openInteractiveOverlay(): Promise<ScreenshotRegion | null> {
     await waitForWindowTransition()
   }
   return region
+}
+
+export function resolveScreenshotOverlayPreloadPath(baseDir: string): string {
+  return path.join(baseDir, "../../../electron/preload.js")
+}
+
+function showOverlayWindow(overlayWindow: BrowserWindow): void {
+  if (overlayWindow.isDestroyed() || overlayWindow.isVisible()) return
+  overlayWindow.show()
+  overlayWindow.focus()
 }
 
 function finishInteractiveSession(session: InteractiveCaptureSession, region: ScreenshotRegion | null): void {
@@ -229,6 +259,13 @@ function finishInteractiveSession(session: InteractiveCaptureSession, region: Sc
     overlayWindow.close()
   }
   session.resolve(region)
+}
+
+export function isInteractiveSessionSender(
+  session: Pick<InteractiveCaptureSession, "overlayWebContentsId">,
+  senderWebContentsId: number | undefined,
+): boolean {
+  return senderWebContentsId !== undefined && senderWebContentsId === session.overlayWebContentsId
 }
 
 function combinedDisplayBounds(): Electron.Rectangle {
@@ -247,6 +284,14 @@ function focusedWindow(): Electron.BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow()
     ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
     ?? undefined
+}
+
+function windowFromWebContentsId(senderWebContentsId: number | undefined): Electron.BrowserWindow | undefined {
+  if (senderWebContentsId === undefined) return undefined
+  return BrowserWindow.getAllWindows().find((window) =>
+    !window.isDestroyed()
+    && window.webContents.id === senderWebContentsId
+  )
 }
 
 async function authorizeFileAccess(

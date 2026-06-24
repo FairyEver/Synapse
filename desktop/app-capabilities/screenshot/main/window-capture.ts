@@ -8,12 +8,12 @@ export type ScreenshotWindowStateContext = {
 }
 
 export async function runWithScreenshotWindowState<T>(
-  options: { readonly hideCurrentWindow?: boolean },
+  options: { readonly hideCurrentWindow?: boolean; readonly senderWebContentsId?: number },
   operation: (context: ScreenshotWindowStateContext) => Promise<T>,
 ): Promise<T> {
-  const focusedWindow = usableFocusedWindow()
-  const context = focusedWindow ? { targetPoint: windowCenter(focusedWindow) } : {}
-  const hiddenWindow = options.hideCurrentWindow === true ? focusedWindow : null
+  const targetWindow = usableSenderWindow(options.senderWebContentsId) ?? usableFocusedWindow()
+  const context = targetWindow ? { targetPoint: windowCenter(targetWindow) } : {}
+  const hiddenWindow = options.hideCurrentWindow === true ? targetWindow : null
 
   try {
     if (hiddenWindow) {
@@ -32,6 +32,13 @@ export function waitForWindowTransition(): Promise<void> {
 
 function usableFocusedWindow(): BrowserWindow | null {
   const target = BrowserWindow.getFocusedWindow()
+  if (!target || target.isDestroyed() || !target.isVisible()) return null
+  return target
+}
+
+function usableSenderWindow(senderWebContentsId: number | undefined): BrowserWindow | null {
+  if (senderWebContentsId === undefined) return null
+  const target = BrowserWindow.getAllWindows().find((window) => window.webContents.id === senderWebContentsId)
   if (!target || target.isDestroyed() || !target.isVisible()) return null
   return target
 }

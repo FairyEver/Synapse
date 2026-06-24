@@ -1,5 +1,6 @@
+import path from "node:path"
 import { describe, expect, it } from "vitest"
-import { screenshotIpcModule } from "../ipc"
+import { isInteractiveSessionSender, resolveScreenshotOverlayPreloadPath, screenshotIpcModule } from "../ipc"
 
 describe("screenshotIpcModule", () => {
   it("declares screenshot channels", () => {
@@ -23,5 +24,18 @@ describe("screenshotIpcModule", () => {
       region: { x: 0, y: 0, width: 100, height: 80 },
     }).success).toBe(true)
     expect(request.safeParse({ mode: "region" }).success).toBe(false)
+  })
+
+  it("resolves the overlay preload from app-capabilities to the Electron preload", () => {
+    expect(resolveScreenshotOverlayPreloadPath("/repo/desktop/dist-electron/app-capabilities/screenshot/main"))
+      .toBe(path.join("/repo/desktop/dist-electron/electron", "preload.js"))
+  })
+
+  it("accepts interactive completion only from the overlay webContents", () => {
+    const session = { overlayWebContentsId: 38 }
+
+    expect(isInteractiveSessionSender(session, 38)).toBe(true)
+    expect(isInteractiveSessionSender(session, 39)).toBe(false)
+    expect(isInteractiveSessionSender(session, undefined)).toBe(false)
   })
 })
