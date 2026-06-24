@@ -112,11 +112,14 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("更换图标")
   })
 
-  it("uses an enter icon for app launch actions", async () => {
+  it("renders app launch actions as a grid without list arrows", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(9)
+    expect(document.querySelector("[data-app-launcher-grid]")).toBeTruthy()
+    expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("grid")
+    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(0)
     expect(document.querySelector(".lucide-external-link")).toBeNull()
+    expect(findButton("资源仓库")).toBeInstanceOf(HTMLButtonElement)
   })
 
   it("opens the clicked app in the current window", async () => {

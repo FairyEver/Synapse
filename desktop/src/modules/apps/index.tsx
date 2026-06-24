@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
-import { ModuleContentPanel } from "@/components/module-page"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
@@ -88,10 +87,10 @@ export function AppsModule({
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-3 py-3">
-          <ModuleContentPanel className="mx-auto max-w-2xl overflow-hidden">
+        <div className="min-h-full px-6 py-10">
+          <div className="mx-auto max-w-5xl">
             <AppLauncherGrid apps={listSystemApps()} onOpenApp={openApp} />
-          </ModuleContentPanel>
+          </div>
         </div>
       </ScrollArea>
     </div>
