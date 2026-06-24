@@ -26,7 +26,7 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_table_describe").description).toContain("Call this before")
 
     const tableDescription = getPropertyDescription("database_row_list", "tableName")
-    expect(tableDescription).toContain("call database_table_list")
+    expect(tableDescription).toContain("call app_database_table_list")
     expect(tableDescription).toContain("table.description")
   })
 
@@ -40,7 +40,7 @@ describe("Database MCP tool descriptions", () => {
 
   it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
     expect(getTool("database_overview_get").description).toContain("Use this first")
-    expect(getTool("database_sql_read").description).toContain("Prefer this over database_sql_execute")
+    expect(getTool("database_sql_read").description).toContain("Prefer this over app_database_sql_execute")
     expect(getTool("database_sql_read").description).toContain("read-only PRAGMA")
     expect(getTool("database_sql_read").description).toContain("_table_folders")
     expect(getTool("database_sql_execute").description).toContain("Use only")

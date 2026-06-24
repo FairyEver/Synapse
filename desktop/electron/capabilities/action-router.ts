@@ -29,7 +29,7 @@ export type SynapseActionRouterDeps = {
 export function createSynapseActionRouter(deps: SynapseActionRouterDeps): SynapseActionRouter {
   return {
     async dispatch(action, params, context) {
-      const domainId = getActionDomainId(action)
+      const domainId = resolveActionDomainId(action)
       const dispatchAction = legacyDispatchAction(action, domainId)
       if (domainId === "app") return deps.appDispatch(dispatchAction, params, context)
       if (domainId === "automation") return deps.automationDispatch(dispatchAction, params, context)
@@ -43,6 +43,24 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       throw new Error(`Unknown action: ${action}`)
     },
   }
+}
+
+function resolveActionDomainId(action: string): string | null {
+  const canonicalDomainId = getActionDomainId(action)
+  if (canonicalDomainId) return canonicalDomainId
+  return getActionDomainId(primaryActionForLegacy(action))
+}
+
+function primaryActionForLegacy(action: string): string {
+  if (action.startsWith("automation.")) return action.replace("automation.", "app.automation.")
+  if (action.startsWith("content.")) return action.replace("content.", "app.resource_repository.")
+  if (action.startsWith("database.")) return action.replace("database.", "app.database.")
+  if (action.startsWith("drive.")) return action.replace("drive.", "app.drive.")
+  if (action.startsWith("model_price.")) return action.replace("model_price.", "app.model_price.")
+  if (action.startsWith("repository.")) return action.replace("repository.", "app.settings.repository.")
+  if (action.startsWith("variable.")) return action.replace("variable.", "app.settings.variable.")
+  if (action.startsWith("workflow.")) return action.replace("workflow.", "app.workflow.")
+  return action
 }
 
 function legacyDispatchAction(action: string, domainId: string | null): string {

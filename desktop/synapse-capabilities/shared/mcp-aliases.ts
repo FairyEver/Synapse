@@ -36,6 +36,8 @@ export function withPrimaryAndLegacyMcpTools<T extends McpToolDefinition>(
   const primaryTools = tools.map((tool) => ({
     ...tool,
     name: primaryToolNameForLegacy(tool.name, options.legacyPrefix, options.primaryPrefix),
+    description: rewriteLegacyToolReferences(tool.description, options),
+    inputSchema: rewriteLegacyToolReferences(tool.inputSchema, options),
   }) as T)
   const legacyTools = primaryTools.map((tool) => ({
     ...tool,
@@ -44,4 +46,22 @@ export function withPrimaryAndLegacyMcpTools<T extends McpToolDefinition>(
   }) as T)
 
   return [...primaryTools, ...legacyTools]
+}
+
+function rewriteLegacyToolReferences<T>(value: T, options: McpAliasOptions): T {
+  if (typeof value === "string") {
+    return value.replaceAll(`${options.legacyPrefix}_`, `${options.primaryPrefix}_`) as T
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteLegacyToolReferences(item, options)) as T
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        rewriteLegacyToolReferences(entry, options),
+      ]),
+    ) as T
+  }
+  return value
 }
