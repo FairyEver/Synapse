@@ -17,7 +17,7 @@ export const TERMINAL_SESSION_READ_CAPABILITY_ID =
 export const TERMINAL_SESSION_WRITE_CAPABILITY_ID =
   "app.terminal.session.write" as CapabilityId
 export const TERMINAL_SESSION_RESIZE_CAPABILITY_ID =
-  "app.terminal.session.update" as CapabilityId
+  "app.terminal.session.resize" as CapabilityId
 export const TERMINAL_SESSION_STOP_CAPABILITY_ID =
   "app.terminal.session.stop" as CapabilityId
 

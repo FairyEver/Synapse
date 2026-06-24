@@ -13,6 +13,7 @@ const CAPABILITY_ACTIONS = [
   "disable",
   "read",
   "write",
+  "resize",
   "execute",
   "reorder",
   "move",
