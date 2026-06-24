@@ -59,9 +59,19 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: await deps.service.renameGroup(terminalRenameGroupInputSchema.parse(params)), affected: 1 }
       }
       if (action === TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID) {
+        const parsed = terminalUpdateGroupSettingsInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+          resource: parsed.groupId,
+          boundary: "terminal.mcp.updateGroupSettings",
+          groupId: parsed.groupId,
+          byteCount: parsed.settings?.startupCommand === undefined
+            ? 0
+            : Buffer.byteLength(parsed.settings.startupCommand),
+        })
         return {
           ok: true,
-          data: await deps.service.updateGroupSettings(terminalUpdateGroupSettingsInputSchema.parse(params)),
+          data: await deps.service.updateGroupSettings(parsed),
           affected: 1,
         }
       }
