@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { MoreHorizontal, Pencil, Plus, RotateCcw, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
@@ -16,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
-import { Badge } from "../../../src/components/ui/badge"
 import { Button } from "../../../src/components/ui/button"
 import {
   Dialog,
@@ -33,7 +33,12 @@ import {
   DropdownMenuTrigger,
 } from "../../../src/components/ui/dropdown-menu"
 import { Input } from "../../../src/components/ui/input"
-import { ScrollArea } from "../../../src/components/ui/scroll-area"
+import {
+  ModuleSidebar,
+  ModuleSidebarGroup,
+  ModuleSidebarList,
+  ModuleSidebarRow,
+} from "../../../src/components/module-sidebar"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { cn } from "../../../src/lib/utils"
@@ -60,14 +65,16 @@ export function TerminalModule() {
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<SynapseTerminalSession | null>(null)
-  const [deleteSaving, setDeleteSaving] = useState(false)
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
   const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroup | null>(null)
   const [groupName, setGroupName] = useState("")
   const [groupSaving, setGroupSaving] = useState(false)
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroup | null>(null)
   const [deleteGroupSaving, setDeleteGroupSaving] = useState(false)
+  const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
 
   const activeSession = useMemo(() => {
@@ -76,9 +83,6 @@ export function TerminalModule() {
   }, [activeSessionId, sessions])
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
-  const statusLabel = activeSession ? getStatusLabel(activeSession.status) : "未启动"
-  const canStopSession = activeSession?.status === "running"
-  const canRestartSession = Boolean(activeSession && activeSession.status !== "running")
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -96,9 +100,12 @@ export function TerminalModule() {
   useEffect(() => {
     let active = true
     setLoading(true)
+    setLoadError(null)
     refreshSessions()
       .catch((error) => {
         logger.error("Failed to load terminal sessions.", error)
+        if (active) setLoadError("加载终端失败")
+        toast.error("加载终端失败")
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -117,37 +124,18 @@ export function TerminalModule() {
       })
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
+      setTerminalReadError(null)
       terminalBridge.listGroups()
         .then(setGroups)
         .catch((error) => {
           logger.warn("Failed to refresh terminal groups after session creation.", error)
+          toast.error("刷新终端分组失败")
         })
     } catch (error) {
       logger.error("Failed to create terminal session.", error)
+      toast.error("新建终端失败")
     }
   }, [terminalBridge])
-
-  const restartActiveSession = useCallback(async () => {
-    if (!activeSession || activeSession.status === "running") return
-    await createSession({
-      groupId: activeSession.groupId,
-      title: activeSession.title,
-      cwd: activeSession.cwd,
-      cols: activeSession.cols,
-      rows: activeSession.rows,
-    })
-  }, [activeSession, createSession])
-
-  const stopCurrentSession = useCallback(async () => {
-    if (!activeSession) return
-    try {
-      await terminalBridge.stopSession({ sessionId: activeSession.id })
-      const session = await terminalBridge.getSession({ sessionId: activeSession.id })
-      setSessions((current) => mergeSession(current, session))
-    } catch (error) {
-      logger.error("Failed to stop terminal session.", error)
-    }
-  }, [activeSession, terminalBridge])
 
   const openRenameDialog = useCallback((session: SynapseTerminalSession) => {
     setRenameTarget(session)
@@ -186,6 +174,7 @@ export function TerminalModule() {
       setGroupName("")
     } catch (error) {
       logger.error("Failed to save terminal group.", error)
+      toast.error(groupDialogMode === "rename" ? "重命名分组失败" : "新建分组失败")
     } finally {
       setGroupSaving(false)
     }
@@ -206,15 +195,15 @@ export function TerminalModule() {
       setRenameTitle("")
     } catch (error) {
       logger.error("Failed to rename terminal session.", error)
+      toast.error("重命名终端失败")
     } finally {
       setRenameSaving(false)
     }
   }, [renameTarget, renameTitle, terminalBridge])
 
-  const deleteSession = useCallback(async () => {
-    if (!deleteTarget) return
-    const targetId = deleteTarget.id
-    setDeleteSaving(true)
+  const deleteSession = useCallback(async (target: SynapseTerminalSession) => {
+    const targetId = target.id
+    setDeletingSessionId(targetId)
     try {
       await terminalBridge.deleteSession({ sessionId: targetId })
       setSessions((current) => {
@@ -225,13 +214,13 @@ export function TerminalModule() {
         })
         return nextSessions
       })
-      setDeleteTarget(null)
     } catch (error) {
       logger.error("Failed to delete terminal session.", error)
+      toast.error("删除终端失败")
     } finally {
-      setDeleteSaving(false)
+      setDeletingSessionId((current) => current === targetId ? null : current)
     }
-  }, [deleteTarget, terminalBridge])
+  }, [terminalBridge])
 
   const deleteGroup = useCallback(async () => {
     if (!deleteGroupTarget) return
@@ -254,6 +243,7 @@ export function TerminalModule() {
       setDeleteGroupTarget(null)
     } catch (error) {
       logger.error("Failed to delete terminal group.", error)
+      toast.error("删除分组失败")
     } finally {
       setDeleteGroupSaving(false)
     }
@@ -270,6 +260,7 @@ export function TerminalModule() {
     const container = terminalContainerRef.current
     if (!container || !activeSession) return undefined
 
+    setTerminalReadError(null)
     let disposed = false
     let lastSeq = 0
     const xterm = new Terminal(createTerminalRenderingOptions({
@@ -308,6 +299,7 @@ export function TerminalModule() {
         data,
       }).catch((error) => {
         logger.error("Failed to write terminal input.", error)
+        toast.error("写入终端失败")
       })
     })
 
@@ -357,6 +349,10 @@ export function TerminalModule() {
       pendingChunks.length = 0
     }).catch((error) => {
       logger.error("Failed to read terminal output.", error)
+      if (!disposed) {
+        setTerminalReadError("读取终端输出失败")
+        toast.error("读取终端输出失败")
+      }
     })
 
     return () => {
@@ -375,44 +371,63 @@ export function TerminalModule() {
     <SystemAppWindowShell
       actions={headerActions}
     >
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1">
-        <aside className="max-h-48 min-h-0 border-b bg-surface md:max-h-none md:border-b-0 md:border-r">
-          <ScrollArea className="h-full">
-            <div className="grid gap-2 p-2">
-              <div className="flex items-center justify-end">
-                <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
-                  <Plus data-icon="inline-start" />
-                  新建分组
-                </Button>
-              </div>
+      <div
+        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1"
+      >
+        <ModuleSidebar
+          variant="bare"
+          className="max-h-48 min-h-0 border-b bg-background md:max-h-none md:border-b-0 md:border-r"
+        >
+          <div className="flex items-center justify-start">
+            <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
+              <Plus data-icon="inline-start" />
+              新建分组
+            </Button>
+          </div>
+          <ModuleSidebarList>
+            <div className="grid gap-1">
               {loading ? (
-                <div className="grid gap-2">
+                <>
                   <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                </div>
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </>
               ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
-                <div key={group.id} className="grid gap-1">
-                  <div className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 px-2">
-                    <div className="truncate text-xs font-medium text-muted-foreground">{group.name}</div>
-                    {group.id !== "ungrouped" ? (
+                <ModuleSidebarGroup
+                  key={group.id}
+                  open={openGroupIds[group.id] ?? true}
+                  onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [group.id]: open }))}
+                  data-track="terminal-session-group"
+                  title={group.name}
+                  openIcon={FolderOpen}
+                  closedIcon={Folder}
+                  headerClassName="pl-0 pr-3"
+                  contentClassName="pl-0"
+                  actions={group.id !== "ungrouped" ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        title="新建终端"
+                        onClick={() => { void createSession({ groupId: group.id }) }}
+                      >
+                        <Plus className="size-3.5" />
+                        <span className="sr-only">新建终端</span>
+                      </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             type="button"
-                            size="icon-sm"
+                            size="icon-xs"
                             variant="ghost"
                             aria-label={`终端分组操作：${group.name}`}
                           >
-                            <MoreHorizontal />
+                            <MoreHorizontal className="size-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => { void createSession({ groupId: group.id }) }}>
-                            <TerminalIcon />
-                            新建终端
-                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
                             <Pencil />
                             重命名
@@ -423,94 +438,61 @@ export function TerminalModule() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    ) : null}
-                  </div>
-                  <div className="grid gap-1">
-                    {group.sessions.map((session) => (
-                      <div
-                        key={session.id}
-                        className={cn(
-                          "grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg transition-colors hover:bg-muted",
-                          session.id === activeSession?.id ? "bg-muted text-foreground" : "text-foreground",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          className="grid min-h-9 min-w-0 content-center px-2 py-1 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          onClick={() => setActiveSessionId(session.id)}
-                        >
-                          <span className="truncate font-medium">{session.title}</span>
-                          <span className="truncate text-xs text-muted-foreground">{session.cwd}</span>
-                        </button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              aria-label={`终端会话操作：${session.title}`}
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <MoreHorizontal />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openRenameDialog(session)}>
-                              <Pencil />
-                              重命名
-                            </DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(session)}>
-                              <Trash2 />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                    </>
+                  ) : null}
+                >
+                  {group.sessions.map((session) => (
+                    <ModuleSidebarRow
+                      key={session.id}
+                      active={session.id === activeSession?.id}
+                      data-track="terminal-session-select"
+                      icon={<TerminalSessionStatusIcon status={session.status} />}
+                      trailing={
+                        <TerminalSessionDeleteButton
+                          disabled={deletingSessionId === session.id}
+                          session={session}
+                          onDelete={() => { void deleteSession(session) }}
+                        />
+                      }
+                      trackValue={session.id}
+                      onSelect={() => setActiveSessionId(session.id)}
+                      onDoubleClick={() => openRenameDialog(session)}
+                    >
+                      {session.title}
+                    </ModuleSidebarRow>
+                  ))}
+                </ModuleSidebarGroup>
               )) : (
                 <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
                   暂无会话
                 </div>
               )}
             </div>
-          </ScrollArea>
-        </aside>
+          </ModuleSidebarList>
+        </ModuleSidebar>
         <main className="flex min-h-0 min-w-0 flex-col">
           {activeSession ? (
-            <>
-              <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-1.5">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{activeSession.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">{activeSession.cwd}</div>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                  <Badge variant="outline">{statusLabel}</Badge>
-                  {canRestartSession ? (
-                    <Button type="button" size="sm" variant="outline" onClick={() => { void restartActiveSession() }}>
-                      <RotateCcw data-icon="inline-start" />
-                      在此处新开
-                    </Button>
-                  ) : null}
-                  {canStopSession ? (
-                    <Button type="button" size="sm" variant="outline" onClick={stopCurrentSession}>
-                      <Square data-icon="inline-start" />
-                      停止会话
-                    </Button>
-                  ) : null}
-                </div>
-              </header>
-              <div className="dark min-h-0 flex-1 overflow-hidden bg-background">
-                <div ref={terminalContainerRef} className="h-full min-h-0 min-w-0 overflow-hidden rounded-lg border bg-background" />
-              </div>
-            </>
+            <div className="dark flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+              {terminalReadError ? (
+                <div className="border-b bg-background px-3 py-2 text-sm text-muted-foreground">{terminalReadError}</div>
+              ) : null}
+              <div
+                ref={terminalContainerRef}
+                role="region"
+                aria-label="终端输出与输入"
+                tabIndex={0}
+                className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
           ) : (
             <div className="flex h-full min-h-0 items-center justify-center">
-              <Button type="button" onClick={() => { void createSession() }}>
-                <TerminalIcon data-icon="inline-start" />
-                新建终端
-              </Button>
+              <div className="grid justify-items-center gap-2">
+                <div className="text-sm text-muted-foreground">{loadError ?? "暂无会话"}</div>
+                <Button type="button" onClick={() => { void createSession() }}>
+                  <TerminalIcon data-icon="inline-start" />
+                  新建终端
+                </Button>
+              </div>
             </div>
           )}
         </main>
@@ -611,27 +593,6 @@ export function TerminalModule() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
-        if (!open) setDeleteTarget(null)
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除终端</AlertDialogTitle>
-            <AlertDialogDescription>
-              会停止该终端并删除保留输出。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteSaving}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleteSaving}
-              onClick={() => { void deleteSession() }}
-            >
-              删除终端
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
         if (!open) setDeleteGroupTarget(null)
       }}>
@@ -654,6 +615,54 @@ export function TerminalModule() {
         </AlertDialogContent>
       </AlertDialog>
     </SystemAppWindowShell>
+  )
+}
+
+function TerminalSessionDeleteButton({
+  disabled,
+  session,
+  onDelete,
+}: {
+  readonly disabled: boolean
+  readonly session: SynapseTerminalSession
+  readonly onDelete: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant="ghost"
+      disabled={disabled}
+      aria-label={`删除终端会话：${session.title}`}
+      title="删除"
+      className="text-muted-foreground hover:text-destructive"
+      onClick={(event) => {
+        event.stopPropagation()
+        onDelete()
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Trash2 className="size-3.5" />
+    </Button>
+  )
+}
+
+function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTerminalSession["status"] }) {
+  const running = status === "running"
+  const Icon = running ? CircleDot : Link2Off
+  const label = running ? "运行中" : "已断开"
+
+  return (
+    <span
+      title={label}
+      className={cn(
+        "inline-flex size-3.5 shrink-0 items-center justify-center",
+        running ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+      )}
+    >
+      <Icon className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
   )
 }
 
@@ -700,14 +709,6 @@ function mergeGroup(
     ? groups.map((item) => item.id === group.id ? group : item)
     : [...groups, group]
   return nextGroups.sort((left, right) => left.sortOrder - right.sortOrder)
-}
-
-function getStatusLabel(status: SynapseTerminalSession["status"]): string {
-  if (status === "running") return "运行中"
-  if (status === "exited") return "已退出"
-  if (status === "killed") return "已停止"
-  if (status === "failed") return "失败"
-  return "已断开"
 }
 
 function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {

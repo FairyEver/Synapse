@@ -89,7 +89,7 @@ export function buildClaudeCodePrintArgs(config: ClaudeCodeNodeConfig, prompt: s
     args.push("--disallowedTools", disallowedTool)
   }
 
-  args.push(prompt)
+  args.push("--", prompt)
 
   return args
 }

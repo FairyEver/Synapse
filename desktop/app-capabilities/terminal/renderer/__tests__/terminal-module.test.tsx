@@ -139,6 +139,10 @@ const webglState = vi.hoisted(() => ({
   }>,
 }))
 
+const toastState = vi.hoisted(() => ({
+  error: vi.fn(),
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalBridge
@@ -206,6 +210,10 @@ vi.mock("@xterm/addon-webgl", () => ({
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
+vi.mock("sonner", () => ({
+  toast: toastState,
+}))
+
 import { Terminal as XtermTerminal } from "@xterm/xterm"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { TerminalModule } from "../index"
@@ -258,6 +266,7 @@ beforeEach(() => {
   terminalBridge.resizeSession.mockClear()
   terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
+  toastState.error.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
   terminalBridge.onSessionDeleted.mockClear()
@@ -310,7 +319,7 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
-  it("keeps lost sessions read-only and restarts them from the same context", async () => {
+  it("keeps lost sessions read-only without terminal-pane actions", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({
       id: "session-1",
@@ -321,35 +330,38 @@ describe("TerminalModule", () => {
       cols: 120,
       rows: 40,
     })]
-    terminalBridge.createSession.mockImplementationOnce(async (input) => createSession({
-      id: "session-2",
-      shell: "zsh",
-      status: "running",
-      startedAt: "2026-06-24T00:01:00.000Z",
-      ...input,
-    }))
 
     await renderEmbeddedModule()
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
+    const main = document.body.querySelector("main")
     expect(actions?.textContent).toContain("新建终端")
-    expect(actions?.textContent).not.toContain("在此处新开")
     expect(document.body.textContent).toContain("已断开")
-    expect(document.body.textContent).toContain("在此处新开")
+    expect(main?.textContent).not.toContain("同目录新开")
+    expect(main?.textContent).not.toContain("终止进程")
     expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
       disableStdin: true,
     }))
+  })
 
-    await clickButton("在此处新开")
-
-    expect(terminalBridge.createSession).toHaveBeenCalledWith({
+  it("renders the active session area as only the terminal surface", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
       groupId: "group-1",
-      title: "zsh",
+      title: "开发终端",
       cwd: "/Users/liyang",
-      cols: 120,
-      rows: 40,
-    })
-    expect(document.body.textContent).toContain("运行中")
+    })]
+
+    await renderModule()
+
+    const main = document.body.querySelector("main")
+    expect(document.body.textContent).toContain("开发终端")
+    expect(main?.textContent).not.toContain("/Users/liyang")
+    expect(main?.textContent).not.toContain("运行中")
+    expect(main?.textContent).not.toContain("终止进程")
+    expect(main?.textContent).not.toContain("同目录新开")
+    expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
   })
 
   it("does not render session-level Agent control", async () => {
@@ -361,13 +373,12 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).not.toContain("Agent 控制")
   })
 
-  it("renames a terminal session from the session row menu", async () => {
+  it("renames a terminal session by double-clicking its name", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
-    await clickSessionMenu("开发终端")
-    await clickMenuItem("重命名")
+    await doubleClickSession("开发终端")
     await changeInput("终端名称", "  构建日志  ")
     await clickButton("保存")
 
@@ -376,6 +387,16 @@ describe("TerminalModule", () => {
       title: "  构建日志  ",
     })
     expect(document.body.textContent).toContain("构建日志")
+  })
+
+  it("renders a direct delete button instead of a session menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.body.querySelector('[aria-label="终端会话操作：开发终端"]')).toBeNull()
+    expect(document.body.querySelector('[aria-label="删除终端会话：开发终端"]')).toBeTruthy()
   })
 
   it("creates an empty terminal group and keeps it visible", async () => {
@@ -389,17 +410,33 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("构建")
   })
 
-  it("creates a terminal session from a group menu", async () => {
+  it("creates a terminal session from a group action", async () => {
     bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
 
     await renderModule()
-    await clickGroupMenu("构建")
-    await clickMenuItem("新建终端")
+    await clickButtonByTitle("新建终端")
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       groupId: "group-build",
       cols: 80,
       rows: 24,
+    })
+  })
+
+  it("collapses a terminal group without changing the active session", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    expect(document.querySelector("[data-slot='collapsible'][data-state='open']")).toBeTruthy()
+
+    await clickButton("默认分组")
+
+    expect(document.querySelector("[data-slot='collapsible'][data-state='closed']")).toBeTruthy()
+    expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
+    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
+      sessionId: "session-1",
+      afterSeq: 0,
     })
   })
 
@@ -450,11 +487,10 @@ describe("TerminalModule", () => {
     ]
 
     await renderModule()
-    await clickSessionMenu("一号终端")
-    await clickMenuItem("删除")
-    await clickButton("删除终端")
+    await clickSessionDelete("一号终端")
 
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(document.body.textContent).not.toContain("会停止该终端并删除保留输出")
     expect(document.body.textContent).not.toContain("一号终端")
     expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
       sessionId: "session-2",
@@ -467,12 +503,45 @@ describe("TerminalModule", () => {
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "临时终端" })]
 
     await renderModule()
-    await clickSessionMenu("临时终端")
-    await clickMenuItem("删除")
-    await clickButton("删除终端")
+    await clickSessionDelete("临时终端")
 
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(document.body.textContent).toContain("新建终端")
+  })
+
+  it("shows a user-visible error when creating a terminal fails", async () => {
+    terminalBridge.createSession.mockRejectedValueOnce(new Error("spawn failed"))
+
+    await renderModule()
+    await clickButton("新建终端")
+
+    expect(toastState.error).toHaveBeenCalledWith("新建终端失败")
+  })
+
+  it("shows a user-visible error when terminal output cannot be loaded", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.readSession.mockRejectedValueOnce(new Error("read failed"))
+
+    await renderModule()
+
+    expect(toastState.error).toHaveBeenCalledWith("读取终端输出失败")
+    expect(document.body.textContent).toContain("读取终端输出失败")
+  })
+
+  it("shows a user-visible error when terminal input cannot be written", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockRejectedValueOnce(new Error("write failed"))
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.instances[0]?.emitInput("pwd\r")
+      await Promise.resolve()
+    })
+
+    expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
   })
 
   it("creates xterm with iTerm-like rendering defaults", async () => {
@@ -642,17 +711,28 @@ async function clickButton(text: string, root: ParentNode = document.body): Prom
   })
 }
 
-async function clickSessionMenu(title: string): Promise<void> {
+async function clickButtonByTitle(title: string): Promise<void> {
   const button = Array.from(document.body.querySelectorAll("button"))
-    .find((item) => item.getAttribute("aria-label") === `终端会话操作：${title}`)
+    .find((item) => item.getAttribute("title") === title)
   await act(async () => {
-    button?.dispatchEvent(new MouseEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      ctrlKey: false,
-    }))
-    button?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
     button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickSessionDelete(title: string): Promise<void> {
+  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="删除终端会话：${title}"]`)
+  await act(async () => {
+    button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function doubleClickSession(title: string): Promise<void> {
+  const row = Array.from(document.body.querySelectorAll<HTMLElement>('[role="button"][data-track="terminal-session-select"]'))
+    .find((element) => element.textContent?.includes(title))
+  await act(async () => {
+    row?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
     await Promise.resolve()
   })
 }

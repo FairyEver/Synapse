@@ -39,6 +39,7 @@ describe("buildClaudeCodePrintRequest", () => {
       "acceptEdits",
       "--setting-sources",
       "user,project,local",
+      "--",
       "Write a summary",
     ])
   })
@@ -89,8 +90,26 @@ describe("buildClaudeCodePrintRequest", () => {
       "Edit",
       "--disallowedTools",
       "Bash(rm *)",
+      "--",
       "Write a summary",
     ])
+  })
+
+  it("separates the prompt from variadic Claude Code flags", () => {
+    const built = request({
+      mcpConfigPath: "/Users/liyang/project/mcp.json",
+      additionalDirectories: ["/Users/liyang/lib"],
+      allowedTools: ["mcp__chrome-devtools__navigate_page"],
+      disallowedTools: ["Bash(*)"],
+    })
+    const args = built.args ?? []
+    const separatorIndex = args.indexOf("--")
+
+    expect(separatorIndex).toBeGreaterThan(args.lastIndexOf("/Users/liyang/lib"))
+    expect(separatorIndex).toBeGreaterThan(args.lastIndexOf("/Users/liyang/project/mcp.json"))
+    expect(separatorIndex).toBeGreaterThan(args.lastIndexOf("mcp__chrome-devtools__navigate_page"))
+    expect(separatorIndex).toBeGreaterThan(args.lastIndexOf("Bash(*)"))
+    expect(args.slice(separatorIndex)).toEqual(["--", "Write a summary"])
   })
 
   it("redacts prompt and secret-looking argv values for debug", () => {
@@ -108,6 +127,7 @@ describe("buildClaudeCodePrintRequest", () => {
       "acceptEdits",
       "--setting-sources",
       "user,project,local",
+      "--",
       "[prompt]",
     ])
   })

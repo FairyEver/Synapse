@@ -1,6 +1,7 @@
-import { useMemo, type ReactNode, type UIEventHandler } from "react"
+import { useMemo, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode, type UIEventHandler } from "react"
 import { Plus, Search, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   InputGroup,
   InputGroupAddon,
@@ -20,16 +21,18 @@ type ModuleSidebarProps = {
   className?: string
   "data-layout"?: string
   variant?: "card" | "bare"
-}
+} & Omit<HTMLAttributes<HTMLElement>, "children" | "className">
 
 function ModuleSidebar({
   children,
   className,
   "data-layout": dataLayout,
   variant = "card",
+  ...asideProps
 }: ModuleSidebarProps) {
   return (
     <aside
+      {...asideProps}
       data-layout={dataLayout}
       className={cn(
         "flex h-full min-h-0 flex-col gap-2 p-2",
@@ -159,6 +162,123 @@ type ModuleSidebarItemProps = {
   trackValue?: string | number | boolean
 }
 
+type ModuleSidebarGroupProps = {
+  readonly actions?: ReactNode
+  readonly children: ReactNode
+  readonly className?: string
+  readonly closedIcon?: LucideIcon
+  readonly contentClassName?: string
+  readonly headerClassName?: string
+  readonly "data-track"?: string
+  readonly onOpenChange: (open: boolean) => void
+  readonly open: boolean
+  readonly openIcon?: LucideIcon
+  readonly title: ReactNode
+}
+
+function ModuleSidebarGroup({
+  actions,
+  children,
+  className,
+  closedIcon: ClosedIcon,
+  contentClassName,
+  headerClassName,
+  "data-track": dataTrack,
+  onOpenChange,
+  open,
+  openIcon: OpenIcon,
+  title,
+}: ModuleSidebarGroupProps) {
+  const Icon = open ? OpenIcon : ClosedIcon
+
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} data-track={dataTrack} className={className}>
+      <div className={cn("flex h-8 w-full items-center justify-between rounded-lg px-3", headerClassName)}>
+        <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
+          {Icon ? <Icon className="size-4 shrink-0" /> : null}
+          <span className="truncate">{title}</span>
+        </CollapsibleTrigger>
+        {actions ? <div className="ml-1 flex shrink-0 items-center gap-0.5">{actions}</div> : null}
+      </div>
+      <CollapsibleContent>
+        <div className={cn("flex w-full min-w-0 flex-col gap-0 pl-3", contentClassName)}>
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+type ModuleSidebarRowProps = {
+  readonly active: boolean
+  readonly children: ReactNode
+  readonly className?: string
+  readonly "data-track"?: string
+  readonly icon?: ReactNode
+  readonly onDoubleClick?: () => void
+  readonly onSelect: () => void
+  readonly trailing?: ReactNode
+  readonly trackValue: string
+}
+
+function ModuleSidebarRow({
+  active,
+  children,
+  className,
+  "data-track": dataTrack = "module-sidebar-row-select",
+  icon,
+  onDoubleClick,
+  onSelect,
+  trailing,
+  trackValue,
+}: ModuleSidebarRowProps) {
+  function handleSelect(event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) {
+    track({
+      component: "module-sidebar-item",
+      name: extractLabel(event.currentTarget) ?? dataTrack,
+      action: "select",
+      value: trackValue,
+    })
+    onSelect()
+  }
+
+  function handleDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.target instanceof Element && event.target.closest("button")) return
+    onDoubleClick?.()
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      data-track={dataTrack}
+      aria-current={active ? "page" : undefined}
+      onClick={handleSelect}
+      onDoubleClick={handleDoubleClick}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        handleSelect(event)
+      }}
+      className={cn(
+        "group/item flex h-8 w-full min-w-0 items-center rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "hover:bg-muted/60 hover:text-foreground",
+        "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
+        active && "bg-secondary text-secondary-foreground hover:bg-secondary",
+        className,
+      )}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-normal">
+        {icon}
+        <span className="block min-w-0 flex-1 truncate">{children}</span>
+      </span>
+      {trailing ? (
+        <span className="ml-2 flex min-w-6 shrink-0 items-center justify-center">{trailing}</span>
+      ) : null}
+    </div>
+  )
+}
+
 function ModuleSidebarItem({
   active,
   disabled,
@@ -242,7 +362,9 @@ function ModuleSidebarItem({
 
 export {
   ModuleSidebar,
+  ModuleSidebarGroup,
   ModuleSidebarHeader,
   ModuleSidebarItem,
   ModuleSidebarList,
+  ModuleSidebarRow,
 }

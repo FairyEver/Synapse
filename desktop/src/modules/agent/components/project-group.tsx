@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { Folder, FolderOpen, Plus } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ModuleSidebarGroup } from "@/components/module-sidebar"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -87,16 +87,14 @@ function ProjectGroup({
 
   return (
     <>
-      <Collapsible open={open} onOpenChange={setOpen} data-track="agent-project-group">
-        <div className="flex h-8 w-full items-center justify-between rounded-lg px-3">
-          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
-            {open ? (
-              <FolderOpen className="size-4 shrink-0" />
-            ) : (
-              <Folder className="size-4 shrink-0" />
-            )}
-            <span className="truncate">{project.name}</span>
-          </CollapsibleTrigger>
+      <ModuleSidebarGroup
+        open={open}
+        onOpenChange={setOpen}
+        data-track="agent-project-group"
+        title={project.name}
+        openIcon={FolderOpen}
+        closedIcon={Folder}
+        actions={
           <Button
             type="button"
             variant="ghost"
@@ -108,62 +106,59 @@ function ProjectGroup({
             <Plus className="size-3.5" />
             <span className="sr-only">新建会话</span>
           </Button>
-        </div>
-        <CollapsibleContent>
-          <div className="flex w-full min-w-0 flex-col gap-0 pl-3">
-            {sessions.map((session) => {
-              const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
-              const running = sendingConversationIds.has(session.id)
-              const active = session.projectId === selectedProjectId
-                && session.id === selectedConversationId
-              const label = sessionLabel(session)
-              return (
-                <ContextMenu key={`${session.projectId}:${session.id}`}>
-                  <ContextMenuTrigger asChild>
-                    <div className="w-full min-w-0">
-                      <AgentSidebarSessionRow
-                        active={active}
-                        trailing={
-                          <SessionTrailing
-                            updatedAt={session.updatedAt}
-                            unread={unread}
-                            running={running}
-                            canDelete
-                            onDelete={() => onDelete(session)}
-                          />
-                        }
-                        trackValue={`${session.projectId}:${session.id}`}
-                        onSelect={() => onSelect(session)}
-                        onDoubleClick={() => handleRenameOpen(session)}
-                      >
-                        {label}
-                      </AgentSidebarSessionRow>
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleRenameOpen(session)}>
-                      重命名
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      variant="destructive"
-                      onClick={() => onDelete(session)}
-                    >
-                      删除
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      variant="destructive"
-                      disabled={sessions.length <= 1}
-                      onClick={() => onDeleteOthers(session)}
-                    >
-                      删除其他
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              )
-            })}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+        }
+      >
+        {sessions.map((session) => {
+          const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
+          const running = sendingConversationIds.has(session.id)
+          const active = session.projectId === selectedProjectId
+            && session.id === selectedConversationId
+          const label = sessionLabel(session)
+          return (
+            <ContextMenu key={`${session.projectId}:${session.id}`}>
+              <ContextMenuTrigger asChild>
+                <div className="w-full min-w-0">
+                  <AgentSidebarSessionRow
+                    active={active}
+                    trailing={
+                      <SessionTrailing
+                        updatedAt={session.updatedAt}
+                        unread={unread}
+                        running={running}
+                        canDelete
+                        onDelete={() => onDelete(session)}
+                      />
+                    }
+                    trackValue={`${session.projectId}:${session.id}`}
+                    onSelect={() => onSelect(session)}
+                    onDoubleClick={() => handleRenameOpen(session)}
+                  >
+                    {label}
+                  </AgentSidebarSessionRow>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => handleRenameOpen(session)}>
+                  重命名
+                </ContextMenuItem>
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => onDelete(session)}
+                >
+                  删除
+                </ContextMenuItem>
+                <ContextMenuItem
+                  variant="destructive"
+                  disabled={sessions.length <= 1}
+                  onClick={() => onDeleteOthers(session)}
+                >
+                  删除其他
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )
+        })}
+      </ModuleSidebarGroup>
 
       <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null) }}>
         <DialogContent

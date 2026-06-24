@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Archive } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ModuleSidebarGroup } from "@/components/module-sidebar"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -85,74 +85,71 @@ function ArchivedGroup({
 
   return (
     <>
-      <Collapsible open={open} onOpenChange={setOpen} data-track="agent-archived-group">
-        <CollapsibleTrigger className="flex h-8 w-full items-center rounded-lg px-3 text-sm font-medium text-foreground/80 outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
-          <span className="flex min-w-0 items-center gap-2 text-left">
-            <Archive className="size-4 shrink-0" />
-            <span className="truncate">已归档</span>
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="flex w-full min-w-0 flex-col gap-0 pl-3">
-            {sessions.map((session) => {
-              const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
-              const running = sendingConversationIds.has(session.id)
-              const active = session.projectId === selectedProjectId
-                && session.id === selectedConversationId
-              const def = session.agentType
-                ? agentDefinitions.find((d) => d.id === session.agentType)
-                : undefined
-              const label = sessionLabel(session)
-              return (
-                <ContextMenu key={`${session.projectId}:${session.id}`}>
-                  <ContextMenuTrigger asChild>
-                    <div className="w-full min-w-0">
-                      <AgentSidebarSessionRow
-                        active={active}
-                        icon={def?.icon ? (
-                          <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
-                        ) : undefined}
-                        trailing={
-                          <SessionTrailing
-                            updatedAt={session.updatedAt}
-                            unread={unread}
-                            running={running}
-                            canDelete
-                            onDelete={() => onDelete(session)}
-                          />
-                        }
-                        trackValue={`archived:${session.projectId}:${session.id}`}
-                        onSelect={() => onSelect(session)}
-                        onDoubleClick={() => handleRenameOpen(session)}
-                      >
-                        {label}
-                      </AgentSidebarSessionRow>
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleRenameOpen(session)}>
-                      重命名
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      variant="destructive"
-                      onClick={() => onDelete(session)}
-                    >
-                      删除
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      variant="destructive"
-                      disabled={sessions.length <= 1}
-                      onClick={() => onDeleteOthers(session)}
-                    >
-                      删除其他
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              )
-            })}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <ModuleSidebarGroup
+        open={open}
+        onOpenChange={setOpen}
+        data-track="agent-archived-group"
+        title="已归档"
+        openIcon={Archive}
+        closedIcon={Archive}
+      >
+        {sessions.map((session) => {
+          const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
+          const running = sendingConversationIds.has(session.id)
+          const active = session.projectId === selectedProjectId
+            && session.id === selectedConversationId
+          const def = session.agentType
+            ? agentDefinitions.find((d) => d.id === session.agentType)
+            : undefined
+          const label = sessionLabel(session)
+          return (
+            <ContextMenu key={`${session.projectId}:${session.id}`}>
+              <ContextMenuTrigger asChild>
+                <div className="w-full min-w-0">
+                  <AgentSidebarSessionRow
+                    active={active}
+                    icon={def?.icon ? (
+                      <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
+                    ) : undefined}
+                    trailing={
+                      <SessionTrailing
+                        updatedAt={session.updatedAt}
+                        unread={unread}
+                        running={running}
+                        canDelete
+                        onDelete={() => onDelete(session)}
+                      />
+                    }
+                    trackValue={`archived:${session.projectId}:${session.id}`}
+                    onSelect={() => onSelect(session)}
+                    onDoubleClick={() => handleRenameOpen(session)}
+                  >
+                    {label}
+                  </AgentSidebarSessionRow>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => handleRenameOpen(session)}>
+                  重命名
+                </ContextMenuItem>
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => onDelete(session)}
+                >
+                  删除
+                </ContextMenuItem>
+                <ContextMenuItem
+                  variant="destructive"
+                  disabled={sessions.length <= 1}
+                  onClick={() => onDeleteOthers(session)}
+                >
+                  删除其他
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )
+        })}
+      </ModuleSidebarGroup>
 
       <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null) }}>
         <DialogContent
