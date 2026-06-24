@@ -47,6 +47,10 @@ type SpawnPtyInput = {
   rows: number
 }
 
+type TerminalServiceLogger = {
+  warn(message: string, meta?: Record<string, unknown>): void
+}
+
 export type TerminalService = ReturnType<typeof createTerminalService>
 
 export function createTerminalService(deps: {
@@ -55,6 +59,7 @@ export function createTerminalService(deps: {
   resolveDefaultShell?: () => string
   resolveDefaultCwd?: () => string
   spawnPty?: (input: SpawnPtyInput) => PtyLike
+  logger?: TerminalServiceLogger
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
@@ -62,7 +67,10 @@ export function createTerminalService(deps: {
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
   const outputRetentionBytes = deps.outputRetentionBytes ?? TERMINAL_SESSION_OUTPUT_RETENTION_BYTES
-  let persistTail: Promise<void> = Promise.resolve()
+  let persistInFlight: Promise<void> | undefined
+  let persistPending = false
+  let persistIdleWaiters: Array<() => void> = []
+  let lastPersistError: unknown
 
   function now(): string {
     return new Date().toISOString()
@@ -81,13 +89,41 @@ export function createTerminalService(deps: {
   }
 
   function persist(): Promise<void> {
-    const state = snapshotState()
-    const next = persistTail.then(
-      () => deps.store.saveState(state),
-      () => deps.store.saveState(state),
-    )
-    persistTail = next.catch(() => undefined)
-    return next
+    if (persistInFlight) {
+      persistPending = true
+      return waitForPersistIdle()
+    }
+    persistInFlight = runPersistLoop()
+    return waitForPersistIdle()
+  }
+
+  async function runPersistLoop(): Promise<void> {
+    try {
+      do {
+        persistPending = false
+        await persistSnapshot()
+      } while (persistPending)
+    } finally {
+      persistInFlight = undefined
+      const waiters = persistIdleWaiters
+      persistIdleWaiters = []
+      for (const resolve of waiters) resolve()
+    }
+  }
+
+  async function persistSnapshot(): Promise<void> {
+    try {
+      await deps.store.saveState(snapshotState())
+      lastPersistError = undefined
+    } catch (error) {
+      lastPersistError = error
+      deps.logger?.warn("Terminal service failed to persist state.", { error })
+    }
+  }
+
+  function waitForPersistIdle(): Promise<void> {
+    if (!persistInFlight) return Promise.resolve()
+    return new Promise((resolve) => persistIdleWaiters.push(resolve))
   }
 
   function ensureDefaultGroup(): TerminalGroup {
@@ -200,13 +236,32 @@ export function createTerminalService(deps: {
       await persist()
     },
     async stop() {
-      for (const sessionId of [...runtimes.keys()]) {
-        cleanupRuntime(sessionId)
+      const timestamp = now()
+      for (const [sessionId, runtime] of [...runtimes.entries()]) {
+        const current = sessions.get(sessionId)
+        if (current?.status === "running") {
+          const updated: TerminalSession = {
+            ...current,
+            status: "killed",
+            updatedAt: timestamp,
+            endedAt: current.endedAt ?? timestamp,
+          }
+          sessions.set(sessionId, updated)
+          events.emit("sessionChanged", updated)
+        }
+        try {
+          runtime.pty.kill()
+        } finally {
+          cleanupRuntime(sessionId)
+        }
       }
-      await persistTail
+      await persist()
     },
     flushPersistQueue() {
-      return persistTail
+      return waitForPersistIdle()
+    },
+    getLastPersistError() {
+      return lastPersistError
     },
     listGroups(): TerminalGroup[] {
       return [...groups.values()].sort((left, right) => left.sortOrder - right.sortOrder)

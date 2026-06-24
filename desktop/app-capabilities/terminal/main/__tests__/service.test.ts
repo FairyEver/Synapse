@@ -252,11 +252,78 @@ describe("TerminalService", () => {
     expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(3)
     expect(store.state.output.map((chunk) => chunk.data)).toEqual(["one", "two", "three"])
   })
+
+  it("stop kills live ptys and persists sessions as not running", async () => {
+    const store = createMemoryStore()
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty] })
+    const session = await service.createSession({})
+
+    await service.stop()
+
+    expect(pty.kill).toHaveBeenCalledTimes(1)
+    expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
+    expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("killed")
+    expect(() => service.writeSession({ sessionId: session.id, data: "x", actor: "user" }))
+      .toThrow("Terminal session is not running")
+  })
+
+  it("coalesces quick output persistence into a bounded number of saves", async () => {
+    const saveStarted: Array<() => void> = []
+    const saveCalls: TerminalStoreState[] = []
+    let blockSaves = false
+    const store = createMemoryStore(undefined, async (state) => {
+      saveCalls.push(structuredClone(state))
+      if (blockSaves) await new Promise<void>((resolve) => saveStarted.push(resolve))
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty] })
+    const session = await service.createSession({})
+
+    blockSaves = true
+    pty.emitData("one")
+    pty.emitData("two")
+    pty.emitData("three")
+    expect(saveStarted).toHaveLength(1)
+
+    saveStarted.shift()?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(saveStarted).toHaveLength(1)
+    saveStarted.shift()?.()
+    await service.flushPersistQueue()
+
+    const outputSaves = saveCalls.filter((state) => state.output.length > 0)
+    expect(outputSaves).toHaveLength(2)
+    expect(store.state.sessions.find((item) => item.id === session.id)?.lastOutputSeq).toBe(3)
+    expect(store.state.output.map((chunk) => chunk.data)).toEqual(["one", "two", "three"])
+  })
+
+  it("surfaces and logs persistence failures", async () => {
+    const persistError = new Error("disk full")
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const store = createMemoryStore(undefined, async (state) => {
+      if (state.output.length > 0) throw persistError
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty], logger })
+    await service.createSession({})
+
+    pty.emitData("lost")
+    await service.flushPersistQueue()
+
+    expect(service.getLastPersistError()).toBe(persistError)
+    expect(logger.warn).toHaveBeenCalledWith("Terminal service failed to persist state.", {
+      error: persistError,
+    })
+  })
 })
 
 async function createStartedService(
   store: TerminalStore,
-  options: { ptys?: FakePty[] } = {},
+  options: {
+    ptys?: FakePty[]
+    logger?: { warn(message: string, meta?: Record<string, unknown>): void }
+  } = {},
 ): Promise<TerminalService> {
   const queue = [...(options.ptys ?? [])]
   const service = createTerminalService({
@@ -264,6 +331,7 @@ async function createStartedService(
     outputRetentionBytes: 10 * 1024,
     resolveDefaultShell: () => "/bin/zsh",
     resolveDefaultCwd: () => tempDir,
+    logger: options.logger,
     spawnPty: () => {
       const next = queue.shift()
       if (!next) throw new Error("No fake pty available")
@@ -276,7 +344,7 @@ async function createStartedService(
 
 function createMemoryStore(
   initial: TerminalStoreState = { groups: [], sessions: [], output: [] },
-  onSave?: () => Promise<void>,
+  onSave?: (state: TerminalStoreState) => Promise<void>,
 ): TerminalStore & { state: TerminalStoreState } {
   const store = {
     state: structuredClone(initial),
@@ -284,7 +352,7 @@ function createMemoryStore(
       return structuredClone(store.state)
     },
     async saveState(state: TerminalStoreState) {
-      await onSave?.()
+      await onSave?.(state)
       store.state = structuredClone(state)
     },
   }
