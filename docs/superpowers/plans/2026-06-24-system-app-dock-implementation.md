@@ -203,7 +203,7 @@ expect(app.capabilities?.primaryMcpPrefix).toMatch(/^app_[a-z0-9_]+$/)
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/modules/apps/__tests__/registry.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/apps/__tests__/registry.test.ts
 ```
 
 Expected: FAIL because new app ids and metadata fields do not exist yet.
@@ -421,7 +421,7 @@ Update `desktop/src/modules/apps/registry.ts` with matching manifest order.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/modules/apps/__tests__/registry.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/apps/__tests__/registry.test.ts
 ```
 
 Expected: PASS.
@@ -429,7 +429,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit registry metadata**
 
 ```bash
-git add desktop/src/modules/apps desktop/src/modules/agent/app-definition.ts desktop/src/modules/agent/app-manifest.ts desktop/src/modules/workflow/app-definition.ts desktop/src/modules/workflow/app-manifest.ts desktop/src/modules/drive/app-definition.ts desktop/src/modules/drive/app-manifest.ts desktop/src/modules/automation/app-definition.ts desktop/src/modules/automation/app-manifest.ts desktop/src/modules/settings/app-definition.ts desktop/src/modules/settings/app-manifest.ts
+git add src/modules/apps src/modules/agent/app-definition.ts src/modules/agent/app-manifest.ts src/modules/workflow/app-definition.ts src/modules/workflow/app-manifest.ts src/modules/drive/app-definition.ts src/modules/drive/app-manifest.ts src/modules/automation/app-definition.ts src/modules/automation/app-manifest.ts src/modules/settings/app-definition.ts src/modules/settings/app-manifest.ts
 git commit -m "feat(desktop): register shell modules as system apps"
 ```
 
@@ -477,7 +477,7 @@ describe("AppShellDock", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/app-shell/components/__tests__/app-shell-dock.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/app-shell/components/__tests__/app-shell-dock.test.tsx
 ```
 
 Expected: FAIL because `AppShellDock` does not exist.
@@ -601,7 +601,7 @@ const appDescriptions = {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/app-shell/components/__tests__/app-shell-dock.test.tsx desktop/src/modules/apps/__tests__/app-launcher.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/app-shell/components/__tests__/app-shell-dock.test.tsx src/modules/apps/__tests__/app-launcher.test.tsx
 ```
 
 Expected: PASS.
@@ -609,7 +609,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit Dock component**
 
 ```bash
-git add desktop/src/modules/apps/dock.ts desktop/src/app-shell/components/app-shell-dock.tsx desktop/src/modules/apps/components/system-app-content.tsx desktop/src/modules/apps/components/app-launcher-grid.tsx desktop/src/app-shell/components/__tests__/app-shell-dock.test.tsx desktop/src/modules/apps/__tests__/app-launcher.test.tsx
+git add src/modules/apps/dock.ts src/app-shell/components/app-shell-dock.tsx src/modules/apps/components/system-app-content.tsx src/modules/apps/components/app-launcher-grid.tsx src/app-shell/components/__tests__/app-shell-dock.test.tsx src/modules/apps/__tests__/app-launcher.test.tsx
 git commit -m "feat(desktop): add system app dock"
 ```
 
@@ -662,7 +662,7 @@ describe("app Dock order", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/__tests__/App.navigation-order.test.ts desktop/src/__tests__/App.workflow-entry.test.tsx desktop/src/__tests__/App.no-repository.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/__tests__/App.navigation-order.test.ts src/__tests__/App.workflow-entry.test.tsx src/__tests__/App.no-repository.test.tsx
 ```
 
 Expected: FAIL because App still uses `APP_NAVIGATION_TABS` and `apps`.
@@ -799,7 +799,7 @@ setActiveTab(DEFAULT_APP_TAB, "cheat-code")
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/__tests__/App.navigation-order.test.ts desktop/src/__tests__/App.workflow-entry.test.tsx desktop/src/__tests__/App.no-repository.test.tsx desktop/src/modules/apps/__tests__/system-app-window-app.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/__tests__/App.navigation-order.test.ts src/__tests__/App.workflow-entry.test.tsx src/__tests__/App.no-repository.test.tsx src/modules/apps/__tests__/system-app-window-app.test.tsx
 ```
 
 Expected: PASS.
@@ -807,7 +807,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit shell state migration**
 
 ```bash
-git add desktop/config.ts desktop/src/App.tsx desktop/src/app-shell/navigation.ts desktop/src/app-shell/components/app-shell-layout.tsx desktop/src/__tests__/App.navigation-order.test.ts desktop/src/__tests__/App.workflow-entry.test.tsx desktop/src/__tests__/App.no-repository.test.tsx desktop/src/modules/apps/components/system-app-content.tsx
+git add desktop/config.ts src/App.tsx src/app-shell/navigation.ts src/app-shell/components/app-shell-layout.tsx src/__tests__/App.navigation-order.test.ts src/__tests__/App.workflow-entry.test.tsx src/__tests__/App.no-repository.test.tsx src/modules/apps/components/system-app-content.tsx
 git commit -m "feat(desktop): route main shell by system app id"
 ```
 
@@ -851,7 +851,7 @@ it("uses resource repository app tool names with content aliases", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/synapse-capabilities/shared/drive-domain.test.ts desktop/synapse-capabilities/shared/content-domain.test.ts
+pnpm --filter @synapse/desktop exec vitest run synapse-capabilities/shared/drive-domain.test.ts synapse-capabilities/shared/content-domain.test.ts
 ```
 
 Expected: FAIL because primary app tool names and canonical app ids are not in place.
@@ -935,7 +935,7 @@ If duplicate domain ids break assumptions, keep domain ids unchanged for groupin
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/synapse-capabilities/shared/drive-domain.test.ts desktop/synapse-capabilities/shared/content-domain.test.ts desktop/synapse-capabilities/shared/app-domain.test.ts
+pnpm --filter @synapse/desktop exec vitest run synapse-capabilities/shared/drive-domain.test.ts synapse-capabilities/shared/content-domain.test.ts synapse-capabilities/shared/app-domain.test.ts
 ```
 
 Expected: Tests still fail until primary names and aliases are added in Task 5, but there should be no TypeScript syntax errors.
@@ -943,7 +943,7 @@ Expected: Tests still fail until primary names and aliases are added in Task 5, 
 - [ ] **Step 8: Commit canonical ids**
 
 ```bash
-git add desktop/database/shared/capability-registry.ts desktop/synapse-capabilities/shared/*-domain.ts desktop/synapse-capabilities/shared/*-domain.test.ts
+git add desktop/database/shared/capability-registry.ts synapse-capabilities/shared/*-domain.ts synapse-capabilities/shared/*-domain.test.ts
 git commit -m "feat(mcp): move system capabilities to app namespace"
 ```
 
@@ -1107,7 +1107,7 @@ it("calls legacy Automation aliases through the same canonical action", async ()
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/electron/database/__tests__/mcp-server.test.ts desktop/synapse-capabilities/shared/drive-domain.test.ts desktop/synapse-capabilities/shared/content-domain.test.ts desktop/synapse-capabilities/shared/app-domain.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/database/__tests__/mcp-server.test.ts synapse-capabilities/shared/drive-domain.test.ts synapse-capabilities/shared/content-domain.test.ts synapse-capabilities/shared/app-domain.test.ts
 ```
 
 Expected: PASS.
@@ -1115,7 +1115,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit MCP tool aliases**
 
 ```bash
-git add desktop/synapse-capabilities/shared desktop/database/shared desktop/electron/database/__tests__/mcp-server.test.ts
+git add synapse-capabilities/shared desktop/database/shared electron/database/__tests__/mcp-server.test.ts
 git commit -m "feat(mcp): expose app tool names with legacy aliases"
 ```
 
@@ -1197,7 +1197,7 @@ Append a bullet under the appropriate pending section in `RELEASE_NOTES_PENDING.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/src/modules/apps/__tests__/registry.test.ts desktop/src/app-shell/components/__tests__/app-shell-dock.test.tsx desktop/src/__tests__/App.navigation-order.test.ts desktop/src/__tests__/App.workflow-entry.test.tsx desktop/src/__tests__/App.no-repository.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/apps/__tests__/registry.test.ts src/app-shell/components/__tests__/app-shell-dock.test.tsx src/__tests__/App.navigation-order.test.ts src/__tests__/App.workflow-entry.test.tsx src/__tests__/App.no-repository.test.tsx
 ```
 
 Expected: PASS.
@@ -1207,7 +1207,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop test -- desktop/electron/database/__tests__/mcp-server.test.ts desktop/synapse-capabilities/shared/drive-domain.test.ts desktop/synapse-capabilities/shared/content-domain.test.ts desktop/synapse-capabilities/shared/app-domain.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/database/__tests__/mcp-server.test.ts synapse-capabilities/shared/drive-domain.test.ts synapse-capabilities/shared/content-domain.test.ts synapse-capabilities/shared/app-domain.test.ts
 ```
 
 Expected: PASS.
