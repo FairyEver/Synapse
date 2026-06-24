@@ -55,12 +55,12 @@ export function AppShellDock({
     <TooltipProvider>
       <nav
         data-track="app-shell-dock"
-        className="flex min-w-0 justify-center overflow-hidden"
+        className="flex min-w-0 justify-center"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
         <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
-          <div className="flex min-w-max items-center justify-center gap-1">
+          <div className="flex min-w-max items-center justify-center gap-1 pb-1.5">
             {apps.map((app) => {
               const active = app.id === value
               const unpinnable = Boolean(canUnpinApp?.(app.id) && onUnpinApp)
@@ -74,13 +74,20 @@ export function AppShellDock({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-11 aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground"
+                          className="relative size-11 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
                           aria-label={app.name}
                           aria-current={active ? "page" : undefined}
                           data-can-unpin={unpinnable ? "true" : undefined}
                           onClick={() => onValueChange(app.id)}
                         >
                           <img src={app.icon} alt="" className="size-10 object-contain" draggable={false} />
+                          {active ? (
+                            <span
+                              data-slot="app-shell-dock-active-indicator"
+                              aria-hidden="true"
+                              className="absolute bottom-0 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-blue-500"
+                            />
+                          ) : null}
                         </Button>
                       </TooltipTrigger>
                     </ContextMenuTrigger>
