@@ -26,19 +26,19 @@ vi.mock("@/app-shell/components/app-shell-actions", () => ({
 }))
 
 vi.mock("@/app-shell/components/app-shell-layout", () => ({
-  AppShellLayout: ({ navigation, children }: {
-    navigation: React.ReactNode
+  AppShellLayout: ({ dock, children }: {
+    dock: React.ReactNode
     children: React.ReactNode
   }) => (
     <div>
-      <nav>{navigation}</nav>
+      <nav>{dock}</nav>
       <main>{children}</main>
     </div>
   ),
 }))
 
-vi.mock("@/app-shell/components/app-shell-navigation", () => ({
-  AppShellNavigation: () => <nav>导航</nav>,
+vi.mock("@/app-shell/components/app-shell-dock", () => ({
+  AppShellDock: () => <nav>Dock</nav>,
 }))
 
 vi.mock("@/app-shell/components/empty-repository-state", () => ({
@@ -116,7 +116,11 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/apps", () => ({ AppsModule: () => <div>应用模块</div> }))
+vi.mock("@/modules/apps/components/system-app-content", () => ({
+  SystemAppContent: ({ appId }: { appId: string }) => (
+    <div>{appId === "agent" ? "对话模块" : appId === "launcher" ? "应用模块" : appId}</div>
+  ),
+}))
 vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
 vi.mock("@/modules/drive", () => ({ DriveModule: () => <div>云盘模块</div> }))
@@ -173,7 +177,7 @@ describe("App without repositories", () => {
     await renderApp()
 
     expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
-    expect(document.body.textContent).toContain("导航")
+    expect(document.body.textContent).toContain("Dock")
     expect(document.body.textContent).toContain("应用模块")
   })
 })

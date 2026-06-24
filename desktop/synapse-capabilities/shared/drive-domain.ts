@@ -1,50 +1,53 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const driveCapabilities: readonly CapabilityDefinition[] = [
-  { id: "drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
-  { id: "drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
-  { id: "drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive, overwriting the newest same-name file in the target folder.", mutates: true },
-  { id: "drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive, merging same-name folders and overwriting same-name files.", mutates: true },
-  { id: "drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
-  { id: "drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
-  { id: "drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
-  { id: "drive.item.delete" as CapabilityId, title: "Delete item", description: "Move a Synapse Drive file or folder to Drive trash.", mutates: true, risk: "high" },
-  { id: "drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
-  { id: "drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
-  { id: "drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
-  { id: "drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
-  { id: "drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version to a local path.", mutates: true },
-  { id: "drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a historical Synapse Drive file version as the current version.", mutates: true },
-  { id: "drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current historical Synapse Drive file version.", mutates: true, risk: "high" },
-  { id: "drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
-  { id: "drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
-  { id: "drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
-  { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
-  { id: "drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
-  { id: "drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a Drive folder as an independent read-only static site at /sites/<siteId>/.", mutates: true },
-  { id: "drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
-  { id: "drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
-  { id: "drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
-  { id: "drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
-  { id: "drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
-  { id: "drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
-  { id: "drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
-  { id: "drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
-  { id: "drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
-  { id: "drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
-  { id: "drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
-  { id: "drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: "Upload an image to Drive 公开素材, also known as 图床, 外链, 直链, public asset, or direct link.", mutates: true },
-  { id: "drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
-  { id: "drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
-  { id: "drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file while preserving its /files/<assetId> URL.", mutates: true },
-  { id: "drive.direct_link.rename" as CapabilityId, title: "Rename public asset", description: "Rename a public asset while preserving its /files/<assetId> URL.", mutates: true },
-  { id: "drive.direct_link.delete" as CapabilityId, title: "Delete public asset", description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.", mutates: true, risk: "high" },
-  { id: "drive.direct_link.restore" as CapabilityId, title: "Restore public asset", description: "Restore a trashed public asset and make the same public URL available again.", mutates: true },
-  { id: "drive.trash.list" as CapabilityId, title: "List Drive trash", description: "List user-visible Drive trash, including normal Drive files and public assets.", mutates: false },
-  { id: "drive.trash.delete" as CapabilityId, title: "Delete from Drive trash", description: "Hide a trashed Drive item from the user. Admins can still see and restore it.", mutates: true, risk: "high" },
-  { id: "drive.item.restore" as CapabilityId, title: "Restore Drive item", description: "Restore a Drive item from trash.", mutates: true },
+  { id: "app.drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
+  { id: "app.drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
+  { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive, overwriting the newest same-name file in the target folder.", mutates: true },
+  { id: "app.drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive, merging same-name folders and overwriting same-name files.", mutates: true },
+  { id: "app.drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
+  { id: "app.drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
+  { id: "app.drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
+  { id: "app.drive.item.delete" as CapabilityId, title: "Delete item", description: "Move a Synapse Drive file or folder to Drive trash.", mutates: true, risk: "high" },
+  { id: "app.drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
+  { id: "app.drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
+  { id: "app.drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
+  { id: "app.drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
+  { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version to a local path.", mutates: true },
+  { id: "app.drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a historical Synapse Drive file version as the current version.", mutates: true },
+  { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current historical Synapse Drive file version.", mutates: true, risk: "high" },
+  { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
+  { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
+  { id: "app.drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
+  { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
+  { id: "app.drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
+  { id: "app.drive.site.create" as CapabilityId, title: "Create Drive site", description: "Publish a Drive folder as an independent read-only static site at /sites/<siteId>/.", mutates: true },
+  { id: "app.drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
+  { id: "app.drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
+  { id: "app.drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
+  { id: "app.drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
+  { id: "app.drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
+  { id: "app.drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
+  { id: "app.drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
+  { id: "app.drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
+  { id: "app.drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
+  { id: "app.drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
+  { id: "app.drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
+  { id: "app.drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: "Upload an image to Drive 公开素材, also known as 图床, 外链, 直链, public asset, or direct link.", mutates: true },
+  { id: "app.drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
+  { id: "app.drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
+  { id: "app.drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file while preserving its /files/<assetId> URL.", mutates: true },
+  { id: "app.drive.direct_link.rename" as CapabilityId, title: "Rename public asset", description: "Rename a public asset while preserving its /files/<assetId> URL.", mutates: true },
+  { id: "app.drive.direct_link.delete" as CapabilityId, title: "Delete public asset", description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.", mutates: true, risk: "high" },
+  { id: "app.drive.direct_link.restore" as CapabilityId, title: "Restore public asset", description: "Restore a trashed public asset and make the same public URL available again.", mutates: true },
+  { id: "app.drive.trash.list" as CapabilityId, title: "List Drive trash", description: "List user-visible Drive trash, including normal Drive files and public assets.", mutates: false },
+  { id: "app.drive.trash.delete" as CapabilityId, title: "Delete from Drive trash", description: "Hide a trashed Drive item from the user. Admins can still see and restore it.", mutates: true, risk: "high" },
+  { id: "app.drive.item.restore" as CapabilityId, title: "Restore Drive item", description: "Restore a Drive item from trash.", mutates: true },
 ]
 
 export const DRIVE_DOMAIN: CapabilityDomainDefinition = {
@@ -52,8 +55,9 @@ export const DRIVE_DOMAIN: CapabilityDomainDefinition = {
   capabilities: driveCapabilities,
 }
 
-export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  driveCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  driveCapabilities,
+  { legacyPrefix: "drive", primaryPrefix: "app_drive" },
 )
 
 const stringField = (description: string) => ({ type: "string", description })
@@ -84,7 +88,7 @@ const accessSettingsProperties = {
 }
 
 export function buildDriveTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "drive_item_list",
       description: "List Synapse Drive files and folders. parentId defaults to root.",
@@ -593,5 +597,5 @@ export function buildDriveTools(): McpToolDefinition[] {
         required: ["itemId"],
       },
     },
-  ]
+  ], { legacyPrefix: "drive", primaryPrefix: "app_drive" })
 }

@@ -1,5 +1,8 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type {
   CapabilityDefinition,
   CapabilityDomainDefinition,
@@ -73,20 +76,20 @@ export type AutomationRuntimeInspectParams = {
 }
 
 const automationCapabilities: readonly CapabilityDefinition[] = [
-  { id: "automation.item.list" as CapabilityId, title: "List automations", description: "List Synapse Automation item summaries.", mutates: false },
-  { id: "automation.item.get" as CapabilityId, title: "Get automation", description: "Get one Synapse Automation item summary by id.", mutates: false },
-  { id: "automation.item.create" as CapabilityId, title: "Create automation", description: "Create one Synapse Automation item.", mutates: true },
-  { id: "automation.item.update" as CapabilityId, title: "Update automation", description: "Update one Synapse Automation item.", mutates: true },
-  { id: "automation.item.delete" as CapabilityId, title: "Delete automation", description: "Delete one Synapse Automation item.", mutates: true, risk: "high" },
-  { id: "automation.item.enable" as CapabilityId, title: "Enable automation", description: "Enable one Synapse Automation item.", mutates: true },
-  { id: "automation.item.disable" as CapabilityId, title: "Disable automation", description: "Disable one Synapse Automation item.", mutates: true },
-  { id: "automation.run.execute" as CapabilityId, title: "Run automation", description: "Manually run one Synapse Automation item.", mutates: true },
-  { id: "automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run. Fails if the run is missing or no longer active.", mutates: true },
-  { id: "automation.run.list" as CapabilityId, title: "List automation runs", description: "List recent runs for one Synapse Automation item.", mutates: false },
-  { id: "automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
-  { id: "automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
-  { id: "automation.trigger_type.list" as CapabilityId, title: "List automation trigger types", description: "List registered Automation trigger type descriptors.", mutates: false },
-  { id: "automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List registered Automation executor type descriptors.", mutates: false },
+  { id: "app.automation.item.list" as CapabilityId, title: "List automations", description: "List Synapse Automation item summaries.", mutates: false },
+  { id: "app.automation.item.get" as CapabilityId, title: "Get automation", description: "Get one Synapse Automation item summary by id.", mutates: false },
+  { id: "app.automation.item.create" as CapabilityId, title: "Create automation", description: "Create one Synapse Automation item.", mutates: true },
+  { id: "app.automation.item.update" as CapabilityId, title: "Update automation", description: "Update one Synapse Automation item.", mutates: true },
+  { id: "app.automation.item.delete" as CapabilityId, title: "Delete automation", description: "Delete one Synapse Automation item.", mutates: true, risk: "high" },
+  { id: "app.automation.item.enable" as CapabilityId, title: "Enable automation", description: "Enable one Synapse Automation item.", mutates: true },
+  { id: "app.automation.item.disable" as CapabilityId, title: "Disable automation", description: "Disable one Synapse Automation item.", mutates: true },
+  { id: "app.automation.run.execute" as CapabilityId, title: "Run automation", description: "Manually run one Synapse Automation item.", mutates: true },
+  { id: "app.automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run. Fails if the run is missing or no longer active.", mutates: true },
+  { id: "app.automation.run.list" as CapabilityId, title: "List automation runs", description: "List recent runs for one Synapse Automation item.", mutates: false },
+  { id: "app.automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
+  { id: "app.automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
+  { id: "app.automation.trigger_type.list" as CapabilityId, title: "List automation trigger types", description: "List registered Automation trigger type descriptors.", mutates: false },
+  { id: "app.automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List registered Automation executor type descriptors.", mutates: false },
 ]
 
 export const AUTOMATION_DOMAIN: CapabilityDomainDefinition = {
@@ -94,8 +97,9 @@ export const AUTOMATION_DOMAIN: CapabilityDomainDefinition = {
   capabilities: automationCapabilities,
 }
 
-export const AUTOMATION_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  automationCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const AUTOMATION_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  automationCapabilities,
+  { legacyPrefix: "automation", primaryPrefix: "app_automation" },
 )
 
 const automationIdProperty = {
@@ -135,7 +139,7 @@ const automationPolicySchema = {
 }
 
 export function buildAutomationTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "automation_item_list",
       description: "List Synapse Automation item summaries. Results intentionally omit raw trigger.config and executor.config.",
@@ -263,5 +267,5 @@ export function buildAutomationTools(): McpToolDefinition[] {
       description: "List registered Automation executor types from Action Runtime, including public config fields and platform-aware defaults.",
       inputSchema: { type: "object", properties: {} },
     },
-  ]
+  ], { legacyPrefix: "automation", primaryPrefix: "app_automation" })
 }

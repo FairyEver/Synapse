@@ -169,6 +169,12 @@ describe("MCP HTTP server", () => {
     expect(response.status).toBe(200)
     const payload = JSON.parse(response.body)
     expect(payload.result.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
+      "app_automation_item_list",
+      "app_automation_item_create",
+      "app_automation_run_execute",
+      "app_automation_webhook_list",
+      "app_automation_trigger_type_list",
+      "app_automation_executor_type_list",
       "automation_item_list",
       "automation_item_create",
       "automation_run_execute",
@@ -194,7 +200,7 @@ describe("MCP HTTP server", () => {
     })
 
     expect(response.status).toBe(200)
-    expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, {
+    expect(dispatch).toHaveBeenCalledWith("app.automation.item.list", { enabled: true }, {
       source: "mcp-http",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
     })

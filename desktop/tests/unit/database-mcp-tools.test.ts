@@ -26,7 +26,7 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_table_describe").description).toContain("Call this before")
 
     const tableDescription = getPropertyDescription("database_row_list", "tableName")
-    expect(tableDescription).toContain("call database_table_list")
+    expect(tableDescription).toContain("call app_database_table_list")
     expect(tableDescription).toContain("table.description")
   })
 
@@ -34,13 +34,13 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_table_update").description).toContain("table description")
     expect(getTool("database_choice_usage_get").description).toContain("choice")
 
-    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("database.table.update")
-    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("database.choice_usage.get")
+    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("app.database.table.update")
+    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("app.database.choice_usage.get")
   })
 
   it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
     expect(getTool("database_overview_get").description).toContain("Use this first")
-    expect(getTool("database_sql_read").description).toContain("Prefer this over database_sql_execute")
+    expect(getTool("database_sql_read").description).toContain("Prefer this over app_database_sql_execute")
     expect(getTool("database_sql_read").description).toContain("read-only PRAGMA")
     expect(getTool("database_sql_read").description).toContain("_table_folders")
     expect(getTool("database_sql_execute").description).toContain("Use only")
@@ -49,9 +49,12 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_log_list").description).toContain("recently changed")
   })
 
-  it("exposes only canonical Database tool names", () => {
+  it("exposes primary app Database tools and legacy Database aliases", () => {
     const names = buildTools().map((tool) => tool.name)
-    expect(names.every((name) => name.startsWith("database_"))).toBe(true)
+    expect(names.some((name) => name.startsWith("app_database_"))).toBe(true)
+    expect(names.some((name) => name.startsWith("database_"))).toBe(true)
+    expect(MCP_TOOL_ACTIONS.app_database_table_list).toBe("app.database.table.list")
+    expect(MCP_TOOL_ACTIONS.database_table_list).toBe("app.database.table.list")
   })
 
   it("bounds row list pagination in the MCP schema", () => {

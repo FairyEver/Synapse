@@ -6,6 +6,50 @@ describe("Drive capability domain", () => {
   it("registers Drive MCP tools and actions", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
 
+    expect(toolNames.filter((name) => name.startsWith("app_drive_"))).toEqual([
+      "app_drive_item_list",
+      "app_drive_item_get",
+      "app_drive_file_upload",
+      "app_drive_folder_upload",
+      "app_drive_folder_create",
+      "app_drive_item_rename",
+      "app_drive_item_move",
+      "app_drive_item_delete",
+      "app_drive_item_preview_get",
+      "app_drive_file_content_read",
+      "app_drive_file_download_create",
+      "app_drive_file_version_list",
+      "app_drive_file_version_download_create",
+      "app_drive_file_version_restore",
+      "app_drive_file_version_delete",
+      "app_drive_file_version_pin_update",
+      "app_drive_folder_zip_create",
+      "app_drive_share_list",
+      "app_drive_share_create",
+      "app_drive_share_disable",
+      "app_drive_site_create",
+      "app_drive_site_list",
+      "app_drive_site_update_access",
+      "app_drive_site_disable",
+      "app_drive_site_delete",
+      "app_drive_site_republish",
+      "app_drive_usage_get",
+      "app_drive_stats_get",
+      "app_drive_item_tree_list",
+      "app_drive_folder_path_ensure",
+      "app_drive_reorganization_preview",
+      "app_drive_reorganization_apply",
+      "app_drive_direct_link_upload",
+      "app_drive_direct_link_list",
+      "app_drive_direct_link_get",
+      "app_drive_direct_link_update",
+      "app_drive_direct_link_rename",
+      "app_drive_direct_link_delete",
+      "app_drive_direct_link_restore",
+      "app_drive_trash_list",
+      "app_drive_trash_delete",
+      "app_drive_item_restore",
+    ])
     expect(toolNames.filter((name) => name.startsWith("drive_"))).toEqual([
       "drive_item_list",
       "drive_item_get",
@@ -50,26 +94,45 @@ describe("Drive capability domain", () => {
       "drive_trash_delete",
       "drive_item_restore",
     ])
-    expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("drive.file.upload")
-    expect(MCP_TOOL_ACTIONS.drive_file_version_restore).toBe("drive.file_version.restore")
-    expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("drive.reorganization.apply")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_upload).toBe("drive.direct_link.upload")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_list).toBe("drive.direct_link.list")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_get).toBe("drive.direct_link.get")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_update).toBe("drive.direct_link.update")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_rename).toBe("drive.direct_link.rename")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_delete).toBe("drive.direct_link.delete")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_restore).toBe("drive.direct_link.restore")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_create).toBe("drive.site.create")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_list).toBe("drive.site.list")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_update_access).toBe("drive.site.update_access")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_disable).toBe("drive.site.disable")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_delete).toBe("drive.site.delete")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_republish).toBe("drive.site.republish")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_list).toBe("drive.trash.list")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_delete).toBe("drive.trash.delete")
-    expect(DRIVE_MCP_TOOL_ACTIONS.drive_item_restore).toBe("drive.item.restore")
-    expect(getActionDomainId("drive.item.list")).toBe("drive")
+    expect(MCP_TOOL_ACTIONS.app_drive_file_upload).toBe("app.drive.file.upload")
+    expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("app.drive.file.upload")
+    expect(MCP_TOOL_ACTIONS.app_drive_file_version_restore).toBe("app.drive.file_version.restore")
+    expect(MCP_TOOL_ACTIONS.drive_file_version_restore).toBe("app.drive.file_version.restore")
+    expect(MCP_TOOL_ACTIONS.app_drive_reorganization_apply).toBe("app.drive.reorganization.apply")
+    expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("app.drive.reorganization.apply")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_upload).toBe("app.drive.direct_link.upload")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_upload).toBe("app.drive.direct_link.upload")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_list).toBe("app.drive.direct_link.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_list).toBe("app.drive.direct_link.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_get).toBe("app.drive.direct_link.get")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_get).toBe("app.drive.direct_link.get")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_update).toBe("app.drive.direct_link.update")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_update).toBe("app.drive.direct_link.update")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_rename).toBe("app.drive.direct_link.rename")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_rename).toBe("app.drive.direct_link.rename")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_delete).toBe("app.drive.direct_link.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_delete).toBe("app.drive.direct_link.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_direct_link_restore).toBe("app.drive.direct_link.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_restore).toBe("app.drive.direct_link.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_create).toBe("app.drive.site.create")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_create).toBe("app.drive.site.create")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_list).toBe("app.drive.site.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_list).toBe("app.drive.site.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_update_access).toBe("app.drive.site.update_access")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_update_access).toBe("app.drive.site.update_access")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_disable).toBe("app.drive.site.disable")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_disable).toBe("app.drive.site.disable")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_delete).toBe("app.drive.site.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_delete).toBe("app.drive.site.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_republish).toBe("app.drive.site.republish")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_republish).toBe("app.drive.site.republish")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_trash_list).toBe("app.drive.trash.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_list).toBe("app.drive.trash.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_trash_delete).toBe("app.drive.trash.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_delete).toBe("app.drive.trash.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_item_restore).toBe("app.drive.item.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_item_restore).toBe("app.drive.item.restore")
+    expect(getActionDomainId("app.drive.item.list")).toBe("drive")
   })
 
   it("builds public asset and trash tool schemas", () => {
@@ -154,16 +217,16 @@ describe("Drive capability domain", () => {
   it("marks public asset and trash write capabilities correctly", () => {
     const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
 
-    expect(capabilities.get("drive.direct_link.upload")).toMatchObject({ mutates: true })
-    expect(capabilities.get("drive.direct_link.update")).toMatchObject({ mutates: true })
-    expect(capabilities.get("drive.direct_link.rename")).toMatchObject({ mutates: true })
-    expect(capabilities.get("drive.direct_link.delete")).toMatchObject({ mutates: true, risk: "high" })
-    expect(capabilities.get("drive.direct_link.restore")).toMatchObject({ mutates: true })
-    expect(capabilities.get("drive.trash.delete")).toMatchObject({ mutates: true, risk: "high" })
-    expect(capabilities.get("drive.item.restore")).toMatchObject({ mutates: true })
-    expect(capabilities.get("drive.direct_link.list")).toMatchObject({ mutates: false })
-    expect(capabilities.get("drive.direct_link.get")).toMatchObject({ mutates: false })
-    expect(capabilities.get("drive.trash.list")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.direct_link.upload")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.direct_link.update")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.direct_link.rename")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.direct_link.delete")).toMatchObject({ mutates: true, risk: "high" })
+    expect(capabilities.get("app.drive.direct_link.restore")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.trash.delete")).toMatchObject({ mutates: true, risk: "high" })
+    expect(capabilities.get("app.drive.item.restore")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.direct_link.list")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.direct_link.get")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.trash.list")).toMatchObject({ mutates: false })
   })
 
   it("does not register public asset access-log tools", () => {

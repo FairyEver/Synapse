@@ -2,7 +2,7 @@ import {
   OPEN_AGENT_SESSION_EVENT,
   type OpenAgentSessionPayload,
 } from "@/types/agent-navigation"
-import { DEFAULT_APP_NAVIGATION_TAB_ID } from "../../config"
+import { DEFAULT_SYSTEM_APP_ID } from "../../config"
 
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:open-settings-account"
@@ -18,22 +18,22 @@ type WatchNextAgentSessionPayload = {
   sessionKeyPrefix?: string
 }
 type RequestedSettingsCategory = "account" | "repositories" | "about"
-let currentAppTab = DEFAULT_APP_NAVIGATION_TAB_ID
+let currentAppId = DEFAULT_SYSTEM_APP_ID
 let requestedSettingsCategory: RequestedSettingsCategory | null = null
 
 function requestOpenSettingsTab(): void {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_TAB_EVENT))
 }
 
-function publishActiveAppTab(tabId: string): void {
-  currentAppTab = tabId
+function publishActiveAppTab(appId: string): void {
+  currentAppId = appId
   window.dispatchEvent(new CustomEvent(APP_TAB_CHANGED_EVENT, {
-    detail: tabId,
+    detail: appId,
   }))
 }
 
 function readCurrentAppTab(): string {
-  return currentAppTab
+  return currentAppId
 }
 
 function subscribeOpenSettingsTab(listener: () => void): () => void {

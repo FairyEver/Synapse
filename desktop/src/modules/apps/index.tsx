@@ -6,7 +6,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
-import { getSystemAppManifest, listSystemApps } from "./registry"
+import { getSystemAppManifest, listLaunchableSystemApps } from "./registry"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "./types"
 
 type AppsBridge = {
@@ -37,6 +37,10 @@ export function AppsModule({
   }, [pendingContentOpenRequest])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
+    if (appId === "launcher") {
+      setActiveAppId(null)
+      return
+    }
     setActiveAppId(appId)
   }, [])
 
@@ -89,7 +93,10 @@ export function AppsModule({
       <ScrollArea className="min-h-0 flex-1">
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
-            <AppLauncherGrid apps={listSystemApps()} onOpenApp={openApp} />
+            <AppLauncherGrid
+              apps={listLaunchableSystemApps()}
+              onOpenApp={openApp}
+            />
           </div>
         </div>
       </ScrollArea>

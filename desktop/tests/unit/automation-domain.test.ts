@@ -17,38 +17,38 @@ describe("Automation capability domain", () => {
   it("defines the Automation capability ids", () => {
     expect(AUTOMATION_DOMAIN.id).toBe("automation")
     expect(AUTOMATION_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "automation.item.list",
-      "automation.item.get",
-      "automation.item.create",
-      "automation.item.update",
-      "automation.item.delete",
-      "automation.item.enable",
-      "automation.item.disable",
-      "automation.run.execute",
-      "automation.run.disable",
-      "automation.run.list",
-      "automation.runtime.inspect",
-      "automation.webhook.list",
-      "automation.trigger_type.list",
-      "automation.executor_type.list",
+      "app.automation.item.list",
+      "app.automation.item.get",
+      "app.automation.item.create",
+      "app.automation.item.update",
+      "app.automation.item.delete",
+      "app.automation.item.enable",
+      "app.automation.item.disable",
+      "app.automation.run.execute",
+      "app.automation.run.disable",
+      "app.automation.run.list",
+      "app.automation.runtime.inspect",
+      "app.automation.webhook.list",
+      "app.automation.trigger_type.list",
+      "app.automation.executor_type.list",
     ])
   })
 
   it("maps Automation MCP tool names to canonical actions", () => {
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_list).toBe("automation.item.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_create).toBe("automation.item.create")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_run_execute).toBe("automation.run.execute")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_webhook_list).toBe("automation.webhook.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_trigger_type_list).toBe("automation.trigger_type.list")
-    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_executor_type_list).toBe("automation.executor_type.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_list).toBe("app.automation.item.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_create).toBe("app.automation.item.create")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_run_execute).toBe("app.automation.run.execute")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_webhook_list).toBe("app.automation.webhook.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_trigger_type_list).toBe("app.automation.trigger_type.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_executor_type_list).toBe("app.automation.executor_type.list")
   })
 
   it("registers Automation tools with the global MCP registry", () => {
     expect(CAPABILITY_DOMAINS.map((domain) => domain.id)).toContain("automation")
-    expect(MCP_TOOL_ACTIONS.automation_item_delete).toBe("automation.item.delete")
-    expect(MCP_TOOL_ACTIONS.automation_run_disable).toBe("automation.run.disable")
-    expect(MCP_TOOL_ACTIONS.automation_webhook_list).toBe("automation.webhook.list")
-    expect(getActionDomainId("automation.item.list")).toBe("automation")
+    expect(MCP_TOOL_ACTIONS.automation_item_delete).toBe("app.automation.item.delete")
+    expect(MCP_TOOL_ACTIONS.automation_run_disable).toBe("app.automation.run.disable")
+    expect(MCP_TOOL_ACTIONS.automation_webhook_list).toBe("app.automation.webhook.list")
+    expect(getActionDomainId("app.automation.item.list")).toBe("automation")
     expect(getMcpToolDomainId("automation_runtime_inspect")).toBe("automation")
 
     const tools = buildAllMcpTools()

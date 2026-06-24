@@ -1,12 +1,12 @@
-# Synapse 仓库 MCP API Reference
+# Synapse Settings Repository MCP API Reference
 
 All tools are accessed through the `synapse-mcp` MCP server. Each tool maps to the same canonical Synapse API action.
 
 ## Tools
 
-### repository_item_list
+### app_settings_repository_item_list
 
-Canonical action: `repository.item.list`
+Canonical action: `app.settings.repository.item.list`
 
 Input:
 

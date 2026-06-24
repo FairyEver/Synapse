@@ -6,7 +6,7 @@ You have access to Synapse Automation MCP tools for managing Automation items an
 
 Use this skill only for Synapse Automation items, trigger/executor configuration, enablement, manual runs, active run stopping, run history, and Automation runtime state.
 
-Do not use this skill for old Scheduler tasks, Workflow definitions, database rows, content publishing, provider settings, or editor installation. Switch to the matching dedicated Synapse MCP skill when available.
+Do not use this skill for old Scheduler tasks, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. Switch to the matching dedicated Synapse MCP skill when available.
 
 ## Capabilities
 
@@ -25,16 +25,16 @@ Read responses intentionally omit raw `trigger.config` and `executor.config`. Do
 
 ## Default Flow
 
-1. If the user gives an Automation name instead of an id, call `automation_item_list` first. Names are not unique; pass `limit` and `scope` when you only need a bounded subset.
-2. Before creating or replacing configs, call `automation_trigger_type_list` and `automation_executor_type_list`.
+1. If the user gives an Automation name instead of an id, call `app_automation_item_list` first. Names are not unique; pass `limit` and `scope` when you only need a bounded subset.
+2. Before creating or replacing configs, call `app_automation_trigger_type_list` and `app_automation_executor_type_list`.
 3. Build a full `trigger` ref: `{ "type": "...", "config": { ... } }`.
 4. Build a full `executor` ref: `{ "type": "...", "config": { ... } }`.
-5. Call `automation_item_create` or `automation_item_update`.
-6. Use `automation_item_enable` or `automation_item_disable` for enabled state changes.
-7. Use `automation_run_execute` for a manual run.
-8. Use `automation_webhook_list` before creating a `builtin.webhook` trigger unless the user already gave a Webhook public id.
-9. Use `automation_runtime_inspect` and `automation_run_list` to troubleshoot execution state.
-10. Use `automation_run_disable` only when stopping an active run by run id.
+5. Call `app_automation_item_create` or `app_automation_item_update`.
+6. Use `app_automation_item_enable` or `app_automation_item_disable` for enabled state changes.
+7. Use `app_automation_run_execute` for a manual run.
+8. Use `app_automation_webhook_list` before creating a `builtin.webhook` trigger unless the user already gave a Webhook public id.
+9. Use `app_automation_runtime_inspect` and `app_automation_run_list` to troubleshoot execution state.
+10. Use `app_automation_run_disable` only when stopping an active run by run id.
 
 ## Trigger Rules
 
@@ -46,9 +46,9 @@ Known built-in trigger types include:
 - `builtin.interval` - schedule by fixed interval.
 - `builtin.webhook` - run when a matching Webhook delivery arrives.
 
-Use the returned `configSchema`, `defaultConfig`, and `variables` from `automation_trigger_type_list`. Do not guess fields that are not in the schema.
+Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.
 
-For `builtin.webhook`, call `automation_webhook_list` and set `trigger.config.webhookPublicId` from the returned `publicId`. You may also set `trigger.config.webhookName` from the returned name.
+For `builtin.webhook`, call `app_automation_webhook_list` and set `trigger.config.webhookPublicId` from the returned `publicId`. You may also set `trigger.config.webhookName` from the returned name.
 
 ## Executor Rules
 
@@ -62,25 +62,25 @@ Known built-in executor types include:
 - `builtin.agent` - sends work to an Agent.
 - `builtin.workflow` - runs a saved Workflow.
 
-Use `automation_executor_type_list` for public config fields, platform-aware defaults, and permissions. On Windows, `builtin.command` and `builtin.script` defaults use `cmd`; do not force `posix` unless the user explicitly asks for a POSIX shell. Do not guess provider ids, model tiers, project ids, or Agent settings.
+Use `app_automation_executor_type_list` for public config fields, platform-aware defaults, and permissions. On Windows, `builtin.command` and `builtin.script` defaults use `cmd`; do not force `posix` unless the user explicitly asks for a POSIX shell. Do not guess provider ids, model tiers, project ids, or Agent settings.
 
-For `builtin.workflow`, set `executor.config.workflowId` to the saved Workflow id. Set `executor.config.paramTemplates` to an object whose keys are Workflow parameter names and whose values may use Automation template variables such as `{{trigger.triggeredAt}}` or Webhook variables from `automation_trigger_type_list`.
+For `builtin.workflow`, set `executor.config.workflowId` to the saved Workflow id. Set `executor.config.paramTemplates` to an object whose keys are Workflow parameter names and whose values may use Automation template variables such as `{{trigger.triggeredAt}}` or Webhook variables from `app_automation_trigger_type_list`.
 
 ## Update Rules
 
-Use `automation_item_update` with a focused patch. The patch may include `trigger` or `executor`, but those refs replace the corresponding stored config.
+Use `app_automation_item_update` with a focused patch. The patch may include `trigger` or `executor`, but those refs replace the corresponding stored config.
 
-If you only need to enable or disable an Automation, use `automation_item_enable` or `automation_item_disable` instead of `automation_item_update`.
+If you only need to enable or disable an Automation, use `app_automation_item_enable` or `app_automation_item_disable` instead of `app_automation_item_update`.
 
 If a read result only shows `{ type, summary }`, that is expected. It is not enough to reconstruct private configs. Ask the user for the new desired config or use discovery defaults.
 
 ## Run Rules
 
-- `automation_run_execute` starts a manual run and returns a safe run summary. Treat tool failure as no run started.
-- `automation_run_disable` stops an active run by run id. Treat tool failure as missing or no longer active.
-- `automation_run_list` returns recent run summaries without raw logs or outputs.
-- `automation_runtime_inspect` shows which items are scheduled or running.
-- `automation_webhook_list` returns Webhook `publicId`, name, enabled state, and delivery status for `builtin.webhook` trigger configuration.
+- `app_automation_run_execute` starts a manual run and returns a safe run summary. Treat tool failure as no run started.
+- `app_automation_run_disable` stops an active run by run id. Treat tool failure as missing or no longer active.
+- `app_automation_run_list` returns recent run summaries without raw logs or outputs.
+- `app_automation_runtime_inspect` shows which items are scheduled or running.
+- `app_automation_webhook_list` returns Webhook `publicId`, name, enabled state, and delivery status for `builtin.webhook` trigger configuration.
 
 ## API Reference
 

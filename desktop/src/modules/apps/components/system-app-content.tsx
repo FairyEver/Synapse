@@ -1,24 +1,42 @@
-import { useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
+import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import {
   subscribeContentOpenRequest,
   type ContentOpenRequest,
 } from "@/app-shell/content-navigation"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { AgentModule } from "@/modules/agent"
+import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
+import { DriveModule } from "@/modules/drive"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
 import { ResourceRepositoryModule } from "@/modules/resource-repository"
+import { SettingsModule } from "@/modules/settings"
 import { UsageMonitorModule } from "@/modules/usage-analysis"
+import { WorkflowModule } from "@/modules/workflow"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
-import type { SynapseSystemAppId } from "../types"
+import { AppLauncherGrid } from "./app-launcher-grid"
+import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
+import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
+import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../types"
+
+type AppsBridge = {
+  readonly openSystemApp?: (targetAppId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
+}
 
 type SystemAppContentProps = {
   readonly appId: SynapseSystemAppId
   readonly resourceContentOpenRequest?: ContentOpenRequest | null
   readonly onResourceContentOpenRequestConsumed?: (requestId: string) => void
   readonly onContentOpenRequest?: (request: ContentOpenRequest) => void
+  readonly pendingAgentSession?: OpenAgentSessionPayload | null
+  readonly onPendingAgentSessionConsumed?: () => void
 }
 
 function SystemAppContent({
@@ -26,12 +44,34 @@ function SystemAppContent({
   resourceContentOpenRequest = null,
   onResourceContentOpenRequestConsumed,
   onContentOpenRequest,
+  pendingAgentSession = null,
+  onPendingAgentSessionConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
     return subscribeContentOpenRequest(onContentOpenRequest)
   }, [appId, onContentOpenRequest])
 
+  if (appId === "agent") {
+    return (
+      <AgentModule
+        pendingAgentSession={pendingAgentSession}
+        onPendingAgentSessionConsumed={onPendingAgentSessionConsumed}
+      />
+    )
+  }
+  if (appId === "workflow") return <WorkflowModule />
+  if (appId === "drive") return <DriveModule />
+  if (appId === "automation") return <AutomationModule />
+  if (appId === "launcher") {
+    return (
+      <LauncherContent
+        pendingContentOpenRequest={resourceContentOpenRequest}
+        onPendingContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
+      />
+    )
+  }
+  if (appId === "settings") return <SettingsModule />
   if (appId === "resource-repository") {
     return (
       <ResourceRepositoryModule
@@ -50,6 +90,92 @@ function SystemAppContent({
   if (appId === "model-price") return <ModelPriceModule />
 
   return null
+}
+
+function LauncherContent({
+  pendingContentOpenRequest = null,
+  onPendingContentOpenRequestConsumed,
+}: {
+  readonly pendingContentOpenRequest?: ContentOpenRequest | null
+  readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+}) {
+  const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
+  const [resourceContentOpenRequest, setResourceContentOpenRequest] =
+    useState<ContentOpenRequest | null>(null)
+
+  useEffect(() => {
+    if (!pendingContentOpenRequest) return
+    setActiveAppId("resource-repository")
+    setResourceContentOpenRequest(pendingContentOpenRequest)
+  }, [pendingContentOpenRequest])
+
+  const openApp = useCallback((appId: SynapseSystemAppId) => {
+    setActiveAppId(appId)
+  }, [])
+
+  const openAppWindow = async (appId: SynapseSystemAppId) => {
+    try {
+      const appsBridge = (getSynapseBridge() as ReturnType<typeof getSynapseBridge> & {
+        readonly apps?: AppsBridge
+      } | undefined)?.apps
+      if (!appsBridge?.openSystemApp) {
+        throw new Error("System app window bridge is unavailable.")
+      }
+      await appsBridge.openSystemApp(appId)
+      setActiveAppId(null)
+      setResourceContentOpenRequest(null)
+    } catch {
+      toast.error("打开应用失败")
+    }
+  }
+
+  const openResourceRepository = useCallback((request: ContentOpenRequest) => {
+    setActiveAppId("resource-repository")
+    setResourceContentOpenRequest(request)
+  }, [])
+
+  const handleResourceContentOpenRequestConsumed = useCallback((requestId: string) => {
+    setResourceContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+    if (pendingContentOpenRequest?.requestId === requestId) {
+      onPendingContentOpenRequestConsumed?.(requestId)
+    }
+  }, [onPendingContentOpenRequestConsumed, pendingContentOpenRequest])
+
+  const activeApp = activeAppId ? getSystemAppManifest(activeAppId) : null
+  if (activeApp) {
+    return (
+      <EmbeddedSystemAppShell
+        appName={activeApp.name}
+        onBack={() => {
+          setActiveAppId(null)
+          setResourceContentOpenRequest(null)
+        }}
+        onOpenWindow={() => void openAppWindow(activeApp.id)}
+      >
+        <SystemAppContent
+          appId={activeApp.id}
+          resourceContentOpenRequest={resourceContentOpenRequest}
+          onResourceContentOpenRequestConsumed={handleResourceContentOpenRequestConsumed}
+          onContentOpenRequest={openResourceRepository}
+        />
+      </EmbeddedSystemAppShell>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-full px-6 py-7">
+          <div className="mx-auto max-w-4xl">
+            <AppLauncherGrid
+              apps={listLaunchableSystemApps()}
+              onOpenApp={openApp}
+            />
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
+  )
 }
 
 export { SystemAppContent }

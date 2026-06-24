@@ -1,6 +1,6 @@
-# Synapse 仓库 MCP
+# Synapse Settings Repository MCP
 
-You have access to Synapse Repository MCP tools for discovering configured Synapse repositories.
+You have access to Synapse Settings Repository MCP tools for discovering configured Synapse repositories.
 
 ## Scope Boundary
 
@@ -10,8 +10,8 @@ This skill does not create, delete, sync, initialize, maintain, or modify reposi
 
 ## Default Flow
 
-1. Call `repository_item_list`.
-2. Use `isActive` to identify the current active repository.
+1. Call `app_settings_repository_item_list`.
+2. Use `isActive` to identify the current active app.settings.repository.
 3. Use `uuid`, `name`, and `localPath` to disambiguate repositories with similar names.
 
 ## Data Rules

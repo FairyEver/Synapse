@@ -42,7 +42,7 @@ import { buildWorkflowTools } from "../../synapse-capabilities/shared/workflow-d
 describe("Synapse capability domains", () => {
   it("keeps Database capabilities in the Database domain", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
-    expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
+    expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("app.database.table.list")
   })
 })
 
@@ -74,26 +74,26 @@ describe("Model price capability domain", () => {
   it("registers model price actions separately from usage analysis internals", () => {
     expect(MODEL_PRICE_DOMAIN.id).toBe("model_price")
     expect(MODEL_PRICE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "model_price.used_model.list",
-      "model_price.preset.list",
-      "model_price.preset.import",
-      "model_price.rule.list",
-      "model_price.rule.get",
-      "model_price.rule.create",
-      "model_price.rule.update",
-      "model_price.rule.clear",
-      "model_price.rule.delete",
-      "model_price.rule.enable",
-      "model_price.rule.disable",
+      "app.model_price.used_model.list",
+      "app.model_price.preset.list",
+      "app.model_price.preset.import",
+      "app.model_price.rule.list",
+      "app.model_price.rule.get",
+      "app.model_price.rule.create",
+      "app.model_price.rule.update",
+      "app.model_price.rule.clear",
+      "app.model_price.rule.delete",
+      "app.model_price.rule.enable",
+      "app.model_price.rule.disable",
     ])
   })
 
   it("maps model price MCP tools to canonical actions", () => {
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_used_model_list).toBe("model_price.used_model.list")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("model_price.preset.import")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_update).toBe("model_price.rule.update")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("model_price.rule.clear")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_disable).toBe("model_price.rule.disable")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_used_model_list).toBe("app.model_price.used_model.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("app.model_price.preset.import")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_update).toBe("app.model_price.rule.update")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("app.model_price.rule.clear")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_disable).toBe("app.model_price.rule.disable")
   })
 
   it("defines model price MCP schemas with ruleId-based mutations", () => {
@@ -109,8 +109,8 @@ describe("Model price capability domain", () => {
     expect(toolNames).toContain("model_price_used_model_list")
     expect(toolNames).toContain("model_price_rule_create")
     expect(toolNames).toContain("model_price_rule_delete")
-    expect(MCP_TOOL_ACTIONS.model_price_rule_enable).toBe("model_price.rule.enable")
-    expect(getActionDomainId("model_price.rule.list")).toBe("model_price")
+    expect(MCP_TOOL_ACTIONS.model_price_rule_enable).toBe("app.model_price.rule.enable")
+    expect(getActionDomainId("app.model_price.rule.list")).toBe("model_price")
   })
 })
 
@@ -118,17 +118,22 @@ describe("Repository capability domain", () => {
   it("registers read-only repository discovery", () => {
     expect(REPOSITORY_DOMAIN.id).toBe("repository")
     expect(REPOSITORY_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "repository.item.list",
+      "app.settings.repository.item.list",
     ])
     expect(REPOSITORY_DOMAIN.capabilities.every((capability) => capability.mutates === false)).toBe(true)
   })
 
   it("maps repository MCP tools to canonical actions", () => {
-    expect(REPOSITORY_MCP_TOOL_ACTIONS.repository_item_list).toBe("repository.item.list")
+    expect(REPOSITORY_MCP_TOOL_ACTIONS.app_settings_repository_item_list).toBe("app.settings.repository.item.list")
+    expect(REPOSITORY_MCP_TOOL_ACTIONS.repository_item_list).toBe("app.settings.repository.item.list")
     const tools = buildRepositoryTools()
-    expect(tools.map((tool) => tool.name)).toEqual(["repository_item_list"])
-    expect(tools[0]?.description).toContain("uuid, name, local path, and active state")
-    expect(tools[0]?.description).not.toContain("variable count")
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "app_settings_repository_item_list",
+      "repository_item_list",
+    ])
+    const legacyTool = tools.find((tool) => tool.name === "repository_item_list")
+    expect(legacyTool?.description).toContain("uuid, name, local path, and active state")
+    expect(legacyTool?.description).not.toContain("variable count")
   })
 })
 
@@ -136,20 +141,27 @@ describe("Variable capability domain", () => {
   it("registers user-scoped variable CRUD actions", () => {
     expect(VARIABLE_DOMAIN.id).toBe("variable")
     expect(VARIABLE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "variable.item.list",
-      "variable.item.get",
-      "variable.item.create",
-      "variable.item.update",
-      "variable.item.upsert",
-      "variable.item.delete",
+      "app.settings.variable.item.list",
+      "app.settings.variable.item.get",
+      "app.settings.variable.item.create",
+      "app.settings.variable.item.update",
+      "app.settings.variable.item.upsert",
+      "app.settings.variable.item.delete",
     ])
   })
 
   it("maps variable MCP tools to canonical actions", () => {
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_list).toBe("variable.item.list")
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_get).toBe("variable.item.get")
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_upsert).toBe("variable.item.upsert")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.app_settings_variable_item_list).toBe("app.settings.variable.item.list")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_list).toBe("app.settings.variable.item.list")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_get).toBe("app.settings.variable.item.get")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_upsert).toBe("app.settings.variable.item.upsert")
     expect(buildVariableTools().map((tool) => tool.name)).toEqual([
+      "app_settings_variable_item_list",
+      "app_settings_variable_item_get",
+      "app_settings_variable_item_create",
+      "app_settings_variable_item_update",
+      "app_settings_variable_item_upsert",
+      "app_settings_variable_item_delete",
       "variable_item_list",
       "variable_item_get",
       "variable_item_create",
@@ -180,10 +192,10 @@ describe("Repository and Variable combined MCP tools", () => {
     expect(toolNames).toContain("repository_item_list")
     expect(toolNames).toContain("variable_item_list")
     expect(toolNames).toContain("variable_item_upsert")
-    expect(MCP_TOOL_ACTIONS.repository_item_list).toBe("repository.item.list")
-    expect(MCP_TOOL_ACTIONS.variable_item_delete).toBe("variable.item.delete")
-    expect(getActionDomainId("repository.item.list")).toBe("repository")
-    expect(getActionDomainId("variable.item.upsert")).toBe("variable")
+    expect(MCP_TOOL_ACTIONS.repository_item_list).toBe("app.settings.repository.item.list")
+    expect(MCP_TOOL_ACTIONS.variable_item_delete).toBe("app.settings.variable.item.delete")
+    expect(getActionDomainId("app.settings.repository.item.list")).toBe("repository")
+    expect(getActionDomainId("app.settings.variable.item.upsert")).toBe("variable")
   })
 })
 
@@ -223,30 +235,30 @@ describe("Content capability domain", () => {
   it("registers content actions separately from other domains", () => {
     expect(CONTENT_DOMAIN.id).toBe("content")
     expect(CONTENT_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "content.type.describe",
-      "content.rule.list",
-      "content.rule.get",
-      "content.rule.create",
-      "content.rule.update",
-      "content.rule.delete",
-      "content.skill.list",
-      "content.skill.get",
-      "content.skill.create",
-      "content.skill.update",
-      "content.skill.delete",
-      "content.prompt.list",
-      "content.prompt.get",
-      "content.prompt.create",
-      "content.prompt.update",
-      "content.prompt.delete",
+      "app.resource_repository.type.describe",
+      "app.resource_repository.rule.list",
+      "app.resource_repository.rule.get",
+      "app.resource_repository.rule.create",
+      "app.resource_repository.rule.update",
+      "app.resource_repository.rule.delete",
+      "app.resource_repository.skill.list",
+      "app.resource_repository.skill.get",
+      "app.resource_repository.skill.create",
+      "app.resource_repository.skill.update",
+      "app.resource_repository.skill.delete",
+      "app.resource_repository.prompt.list",
+      "app.resource_repository.prompt.get",
+      "app.resource_repository.prompt.create",
+      "app.resource_repository.prompt.update",
+      "app.resource_repository.prompt.delete",
     ])
   })
 
   it("maps content MCP tool names to canonical actions", () => {
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_type_describe).toBe("content.type.describe")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_rule_create).toBe("content.rule.create")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_skill_update).toBe("content.skill.update")
-    expect(CONTENT_MCP_TOOL_ACTIONS.content_prompt_delete).toBe("content.prompt.delete")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_type_describe).toBe("app.resource_repository.type.describe")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_rule_create).toBe("app.resource_repository.rule.create")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_skill_update).toBe("app.resource_repository.skill.update")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_prompt_delete).toBe("app.resource_repository.prompt.delete")
   })
 
   it("combines content tools with all MCP tools", () => {
@@ -255,8 +267,8 @@ describe("Content capability domain", () => {
     expect(toolNames).toContain("content_rule_create")
     expect(toolNames).toContain("content_skill_create")
     expect(toolNames).toContain("content_prompt_create")
-    expect(MCP_TOOL_ACTIONS.content_skill_delete).toBe("content.skill.delete")
-    expect(getActionDomainId("content.prompt.update")).toBe("content")
+    expect(MCP_TOOL_ACTIONS.content_skill_delete).toBe("app.resource_repository.skill.delete")
+    expect(getActionDomainId("app.resource_repository.prompt.update")).toBe("content")
   })
 
   it("documents list/get/create/update/delete tool schemas for each content type", () => {
@@ -287,7 +299,7 @@ describe("Content capability domain", () => {
     expect(update?.inputSchema).not.toHaveProperty("anyOf")
     expect(update?.inputSchema).not.toHaveProperty("oneOf")
     expect(update?.inputSchema).not.toHaveProperty("allOf")
-    expect(update?.description).toContain("content_skill_get")
+    expect(update?.description).toContain("app_resource_repository_skill_get")
     expect(update?.description).toContain("current icon/image appearance is preserved")
     expect(update?.description).toContain("name/title/description/category/content")
     expect(update?.description).toContain("sourceDirectoryPath")

@@ -2,7 +2,7 @@
 
 ## List Used Models
 
-`model_price_used_model_list`
+`app_model_price_used_model_list`
 
 ```json
 {
@@ -22,7 +22,7 @@ Use this to find models with `priceKnown: false`. `matchedRuleId` is a rule id, 
 
 ## List And Import Presets
 
-`model_price_preset_list`
+`app_model_price_preset_list`
 
 ```json
 {}
@@ -30,7 +30,7 @@ Use this to find models with `priceKnown: false`. `matchedRuleId` is a rule id, 
 
 Lists built-in presets. Use the returned `id` field as `presetId`.
 
-`model_price_preset_import`
+`app_model_price_preset_import`
 
 ```json
 { "presetId": "deepseek-official" }
@@ -40,7 +40,7 @@ Imports or refreshes one built-in preset. Existing user rules that do not match 
 
 ## List And Get Rules
 
-`model_price_rule_list`
+`app_model_price_rule_list`
 
 ```json
 {}
@@ -48,7 +48,7 @@ Imports or refreshes one built-in preset. Existing user rules that do not match 
 
 Lists enabled and disabled rules. Use the returned `id` field as `ruleId`.
 
-`model_price_rule_get`
+`app_model_price_rule_get`
 
 ```json
 { "ruleId": "rule-id-from-list" }
@@ -56,7 +56,7 @@ Lists enabled and disabled rules. Use the returned `id` field as `ruleId`.
 
 ## Create Rule
 
-`model_price_rule_create`
+`app_model_price_rule_create`
 
 ```json
 {
@@ -79,7 +79,7 @@ Fields:
 
 ## Update Rule
 
-`model_price_rule_update`
+`app_model_price_rule_update`
 
 ```json
 {
@@ -92,13 +92,13 @@ Updates are partial. Pass only fields that should change; omitted prices keep th
 
 ## Enable Or Disable Rule
 
-`model_price_rule_enable`
+`app_model_price_rule_enable`
 
 ```json
 { "ruleId": "rule-id-from-list" }
 ```
 
-`model_price_rule_disable`
+`app_model_price_rule_disable`
 
 ```json
 { "ruleId": "rule-id-from-list" }
@@ -108,7 +108,7 @@ Disable a rule when you want to keep it for later but stop matching it.
 
 ## Delete Rule
 
-`model_price_rule_delete`
+`app_model_price_rule_delete`
 
 ```json
 { "ruleId": "rule-id-from-list" }
@@ -118,7 +118,7 @@ This hard-deletes the rule. Use only when the user explicitly wants removal.
 
 ## Clear Rules
 
-`model_price_rule_clear`
+`app_model_price_rule_clear`
 
 ```json
 {}
@@ -130,34 +130,34 @@ Clears every model price rule. Use only when the user explicitly asks for a full
 
 Find unpriced used models:
 
-1. Call `model_price_used_model_list`.
+1. Call `app_model_price_used_model_list`.
 2. Look for rows with `priceKnown: false`.
 3. Ask the user for prices if they did not provide them.
-4. Create a rule with `model_price_rule_create`.
+4. Create a rule with `app_model_price_rule_create`.
 
 Import built-in prices:
 
-1. Call `model_price_preset_list`.
+1. Call `app_model_price_preset_list`.
 2. Choose the exact preset requested by the user.
-3. Call `model_price_preset_import` with the returned `id`.
+3. Call `app_model_price_preset_import` with the returned `id`.
 
 Update one price field:
 
-1. Call `model_price_rule_list`.
+1. Call `app_model_price_rule_list`.
 2. Identify the exact rule and confirm ambiguity if multiple rules could match.
-3. Call `model_price_rule_update` with `ruleId` and only the changed field.
+3. Call `app_model_price_rule_update` with `ruleId` and only the changed field.
 
 Enable, disable, or delete:
 
-1. Call `model_price_rule_list`.
+1. Call `app_model_price_rule_list`.
 2. Use the returned `id` as `ruleId`.
-3. Call `model_price_rule_enable` when a disabled rule should match again.
-4. Call `model_price_rule_disable` to keep the rule but stop matching it.
-5. Call `model_price_rule_delete` only for explicit removal.
+3. Call `app_model_price_rule_enable` when a disabled rule should match again.
+4. Call `app_model_price_rule_disable` to keep the rule but stop matching it.
+5. Call `app_model_price_rule_delete` only for explicit removal.
 
 Clear all rules:
 
 1. Confirm the user explicitly requested a full reset.
-2. Call `model_price_rule_clear`.
+2. Call `app_model_price_rule_clear`.
 
 Model price rule changes affect current matching immediately, but they do not rewrite already indexed usage totals at save time. A later Usage Analysis refresh can reprocess unchanged CC/Codex usage files when the price-rule hash changes. Do not trigger or simulate that refresh from this skill.

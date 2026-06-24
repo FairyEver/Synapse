@@ -16,18 +16,21 @@ function extractDispatcherActions(): string[] {
 describe("Database capability parity", () => {
   it("keeps dispatcher actions registered in the shared capability registry", () => {
     const registryActions = DATABASE_CAPABILITIES.map((capability) => capability.id).sort()
-    expect(registryActions).toEqual(extractDispatcherActions())
+    const dispatcherActions = extractDispatcherActions()
+      .map((action) => action.replace("database.", "app.database."))
+      .sort()
+    expect(registryActions).toEqual(dispatcherActions)
   })
 
   it("keeps MCP tools mapped to registered actions", () => {
     const toolNames = buildTools().map((tool) => tool.name).sort()
     const mappedToolNames = Object.keys(MCP_TOOL_ACTIONS).sort()
-    const mappedActions = Object.values(MCP_TOOL_ACTIONS).sort()
+    const mappedActions = [...new Set(Object.values(MCP_TOOL_ACTIONS))].sort()
     const registryActions = DATABASE_CAPABILITIES.map((capability) => capability.id).sort()
     const registryToolNames = DATABASE_CAPABILITIES.map((capability) => capabilityIdToMcpTool(capability.id)).sort()
 
-    expect(mappedToolNames).toEqual(registryToolNames)
-    expect(toolNames).toEqual(registryToolNames)
+    expect(mappedToolNames).toEqual(toolNames)
+    expect(toolNames).toEqual(expect.arrayContaining(registryToolNames))
     expect(mappedActions).toEqual(registryActions)
   })
 })

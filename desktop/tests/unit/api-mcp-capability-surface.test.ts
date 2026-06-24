@@ -37,15 +37,15 @@ function readMarkdownFiles(root: URL, prefix = ""): Array<{ path: string; conten
 }
 
 describe("API and MCP capability surface", () => {
-  it("keeps every registered capability exposed as exactly one MCP tool", () => {
+  it("keeps every registered capability exposed as a primary MCP tool with mapped aliases", () => {
     const actionIds = allCapabilityIds()
     const toolNames = buildAllMcpTools().map((tool) => tool.name).sort()
     const mappedToolNames = Object.keys(MCP_TOOL_ACTIONS).sort()
-    const mappedActionIds = Object.values(MCP_TOOL_ACTIONS).sort()
+    const mappedActionIds = [...new Set(Object.values(MCP_TOOL_ACTIONS))].sort()
     const expectedToolNames = actionIds.map((action) => capabilityIdToMcpTool(action)).sort()
 
-    expect(toolNames).toEqual(expectedToolNames)
-    expect(mappedToolNames).toEqual(expectedToolNames)
+    expect(toolNames).toEqual(mappedToolNames)
+    expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
   })
 
@@ -92,7 +92,8 @@ describe("API and MCP capability surface", () => {
       await expect(router.dispatch(action, {}, { source: "api" })).resolves.toEqual({ ok: true })
       const domain = getActionDomainId(action)
       expect(domain).not.toBeNull()
-      expect(dispatchers[domain as keyof typeof dispatchers]).toHaveBeenLastCalledWith(action, {}, { source: "api" })
+      expect(dispatchers[domain as keyof typeof dispatchers])
+        .toHaveBeenLastCalledWith(expectedDispatcherAction(action, domain), {}, { source: "api" })
     }
   })
 
@@ -106,6 +107,22 @@ describe("API and MCP capability surface", () => {
     expect(existsSync(new URL("electron/database/cli-installer.ts", repoRoot))).toBe(false)
     expect(packageJson.scripts?.["build:database"]).not.toContain("dist-database/cli")
     expect(`${docsMatrix}\n${websiteMatrix}\n${websiteCapabilities}`).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
+  })
+
+  it("uses primary app MCP tool names in the built-in Synapse skill docs", () => {
+    const docs = readMarkdownFiles(
+      new URL("resources/templates/skills/synapse-skill/", repoRoot),
+    )
+    const docsText = docs.map((file) => file.content).join("\n")
+    const legacyToolNames = Object.keys(MCP_TOOL_ACTIONS)
+      .filter((toolName) => !toolName.startsWith("app_"))
+      .sort()
+    const documentedLegacyToolNames = legacyToolNames.filter((toolName) => {
+      const escaped = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return new RegExp(`\`${escaped}\``).test(docsText)
+    })
+
+    expect(documentedLegacyToolNames).toEqual([])
   })
 
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {
@@ -123,3 +140,28 @@ describe("API and MCP capability surface", () => {
     expect(offenders).toEqual([])
   })
 })
+
+function expectedDispatcherAction(action: string, domain: string | null): string {
+  if (!action.startsWith("app.")) return action
+
+  switch (domain) {
+    case "automation":
+      return action.replace("app.automation.", "automation.")
+    case "content":
+      return action.replace("app.resource_repository.", "content.")
+    case "database":
+      return action.replace("app.database.", "database.")
+    case "drive":
+      return action.replace("app.drive.", "drive.")
+    case "model_price":
+      return action.replace("app.model_price.", "model_price.")
+    case "repository":
+      return action.replace("app.settings.repository.", "repository.")
+    case "variable":
+      return action.replace("app.settings.variable.", "variable.")
+    case "workflow":
+      return action.replace("app.workflow.", "workflow.")
+    default:
+      return action
+  }
+}
