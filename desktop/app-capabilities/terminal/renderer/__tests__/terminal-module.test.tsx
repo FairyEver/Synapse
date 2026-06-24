@@ -231,10 +231,12 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
+    const options = vi.mocked(XtermTerminal).mock.calls[0]?.[0]
+    expect(options?.fontFamily).toContain("MesloLGS NF")
+    expect(options?.fontFamily).toContain("Meslo LG S for Powerline")
     expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
       customGlyphs: true,
       cursorStyle: "block",
-      fontFamily: expect.stringContaining("MesloLGS NF"),
       fontSize: expect.any(Number),
       letterSpacing: 0,
       lineHeight: expect.any(Number),
