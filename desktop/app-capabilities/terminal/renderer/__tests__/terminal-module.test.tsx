@@ -255,7 +255,7 @@ describe("TerminalModule", () => {
   it("shows the empty state and creates a terminal session", async () => {
     await renderModule()
 
-    expect(document.body.textContent).toContain("新建会话")
+    expect(document.body.textContent).toContain("暂无会话")
 
     await clickButton("新建终端")
 
@@ -266,13 +266,13 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
-  it("creates a terminal session from embedded header actions", async () => {
+  it("keeps terminal actions inside the terminal surface when embedded", async () => {
     await renderEmbeddedModule()
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
-    expect(actions?.textContent).toContain("新建终端")
+    expect(actions?.textContent).not.toContain("新建终端")
 
-    await clickButton("新建终端", actions)
+    await clickButton("新建终端")
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       cols: 80,

@@ -87,8 +87,8 @@ export function AppsModule({
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-6 py-10">
-          <div className="mx-auto max-w-5xl">
+        <div className="min-h-full px-6 py-7">
+          <div className="mx-auto max-w-4xl">
             <AppLauncherGrid apps={listSystemApps()} onOpenApp={openApp} />
           </div>
         </div>

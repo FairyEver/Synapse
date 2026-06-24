@@ -34,6 +34,7 @@ import {
 } from "../../../src/components/ui/dropdown-menu"
 import { Input } from "../../../src/components/ui/input"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
+import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
@@ -189,7 +190,7 @@ export function TerminalModule() {
     }
   }, [deleteTarget, terminalBridge])
 
-  const headerActions = useMemo(() => (
+  const terminalActions = useMemo(() => (
     <>
       <Badge variant="outline">{statusLabel}</Badge>
       {canRestartSession ? (
@@ -315,14 +316,19 @@ export function TerminalModule() {
   }, [activeSession, terminalBridge])
 
   return (
-    <SystemAppWindowShell
-      actions={headerActions}
-    >
-      <div className="grid h-full min-h-0 grid-cols-[16rem_minmax(0,1fr)] bg-background">
-        <aside className="min-h-0 border-r bg-surface">
+    <SystemAppWindowShell>
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1">
+        <aside className="max-h-48 min-h-0 border-b bg-surface md:max-h-none md:border-b-0 md:border-r">
           <ScrollArea className="h-full">
-            <div className="grid gap-3 p-3">
-              {sessionGroups.length > 0 ? sessionGroups.map((group) => (
+            <div className="grid gap-2 p-2">
+              {loading ? (
+                <div className="grid gap-2">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
                 <div key={group.id} className="grid gap-1">
                   <div className="px-2 text-xs font-medium text-muted-foreground">{group.name}</div>
                   <div className="grid gap-1">
@@ -330,13 +336,13 @@ export function TerminalModule() {
                       <div
                         key={session.id}
                         className={cn(
-                          "grid min-h-10 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg transition-colors hover:bg-muted",
+                          "grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg transition-colors hover:bg-muted",
                           session.id === activeSession?.id ? "bg-muted text-foreground" : "text-foreground",
                         )}
                       >
                         <button
                           type="button"
-                          className="grid min-h-10 min-w-0 px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="grid min-h-9 min-w-0 content-center px-2 py-1 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => setActiveSessionId(session.id)}
                         >
                           <span className="truncate font-medium">{session.title}</span>
@@ -370,8 +376,8 @@ export function TerminalModule() {
                   </div>
                 </div>
               )) : (
-                <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                  {loading ? "" : "新建会话"}
+                <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
+                  暂无会话
                 </div>
               )}
             </div>
@@ -380,13 +386,16 @@ export function TerminalModule() {
         <main className="flex min-h-0 min-w-0 flex-col">
           {activeSession ? (
             <>
-              <header className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b px-3">
+              <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-1.5">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{activeSession.title}</div>
                   <div className="truncate text-xs text-muted-foreground">{activeSession.cwd}</div>
                 </div>
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                  {terminalActions}
+                </div>
               </header>
-              <div className="dark min-h-0 flex-1 overflow-hidden bg-background p-2">
+              <div className="dark min-h-0 flex-1 overflow-hidden bg-background">
                 <div ref={terminalContainerRef} className="h-full min-h-0 min-w-0 overflow-hidden rounded-lg border bg-background" />
               </div>
             </>

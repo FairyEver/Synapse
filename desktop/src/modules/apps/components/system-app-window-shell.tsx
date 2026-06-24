@@ -60,6 +60,14 @@ function SystemAppWindowShell<T extends string>({
     )
   }
 
+  if (!hasTabs && !actions) {
+    return (
+      <div className="h-full min-h-0 min-w-0 bg-surface">
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div

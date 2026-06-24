@@ -21,19 +21,19 @@ export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
   return (
     <div
       data-app-launcher-grid
-      className="grid grid-cols-2 justify-items-center gap-x-8 gap-y-10 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5"
+      className="mx-auto grid w-fit grid-cols-2 justify-items-center gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
     >
       {apps.map((app) => (
         <button
           key={app.id}
           type="button"
-          className="group flex h-40 w-full max-w-36 flex-col items-center justify-start rounded-xl px-3 py-4 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="group flex h-40 w-36 flex-col items-center justify-start rounded-xl px-3 py-3 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
           onClick={() => onOpenApp(app.id)}
         >
           <img
             src={app.icon}
             alt=""
-            className="size-20 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            className="size-22 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             draggable={false}
           />
           <span className="mt-3 flex min-w-0 flex-1 flex-col items-center">

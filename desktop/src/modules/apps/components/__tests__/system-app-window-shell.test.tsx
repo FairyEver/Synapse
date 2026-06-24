@@ -60,6 +60,17 @@ describe("SystemAppWindowShell", () => {
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("右侧操作")
   })
 
+  it("does not render an empty toolbar for single-view windows", async () => {
+    await renderShell(roots, (
+      <SystemAppWindowShell>
+        <div>内容</div>
+      </SystemAppWindowShell>
+    ))
+
+    expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
+    expect(document.body.textContent).toContain("内容")
+  })
+
   it("registers tabs and actions with the embedded header instead of rendering its own toolbar", async () => {
     const onValueChange = vi.fn()
 
