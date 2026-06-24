@@ -16,6 +16,7 @@ describe("system app registry", () => {
       "git",
       "database",
       "document-template",
+      "terminal",
       "editor-scan",
       "usage-monitor",
       "model-price",

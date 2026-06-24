@@ -34,6 +34,9 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
+import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
+import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
+import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -285,6 +288,23 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
   create() {
     initializeAppIcon()
     return { initialized: true }
+  },
+}
+
+export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
+  id: "core.terminal",
+  criticality: "degraded",
+  create(ctx) {
+    return createTerminalService({
+      store: createTerminalStore({ baseDir: path.join(app.getPath("userData"), "terminal") }),
+      logger: ctx.logger.child("terminal"),
+    })
+  },
+  async start(instance) {
+    await instance.start()
+  },
+  async stop(instance) {
+    await instance.stop()
   },
 }
 
@@ -666,6 +686,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.workflow.engine",
     "core.permission-guard",
     "core.audit-sink",
+    "core.terminal",
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -681,6 +702,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const terminalService = ctx.registry.get<TerminalService>("core.terminal")
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
     const deletedWorkflowIds = new Set<string>()
@@ -793,9 +815,19 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const terminalDispatcher = createTerminalCapabilityDispatcher({
+      service: terminalService,
+      permissionGuard,
+      auditSink,
+    })
 
     const actionRouter = createSynapseActionRouter({
-      appDispatch: (action, params, context) => documentTemplateDispatcher.dispatch(action, params, context),
+      appDispatch: (action, params, context) => {
+        if (action.startsWith("app.terminal.")) {
+          return terminalDispatcher.dispatch(action, params, context)
+        }
+        return documentTemplateDispatcher.dispatch(action, params, context)
+      },
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),

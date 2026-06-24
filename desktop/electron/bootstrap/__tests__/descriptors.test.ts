@@ -131,6 +131,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.workflow.engine",
       "core.permission-guard",
       "core.audit-sink",
+      "core.terminal",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")

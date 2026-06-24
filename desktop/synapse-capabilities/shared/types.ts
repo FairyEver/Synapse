@@ -44,6 +44,7 @@ export type McpToolDefinition = {
     readonly required?: readonly string[]
     readonly anyOf?: readonly unknown[]
     readonly allOf?: readonly unknown[]
+    readonly additionalProperties?: boolean
   }
 }
 

@@ -26,6 +26,10 @@ import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
 import type { SynapseGitUserFacingFailure } from "../src/types/git"
+import type {
+  SynapseTerminalDataEvent,
+  SynapseTerminalSession,
+} from "../src/types/terminal"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
@@ -370,6 +374,20 @@ const IPC_CHANNELS = {
     "chooseJsonFile": "synapse:document-template:json:choose",
     "chooseOutputFile": "synapse:document-template:output:choose",
     "generateDocx": "synapse:document-template:docx:generate",
+  },
+  "terminal": {
+    "listGroups": "synapse:terminal:group:list",
+    "createGroup": "synapse:terminal:group:create",
+    "listSessions": "synapse:terminal:session:list",
+    "createSession": "synapse:terminal:session:create",
+    "getSession": "synapse:terminal:session:get",
+    "readSession": "synapse:terminal:session:read",
+    "writeSession": "synapse:terminal:session:write",
+    "resizeSession": "synapse:terminal:session:resize",
+    "setAgentControl": "synapse:terminal:session:agent-control",
+    "stopSession": "synapse:terminal:session:stop",
+    "data": "synapse:terminal:data",
+    "sessionChanged": "synapse:terminal:session-changed",
   },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
@@ -720,6 +738,26 @@ const synapseBridge: SynapseBridge = {
     chooseJsonFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseJsonFile)(),
     chooseOutputFile: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input),
     generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
+  },
+  terminal: {
+    listGroups: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
+    createGroup: (input) => invoke(IPC_CHANNELS.terminal.createGroup)(input),
+    listSessions: () => invoke(IPC_CHANNELS.terminal.listSessions)(),
+    createSession: (input) => invoke(IPC_CHANNELS.terminal.createSession)(input),
+    getSession: (input) => invoke(IPC_CHANNELS.terminal.getSession)(input),
+    readSession: (input) => invoke(IPC_CHANNELS.terminal.readSession)(input),
+    writeSession: (input) => invoke(IPC_CHANNELS.terminal.writeSession)(input),
+    resizeSession: (input) => invoke(IPC_CHANNELS.terminal.resizeSession)(input),
+    setAgentControl: (input) => invoke(IPC_CHANNELS.terminal.setAgentControl)(input),
+    stopSession: (input) => invoke(IPC_CHANNELS.terminal.stopSession)(input),
+    onData: createRawPayloadSubscription<SynapseTerminalDataEvent>(
+      subscribe,
+      IPC_CHANNELS.terminal.data,
+    ),
+    onSessionChanged: createRawPayloadSubscription<SynapseTerminalSession>(
+      subscribe,
+      IPC_CHANNELS.terminal.sessionChanged,
+    ),
   },
   git: {
     checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),

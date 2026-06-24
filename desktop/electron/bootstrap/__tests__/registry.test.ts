@@ -95,6 +95,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.project-containers",
         "core.relay",
         "core.side-channel",
+        "core.terminal",
         "core.update",
         "core.usage-analysis",
         "core.window-manager",
@@ -139,6 +140,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
+    expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("git.access-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
@@ -232,6 +234,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow.engine",
       "core.permission-guard",
       "core.audit-sink",
+      "core.terminal",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
