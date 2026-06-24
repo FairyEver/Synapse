@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { Clipboard, Download, Image, MousePointer2 } from "lucide-react"
+import { Clipboard, Download, FolderOpen, FolderOutput, Image, MousePointer2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Alert, AlertDescription } from "../../../src/components/ui/alert"
@@ -7,11 +7,11 @@ import { Button } from "../../../src/components/ui/button"
 import { Card, CardContent } from "../../../src/components/ui/card"
 import {
   Field,
-  FieldContent,
   FieldGroup,
   FieldLabel,
   FieldSet,
 } from "../../../src/components/ui/field"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../../../src/components/ui/input-group"
 import { Input } from "../../../src/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "../../../src/components/ui/radio-group"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
@@ -181,16 +181,29 @@ export function ScreenshotModule() {
                     />
                   </Field>
                   <Field className="gap-2 md:grid md:grid-cols-[7rem_minmax(0,1fr)] md:items-center">
-                    <FieldLabel htmlFor="screenshot-output">输出文件</FieldLabel>
-                    <div className="flex min-w-0 gap-2">
-                      <Input
-                        id="screenshot-output"
-                        value={outputPath}
-                        onChange={(event) => setOutputPath(event.target.value)}
-                        placeholder="选择 .png 文件"
+                    <FieldLabel htmlFor="screenshot-output">保存位置</FieldLabel>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <InputGroup>
+                        <InputGroupAddon>
+                          <FolderOutput className="size-4 text-muted-foreground" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                          id="screenshot-output"
+                          value={outputPath}
+                          placeholder="选择保存位置"
+                          readOnly
+                          disabled={Boolean(busyAction)}
+                        />
+                      </InputGroup>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full sm:w-24"
+                        onClick={chooseOutput}
                         disabled={Boolean(busyAction)}
-                      />
-                      <Button type="button" variant="outline" onClick={chooseOutput} disabled={Boolean(busyAction)}>
+                        aria-label="选择保存位置"
+                      >
+                        <FolderOpen data-icon="inline-start" />
                         选择
                       </Button>
                     </div>
@@ -209,7 +222,7 @@ export function ScreenshotModule() {
                 </Button>
                 <Button type="button" variant="outline" onClick={saveToFile} disabled={!canSave}>
                   {busyAction === "save" ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
-                  保存
+                  保存到文件
                 </Button>
               </div>
 
@@ -223,10 +236,10 @@ export function ScreenshotModule() {
                 <div className="grid gap-3 border-t pt-4">
                   <div className="grid gap-1 text-sm text-muted-foreground">
                     <p>{artifact.width} x {artifact.height}</p>
-                    <p>{artifact.tempPath}</p>
+                    <p className="break-all">{artifact.tempPath}</p>
                   </div>
                   {previewUrl && artifact.bytes.byteLength > 0 ? (
-                    <div className="overflow-hidden rounded-lg border bg-muted">
+                    <div className="overflow-hidden rounded-lg bg-muted">
                       <img src={previewUrl} alt="截图预览" className="max-h-96 w-full object-contain" />
                     </div>
                   ) : null}
@@ -269,42 +282,47 @@ function RegionFields(props: {
 
   return (
     <Field className="gap-2 md:grid md:grid-cols-[7rem_minmax(0,1fr)] md:items-center">
-      <FieldLabel>
-        <MousePointer2 className="size-4 text-muted-foreground" />
-        坐标
-      </FieldLabel>
-      <FieldContent>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <CoordinateInput label="X" value={props.region.x} disabled={props.disabled} onChange={(value) => update("x", value)} />
-            <CoordinateInput label="Y" value={props.region.y} disabled={props.disabled} onChange={(value) => update("y", value)} />
-            <CoordinateInput label="W" value={props.region.width} disabled={props.disabled} onChange={(value) => update("width", value)} />
-            <CoordinateInput label="H" value={props.region.height} disabled={props.disabled} onChange={(value) => update("height", value)} />
-          </div>
-          <Button type="button" variant="outline" onClick={props.onPickRegion} disabled={props.disabled}>
-            <MousePointer2 data-icon="inline-start" />
-            框选
-          </Button>
+      <FieldLabel>坐标</FieldLabel>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="screenshot-region-fields">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <CoordinateInput id="screenshot-region-x" label="X" value={props.region.x} disabled={props.disabled} onChange={(value) => update("x", value)} />
+          <CoordinateInput id="screenshot-region-y" label="Y" value={props.region.y} disabled={props.disabled} onChange={(value) => update("y", value)} />
+          <CoordinateInput id="screenshot-region-width" label="W" value={props.region.width} disabled={props.disabled} onChange={(value) => update("width", value)} />
+          <CoordinateInput id="screenshot-region-height" label="H" value={props.region.height} disabled={props.disabled} onChange={(value) => update("height", value)} />
         </div>
-      </FieldContent>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full sm:w-24"
+          onClick={props.onPickRegion}
+          disabled={props.disabled}
+          data-testid="screenshot-region-pick"
+        >
+          <MousePointer2 data-icon="inline-start" />
+          框选
+        </Button>
+      </div>
     </Field>
   )
 }
 
 function CoordinateInput(props: {
+  readonly id: string
   readonly label: string
   readonly value: number
   readonly disabled: boolean
   readonly onChange: (value: string) => void
 }) {
   return (
-    <label className="grid gap-1 text-xs text-muted-foreground">
+    <label htmlFor={props.id} className="grid gap-1 text-xs text-muted-foreground">
       {props.label}
       <Input
+        id={props.id}
         type="number"
         value={Number.isFinite(props.value) ? String(props.value) : ""}
         onChange={(event) => props.onChange(event.target.value)}
         disabled={props.disabled}
+        className="text-right"
       />
     </label>
   )

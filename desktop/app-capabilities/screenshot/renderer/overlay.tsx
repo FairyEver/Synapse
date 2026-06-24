@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
+import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import type { ScreenshotRegion } from "../shared/schema"
 
@@ -22,41 +22,94 @@ export function ScreenshotOverlayApp() {
   const [current, setCurrent] = useState<Point | null>(null)
   const dragging = Boolean(start && current)
   const rootRef = useRef<HTMLDivElement>(null)
+  const startRef = useRef<Point | null>(null)
+  const currentRef = useRef<Point | null>(null)
+  const finishedRef = useRef(false)
   const region = start && current ? normalizeRegion(start, current, offset) : null
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     rootRef.current?.focus()
   }, [])
 
+  useLayoutEffect(() => {
+    const root = document.getElementById("root")
+    const targets = [document.documentElement, document.body, root].filter((target): target is HTMLElement => Boolean(target))
+    for (const target of targets) {
+      target.classList.add("bg-transparent")
+    }
+    return () => {
+      for (const target of targets) {
+        target.classList.remove("bg-transparent")
+      }
+    }
+  }, [])
+
   const begin = (event: PointerEvent<HTMLDivElement>) => {
+    if (finishedRef.current) return
     const point = eventPoint(event)
+    startRef.current = point
+    currentRef.current = point
     setStart(point)
     setCurrent(point)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   const move = (event: PointerEvent<HTMLDivElement>) => {
-    if (!start) return
-    setCurrent(eventPoint(event))
+    if (!startRef.current || finishedRef.current) return
+    const point = eventPoint(event)
+    currentRef.current = point
+    setCurrent(point)
   }
 
   const end = (event: PointerEvent<HTMLDivElement>) => {
-    if (!region) return
-    event.currentTarget.releasePointerCapture(event.pointerId)
-    if (region.width < 2 || region.height < 2) {
+    if (!startRef.current || !currentRef.current || finishedRef.current) return
+    const point = eventPoint(event)
+    currentRef.current = point
+    setCurrent(point)
+    releasePointer(event)
+    completeSelection()
+  }
+
+  const completeSelection = () => {
+    const nextRegion = currentRegion()
+    if (!nextRegion) return
+    if (nextRegion.width < 2 || nextRegion.height < 2) {
       reset()
       return
     }
-    void requireBridgeDomain("screenshot").completeInteractiveCapture(region)
+    finishedRef.current = true
+    try {
+      closeWhenBridgeRejectsOrReturnsFalse(
+        requireBridgeDomain("screenshot").completeInteractiveCapture(nextRegion),
+      )
+    } catch {
+      closeOverlayFallback()
+    }
   }
 
   const cancel = () => {
-    void requireBridgeDomain("screenshot").cancelInteractiveCapture()
+    if (finishedRef.current) return
+    finishedRef.current = true
+    try {
+      closeWhenBridgeRejectsOrReturnsFalse(
+        requireBridgeDomain("screenshot").cancelInteractiveCapture(),
+      )
+    } catch {
+      closeOverlayFallback()
+    }
   }
 
   const reset = () => {
+    startRef.current = null
+    currentRef.current = null
     setStart(null)
     setCurrent(null)
+  }
+
+  const currentRegion = () => {
+    return startRef.current && currentRef.current
+      ? normalizeRegion(startRef.current, currentRef.current, offset)
+      : null
   }
 
   return (
@@ -71,12 +124,16 @@ export function ScreenshotOverlayApp() {
         if (event.key === "Escape") {
           event.preventDefault()
           cancel()
+        } else if (event.key === "Enter") {
+          event.preventDefault()
+          completeSelection()
         }
       }}
       aria-label="截图区域"
     >
       {dragging && region ? (
         <div
+          data-testid="screenshot-selection"
           className="fixed border-2 border-primary bg-primary/10"
           style={{
             left: `${region.x - offset.x}px`,
@@ -88,6 +145,30 @@ export function ScreenshotOverlayApp() {
       ) : null}
     </div>
   )
+}
+
+function releasePointer(event: PointerEvent<HTMLDivElement>): void {
+  try {
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  } catch {
+    // Pointer capture can already be released by the browser.
+  }
+}
+
+function closeOverlayFallback(): void {
+  window.close()
+}
+
+function closeWhenBridgeRejectsOrReturnsFalse(result: Promise<boolean>): void {
+  void result
+    .then((completed) => {
+      if (!completed) {
+        closeOverlayFallback()
+      }
+    })
+    .catch(() => {
+      closeOverlayFallback()
+    })
 }
 
 function eventPoint(event: PointerEvent<HTMLDivElement>): Point {

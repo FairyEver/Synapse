@@ -15,6 +15,7 @@ import {
 } from "./errors"
 import type {
   IpcHandlerContext,
+  IpcInvocationContext,
   IpcMethodDescriptor,
   IpcModule,
   IpcRegisterResult,
@@ -30,7 +31,7 @@ import { makeIdempotentDisposer } from "../lib"
  */
 export type IpcTransportInstall = (
   channel: string,
-  invoker: (request: unknown) => Promise<unknown>,
+  invoker: (request: unknown, invocation?: IpcInvocationContext) => Promise<unknown>,
 ) => () => void
 
 export interface IpcRegistryDeps {
@@ -128,13 +129,16 @@ export class IpcRegistryImpl implements IpcRegistry {
     descriptor: IpcMethodDescriptor,
     ctx: IpcHandlerContext,
   ): () => void {
-    const invoker = async (raw: unknown): Promise<unknown> => {
+    const invoker = async (raw: unknown, invocation: IpcInvocationContext = {}): Promise<unknown> => {
       const validated = validateRequest(channel, descriptor.request, raw)
       if (!validated.ok) {
         // Throw — the transport adapter converts this to a structured error.
         throw validated.error
       }
-      const result = await Promise.resolve(descriptor.handler(ctx, validated.value))
+      const result = await Promise.resolve(descriptor.handler({
+        ...ctx,
+        senderWebContentsId: invocation.senderWebContentsId,
+      }, validated.value))
       return tryValidateResponse(channel, descriptor.response, result)
     }
     return this.install(channel, invoker)
@@ -148,11 +152,11 @@ export class IpcRegistryImpl implements IpcRegistry {
  */
 export interface InMemoryIpcHarness {
   readonly registry: IpcRegistryImpl
-  invoke(channel: string, request: unknown): Promise<unknown>
+  invoke(channel: string, request: unknown, invocation?: IpcInvocationContext): Promise<unknown>
 }
 
 export function createInMemoryHarness(): InMemoryIpcHarness {
-  const handlers = new Map<string, (request: unknown) => Promise<unknown>>()
+  const handlers = new Map<string, (request: unknown, invocation?: IpcInvocationContext) => Promise<unknown>>()
   const registry = new IpcRegistryImpl({
     install(channel, invoker) {
       handlers.set(channel, invoker)
@@ -161,10 +165,10 @@ export function createInMemoryHarness(): InMemoryIpcHarness {
   })
   return {
     registry,
-    async invoke(channel, request) {
+    async invoke(channel, request, invocation) {
       const handler = handlers.get(channel)
       if (!handler) throw new IpcChannelNotFoundError(channel)
-      return handler(request)
+      return handler(request, invocation)
     },
   }
 }
