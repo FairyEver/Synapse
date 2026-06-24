@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Square, Terminal as TerminalIcon } from "lucide-react"
+import { Plus, RotateCcw, Square, Terminal as TerminalIcon } from "lucide-react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
@@ -15,6 +15,7 @@ import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseTerminalGroup,
+  SynapseTerminalCreateSessionInput,
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
@@ -43,6 +44,7 @@ export function TerminalModule() {
   const canSetAgentControl = "setAgentControl" in terminalBridge && typeof terminalBridge.setAgentControl === "function"
   const statusLabel = activeSession ? getStatusLabel(activeSession.status) : "未启动"
   const canStopSession = activeSession?.status === "running"
+  const canRestartSession = Boolean(activeSession && activeSession.status !== "running")
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -72,11 +74,12 @@ export function TerminalModule() {
     }
   }, [refreshSessions])
 
-  const createSession = useCallback(async () => {
+  const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
       const session = await terminalBridge.createSession({
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
+        ...input,
       })
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
@@ -89,6 +92,18 @@ export function TerminalModule() {
       logger.error("Failed to create terminal session.", error)
     }
   }, [terminalBridge])
+
+  const restartActiveSession = useCallback(async () => {
+    if (!activeSession || activeSession.status === "running") return
+    await createSession({
+      groupId: activeSession.groupId,
+      title: activeSession.title,
+      cwd: activeSession.cwd,
+      cols: activeSession.cols,
+      rows: activeSession.rows,
+      agentControl: activeSession.agentControl === "enabled",
+    })
+  }, [activeSession, createSession])
 
   const stopCurrentSession = useCallback(async () => {
     if (!activeSession) return
@@ -120,7 +135,13 @@ export function TerminalModule() {
   const headerActions = useMemo(() => (
     <>
       <Badge variant="outline">{statusLabel}</Badge>
-      <Button type="button" size="sm" onClick={createSession}>
+      {canRestartSession ? (
+        <Button type="button" size="sm" variant="outline" onClick={() => { void restartActiveSession() }}>
+          <RotateCcw data-icon="inline-start" />
+          重开终端
+        </Button>
+      ) : null}
+      <Button type="button" size="sm" onClick={() => { void createSession() }}>
         <Plus data-icon="inline-start" />
         新建终端
       </Button>
@@ -129,7 +150,7 @@ export function TerminalModule() {
         停止会话
       </Button>
     </>
-  ), [canStopSession, createSession, statusLabel, stopCurrentSession])
+  ), [canRestartSession, canStopSession, createSession, restartActiveSession, statusLabel, stopCurrentSession])
 
   useEffect(() => {
     const container = terminalContainerRef.current
@@ -286,7 +307,7 @@ export function TerminalModule() {
             </>
           ) : (
             <div className="flex h-full min-h-0 items-center justify-center">
-              <Button type="button" onClick={createSession}>
+              <Button type="button" onClick={() => { void createSession() }}>
                 <TerminalIcon data-icon="inline-start" />
                 新建终端
               </Button>

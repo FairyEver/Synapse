@@ -30,7 +30,21 @@ const terminalBridge = vi.hoisted(() => ({
   listGroups: vi.fn(async () => bridgeState.groups),
   createGroup: vi.fn(async () => createGroup()),
   listSessions: vi.fn(async () => bridgeState.sessions),
-  createSession: vi.fn(async () => createSession()),
+  createSession: vi.fn(async (input: {
+    groupId?: string
+    title?: string
+    cwd?: string
+    cols?: number
+    rows?: number
+    agentControl?: boolean
+  } = {}) => createSession({
+    groupId: input.groupId ?? "group-1",
+    title: input.title ?? `Session ${bridgeState.sessions.length + 1}`,
+    cwd: input.cwd ?? "/tmp",
+    cols: input.cols ?? 80,
+    rows: input.rows ?? 24,
+    agentControl: input.agentControl ? "enabled" : "disabled",
+  })),
   getSession: vi.fn(async ({ sessionId }: { sessionId: string }) => getSession(sessionId)),
   readSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
     if (bridgeState.deferredRead) return bridgeState.deferredRead.promise
@@ -248,6 +262,48 @@ describe("TerminalModule", () => {
       rows: 24,
     })
     expect(document.body.textContent).toContain("Session 1")
+  })
+
+  it("keeps lost sessions read-only and restarts them from the same context", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "zsh",
+      cwd: "/Users/liyang",
+      status: "lost",
+      agentControl: "enabled",
+      cols: 120,
+      rows: 40,
+    })]
+    terminalBridge.createSession.mockImplementationOnce(async (input) => createSession({
+      id: "session-2",
+      shell: "zsh",
+      status: "running",
+      startedAt: "2026-06-24T00:01:00.000Z",
+      ...input,
+      agentControl: input.agentControl ? "enabled" : "disabled",
+    }))
+
+    await renderEmbeddedModule()
+
+    expect(document.body.textContent).toContain("丢失")
+    expect(document.body.textContent).toContain("重开终端")
+    expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      disableStdin: true,
+    }))
+
+    await clickButton("重开终端")
+
+    expect(terminalBridge.createSession).toHaveBeenCalledWith({
+      groupId: "group-1",
+      title: "zsh",
+      cwd: "/Users/liyang",
+      cols: 120,
+      rows: 40,
+      agentControl: true,
+    })
+    expect(document.body.textContent).toContain("运行中")
   })
 
   it("creates xterm with iTerm-like rendering defaults", async () => {
