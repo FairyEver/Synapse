@@ -109,6 +109,22 @@ describe("API and MCP capability surface", () => {
     expect(`${docsMatrix}\n${websiteMatrix}\n${websiteCapabilities}`).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
   })
 
+  it("uses primary app MCP tool names in the built-in Synapse skill docs", () => {
+    const docs = readMarkdownFiles(
+      new URL("resources/templates/skills/synapse-skill/", repoRoot),
+    )
+    const docsText = docs.map((file) => file.content).join("\n")
+    const legacyToolNames = Object.keys(MCP_TOOL_ACTIONS)
+      .filter((toolName) => !toolName.startsWith("app_"))
+      .sort()
+    const documentedLegacyToolNames = legacyToolNames.filter((toolName) => {
+      const escaped = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return new RegExp(`\`${escaped}\``).test(docsText)
+    })
+
+    expect(documentedLegacyToolNames).toEqual([])
+  })
+
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {
     const superpowersDocs = [
       ...readMarkdownFiles(new URL("../docs/superpowers/specs/", repoRoot), "specs"),

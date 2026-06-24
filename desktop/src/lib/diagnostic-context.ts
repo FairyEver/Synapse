@@ -11,7 +11,7 @@ export type DiagnosticBreadcrumb = {
 
 export type DiagnosticContext = {
   activeRepositoryUuid?: string
-  activeTab?: string
+  activeAppId?: string
   windowType?: string
 }
 

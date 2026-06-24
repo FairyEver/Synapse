@@ -26,12 +26,12 @@ vi.mock("@/app-shell/components/app-shell-actions", () => ({
 }))
 
 vi.mock("@/app-shell/components/app-shell-layout", () => ({
-  AppShellLayout: ({ navigation, children }: {
-    navigation: React.ReactNode
+  AppShellLayout: ({ dock, children }: {
+    dock: React.ReactNode
     children: React.ReactNode
   }) => (
     <div>
-      <nav>{navigation}</nav>
+      <nav>{dock}</nav>
       <main>{children}</main>
     </div>
   ),

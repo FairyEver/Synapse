@@ -44,18 +44,18 @@ import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { DEFAULT_SYSTEM_APP_ID } from "../config"
 
-type AppTabId = SynapseSystemAppId
-type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
+type ActiveAppId = SynapseSystemAppId
+type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 
 const logger = createRendererLogger("app")
 
-const DEFAULT_APP_TAB: AppTabId = DEFAULT_SYSTEM_APP_ID as SynapseSystemAppId
+const DEFAULT_ACTIVE_APP_ID: ActiveAppId = DEFAULT_SYSTEM_APP_ID as SynapseSystemAppId
 
 function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
-  const [activeTab, setActiveTabRaw] = useState<AppTabId>(() => hasRepositories ? DEFAULT_APP_TAB : "agent")
+  const [activeAppId, setActiveAppIdRaw] = useState<ActiveAppId>(() => hasRepositories ? DEFAULT_ACTIVE_APP_ID : "agent")
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
@@ -68,37 +68,37 @@ function MainApp() {
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const isActiveRepositoryMissing = activeRepositoryState?.status === "missing"
 
-  const activeTabRef = useRef(activeTab)
-  activeTabRef.current = activeTab
+  const activeAppIdRef = useRef(activeAppId)
+  activeAppIdRef.current = activeAppId
 
   useEffect(() => {
     updateDiagnosticContext({
       activeRepositoryUuid: activeRepository?.uuid,
-      activeTab,
+      activeAppId,
       windowType: "main",
     })
-  }, [activeRepository?.uuid, activeTab])
+  }, [activeAppId, activeRepository?.uuid])
 
-  const setActiveTab = useCallback(
-    (nextTab: AppTabId, source: AppTabChangeSource) => {
-      const prevTab = activeTabRef.current
-      if (prevTab !== nextTab) {
+  const setActiveAppId = useCallback(
+    (nextAppId: ActiveAppId, source: ActiveAppChangeSource) => {
+      const previousAppId = activeAppIdRef.current
+      if (previousAppId !== nextAppId) {
         logger.info("Active system app changed.", {
-          from: prevTab,
-          to: nextTab,
+          from: previousAppId,
+          to: nextAppId,
           source,
         })
       }
-      setActiveTabRaw(nextTab)
+      setActiveAppIdRaw(nextAppId)
     },
     [],
   )
 
   useEffect(() => {
-    if (!hasRepositories && activeTabRef.current === DEFAULT_APP_TAB) {
-      setActiveTab("agent", "navigation")
+    if (!hasRepositories && activeAppIdRef.current === DEFAULT_ACTIVE_APP_ID) {
+      setActiveAppId("agent", "navigation")
     }
-  }, [hasRepositories, setActiveTab])
+  }, [hasRepositories, setActiveAppId])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -136,10 +136,10 @@ function MainApp() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === "workflow" && !workflowEntryVisible) {
-      setActiveTab(DEFAULT_APP_TAB, "cheat-code")
+    if (activeAppId === "workflow" && !workflowEntryVisible) {
+      setActiveAppId(DEFAULT_ACTIVE_APP_ID, "cheat-code")
     }
-  }, [activeTab, setActiveTab, workflowEntryVisible])
+  }, [activeAppId, setActiveAppId, workflowEntryVisible])
 
   const dockApps = useMemo(
     () => listDockApps(listSystemApps(), { workflowEntryVisible }),
@@ -173,24 +173,24 @@ function MainApp() {
 
   useEffect(() => {
     logger.info("App mounted.", {
-      activeTab,
+      activeAppId,
     })
   }, [])
 
   useEffect(() => {
-    publishActiveAppTab(activeTab)
-  }, [activeTab])
+    publishActiveAppTab(activeAppId)
+  }, [activeAppId])
 
   useEffect(() => {
     return subscribeOpenSettingsTab(() => {
-      setActiveTab("settings", "shortcut")
+      setActiveAppId("settings", "shortcut")
     })
-  }, [setActiveTab])
+  }, [setActiveAppId])
 
   const handleOpenAgentSession = useCallback((payload: OpenAgentSessionPayload) => {
-    setActiveTab("agent", "notification")
+    setActiveAppId("agent", "notification")
     setPendingAgentSession(payload)
-  }, [setActiveTab])
+  }, [setActiveAppId])
 
   useEffect(() => {
     return subscribeOpenAgentSession(handleOpenAgentSession)
@@ -206,10 +206,10 @@ function MainApp() {
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
       ensureBodyInteractable()
-      setActiveTab("launcher", "notification")
+      setActiveAppId("launcher", "notification")
       setPendingAppContentOpenRequest(request)
     })
-  }, [setActiveTab])
+  }, [setActiveAppId])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -218,21 +218,21 @@ function MainApp() {
     }
 
     return bridge.updater.onOpenUpdatePage(() => {
-      setActiveTab("settings", "notification")
+      setActiveAppId("settings", "notification")
       requestOpenSettingsAbout()
     })
-  }, [setActiveTab])
+  }, [setActiveAppId])
 
   const accountUiVisible = isAccountUiVisible()
 
   return (
     <IdentityGate>
       <AppShellLayout
-        navigation={
+        dock={
           <AppShellDock
             apps={dockApps}
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value, "navigation")}
+            value={activeAppId}
+            onValueChange={(value) => setActiveAppId(value, "navigation")}
           />
         }
         actions={accountUiVisible ? (
@@ -244,7 +244,7 @@ function MainApp() {
         <div className="flex h-full min-h-0 flex-col">
           <ErrorBoundary fallbackTitle="应用出现问题">
             <SystemAppContent
-              appId={activeTab}
+              appId={activeAppId}
               resourceContentOpenRequest={pendingAppContentOpenRequest}
               onResourceContentOpenRequestConsumed={(requestId) => {
                 setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)

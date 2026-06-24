@@ -13,7 +13,7 @@ describe("diagnostic context", () => {
 
     updateDiagnosticContext({
       activeRepositoryUuid: "repo-1",
-      activeTab: "agent",
+      activeAppId: "agent",
       windowType: "main",
     })
     recordDiagnosticBreadcrumb({
@@ -25,7 +25,7 @@ describe("diagnostic context", () => {
     expect(getDiagnosticSnapshot()).toMatchObject({
       context: {
         activeRepositoryUuid: "repo-1",
-        activeTab: "agent",
+        activeAppId: "agent",
         windowType: "main",
       },
       breadcrumbs: [
