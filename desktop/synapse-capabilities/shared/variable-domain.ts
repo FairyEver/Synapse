@@ -1,40 +1,43 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const variableCapabilities: readonly CapabilityDefinition[] = [
   {
-    id: "variable.item.list" as CapabilityId,
+    id: "app.settings.variable.item.list" as CapabilityId,
     title: "List variables",
     description: "List user local variables without values.",
     mutates: false,
   },
   {
-    id: "variable.item.get" as CapabilityId,
+    id: "app.settings.variable.item.get" as CapabilityId,
     title: "Get variable",
     description: "Get one local variable, optionally including its value.",
     mutates: false,
   },
   {
-    id: "variable.item.create" as CapabilityId,
+    id: "app.settings.variable.item.create" as CapabilityId,
     title: "Create variable",
     description: "Create one user local variable.",
     mutates: true,
   },
   {
-    id: "variable.item.update" as CapabilityId,
+    id: "app.settings.variable.item.update" as CapabilityId,
     title: "Update variable",
     description: "Update or rename one existing local variable.",
     mutates: true,
   },
   {
-    id: "variable.item.upsert" as CapabilityId,
+    id: "app.settings.variable.item.upsert" as CapabilityId,
     title: "Upsert variable",
     description: "Create or update one local variable.",
     mutates: true,
   },
   {
-    id: "variable.item.delete" as CapabilityId,
+    id: "app.settings.variable.item.delete" as CapabilityId,
     title: "Delete variable",
     description: "Delete one user local variable.",
     mutates: true,
@@ -46,8 +49,9 @@ export const VARIABLE_DOMAIN: CapabilityDomainDefinition = {
   capabilities: variableCapabilities,
 }
 
-export const VARIABLE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  variableCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const VARIABLE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  variableCapabilities,
+  { legacyPrefix: "variable", primaryPrefix: "app_settings_variable" },
 )
 
 const nameProperty = {
@@ -66,7 +70,7 @@ const valueProperty = {
 }
 
 export function buildVariableTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "variable_item_list",
       description: "List user-scoped Synapse local variables without returning values.",
@@ -144,5 +148,5 @@ export function buildVariableTools(): McpToolDefinition[] {
         required: ["name"],
       },
     },
-  ]
+  ], { legacyPrefix: "variable", primaryPrefix: "app_settings_variable" })
 }

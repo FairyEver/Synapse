@@ -1,5 +1,8 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
@@ -23,17 +26,17 @@ const priceProperty = (label: string) => ({
 })
 
 const modelPriceCapabilities: readonly CapabilityDefinition[] = [
-  { id: "model_price.used_model.list" as CapabilityId, title: "List used models", description: "List models seen in CC and Codex usage data with current price-rule match status.", mutates: false },
-  { id: "model_price.preset.list" as CapabilityId, title: "List price presets", description: "List built-in model price presets that can be imported.", mutates: false },
-  { id: "model_price.preset.import" as CapabilityId, title: "Import price preset", description: "Import or refresh rules from one built-in model price preset.", mutates: true },
-  { id: "model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules. The id field is the opaque rule ID, not a rule name.", mutates: false },
-  { id: "model_price.rule.get" as CapabilityId, title: "Get price rule", description: "Get one model price rule by opaque ruleId.", mutates: false },
-  { id: "model_price.rule.create" as CapabilityId, title: "Create price rule", description: "Create one model price rule.", mutates: true },
-  { id: "model_price.rule.update" as CapabilityId, title: "Update price rule", description: "Partially update one model price rule by opaque ruleId.", mutates: true },
-  { id: "model_price.rule.clear" as CapabilityId, title: "Clear price rules", description: "Clear all model price rules.", mutates: true },
-  { id: "model_price.rule.delete" as CapabilityId, title: "Delete price rule", description: "Hard-delete one model price rule by opaque ruleId.", mutates: true },
-  { id: "model_price.rule.enable" as CapabilityId, title: "Enable price rule", description: "Enable one model price rule.", mutates: true },
-  { id: "model_price.rule.disable" as CapabilityId, title: "Disable price rule", description: "Disable one model price rule without deleting it.", mutates: true },
+  { id: "app.model_price.used_model.list" as CapabilityId, title: "List used models", description: "List models seen in CC and Codex usage data with current price-rule match status.", mutates: false },
+  { id: "app.model_price.preset.list" as CapabilityId, title: "List price presets", description: "List built-in model price presets that can be imported.", mutates: false },
+  { id: "app.model_price.preset.import" as CapabilityId, title: "Import price preset", description: "Import or refresh rules from one built-in model price preset.", mutates: true },
+  { id: "app.model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules. The id field is the opaque rule ID, not a rule name.", mutates: false },
+  { id: "app.model_price.rule.get" as CapabilityId, title: "Get price rule", description: "Get one model price rule by opaque ruleId.", mutates: false },
+  { id: "app.model_price.rule.create" as CapabilityId, title: "Create price rule", description: "Create one model price rule.", mutates: true },
+  { id: "app.model_price.rule.update" as CapabilityId, title: "Update price rule", description: "Partially update one model price rule by opaque ruleId.", mutates: true },
+  { id: "app.model_price.rule.clear" as CapabilityId, title: "Clear price rules", description: "Clear all model price rules.", mutates: true },
+  { id: "app.model_price.rule.delete" as CapabilityId, title: "Delete price rule", description: "Hard-delete one model price rule by opaque ruleId.", mutates: true },
+  { id: "app.model_price.rule.enable" as CapabilityId, title: "Enable price rule", description: "Enable one model price rule.", mutates: true },
+  { id: "app.model_price.rule.disable" as CapabilityId, title: "Disable price rule", description: "Disable one model price rule without deleting it.", mutates: true },
 ]
 
 export const MODEL_PRICE_DOMAIN: CapabilityDomainDefinition = {
@@ -41,8 +44,9 @@ export const MODEL_PRICE_DOMAIN: CapabilityDomainDefinition = {
   capabilities: modelPriceCapabilities,
 }
 
-export const MODEL_PRICE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  modelPriceCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const MODEL_PRICE_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  modelPriceCapabilities,
+  { legacyPrefix: "model_price", primaryPrefix: "app_model_price" },
 )
 
 export function buildModelPriceTools(): McpToolDefinition[] {
@@ -54,7 +58,7 @@ export function buildModelPriceTools(): McpToolDefinition[] {
     reasoningPer1M: priceProperty("Reasoning"),
   }
 
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "model_price_used_model_list",
       description: "List models used by CC and Codex with current enabled price-rule match status. matchedRuleId is a rule ID, not a model name. This reads indexed usage data and does not refresh usage logs.",
@@ -133,5 +137,5 @@ export function buildModelPriceTools(): McpToolDefinition[] {
       description: "Disable one model price rule by opaque ruleId without deleting it.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
-  ]
+  ], { legacyPrefix: "model_price", primaryPrefix: "app_model_price" })
 }

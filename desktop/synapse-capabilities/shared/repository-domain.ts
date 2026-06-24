@@ -1,10 +1,13 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const repositoryCapabilities: readonly CapabilityDefinition[] = [
   {
-    id: "repository.item.list" as CapabilityId,
+    id: "app.settings.repository.item.list" as CapabilityId,
     title: "List repositories",
     description: "List configured Synapse repositories and identify the active repository.",
     mutates: false,
@@ -16,12 +19,13 @@ export const REPOSITORY_DOMAIN: CapabilityDomainDefinition = {
   capabilities: repositoryCapabilities,
 }
 
-export const REPOSITORY_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  repositoryCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const REPOSITORY_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  repositoryCapabilities,
+  { legacyPrefix: "repository", primaryPrefix: "app_settings_repository" },
 )
 
 export function buildRepositoryTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "repository_item_list",
       description:
@@ -31,5 +35,5 @@ export function buildRepositoryTools(): McpToolDefinition[] {
         properties: {},
       },
     },
-  ]
+  ], { legacyPrefix: "repository", primaryPrefix: "app_settings_repository" })
 }

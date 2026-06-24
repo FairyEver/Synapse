@@ -57,8 +57,11 @@ function normalizeToolResult(action: string, result: unknown): unknown {
   if (domainId && domainId !== "database") {
     return result.data ?? null
   }
+  const normalizedAction = action.startsWith("app.database.")
+    ? action.replace("app.database.", "database.")
+    : action
 
-  switch (action) {
+  switch (normalizedAction) {
     case "database.table.list":
     case "database.table.describe":
     case "database.overview.get":

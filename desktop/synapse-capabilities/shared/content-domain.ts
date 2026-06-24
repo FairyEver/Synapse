@@ -1,5 +1,8 @@
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 import type {
   CapabilityDefinition,
   CapabilityDomainDefinition,
@@ -13,22 +16,22 @@ const CONTENT_NAME_MAX_LENGTH = 64
 const SKILL_SOURCE_DIRECTORY_LIMITS = "Imports non-hidden attachments up to 100 files, 200 attachment directories, depth 8, 10MB per file, and 50MB total."
 
 const contentCapabilities: readonly CapabilityDefinition[] = [
-  { id: "content.type.describe" as CapabilityId, title: "Describe content types", description: "Return content fields, categories, appearance options, and publishing constraints.", mutates: false },
-  { id: "content.rule.list" as CapabilityId, title: "List rules", description: "List Synapse Rule resources.", mutates: false },
-  { id: "content.rule.get" as CapabilityId, title: "Get rule", description: "Get one Synapse Rule resource by id.", mutates: false },
-  { id: "content.rule.create" as CapabilityId, title: "Create rule", description: "Create a Synapse Rule resource.", mutates: true },
-  { id: "content.rule.update" as CapabilityId, title: "Update rule", description: "Update a Synapse Rule created by the current repo profile.", mutates: true },
-  { id: "content.rule.delete" as CapabilityId, title: "Delete rule", description: "Delete a Synapse Rule created by the current repo profile.", mutates: true },
-  { id: "content.skill.list" as CapabilityId, title: "List skills", description: "List Synapse Skill resources.", mutates: false },
-  { id: "content.skill.get" as CapabilityId, title: "Get skill", description: "Get one Synapse Skill resource by id.", mutates: false },
-  { id: "content.skill.create" as CapabilityId, title: "Create skill", description: "Create a Synapse Skill resource.", mutates: true },
-  { id: "content.skill.update" as CapabilityId, title: "Update skill", description: "Update a Synapse Skill created by the current repo profile.", mutates: true },
-  { id: "content.skill.delete" as CapabilityId, title: "Delete skill", description: "Delete a Synapse Skill created by the current repo profile.", mutates: true },
-  { id: "content.prompt.list" as CapabilityId, title: "List prompts", description: "List Synapse Prompt resources.", mutates: false },
-  { id: "content.prompt.get" as CapabilityId, title: "Get prompt", description: "Get one Synapse Prompt resource by id.", mutates: false },
-  { id: "content.prompt.create" as CapabilityId, title: "Create prompt", description: "Create a Synapse Prompt resource.", mutates: true },
-  { id: "content.prompt.update" as CapabilityId, title: "Update prompt", description: "Update a Synapse Prompt created by the current repo profile.", mutates: true },
-  { id: "content.prompt.delete" as CapabilityId, title: "Delete prompt", description: "Delete a Synapse Prompt created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.type.describe" as CapabilityId, title: "Describe content types", description: "Return content fields, categories, appearance options, and publishing constraints.", mutates: false },
+  { id: "app.resource_repository.rule.list" as CapabilityId, title: "List rules", description: "List Synapse Rule resources.", mutates: false },
+  { id: "app.resource_repository.rule.get" as CapabilityId, title: "Get rule", description: "Get one Synapse Rule resource by id.", mutates: false },
+  { id: "app.resource_repository.rule.create" as CapabilityId, title: "Create rule", description: "Create a Synapse Rule resource.", mutates: true },
+  { id: "app.resource_repository.rule.update" as CapabilityId, title: "Update rule", description: "Update a Synapse Rule created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.rule.delete" as CapabilityId, title: "Delete rule", description: "Delete a Synapse Rule created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.skill.list" as CapabilityId, title: "List skills", description: "List Synapse Skill resources.", mutates: false },
+  { id: "app.resource_repository.skill.get" as CapabilityId, title: "Get skill", description: "Get one Synapse Skill resource by id.", mutates: false },
+  { id: "app.resource_repository.skill.create" as CapabilityId, title: "Create skill", description: "Create a Synapse Skill resource.", mutates: true },
+  { id: "app.resource_repository.skill.update" as CapabilityId, title: "Update skill", description: "Update a Synapse Skill created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.skill.delete" as CapabilityId, title: "Delete skill", description: "Delete a Synapse Skill created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.prompt.list" as CapabilityId, title: "List prompts", description: "List Synapse Prompt resources.", mutates: false },
+  { id: "app.resource_repository.prompt.get" as CapabilityId, title: "Get prompt", description: "Get one Synapse Prompt resource by id.", mutates: false },
+  { id: "app.resource_repository.prompt.create" as CapabilityId, title: "Create prompt", description: "Create a Synapse Prompt resource.", mutates: true },
+  { id: "app.resource_repository.prompt.update" as CapabilityId, title: "Update prompt", description: "Update a Synapse Prompt created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.prompt.delete" as CapabilityId, title: "Delete prompt", description: "Delete a Synapse Prompt created by the current repo profile.", mutates: true },
 ]
 
 export const CONTENT_DOMAIN: CapabilityDomainDefinition = {
@@ -36,8 +39,9 @@ export const CONTENT_DOMAIN: CapabilityDomainDefinition = {
   capabilities: contentCapabilities,
 }
 
-export const CONTENT_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  contentCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
+export const CONTENT_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  contentCapabilities,
+  { legacyPrefix: "content", primaryPrefix: "app_resource_repository" },
 )
 
 const stringField = (description: string) => ({ type: "string", description })
@@ -275,7 +279,7 @@ function deleteTool(type: ContentResourceType): McpToolDefinition {
 }
 
 export function buildContentTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     {
       name: "content_type_describe",
       description: "Return content field requirements, categories, icon values, background values, and constraints for Rule, Skill, and Prompt publishing. Call this before create/update.",
@@ -297,5 +301,5 @@ export function buildContentTools(): McpToolDefinition[] {
       updateTool(type),
       deleteTool(type),
     ]),
-  ]
+  ], { legacyPrefix: "content", primaryPrefix: "app_resource_repository" })
 }

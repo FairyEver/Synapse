@@ -38,7 +38,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("database.table.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.database.table.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: ["tables"],
     })
@@ -57,7 +57,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("model_price.rule.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.model_price.rule.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -77,7 +77,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("repository.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.settings.repository.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -94,7 +94,7 @@ describe("createSynapseActionRouter", () => {
     const deps = createRouterDeps({ automationDispatch })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("automation.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.automation.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -113,7 +113,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("variable.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.settings.variable.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -132,7 +132,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("workflow.definition.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.workflow.definition.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -151,7 +151,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("content.skill.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.resource_repository.skill.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })
@@ -170,7 +170,7 @@ describe("createSynapseActionRouter", () => {
     })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("drive.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.drive.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: [],
     })

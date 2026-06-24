@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest"
 import { buildContentTools } from "./content-domain"
 
 describe("Content capability domain", () => {
+  it("uses resource repository app tool names with content aliases", () => {
+    const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.has("app_resource_repository_skill_create")).toBe(true)
+    expect(tools.has("content_skill_create")).toBe(true)
+  })
+
   it("expresses validator-required appearance fields in create and update schemas", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
 

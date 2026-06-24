@@ -1,6 +1,9 @@
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import type { CapabilityId } from "./naming"
-import { capabilityIdToMcpTool } from "./naming"
+import {
+  buildPrimaryAndLegacyMcpToolActions,
+  withPrimaryAndLegacyMcpTools,
+} from "./mcp-aliases"
 
 // ---------------------------------------------------------------------------
 // Capability definitions
@@ -8,30 +11,30 @@ import { capabilityIdToMcpTool } from "./naming"
 
 const workflowCapabilities: readonly CapabilityDefinition[] = [
   // Discovery
-  { id: "workflow.node_type.list" as CapabilityId, title: "List node types", description: "List available workflow node types with summaries.", mutates: false },
-  { id: "workflow.node_type.describe" as CapabilityId, title: "Describe node type", description: "Return full manifest + config JSON Schema for a node type.", mutates: false },
+  { id: "app.workflow.node_type.list" as CapabilityId, title: "List node types", description: "List available workflow node types with summaries.", mutates: false },
+  { id: "app.workflow.node_type.describe" as CapabilityId, title: "Describe node type", description: "Return full manifest + config JSON Schema for a node type.", mutates: false },
   // Read
-  { id: "workflow.definition.list" as CapabilityId, title: "List workflows", description: "List all workflow definitions.", mutates: false },
-  { id: "workflow.definition.get" as CapabilityId, title: "Get workflow", description: "Get a full workflow definition by ID.", mutates: false },
-  { id: "workflow.definition.inspect" as CapabilityId, title: "Inspect workflow", description: "Validate a workflow definition and return errors/warnings.", mutates: false },
-  { id: "workflow.run.get" as CapabilityId, title: "Get run status", description: "Get workflow run status by runId.", mutates: false },
-  { id: "workflow.run.list" as CapabilityId, title: "List run history", description: "List run history for a workflow.", mutates: false },
+  { id: "app.workflow.definition.list" as CapabilityId, title: "List workflows", description: "List all workflow definitions.", mutates: false },
+  { id: "app.workflow.definition.get" as CapabilityId, title: "Get workflow", description: "Get a full workflow definition by ID.", mutates: false },
+  { id: "app.workflow.definition.inspect" as CapabilityId, title: "Inspect workflow", description: "Validate a workflow definition and return errors/warnings.", mutates: false },
+  { id: "app.workflow.run.get" as CapabilityId, title: "Get run status", description: "Get workflow run status by runId.", mutates: false },
+  { id: "app.workflow.run.list" as CapabilityId, title: "List run history", description: "List run history for a workflow.", mutates: false },
   // Whole write
-  { id: "workflow.definition.create" as CapabilityId, title: "Create workflow", description: "Create a new empty workflow with a default end node.", mutates: true },
-  { id: "workflow.definition.update" as CapabilityId, title: "Update workflow", description: "Replace a full workflow definition (validate then save).", mutates: true },
-  { id: "workflow.definition.delete" as CapabilityId, title: "Delete workflow", description: "Delete a workflow, cancel active runs, and clean up snapshots.", mutates: true },
+  { id: "app.workflow.definition.create" as CapabilityId, title: "Create workflow", description: "Create a new empty workflow with a default end node.", mutates: true },
+  { id: "app.workflow.definition.update" as CapabilityId, title: "Update workflow", description: "Replace a full workflow definition (validate then save).", mutates: true },
+  { id: "app.workflow.definition.delete" as CapabilityId, title: "Delete workflow", description: "Delete a workflow, cancel active runs, and clean up snapshots.", mutates: true },
   // Execute
-  { id: "workflow.run.execute" as CapabilityId, title: "Run workflow", description: "Execute a workflow with parameters. Returns runId for polling.", mutates: true },
-  { id: "workflow.run.disable" as CapabilityId, title: "Cancel run", description: "Cancel a running workflow execution. Returns whether an active run received the abort signal.", mutates: true },
+  { id: "app.workflow.run.execute" as CapabilityId, title: "Run workflow", description: "Execute a workflow with parameters. Returns runId for polling.", mutates: true },
+  { id: "app.workflow.run.disable" as CapabilityId, title: "Cancel run", description: "Cancel a running workflow execution. Returns whether an active run received the abort signal.", mutates: true },
   // Atomic write
-  { id: "workflow.node.create" as CapabilityId, title: "Add node", description: "Add a node to a workflow. Position is auto-calculated if omitted.", mutates: true },
-  { id: "workflow.node.update" as CapabilityId, title: "Update node", description: "Update a node's name, position, or config (config is replaced, not merged).", mutates: true },
-  { id: "workflow.node.delete" as CapabilityId, title: "Delete node", description: "Delete a node and its connected edges.", mutates: true },
-  { id: "workflow.edge.create" as CapabilityId, title: "Add edge", description: "Add a directed edge between two nodes.", mutates: true },
-  { id: "workflow.edge.delete" as CapabilityId, title: "Delete edge", description: "Delete an edge by ID.", mutates: true },
-  { id: "workflow.param.update" as CapabilityId, title: "Update params", description: "Replace the workflow parameter list.", mutates: true },
+  { id: "app.workflow.node.create" as CapabilityId, title: "Add node", description: "Add a node to a workflow. Position is auto-calculated if omitted.", mutates: true },
+  { id: "app.workflow.node.update" as CapabilityId, title: "Update node", description: "Update a node's name, position, or config (config is replaced, not merged).", mutates: true },
+  { id: "app.workflow.node.delete" as CapabilityId, title: "Delete node", description: "Delete a node and its connected edges.", mutates: true },
+  { id: "app.workflow.edge.create" as CapabilityId, title: "Add edge", description: "Add a directed edge between two nodes.", mutates: true },
+  { id: "app.workflow.edge.delete" as CapabilityId, title: "Delete edge", description: "Delete an edge by ID.", mutates: true },
+  { id: "app.workflow.param.update" as CapabilityId, title: "Update params", description: "Replace the workflow parameter list.", mutates: true },
   // Layout
-  { id: "workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using the same pure auto-layout algorithm as the UI editor.", mutates: true },
+  { id: "app.workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using the same pure auto-layout algorithm as the UI editor.", mutates: true },
 ]
 
 export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
@@ -39,8 +42,9 @@ export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
   capabilities: workflowCapabilities,
 }
 
-export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
-  workflowCapabilities.map((c) => [capabilityIdToMcpTool(c.id), c.id]),
+export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = buildPrimaryAndLegacyMcpToolActions(
+  workflowCapabilities,
+  { legacyPrefix: "workflow", primaryPrefix: "app_workflow" },
 )
 
 // ---------------------------------------------------------------------------
@@ -221,7 +225,7 @@ const workflowDefinitionSchema = {
 }
 
 export function buildWorkflowTools(): McpToolDefinition[] {
-  return [
+  return withPrimaryAndLegacyMcpTools([
     // Discovery
     {
       name: "workflow_node_type_list",
@@ -467,5 +471,5 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         required: ["workflowId"],
       },
     },
-  ]
+  ], { legacyPrefix: "workflow", primaryPrefix: "app_workflow" })
 }

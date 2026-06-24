@@ -54,13 +54,17 @@ describe("model price capability dispatcher", () => {
     const toolNames = buildModelPriceTools().map((tool) => tool.name)
 
     expect(toolNames).toEqual(expect.arrayContaining([
+      "app_model_price_preset_list",
+      "app_model_price_preset_import",
+      "app_model_price_rule_clear",
       "model_price_preset_list",
       "model_price_preset_import",
       "model_price_rule_clear",
     ]))
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_list).toBe("model_price.preset.list")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("model_price.preset.import")
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("model_price.rule.clear")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_preset_list).toBe("app.model_price.preset.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_list).toBe("app.model_price.preset.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_preset_import).toBe("app.model_price.preset.import")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_clear).toBe("app.model_price.rule.clear")
   })
 
   it("checks permission and audits model price read actions", async () => {

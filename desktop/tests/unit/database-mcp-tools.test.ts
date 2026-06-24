@@ -34,8 +34,8 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_table_update").description).toContain("table description")
     expect(getTool("database_choice_usage_get").description).toContain("choice")
 
-    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("database.table.update")
-    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("database.choice_usage.get")
+    expect(MCP_TOOL_ACTIONS.database_table_update).toBe("app.database.table.update")
+    expect(MCP_TOOL_ACTIONS.database_choice_usage_get).toBe("app.database.choice_usage.get")
   })
 
   it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
@@ -49,9 +49,12 @@ describe("Database MCP tool descriptions", () => {
     expect(getTool("database_log_list").description).toContain("recently changed")
   })
 
-  it("exposes only canonical Database tool names", () => {
+  it("exposes primary app Database tools and legacy Database aliases", () => {
     const names = buildTools().map((tool) => tool.name)
-    expect(names.every((name) => name.startsWith("database_"))).toBe(true)
+    expect(names.some((name) => name.startsWith("app_database_"))).toBe(true)
+    expect(names.some((name) => name.startsWith("database_"))).toBe(true)
+    expect(MCP_TOOL_ACTIONS.app_database_table_list).toBe("app.database.table.list")
+    expect(MCP_TOOL_ACTIONS.database_table_list).toBe("app.database.table.list")
   })
 
   it("bounds row list pagination in the MCP schema", () => {
