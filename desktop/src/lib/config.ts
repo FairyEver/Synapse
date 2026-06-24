@@ -70,12 +70,6 @@ function asTrimmedString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback
 }
 
-function normalizeDirectoryName(value: unknown, fallback: string): string {
-  const nextValue = asTrimmedString(value, fallback)
-
-  return nextValue.length > 0 ? nextValue : fallback
-}
-
 function hasContentDirsFormatError(value: unknown): boolean {
   if (!isRecord(value)) {
     return true

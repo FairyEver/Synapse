@@ -1052,7 +1052,9 @@ class ConfigBackupService {
           rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
           rollbackErrorLength: String(rollbackError).length,
         })
-        throw new Error("配置备份导入失败，且旧配置恢复也失败。当前配置可能已部分改变，请检查配置后重试。")
+        throw new Error("配置备份导入失败，且旧配置恢复也失败。当前配置可能已部分改变，请检查配置后重试。", {
+          cause: rollbackError,
+        })
       }
       throw identityError
     }
