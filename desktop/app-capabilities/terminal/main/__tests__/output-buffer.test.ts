@@ -33,6 +33,19 @@ describe("terminal output buffer", () => {
     expect(result.chunks.map((chunk) => chunk.data)).toEqual(["5678"])
   })
 
+  it("prunes multibyte output by utf8 byte length", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 4 })
+
+    buffer.append("s1", "你")
+    buffer.append("s1", "a")
+    buffer.append("s1", "b")
+
+    const result = buffer.read({ afterSeq: 0, limitBytes: 100 })
+    expect(result.truncated).toBe(true)
+    expect(result.firstSeq).toBe(2)
+    expect(result.chunks.map((chunk) => chunk.data)).toEqual(["a", "b"])
+  })
+
   it("limits reads by requested byte count", () => {
     const buffer = createTerminalOutputBuffer({ maxBytes: 100 })
 
