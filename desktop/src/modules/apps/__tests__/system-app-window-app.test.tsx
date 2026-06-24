@@ -35,6 +35,10 @@ vi.mock("@/modules/model-price", () => ({
   ModelPriceModule: () => <div>价格窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
+  TerminalModule: () => <div>终端窗口</div>,
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {
@@ -63,6 +67,12 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=database")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("数据库窗口")
+  })
+
+  it("renders the terminal system app", async () => {
+    window.history.replaceState({}, "", "/?window=system-app&appId=terminal")
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("终端窗口")
   })
 
   it("renders a short error for unknown app ids", async () => {

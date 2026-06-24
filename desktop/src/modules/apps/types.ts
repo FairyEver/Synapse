@@ -3,6 +3,7 @@ export const SYSTEM_APP_IDS = [
   "git",
   "database",
   "document-template",
+  "terminal",
   "editor-scan",
   "usage-monitor",
   "model-price",

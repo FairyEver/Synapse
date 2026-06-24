@@ -1,5 +1,6 @@
 import { databaseAppDefinition } from "../database/app-definition"
 import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
+import { terminalAppDefinition } from "../../../app-capabilities/terminal/renderer/app-definition"
 import { editorScanAppDefinition } from "../editor-scan/app-definition"
 import { gitAppDefinition } from "../git/app-definition"
 import { modelPriceAppDefinition } from "../model-price/app-definition"
@@ -13,6 +14,7 @@ const systemAppDefinitions = [
   gitAppDefinition,
   databaseAppDefinition,
   documentTemplateAppDefinition,
+  terminalAppDefinition,
   editorScanAppDefinition,
   usageMonitorAppDefinition,
   modelPriceAppDefinition,
