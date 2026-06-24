@@ -4,8 +4,9 @@ export function listDockApps(
   apps: readonly SynapseSystemAppManifest[],
   options: { readonly workflowEntryVisible: boolean },
 ): readonly SynapseSystemAppManifest[] {
-  return apps
+  const dockApps = apps
     .filter((app) => app.dock.pinnedByDefault)
     .filter((app) => app.dock.visibility !== "workflow-entry-enabled" || options.workflowEntryVisible)
-    .toSorted((left, right) => left.dock.order - right.dock.order)
+
+  return [...dockApps].sort((left, right) => left.dock.order - right.dock.order)
 }
