@@ -23,7 +23,7 @@ import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
-import { getSystemAppManifest, listSystemApps } from "../registry"
+import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../types"
 
 type AppsBridge = {
@@ -168,7 +168,7 @@ function LauncherContent({
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
-              apps={listSystemApps().filter((app) => app.id !== "launcher")}
+              apps={listLaunchableSystemApps()}
               onOpenApp={openApp}
             />
           </div>

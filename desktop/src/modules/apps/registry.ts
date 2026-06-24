@@ -38,6 +38,10 @@ export function listSystemApps(): readonly SynapseSystemAppManifest[] {
   return systemApps
 }
 
+export function listLaunchableSystemApps(): readonly SynapseSystemAppManifest[] {
+  return systemApps.filter((app) => app.id !== "launcher")
+}
+
 export function getSystemAppManifest(appId: string): SynapseSystemAppManifest | null {
   if (!isSystemAppId(appId)) return null
   return systemApps.find((app) => app.id === appId) ?? null

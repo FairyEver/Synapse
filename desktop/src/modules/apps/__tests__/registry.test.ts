@@ -6,6 +6,7 @@ import {
 } from "../definitions"
 import {
   getSystemAppManifest,
+  listLaunchableSystemApps,
   listSystemApps,
 } from "../registry"
 
@@ -51,6 +52,15 @@ describe("system app registry", () => {
         legacyMcpPrefixes: ["content"],
       },
     })
+  })
+
+  it("lists launchable apps without the launcher entry", () => {
+    const launchableAppIds = listLaunchableSystemApps().map((app) => app.id)
+
+    expect(launchableAppIds).not.toContain("launcher")
+    expect(launchableAppIds).toContain("database")
+    expect(launchableAppIds).toContain("resource-repository")
+    expect(launchableAppIds).toEqual(listSystemApps().map((app) => app.id).filter((id) => id !== "launcher"))
   })
 
   it("marks every system app as fixed", () => {

@@ -15,7 +15,7 @@ export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
         <button
           key={app.id}
           type="button"
-          className="group flex h-32 w-32 flex-col items-center justify-start rounded-md px-3 py-3 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="group flex h-36 w-32 flex-col items-center justify-start rounded-md px-3 py-3 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
           onClick={() => onOpenApp(app.id)}
         >
           <img

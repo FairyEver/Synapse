@@ -6,7 +6,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
-import { getSystemAppManifest, listSystemApps } from "./registry"
+import { getSystemAppManifest, listLaunchableSystemApps } from "./registry"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "./types"
 
 type AppsBridge = {
@@ -94,7 +94,7 @@ export function AppsModule({
         <div className="min-h-full px-6 py-7">
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
-              apps={listSystemApps().filter((app) => app.id !== "launcher")}
+              apps={listLaunchableSystemApps()}
               onOpenApp={openApp}
             />
           </div>

@@ -120,6 +120,7 @@ describe("AppsModule", () => {
     expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("grid")
     expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("w-fit")
     expect(document.querySelector("[data-app-launcher-grid]")?.className).toContain("lg:grid-cols-5")
+    expect(findButton("资源仓库").className).toContain("h-36")
     expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(0)
     expect(document.querySelector(".lucide-external-link")).toBeNull()
     expect(findButton("资源仓库")).toBeInstanceOf(HTMLButtonElement)
