@@ -34,6 +34,8 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
+import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
+import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -285,6 +287,22 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
   create() {
     initializeAppIcon()
     return { initialized: true }
+  },
+}
+
+export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
+  id: "core.terminal",
+  criticality: "degraded",
+  create() {
+    return createTerminalService({
+      store: createTerminalStore({ baseDir: path.join(app.getPath("userData"), "terminal") }),
+    })
+  },
+  async start(instance) {
+    await instance.start()
+  },
+  async stop(instance) {
+    await instance.stop()
   },
 }
 

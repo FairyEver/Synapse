@@ -59,6 +59,8 @@ describe("TerminalService", () => {
     const store = createMemoryStore()
     const pty = new FakePty()
     const service = await createStartedService(store, { ptys: [pty] })
+    const onData = vi.fn()
+    service.events.on("data", onData)
 
     const session = await service.createSession({ title: "Shell" })
     pty.emitData("hello\n")
@@ -74,6 +76,10 @@ describe("TerminalService", () => {
     })
     expect(read.chunks.map((chunk) => chunk.data)).toEqual(["hello\n"])
     expect(store.state.output.map((chunk) => chunk.data)).toEqual(["hello\n"])
+    expect(onData).toHaveBeenCalledWith({
+      sessionId: session.id,
+      chunk: expect.objectContaining({ sessionId: session.id, seq: 1, data: "hello\n", source: "pty" }),
+    })
   })
 
   it("blocks MCP write until agent control is enabled, then writes raw data", async () => {
@@ -136,6 +142,17 @@ describe("TerminalService", () => {
     expect(service.getSession({ sessionId: session.id })).toMatchObject({ cols: 120, rows: 40 })
   })
 
+  it("resizeSession throws when the session is not running", async () => {
+    const pty = new FakePty()
+    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+    const session = await service.createSession({})
+    pty.emitExit({ exitCode: 0 })
+    await service.flushPersistQueue()
+
+    await expect(service.resizeSession({ sessionId: session.id, cols: 100, rows: 30 }))
+      .rejects.toThrow("Terminal session is not running")
+  })
+
   it("stopSession marks killed and calls pty.kill; MCP stop is blocked without agent control", async () => {
     const pty = new FakePty()
     const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
@@ -151,10 +168,23 @@ describe("TerminalService", () => {
     expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
   })
 
+  it("stopSession throws when the session is not running", async () => {
+    const pty = new FakePty()
+    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+    const session = await service.createSession({})
+    pty.emitExit({ exitCode: 0 })
+    await service.flushPersistQueue()
+
+    await expect(service.stopSession({ sessionId: session.id, actor: "user" }))
+      .rejects.toThrow("Terminal session is not running")
+  })
+
   it("onExit marks exited and removes runtime", async () => {
     const pty = new FakePty()
     const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
     const session = await service.createSession({})
+    const onSessionChanged = vi.fn()
+    service.events.on("sessionChanged", onSessionChanged)
 
     pty.emitExit({ exitCode: 2, signal: 15 })
     await service.flushPersistQueue()
@@ -164,8 +194,40 @@ describe("TerminalService", () => {
       exitCode: 2,
       signal: 15,
     })
+    expect(onSessionChanged).toHaveBeenCalledWith(expect.objectContaining({
+      id: session.id,
+      status: "exited",
+      exitCode: 2,
+      signal: 15,
+    }))
     expect(() => service.writeSession({ sessionId: session.id, data: "x", actor: "user" }))
       .toThrow("Terminal session is not running")
+  })
+
+  it("onExit keeps killed status when a killed session exits", async () => {
+    const pty = new FakePty()
+    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+    const session = await service.createSession({})
+
+    await service.stopSession({ sessionId: session.id, actor: "user" })
+    pty.emitExit({ exitCode: 1 })
+    await service.flushPersistQueue()
+
+    expect(service.getSession({ sessionId: session.id })).toMatchObject({
+      status: "killed",
+      exitCode: 1,
+    })
+  })
+
+  it("setAgentControl persists agent control changes", async () => {
+    const store = createMemoryStore()
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty] })
+    const session = await service.createSession({})
+
+    await service.setAgentControl({ sessionId: session.id, enabled: true })
+
+    expect(store.state.sessions.find((item) => item.id === session.id)?.agentControl).toBe("enabled")
   })
 
   it("serializes quick output persistence and preserves final state", async () => {
