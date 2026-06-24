@@ -120,7 +120,6 @@ type TerminalSession = {
   updatedAt: string
   startedAt: string
   endedAt?: string
-  agentControl: "disabled" | "enabled"
   cols: number
   rows: number
   lastOutputSeq: number
@@ -209,7 +208,6 @@ type CreateSessionInput = {
   cwd?: string
   cols?: number
   rows?: number
-  agentControl?: boolean
 }
 
 type ReadSessionInput = {
@@ -242,10 +240,9 @@ MCP can create, list, get, read, and resize terminal sessions through normal cap
 
 MCP write and stop are sensitive:
 
-- `session_write` requires `agentControl: "enabled"` on the target session.
-- `session_stop` also requires `agentControl: "enabled"` when called by MCP.
-- MCP session creation with `agentControl: true` must pass through the existing permission and audit boundary.
-- The UI can toggle Agent control per session.
+- `session_write` is allowed for any running Synapse terminal session.
+- `session_stop` is allowed for any running Synapse terminal session.
+- Both actions must pass through the existing `shell.exec` permission and audit boundary.
 
 Audit records for write and stop include actor, source, session id, byte count, timestamp, and outcome. Audit records must not store the full input data, because terminal input may contain secrets.
 
@@ -257,7 +254,7 @@ Layout:
 
 - Left side: groups and sessions.
 - Center: current xterm terminal.
-- Top area: current session title, status, cwd, Agent control switch, create and stop actions.
+- Top area: current session title, status, cwd, create and stop actions.
 - No right panel in the first version.
 
 Empty states stay minimal:
@@ -321,9 +318,8 @@ Core tests:
 - Output beyond the configured limit returns `truncated: true`.
 - UI detach does not stop the pty.
 - Reopening the UI can read output produced while detached.
-- MCP cannot write to sessions with Agent control disabled.
-- MCP can write to sessions with Agent control enabled.
-- MCP stop requires Agent control.
+- MCP can write to running sessions after permission approval.
+- MCP can stop running sessions after permission approval.
 - Restarting Synapse marks old running sessions as `lost`.
 - Stop prevents later write and resize operations.
 

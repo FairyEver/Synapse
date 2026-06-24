@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
-  TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+  TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
+  TERMINAL_SESSION_RENAME_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
 } from "../../shared/capability"
@@ -59,47 +60,89 @@ describe("createTerminalCapabilityDispatcher", () => {
     })
   })
 
-  it("authorizes and audits agent-controlled session creation", async () => {
-    const createSessionService = vi.fn(async () => createSession())
+  it("dispatches rename with parsed input", async () => {
+    const renamed = createSession({ title: "Logs" })
+    const renameSession = vi.fn(async () => renamed)
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { renameSession } as never,
+    })
+
+    const result = await dispatcher.dispatch(TERMINAL_SESSION_RENAME_CAPABILITY_ID, {
+      sessionId: "s1",
+      title: "  Logs  ",
+    }, { source: "mcp-http" })
+
+    expect(renameSession).toHaveBeenCalledWith({
+      sessionId: "s1",
+      title: "  Logs  ",
+    })
+    expect(result).toEqual({ ok: true, data: renamed, affected: 1 })
+  })
+
+  it("records denied delete audits and does not call service", async () => {
+    const deleteSession = vi.fn()
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { deleteSession } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(TERMINAL_SESSION_DELETE_CAPABILITY_ID, {
+      sessionId: "s1",
+    }, { source: "mcp-http" })).rejects.toThrow("blocked by policy")
+
+    expect(deleteSession).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "s1",
+      outcome: "denied",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+        boundary: "terminal.mcp.deleteSession",
+        sessionId: "s1",
+        reason: "blocked by policy",
+        policyId: "terminal-deny",
+      },
+    }))
+  })
+
+  it("authorizes delete before calling service as the mcp actor", async () => {
+    const deleteSession = vi.fn()
     const permissionGuard = {
       check: vi.fn(async () => ({ allowed: true })),
     }
     const auditSink = { record: vi.fn() }
     const dispatcher = createTerminalCapabilityDispatcher({
-      service: { createSession: createSessionService } as never,
+      service: { deleteSession } as never,
       permissionGuard: permissionGuard as never,
       auditSink: auditSink as never,
     })
 
-    await dispatcher.dispatch(TERMINAL_SESSION_CREATE_CAPABILITY_ID, {
-      cwd: "/tmp",
-      agentControl: true,
+    await dispatcher.dispatch(TERMINAL_SESSION_DELETE_CAPABILITY_ID, {
+      sessionId: "s1",
     }, { source: "mcp-http" })
 
-    expect(permissionGuard.check).toHaveBeenCalledWith({
-      action: "shell.exec",
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-      resource: "/tmp",
-      context: {
-        source: "mcp-http",
-        capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-        boundary: "terminal.mcp.agentControl",
-      },
-    })
+    expect(deleteSession).toHaveBeenCalledWith({ sessionId: "s1" })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "shell.exec",
-      resource: "/tmp",
+      resource: "s1",
       outcome: "allowed",
       metadata: {
         source: "mcp-http",
-        capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-        boundary: "terminal.mcp.agentControl",
+        capabilityAction: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+        boundary: "terminal.mcp.deleteSession",
+        sessionId: "s1",
       },
     }))
-    expect(createSessionService).toHaveBeenCalledWith({
-      cwd: "/tmp",
-      agentControl: true,
-    })
   })
 
   it("records denied write audits without input data and does not call service", async () => {
@@ -161,7 +204,6 @@ describe("createTerminalCapabilityDispatcher", () => {
     expect(writeSession).toHaveBeenCalledWith({
       sessionId: "s1",
       data: "pwd\n",
-      actor: "mcp",
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "shell.exec",
@@ -197,7 +239,6 @@ describe("createTerminalCapabilityDispatcher", () => {
     expect(stopSession).toHaveBeenCalledWith({
       sessionId: "s1",
       force: true,
-      actor: "mcp",
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "shell.exec",
@@ -223,7 +264,14 @@ describe("createTerminalCapabilityDispatcher", () => {
   })
 })
 
-function createSession() {
+function createSession(overrides: Partial<ReturnType<typeof createSessionBase>> = {}) {
+  return {
+    ...createSessionBase(),
+    ...overrides,
+  }
+}
+
+function createSessionBase() {
   return {
     id: "s1",
     groupId: "g1",
@@ -234,7 +282,6 @@ function createSession() {
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "enabled" as const,
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,

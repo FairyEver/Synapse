@@ -29,7 +29,6 @@ function createValidSession(overrides: Partial<TerminalSession> = {}): TerminalS
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "disabled",
     cols: 80,
     rows: 24,
     lastOutputSeq: 1,
@@ -79,6 +78,22 @@ describe("terminal store", () => {
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
       groups: [],
       sessions: [],
+      output: [],
+    })
+  })
+
+  it("loads legacy sessions with agentControl and drops the removed field", async () => {
+    const group = createValidGroup()
+    const session = createValidSession()
+    await writeFile(path.join(tempDir, "terminal-state.json"), JSON.stringify({
+      groups: [group],
+      sessions: [{ ...session, agentControl: "enabled" }],
+      output: [],
+    }))
+
+    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
+      groups: [group],
+      sessions: [session],
       output: [],
     })
   })

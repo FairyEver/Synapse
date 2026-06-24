@@ -6,10 +6,12 @@ import type { TerminalService } from "./service"
 import {
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalDeleteSessionInputSchema,
   terminalGroupSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
+  terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
   terminalSessionIdInputSchema,
   terminalSessionSchema,
@@ -17,14 +19,13 @@ import {
   terminalWriteSessionInputSchema,
 } from "../shared/schema"
 
-const terminalSetAgentControlInputSchema = z.object({
-  sessionId: z.string().min(1),
-  enabled: z.boolean(),
-}).strict()
-
 const terminalDataEventPayloadSchema = z.object({
   sessionId: z.string().min(1),
   chunk: terminalOutputChunkSchema,
+})
+
+const terminalSessionDeletedEventPayloadSchema = z.object({
+  sessionId: z.string().min(1),
 })
 
 const terminalEventWiredServices = new WeakSet<TerminalService>()
@@ -47,6 +48,9 @@ function wireTerminalEvents(
   })
   service.events.on("sessionChanged", (payload) => {
     windowManager.broadcast(terminalIpcModule.events.sessionChanged.channel, payload)
+  })
+  service.events.on("sessionDeleted", (payload) => {
+    windowManager.broadcast(terminalIpcModule.events.sessionDeleted.channel, payload)
   })
   terminalEventWiredServices.add(service)
 }
@@ -100,13 +104,21 @@ export const terminalIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof terminalReadSessionInputSchema>) =>
         resolveTerminalService(ctx).readSession(request),
     },
+    renameSession: {
+      channel: "synapse:terminal:session:rename",
+      kind: "invoke",
+      request: terminalRenameSessionInputSchema,
+      response: terminalSessionSchema,
+      handler: (ctx, request: z.infer<typeof terminalRenameSessionInputSchema>) =>
+        resolveTerminalService(ctx).renameSession(request),
+    },
     writeSession: {
       channel: "synapse:terminal:session:write",
       kind: "invoke",
       request: terminalWriteSessionInputSchema,
       response: z.void(),
       handler: (ctx, request: z.infer<typeof terminalWriteSessionInputSchema>) =>
-        resolveTerminalService(ctx).writeSession({ ...request, actor: "user" }),
+        resolveTerminalService(ctx).writeSession(request),
     },
     resizeSession: {
       channel: "synapse:terminal:session:resize",
@@ -116,13 +128,13 @@ export const terminalIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof terminalResizeSessionInputSchema>) =>
         resolveTerminalService(ctx).resizeSession(request),
     },
-    setAgentControl: {
-      channel: "synapse:terminal:session:agent-control",
+    deleteSession: {
+      channel: "synapse:terminal:session:delete",
       kind: "invoke",
-      request: terminalSetAgentControlInputSchema,
-      response: terminalSessionSchema,
-      handler: (ctx, request: z.infer<typeof terminalSetAgentControlInputSchema>) =>
-        resolveTerminalService(ctx).setAgentControl(request),
+      request: terminalDeleteSessionInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalDeleteSessionInputSchema>) =>
+        resolveTerminalService(ctx).deleteSession(request),
     },
     stopSession: {
       channel: "synapse:terminal:session:stop",
@@ -130,7 +142,7 @@ export const terminalIpcModule: IpcModule = {
       request: terminalStopSessionInputSchema,
       response: z.void(),
       handler: (ctx, request: z.infer<typeof terminalStopSessionInputSchema>) =>
-        resolveTerminalService(ctx).stopSession({ ...request, actor: "user" }),
+        resolveTerminalService(ctx).stopSession(request),
     },
   },
   events: {
@@ -143,6 +155,11 @@ export const terminalIpcModule: IpcModule = {
       channel: "synapse:terminal:session-changed",
       kind: "event",
       payload: terminalSessionSchema,
+    },
+    sessionDeleted: {
+      channel: "synapse:terminal:session-deleted",
+      kind: "event",
+      payload: terminalSessionDeletedEventPayloadSchema,
     },
   },
 }

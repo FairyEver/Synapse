@@ -92,19 +92,90 @@ describe("TerminalService", () => {
     })
   })
 
-  it("blocks MCP write until agent control is enabled, then writes raw data", async () => {
+  it("renames a session with a trimmed title and persists the update", async () => {
+    const store = createMemoryStore()
+    const service = await createStartedService(store, { ptys: [new FakePty()] })
+    const session = await service.createSession({ title: "Shell" })
+    const onSessionChanged = vi.fn()
+    service.events.on("sessionChanged", onSessionChanged)
+
+    const updated = await withSessionActions(service).renameSession({
+      sessionId: session.id,
+      title: "  Build logs  ",
+    })
+
+    expect(updated).toMatchObject({ id: session.id, title: "Build logs" })
+    expect(service.getSession({ sessionId: session.id }).title).toBe("Build logs")
+    expect(store.state.sessions.find((item) => item.id === session.id)?.title).toBe("Build logs")
+    expect(onSessionChanged).toHaveBeenCalledWith(expect.objectContaining({
+      id: session.id,
+      title: "Build logs",
+    }))
+  })
+
+  it("rejects empty renamed terminal titles", async () => {
+    const service = await createStartedService(createMemoryStore(), { ptys: [new FakePty()] })
+    const session = await service.createSession({ title: "Shell" })
+
+    await expect(withSessionActions(service).renameSession({
+      sessionId: session.id,
+      title: "   ",
+    })).rejects.toThrow("Terminal session title is required")
+  })
+
+  it("writes MCP raw data without session-level agent control", async () => {
     const pty = new FakePty()
     const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
     const session = await service.createSession({})
 
-    expect(() => service.writeSession({ sessionId: session.id, data: "pwd\n", actor: "mcp" }))
-      .toThrow("Agent control is disabled")
-    expect(pty.write).not.toHaveBeenCalled()
-
-    await service.setAgentControl({ sessionId: session.id, enabled: true })
-    service.writeSession({ sessionId: session.id, data: "\u001b[A", actor: "mcp" })
+    service.writeSession({ sessionId: session.id, data: "\u001b[A" })
 
     expect(pty.write).toHaveBeenCalledWith("\u001b[A")
+  })
+
+  it("deletes an ended session and removes retained output", async () => {
+    const group = createGroup()
+    const session = createSession({ status: "exited", endedAt: "2026-06-24T00:00:03.000Z", lastOutputSeq: 2 })
+    const store = createMemoryStore({
+      groups: [group],
+      sessions: [session],
+      output: [
+        createOutput({ seq: 1, data: "old" }),
+        createOutput({ seq: 2, data: " output" }),
+      ],
+    })
+    const service = await createStartedService(store)
+    const onSessionDeleted = vi.fn()
+    service.events.on("sessionDeleted", onSessionDeleted)
+
+    await withSessionActions(service).deleteSession({ sessionId: session.id })
+
+    expect(service.listSessions()).toEqual([])
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(onSessionDeleted).toHaveBeenCalledWith({ sessionId: session.id })
+    expect(() => service.readSession({ sessionId: session.id }))
+      .toThrow("Terminal session not found")
+  })
+
+  it("deletes a running session by killing the pty without reviving it on exit", async () => {
+    const store = createMemoryStore()
+    const pty = new FakePty()
+    const service = await createStartedService(store, { ptys: [pty] })
+    const session = await service.createSession({})
+    pty.emitData("active")
+    await service.flushPersistQueue()
+
+    await withSessionActions(service).deleteSession({ sessionId: session.id })
+    pty.emitExit({ exitCode: 143, signal: 15 })
+    await service.flushPersistQueue()
+
+    expect(pty.kill).toHaveBeenCalledTimes(1)
+    expect(service.listSessions()).toEqual([])
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
+      .toThrow("Terminal session not found")
   })
 
   it("marks restored running sessions as lost", async () => {
@@ -163,17 +234,13 @@ describe("TerminalService", () => {
       .rejects.toThrow("Terminal session is not running")
   })
 
-  it("stopSession marks killed and calls pty.kill; MCP stop is blocked without agent control", async () => {
+  it("stopSession marks killed and lets MCP stop sessions without session-level agent control", async () => {
     const store = createMemoryStore()
     const pty = new FakePty()
     const service = await createStartedService(store, { ptys: [pty] })
     const session = await service.createSession({})
 
-    await expect(service.stopSession({ sessionId: session.id, actor: "mcp" }))
-      .rejects.toThrow("Agent control is disabled")
-    expect(pty.kill).not.toHaveBeenCalled()
-
-    await service.stopSession({ sessionId: session.id, actor: "user" })
+    await service.stopSession({ sessionId: session.id })
 
     expect(pty.kill).toHaveBeenCalledTimes(1)
     expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "killed" })
@@ -187,7 +254,7 @@ describe("TerminalService", () => {
     pty.emitExit({ exitCode: 0 })
     await service.flushPersistQueue()
 
-    await expect(service.stopSession({ sessionId: session.id, actor: "user" }))
+    await expect(service.stopSession({ sessionId: session.id }))
       .rejects.toThrow("Terminal session is not running")
   })
 
@@ -212,7 +279,7 @@ describe("TerminalService", () => {
       exitCode: 2,
       signal: 15,
     }))
-    expect(() => service.writeSession({ sessionId: session.id, data: "x", actor: "user" }))
+    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
       .toThrow("Terminal session is not running")
   })
 
@@ -221,7 +288,7 @@ describe("TerminalService", () => {
     const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
     const session = await service.createSession({})
 
-    await service.stopSession({ sessionId: session.id, actor: "user" })
+    await service.stopSession({ sessionId: session.id })
     pty.emitExit({ exitCode: 1 })
     await service.flushPersistQueue()
 
@@ -229,17 +296,6 @@ describe("TerminalService", () => {
       status: "killed",
       exitCode: 1,
     })
-  })
-
-  it("setAgentControl persists agent control changes", async () => {
-    const store = createMemoryStore()
-    const pty = new FakePty()
-    const service = await createStartedService(store, { ptys: [pty] })
-    const session = await service.createSession({})
-
-    await service.setAgentControl({ sessionId: session.id, enabled: true })
-
-    expect(store.state.sessions.find((item) => item.id === session.id)?.agentControl).toBe("enabled")
   })
 
   it("serializes quick output persistence and preserves final state", async () => {
@@ -281,7 +337,7 @@ describe("TerminalService", () => {
       signal: 15,
     })
     expect(store.state.sessions.find((item) => item.id === session.id)?.status).toBe("lost")
-    expect(() => service.writeSession({ sessionId: session.id, data: "x", actor: "user" }))
+    expect(() => service.writeSession({ sessionId: session.id, data: "x" }))
       .toThrow("Terminal session is not running")
   })
 
@@ -400,7 +456,6 @@ function createSession(overrides: Partial<TerminalSession> = {}): TerminalSessio
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "disabled",
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,
@@ -416,5 +471,15 @@ function createOutput(overrides: Partial<TerminalOutputChunk> = {}): TerminalOut
     createdAt: "2026-06-24T00:00:01.000Z",
     source: "pty",
     ...overrides,
+  }
+}
+
+function withSessionActions(service: TerminalService): TerminalService & {
+  renameSession(input: { sessionId: string; title: string }): Promise<TerminalSession>
+  deleteSession(input: { sessionId: string }): Promise<void>
+} {
+  return service as TerminalService & {
+    renameSession(input: { sessionId: string; title: string }): Promise<TerminalSession>
+    deleteSession(input: { sessionId: string }): Promise<void>
   }
 }

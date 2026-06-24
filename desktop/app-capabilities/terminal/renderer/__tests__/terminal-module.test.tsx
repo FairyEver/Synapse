@@ -18,8 +18,10 @@ const bridgeState = vi.hoisted(() => ({
   nextSeq: 0,
   dataListener: null as ((event: SynapseTerminalDataEvent) => void) | null,
   sessionChangedListener: null as ((session: SynapseTerminalSession) => void) | null,
+  sessionDeletedListener: null as ((event: { sessionId: string }) => void) | null,
   dataUnsubscribe: vi.fn(),
   sessionChangedUnsubscribe: vi.fn(),
+  sessionDeletedUnsubscribe: vi.fn(),
   deferredRead: null as null | {
     promise: Promise<unknown>
     resolve: (value: unknown) => void
@@ -36,14 +38,12 @@ const terminalBridge = vi.hoisted(() => ({
     cwd?: string
     cols?: number
     rows?: number
-    agentControl?: boolean
   } = {}) => createSession({
     groupId: input.groupId ?? "group-1",
     title: input.title ?? `Session ${bridgeState.sessions.length + 1}`,
     cwd: input.cwd ?? "/tmp",
     cols: input.cols ?? 80,
     rows: input.rows ?? 24,
-    agentControl: input.agentControl ? "enabled" : "disabled",
   })),
   getSession: vi.fn(async ({ sessionId }: { sessionId: string }) => getSession(sessionId)),
   readSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
@@ -56,12 +56,21 @@ const terminalBridge = vi.hoisted(() => ({
       firstSeq: bridgeState.chunks[0]?.seq ?? 0,
     }
   }),
+  renameSession: vi.fn(async ({ sessionId, title }: { sessionId: string; title: string }) => {
+    const session = {
+      ...getSession(sessionId),
+      title: title.trim(),
+      updatedAt: "2026-06-24T00:02:00.000Z",
+    }
+    bridgeState.sessions = bridgeState.sessions.map((item) => item.id === sessionId ? session : item)
+    return session
+  }),
   writeSession: vi.fn(async () => undefined),
   resizeSession: vi.fn(async () => undefined),
-  setAgentControl: vi.fn(async ({ sessionId, enabled }: { sessionId: string; enabled: boolean }) => ({
-    ...getSession(sessionId),
-    agentControl: enabled ? "enabled" : "disabled",
-  })),
+  deleteSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    bridgeState.sessions = bridgeState.sessions.filter((session) => session.id !== sessionId)
+    bridgeState.chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId !== sessionId)
+  }),
   stopSession: vi.fn(async () => undefined),
   onData: vi.fn((listener: (event: SynapseTerminalDataEvent) => void) => {
     bridgeState.dataListener = listener
@@ -70,6 +79,10 @@ const terminalBridge = vi.hoisted(() => ({
   onSessionChanged: vi.fn((listener: (session: SynapseTerminalSession) => void) => {
     bridgeState.sessionChangedListener = listener
     return bridgeState.sessionChangedUnsubscribe
+  }),
+  onSessionDeleted: vi.fn((listener: (event: { sessionId: string }) => void) => {
+    bridgeState.sessionDeletedListener = listener
+    return bridgeState.sessionDeletedUnsubscribe
   }),
 }))
 
@@ -200,21 +213,25 @@ beforeEach(() => {
   bridgeState.nextSeq = 0
   bridgeState.dataListener = null
   bridgeState.sessionChangedListener = null
+  bridgeState.sessionDeletedListener = null
   bridgeState.deferredRead = null
   bridgeState.dataUnsubscribe.mockClear()
   bridgeState.sessionChangedUnsubscribe.mockClear()
+  bridgeState.sessionDeletedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
   terminalBridge.createGroup.mockClear()
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
   terminalBridge.getSession.mockClear()
   terminalBridge.readSession.mockClear()
+  terminalBridge.renameSession.mockClear()
   terminalBridge.writeSession.mockClear()
   terminalBridge.resizeSession.mockClear()
-  terminalBridge.setAgentControl.mockClear()
+  terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
+  terminalBridge.onSessionDeleted.mockClear()
   vi.mocked(XtermTerminal).mockClear()
   xtermState.instances = []
   xtermState.fitInstances = []
@@ -272,7 +289,6 @@ describe("TerminalModule", () => {
       title: "zsh",
       cwd: "/Users/liyang",
       status: "lost",
-      agentControl: "enabled",
       cols: 120,
       rows: 40,
     })]
@@ -282,7 +298,6 @@ describe("TerminalModule", () => {
       status: "running",
       startedAt: "2026-06-24T00:01:00.000Z",
       ...input,
-      agentControl: input.agentControl ? "enabled" : "disabled",
     }))
 
     await renderEmbeddedModule()
@@ -301,9 +316,67 @@ describe("TerminalModule", () => {
       cwd: "/Users/liyang",
       cols: 120,
       rows: 40,
-      agentControl: true,
     })
     expect(document.body.textContent).toContain("运行中")
+  })
+
+  it("does not render session-level Agent control", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.body.textContent).not.toContain("Agent 控制")
+  })
+
+  it("renames a terminal session from the session row menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await clickSessionMenu("开发终端")
+    await clickMenuItem("重命名")
+    await changeInput("终端名称", "  构建日志  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      title: "  构建日志  ",
+    })
+    expect(document.body.textContent).toContain("构建日志")
+  })
+
+  it("deletes the active terminal session and selects the next session", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [
+      createSession({ id: "session-1", groupId: "group-1", title: "一号终端", updatedAt: "2026-06-24T00:02:00.000Z" }),
+      createSession({ id: "session-2", groupId: "group-1", title: "二号终端", updatedAt: "2026-06-24T00:01:00.000Z" }),
+    ]
+
+    await renderModule()
+    await clickSessionMenu("一号终端")
+    await clickMenuItem("删除")
+    await clickButton("删除终端")
+
+    expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(document.body.textContent).not.toContain("一号终端")
+    expect(terminalBridge.readSession).toHaveBeenLastCalledWith({
+      sessionId: "session-2",
+      afterSeq: 0,
+    })
+  })
+
+  it("deletes the last terminal session and returns to the empty state", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "临时终端" })]
+
+    await renderModule()
+    await clickSessionMenu("临时终端")
+    await clickMenuItem("删除")
+    await clickButton("删除终端")
+
+    expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(document.body.textContent).toContain("新建终端")
   })
 
   it("creates xterm with iTerm-like rendering defaults", async () => {
@@ -400,6 +473,7 @@ describe("TerminalModule", () => {
 
     expect(bridgeState.dataUnsubscribe).toHaveBeenCalled()
     expect(bridgeState.sessionChangedUnsubscribe).toHaveBeenCalled()
+    expect(bridgeState.sessionDeletedUnsubscribe).toHaveBeenCalled()
     expect(xtermState.instances[0]?.inputDispose).toHaveBeenCalled()
     expect(xtermState.instances[0]?.dispose).toHaveBeenCalled()
     expect(resizeObservers[0]?.disconnect).toHaveBeenCalled()
@@ -471,6 +545,43 @@ async function clickButton(text: string, root: ParentNode = document.body): Prom
   })
 }
 
+async function clickSessionMenu(title: string): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.getAttribute("aria-label") === `终端会话操作：${title}`)
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      ctrlKey: false,
+    }))
+    button?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+    button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickMenuItem(text: string): Promise<void> {
+  const item = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]'))
+    .find((element) => element.textContent === text)
+  await act(async () => {
+    item?.click()
+    await Promise.resolve()
+  })
+}
+
+async function changeInput(label: string, value: string): Promise<void> {
+  const input = document.body.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
+  await act(async () => {
+    if (input) {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      valueSetter?.call(input, value)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    await Promise.resolve()
+  })
+}
+
 function createGroup(overrides: Partial<SynapseTerminalGroup> = {}): SynapseTerminalGroup {
   return {
     id: "group-1",
@@ -493,7 +604,6 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     startedAt: "2026-06-24T00:00:00.000Z",
-    agentControl: "disabled",
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,

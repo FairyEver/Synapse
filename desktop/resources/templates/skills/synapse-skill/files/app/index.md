@@ -23,5 +23,6 @@ Rules:
 - Create a session with `app_terminal_session_create`, then read retained output with `app_terminal_session_read`.
 - Use `afterSeq` from prior reads to avoid rereading the same output.
 - `app_terminal_session_write` writes raw terminal input; include `\n` when the shell should submit a command.
-- `app_terminal_session_write` and `app_terminal_session_stop` require Agent control to be enabled on the session.
+- Use `app_terminal_session_rename` for display names and `app_terminal_session_delete` to remove a session plus retained output.
+- Deleting a running terminal session stops it before removing the record.
 - Do not use Terminal tools as a broad command runner when a narrower MCP tool exists.

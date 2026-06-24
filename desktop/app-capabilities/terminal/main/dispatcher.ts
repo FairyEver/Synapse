@@ -4,9 +4,11 @@ import {
   TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+  TERMINAL_SESSION_DELETE_CAPABILITY_ID,
   TERMINAL_SESSION_GET_CAPABILITY_ID,
   TERMINAL_SESSION_LIST_CAPABILITY_ID,
   TERMINAL_SESSION_READ_CAPABILITY_ID,
+  TERMINAL_SESSION_RENAME_CAPABILITY_ID,
   TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
   TERMINAL_SESSION_STOP_CAPABILITY_ID,
   TERMINAL_SESSION_WRITE_CAPABILITY_ID,
@@ -14,8 +16,10 @@ import {
 import {
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalDeleteSessionInputSchema,
   terminalEmptyInputSchema,
   terminalReadSessionInputSchema,
+  terminalRenameSessionInputSchema,
   terminalResizeSessionInputSchema,
   terminalSessionIdInputSchema,
   terminalStopSessionInputSchema,
@@ -46,15 +50,7 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: deps.service.listGroups(), affected: 0 }
       }
       if (action === TERMINAL_SESSION_CREATE_CAPABILITY_ID) {
-        const parsed = terminalCreateSessionInputSchema.parse(params)
-        if (parsed.agentControl) {
-          await authorizeTerminalControl(deps, context, {
-            capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
-            resource: parsed.cwd ?? "terminal.session",
-            boundary: "terminal.mcp.agentControl",
-          })
-        }
-        return { ok: true, data: await deps.service.createSession(parsed), affected: 1 }
+        return { ok: true, data: await deps.service.createSession(terminalCreateSessionInputSchema.parse(params)), affected: 1 }
       }
       if (action === TERMINAL_SESSION_LIST_CAPABILITY_ID) {
         terminalEmptyInputSchema.parse(params)
@@ -66,6 +62,9 @@ export function createTerminalCapabilityDispatcher(deps: {
       if (action === TERMINAL_SESSION_READ_CAPABILITY_ID) {
         return { ok: true, data: deps.service.readSession(terminalReadSessionInputSchema.parse(params)), affected: 0 }
       }
+      if (action === TERMINAL_SESSION_RENAME_CAPABILITY_ID) {
+        return { ok: true, data: await deps.service.renameSession(terminalRenameSessionInputSchema.parse(params)), affected: 1 }
+      }
       if (action === TERMINAL_SESSION_WRITE_CAPABILITY_ID) {
         const parsed = terminalWriteSessionInputSchema.parse(params)
         await authorizeTerminalControl(deps, context, {
@@ -75,11 +74,22 @@ export function createTerminalCapabilityDispatcher(deps: {
           sessionId: parsed.sessionId,
           byteCount: Buffer.byteLength(parsed.data),
         })
-        deps.service.writeSession({ ...parsed, actor: "mcp" })
+        deps.service.writeSession(parsed)
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_RESIZE_CAPABILITY_ID) {
         await deps.service.resizeSession(terminalResizeSessionInputSchema.parse(params))
+        return { ok: true, data: { ok: true }, affected: 1 }
+      }
+      if (action === TERMINAL_SESSION_DELETE_CAPABILITY_ID) {
+        const parsed = terminalDeleteSessionInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+          resource: parsed.sessionId,
+          boundary: "terminal.mcp.deleteSession",
+          sessionId: parsed.sessionId,
+        })
+        await deps.service.deleteSession(parsed)
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_STOP_CAPABILITY_ID) {
@@ -91,7 +101,7 @@ export function createTerminalCapabilityDispatcher(deps: {
           sessionId: parsed.sessionId,
           force: Boolean(parsed.force),
         })
-        await deps.service.stopSession({ ...parsed, actor: "mcp" })
+        await deps.service.stopSession(parsed)
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       throw new Error(`Unknown terminal action: ${action}`)

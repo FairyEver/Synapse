@@ -27,12 +27,14 @@ import type {
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalDataEvent,
+  SynapseTerminalDeleteSessionInput,
   SynapseTerminalGroup,
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
+  SynapseTerminalRenameSessionInput,
   SynapseTerminalResizeSessionInput,
   SynapseTerminalSession,
-  SynapseTerminalSetAgentControlInput,
+  SynapseTerminalSessionDeletedEvent,
   SynapseTerminalStopSessionInput,
   SynapseTerminalWriteSessionInput,
 } from "./terminal"
@@ -825,12 +827,14 @@ export type SynapseBridge = {
     createSession: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>
     getSession: (input: { sessionId: string }) => Promise<SynapseTerminalSession>
     readSession: (input: SynapseTerminalReadSessionInput) => Promise<SynapseTerminalReadSessionResult>
+    renameSession: (input: SynapseTerminalRenameSessionInput) => Promise<SynapseTerminalSession>
     writeSession: (input: SynapseTerminalWriteSessionInput) => Promise<void>
     resizeSession: (input: SynapseTerminalResizeSessionInput) => Promise<void>
-    setAgentControl: (input: SynapseTerminalSetAgentControlInput) => Promise<SynapseTerminalSession>
+    deleteSession: (input: SynapseTerminalDeleteSessionInput) => Promise<void>
     stopSession: (input: SynapseTerminalStopSessionInput) => Promise<void>
     onData: (listener: (event: SynapseTerminalDataEvent) => void) => () => void
     onSessionChanged: (listener: (session: SynapseTerminalSession) => void) => () => void
+    onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
   }
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>

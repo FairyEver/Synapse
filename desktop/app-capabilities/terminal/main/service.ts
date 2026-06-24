@@ -8,10 +8,12 @@ import { TERMINAL_SESSION_OUTPUT_RETENTION_BYTES } from "../../../config"
 import type {
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalDeleteSessionInput,
   TerminalGroup,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
+  TerminalRenameSessionInput,
   TerminalResizeSessionInput,
   TerminalSession,
   TerminalStopSessionInput,
@@ -19,8 +21,6 @@ import type {
 } from "../shared/schema"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
 import type { TerminalStore, TerminalStoreState } from "./store"
-
-export type TerminalActor = "user" | "mcp"
 
 export type PtyDisposable = {
   dispose(): void
@@ -314,7 +314,6 @@ export function createTerminalService(deps: {
         createdAt: timestamp,
         updatedAt: timestamp,
         startedAt: timestamp,
-        agentControl: input.agentControl ? "enabled" : "disabled",
         cols,
         rows,
         lastOutputSeq: 0,
@@ -347,11 +346,19 @@ export function createTerminalService(deps: {
         }),
       }
     },
-    writeSession(input: TerminalWriteSessionInput & { actor: TerminalActor }): void {
+    async renameSession(input: TerminalRenameSessionInput): Promise<TerminalSession> {
       const session = getSessionOrThrow(input.sessionId)
-      if (input.actor === "mcp" && session.agentControl !== "enabled") {
-        throw new Error("Agent control is disabled")
-      }
+      const title = input.title.trim()
+      if (!title) throw new Error("Terminal session title is required")
+      if (title.length > 120) throw new Error("Terminal session title is too long")
+      const updated = { ...session, title, updatedAt: now() }
+      sessions.set(session.id, updated)
+      events.emit("sessionChanged", updated)
+      await flushPersist()
+      return updated
+    },
+    writeSession(input: TerminalWriteSessionInput): void {
+      getSessionOrThrow(input.sessionId)
       getRunningRuntime(input.sessionId).pty.write(input.data)
     },
     async resizeSession(input: TerminalResizeSessionInput): Promise<void> {
@@ -361,22 +368,27 @@ export function createTerminalService(deps: {
       runtime.pty.resize(input.cols, input.rows)
       await flushPersist()
     },
-    async setAgentControl(input: { sessionId: string; enabled: boolean }): Promise<TerminalSession> {
+    async deleteSession(input: TerminalDeleteSessionInput): Promise<void> {
       const session = getSessionOrThrow(input.sessionId)
-      const updated: TerminalSession = {
-        ...session,
-        agentControl: input.enabled ? "enabled" : "disabled",
-        updatedAt: now(),
+      const runtime = runtimes.get(session.id)
+      if (runtime) {
+        cleanupRuntime(session.id)
+        try {
+          runtime.pty.kill()
+        } catch (error) {
+          deps.logger?.warn("Terminal service failed to kill deleted session runtime.", {
+            error,
+            sessionId: session.id,
+          })
+        }
       }
-      sessions.set(session.id, updated)
+      sessions.delete(session.id)
+      buffers.delete(session.id)
+      events.emit("sessionDeleted", { sessionId: session.id })
       await flushPersist()
-      return updated
     },
-    async stopSession(input: TerminalStopSessionInput & { actor: TerminalActor }): Promise<void> {
+    async stopSession(input: TerminalStopSessionInput): Promise<void> {
       const session = getSessionOrThrow(input.sessionId)
-      if (input.actor === "mcp" && session.agentControl !== "enabled") {
-        throw new Error("Agent control is disabled")
-      }
       const runtime = getRunningRuntime(input.sessionId)
       const timestamp = now()
       sessions.set(session.id, { ...session, status: "killed", updatedAt: timestamp, endedAt: timestamp })

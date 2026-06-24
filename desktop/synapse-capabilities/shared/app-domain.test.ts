@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   TERMINAL_MCP_TOOL_NAMES,
+  TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+  TERMINAL_SESSION_RENAME_CAPABILITY_ID,
   TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
 } from "../../app-capabilities/terminal/shared/capability"
 import { APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
@@ -10,6 +12,8 @@ describe("App capability domain", () => {
   it("allows terminal session write and stop capability ids", () => {
     expect(() => assertCanonicalCapabilityId("app.terminal.session.write")).not.toThrow()
     expect(() => assertCanonicalCapabilityId("app.terminal.session.stop")).not.toThrow()
+    expect(() => assertCanonicalCapabilityId("app.terminal.session.rename")).not.toThrow()
+    expect(() => assertCanonicalCapabilityId("app.terminal.session.delete")).not.toThrow()
   })
 
   it("maps the terminal session resize capability to the public resize tool name", () => {
@@ -32,6 +36,17 @@ describe("App capability domain", () => {
     )
   })
 
+  it("maps public terminal rename and delete tools to their capabilities", () => {
+    expect(TERMINAL_SESSION_RENAME_CAPABILITY_ID).toBe("app.terminal.session.rename")
+    expect(TERMINAL_SESSION_DELETE_CAPABILITY_ID).toBe("app.terminal.session.delete")
+    expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.sessionRename]).toBe(
+      TERMINAL_SESSION_RENAME_CAPABILITY_ID,
+    )
+    expect(APP_MCP_TOOL_ACTIONS[TERMINAL_MCP_TOOL_NAMES.sessionDelete]).toBe(
+      TERMINAL_SESSION_DELETE_CAPABILITY_ID,
+    )
+  })
+
   it("marks terminal list tool input schemas as strict empty objects", () => {
     const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
 
@@ -44,6 +59,38 @@ describe("App capability domain", () => {
       type: "object",
       properties: {},
       additionalProperties: false,
+    })
+  })
+
+  it("does not expose session-level agent control in terminal MCP create schema", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+    const createSchema = tools.get(TERMINAL_MCP_TOOL_NAMES.sessionCreate)?.inputSchema
+
+    expect(createSchema).toMatchObject({
+      type: "object",
+      properties: expect.not.objectContaining({
+        agentControl: expect.anything(),
+      }),
+    })
+  })
+
+  it("defines terminal rename and delete MCP schemas", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionRename)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        sessionId: expect.objectContaining({ type: "string", minLength: 1 }),
+        title: expect.objectContaining({ type: "string", minLength: 1, maxLength: 120 }),
+      },
+      required: ["sessionId", "title"],
+    })
+    expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionDelete)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        sessionId: expect.objectContaining({ type: "string", minLength: 1 }),
+      },
+      required: ["sessionId"],
     })
   })
 })
