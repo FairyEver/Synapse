@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import { toast } from "sonner"
+import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import {
   subscribeContentOpenRequest,
   type ContentOpenRequest,
@@ -29,6 +30,8 @@ type SystemAppContentProps = {
   readonly resourceContentOpenRequest?: ContentOpenRequest | null
   readonly onResourceContentOpenRequestConsumed?: (requestId: string) => void
   readonly onContentOpenRequest?: (request: ContentOpenRequest) => void
+  readonly pendingAgentSession?: OpenAgentSessionPayload | null
+  readonly onPendingAgentSessionConsumed?: () => void
 }
 
 function SystemAppContent({
@@ -36,17 +39,36 @@ function SystemAppContent({
   resourceContentOpenRequest = null,
   onResourceContentOpenRequestConsumed,
   onContentOpenRequest,
+  pendingAgentSession = null,
+  onPendingAgentSessionConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
     return subscribeContentOpenRequest(onContentOpenRequest)
   }, [appId, onContentOpenRequest])
 
-  if (appId === "agent") return <AgentModule />
+  if (appId === "agent") {
+    return (
+      <AgentModule
+        pendingAgentSession={pendingAgentSession}
+        onPendingAgentSessionConsumed={onPendingAgentSessionConsumed}
+      />
+    )
+  }
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
   if (appId === "automation") return <AutomationModule />
-  if (appId === "launcher") return <LauncherContent />
+  if (appId === "launcher") {
+    if (resourceContentOpenRequest) {
+      return (
+        <ResourceRepositoryModule
+          initialContentOpenRequest={resourceContentOpenRequest}
+          onInitialContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
+        />
+      )
+    }
+    return <LauncherContent />
+  }
   if (appId === "settings") return <SettingsModule />
   if (appId === "resource-repository") {
     return (

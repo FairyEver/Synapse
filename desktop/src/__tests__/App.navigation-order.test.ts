@@ -1,14 +1,25 @@
 import { describe, expect, it } from "vitest"
-import { APP_NAVIGATION_TABS } from "../../config"
+import { listDockApps } from "@/modules/apps/dock"
+import { listSystemApps } from "@/modules/apps/registry"
 
-describe("app navigation order", () => {
-  it("keeps the primary tabs in the requested left-to-right order", () => {
-    expect(APP_NAVIGATION_TABS.map((tab) => tab.id)).toEqual([
+describe("app Dock order", () => {
+  it("keeps pinned apps in the requested left-to-right order", () => {
+    expect(listDockApps(listSystemApps(), { workflowEntryVisible: true }).map((app) => app.id)).toEqual([
       "agent",
       "workflow",
       "drive",
       "automation",
-      "apps",
+      "launcher",
+      "settings",
+    ])
+  })
+
+  it("hides workflow when the workflow entry is not visible", () => {
+    expect(listDockApps(listSystemApps(), { workflowEntryVisible: false }).map((app) => app.id)).toEqual([
+      "agent",
+      "drive",
+      "automation",
+      "launcher",
       "settings",
     ])
   })

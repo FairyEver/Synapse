@@ -38,15 +38,15 @@ vi.mock("@/app-shell/components/app-shell-layout", () => ({
   ),
 }))
 
-vi.mock("@/app-shell/components/app-shell-navigation", () => ({
-  AppShellNavigation: ({ tabs, onValueChange }: {
-    tabs: Array<{ id: string; label: string }>
+vi.mock("@/app-shell/components/app-shell-dock", () => ({
+  AppShellDock: ({ apps, onValueChange }: {
+    apps: Array<{ id: string; name: string }>
     onValueChange: (value: string) => void
   }) => (
     <div>
-      {tabs.map((tab) => (
-        <button key={tab.id} type="button" onClick={() => onValueChange(tab.id)}>
-          {tab.label}
+      {apps.map((app) => (
+        <button key={app.id} type="button" onClick={() => onValueChange(app.id)}>
+          {app.name}
         </button>
       ))}
     </div>
@@ -141,22 +141,24 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/apps", () => ({
-  AppsModule: ({
-    pendingContentOpenRequest,
-    onPendingContentOpenRequestConsumed,
+vi.mock("@/modules/apps/components/system-app-content", () => ({
+  SystemAppContent: ({
+    appId,
+    resourceContentOpenRequest,
+    onResourceContentOpenRequestConsumed,
   }: {
-    pendingContentOpenRequest?: ContentOpenRequest | null
-    onPendingContentOpenRequestConsumed?: (requestId: string) => void
+    appId: string
+    resourceContentOpenRequest?: ContentOpenRequest | null
+    onResourceContentOpenRequestConsumed?: (requestId: string) => void
   }) => (
     <div>
-      应用模块
-      {pendingContentOpenRequest ? (
+      {appId === "agent" ? "对话模块" : appId === "launcher" ? "应用模块" : appId === "workflow" ? "工作流模块" : appId}
+      {resourceContentOpenRequest ? (
         <button
           type="button"
-          onClick={() => onPendingContentOpenRequestConsumed?.(pendingContentOpenRequest.requestId)}
+          onClick={() => onResourceContentOpenRequestConsumed?.(resourceContentOpenRequest.requestId)}
         >
-          {pendingContentOpenRequest.contentType}:{pendingContentOpenRequest.kind}
+          {resourceContentOpenRequest.contentType}:{resourceContentOpenRequest.kind}
         </button>
       ) : null}
     </div>

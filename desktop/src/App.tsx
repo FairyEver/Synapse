@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
+import { AppShellDock } from "@/app-shell/components/app-shell-dock"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/knowledge-base-storage-migration-dialog"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
-import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import { subscribeContentOpenRequest, type ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
@@ -36,26 +36,20 @@ import { parseContentStoreInstallWindowRequest } from "@/lib/content-store-insta
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
-import { SettingsModule } from "@/modules/settings"
-import { AppsModule } from "@/modules/apps"
-import { AgentModule } from "@/modules/agent"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
-import { AutomationModule } from "@/modules/automation"
-import { DriveModule } from "@/modules/drive"
+import { listDockApps } from "@/modules/apps/dock"
+import { listSystemApps } from "@/modules/apps/registry"
+import { SystemAppContent } from "@/modules/apps/components/system-app-content"
+import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
-import { WorkflowModule } from "@/modules/workflow"
-import {
-  APP_NAVIGATION_TABS,
-  DEFAULT_APP_NAVIGATION_TAB_ID,
-  type AppNavigationTabId,
-} from "../config"
+import { DEFAULT_SYSTEM_APP_ID } from "../config"
 
-type AppTabId = AppNavigationTabId
+type AppTabId = SynapseSystemAppId
 type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 
 const logger = createRendererLogger("app")
 
-const DEFAULT_APP_TAB: AppTabId = DEFAULT_APP_NAVIGATION_TAB_ID
+const DEFAULT_APP_TAB: AppTabId = DEFAULT_SYSTEM_APP_ID as SynapseSystemAppId
 
 function MainApp() {
   const activeRepository = useActiveRepository()
@@ -89,7 +83,7 @@ function MainApp() {
     (nextTab: AppTabId, source: AppTabChangeSource) => {
       const prevTab = activeTabRef.current
       if (prevTab !== nextTab) {
-        logger.info("Top-level tab changed.", {
+        logger.info("Active system app changed.", {
           from: prevTab,
           to: nextTab,
           source,
@@ -147,10 +141,8 @@ function MainApp() {
     }
   }, [activeTab, setActiveTab, workflowEntryVisible])
 
-  const tabs = useMemo(
-    () => APP_NAVIGATION_TABS.filter((tab) => (
-      !("requiresWorkflowEntry" in tab) || workflowEntryVisible
-    )),
+  const dockApps = useMemo(
+    () => listDockApps(listSystemApps(), { workflowEntryVisible }),
     [workflowEntryVisible],
   )
 
@@ -214,7 +206,7 @@ function MainApp() {
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
       ensureBodyInteractable()
-      setActiveTab("apps", "notification")
+      setActiveTab("launcher", "notification")
       setPendingAppContentOpenRequest(request)
     })
   }, [setActiveTab])
@@ -237,10 +229,10 @@ function MainApp() {
     <IdentityGate>
       <AppShellLayout
         navigation={
-          <AppShellNavigation
-            tabs={tabs}
+          <AppShellDock
+            apps={dockApps}
             value={activeTab}
-            onValueChange={(value) => setActiveTab(value as AppTabId, "navigation")}
+            onValueChange={(value) => setActiveTab(value, "navigation")}
           />
         }
         actions={accountUiVisible ? (
@@ -250,44 +242,17 @@ function MainApp() {
         ) : null}
       >
         <div className="flex h-full min-h-0 flex-col">
-          <div className={activeTab !== "agent" ? "hidden" : "contents"}>
-            <ErrorBoundary fallbackTitle="Agent 模块出现问题">
-              <AgentModule
-                pendingAgentSession={pendingAgentSession}
-                onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
-              />
-            </ErrorBoundary>
-          </div>
-          {activeTab === "drive" ? (
-            <ErrorBoundary fallbackTitle="云盘模块出现问题">
-              <DriveModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "automation" ? (
-            <ErrorBoundary fallbackTitle="自动化模块出现问题">
-              <AutomationModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "apps" ? (
-            <ErrorBoundary fallbackTitle="应用模块出现问题">
-              <AppsModule
-                pendingContentOpenRequest={pendingAppContentOpenRequest}
-                onPendingContentOpenRequestConsumed={(requestId) => {
-                  setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
-                }}
-              />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "workflow" && workflowEntryVisible ? (
-            <ErrorBoundary fallbackTitle="工作流模块出现问题">
-              <WorkflowModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "settings" ? (
-            <ErrorBoundary fallbackTitle="设置模块出现问题">
-              <SettingsModule />
-            </ErrorBoundary>
-          ) : null}
+          <ErrorBoundary fallbackTitle="应用出现问题">
+            <SystemAppContent
+              appId={activeTab}
+              resourceContentOpenRequest={pendingAppContentOpenRequest}
+              onResourceContentOpenRequestConsumed={(requestId) => {
+                setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+              }}
+              pendingAgentSession={pendingAgentSession}
+              onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
+            />
+          </ErrorBoundary>
         </div>
         <KnowledgeBaseStorageMigrationDialog
           progress={knowledgeBaseStorageMigration.progress}

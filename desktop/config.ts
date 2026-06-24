@@ -4,16 +4,6 @@ const ONE_HOUR_MS = 60 * 60 * 1000
 // Agent 会话在最近活动结束后超过该时长时，提示用户新建对话以避免继续沿用长上下文。
 export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS
 
-// 顶部导航菜单：定义每个菜单的内部英文标识、中文显示文案和显示顺序，调整这里即可改变主窗口顶部 tab。
-export const APP_NAVIGATION_TABS = [
-  { id: "agent", label: "对话" },
-  { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
-  { id: "drive", label: "云盘" },
-  { id: "automation", label: "自动化" },
-  { id: "apps", label: "应用" },
-  { id: "settings", label: "设置" },
-] as const
-
 // 工作流入口默认显示开关：为 true 时所有用户直接看到工作流入口；为 false 时继续通过金手指状态控制入口显隐。
 export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
 
@@ -80,7 +70,8 @@ export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
 // CC Switch SQLite Provider 导入最大行数：限制设置页预览 cc-switch.db 时单次读取的 Claude provider 数量。
 export const CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS = 500
 
-// 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
-export const DEFAULT_APP_NAVIGATION_TAB_ID = "apps" satisfies AppNavigationTabId
+// 默认激活的系统应用：主窗口有内容仓库时默认进入应用启动器。
+export const DEFAULT_SYSTEM_APP_ID = "launcher"
 
-export type AppNavigationTabId = (typeof APP_NAVIGATION_TABS)[number]["id"]
+// 旧顶部 tab 默认值兼容别名：迁移期保留，后续代码应使用 DEFAULT_SYSTEM_APP_ID。
+export const DEFAULT_APP_NAVIGATION_TAB_ID = DEFAULT_SYSTEM_APP_ID
