@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from "react"
-import { ArrowUp, Camera, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
+import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -297,27 +297,6 @@ function AgentComposer({
     insertComposerText(commandText)
   }
 
-  const captureScreenshotAttachment = async () => {
-    try {
-      const artifact = await requireSynapseBridge().screenshot.startInteractiveCapture({
-        hideCurrentWindow: true,
-      })
-      if (!artifact) return
-      addAttachments([
-        createImageAttachment({
-          id: createDraftAttachmentId(),
-          name: "screenshot.png",
-          mimeType: artifact.mimeType,
-          size: artifact.size,
-          bytes: arrayBufferFromBytes(artifact.bytes),
-        }),
-      ])
-    } catch (error) {
-      logger.warn("Agent screenshot capture failed.", { error })
-      toast.error("截图失败")
-    }
-  }
-
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
       onInputKeyDown(event, attachments, () => acceptSubmittedAttachments(attachments))
@@ -578,17 +557,6 @@ function AgentComposer({
                 onInsert={insertKnowledgeBaseCommand}
                 onOpenSourceManager={onOpenKnowledgeBaseSourceManager}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="截图"
-                data-track="agent-screenshot-capture"
-                disabled={disabled}
-                onClick={() => void captureScreenshotAttachment()}
-              >
-                <Camera />
-              </Button>
             </>
           )}
           trailingActions={(
@@ -829,12 +797,6 @@ function imageIndexAt(attachments: readonly AgentDraftAttachment[], index: numbe
 
 function createDraftAttachmentId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength)
-  copy.set(bytes)
-  return copy.buffer
 }
 
 export { AgentComposer }

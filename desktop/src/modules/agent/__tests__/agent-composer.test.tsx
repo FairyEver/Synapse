@@ -103,6 +103,26 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("lucide-shield-check")
   })
 
+  it("does not expose screenshot capture from the composer", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain('aria-label="截图"')
+    expect(html).not.toContain("agent-screenshot-capture")
+  })
+
   it("does not render the jump-to-bottom pill unless there are unread messages", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
