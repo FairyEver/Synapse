@@ -26,3 +26,18 @@ Rules:
 - Use `app_terminal_session_rename` for display names and `app_terminal_session_delete` to remove a session plus retained output.
 - Deleting a running terminal session stops it before removing the record.
 - Do not use Terminal tools as a broad command runner when a narrower MCP tool exists.
+
+## Screenshot
+
+Use `app_screenshot_capture` when the user asks to take a fullscreen screenshot or a screenshot from explicit screen coordinates.
+
+Use `app_screenshot_file_save` when the user asks to save the screenshot to a specific `.png` path.
+
+Rules:
+
+- For region screenshots, provide screen coordinates as `x`, `y`, `width`, and `height`.
+- Use `mode: "fullscreen"` when the user does not provide coordinates. Fullscreen captures use the current focused Synapse window's screen when available, otherwise the primary screen.
+- Set `hideCurrentWindow: true` when the user asks to exclude the current Synapse window from the screenshot.
+- Treat `tempPath` as a temporary local artifact path, not a permanent user file.
+- Use `app_screenshot_file_save` for durable output. Do not overwrite an existing output file unless the user explicitly asks to replace it.
+- MCP screenshot tools return metadata and local paths, not raw image bytes.

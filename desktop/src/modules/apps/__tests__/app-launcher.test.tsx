@@ -92,6 +92,7 @@ describe("AppsModule", () => {
     expect(findButton("本地数据库")).toBeTruthy()
     expect(findButton("模板生成文档")).toBeTruthy()
     expect(findButton("终端")).toBeTruthy()
+    expect(findButton("截图")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()
     expect(findButton("用量监控")).toBeTruthy()
     expect(findButton("价格管理")).toBeTruthy()
@@ -100,6 +101,7 @@ describe("AppsModule", () => {
     expect(document.body.textContent).toContain("表、字段、数据记录")
     expect(document.body.textContent).toContain("模板与 JSON")
     expect(document.body.textContent).toContain("会话、命令输入")
+    expect(document.body.textContent).toContain("屏幕截图")
     expect(document.body.textContent).toContain("编辑器扫描与安装状态")
     expect(document.body.textContent).toContain("CC 与 Codex 用量")
     expect(document.body.textContent).toContain("模型价格规则")
@@ -113,7 +115,7 @@ describe("AppsModule", () => {
   it("uses an enter icon for app launch actions", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(8)
+    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(9)
     expect(document.querySelector(".lucide-external-link")).toBeNull()
   })
 

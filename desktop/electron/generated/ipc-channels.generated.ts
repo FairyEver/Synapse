@@ -271,6 +271,17 @@ export const IPC_CHANNELS = {
     "sessionChanged": "synapse:terminal:session-changed",
     "sessionDeleted": "synapse:terminal:session-deleted",
   },
+  "screenshot": {
+    "capture": "synapse:screenshot:capture",
+    "captureToFile": "synapse:screenshot:file:capture",
+    "saveArtifact": "synapse:screenshot:file:save-artifact",
+    "copyToClipboard": "synapse:screenshot:clipboard:copy",
+    "copyArtifactToClipboard": "synapse:screenshot:clipboard:copy-artifact",
+    "startInteractiveCapture": "synapse:screenshot:interactive:start",
+    "completeInteractiveCapture": "synapse:screenshot:interactive:complete",
+    "cancelInteractiveCapture": "synapse:screenshot:interactive:cancel",
+    "chooseOutputFile": "synapse:screenshot:output:choose",
+  },
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",

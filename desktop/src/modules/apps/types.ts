@@ -4,6 +4,7 @@ export const SYSTEM_APP_IDS = [
   "database",
   "document-template",
   "terminal",
+  "screenshot",
   "editor-scan",
   "usage-monitor",
   "model-price",

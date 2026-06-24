@@ -63,6 +63,7 @@ const MODULE_SOURCES = [
   { id: "apps", importPath: "electron/modules/apps/ipc.ts" },
   { id: "documentTemplate", importPath: "app-capabilities/document-template/main/ipc.ts" },
   { id: "terminal", importPath: "app-capabilities/terminal/main/ipc.ts" },
+  { id: "screenshot", importPath: "app-capabilities/screenshot/main/ipc.ts" },
   { id: "git", importPath: "electron/modules/git/ipc.ts" },
   { id: "ops", importPath: "electron/modules/ops/ipc.ts" },
   { id: "workflow", importPath: "electron/modules/workflow/ipc.ts" },

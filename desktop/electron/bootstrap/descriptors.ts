@@ -32,8 +32,11 @@ import { readFile, statfs } from "node:fs/promises"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
+import { createScreenshotCapabilityDispatcher } from "../../app-capabilities/screenshot/main/dispatcher"
+import { createScreenshotService } from "../../app-capabilities/screenshot/main/service"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
@@ -820,13 +823,22 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const screenshotDispatcher = createScreenshotCapabilityDispatcher({
+      service: createScreenshotService(),
+      permissionGuard,
+      auditSink,
+    })
+    const appDispatcher = createAppCapabilityDispatcher({
+      documentTemplate: documentTemplateDispatcher,
+      screenshot: screenshotDispatcher,
+    })
 
     const actionRouter = createSynapseActionRouter({
       appDispatch: (action, params, context) => {
         if (action.startsWith("app.terminal.")) {
           return terminalDispatcher.dispatch(action, params, context)
         }
-        return documentTemplateDispatcher.dispatch(action, params, context)
+        return appDispatcher.dispatch(action, params, context)
       },
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
