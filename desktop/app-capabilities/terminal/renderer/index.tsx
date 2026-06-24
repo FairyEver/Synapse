@@ -249,13 +249,6 @@ export function TerminalModule() {
     }
   }, [deleteGroupTarget, sessions, terminalBridge])
 
-  const headerActions = useMemo(() => (
-    <Button type="button" size="sm" onClick={() => { void createSession() }}>
-      <Plus data-icon="inline-start" />
-      新建终端
-    </Button>
-  ), [createSession])
-
   useEffect(() => {
     const container = terminalContainerRef.current
     if (!container || !activeSession) return undefined
@@ -368,9 +361,7 @@ export function TerminalModule() {
   }, [activeSession, terminalBridge])
 
   return (
-    <SystemAppWindowShell
-      actions={headerActions}
-    >
+    <SystemAppWindowShell>
       <div
         className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1"
       >

@@ -304,19 +304,11 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
-  it("renders the global new terminal action in the embedded header", async () => {
+  it("does not render a global new terminal action in the embedded header", async () => {
     await renderEmbeddedModule()
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
-    expect(actions?.textContent).toContain("新建终端")
-
-    await clickButton("新建终端", actions ?? document.body)
-
-    expect(terminalBridge.createSession).toHaveBeenCalledWith({
-      cols: 80,
-      rows: 24,
-    })
-    expect(document.body.textContent).toContain("Session 1")
+    expect(actions?.textContent).not.toContain("新建终端")
   })
 
   it("keeps lost sessions read-only without terminal-pane actions", async () => {
@@ -335,7 +327,7 @@ describe("TerminalModule", () => {
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const main = document.body.querySelector("main")
-    expect(actions?.textContent).toContain("新建终端")
+    expect(actions?.textContent).not.toContain("新建终端")
     expect(document.body.textContent).toContain("已断开")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(main?.textContent).not.toContain("终止进程")
