@@ -11,6 +11,7 @@ import type {
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
   TerminalGroup,
+  TerminalGroupSettings,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
@@ -19,6 +20,7 @@ import type {
   TerminalResizeSessionInput,
   TerminalSession,
   TerminalStopSessionInput,
+  TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
@@ -329,6 +331,26 @@ export function createTerminalService(deps: {
       await flushPersist()
       return updated
     },
+    async updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
+      const group = getGroupOrThrow(input.groupId)
+      const name = input.name.trim()
+      if (!name) throw new Error("Terminal group name is required")
+      if (name.length > 80) throw new Error("Terminal group name is too long")
+      const settings = normalizeGroupSettings(input.settings)
+      const updated: TerminalGroup = {
+        ...group,
+        name,
+        updatedAt: now(),
+      }
+      if (settings) {
+        updated.settings = settings
+      } else {
+        delete updated.settings
+      }
+      groups.set(group.id, updated)
+      await flushPersist()
+      return updated
+    },
     async deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
       const group = getGroupOrThrow(input.groupId)
       const groupSessions = [...sessions.values()].filter((session) => session.groupId === group.id)
@@ -348,7 +370,7 @@ export function createTerminalService(deps: {
       const group = input.groupId ? groups.get(input.groupId) : ensureDefaultGroup()
       if (!group) throw new Error("Terminal group not found")
 
-      const cwd = resolveCwd(input.cwd ?? (deps.resolveDefaultCwd?.() ?? defaultCwd()))
+      const cwd = resolveCwd(input.cwd ?? group.settings?.defaultCwd ?? (deps.resolveDefaultCwd?.() ?? defaultCwd()))
       const shell = deps.resolveDefaultShell?.() ?? defaultShell()
       const cols = input.cols ?? 80
       const rows = input.rows ?? 24
@@ -372,6 +394,9 @@ export function createTerminalService(deps: {
       buffers.set(session.id, buffer)
       sessions.set(session.id, session)
       attachRuntime(session, child, buffer)
+      if (group.settings?.startupCommand) {
+        child.write(appendTerminalNewline(group.settings.startupCommand))
+      }
       await flushPersist()
       return session
     },
@@ -493,4 +518,30 @@ function resolveCwd(cwd: string): string {
     throw new Error("Terminal cwd must be an existing absolute path")
   }
   return cwd
+}
+
+function normalizeGroupSettings(settings: TerminalGroupSettings | undefined): TerminalGroupSettings | undefined {
+  const defaultCwd = settings?.defaultCwd?.trim()
+  const startupCommand = normalizeStartupCommand(settings?.startupCommand)
+  const normalized: TerminalGroupSettings = {
+    ...(defaultCwd ? { defaultCwd: validateAbsoluteCwdInput(defaultCwd) } : {}),
+    ...(startupCommand ? { startupCommand } : {}),
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function normalizeStartupCommand(command: string | undefined): string | undefined {
+  const normalized = command?.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+  return normalized || undefined
+}
+
+function validateAbsoluteCwdInput(cwd: string): string {
+  if (!path.isAbsolute(cwd)) {
+    throw new Error("Terminal cwd must be an absolute path")
+  }
+  return cwd
+}
+
+function appendTerminalNewline(command: string): string {
+  return command.endsWith("\n") ? command : `${command}\n`
 }

@@ -98,6 +98,26 @@ describe("terminal store", () => {
     })
   })
 
+  it("loads legacy groups without settings", async () => {
+    await writeFile(path.join(tempDir, "terminal-state.json"), JSON.stringify({
+      groups: [{
+        id: "g1",
+        name: "Legacy",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        sortOrder: 0,
+      }],
+      sessions: [],
+      output: [],
+    }))
+
+    await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
+      groups: [expect.objectContaining({ id: "g1", name: "Legacy" })],
+      sessions: [],
+      output: [],
+    })
+  })
+
   it("rejects invalid state on save", async () => {
     const store = createTerminalStore({ baseDir: tempDir })
     const validGroup = createValidGroup()
