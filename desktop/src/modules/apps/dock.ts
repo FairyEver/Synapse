@@ -15,17 +15,11 @@ export function listDockApps(
   options: {
     readonly workflowEntryVisible: boolean
     readonly dockAppIds?: readonly SynapseSystemAppId[]
-    readonly userPinnedAppIds?: readonly SynapseSystemAppId[]
   },
 ): readonly SynapseSystemAppManifest[] {
-  const dockAppIds = options.dockAppIds
-    ?? (options.userPinnedAppIds ?? []).reduce(
-      (current, appId) => addDockAppId(current, appId),
-      [...DEFAULT_DOCK_APP_IDS] as SynapseSystemAppId[],
-    )
   const appById = new Map(apps.map((app) => [app.id, app]))
 
-  return normalizeDockAppIds(dockAppIds)
+  return normalizeDockAppIds(options.dockAppIds)
     .map((appId) => appById.get(appId))
     .filter((app): app is SynapseSystemAppManifest => Boolean(app))
     .filter((app) => app.dock.visibility !== "workflow-entry-enabled" || options.workflowEntryVisible)

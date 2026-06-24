@@ -66,7 +66,7 @@ export function AppShellDock({
         onDrop={handleDrop}
       >
         <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
-          <div className="flex min-w-max items-center justify-center gap-1 pb-1.5">
+          <div className="flex min-w-max items-center justify-center gap-1">
             {apps.map((app) => {
               const active = app.id === value
               const unpinnable = Boolean(canUnpinApp?.(app.id) && onUnpinApp)
@@ -100,7 +100,7 @@ export function AppShellDock({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="relative size-11 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
+                          className="relative h-12 w-11 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
                           aria-label={app.name}
                           aria-current={active ? "page" : undefined}
                           data-can-unpin={unpinnable ? "true" : undefined}
@@ -115,7 +115,7 @@ export function AppShellDock({
                             <span
                               data-slot="app-shell-dock-active-indicator"
                               aria-hidden="true"
-                              className="absolute bottom-0 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-blue-500"
+                              className="absolute bottom-0 left-1/2 size-1 -translate-x-1/2 rounded-full bg-blue-500"
                             />
                           ) : null}
                         </Button>

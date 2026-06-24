@@ -41,8 +41,12 @@ describe("AppShellDock", () => {
 
     const activeButton = findButtonByLabel("对话")
     expect(activeButton.getAttribute("aria-current")).toBe("page")
+    expect(activeButton.className).toContain("h-12")
+    expect(activeButton.className).toContain("w-11")
     const activeIndicator = activeButton.querySelector("[data-slot='app-shell-dock-active-indicator']")
     expect(activeIndicator?.getAttribute("aria-hidden")).toBe("true")
+    expect(activeIndicator?.className).toContain("size-1")
+    expect(activeIndicator?.className).toContain("bottom-0")
     expect(findButtonByLabel("应用").querySelector("[data-slot='app-shell-dock-active-indicator']")).toBeNull()
 
     await act(async () => {
