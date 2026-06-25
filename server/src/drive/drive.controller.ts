@@ -34,7 +34,7 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
-const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals;"
+const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob: data:; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock;"
 const PUBLIC_ASSET_CACHE_CONTROL = "no-cache, must-revalidate"
 type DriveAccessCookieKind = "share" | "site"
 
