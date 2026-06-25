@@ -304,6 +304,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           agentIcon={selectedAgentDefinition?.icon}
           mode="embedded"
           onOpenDetached={(target) => void handleOpenDetachedConversation(target)}
+          onRename={(session, name) => chat.renameSession(session, name)}
           onUserSessionRequested={() => {
             if (sourceFilter !== "user") setSourceFilter("user")
           }}

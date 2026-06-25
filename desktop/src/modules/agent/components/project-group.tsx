@@ -7,18 +7,11 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { SessionTrailing } from "./session-trailing"
 import { AgentSidebarSessionRow } from "./agent-sidebar-session-row"
+import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
 
@@ -52,8 +45,6 @@ function ProjectGroup({
   const isSelected = selectedProjectId === project.id
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
-  const [renameValue, setRenameValue] = useState("")
-  const renameInputRef = useRef<HTMLInputElement>(null)
 
   const prevIsSelectedRef = useRef(isSelected)
   const prevSessionCountRef = useRef(sessions.length)
@@ -65,24 +56,6 @@ function ProjectGroup({
 
   function handleRenameOpen(session: SynapseAgentSessionSummary) {
     setRenameTarget(session)
-    setRenameValue(sessionLabel(session))
-  }
-
-  function handleRenameOpenAutoFocus(event: Event) {
-    event.preventDefault()
-    renameInputRef.current?.focus()
-    renameInputRef.current?.select()
-  }
-
-  async function handleRenameConfirm() {
-    const trimmed = renameValue.trim()
-    if (!trimmed || !renameTarget) return
-    try {
-      await onRename(renameTarget, trimmed)
-      setRenameTarget(null)
-    } catch {
-      // Dialog stays open on failure for retry
-    }
   }
 
   return (
@@ -160,27 +133,11 @@ function ProjectGroup({
         })}
       </ModuleSidebarGroup>
 
-      <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null) }}>
-        <DialogContent
-          className="sm:max-w-sm"
-          aria-describedby={undefined}
-          onOpenAutoFocus={handleRenameOpenAutoFocus}
-        >
-          <DialogHeader>
-            <DialogTitle>重命名会话</DialogTitle>
-          </DialogHeader>
-          <Input
-            ref={renameInputRef}
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleRenameConfirm() }}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>取消</Button>
-            <Button disabled={!renameValue.trim()} onClick={handleRenameConfirm}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AgentSessionRenameDialog
+        session={renameTarget}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setRenameTarget(null) }}
+        onRename={onRename}
+      />
     </>
   )
 }

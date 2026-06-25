@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     readonly mode?: string
     readonly session: SynapseAgentSessionSummary
     readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
+    readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   } | null,
 }))
 
@@ -38,6 +39,7 @@ vi.mock("../components/agent-conversation-workspace", () => ({
     readonly mode: string
     readonly session: SynapseAgentSessionSummary
     readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
+    readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   }) => {
     mocks.workspaceProps = props
     return (
@@ -112,6 +114,7 @@ describe("AgentConversationWindowPage", () => {
     expect(container.textContent).toContain("新会话")
     expect(container.querySelector('button[aria-label="新窗口打开"]')).toBeNull()
     expect(mocks.workspaceProps?.mode).toBe("window")
+    expect(mocks.workspaceProps?.onRename).toBe((mocks.chat as { renameSession: unknown }).renameSession)
   })
 
   it("shows missing conversation state", () => {

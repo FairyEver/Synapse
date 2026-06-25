@@ -15,7 +15,6 @@ vi.mock("../components/agent-composer", () => ({
     readonly onStartNewConversation?: () => void
     readonly disabled?: boolean
   }) => {
-    composerProps = props
     return (
       <div data-testid="agent-composer">
         <button type="button" aria-label="新建对话" disabled={props.disabled} onClick={props.onStartNewConversation} />
@@ -47,10 +46,6 @@ const session: SynapseAgentSessionSummary = {
 }
 
 let roots: Root[] = []
-let composerProps: {
-  readonly onStartNewConversation?: () => void
-  readonly disabled?: boolean
-} | null = null
 
 afterEach(() => {
   for (const root of roots) {
@@ -59,7 +54,6 @@ afterEach(() => {
     })
   }
   roots = []
-  composerProps = null
   document.body.innerHTML = ""
   vi.clearAllMocks()
 })
@@ -83,6 +77,41 @@ describe("AgentConversationWorkspace", () => {
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
     })
+  })
+
+  it("opens the rename dialog when double-clicking the conversation title", async () => {
+    const onRename = vi.fn(async () => undefined)
+    const container = renderWorkspace({
+      mode: "embedded",
+      onRename,
+    })
+
+    await act(async () => {
+      container.querySelector("h2")
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+    })
+
+    const input = document.body.querySelector<HTMLInputElement>("input")
+    expect(document.body.textContent).toContain("重命名会话")
+    expect(input?.value).toBe("新会话")
+    expect(input?.selectionStart).toBe(0)
+    expect(input?.selectionEnd).toBe("新会话".length)
+
+    await act(async () => {
+      if (!input) return
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      if (!setter) throw new Error("Input value setter not found")
+      setter.call(input, "需求复盘")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    const saveButton = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "保存")
+    await act(async () => {
+      saveButton?.click()
+    })
+
+    expect(onRename).toHaveBeenCalledWith(session, "需求复盘")
   })
 
   it("hides detached button in window mode", () => {
@@ -170,6 +199,7 @@ function renderWorkspace(options: {
   readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
   readonly project?: SynapseProjectConfig
   readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
+  readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly chat?: AgentConversationWorkspaceController
 }) {
   const container = document.createElement("div")
@@ -208,6 +238,7 @@ function renderWorkspace(options: {
         mode={options.mode}
         onOpenDetached={options.onOpenDetached}
         onReplaceDetachedTarget={options.onReplaceDetachedTarget}
+        onRename={options.onRename}
       />,
     )
   })

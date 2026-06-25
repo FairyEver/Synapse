@@ -57,6 +57,7 @@ import {
 import type { SendMessageOptions } from "../hooks/use-chat-connection"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
+import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { AgentTimeline } from "./agent-timeline"
 
 const logger = createRendererLogger("agent")
@@ -110,6 +111,7 @@ type AgentConversationWorkspaceProps = {
   readonly mode: "embedded" | "window"
   readonly onOpenDetached?: (target: AgentConversationTarget) => void
   readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean> | boolean
+  readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
   readonly onUserSessionRequested?: () => void
 }
 
@@ -137,12 +139,14 @@ function AgentConversationWorkspace({
   mode,
   onOpenDetached,
   onReplaceDetachedTarget,
+  onRename,
   onUserSessionRequested,
 }: AgentConversationWorkspaceProps) {
   const [draft, setDraft] = useState("")
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [isExportingConversation, setIsExportingConversation] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
   const pendingMessageIdRef = useRef(0)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
   const latestEntry = chat.timeline.at(-1)
@@ -516,7 +520,10 @@ function AgentConversationWorkspace({
       <TooltipProvider>
         <div className="flex items-center justify-between gap-2 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-medium">
+            <h2
+              className="truncate text-sm font-medium"
+              onDoubleClick={onRename ? () => setRenameTarget(session) : undefined}
+            >
               {sessionLabel(session)}
             </h2>
           </div>
@@ -615,6 +622,14 @@ function AgentConversationWorkspace({
           </div>
         </div>
       </TooltipProvider>
+
+      {onRename ? (
+        <AgentSessionRenameDialog
+          session={renameTarget}
+          onOpenChange={(nextOpen) => { if (!nextOpen) setRenameTarget(null) }}
+          onRename={onRename}
+        />
+      ) : null}
 
       {chat.error ? (
         <Alert variant="destructive">

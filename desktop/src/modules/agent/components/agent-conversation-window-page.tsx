@@ -144,6 +144,7 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
           agentIcon={definition?.icon}
           mode="window"
           onReplaceDetachedTarget={replaceDetachedTarget}
+          onRename={chat.renameSession}
         />
       </div>
     </div>
