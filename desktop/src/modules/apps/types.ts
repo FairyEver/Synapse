@@ -9,6 +9,7 @@ export const SYSTEM_APP_IDS = [
   "git",
   "database",
   "document-template",
+  "quick-input",
   "terminal",
   "screenshot",
   "editor-scan",
@@ -29,6 +30,7 @@ export type SynapseSystemAppNamespace =
   | "git"
   | "database"
   | "document_template"
+  | "quick_input"
   | "terminal"
   | "screenshot"
   | "editor_scan"
