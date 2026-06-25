@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CircleDot, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -46,6 +46,7 @@ import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseTerminalGroup,
+  SynapseTerminalGroupCommand,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
@@ -76,9 +77,14 @@ export function TerminalModule() {
   const [groupSettingsTarget, setGroupSettingsTarget] = useState<SynapseTerminalGroup | null>(null)
   const [groupSettingsName, setGroupSettingsName] = useState("")
   const [groupSettingsDefaultCwd, setGroupSettingsDefaultCwd] = useState("")
-  const [groupSettingsStartupCommand, setGroupSettingsStartupCommand] = useState("")
   const [groupSettingsSaving, setGroupSettingsSaving] = useState(false)
   const [groupSettingsChoosingDirectory, setGroupSettingsChoosingDirectory] = useState(false)
+  const [commandManagerTarget, setCommandManagerTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [commandEditTarget, setCommandEditTarget] = useState<SynapseTerminalGroupCommand | null>(null)
+  const [commandName, setCommandName] = useState("")
+  const [commandText, setCommandText] = useState("")
+  const [commandSaving, setCommandSaving] = useState(false)
+  const [commandDeletingId, setCommandDeletingId] = useState<string | null>(null)
   const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
@@ -169,7 +175,6 @@ export function TerminalModule() {
     setGroupSettingsTarget(group)
     setGroupSettingsName(group.name)
     setGroupSettingsDefaultCwd(group.settings?.defaultCwd ?? "")
-    setGroupSettingsStartupCommand(group.settings?.startupCommand ?? "")
   }, [])
 
   const saveGroup = useCallback(async () => {
@@ -271,7 +276,6 @@ export function TerminalModule() {
     setGroupSettingsTarget(null)
     setGroupSettingsName("")
     setGroupSettingsDefaultCwd("")
-    setGroupSettingsStartupCommand("")
     setGroupSettingsChoosingDirectory(false)
   }, [])
 
@@ -295,7 +299,6 @@ export function TerminalModule() {
     const name = groupSettingsName.trim()
     if (!name) return
     const defaultCwd = groupSettingsDefaultCwd.trim()
-    const startupCommand = groupSettingsStartupCommand.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
     setGroupSettingsSaving(true)
     try {
       const group = await terminalBridge.updateGroupSettings({
@@ -303,7 +306,7 @@ export function TerminalModule() {
         name,
         settings: {
           ...(defaultCwd ? { defaultCwd } : {}),
-          ...(startupCommand ? { startupCommand } : {}),
+          ...(groupSettingsTarget.settings?.commands?.length ? { commands: groupSettingsTarget.settings.commands } : {}),
         },
       })
       setGroups((current) => current.map((item) => item.id === group.id ? group : item))
@@ -317,11 +320,127 @@ export function TerminalModule() {
   }, [
     groupSettingsDefaultCwd,
     groupSettingsName,
-    groupSettingsStartupCommand,
     groupSettingsTarget,
     resetGroupSettingsDialog,
     terminalBridge,
   ])
+
+  const openCommandManager = useCallback((group: SynapseTerminalGroup) => {
+    setCommandManagerTarget(group)
+    setCommandEditTarget(null)
+    setCommandName("")
+    setCommandText("")
+  }, [])
+
+  const openCreateCommandDialog = useCallback(() => {
+    setCommandEditTarget(null)
+    setCommandName("")
+    setCommandText("")
+  }, [])
+
+  const openEditCommandDialog = useCallback((command: SynapseTerminalGroupCommand) => {
+    setCommandEditTarget(command)
+    setCommandName(command.name)
+    setCommandText(command.command)
+  }, [])
+
+  const closeCommandForm = useCallback(() => {
+    setCommandEditTarget(null)
+    setCommandName("")
+    setCommandText("")
+  }, [])
+
+  const refreshGroupsForCommandManager = useCallback(async (targetGroupId: string) => {
+    const nextGroups = await terminalBridge.listGroups()
+    setGroups(nextGroups)
+    setCommandManagerTarget(nextGroups.find((group) => group.id === targetGroupId) ?? null)
+  }, [terminalBridge])
+
+  const saveCommand = useCallback(async () => {
+    if (!commandManagerTarget) return
+    const name = commandName.trim()
+    const command = commandText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+    if (!name || !command) return
+    setCommandSaving(true)
+    try {
+      if (commandEditTarget) {
+        await terminalBridge.updateGroupCommand({
+          groupId: commandManagerTarget.id,
+          commandId: commandEditTarget.id,
+          name,
+          command,
+        })
+      } else {
+        await terminalBridge.createGroupCommand({
+          groupId: commandManagerTarget.id,
+          name,
+          command,
+        })
+      }
+      await refreshGroupsForCommandManager(commandManagerTarget.id)
+      closeCommandForm()
+    } catch (error) {
+      logger.error("Failed to save terminal command.", error)
+      toast.error("保存命令失败")
+    } finally {
+      setCommandSaving(false)
+    }
+  }, [
+    closeCommandForm,
+    commandEditTarget,
+    commandManagerTarget,
+    commandName,
+    commandText,
+    refreshGroupsForCommandManager,
+    terminalBridge,
+  ])
+
+  const deleteCommand = useCallback(async (command: SynapseTerminalGroupCommand) => {
+    if (!commandManagerTarget) return
+    setCommandDeletingId(command.id)
+    try {
+      await terminalBridge.deleteGroupCommand({
+        groupId: commandManagerTarget.id,
+        commandId: command.id,
+      })
+      await refreshGroupsForCommandManager(commandManagerTarget.id)
+      if (commandEditTarget?.id === command.id) closeCommandForm()
+    } catch (error) {
+      logger.error("Failed to delete terminal command.", error)
+      toast.error("删除命令失败")
+    } finally {
+      setCommandDeletingId((current) => current === command.id ? null : current)
+    }
+  }, [
+    closeCommandForm,
+    commandEditTarget,
+    commandManagerTarget,
+    refreshGroupsForCommandManager,
+    terminalBridge,
+  ])
+
+  const launchCommand = useCallback(async (group: SynapseTerminalGroup, command: SynapseTerminalGroupCommand) => {
+    try {
+      const session = await terminalBridge.launchGroupCommand({
+        groupId: group.id,
+        commandId: command.id,
+        cols: DEFAULT_COLS,
+        rows: DEFAULT_ROWS,
+      })
+      setSessions((current) => mergeSession(current, session))
+      setActiveSessionId(session.id)
+      setTerminalReadError(null)
+      terminalBridge.listGroups()
+        .then(setGroups)
+        .catch((error) => {
+          logger.warn("Failed to refresh terminal groups after command launch.", error)
+          toast.error("刷新终端分组失败")
+        })
+    } catch (error) {
+      logger.error("Failed to launch terminal command.", error)
+      toast.error("启动命令失败")
+    }
+  }, [terminalBridge])
 
   useEffect(() => {
     const container = terminalContainerRef.current
@@ -331,7 +450,6 @@ export function TerminalModule() {
     let disposed = false
     let lastSeq = 0
     let lastResize = { cols: terminalSessionCols, rows: terminalSessionRows }
-    let startupCommandRequested = false
     const xterm = new Terminal(createTerminalRenderingOptions({
       container,
       disableStdin: terminalSessionStatus !== "running",
@@ -376,21 +494,10 @@ export function TerminalModule() {
 
     let initialReadComplete = false
     const pendingChunks: SynapseTerminalOutputChunk[] = []
-    const requestStartupCommand = () => {
-      if (disposed || startupCommandRequested) return
-      startupCommandRequested = true
-      void terminalBridge.runStartupCommand({ sessionId: terminalSessionId }).catch((error) => {
-        logger.warn("Failed to run terminal startup command.", error)
-      })
-    }
 
     const writeChunk = (chunk: SynapseTerminalOutputChunk) => {
       if (chunk.seq <= lastSeq) return
       lastSeq = chunk.seq
-      if (hasPrintableTerminalText(chunk.data)) {
-        xterm.write(chunk.data, requestStartupCommand)
-        return
-      }
       xterm.write(chunk.data)
     }
 
@@ -503,6 +610,30 @@ export function TerminalModule() {
                             type="button"
                             size="icon-xs"
                             variant="ghost"
+                            aria-label={`以命令启动：${group.name}`}
+                          >
+                            <Code2 className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {group.settings?.commands?.map((command) => (
+                            <DropdownMenuItem key={command.id} onClick={() => { void launchCommand(group, command) }}>
+                              <TerminalIcon />
+                              {command.name}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuItem onClick={() => openCommandManager(group)}>
+                            <Settings />
+                            管理命令
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
                             aria-label={`终端分组操作：${group.name}`}
                           >
                             <MoreHorizontal className="size-3.5" />
@@ -512,6 +643,10 @@ export function TerminalModule() {
                           <DropdownMenuItem onClick={() => openGroupSettingsDialog(group)}>
                             <Settings />
                             设置
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openCommandManager(group)}>
+                            <Code2 />
+                            命令
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
                             <Pencil />
@@ -638,7 +773,7 @@ export function TerminalModule() {
           <DialogHeader>
             <DialogTitle>分组设置</DialogTitle>
             <DialogDescription className="sr-only">
-              设置分组名称、默认目录和启动命令。
+              设置分组名称和默认目录。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -670,15 +805,6 @@ export function TerminalModule() {
                 </Button>
               </div>
             </div>
-            <label className="grid gap-1.5">
-              <span className="text-sm font-medium">启动命令</span>
-              <Textarea
-                aria-label="启动命令"
-                value={groupSettingsStartupCommand}
-                onChange={(event) => setGroupSettingsStartupCommand(event.target.value)}
-                rows={5}
-              />
-            </label>
           </div>
           <DialogFooter>
             <Button
@@ -693,6 +819,108 @@ export function TerminalModule() {
               type="button"
               disabled={groupSettingsSaving || !groupSettingsName.trim()}
               onClick={() => { void saveGroupSettings() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={commandManagerTarget !== null} onOpenChange={(open) => {
+        if (!open) {
+          setCommandManagerTarget(null)
+          closeCommandForm()
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>命令</DialogTitle>
+            <DialogDescription className="sr-only">
+              管理终端分组命令。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            {commandManagerTarget?.settings?.commands?.length ? (
+              <div className="grid gap-2">
+                {commandManagerTarget.settings.commands.map((command) => (
+                  <div key={command.id} className="grid gap-1 rounded-md border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 truncate text-sm font-medium">{command.name}</div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`编辑命令：${command.name}`}
+                          onClick={() => openEditCommandDialog(command)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`删除命令：${command.name}`}
+                          disabled={commandDeletingId === command.id}
+                          onClick={() => { void deleteCommand(command) }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="max-h-10 overflow-hidden whitespace-pre-wrap text-xs text-muted-foreground">
+                      {command.command}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="grid gap-3">
+              <label className="grid gap-1.5">
+                <span className="text-sm font-medium">名称</span>
+                <Input
+                  aria-label="命令名称"
+                  value={commandName}
+                  onChange={(event) => setCommandName(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-sm font-medium">命令内容</span>
+                <Textarea
+                  aria-label="命令内容"
+                  value={commandText}
+                  onChange={(event) => setCommandText(event.target.value)}
+                  rows={5}
+                />
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={commandSaving}
+              onClick={() => {
+                if (commandName || commandText || commandEditTarget) {
+                  closeCommandForm()
+                } else {
+                  setCommandManagerTarget(null)
+                }
+              }}
+            >
+              关闭
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={commandSaving}
+              onClick={openCreateCommandDialog}
+            >
+              新增命令
+            </Button>
+            <Button
+              type="button"
+              disabled={commandSaving || !commandName.trim() || !commandText.trim()}
+              onClick={() => { void saveCommand() }}
             >
               保存
             </Button>
@@ -817,14 +1045,6 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
       <span className="sr-only">{label}</span>
     </span>
   )
-}
-
-function hasPrintableTerminalText(data: string): boolean {
-  const withoutEscapeSequences = data
-    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, "")
-    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/\x1B[ -/]*[@-~]/g, "")
-  return /[^\s\x00-\x1F\x7F]/u.test(withoutEscapeSequences)
 }
 
 function groupSessions(

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
   SynapseTerminalDataEvent,
   SynapseTerminalGroup,
+  SynapseTerminalGroupCommand,
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
   SynapseTerminalUpdateGroupSettingsInput,
@@ -64,6 +65,85 @@ const terminalBridge = vi.hoisted(() => ({
     } as SynapseTerminalGroup
     bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
     return group
+  }),
+  createGroupCommand: vi.fn(async ({ groupId, name, command }: {
+    groupId: string
+    name: string
+    command: string
+  }) => {
+    const group = bridgeState.groups.find((item) => item.id === groupId)
+    if (!group) throw new Error("Group not found")
+    const nextCommand = {
+      id: `cmd-${(group.settings?.commands?.length ?? 0) + 1}`,
+      name: name.trim(),
+      command: command.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim(),
+      createdAt: "2026-06-24T00:03:00.000Z",
+      updatedAt: "2026-06-24T00:03:00.000Z",
+    } satisfies SynapseTerminalGroupCommand
+    const updated = {
+      ...group,
+      settings: {
+        ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+        commands: [...(group.settings?.commands ?? []), nextCommand],
+      },
+    }
+    bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? updated : item)
+    return nextCommand
+  }),
+  updateGroupCommand: vi.fn(async ({ groupId, commandId, name, command }: {
+    groupId: string
+    commandId: string
+    name: string
+    command: string
+  }) => {
+    const group = bridgeState.groups.find((item) => item.id === groupId)
+    if (!group) throw new Error("Group not found")
+    const currentCommand = group.settings?.commands?.find((item) => item.id === commandId)
+    const updatedCommand = {
+      id: commandId,
+      name: name.trim(),
+      command: command.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim(),
+      createdAt: currentCommand?.createdAt ?? "2026-06-24T00:03:00.000Z",
+      updatedAt: "2026-06-24T00:04:00.000Z",
+    } satisfies SynapseTerminalGroupCommand
+    const updated = {
+      ...group,
+      settings: {
+        ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+        commands: (group.settings?.commands ?? []).map((item) => item.id === commandId ? updatedCommand : item),
+      },
+    }
+    bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? updated : item)
+    return updatedCommand
+  }),
+  deleteGroupCommand: vi.fn(async ({ groupId, commandId }: { groupId: string; commandId: string }) => {
+    const group = bridgeState.groups.find((item) => item.id === groupId)
+    if (!group) throw new Error("Group not found")
+    const commands = (group.settings?.commands ?? []).filter((item) => item.id !== commandId)
+    const settings = group.settings?.defaultCwd || commands.length
+      ? {
+          ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+          ...(commands.length ? { commands } : {}),
+        }
+      : undefined
+    bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? { ...group, settings } : item)
+  }),
+  launchGroupCommand: vi.fn(async ({ groupId, commandId, cols, rows }: {
+    groupId: string
+    commandId: string
+    cols?: number
+    rows?: number
+  }) => {
+    const group = bridgeState.groups.find((item) => item.id === groupId)
+    const command = group?.settings?.commands?.find((item) => item.id === commandId)
+    if (!command) throw new Error("Command not found")
+    return createSession({
+      id: `session-${bridgeState.sessions.length + 1}`,
+      groupId,
+      title: command.name,
+      cols: cols ?? 80,
+      rows: rows ?? 24,
+    })
   }),
   deleteGroup: vi.fn(async ({ groupId }: { groupId: string }) => {
     const removedSessionIds = new Set(bridgeState.sessions
@@ -276,6 +356,10 @@ beforeEach(() => {
   terminalBridge.createGroup.mockClear()
   terminalBridge.renameGroup.mockClear()
   terminalBridge.updateGroupSettings.mockClear()
+  terminalBridge.createGroupCommand.mockClear()
+  terminalBridge.updateGroupCommand.mockClear()
+  terminalBridge.deleteGroupCommand.mockClear()
+  terminalBridge.launchGroupCommand.mockClear()
   terminalBridge.deleteGroup.mockClear()
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
@@ -475,7 +559,13 @@ describe("TerminalModule", () => {
       name: "构建",
       settings: {
         defaultCwd: "/repo/old",
-        startupCommand: "pnpm test",
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+        }],
       },
     })]
     bridgeState.sessions = []
@@ -485,7 +575,6 @@ describe("TerminalModule", () => {
     await clickMenuItem("设置")
     await changeInput("分组名称", "开发")
     await changeInput("默认目录", "/repo/app")
-    await changeTextarea("启动命令", "nvm use\npnpm dev")
     await clickButton("保存")
 
     expect(terminalBridge.updateGroupSettings).toHaveBeenCalledWith({
@@ -493,10 +582,128 @@ describe("TerminalModule", () => {
       name: "开发",
       settings: {
         defaultCwd: "/repo/app",
-        startupCommand: "nvm use\npnpm dev",
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+        }],
       },
     })
     expect(document.body.textContent).toContain("开发")
+  })
+
+  it("shows group command launch and management actions", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-1",
+      name: "前端项目",
+      settings: {
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+        }],
+      },
+    })]
+
+    await renderModule()
+    await clickCommandMenu("前端项目")
+
+    expect(document.body.textContent).toContain("dev")
+    expect(document.body.textContent).toContain("管理命令")
+  })
+
+  it("launches a named command as a new terminal session", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-1",
+      name: "前端项目",
+      settings: {
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+        }],
+      },
+    })]
+
+    await renderModule()
+    await clickCommandMenu("前端项目")
+    await clickMenuItem("dev")
+
+    expect(terminalBridge.launchGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-dev",
+      cols: 80,
+      rows: 24,
+    })
+    expect(document.body.textContent).toContain("dev")
+  })
+
+  it("keeps group settings focused on name and default directory", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-1",
+      name: "前端项目",
+      settings: {
+        defaultCwd: "/repo/web",
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          updatedAt: "2026-06-24T00:00:00.000Z",
+        }],
+      },
+    })]
+
+    await renderModule()
+    await clickGroupMenu("前端项目")
+    await clickMenuItem("设置")
+
+    expect(document.body.textContent).toContain("分组设置")
+    expect(document.body.textContent).toContain("默认目录")
+    expect(document.body.textContent).not.toContain("启动命令")
+  })
+
+  it("adds edits and deletes commands from command management", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "前端项目" })]
+
+    await renderModule()
+    await clickGroupMenu("前端项目")
+    await clickMenuItem("命令")
+    await clickButton("新增命令")
+    await changeInput("命令名称", "dev")
+    await changeTextarea("命令内容", "pnpm dev")
+    await clickButton("保存")
+
+    expect(terminalBridge.createGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      name: "dev",
+      command: "pnpm dev",
+    })
+
+    await clickButtonByAriaLabel("编辑命令：dev")
+    await changeInput("命令名称", "test")
+    await changeTextarea("命令内容", "pnpm test")
+    await clickButton("保存")
+
+    expect(terminalBridge.updateGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-1",
+      name: "test",
+      command: "pnpm test",
+    })
+
+    await clickButtonByAriaLabel("删除命令：test")
+
+    expect(terminalBridge.deleteGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-1",
+    })
   })
 
   it("chooses a default directory when updating terminal group settings", async () => {
@@ -673,8 +880,8 @@ describe("TerminalModule", () => {
       sessionId: "session-1",
       afterSeq: 0,
     })
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n", expect.any(Function))
-    expect(terminalBridge.runStartupCommand).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("ready\r\n")
+    expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
 
     await act(async () => {
       xtermState.instances[0]?.emitInput("pwd\r")
@@ -702,7 +909,7 @@ describe("TerminalModule", () => {
       resizeObservers[0]?.trigger()
     })
 
-    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("next\r\n", expect.any(Function))
+    expect(xtermState.instances[0]?.write).toHaveBeenCalledWith("next\r\n")
     expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("old")
     expect(xtermState.instances[0]?.write).not.toHaveBeenCalledWith("other")
     expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
@@ -743,7 +950,7 @@ describe("TerminalModule", () => {
     })
   })
 
-  it("does not mark startup ready for control-only terminal output", async () => {
+  it("does not request startup commands from terminal output", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
     bridgeState.chunks = [
@@ -761,7 +968,7 @@ describe("TerminalModule", () => {
       })
     })
 
-    expect(terminalBridge.runStartupCommand).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(terminalBridge.runStartupCommand).not.toHaveBeenCalled()
   })
 
   it("does not lose or duplicate data emitted before retained output finishes loading", async () => {
@@ -866,6 +1073,30 @@ async function clickGroupMenu(name: string): Promise<void> {
       ctrlKey: false,
     }))
     button?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+    button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickCommandMenu(name: string): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.getAttribute("aria-label") === `以命令启动：${name}`)
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      ctrlKey: false,
+    }))
+    button?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+    button?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickButtonByAriaLabel(label: string): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.getAttribute("aria-label") === label)
+  await act(async () => {
     button?.click()
     await Promise.resolve()
   })
