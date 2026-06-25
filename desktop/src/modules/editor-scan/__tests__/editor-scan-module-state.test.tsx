@@ -153,6 +153,29 @@ describe("EditorScanModule", () => {
     expect(screenText()).toContain("不支持")
     expect(screenText()).toContain("/Users/liyang/.cursor/skills")
   })
+
+  it("keeps Skill and Rule filters inside the content view", async () => {
+    await renderEditorScanModule(roots)
+
+    expect(buttonByText("Skill")).not.toBeUndefined()
+    expect(buttonByText("Rule")).not.toBeUndefined()
+    expect(buttonByText("全局")).not.toBeUndefined()
+    expect(buttonByText("项目")).not.toBeUndefined()
+  })
+
+  it("hides content filters in the directory view", async () => {
+    await renderEditorScanModule(roots)
+
+    await act(async () => {
+      buttonByText("目录")?.click()
+      await Promise.resolve()
+    })
+
+    expect(buttonByText("Skill")).toBeUndefined()
+    expect(buttonByText("Rule")).toBeUndefined()
+    expect(buttonByText("全局")).toBeUndefined()
+    expect(buttonByText("项目")).toBeUndefined()
+  })
 })
 
 async function renderEditorScanModule(roots: Root[]): Promise<void> {
