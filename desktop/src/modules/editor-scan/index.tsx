@@ -351,7 +351,14 @@ function EditorScanModule() {
       onValueChange={setAppViewTab}
       actions={headerActions}
     >
-      <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface" sidebarResizable>
+      <SidebarContentLayout
+        sidebar={sidebar}
+        contentScrollable={false}
+        contentClassName="bg-surface"
+        sidebarResizable
+        sidebarDefaultSize={250}
+        sidebarMinSize={250}
+      >
         {appViewTab === "content" ? (
           <div data-editor-scan-content-panel className="flex h-full flex-col">
             {selectionToolbar}

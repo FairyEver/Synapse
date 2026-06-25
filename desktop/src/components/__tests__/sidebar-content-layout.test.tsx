@@ -8,7 +8,25 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/components/ui/resizable", () => ({
   ResizableHandle: () => <div data-testid="resize-handle" />,
-  ResizablePanel: ({ children }: { readonly children: ReactNode }) => <div>{children}</div>,
+  ResizablePanel: ({
+    children,
+    defaultSize,
+    minSize,
+    maxSize,
+  }: {
+    readonly children: ReactNode
+    readonly defaultSize?: number
+    readonly minSize?: number
+    readonly maxSize?: number
+  }) => (
+    <div
+      data-default-size={defaultSize}
+      data-min-size={minSize}
+      data-max-size={maxSize}
+    >
+      {children}
+    </div>
+  ),
   ResizablePanelGroup: ({
     children,
     className,
@@ -72,6 +90,20 @@ describe("SidebarContentLayout", () => {
     const container = await renderLayout({ sidebarResizable: true })
 
     expect(container.querySelector('[data-testid="resize-handle"]')).not.toBeNull()
+  })
+
+  it("allows callers to set sidebar pixel constraints", async () => {
+    const container = await renderLayout({
+      sidebarResizable: true,
+      sidebarDefaultSize: 250,
+      sidebarMinSize: 250,
+      sidebarMaxSize: 360,
+    })
+    const sidebarPanel = container.querySelector("[data-default-size]")
+
+    expect(sidebarPanel?.getAttribute("data-default-size")).toBe("250")
+    expect(sidebarPanel?.getAttribute("data-min-size")).toBe("250")
+    expect(sidebarPanel?.getAttribute("data-max-size")).toBe("360")
   })
 
   it("does not put content padding on the scroll clipping layer", async () => {

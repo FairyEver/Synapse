@@ -17,6 +17,9 @@ type SidebarContentLayoutProps = {
   contentLayout?: "default" | "fill" | "center"
   contentScrollable?: boolean
   sidebarResizable?: boolean
+  sidebarDefaultSize?: number
+  sidebarMinSize?: number
+  sidebarMaxSize?: number
 }
 
 function SidebarContentLayout({
@@ -29,6 +32,9 @@ function SidebarContentLayout({
   contentLayout = "default",
   contentScrollable = true,
   sidebarResizable = false,
+  sidebarDefaultSize = 220,
+  sidebarMinSize = 220,
+  sidebarMaxSize = 420,
 }: SidebarContentLayoutProps) {
   const contentInnerClassName = cn(
     contentScrollable ? "min-h-full min-w-0" : "h-full min-h-0 overflow-hidden",
@@ -42,9 +48,9 @@ function SidebarContentLayout({
       className={cn("h-full min-h-0 w-full overflow-hidden", containerClassName, className)}
     >
       <ResizablePanel
-        defaultSize={220}
-        minSize={220}
-        maxSize={sidebarResizable ? 420 : 220}
+        defaultSize={sidebarDefaultSize}
+        minSize={sidebarMinSize}
+        maxSize={sidebarResizable ? sidebarMaxSize : sidebarDefaultSize}
         disabled={!sidebarResizable}
         groupResizeBehavior="preserve-pixel-size"
       >

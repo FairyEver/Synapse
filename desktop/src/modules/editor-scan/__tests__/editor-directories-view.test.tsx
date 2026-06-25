@@ -64,10 +64,16 @@ describe("EditorDirectoriesView", () => {
   it("shows only the selected IDE directories", async () => {
     await renderDirectoryView(roots, "codex")
 
-    expect(screenText()).toContain("Codex")
     expect(screenText()).toContain("/Users/liyang/.codex")
     expect(screenText()).toContain("/Users/liyang/.agents/skills")
     expect(screenText()).not.toContain("/Users/liyang/.cursor/skills")
+  })
+
+  it("does not render a repeated selected IDE heading", async () => {
+    await renderDirectoryView(roots, "codex")
+
+    expect(document.querySelector("h2")).toBeNull()
+    expect(screenText()).not.toContain("Codex")
   })
 
   it("opens existing directories", async () => {

@@ -1,7 +1,6 @@
 import { FolderPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getEditorLabel } from "@/lib/editor-registry"
 import type { SynapseEditorId } from "@/types/editor"
 import { useEditorDirectories } from "../hooks/use-editor-directories"
 
@@ -23,7 +22,6 @@ function EditorDirectoriesView({ selectedEditorId }: EditorDirectoriesViewProps)
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 p-2">
-        <Skeleton className="h-5 w-32" />
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-9 w-full" />
       </div>
@@ -51,9 +49,6 @@ function EditorDirectoriesView({ selectedEditorId }: EditorDirectoriesViewProps)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b bg-background px-3 py-2.5">
-        <h2 className="text-lg font-semibold">{directory.label || getEditorLabel(selectedEditorId)}</h2>
-      </div>
       <div className="min-h-0 flex-1 p-2">
         <div className="flex flex-col overflow-hidden rounded-lg border bg-background">
           <DirectoryRow

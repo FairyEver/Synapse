@@ -63,12 +63,20 @@ vi.mock("@/components/sidebar-content-layout", () => ({
     sidebar,
     children,
     sidebarResizable,
+    sidebarDefaultSize,
+    sidebarMinSize,
   }: {
     readonly sidebar: ReactNode
     readonly children: ReactNode
     readonly sidebarResizable?: boolean
+    readonly sidebarDefaultSize?: number
+    readonly sidebarMinSize?: number
   }) => (
-    <div data-sidebar-resizable={sidebarResizable ? "true" : "false"}>
+    <div
+      data-sidebar-resizable={sidebarResizable ? "true" : "false"}
+      data-sidebar-default-size={sidebarDefaultSize}
+      data-sidebar-min-size={sidebarMinSize}
+    >
       <aside>{sidebar}</aside>
       <main>{children}</main>
     </div>
@@ -151,6 +159,23 @@ describe("EditorScanModule", () => {
       .toBe("true")
   })
 
+  it("sets the IDE management sidebar default and minimum width to 250px", async () => {
+    await renderEditorScanModule(roots)
+
+    const layout = document.querySelector("[data-sidebar-resizable]")
+
+    expect(layout?.getAttribute("data-sidebar-default-size")).toBe("250")
+    expect(layout?.getAttribute("data-sidebar-min-size")).toBe("250")
+
+    await act(async () => {
+      buttonByText("目录")?.click()
+      await Promise.resolve()
+    })
+
+    expect(layout?.getAttribute("data-sidebar-default-size")).toBe("250")
+    expect(layout?.getAttribute("data-sidebar-min-size")).toBe("250")
+  })
+
   it("does not render duplicate editor headings in the sidebar or content panel", async () => {
     await renderEditorScanModule(roots)
 
@@ -214,10 +239,10 @@ describe("EditorScanModule", () => {
 
     const contentPanel = document.querySelector("[data-editor-scan-content-panel]")
 
-    expect(contentPanel?.textContent).toContain("Cursor")
     expect(contentPanel?.textContent).toContain("全局规则")
     expect(contentPanel?.textContent).not.toContain("Skill")
     expect(contentPanel?.textContent).not.toContain("Rule")
+    expect(contentPanel?.querySelector("h2")).toBeNull()
   })
 })
 
