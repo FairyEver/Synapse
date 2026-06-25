@@ -3,6 +3,10 @@ import {
   DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
 } from "../../app-capabilities/document-template/shared/capability"
 import {
+  TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
+  TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
+  TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
+  TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
   TERMINAL_GROUP_CREATE_CAPABILITY_ID,
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
@@ -55,7 +59,31 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
     title: "Update terminal group settings",
-    description: "Update a terminal group's name, default working directory, and startup command.",
+    description: "Update a terminal group's name and default working directory.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
+    title: "Create terminal group command",
+    description: "Create a named command under a Synapse terminal group.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
+    title: "Update terminal group command",
+    description: "Update a named command under a Synapse terminal group.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
+    title: "Delete terminal group command",
+    description: "Delete a named command from a Synapse terminal group.",
+    mutates: true,
+  },
+  {
+    id: TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
+    title: "Launch terminal group command",
+    description: "Create a new terminal session from a named terminal group command.",
     mutates: true,
   },
   {
@@ -143,6 +171,10 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TERMINAL_MCP_TOOL_NAMES.groupList]: TERMINAL_GROUP_LIST_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupRename]: TERMINAL_GROUP_RENAME_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings]: TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupCommandCreate]: TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupCommandUpdate]: TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupCommandDelete]: TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID,
+  [TERMINAL_MCP_TOOL_NAMES.groupCommandLaunch]: TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.groupDelete]: TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionCreate]: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
   [TERMINAL_MCP_TOOL_NAMES.sessionList]: TERMINAL_SESSION_LIST_CAPABILITY_ID,
@@ -263,7 +295,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: TERMINAL_MCP_TOOL_NAMES.groupUpdateSettings,
-      description: "Update a terminal group's name, default working directory, and startup command for future sessions.",
+      description: "Update a terminal group's name and default working directory.",
       inputSchema: {
         type: "object",
         properties: {
@@ -273,12 +305,64 @@ export function buildAppTools(): McpToolDefinition[] {
             type: "object",
             properties: {
               defaultCwd: stringField("Optional absolute working directory for future sessions in this group.", { minLength: 1 }),
-              startupCommand: stringField("Optional multi-line command text to run automatically in future sessions.", { minLength: 1, maxLength: 64 * 1024 }),
             },
             additionalProperties: false,
           },
         },
         required: ["groupId", "name"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupCommandCreate,
+      description: "Create a named command under a Synapse terminal group.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          name: stringField("Command display name.", { minLength: 1, maxLength: 80 }),
+          command: stringField("Multi-line command text.", { minLength: 1, maxLength: 64 * 1024 }),
+        },
+        required: ["groupId", "name", "command"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupCommandUpdate,
+      description: "Update a named command under a Synapse terminal group.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          commandId: stringField("Terminal group command id.", { minLength: 1 }),
+          name: stringField("Command display name.", { minLength: 1, maxLength: 80 }),
+          command: stringField("Multi-line command text.", { minLength: 1, maxLength: 64 * 1024 }),
+        },
+        required: ["groupId", "commandId", "name", "command"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupCommandDelete,
+      description: "Delete a named command from a Synapse terminal group.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          commandId: stringField("Terminal group command id.", { minLength: 1 }),
+        },
+        required: ["groupId", "commandId"],
+      },
+    },
+    {
+      name: TERMINAL_MCP_TOOL_NAMES.groupCommandLaunch,
+      description: "Create a new terminal session from a named command and run it in the group default directory.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          groupId: stringField("Terminal group id.", { minLength: 1 }),
+          commandId: stringField("Terminal group command id.", { minLength: 1 }),
+          cols: positiveIntField("Optional terminal columns. Defaults to 80.", 500),
+          rows: positiveIntField("Optional terminal rows. Defaults to 24.", 200),
+        },
+        required: ["groupId", "commandId"],
       },
     },
     {

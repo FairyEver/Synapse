@@ -2,8 +2,17 @@ import { z } from "zod"
 
 export const terminalSessionStatusSchema = z.enum(["running", "exited", "killed", "failed", "lost"])
 
+export const terminalGroupCommandSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(80),
+  command: z.string().min(1).max(64 * 1024),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+}).strict()
+
 export const terminalGroupSettingsSchema = z.object({
   defaultCwd: z.string().min(1).optional(),
+  commands: z.array(terminalGroupCommandSchema).optional(),
   startupCommand: z.string().min(1).max(64 * 1024).optional(),
 }).strict()
 
@@ -59,6 +68,31 @@ export const terminalUpdateGroupSettingsInputSchema = z.object({
   groupId: z.string().min(1),
   name: z.string().min(1).max(80),
   settings: terminalGroupSettingsSchema.optional(),
+}).strict()
+
+export const terminalCreateGroupCommandInputSchema = z.object({
+  groupId: z.string().min(1),
+  name: z.string().min(1).max(80),
+  command: z.string().min(1).max(64 * 1024),
+}).strict()
+
+export const terminalUpdateGroupCommandInputSchema = z.object({
+  groupId: z.string().min(1),
+  commandId: z.string().min(1),
+  name: z.string().min(1).max(80),
+  command: z.string().min(1).max(64 * 1024),
+}).strict()
+
+export const terminalDeleteGroupCommandInputSchema = z.object({
+  groupId: z.string().min(1),
+  commandId: z.string().min(1),
+}).strict()
+
+export const terminalLaunchGroupCommandInputSchema = z.object({
+  groupId: z.string().min(1),
+  commandId: z.string().min(1),
+  cols: z.number().int().positive().max(500).optional(),
+  rows: z.number().int().positive().max(200).optional(),
 }).strict()
 
 export const terminalDeleteGroupInputSchema = terminalGroupIdInputSchema
@@ -120,11 +154,16 @@ export const terminalReadSessionResultSchema = z.object({
 
 export type TerminalGroup = z.infer<typeof terminalGroupSchema>
 export type TerminalGroupSettings = z.infer<typeof terminalGroupSettingsSchema>
+export type TerminalGroupCommand = z.infer<typeof terminalGroupCommandSchema>
 export type TerminalSession = z.infer<typeof terminalSessionSchema>
 export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>
 export type TerminalCreateGroupInput = z.infer<typeof terminalCreateGroupInputSchema>
 export type TerminalRenameGroupInput = z.infer<typeof terminalRenameGroupInputSchema>
 export type TerminalUpdateGroupSettingsInput = z.infer<typeof terminalUpdateGroupSettingsInputSchema>
+export type TerminalCreateGroupCommandInput = z.infer<typeof terminalCreateGroupCommandInputSchema>
+export type TerminalUpdateGroupCommandInput = z.infer<typeof terminalUpdateGroupCommandInputSchema>
+export type TerminalDeleteGroupCommandInput = z.infer<typeof terminalDeleteGroupCommandInputSchema>
+export type TerminalLaunchGroupCommandInput = z.infer<typeof terminalLaunchGroupCommandInputSchema>
 export type TerminalDeleteGroupInput = z.infer<typeof terminalDeleteGroupInputSchema>
 export type TerminalEmptyInput = z.infer<typeof terminalEmptyInputSchema>
 export type TerminalCreateSessionInput = z.infer<typeof terminalCreateSessionInputSchema>

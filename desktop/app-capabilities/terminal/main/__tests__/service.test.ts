@@ -147,7 +147,12 @@ describe("TerminalService", () => {
       name: "构建",
       settings: {
         defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
+        commands: [
+          expect.objectContaining({
+            name: "启动命令",
+            command: "nvm use\npnpm dev",
+          }),
+        ],
       },
     })
     expect(store.state.groups).toEqual([expect.objectContaining({
@@ -155,9 +160,84 @@ describe("TerminalService", () => {
       name: "构建",
       settings: {
         defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
+        commands: [
+          expect.objectContaining({
+            name: "启动命令",
+            command: "nvm use\npnpm dev",
+          }),
+        ],
       },
     })])
+  })
+
+  it("migrates legacy startup command into a named group command", async () => {
+    const group = createGroup({
+      updatedAt: "2026-06-24T00:02:00.000Z",
+      settings: {
+        defaultCwd: tempDir,
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const [migrated] = service.listGroups()
+
+    expect(migrated.settings).toMatchObject({
+      defaultCwd: tempDir,
+      commands: [
+        expect.objectContaining({
+          name: "启动命令",
+          command: "nvm use\npnpm dev",
+          createdAt: "2026-06-24T00:02:00.000Z",
+          updatedAt: "2026-06-24T00:02:00.000Z",
+        }),
+      ],
+    })
+    expect(migrated.settings).not.toHaveProperty("startupCommand")
+    expect(store.state.groups[0]?.settings).not.toHaveProperty("startupCommand")
+  })
+
+  it("does not overwrite explicit commands when legacy startup command is also present", async () => {
+    const existingCommand = {
+      id: "cmd-dev",
+      name: "dev",
+      command: "pnpm dev",
+      createdAt: "2026-06-24T00:01:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+    }
+    const group = createGroup({
+      settings: {
+        startupCommand: "pnpm old",
+        commands: [existingCommand],
+      },
+    })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    expect(service.listGroups()[0]?.settings).toEqual({
+      commands: [existingCommand],
+    })
+    expect(store.state.groups[0]?.settings).toEqual({
+      commands: [existingCommand],
+    })
+  })
+
+  it("creates clean sessions without running migrated commands", async () => {
+    const group = createGroup({
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await service.createSession({ groupId: group.id })
+
+    expect(pty.write).not.toHaveBeenCalled()
   })
 
   it("uses explicit cwd before group default cwd", async () => {
@@ -220,7 +300,7 @@ describe("TerminalService", () => {
     expect(service.listSessions()).toEqual([])
   })
 
-  it("runs group startup command only after the renderer marks the session ready", async () => {
+  it("keeps runStartupCommand as a no-op when no pending command exists", async () => {
     const group = createGroup({
       settings: {
         startupCommand: "nvm use\npnpm dev",
@@ -242,15 +322,14 @@ describe("TerminalService", () => {
 
     service.runStartupCommand({ sessionId: session.id })
 
-    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
-    expect(pty.write).toHaveBeenCalledTimes(1)
+    expect(pty.write).not.toHaveBeenCalled()
 
     service.runStartupCommand({ sessionId: session.id })
 
-    expect(pty.write).toHaveBeenCalledTimes(1)
+    expect(pty.write).not.toHaveBeenCalled()
   })
 
-  it("filters startup command echo while keeping command output", async () => {
+  it("keeps command-like output for clean sessions", async () => {
     const group = createGroup({
       settings: {
         startupCommand: "ls",
@@ -270,9 +349,9 @@ describe("TerminalService", () => {
     pty.emitData("README.md\r\n")
     await service.flushPersistQueue()
 
-    expect(onData).toHaveBeenCalledTimes(1)
+    expect(onData).toHaveBeenCalledTimes(2)
     expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data))
-      .toEqual(["README.md\r\n"])
+      .toEqual(["ls\r\n", "README.md\r\n"])
   })
 
   it("does not write an empty startup command", async () => {
@@ -288,6 +367,111 @@ describe("TerminalService", () => {
     await service.createSession({ groupId: group.id })
 
     expect(pty.write).not.toHaveBeenCalled()
+  })
+
+  it("creates updates and deletes terminal group commands", async () => {
+    const group = createGroup({ name: "前端项目" })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const created = await service.createGroupCommand({
+      groupId: group.id,
+      name: "  dev  ",
+      command: "pnpm dev\r\n",
+    })
+    expect(created).toMatchObject({
+      name: "dev",
+      command: "pnpm dev",
+    })
+
+    const updated = await service.updateGroupCommand({
+      groupId: group.id,
+      commandId: created.id,
+      name: "  test  ",
+      command: "pnpm test",
+    })
+    expect(updated).toMatchObject({
+      id: created.id,
+      name: "test",
+      command: "pnpm test",
+    })
+
+    expect(service.listGroups()[0]?.settings?.commands).toEqual([updated])
+
+    await service.deleteGroupCommand({
+      groupId: group.id,
+      commandId: created.id,
+    })
+
+    expect(service.listGroups()[0]?.settings).toBeUndefined()
+    expect(store.state.groups[0]?.settings).toBeUndefined()
+  })
+
+  it("launches a group command in a new focused session shape", async () => {
+    const command = {
+      id: "cmd-dev",
+      name: "dev",
+      command: "nvm use\npnpm dev",
+      createdAt: "2026-06-24T00:01:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+    }
+    const group = createGroup({
+      settings: {
+        defaultCwd: tempDir,
+        commands: [command],
+      },
+    })
+    const pty = new FakePty()
+    const spawnInputs: Array<{ cwd: string; cols: number; rows: number }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty], spawnInputs },
+    )
+
+    const session = await service.launchGroupCommand({
+      groupId: group.id,
+      commandId: command.id,
+      cols: 120,
+      rows: 40,
+    })
+
+    expect(session).toMatchObject({
+      groupId: group.id,
+      title: "dev",
+      cwd: tempDir,
+      cols: 120,
+      rows: 40,
+      status: "running",
+    })
+    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir, cols: 120, rows: 40 })])
+    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+  })
+
+  it("rejects launching an unknown group command", async () => {
+    const group = createGroup({
+      settings: {
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:01:00.000Z",
+          updatedAt: "2026-06-24T00:01:00.000Z",
+        }],
+      },
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await expect(service.launchGroupCommand({
+      groupId: group.id,
+      commandId: "missing",
+    })).rejects.toThrow("Terminal command not found")
+
+    expect(pty.write).not.toHaveBeenCalled()
+    expect(service.listSessions()).toEqual([])
   })
 
   it("rejects empty renamed terminal group names", async () => {

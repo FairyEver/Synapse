@@ -34,12 +34,16 @@ import type {
   ScreenshotSaveResult,
 } from "../../app-capabilities/screenshot/shared/schema"
 import type {
+  SynapseTerminalCreateGroupCommandInput,
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalDataEvent,
+  SynapseTerminalDeleteGroupCommandInput,
   SynapseTerminalDeleteGroupInput,
   SynapseTerminalDeleteSessionInput,
   SynapseTerminalGroup,
+  SynapseTerminalGroupCommand,
+  SynapseTerminalLaunchGroupCommandInput,
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
   SynapseTerminalRenameGroupInput,
@@ -49,6 +53,7 @@ import type {
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
   SynapseTerminalStopSessionInput,
+  SynapseTerminalUpdateGroupCommandInput,
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWriteSessionInput,
 } from "./terminal"
@@ -840,6 +845,10 @@ export type SynapseBridge = {
     createGroup: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroup>
     renameGroup: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroup>
     updateGroupSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroup>
+    createGroupCommand: (input: SynapseTerminalCreateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
+    updateGroupCommand: (input: SynapseTerminalUpdateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
+    deleteGroupCommand: (input: SynapseTerminalDeleteGroupCommandInput) => Promise<void>
+    launchGroupCommand: (input: SynapseTerminalLaunchGroupCommandInput) => Promise<SynapseTerminalSession>
     deleteGroup: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
     listSessions: () => Promise<SynapseTerminalSession[]>
     createSession: (input: SynapseTerminalCreateSessionInput) => Promise<SynapseTerminalSession>

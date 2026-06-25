@@ -10,6 +10,14 @@ export const TERMINAL_GROUP_RENAME_CAPABILITY_ID =
   "app.terminal.group.rename" as CapabilityId
 export const TERMINAL_GROUP_UPDATE_SETTINGS_CAPABILITY_ID =
   "app.terminal.group.updateSettings" as CapabilityId
+export const TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID =
+  "app.terminal.groupCommand.create" as CapabilityId
+export const TERMINAL_GROUP_COMMAND_UPDATE_CAPABILITY_ID =
+  "app.terminal.groupCommand.update" as CapabilityId
+export const TERMINAL_GROUP_COMMAND_DELETE_CAPABILITY_ID =
+  "app.terminal.groupCommand.delete" as CapabilityId
+export const TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID =
+  "app.terminal.groupCommand.launch" as CapabilityId
 export const TERMINAL_GROUP_DELETE_CAPABILITY_ID =
   "app.terminal.group.delete" as CapabilityId
 export const TERMINAL_SESSION_CREATE_CAPABILITY_ID =
@@ -36,6 +44,10 @@ export const TERMINAL_MCP_TOOL_NAMES = {
   groupList: "app_terminal_group_list",
   groupRename: "app_terminal_group_rename",
   groupUpdateSettings: "app_terminal_group_updateSettings",
+  groupCommandCreate: "app_terminal_groupCommand_create",
+  groupCommandUpdate: "app_terminal_groupCommand_update",
+  groupCommandDelete: "app_terminal_groupCommand_delete",
+  groupCommandLaunch: "app_terminal_groupCommand_launch",
   groupDelete: "app_terminal_group_delete",
   sessionCreate: "app_terminal_session_create",
   sessionList: "app_terminal_session_list",
