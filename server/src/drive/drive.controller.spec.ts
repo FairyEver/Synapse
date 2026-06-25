@@ -1776,7 +1776,7 @@ function expectDriveHtmlRenderCsp(value: string | undefined): void {
   expect(value).toContain("frame-ancestors 'self'")
   expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
   expect(value).toContain("connect-src 'self' https:")
-  expect(value).toContain("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals")
+  expect(value).toContain("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock")
   expect(value).toContain("object-src 'none'")
   expect(value).toContain("base-uri 'none'")
   expect(value).not.toContain("allow-same-origin")
