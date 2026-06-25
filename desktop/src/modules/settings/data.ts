@@ -1,7 +1,6 @@
 import {
   Activity,
   Bot,
-  Blocks,
   Braces,
   FolderGit2,
   FolderOpen,
@@ -47,12 +46,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: TextCursorInput,
     label: "提示词片段",
     description: "维护常用片段。",
-  },
-  {
-    id: "tools",
-    icon: Blocks,
-    label: "本机IDE",
-    description: "编辑器目录与集成。",
   },
   {
     id: "claude-code",
