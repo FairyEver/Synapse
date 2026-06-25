@@ -5,8 +5,8 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const quickInputBridge = vi.hoisted(() => ({
-  list: vi.fn(async () => [
+const quickInputFixtures = vi.hoisted(() => ({
+  items: [
     {
       id: "quick-1",
       schemaVersion: 1,
@@ -15,7 +15,11 @@ const quickInputBridge = vi.hoisted(() => ({
       createdAt: "2026-06-25T00:00:00.000Z",
       updatedAt: "2026-06-25T00:00:00.000Z",
     },
-  ]),
+  ],
+}))
+
+const quickInputBridge = vi.hoisted(() => ({
+  list: vi.fn(async () => quickInputFixtures.items),
   create: vi.fn(async (input: { content: string }) => ({
     id: "quick-2",
     schemaVersion: 1,
@@ -67,6 +71,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   quickInputBridge.list.mockClear()
+  quickInputBridge.list.mockImplementation(async () => quickInputFixtures.items)
   quickInputBridge.create.mockClear()
   quickInputBridge.update.mockClear()
   quickInputBridge.delete.mockClear()
@@ -90,6 +95,32 @@ describe("QuickInputModule", () => {
     await renderModule()
 
     expect(quickInputBridge.list).toHaveBeenCalled()
+    expect(document.body.textContent).toContain("内容")
+    expect(document.body.textContent).toContain("操作")
+    expect(document.body.textContent).toContain("今天的工作计划有什么")
+  })
+
+  it("shows an empty state when no quick input items exist", async () => {
+    quickInputBridge.list.mockResolvedValueOnce([])
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("暂无快捷输入")
+    expect(Array.from(document.body.querySelectorAll("button")).some((button) => button.textContent === "新增快捷输入"))
+      .toBe(true)
+  })
+
+  it("shows a retry action when loading quick input items fails", async () => {
+    quickInputBridge.list
+      .mockRejectedValueOnce(new Error("读取失败"))
+      .mockResolvedValueOnce(quickInputFixtures.items)
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("加载失败")
+    await clickButton("重试")
+
+    expect(quickInputBridge.list).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain("今天的工作计划有什么")
   })
 
@@ -98,7 +129,7 @@ describe("QuickInputModule", () => {
 
     await clickButton("新增")
     await changeTextarea("预览今天的工作总结")
-    await clickButton("保存")
+    await clickButton("保存快捷输入")
 
     expect(quickInputBridge.create).toHaveBeenCalledWith({ content: "预览今天的工作总结" })
     expect(toast.success).toHaveBeenCalledWith("已保存")
@@ -107,10 +138,10 @@ describe("QuickInputModule", () => {
   it("updates and deletes an item", async () => {
     await renderModule()
 
-    await clickButton("编辑")
+    await clickButton("编辑快捷输入：今天的工作计划有什么")
     await changeTextarea("更新后的快捷输入")
-    await clickButton("保存")
-    await clickButton("删除")
+    await clickButton("保存快捷输入")
+    await clickButton("删除快捷输入：更新后的快捷输入")
 
     expect(quickInputBridge.update).toHaveBeenCalledWith({
       id: "quick-1",
