@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -91,5 +91,36 @@ describe("writeKnowledgeBaseManifest", () => {
       manifestPath: ".raw/.manifest.json",
     }))
     expect(String((warn.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error)).not.toContain(root)
+  })
+
+  it("repairs a UTF-8 BOM prefix on otherwise valid manifests", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    const manifestText = JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/a.md": {
+          hash: "hash-a",
+          ingested_at: "2026-06-25T00:00:00.000Z",
+        },
+      },
+      address_map: {
+        "wiki/a.md": "c-000001",
+      },
+    }, null, 2) + "\n"
+    const manifestPath = path.join(root, ".raw", ".manifest.json")
+    await writeFile(manifestPath, `\uFEFF${manifestText}`, "utf8")
+
+    const result = await readKnowledgeBaseManifest(root)
+
+    expect(result.status).toBe("valid")
+    expect(result.manifest.sources[".raw/a.md"]).toEqual({
+      hash: "hash-a",
+      ingested_at: "2026-06-25T00:00:00.000Z",
+    })
+    expect(result.manifest.address_map).toEqual({
+      "wiki/a.md": "c-000001",
+    })
+    await expect(readFile(manifestPath, "utf8")).resolves.toBe(manifestText)
   })
 })
