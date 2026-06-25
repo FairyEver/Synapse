@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   recordComplete: vi.fn(),
   resolve: vi.fn(),
+  resolveEditorInstallTarget: vi.fn(),
+  installSourceToEditor: vi.fn(),
   startLogin: vi.fn(),
 }))
 
@@ -57,6 +59,14 @@ vi.mock("@/app-shell/content-store-install", () => ({
   resolveContentStoreInstallSession: mocks.resolve,
 }))
 
+vi.mock("@/app-shell/content", () => ({
+  resolveEditorInstallTarget: mocks.resolveEditorInstallTarget,
+}))
+
+vi.mock("@/app-shell/installers", () => ({
+  installSourceToEditor: mocks.installSourceToEditor,
+}))
+
 vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
   useEditorAdaptersForContentType: () => ({
     error: null,
@@ -64,32 +74,6 @@ vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
     isLoading: false,
     load: mocks.loadEditors,
   }),
-}))
-
-vi.mock("@/modules/content/components/content-install-dialog", () => ({
-  ContentInstallDialog: ({
-    initialContent,
-    onInstalled,
-    open,
-    preparedSourceId,
-  }: {
-    initialContent?: string | null
-    onInstalled?: () => Promise<void> | void
-    open: boolean
-    preparedSourceId?: string
-  }) => open ? (
-    <div>
-      <span>{`dialog:${preparedSourceId}:${initialContent}`}</span>
-      <button
-        type="button"
-        onClick={() => {
-          void onInstalled?.()
-        }}
-      >
-        完成安装
-      </button>
-    </div>
-  ) : null,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -111,7 +95,7 @@ afterEach(() => {
 })
 
 describe("ContentStoreInstallWindowPage", () => {
-  it("prepares the package, opens the existing install dialog, and records completion", async () => {
+  it("prepares the package, renders the installer flow, and records completion", async () => {
     mocks.resolve.mockResolvedValue({
       status: "ready",
       session: {
@@ -138,19 +122,42 @@ describe("ContentStoreInstallWindowPage", () => {
       },
     })
     mocks.recordComplete.mockResolvedValue({ ok: true })
+    mocks.resolveEditorInstallTarget.mockResolvedValue({
+      editorId: "codex",
+      label: "Codex",
+      scope: "global",
+      contentType: "skill",
+      message: null,
+      status: "ready",
+      targetKind: "directory",
+      targetPath: "/tmp/skills/store-skill",
+      targetExists: false,
+    })
+    mocks.installSourceToEditor.mockResolvedValue({
+      editorId: "codex",
+      label: "Codex",
+      scope: "global",
+      contentType: "skill",
+      contentId: "content-1",
+      targetKind: "directory",
+      targetPath: "/tmp/skills/store-skill",
+    })
 
     await renderPage()
 
     expect(document.body.textContent).toContain("选择编辑器")
+    expect(document.body.textContent).toContain("Codex")
 
     await act(async () => {
       clickButton("Codex")
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("dialog:prepared-1:# Store Skill")
+    expect(document.body.textContent).toContain("目标位置")
 
     await act(async () => {
-      clickButton("完成安装")
+      clickButton("安装")
       await Promise.resolve()
     })
 

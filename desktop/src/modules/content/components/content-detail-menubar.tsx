@@ -10,14 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import {
-  Menubar,
-  MenubarContent,
-  MenubarGroup,
-  MenubarItem,
-  MenubarMenu,
-  MenubarTrigger,
-} from "@/components/ui/menubar"
+import { Menubar } from "@/components/ui/menubar"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { getContentTypeDefinition } from "@/config/content-types"
 import {
@@ -75,10 +68,9 @@ function ContentDetailMenubar({
     handleCopy,
     handleDownload,
     hasAttachments,
+    installAction,
     installDialog,
-    installMenuItems,
     isBusy,
-    loadInstallTargets,
     openInstallDialogForEditorId,
   } = useContentDownloadActions({ item, onInstalled })
   const { error: showError, warning } = useAppNotifications()
@@ -183,32 +175,18 @@ function ContentDetailMenubar({
             ) : null}
 
             {canInstall ? (
-              <MenubarMenu>
-                <MenubarTrigger
-                  onFocus={() => {
-                    loadInstallTargets()
-                  }}
-                  onPointerEnter={() => {
-                    loadInstallTargets()
-                  }}
-                >
-                  安装
-                </MenubarTrigger>
-                <MenubarContent className="w-56">
-                  <MenubarGroup>
-                    {installMenuItems.map((action) => (
-                      <MenubarItem
-                        key={action.key}
-                        disabled={action.disabled}
-                        onSelect={action.onSelect}
-                      >
-                        {action.icon}
-                        {action.label}
-                      </MenubarItem>
-                    ))}
-                  </MenubarGroup>
-                </MenubarContent>
-              </MenubarMenu>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-sm px-1.5"
+                disabled={isBusy || installAction?.disabled}
+                onClick={() => {
+                  installAction?.onSelect?.()
+                }}
+              >
+                安装
+              </Button>
             ) : null}
 
             {canCopyInDetailToolbar ? (

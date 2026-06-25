@@ -85,6 +85,14 @@ vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
   DocumentTemplateModule: () => <div>文档模板内容</div>,
 }))
 
+vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
+  SkillInstallerModule: () => <div>Skill 安装器内容</div>,
+}))
+
+vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
+  RuleInstallerModule: () => <div>Rule 安装器内容</div>,
+}))
+
 vi.mock("../../../../app-capabilities/screenshot/renderer", () => ({
   ScreenshotModule: () => <div>截图内容</div>,
 }))

@@ -33,7 +33,6 @@ function ContentActionSplitButton({
   onInstallDialogOpenChange,
 }: ContentActionSplitButtonProps) {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
-  const [isInstallMenuOpen, setIsInstallMenuOpen] = useState(false)
   const {
     auxiliaryMenuSections,
     canCopy,
@@ -41,11 +40,10 @@ function ContentActionSplitButton({
     canInstall,
     downloadAction,
     handleCopy,
+    installAction,
     installDialog,
-    installMenuItems,
     isBusy,
     isDownloading,
-    loadInstallTargets,
   } = useContentDownloadActions({
     item,
     onInstallDialogOpenChange,
@@ -103,43 +101,17 @@ function ContentActionSplitButton({
             复制
           </Button>
         ) : canInstall ? (
-          <DropdownMenu
-            data-track="content-install-menu"
-            open={isInstallMenuOpen}
-            onOpenChange={(open) => {
-              setIsInstallMenuOpen(open)
-
-              if (open) {
-                loadInstallTargets()
-              }
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isBusy || installAction?.disabled}
+            onClick={() => {
+              installAction?.onSelect?.()
             }}
           >
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isBusy}
-              >
-                <PackagePlus data-icon="inline-start" />
-                安装
-              </Button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent align="end" className="w-max">
-              <DropdownMenuGroup>
-                {installMenuItems.map((action) => (
-                  <DropdownMenuItem
-                    key={action.key}
-                    disabled={action.disabled}
-                    onSelect={action.onSelect}
-                  >
-                    {action.icon}
-                    {action.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <PackagePlus data-icon="inline-start" />
+            安装
+          </Button>
         ) : canDownload ? (
           <Button
             variant="outline"

@@ -75,15 +75,6 @@ function mockDownloadActions() {
   useContentDownloadActionsMock.mockReturnValue({
     auxiliaryMenuSections: [
       {
-        key: "install",
-        items: [
-          {
-            key: "install-codex",
-            label: "Codex",
-          },
-        ],
-      },
-      {
         key: "copy",
         items: [
           {
@@ -101,23 +92,20 @@ function mockDownloadActions() {
       label: "下载到本地",
     },
     handleCopy: vi.fn(),
+    installAction: {
+      key: "install",
+      label: "安装",
+    },
     installDialog: null,
-    installMenuItems: [
-      {
-        key: "install-codex",
-        label: "Codex",
-      },
-    ],
     isBusy: false,
     isCopying: false,
     isDownloading: false,
-    loadInstallTargets: vi.fn(),
   })
 }
 
 describe("ContentActionSplitButton", () => {
   it.each(["skill", "rule"] as const)(
-    "keeps install editors on the primary %s menu and download/copy on the arrow menu",
+    "renders a single %s install button and keeps download/copy on the arrow menu",
     (contentType) => {
       mockDownloadActions()
 
@@ -127,20 +115,15 @@ describe("ContentActionSplitButton", () => {
       const installMenuStart = html.indexOf('data-track="content-install-menu"')
       const overflowMenuStart = html.indexOf('data-track="content-actions-menu"')
 
-      expect(installMenuStart).toBeGreaterThan(-1)
-      expect(overflowMenuStart).toBeGreaterThan(installMenuStart)
+      expect(installMenuStart).toBe(-1)
+      expect(overflowMenuStart).toBeGreaterThan(-1)
       expect(html).toContain(">安装<")
       expect(html).not.toContain(">下载</button>")
-
-      const installMenu = html.slice(installMenuStart, overflowMenuStart)
       const overflowMenu = html.slice(overflowMenuStart)
 
-      expect(installMenu).toContain("Codex")
-      expect(installMenu).not.toContain("下载到本地")
-      expect(installMenu).not.toContain("复制正文")
+      expect(html).not.toContain("Codex")
       expect(overflowMenu).toContain("下载到本地")
       expect(overflowMenu).toContain("复制正文")
-      expect(overflowMenu).not.toContain("Codex")
     },
   )
 })

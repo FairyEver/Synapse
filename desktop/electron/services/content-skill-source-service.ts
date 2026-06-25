@@ -84,6 +84,10 @@ async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
   return mdFiles.length > 0 ? await resolveTrustedSkillMainFile(dirPath, path.join(dirPath, mdFiles[0] ?? "")) : null
 }
 
+async function resolveRootSkillMainFile(dirPath: string): Promise<string | null> {
+  return resolveTrustedSkillMainFile(dirPath, path.join(dirPath, "SKILL.md"))
+}
+
 async function resolveTrustedSkillMainFile(dirPath: string, filePath: string): Promise<string | null> {
   let info: Awaited<ReturnType<typeof lstat>>
   try {
@@ -406,6 +410,7 @@ function getErrorMessage(error: unknown): string {
 export {
   assertDirectoryExists,
   readSkillDraftFromDirectory,
+  resolveRootSkillMainFile,
   resolveSkillMainFile,
   SYNAPSE_SKILL_ID_FILE,
   type ContentSkillSourceDraft,

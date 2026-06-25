@@ -8,13 +8,14 @@ import {
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { EditorIcon } from "@/components/editor-icon"
 import { getContentTypeDefinition } from "@/config/content-types"
-import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
 import type { EditorWriteTargetInitialSelection } from "@/modules/content/components/editor-write-target-selector"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
+import { RuleInstallerModal } from "@/modules/installers/rule/rule-installer-modal"
+import { SkillInstallerModal } from "@/modules/installers/skill/skill-installer-modal"
 import type { SynapseContentMeta } from "@/types/content"
-import type { SynapseEditorAdapterSummary, SynapseEditorId } from "@/types/editor"
+import type { SynapseEditorId } from "@/types/editor"
+import type { SynapseInstallerSource } from "@/types/installers"
 
 type ContentActionMenuItem = {
   key: string
@@ -51,9 +52,6 @@ function useContentDownloadActions({
   const [isCopying, setIsCopying] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false)
-  const [initialInstallSelection, setInitialInstallSelection] =
-    useState<EditorWriteTargetInitialSelection | null>(null)
-  const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const [isCopyingIconPrompt, setIsCopyingIconPrompt] = useState(false)
   const onInstallDialogOpenChangeRef = useRef(onInstallDialogOpenChange)
 
@@ -63,9 +61,7 @@ function useContentDownloadActions({
   const canInstall = definition.capabilities.canInstallToEditor
   const isBusy = isCopying || isDownloading || isCopyingIconPrompt
   const {
-    error: adaptersError,
     filteredAdapters,
-    isLoading: isLoadingAdapters,
     load: loadInstallTargets,
   } = useEditorAdaptersForContentType({
     contentType: item.type,
@@ -73,41 +69,60 @@ function useContentDownloadActions({
     loggerName: `content.action.${item.type}`,
   })
 
-  const openInstallDialog = useCallback((editor: SynapseEditorAdapterSummary) => {
-    setInitialInstallSelection(null)
-    setSelectedEditor(editor)
+  const installerSource = useMemo<SynapseInstallerSource | null>(() => {
+    if (item.type === "skill") {
+      return {
+        kind: "skill",
+        origin: "repository",
+        repositoryContentId: item.id,
+        sourceIdentity: item.id,
+        name: item.name ?? item.id,
+        title: item.title,
+        description: item.description,
+      }
+    }
+    if (item.type === "rule") {
+      return {
+        kind: "rule",
+        origin: "repository",
+        repositoryContentId: item.id,
+        sourceIdentity: item.id,
+        name: item.name ?? item.id,
+        title: item.title,
+        description: item.description,
+      }
+    }
+    return null
+  }, [item])
+
+  const openInstallDialog = useCallback(() => {
+    void loadInstallTargets()
     setIsInstallDialogOpen((prevOpen) => {
       if (prevOpen !== true) {
         logger.info("Content install dialog visibility changed.", {
           open: true,
           contentId: item.id,
           contentType: item.type,
-          editorId: editor.id,
         })
       }
 
       return true
     })
-  }, [item.id, item.type, logger])
+  }, [item.id, item.type, loadInstallTargets, logger])
 
   const handleInstallDialogOpenChange = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) {
-      setInitialInstallSelection(null)
-    }
-
     setIsInstallDialogOpen((prevOpen) => {
       if (prevOpen !== nextOpen) {
         logger.info("Content install dialog visibility changed.", {
           open: nextOpen,
           contentId: item.id,
           contentType: item.type,
-          editorId: selectedEditor?.id ?? null,
         })
       }
 
       return nextOpen
     })
-  }, [item.id, item.type, logger, selectedEditor])
+  }, [item.id, item.type, logger])
 
   const openInstallDialogForEditorId = useCallback(async ({
     editorId,
@@ -128,11 +143,10 @@ function useContentDownloadActions({
       return false
     }
 
-    setInitialInstallSelection(initialSelection)
-    setSelectedEditor(adapter)
-    setIsInstallDialogOpen(true)
+    void initialSelection
+    openInstallDialog()
     return true
-  }, [filteredAdapters, item.id, item.type, loadInstallTargets, logger])
+  }, [item.id, item.type, loadInstallTargets, logger, openInstallDialog])
 
   useEffect(() => {
     onInstallDialogOpenChangeRef.current?.(isInstallDialogOpen)
@@ -284,20 +298,12 @@ function useContentDownloadActions({
       if (canInstall) {
         sections.push({
           key: "install",
-          items: isLoadingAdapters
-            ? [{ key: "loading-editors", label: "正在读取编辑器", disabled: true }]
-            : adaptersError
-              ? [{ key: "editors-error", label: adaptersError, disabled: true }]
-              : filteredAdapters.length > 0
-                ? filteredAdapters.map((adapter) => ({
-                    key: `install-${adapter.id}`,
-                    label: adapter.label,
-                    icon: <EditorIcon editorId={adapter.id} />,
-                    onSelect: () => {
-                      openInstallDialog(adapter)
-                    },
-                  }))
-                : [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }],
+          items: [{
+            key: "install",
+            label: "安装",
+            disabled: isBusy,
+            onSelect: openInstallDialog,
+          }],
         })
       }
 
@@ -327,7 +333,7 @@ function useContentDownloadActions({
 
       return sections
     },
-    [adaptersError, canCopy, canInstall, filteredAdapters, handleCopy, handleCopyIconPrompt, isBusy, isLoadingAdapters, openInstallDialog],
+    [canCopy, canInstall, handleCopy, handleCopyIconPrompt, isBusy, openInstallDialog],
   )
 
   const downloadAction = useMemo<ContentActionMenuItem | null>(
@@ -351,25 +357,38 @@ function useContentDownloadActions({
     [auxiliaryMenuSections, downloadAction],
   )
 
-  const installMenuItems = useMemo<ContentActionMenuItem[]>(
-    () => {
-      if (!canInstall) return []
-      if (isLoadingAdapters) return [{ key: "loading-editors", label: "正在读取编辑器", disabled: true }]
-      if (adaptersError) return [{ key: "editors-error", label: adaptersError, disabled: true }]
-      if (filteredAdapters.length === 0) return [{ key: "no-install-target", label: "当前没有可用的安装目标", disabled: true }]
-      return filteredAdapters.map((adapter) => ({
-        key: `install-${adapter.id}`,
-        label: adapter.label,
-        icon: <EditorIcon editorId={adapter.id} />,
-        onSelect: () => {
-          openInstallDialog(adapter)
-        },
-      }))
-    },
-    [adaptersError, canInstall, filteredAdapters, isLoadingAdapters, openInstallDialog],
+  const installAction = useMemo<ContentActionMenuItem | null>(
+    () => canInstall
+      ? {
+          key: "install",
+          label: "安装",
+          disabled: isBusy,
+          onSelect: openInstallDialog,
+        }
+      : null,
+    [canInstall, isBusy, openInstallDialog],
   )
 
   const hasAttachments = definition.capabilities.hasAttachments
+  const installDialog = canInstall && installerSource?.kind === "skill" ? (
+    <SkillInstallerModal
+      editors={filteredAdapters}
+      open={isInstallDialogOpen}
+      projects={config.global.projects}
+      source={installerSource}
+      onInstalled={onInstalled}
+      onOpenChange={handleInstallDialogOpenChange}
+    />
+  ) : canInstall && installerSource?.kind === "rule" ? (
+    <RuleInstallerModal
+      editors={filteredAdapters}
+      open={isInstallDialogOpen}
+      projects={config.global.projects}
+      source={installerSource}
+      onInstalled={onInstalled}
+      onOpenChange={handleInstallDialogOpenChange}
+    />
+  ) : null
 
   return {
     allMenuSections,
@@ -382,18 +401,8 @@ function useContentDownloadActions({
     handleCopyIconPrompt,
     handleDownload,
     hasAttachments,
-    installDialog: canInstall ? (
-      <ContentInstallDialog
-        editor={selectedEditor}
-        initialSelection={initialInstallSelection}
-        item={item}
-        onInstalled={onInstalled}
-        open={isInstallDialogOpen}
-        onOpenChange={handleInstallDialogOpenChange}
-        projects={config.global.projects}
-      />
-    ) : null,
-    installMenuItems,
+    installAction,
+    installDialog,
     isBusy,
     isCopying,
     isCopyingIconPrompt,

@@ -132,6 +132,10 @@ describe("ContentInstallService prepared source", () => {
     expect(provider.readPreparedRule).toHaveBeenCalledWith("prepared-1", "content-1")
     expect(mocks.getContent).not.toHaveBeenCalled()
     expect(mocks.prepareRuleFileContent).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        contentId: "content-1",
+        contentType: "rule",
+      }),
       ruleBody: "# Store Rule\n",
     }))
     await expect(readFile(targetPath, "utf8")).resolves.toBe("---\ninstalled: true\n---\n# Store Rule\n")
