@@ -717,6 +717,7 @@ describe("preload bridge", () => {
     await bridge.modelPrice.getRules()
     await bridge.modelPrice.listPresets()
     await bridge.modelPrice.importPreset("deepseek-official")
+    await bridge.modelPrice.importPresets(["deepseek-official", "aliyun-bailian"])
     await bridge.modelPrice.saveRules([{ modelPattern: "local-model", inputPer1M: 1 }])
     await bridge.modelPrice.clearRules()
     await bridge.modelPrice.resetRules()
@@ -736,6 +737,10 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:model-price:presets:import",
       "deepseek-official",
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:presets:import",
+      ["deepseek-official", "aliyun-bailian"],
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:model-price:rules:save",

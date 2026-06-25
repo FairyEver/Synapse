@@ -1407,6 +1407,7 @@ const synapseBridge: SynapseBridge = {
     listCoverage: (input) => invoke(IPC_CHANNELS["model-price"].coverageList)(input),
     listPresets: invoke(IPC_CHANNELS["model-price"].presetsList),
     importPreset: (presetId) => invoke(IPC_CHANNELS["model-price"].presetsImport)(presetId),
+    importPresets: (presetIds) => invoke(IPC_CHANNELS["model-price"].presetsImport)(presetIds),
     getRules: invoke(IPC_CHANNELS["model-price"].rulesGet),
     saveRules: (rules) => invoke(IPC_CHANNELS["model-price"].rulesSave)(rules),
     clearRules: invoke(IPC_CHANNELS["model-price"].rulesClear),

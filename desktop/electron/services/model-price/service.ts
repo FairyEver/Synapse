@@ -68,49 +68,61 @@ export class ModelPriceService {
   }
 
   importPreset(presetId: ModelPricePresetId): ModelPriceRule[] {
-    const preset = getModelPricePreset(presetId)
-    if (!preset) throw new Error(`Unknown model price preset: ${presetId}`)
+    return this.importPresets([presetId])
+  }
 
-    const existing = this.listRules()
+  importPresets(presetIds: readonly ModelPricePresetId[]): ModelPriceRule[] {
+    const presets = presetIds.map((presetId) => {
+      const preset = getModelPricePreset(presetId)
+      if (!preset) throw new Error(`Unknown model price preset: ${presetId}`)
+      return preset
+    })
+
     const now = new Date().toISOString()
-    const highestSortIndex = existing.reduce((max, rule) => Math.max(max, rule.sortIndex), -1)
-    const presetRulesByPattern = new Map(preset.rules.map((rule) => [normalizeModelPatternKey(rule.modelPattern), rule] as const))
-    const result: ModelPriceRuleInput[] = []
-    const matchedPatterns = new Set<string>()
-    let nextSortIndex = highestSortIndex + 1
+    let result: ModelPriceRuleInput[] = this.listRules()
 
-    for (const rule of existing) {
-      const key = normalizeModelPatternKey(rule.modelPattern)
-      const presetRule = presetRulesByPattern.get(key)
-      if (!presetRule) {
-        result.push(rule)
-        continue
+    for (const preset of presets) {
+      const highestSortIndex = result.reduce((max, rule) => Math.max(max, rule.sortIndex ?? -1), -1)
+      const presetRulesByPattern = new Map(preset.rules.map((rule) => [normalizeModelPatternKey(rule.modelPattern), rule] as const))
+      const nextResult: ModelPriceRuleInput[] = []
+      const matchedPatterns = new Set<string>()
+      let nextSortIndex = highestSortIndex + 1
+
+      for (const rule of result) {
+        const key = normalizeModelPatternKey(rule.modelPattern)
+        const presetRule = presetRulesByPattern.get(key)
+        if (!presetRule) {
+          nextResult.push(rule)
+          continue
+        }
+
+        if (matchedPatterns.has(key)) {
+          continue
+        }
+
+        matchedPatterns.add(key)
+        nextResult.push({
+          ...presetRule,
+          id: createModelPriceRuleId(`preset:${preset.id}`, presetRule.modelPattern),
+          source: "builtin",
+          updatedAt: now,
+          sortIndex: rule.sortIndex,
+        })
       }
 
-      if (matchedPatterns.has(key)) {
-        continue
+      for (const [key, rule] of presetRulesByPattern) {
+        if (matchedPatterns.has(key)) continue
+        nextResult.push({
+          ...rule,
+          id: createModelPriceRuleId(`preset:${preset.id}`, rule.modelPattern),
+          source: "builtin",
+          updatedAt: now,
+          sortIndex: nextSortIndex,
+        })
+        nextSortIndex += 1
       }
 
-      matchedPatterns.add(key)
-      result.push({
-        ...presetRule,
-        id: createModelPriceRuleId(`preset:${preset.id}`, presetRule.modelPattern),
-        source: "builtin",
-        updatedAt: now,
-        sortIndex: rule.sortIndex,
-      })
-    }
-
-    for (const [key, rule] of presetRulesByPattern) {
-      if (matchedPatterns.has(key)) continue
-      result.push({
-        ...rule,
-        id: createModelPriceRuleId(`preset:${preset.id}`, rule.modelPattern),
-        source: "builtin",
-        updatedAt: now,
-        sortIndex: nextSortIndex,
-      })
-      nextSortIndex += 1
+      result = nextResult
     }
 
     const rules = normalizeModelPriceRules(result)
