@@ -129,6 +129,11 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - App 类 MCP capability 命名采用 `app.<app_namespace>.<subdomain>.<action>`，MCP tool 名采用 capability id 的下划线形式，例如 `app.document_template.docx.generate` 对应 `app_document_template_docx_generate`。
 - 生成类能力使用 `generate` action。新增这类 action 或 domain 时，必须同步更新 capability 命名校验、MCP tool 映射、action router、内置 `synapse-skill` 模板和相关测试。
 - 能力包如果涉及本地文件读写、网络、shell、Agent、Drive 或其它敏感能力，入口适配器和核心 service 必须保留统一权限检查、审计、错误脱敏和日志边界，不得只在某一个入口处理。
+- 系统应用自有业务数据默认使用 DataRepository namespace，命名格式为 `app.<app-id>.<entity>`，例如 `app.quick-input.items`。`app-id` 使用系统应用 id 的短横线形式，`entity` 使用英文复数名词或明确单例名，例如 `items`、`groups`、`runs`、`settings`。
+- 系统应用自有数据不得直接手写 SQLite 业务表名；SQLite backend 的实际表名由 DataRepository namespace 自动映射，例如 `app.quick-input.items` 对应 `ns_app_quick_input_items`。只有确有理由绕过 DataRepository 时，必须先在设计文档中说明并获得当前对话确认。
+- 系统应用数据 backend 选择默认规则：小型单例配置用 `json`，列表型用户数据优先用 `sqlite`，密钥或 token 用 `encrypted-json`，追加型审计或运行日志用 `jsonl`。记录必须带 `schemaVersion`，schema 放在 `desktop/electron/runtime/data-repo/schemas/` 并注册进 `allSchemas`。
+- 系统应用从旧配置或旧文件迁移数据时，必须有幂等迁移标记，迁移成功后清理旧有效数据来源，避免用户清空新数据后又被旧数据复活。迁移失败不得删除旧数据，必须结构化记录错误并允许下次重试。
+- Renderer 不得直接读写 DataRepository。系统应用自有数据必须通过能力包 `main/service.ts` 或同级 core service 读写，再由 IPC、MCP、Workflow node 或 App UI 作为入口适配器调用。
 
 ### 参考模板目录
 
