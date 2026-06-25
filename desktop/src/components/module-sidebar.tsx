@@ -35,7 +35,7 @@ function ModuleSidebar({
       {...asideProps}
       data-layout={dataLayout}
       className={cn(
-        "flex h-full min-h-0 flex-col gap-2 p-2",
+        "flex h-full min-h-0 min-w-0 flex-col gap-2 p-2",
         variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",
         className,
       )}
@@ -139,11 +139,11 @@ function ModuleSidebarList({
 }: ModuleSidebarListProps) {
   return (
     <ScrollArea
-      className={cn("min-h-0 flex-1", className)}
+      className={cn("min-h-0 min-w-0 w-full max-w-full flex-1", className)}
       data-track={dataTrack}
       onViewportScroll={onScroll}
     >
-      <div className="flex flex-col px-0.5 py-0.5">{children}</div>
+      <div className="flex min-w-0 w-full max-w-full flex-col overflow-hidden px-0.5 py-0.5">{children}</div>
     </ScrollArea>
   )
 }
@@ -308,15 +308,15 @@ function ModuleSidebarItem({
       }}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-w-0 flex-1 items-center gap-2 text-left",
+        "flex min-w-0 max-w-full flex-1 items-center gap-2 overflow-hidden text-left box-border",
         !disabled && "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
       )}
     >
       {Icon ? <Icon className="size-4 shrink-0" /> : iconElement ?? null}
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate">{children}</span>
+      <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <span className="block truncate">{children}</span>
         {description ? (
-          <span className="truncate text-xs font-normal text-muted-foreground">
+          <span className="block truncate text-xs font-normal text-muted-foreground">
             {description}
           </span>
         ) : null}
@@ -329,7 +329,7 @@ function ModuleSidebarItem({
       <div
         data-track={dataTrack}
         className={cn(
-          "flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80",
+          "flex w-full min-w-0 max-w-full box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80",
           description ? "min-h-11 py-1.5" : "h-8",
           "pointer-events-none opacity-50",
           className,
@@ -346,7 +346,7 @@ function ModuleSidebarItem({
       data-track={dataTrack}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group/item flex w-full items-center justify-between rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "group/item flex w-full min-w-0 max-w-full box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
         description ? "min-h-11 py-1.5" : "h-8",
         "hover:bg-muted/60 hover:text-foreground",
         "focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50",
