@@ -98,6 +98,7 @@ export interface ClaudeSDKRuntimeSettings {
 }
 
 interface PendingPermission {
+  readonly input: Record<string, unknown>
   readonly resolve: (decision: PermissionResult) => void
   readonly cleanup: () => void
 }
@@ -234,7 +235,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.permissions.delete(requestId)
     pending.cleanup()
-    pending.resolve(toPermissionResult(decision))
+    pending.resolve(toPermissionResult(decision, pending.input))
   }
 
   nextEvent(): Promise<AgentEvent | null> {
@@ -435,7 +436,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.eventQueue.push(event)
 
-    return this.awaitPermissionResponse(requestId, context)
+    return this.awaitPermissionResponse(requestId, input, context)
   }
 
   private async requestUserQuestion(
@@ -465,11 +466,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.eventQueue.push(event)
 
-    return this.awaitPermissionResponse(requestId, context)
+    return this.awaitPermissionResponse(requestId, input, context)
   }
 
   private awaitPermissionResponse(
     requestId: string,
+    input: Record<string, unknown>,
     context: CanUseToolContext,
   ): Promise<PermissionResult> {
     return new Promise<PermissionResult>((resolve) => {
@@ -479,6 +481,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       }
       context.signal.addEventListener("abort", abort, { once: true })
       this.permissions.set(requestId, {
+        input,
         resolve,
         cleanup: () => context.signal.removeEventListener("abort", abort),
       })
@@ -753,11 +756,14 @@ function createForwardedAbortController(signal: AbortSignal | undefined): Forwar
   }
 }
 
-function toPermissionResult(decision: AgentPermissionDecision): PermissionResult {
+function toPermissionResult(
+  decision: AgentPermissionDecision,
+  originalInput: Record<string, unknown>,
+): PermissionResult {
   if (decision.behavior === "allow") {
     return {
       behavior: "allow",
-      updatedInput: decision.updatedInput,
+      updatedInput: decision.updatedInput ?? originalInput,
     }
   }
 
