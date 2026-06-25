@@ -5,11 +5,15 @@ import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
 import type { TerminalService } from "./service"
 import {
+  terminalCreateGroupCommandInputSchema,
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalDeleteGroupCommandInputSchema,
   terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
+  terminalGroupCommandSchema,
   terminalGroupSchema,
+  terminalLaunchGroupCommandInputSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
@@ -20,6 +24,7 @@ import {
   terminalSessionIdInputSchema,
   terminalSessionSchema,
   terminalStopSessionInputSchema,
+  terminalUpdateGroupCommandInputSchema,
   terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
 } from "../shared/schema"
@@ -93,6 +98,38 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGroupSchema,
       handler: (ctx, request: z.infer<typeof terminalUpdateGroupSettingsInputSchema>) =>
         resolveTerminalService(ctx).updateGroupSettings(request),
+    },
+    createGroupCommand: {
+      channel: "synapse:terminal:group-command:create",
+      kind: "invoke",
+      request: terminalCreateGroupCommandInputSchema,
+      response: terminalGroupCommandSchema,
+      handler: (ctx, request: z.infer<typeof terminalCreateGroupCommandInputSchema>) =>
+        resolveTerminalService(ctx).createGroupCommand(request),
+    },
+    updateGroupCommand: {
+      channel: "synapse:terminal:group-command:update",
+      kind: "invoke",
+      request: terminalUpdateGroupCommandInputSchema,
+      response: terminalGroupCommandSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateGroupCommandInputSchema>) =>
+        resolveTerminalService(ctx).updateGroupCommand(request),
+    },
+    deleteGroupCommand: {
+      channel: "synapse:terminal:group-command:delete",
+      kind: "invoke",
+      request: terminalDeleteGroupCommandInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalDeleteGroupCommandInputSchema>) =>
+        resolveTerminalService(ctx).deleteGroupCommand(request),
+    },
+    launchGroupCommand: {
+      channel: "synapse:terminal:group-command:launch",
+      kind: "invoke",
+      request: terminalLaunchGroupCommandInputSchema,
+      response: terminalSessionSchema,
+      handler: (ctx, request: z.infer<typeof terminalLaunchGroupCommandInputSchema>) =>
+        resolveTerminalService(ctx).launchGroupCommand(request),
     },
     chooseDefaultCwd: {
       channel: "synapse:terminal:group:choose-default-cwd",

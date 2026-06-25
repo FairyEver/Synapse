@@ -71,6 +71,10 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.renameGroup.channel).toBe("synapse:terminal:group:rename")
     expect(terminalIpcModule.methods.updateGroupSettings.channel).toBe("synapse:terminal:group:update-settings")
     expect(terminalIpcModule.methods.chooseDefaultCwd.channel).toBe("synapse:terminal:group:choose-default-cwd")
+    expect(terminalIpcModule.methods.createGroupCommand.channel).toBe("synapse:terminal:group-command:create")
+    expect(terminalIpcModule.methods.updateGroupCommand.channel).toBe("synapse:terminal:group-command:update")
+    expect(terminalIpcModule.methods.deleteGroupCommand.channel).toBe("synapse:terminal:group-command:delete")
+    expect(terminalIpcModule.methods.launchGroupCommand.channel).toBe("synapse:terminal:group-command:launch")
     expect(terminalIpcModule.methods.deleteGroup.channel).toBe("synapse:terminal:group:delete")
     expect(terminalIpcModule.methods.listSessions.channel).toBe("synapse:terminal:session:list")
     expect(terminalIpcModule.methods.createSession.channel).toBe("synapse:terminal:session:create")
@@ -173,6 +177,55 @@ describe("terminalIpcModule", () => {
     })
     expect(service.runStartupCommand).toHaveBeenCalledWith({
       sessionId: "session-1",
+    })
+  })
+
+  it("manages and launches terminal group commands through IPC", async () => {
+    const service = createService()
+    const ctx = createContext(service)
+
+    await terminalIpcModule.methods.createGroupCommand.handler(ctx, {
+      groupId: "group-1",
+      name: "dev",
+      command: "pnpm dev",
+    })
+    await terminalIpcModule.methods.updateGroupCommand.handler(ctx, {
+      groupId: "group-1",
+      commandId: "cmd-1",
+      name: "test",
+      command: "pnpm test",
+    })
+    await terminalIpcModule.methods.launchGroupCommand.handler(ctx, {
+      groupId: "group-1",
+      commandId: "cmd-1",
+      cols: 120,
+      rows: 40,
+    })
+    await terminalIpcModule.methods.deleteGroupCommand.handler(ctx, {
+      groupId: "group-1",
+      commandId: "cmd-1",
+    })
+
+    expect(service.createGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      name: "dev",
+      command: "pnpm dev",
+    })
+    expect(service.updateGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-1",
+      name: "test",
+      command: "pnpm test",
+    })
+    expect(service.launchGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-1",
+      cols: 120,
+      rows: 40,
+    })
+    expect(service.deleteGroupCommand).toHaveBeenCalledWith({
+      groupId: "group-1",
+      commandId: "cmd-1",
     })
   })
 
@@ -311,6 +364,22 @@ function createService(): Partial<TerminalService> {
       updatedAt: "2026-06-24T00:00:00.000Z",
       sortOrder: 0,
     })),
+    createGroupCommand: vi.fn(async () => ({
+      id: "cmd-1",
+      name: "dev",
+      command: "pnpm dev",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    })),
+    updateGroupCommand: vi.fn(async () => ({
+      id: "cmd-1",
+      name: "test",
+      command: "pnpm test",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+    })),
+    deleteGroupCommand: vi.fn(async () => undefined),
+    launchGroupCommand: vi.fn(async () => createSession({ id: "session-command", title: "test" })),
     deleteGroup: vi.fn(),
     listSessions: vi.fn(() => []),
     createSession: vi.fn(),
@@ -332,7 +401,7 @@ function createService(): Partial<TerminalService> {
   }
 }
 
-function createSession() {
+function createSession(overrides = {}) {
   return {
     id: "session-1",
     groupId: "group-1",
@@ -346,6 +415,7 @@ function createSession() {
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,
+    ...overrides,
   }
 }
 
