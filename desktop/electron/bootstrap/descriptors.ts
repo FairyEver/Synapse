@@ -118,6 +118,7 @@ import {
 import { pathExists } from "../services/fs-utils"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import { configureGitCommandSecurity } from "../services/git-command"
+import { setConfigBackupDataRepository } from "../services/config-backup-service"
 import { createGitAccessService, type GitAccessService } from "../services/git-client/git-access-service"
 import { createGitBranchService, type GitBranchService } from "../services/git-client/git-branch-service"
 import { createGitClientCommandRunner, type GitClientCommandRunner } from "../services/git-client/git-command-runner"
@@ -1095,10 +1096,12 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
   id: "core.data-repository",
   criticality: "fatal",
   create() {
-    return createFileBackedDataRepository({
+    const dataRepository = createFileBackedDataRepository({
       rootDir: path.join(app.getPath("userData"), "data-v1"),
       safeStorage,
     })
+    setConfigBackupDataRepository(dataRepository)
+    return dataRepository
   },
 }
 

@@ -6,10 +6,12 @@ import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
 import { DEFAULT_DOCK_APP_IDS, normalizeDockAppIds } from "../../src/modules/apps/dock"
 import type {
+  SynapseDataRepositoryBackupPayload,
   SynapseConfigBackup,
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
+import type { DataRepository } from "../runtime/data-repo"
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
 import type {
   SynapseAgentGlobalConfig,
@@ -31,6 +33,7 @@ import { normalizeUserId, userIdentityService } from "./user-identity-service"
 
 const BACKUP_SCHEMA_VERSION = 1 as const
 const logger = createMainLogger("service.config-backup")
+let dataRepositoryForBackup: Pick<DataRepository, "exportAll" | "importAll"> | null = null
 type LegacyBackupRepositoryConfig = SynapseConfigBackup["config"]["repositories"][number] & {
   variables?: unknown
 }
@@ -40,8 +43,13 @@ type BackupConfigWithLegacyVariables = Omit<SynapseConfigBackup["config"], "repo
 export type ConfigBackupPreparedImport = {
   readonly filePath: string
   readonly identity: SynapseConfigBackup["identity"]
+  readonly dataRepository?: SynapseDataRepositoryBackupPayload
   readonly previousConfig: SynapseConfig
   readonly nextConfig: SynapseConfigBackup["config"]
+}
+
+function setConfigBackupDataRepository(repository: Pick<DataRepository, "exportAll" | "importAll"> | null): void {
+  dataRepositoryForBackup = repository
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,6 +58,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
+}
+
+function isDataRepositoryBackupPayload(value: unknown): value is SynapseDataRepositoryBackupPayload {
+  if (!isRecord(value) || value.format !== "synapse-backup-v1" || !isIsoDateString(value.exportedAt)) {
+    return false
+  }
+  if (!Array.isArray(value.namespaces)) return false
+  return value.namespaces.every((entry) => {
+    if (!isRecord(entry)) return false
+    if (!isNonEmptyString(entry.name)) return false
+    if (typeof entry.schemaVersion !== "number") return false
+    if (typeof entry.encrypted !== "boolean") return false
+    if (entry.data === null) return true
+    if (!isRecord(entry.data)) return false
+    const items = entry.data.items
+    return items === undefined || Array.isArray(items)
+  })
 }
 
 function isIsoDateString(value: unknown): value is string {
@@ -876,6 +901,7 @@ function parseBackup(rawValue: unknown): SynapseConfigBackup {
   const exportedAt = readRequiredField(rawValue, "exportedAt", "backup", errors)
   const config = readRequiredField(rawValue, "config", "backup", errors)
   const identity = readRequiredField(rawValue, "identity", "backup", errors)
+  const dataRepository = rawValue.dataRepository
 
   if (schemaVersion !== BACKUP_SCHEMA_VERSION) {
     errors.push(`backup.schemaVersion 必须是 ${BACKUP_SCHEMA_VERSION}。`)
@@ -887,6 +913,14 @@ function parseBackup(rawValue: unknown): SynapseConfigBackup {
 
   const normalizedConfig = validateConfig(config, errors)
   const normalizedIdentity = validateIdentity(identity, errors)
+  const normalizedDataRepository = dataRepository === undefined
+    ? undefined
+    : isDataRepositoryBackupPayload(dataRepository)
+      ? dataRepository
+      : null
+  if (dataRepository !== undefined && normalizedDataRepository === null) {
+    errors.push("backup.dataRepository 必须是有效的数据仓库备份。")
+  }
 
   if (errors.length > 0 || !normalizedConfig || !normalizedIdentity || !isIsoDateString(exportedAt)) {
     throw new Error(formatValidationErrors(errors))
@@ -897,6 +931,7 @@ function parseBackup(rawValue: unknown): SynapseConfigBackup {
     exportedAt: exportedAt.trim(),
     config: normalizedConfig,
     identity: normalizedIdentity,
+    ...(normalizedDataRepository ? { dataRepository: normalizedDataRepository } : undefined),
   }
 }
 
@@ -907,6 +942,9 @@ async function writeBackupFile(filePath: string, backup: SynapseConfigBackup): P
 
 async function createConfigBackupPayload(exportedAt = new Date()): Promise<SynapseConfigBackup> {
   const config = await configStore.load()
+  const dataRepository = dataRepositoryForBackup
+    ? await dataRepositoryForBackup.exportAll({ includeSecrets: false })
+    : undefined
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: exportedAt.toISOString(),
@@ -930,6 +968,7 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
       })),
     },
     identity: await userIdentityService.exportIdentity(),
+    ...(dataRepository ? { dataRepository } : undefined),
   }
 }
 
@@ -1030,6 +1069,7 @@ class ConfigBackupService {
     return {
       filePath,
       identity: backup.identity,
+      ...(backup.dataRepository ? { dataRepository: backup.dataRepository } : undefined),
       previousConfig,
       nextConfig,
     }
@@ -1037,6 +1077,29 @@ class ConfigBackupService {
 
   async commitImport(plan: ConfigBackupPreparedImport): Promise<SynapseConfigBackupImportResult> {
     await configStore.replace(plan.nextConfig)
+
+    if (plan.dataRepository && dataRepositoryForBackup) {
+      try {
+        await dataRepositoryForBackup.importAll(plan.dataRepository)
+      } catch (dataRepositoryError) {
+        logger.warn("Data repository import failed, rolling back config.", { filePath: redactedFilePathForLog() })
+        try {
+          await configStore.replace(plan.previousConfig)
+        } catch (rollbackError) {
+          logger.error("Config backup import rollback failed.", {
+            filePath: redactedFilePathForLog(),
+            dataRepositoryErrorName: dataRepositoryError instanceof Error ? dataRepositoryError.name : typeof dataRepositoryError,
+            dataRepositoryErrorLength: String(dataRepositoryError).length,
+            rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+            rollbackErrorLength: String(rollbackError).length,
+          })
+          throw new Error("配置备份导入失败，且旧配置恢复也失败。当前配置可能已部分改变，请检查配置后重试。", {
+            cause: rollbackError,
+          })
+        }
+        throw dataRepositoryError
+      }
+    }
 
     try {
       await userIdentityService.importIdentity(plan.identity)
@@ -1086,7 +1149,7 @@ class ConfigBackupService {
 
 export const configBackupService = new ConfigBackupService()
 
-export { createConfigBackupPayload }
+export { createConfigBackupPayload, setConfigBackupDataRepository }
 
 function redactedFilePathForLog(): string {
   return "[path]"
