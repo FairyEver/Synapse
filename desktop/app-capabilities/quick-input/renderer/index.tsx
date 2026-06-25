@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { CircleAlert, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
 import { Button } from "../../../src/components/ui/button"
 import {
   Dialog,
@@ -25,7 +26,16 @@ import {
   FieldLabel,
 } from "../../../src/components/ui/field"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
+import { Skeleton } from "../../../src/components/ui/skeleton"
 import { Spinner } from "../../../src/components/ui/spinner"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
@@ -50,6 +60,7 @@ const emptyFormState: QuickInputFormState = {
 export function QuickInputModule() {
   const [items, setItems] = useState<SynapseQuickInputItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [saving, setSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<QuickInputFormState>(emptyFormState)
@@ -58,10 +69,14 @@ export function QuickInputModule() {
 
   const reload = useCallback(async () => {
     try {
+      setLoading(true)
+      setLoadError("")
       setItems(await quickInputBridge.list())
     } catch (error) {
+      const message = errorMessage(error, "加载失败")
       logger.error("Failed to load quick input items.", error)
-      toast.error("加载失败")
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -144,31 +159,40 @@ export function QuickInputModule() {
       )}
     >
       <ScrollArea className="h-full min-h-0">
-        <div className="mx-auto grid w-full max-w-5xl gap-3 p-3 sm:p-5">
+        <div className="mx-auto grid w-full max-w-4xl gap-3 p-3 sm:p-5">
           {loading ? (
-            <div className="flex min-h-48 items-center justify-center text-muted-foreground">
-              <Spinner />
-            </div>
+            <QuickInputTableSkeleton />
+          ) : items.length === 0 && loadError ? (
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertTitle>加载失败</AlertTitle>
+              <AlertDescription className="break-words">{loadError}</AlertDescription>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 w-fit"
+                onClick={() => void reload()}
+              >
+                <RefreshCw data-icon="inline-start" />
+                重试
+              </Button>
+            </Alert>
           ) : items.length === 0 ? (
-            <Empty className="min-h-48">
+            <Empty className="min-h-48 border">
               <EmptyHeader>
                 <EmptyTitle>暂无快捷输入</EmptyTitle>
               </EmptyHeader>
               <EmptyContent>
-                <Button type="button" variant="outline" onClick={openCreateForm}>新增</Button>
+                <Button type="button" variant="outline" onClick={openCreateForm}>新增快捷输入</Button>
               </EmptyContent>
             </Empty>
           ) : (
-            <div className="grid gap-2">
-              {items.map((item) => (
-                <QuickInputRow
-                  key={item.id}
-                  item={item}
-                  onDelete={() => void deleteItem(item)}
-                  onEdit={() => openEditForm(item)}
-                />
-              ))}
-            </div>
+            <QuickInputTable
+              items={items}
+              onDelete={(item) => void deleteItem(item)}
+              onEdit={openEditForm}
+            />
           )}
         </div>
       </ScrollArea>
@@ -190,26 +214,78 @@ export function QuickInputModule() {
   )
 }
 
-function QuickInputRow({
-  item,
+function QuickInputTableSkeleton() {
+  return (
+    <div className="rounded-md border bg-background">
+      <div className="grid gap-3 p-3">
+        <Skeleton className="h-4 w-20" />
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="grid gap-2 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_4rem] sm:items-center">
+            <Skeleton className="h-4 w-full max-w-xl" />
+            <div className="flex justify-end gap-1">
+              <Skeleton className="size-7" />
+              <Skeleton className="size-7" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QuickInputTable({
+  items,
   onDelete,
   onEdit,
 }: {
-  readonly item: SynapseQuickInputItem
-  readonly onDelete: () => void
-  readonly onEdit: () => void
+  readonly items: SynapseQuickInputItem[]
+  readonly onDelete: (item: SynapseQuickInputItem) => void
+  readonly onEdit: (item: SynapseQuickInputItem) => void
 }) {
   return (
-    <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-      <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-6">{item.content}</p>
-      <div className="flex shrink-0 items-center gap-1 sm:justify-end">
-        <Button type="button" variant="ghost" size="icon" aria-label="编辑" onClick={onEdit}>
-          <Pencil />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label="删除" onClick={onDelete}>
-          <Trash2 />
-        </Button>
-      </div>
+    <div className="rounded-md border bg-background">
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>内容</TableHead>
+            <TableHead className="w-24 text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => {
+            const preview = quickInputPreview(item.content)
+            return (
+              <TableRow key={item.id}>
+                <TableCell className="min-w-0 whitespace-normal align-top">
+                  <div className="whitespace-pre-wrap break-words leading-6">{item.content}</div>
+                </TableCell>
+                <TableCell className="align-top text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`编辑快捷输入：${preview}`}
+                      onClick={() => onEdit(item)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`删除快捷输入：${preview}`}
+                      onClick={() => onDelete(item)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -260,7 +336,7 @@ function QuickInputDialog({
             </Button>
             <Button type="submit" disabled={saving}>
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              保存
+              {saving ? "保存中" : "保存快捷输入"}
             </Button>
           </DialogFooter>
         </form>
@@ -279,4 +355,9 @@ function mergeItem(items: SynapseQuickInputItem[], item: SynapseQuickInputItem):
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message
   return fallback
+}
+
+function quickInputPreview(content: string): string {
+  const preview = content.replace(/\s+/g, " ").trim()
+  return preview.length > 24 ? `${preview.slice(0, 24)}...` : preview
 }
