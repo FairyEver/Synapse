@@ -493,6 +493,24 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
   })
 
+  it("keeps the terminal workspace full height", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+    })]
+
+    await renderModule()
+
+    const main = document.body.querySelector("main")
+    const terminalRegion = document.querySelector("[aria-label='终端输出与输入']")
+    expect(main?.classList.contains("h-full")).toBe(true)
+    expect(main?.classList.contains("min-h-0")).toBe(true)
+    expect(terminalRegion?.parentElement?.classList.contains("h-full")).toBe(true)
+    expect(terminalRegion?.classList.contains("flex-1")).toBe(true)
+  })
+
   it("does not render session-level Agent control", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -707,7 +725,14 @@ describe("TerminalModule", () => {
     await renderModule()
     await clickGroupMenu("前端项目")
     await clickMenuItem("命令")
+
+    expect(document.body.textContent).toContain("命令")
+    expect(document.body.textContent).toContain("暂无命令")
+    expect(document.body.querySelector('input[aria-label="命令名称"]')).toBeNull()
+
     await clickButton("新增命令")
+
+    expect(document.body.textContent).toContain("新增命令")
     await changeInput("命令名称", "dev")
     await changeTextarea("命令内容", "pnpm dev")
     await clickButton("保存")
@@ -719,6 +744,8 @@ describe("TerminalModule", () => {
     })
 
     await clickButtonByAriaLabel("编辑命令：dev")
+
+    expect(document.body.textContent).toContain("编辑命令")
     await changeInput("命令名称", "test")
     await changeTextarea("命令内容", "pnpm test")
     await clickButton("保存")

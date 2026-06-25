@@ -32,7 +32,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../../src/components/ui/dropdown-menu"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "../../../src/components/ui/empty"
+import { Field, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import {
   ModuleSidebar,
@@ -81,6 +91,7 @@ export function TerminalModule() {
   const [groupSettingsSaving, setGroupSettingsSaving] = useState(false)
   const [groupSettingsChoosingDirectory, setGroupSettingsChoosingDirectory] = useState(false)
   const [commandManagerTarget, setCommandManagerTarget] = useState<SynapseTerminalGroup | null>(null)
+  const [commandFormOpen, setCommandFormOpen] = useState(false)
   const [commandEditTarget, setCommandEditTarget] = useState<SynapseTerminalGroupCommand | null>(null)
   const [commandName, setCommandName] = useState("")
   const [commandText, setCommandText] = useState("")
@@ -101,6 +112,7 @@ export function TerminalModule() {
   const terminalSessionRows = activeSession?.rows ?? DEFAULT_ROWS
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
+  const commandManagerCommands = commandManagerTarget?.settings?.commands ?? []
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -328,6 +340,7 @@ export function TerminalModule() {
 
   const openCommandManager = useCallback((group: SynapseTerminalGroup) => {
     setCommandManagerTarget(group)
+    setCommandFormOpen(false)
     setCommandEditTarget(null)
     setCommandName("")
     setCommandText("")
@@ -337,15 +350,18 @@ export function TerminalModule() {
     setCommandEditTarget(null)
     setCommandName("")
     setCommandText("")
+    setCommandFormOpen(true)
   }, [])
 
   const openEditCommandDialog = useCallback((command: SynapseTerminalGroupCommand) => {
     setCommandEditTarget(command)
     setCommandName(command.name)
     setCommandText(command.command)
+    setCommandFormOpen(true)
   }, [])
 
   const closeCommandForm = useCallback(() => {
+    setCommandFormOpen(false)
     setCommandEditTarget(null)
     setCommandName("")
     setCommandText("")
@@ -696,9 +712,9 @@ export function TerminalModule() {
         contentScrollable={false}
         sidebarResizable
       >
-        <main className="flex min-h-0 min-w-0 flex-col">
+        <main className="flex h-full min-h-0 min-w-0 flex-col">
           {activeSession ? (
-            <div className="dark flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+            <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
               {terminalReadError ? (
                 <div className="border-b bg-background px-3 py-2 text-sm text-muted-foreground">{terminalReadError}</div>
               ) : null}
@@ -837,91 +853,134 @@ export function TerminalModule() {
           closeCommandForm()
         }
       }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>命令</DialogTitle>
             <DialogDescription className="sr-only">
               管理终端分组命令。
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            {commandManagerTarget?.settings?.commands?.length ? (
-              <div className="grid gap-2">
-                {commandManagerTarget.settings.commands.map((command) => (
-                  <div key={command.id} className="grid gap-1 rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 truncate text-sm font-medium">{command.name}</div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`编辑命令：${command.name}`}
-                          onClick={() => openEditCommandDialog(command)}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`删除命令：${command.name}`}
-                          disabled={commandDeletingId === command.id}
-                          onClick={() => { void deleteCommand(command) }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="max-h-10 overflow-hidden whitespace-pre-wrap text-xs text-muted-foreground">
-                      {command.command}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <div className="grid gap-3">
-              <label className="grid gap-1.5">
-                <span className="text-sm font-medium">名称</span>
-                <Input
-                  aria-label="命令名称"
-                  value={commandName}
-                  onChange={(event) => setCommandName(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-sm font-medium">命令内容</span>
-                <Textarea
-                  aria-label="命令内容"
-                  value={commandText}
-                  onChange={(event) => setCommandText(event.target.value)}
-                  rows={5}
-                />
-              </label>
+          {commandManagerCommands.length ? (
+            <div className="max-h-[min(24rem,calc(100vh-12rem))] overflow-auto rounded-md border">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-40">名称</TableHead>
+                    <TableHead>命令内容</TableHead>
+                    <TableHead className="w-20 text-right" aria-label="操作" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {commandManagerCommands.map((command) => (
+                    <TableRow key={command.id}>
+                      <TableCell className="min-w-0">
+                        <div className="truncate font-medium">{command.name}</div>
+                      </TableCell>
+                      <TableCell className="min-w-0">
+                        <div className="truncate font-mono text-xs text-muted-foreground" title={command.command}>
+                          {command.command}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`编辑命令：${command.name}`}
+                            onClick={() => openEditCommandDialog(command)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`删除命令：${command.name}`}
+                            disabled={commandDeletingId === command.id}
+                            onClick={() => { void deleteCommand(command) }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          </div>
+          ) : (
+            <Empty className="min-h-40 border">
+              <EmptyHeader>
+                <EmptyTitle>暂无命令</EmptyTitle>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button type="button" size="sm" onClick={openCreateCommandDialog}>
+                  新增命令
+                </Button>
+              </EmptyContent>
+            </Empty>
+          )}
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               disabled={commandSaving}
               onClick={() => {
-                if (commandName || commandText || commandEditTarget) {
-                  closeCommandForm()
-                } else {
-                  setCommandManagerTarget(null)
-                }
+                setCommandManagerTarget(null)
+                closeCommandForm()
               }}
             >
               关闭
             </Button>
+            {commandManagerCommands.length ? (
+              <Button
+                type="button"
+                disabled={commandSaving}
+                onClick={openCreateCommandDialog}
+              >
+                新增命令
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={commandManagerTarget !== null && commandFormOpen} onOpenChange={(open) => {
+        if (!open) closeCommandForm()
+      }}>
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{commandEditTarget ? "编辑命令" : "新增命令"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Field>
+              <FieldLabel htmlFor="terminal-command-name">名称</FieldLabel>
+              <Input
+                id="terminal-command-name"
+                aria-label="命令名称"
+                value={commandName}
+                onChange={(event) => setCommandName(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="terminal-command-content">命令内容</FieldLabel>
+              <Textarea
+                id="terminal-command-content"
+                aria-label="命令内容"
+                value={commandText}
+                onChange={(event) => setCommandText(event.target.value)}
+                rows={5}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
               disabled={commandSaving}
-              onClick={openCreateCommandDialog}
+              onClick={closeCommandForm}
             >
-              新增命令
+              取消
             </Button>
             <Button
               type="button"
