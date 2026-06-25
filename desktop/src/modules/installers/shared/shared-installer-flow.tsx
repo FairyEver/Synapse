@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type {
   SynapseInstallerKind,
@@ -26,7 +27,7 @@ export type SharedInstallerFlowProps = {
     source: SynapseInstallerSource
   }) => Promise<void> | void
   onInstalled: () => Promise<void> | void
-  projects: string[]
+  projects: SynapseProjectConfig[]
   renderSourceInput?: (args: SharedInstallerFlowRenderSourceInputArgs) => ReactNode
   source?: SynapseInstallerSource
 }

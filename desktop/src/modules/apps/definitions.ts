@@ -3,6 +3,8 @@ import { automationAppDefinition } from "../automation/app-definition"
 import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
 import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
+import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
+import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
 import { terminalAppDefinition } from "../../../app-capabilities/terminal/renderer/app-definition"
 import { screenshotAppDefinition } from "../../../app-capabilities/screenshot/renderer/app-definition"
@@ -28,6 +30,8 @@ const systemAppDefinitions = [
   gitAppDefinition,
   databaseAppDefinition,
   documentTemplateAppDefinition,
+  skillInstallerAppDefinition,
+  ruleInstallerAppDefinition,
   quickInputAppDefinition,
   terminalAppDefinition,
   screenshotAppDefinition,

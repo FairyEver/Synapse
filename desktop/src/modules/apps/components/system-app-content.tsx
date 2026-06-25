@@ -19,6 +19,8 @@ import { UsageMonitorModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
+import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
+import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
@@ -89,6 +91,8 @@ function SystemAppContent({
   }
   if (appId === "database") return <DatabaseModule />
   if (appId === "document-template") return <DocumentTemplateModule />
+  if (appId === "skill-installer") return <SkillInstallerModule />
+  if (appId === "rule-installer") return <RuleInstallerModule />
   if (appId === "quick-input") return <QuickInputModule />
   if (appId === "terminal") return <TerminalModule />
   if (appId === "screenshot") return <ScreenshotModule />

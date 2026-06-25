@@ -43,6 +43,14 @@ vi.mock("../../../../app-capabilities/screenshot/renderer", () => ({
   ScreenshotModule: () => <div>截图窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
+  SkillInstallerModule: () => <div>Skill 安装器窗口</div>,
+}))
+
+vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
+  RuleInstallerModule: () => <div>Rule 安装器窗口</div>,
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {

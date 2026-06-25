@@ -23,6 +23,8 @@ describe("system app registry", () => {
       "git",
       "database",
       "document-template",
+      "skill-installer",
+      "rule-installer",
       "quick-input",
       "terminal",
       "screenshot",

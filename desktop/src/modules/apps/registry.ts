@@ -3,6 +3,8 @@ import { automationAppManifest } from "@/modules/automation/app-manifest"
 import { databaseAppManifest } from "@/modules/database/app-manifest"
 import { driveAppManifest } from "@/modules/drive/app-manifest"
 import { documentTemplateAppManifest } from "../../../app-capabilities/document-template/renderer/app-manifest"
+import { skillInstallerAppManifest } from "../../../app-capabilities/skill-installer/renderer/app-manifest"
+import { ruleInstallerAppManifest } from "../../../app-capabilities/rule-installer/renderer/app-manifest"
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
 import { terminalAppManifest } from "../../../app-capabilities/terminal/renderer/app-manifest"
 import { screenshotAppManifest } from "../../../app-capabilities/screenshot/renderer/app-manifest"
@@ -28,6 +30,8 @@ const systemApps = [
   gitAppManifest,
   databaseAppManifest,
   documentTemplateAppManifest,
+  skillInstallerAppManifest,
+  ruleInstallerAppManifest,
   quickInputAppManifest,
   terminalAppManifest,
   screenshotAppManifest,
