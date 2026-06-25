@@ -1870,7 +1870,7 @@ describe("AgentComposer", () => {
     openQuickInputMenu(container)
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]') as HTMLElement | null
     const item = document.querySelector('[role="menuitem"][aria-label^="发送快捷输入："]') as HTMLElement | null
-    expect(menu?.className).toContain("w-96")
+    expect(menu?.className).toContain("w-80")
     expect(item).toBeTruthy()
     expect(item?.textContent).toBe("这是一段非常长的片段内容，用来验证菜单中只显示预…")
     expect(item?.querySelector('[data-quick-input-action="send"]')).toBeNull()

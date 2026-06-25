@@ -53,7 +53,7 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="w-96"
+        className="w-80"
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {quickInputs.map((item) => (
@@ -64,7 +64,7 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
               onDirectSend(item.content)
             }}
           >
-            <span className="max-w-80 truncate">{quickInputMenuPreview(item.content)}</span>
+            <span className="min-w-0 flex-1 truncate">{quickInputMenuPreview(item.content)}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
