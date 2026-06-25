@@ -47,33 +47,38 @@ export const quickInputIpcModule: IpcModule = {
       kind: "invoke",
       request: quickInputCreateInputSchema,
       response: quickInputItemSchema,
-      handler: (ctx, request) => resolveQuickInputService(ctx).create(request),
+      handler: (ctx, request: z.infer<typeof quickInputCreateInputSchema>) =>
+        resolveQuickInputService(ctx).create(request),
     },
     update: {
       channel: "synapse:quick-input:update",
       kind: "invoke",
       request: quickInputUpdateInputSchema,
       response: quickInputItemSchema,
-      handler: (ctx, request) => resolveQuickInputService(ctx).update(request),
+      handler: (ctx, request: z.infer<typeof quickInputUpdateInputSchema>) =>
+        resolveQuickInputService(ctx).update(request),
     },
     delete: {
       channel: "synapse:quick-input:delete",
       kind: "invoke",
       request: quickInputIdInputSchema,
       response: z.void(),
-      handler: (ctx, request) => resolveQuickInputService(ctx).delete(request),
+      handler: (ctx, request: z.infer<typeof quickInputIdInputSchema>) =>
+        resolveQuickInputService(ctx).delete(request),
     },
     pinToTop: {
       channel: "synapse:quick-input:pin-to-top",
       kind: "invoke",
       request: quickInputIdInputSchema,
       response: z.array(quickInputItemSchema),
-      handler: (ctx, request) => resolveQuickInputService(ctx).pinToTop(request),
+      handler: (ctx, request: z.infer<typeof quickInputIdInputSchema>) =>
+        resolveQuickInputService(ctx).pinToTop(request),
     },
   },
   events: {
     changed: {
       channel: "synapse:quick-input:changed",
+      kind: "event",
       payload: quickInputChangedEventSchema,
     },
   },

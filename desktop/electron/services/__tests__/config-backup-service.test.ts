@@ -390,7 +390,7 @@ describe("ConfigBackupService quick inputs", () => {
   it("imports DataRepository payloads from backups", async () => {
     const importAll = vi.fn(async () => undefined)
     setConfigBackupDataRepository({
-      exportAll: vi.fn(async () => ({ format: "synapse-backup-v1", exportedAt: new Date().toISOString(), namespaces: [] })),
+      exportAll: vi.fn(async () => ({ format: "synapse-backup-v1" as const, exportedAt: new Date().toISOString(), namespaces: [] })),
       importAll,
     })
     const dataRepository = {

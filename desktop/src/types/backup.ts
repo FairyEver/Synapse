@@ -8,10 +8,7 @@ export type SynapseDataRepositoryBackupPayload = {
     readonly name: string
     readonly schemaVersion: number
     readonly encrypted: boolean
-    readonly data: {
-      readonly singleton?: unknown
-      readonly items?: readonly unknown[]
-    } | null
+    readonly data: unknown
   }[]
 }
 
