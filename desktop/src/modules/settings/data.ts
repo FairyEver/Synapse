@@ -8,7 +8,6 @@ import {
   CircleUserRound,
   Settings2,
   Shield,
-  TextCursorInput,
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
@@ -40,12 +39,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: FolderOpen,
     label: "项目和知识库",
     description: "管理 Agent 可用项目。",
-  },
-  {
-    id: "quick-inputs",
-    icon: TextCursorInput,
-    label: "提示词片段",
-    description: "维护常用片段。",
   },
   {
     id: "claude-code",
