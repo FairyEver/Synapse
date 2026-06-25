@@ -724,6 +724,25 @@ describe("TerminalModule", () => {
     expect(terminalBridge.stopSession).not.toHaveBeenCalled()
   })
 
+  it("does not resize the pty repeatedly when observer reports unchanged dimensions", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    act(() => {
+      resizeObservers[0]?.trigger()
+      resizeObservers[0]?.trigger()
+    })
+
+    expect(terminalBridge.resizeSession).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cols: 100,
+      rows: 30,
+    })
+  })
+
   it("does not mark startup ready for control-only terminal output", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]

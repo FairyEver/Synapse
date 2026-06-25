@@ -473,6 +473,17 @@ describe("TerminalService", () => {
     expect(service.getSession({ sessionId: session.id })).toMatchObject({ cols: 120, rows: 40 })
   })
 
+  it("resizeSession ignores unchanged dimensions", async () => {
+    const pty = new FakePty()
+    const service = await createStartedService(createMemoryStore(), { ptys: [pty] })
+    const session = await service.createSession({ cols: 80, rows: 24 })
+
+    await service.resizeSession({ sessionId: session.id, cols: 80, rows: 24 })
+
+    expect(pty.resize).not.toHaveBeenCalled()
+    expect(service.getSession({ sessionId: session.id })).toMatchObject({ cols: 80, rows: 24 })
+  })
+
   it("resizeSession throws when the session is not running", async () => {
     const pty = new FakePty()
     const service = await createStartedService(createMemoryStore(), { ptys: [pty] })

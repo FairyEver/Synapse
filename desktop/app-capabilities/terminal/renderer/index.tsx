@@ -88,6 +88,10 @@ export function TerminalModule() {
     if (!activeSessionId) return sessions[0] ?? null
     return sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null
   }, [activeSessionId, sessions])
+  const terminalSessionId = activeSession?.id ?? null
+  const terminalSessionStatus = activeSession?.status ?? null
+  const terminalSessionCols = activeSession?.cols ?? DEFAULT_COLS
+  const terminalSessionRows = activeSession?.rows ?? DEFAULT_ROWS
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
 
@@ -321,15 +325,16 @@ export function TerminalModule() {
 
   useEffect(() => {
     const container = terminalContainerRef.current
-    if (!container || !activeSession) return undefined
+    if (!container || !terminalSessionId || !terminalSessionStatus) return undefined
 
     setTerminalReadError(null)
     let disposed = false
     let lastSeq = 0
+    let lastResize = { cols: terminalSessionCols, rows: terminalSessionRows }
     let startupCommandRequested = false
     const xterm = new Terminal(createTerminalRenderingOptions({
       container,
-      disableStdin: activeSession.status !== "running",
+      disableStdin: terminalSessionStatus !== "running",
     }))
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon()
@@ -345,8 +350,10 @@ export function TerminalModule() {
       const cols = proposed?.cols ?? xterm.cols
       const rows = proposed?.rows ?? xterm.rows
       if (!cols || !rows) return
+      if (lastResize.cols === cols && lastResize.rows === rows) return
+      lastResize = { cols, rows }
       void terminalBridge.resizeSession({
-        sessionId: activeSession.id,
+        sessionId: terminalSessionId,
         cols,
         rows,
       }).catch((error) => {
@@ -359,7 +366,7 @@ export function TerminalModule() {
 
     const inputDisposable = xterm.onData((data) => {
       void terminalBridge.writeSession({
-        sessionId: activeSession.id,
+        sessionId: terminalSessionId,
         data,
       }).catch((error) => {
         logger.error("Failed to write terminal input.", error)
@@ -372,7 +379,7 @@ export function TerminalModule() {
     const requestStartupCommand = () => {
       if (disposed || startupCommandRequested) return
       startupCommandRequested = true
-      void terminalBridge.runStartupCommand({ sessionId: activeSession.id }).catch((error) => {
+      void terminalBridge.runStartupCommand({ sessionId: terminalSessionId }).catch((error) => {
         logger.warn("Failed to run terminal startup command.", error)
       })
     }
@@ -388,7 +395,7 @@ export function TerminalModule() {
     }
 
     const unsubscribeData = terminalBridge.onData((event) => {
-      if (event.sessionId !== activeSession.id || disposed) return
+      if (event.sessionId !== terminalSessionId || disposed) return
       if (!initialReadComplete) {
         pendingChunks.push(event.chunk)
         return
@@ -411,7 +418,7 @@ export function TerminalModule() {
     })
 
     terminalBridge.readSession({
-      sessionId: activeSession.id,
+      sessionId: terminalSessionId,
       afterSeq: 0,
     }).then((result) => {
       if (disposed) return
@@ -441,7 +448,7 @@ export function TerminalModule() {
       resizeObserver.disconnect()
       xterm.dispose()
     }
-  }, [activeSession, terminalBridge])
+  }, [terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
 
   return (
     <SystemAppWindowShell>

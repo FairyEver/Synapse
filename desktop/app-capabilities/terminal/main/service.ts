@@ -496,6 +496,7 @@ export function createTerminalService(deps: {
     async resizeSession(input: TerminalResizeSessionInput): Promise<void> {
       const runtime = getRunningRuntime(input.sessionId)
       const session = getSessionOrThrow(input.sessionId)
+      if (session.cols === input.cols && session.rows === input.rows) return
       sessions.set(session.id, { ...session, cols: input.cols, rows: input.rows, updatedAt: now() })
       runtime.pty.resize(input.cols, input.rows)
       await flushPersist()
