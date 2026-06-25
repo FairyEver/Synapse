@@ -5,14 +5,16 @@ import { useAccount } from "@/app-shell/account"
 import { useAppConfig } from "@/app-shell/config"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { normalizeContentNameInput, validateContentNameInput } from "@/lib/content-name-input"
+import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-name-input"
 import type {
   SynapseContentStoreInstallWindowRequest,
   SynapseContentStorePreparedSource,
 } from "@/types/content-store-install"
 import type { SynapseContentMeta } from "@/types/content"
-import type { SynapseEditorAdapterSummary } from "@/types/editor"
-import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
+import type { SynapseInstallerSource } from "@/types/installers"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
+import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installer-flow"
 import { ContentStoreInstallLoading } from "./content-store-install-loading"
 import { useContentStoreInstall } from "./use-content-store-install"
 
@@ -42,12 +44,11 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
   const { config } = useAppConfig()
   const account = useAccount()
   const { load, markCompleted, state } = useContentStoreInstall(request.session)
-  const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const authenticatedRetrySessionRef = useRef<string | null>(null)
 
   const source = state.status === "ready" ? state.source : null
   const item = useMemo(() => source ? toContentMeta(source) : null, [source])
+  const installerSource = useMemo(() => source ? toInstallerSource(source) : null, [source])
   const adapters = useEditorAdaptersForContentType({
     contentType: source?.type ?? "skill",
     enabled: Boolean(source),
@@ -61,8 +62,6 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
   } = adapters
 
   const resetAndLoad = useCallback(async () => {
-    setSelectedEditor(null)
-    setDialogOpen(false)
     await load()
   }, [load])
 
@@ -95,7 +94,6 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
 
   const handleInstalled = useCallback(async () => {
     await recordContentStoreInstallComplete(request.session)
-    setDialogOpen(false)
     markCompleted(source?.title ?? "内容")
   }, [markCompleted, request.session, source?.title])
 
@@ -143,9 +141,8 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
           />
         ) : null}
 
-        {source && item && state.status === "ready" ? (
+        {source && item && installerSource && state.status === "ready" ? (
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-foreground">选择编辑器</h2>
             {editorError ? <p className="text-sm text-destructive">{editorError}</p> : null}
             {isLoadingEditors ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -156,37 +153,60 @@ function ContentStoreInstallWindowPage({ request }: { request: SynapseContentSto
             {!isLoadingEditors && filteredAdapters.length === 0 ? (
               <p className="text-sm text-muted-foreground">没有可用编辑器。</p>
             ) : null}
-            <div className="grid gap-2 sm:grid-cols-2">
-              {filteredAdapters.map((editor) => (
-                <Button
-                  key={editor.id}
-                  type="button"
-                  variant="outline"
-                  className="h-auto justify-start py-3 text-left"
-                  onClick={() => {
-                    setSelectedEditor(editor)
-                    setDialogOpen(true)
-                  }}
-                >
-                  {editor.label}
-                </Button>
-              ))}
-            </div>
-            <ContentInstallDialog
-              editor={selectedEditor}
-              initialContent={source.mainContent}
-              item={item}
-              onInstalled={handleInstalled}
-              onOpenChange={setDialogOpen}
-              open={dialogOpen}
-              preparedSourceId={source.id}
+            <SharedInstallerFlow
+              editors={filteredAdapters}
+              mode="page"
               projects={config.global.projects}
+              source={installerSource}
+              onCancel={() => undefined}
+              onInstalled={handleInstalled}
             />
           </section>
         ) : null}
       </div>
     </main>
   )
+}
+
+function toInstallerSource(source: SynapseContentStorePreparedSource): SynapseInstallerSource {
+  const name = choosePreparedSourceName(source)
+  if (source.type === "skill") {
+    return {
+      kind: "skill",
+      origin: "prepared",
+      preparedSourceId: source.id,
+      sourceIdentity: source.contentId,
+      name,
+      title: source.title,
+      description: "",
+      mainContent: source.mainContent,
+    }
+  }
+
+  return {
+    kind: "rule",
+    origin: "prepared",
+    preparedSourceId: source.id,
+    sourceIdentity: source.contentId,
+    name,
+    title: source.title,
+    description: "",
+    body: source.mainContent,
+  }
+}
+
+function choosePreparedSourceName(source: SynapseContentStorePreparedSource): string {
+  const normalize = source.type === "skill" ? normalizeSkillNameInput : normalizeContentNameInput
+  const validate = source.type === "skill" ? validateSkillNameInput : validateContentNameInput
+
+  for (const candidate of [source.title, source.contentId, source.id, source.type]) {
+    const normalized = normalize(candidate)
+    if (!validate(normalized)) {
+      return normalized
+    }
+  }
+
+  return source.type
 }
 
 function InstallStateMessage({

@@ -66,32 +66,6 @@ vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
   }),
 }))
 
-vi.mock("@/modules/content/components/content-install-dialog", () => ({
-  ContentInstallDialog: ({
-    initialContent,
-    onInstalled,
-    open,
-    preparedSourceId,
-  }: {
-    initialContent?: string | null
-    onInstalled?: () => Promise<void> | void
-    open: boolean
-    preparedSourceId?: string
-  }) => open ? (
-    <div>
-      <span>{`dialog:${preparedSourceId}:${initialContent}`}</span>
-      <button
-        type="button"
-        onClick={() => {
-          void onInstalled?.()
-        }}
-      >
-        完成安装
-      </button>
-    </div>
-  ) : null,
-}))
-
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 import { ContentStoreInstallWindowPage } from "../content-store-install-window-page"
@@ -111,7 +85,7 @@ afterEach(() => {
 })
 
 describe("ContentStoreInstallWindowPage", () => {
-  it("prepares the package, opens the existing install dialog, and records completion", async () => {
+  it("prepares the package, renders the installer flow, and records completion", async () => {
     mocks.resolve.mockResolvedValue({
       status: "ready",
       session: {
@@ -142,15 +116,16 @@ describe("ContentStoreInstallWindowPage", () => {
     await renderPage()
 
     expect(document.body.textContent).toContain("选择编辑器")
+    expect(document.body.textContent).toContain("Codex")
 
     await act(async () => {
       clickButton("Codex")
     })
 
-    expect(document.body.textContent).toContain("dialog:prepared-1:# Store Skill")
+    expect(document.body.textContent).toContain("目标位置")
 
     await act(async () => {
-      clickButton("完成安装")
+      clickButton("安装")
       await Promise.resolve()
     })
 
