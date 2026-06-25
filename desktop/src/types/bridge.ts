@@ -66,6 +66,12 @@ import type {
   SynapseContentStoreInstallResolveResult,
 } from "./content-store-install"
 import type {
+  SynapsePrepareInlineRuleSourcePayload,
+  SynapsePrepareLocalSkillSourcePayload,
+  SynapseRuleInstallerSource,
+  SynapseSkillInstallerSource,
+} from "./installers"
+import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveFileVersionDto,
@@ -1041,6 +1047,14 @@ export type SynapseBridge = {
     resolve: (sessionId: string) => Promise<SynapseContentStoreInstallResolveResult>
     prepare: (sessionId: string) => Promise<SynapseContentStoreInstallPrepareResult>
     recordComplete: (sessionId: string) => Promise<{ ok: true }>
+  }
+  installers: {
+    prepareLocalSkillSource: (
+      payload: SynapsePrepareLocalSkillSourcePayload,
+    ) => Promise<SynapseSkillInstallerSource>
+    prepareInlineRuleSource: (
+      payload: SynapsePrepareInlineRuleSourcePayload,
+    ) => Promise<SynapseRuleInstallerSource>
   }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>

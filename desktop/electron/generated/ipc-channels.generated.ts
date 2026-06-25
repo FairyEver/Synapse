@@ -87,6 +87,10 @@ export const IPC_CHANNELS = {
     "prepare": "synapse:content-store-install:prepare",
     "recordComplete": "synapse:content-store-install:record-complete",
   },
+  "installers": {
+    "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
+    "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",

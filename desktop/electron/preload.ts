@@ -73,6 +73,10 @@ const IPC_CHANNELS = {
     "prepare": "synapse:content-store-install:prepare",
     "recordComplete": "synapse:content-store-install:record-complete",
   },
+  "installers": {
+    "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
+    "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",
@@ -993,6 +997,10 @@ const synapseBridge: SynapseBridge = {
     prepare: (sessionId) => invoke(IPC_CHANNELS["content-store-install"].prepare)({ sessionId }),
     recordComplete: (sessionId) =>
       invoke(IPC_CHANNELS["content-store-install"].recordComplete)({ sessionId }),
+  },
+  installers: {
+    prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),
+    prepareInlineRuleSource: invoke(IPC_CHANNELS.installers.prepareInlineRuleSource),
   },
   config: {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),
