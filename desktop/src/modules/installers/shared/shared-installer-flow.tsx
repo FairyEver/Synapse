@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from "react"
 
 import { resolveEditorInstallTarget } from "@/app-shell/content"
 import { installSourceToEditor } from "@/app-shell/installers"
+import { EditorIcon } from "@/components/editor-icon"
 import { Button } from "@/components/ui/button"
 import {
   EditorWriteTargetSelector,
@@ -137,30 +138,35 @@ export function SharedInstallerFlow({
     <section className={containerClassName}>
       {flow.step === "source" ? (
         <div className="flex flex-col gap-3">
-          <h2 className="font-heading text-lg font-medium">选择{getKindLabel(flow.activeKind)}来源</h2>
+          <h2 className="text-balance font-heading text-base font-medium">选择{getKindLabel(flow.activeKind)}来源</h2>
           {renderSourceInput?.({ onSourceReady: flow.selectSource }) ?? null}
         </div>
       ) : null}
 
       {flow.step === "editor" ? (
         <div className="flex flex-col gap-3">
-          <h2 className="font-heading text-lg font-medium">选择编辑器</h2>
-          <div className="grid gap-2">
-            {flow.availableEditors.map((editor) => (
-              <Button
-                key={editor.id}
-                type="button"
-                variant="outline"
-                className="justify-start"
-                onClick={() => {
-                  setSelection(null)
-                  setError("")
-                  flow.selectEditor(editor)
-                }}
-              >
-                {editor.label}
-              </Button>
-            ))}
+          <h2 className="text-balance font-heading text-base font-medium">选择编辑器</h2>
+          <div className="grid gap-1.5">
+            {flow.availableEditors.length > 0 ? (
+              flow.availableEditors.map((editor) => (
+                <Button
+                  key={editor.id}
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-full justify-start gap-2.5 whitespace-normal bg-muted/30 p-2.5 text-left hover:bg-muted/60"
+                  onClick={() => {
+                    setSelection(null)
+                    setError("")
+                    flow.selectEditor(editor)
+                  }}
+                >
+                  <EditorIcon editorId={editor.id} className="size-8" />
+                  <span className="min-w-0 truncate font-medium">{editor.label}</span>
+                </Button>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">当前没有可用编辑器。</p>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>取消</Button>
@@ -170,7 +176,7 @@ export function SharedInstallerFlow({
 
       {flow.step === "target" ? (
         <div className="flex flex-col gap-3">
-          <h2 className="font-heading text-lg font-medium">目标位置</h2>
+          <h2 className="text-balance font-heading text-base font-medium">目标位置</h2>
           {flow.source && flow.selectedEditor ? (
             <EditorWriteTargetSelector
               actionKind="install"
@@ -203,7 +209,7 @@ export function SharedInstallerFlow({
 
       {flow.step === "success" ? (
         <div className="flex flex-col gap-3">
-          <h2 className="font-heading text-lg font-medium">安装完成</h2>
+          <h2 className="text-balance font-heading text-base font-medium">安装完成</h2>
           <div className="flex justify-end">
             <Button type="button" onClick={onCancel}>完成</Button>
           </div>

@@ -23,6 +23,12 @@ vi.mock("@/app-shell/installers", () => ({
   installSourceToEditor: mocks.installSourceToEditor,
 }))
 
+vi.mock("@/components/editor-icon", () => ({
+  EditorIcon: ({ editorId }: { editorId: string }) => (
+    <span aria-hidden="true" data-testid={`editor-icon-${editorId}`} />
+  ),
+}))
+
 const editor: SynapseEditorAdapterSummary = {
   id: "codex" as SynapseEditorAdapterSummary["id"],
   label: "Codex",
@@ -65,7 +71,7 @@ async function renderFlow() {
 
 function clickButton(text: string) {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
-    .find((candidate) => candidate.textContent === text)
+    .find((candidate) => candidate.textContent?.includes(text))
 
   button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
@@ -97,6 +103,7 @@ describe("SharedInstallerFlow", () => {
     await renderFlow()
 
     expect(document.body.textContent).toContain("选择编辑器")
+    expect(document.querySelector("[data-testid='editor-icon-codex']")).not.toBeNull()
     await act(async () => {
       clickButton("Codex")
       await Promise.resolve()

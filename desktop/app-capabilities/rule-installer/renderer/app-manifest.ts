@@ -1,5 +1,5 @@
 import type { SynapseSystemAppManifest } from "../../../src/modules/apps/types"
-import icon from "../../../src/modules/resource-repository/assets/icon.png"
+import icon from "../../../src/modules/installers/assets/icon.png"
 import { ruleInstallerAppDefinition } from "./app-definition"
 
 export const ruleInstallerAppManifest = {
