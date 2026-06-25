@@ -83,9 +83,28 @@ export function SharedInstallerFlow({
   }, [flow.source])
 
   const handleInstall = async () => {
-    if (!flow.source || !flow.selectedEditor || !selection || selection.activeTarget?.status !== "ready") {
+    const activeTarget = selection?.activeTarget
+    if (
+      !flow.source
+      || !flow.selectedEditor
+      || !selection
+      || (activeTarget?.status !== "ready" && activeTarget?.status !== "conflict")
+    ) {
       return
     }
+    const replaceConfirmed = activeTarget.status === "conflict"
+    const overwriteConfirmed = activeTarget.status === "ready"
+      && flow.source.kind === "skill"
+      && activeTarget.targetKind === "directory"
+      && activeTarget.targetExists
+
+    if (replaceConfirmed && !window.confirm("确认替换目标 Skill？")) {
+      return
+    }
+    if (overwriteConfirmed && !window.confirm("确认覆盖目标目录？")) {
+      return
+    }
+
     setInstalling(true)
     setError("")
     try {
@@ -93,7 +112,10 @@ export function SharedInstallerFlow({
       if (!onInstall) {
         await installSourceToEditor({
           editorId: flow.selectedEditor.id,
+          overwriteConfirmed,
           projectPath: selection.scope === "project" ? selection.projectPath : undefined,
+          replaceConfirmed,
+          replacedSourceIdentity: activeTarget.status === "conflict" ? activeTarget.conflictContentId : undefined,
           scope: selection.scope,
           source: flow.source,
         })
@@ -168,7 +190,10 @@ export function SharedInstallerFlow({
             <Button
               type="button"
               onClick={handleInstall}
-              disabled={installing || selection?.activeTarget?.status !== "ready"}
+              disabled={
+                installing
+                || (selection?.activeTarget?.status !== "ready" && selection?.activeTarget?.status !== "conflict")
+              }
             >
               {installing ? "安装中" : "安装"}
             </Button>
