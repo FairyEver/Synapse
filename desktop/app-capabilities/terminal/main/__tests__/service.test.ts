@@ -369,6 +369,111 @@ describe("TerminalService", () => {
     expect(pty.write).not.toHaveBeenCalled()
   })
 
+  it("creates updates and deletes terminal group commands", async () => {
+    const group = createGroup({ name: "前端项目" })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const created = await service.createGroupCommand({
+      groupId: group.id,
+      name: "  dev  ",
+      command: "pnpm dev\r\n",
+    })
+    expect(created).toMatchObject({
+      name: "dev",
+      command: "pnpm dev",
+    })
+
+    const updated = await service.updateGroupCommand({
+      groupId: group.id,
+      commandId: created.id,
+      name: "  test  ",
+      command: "pnpm test",
+    })
+    expect(updated).toMatchObject({
+      id: created.id,
+      name: "test",
+      command: "pnpm test",
+    })
+
+    expect(service.listGroups()[0]?.settings?.commands).toEqual([updated])
+
+    await service.deleteGroupCommand({
+      groupId: group.id,
+      commandId: created.id,
+    })
+
+    expect(service.listGroups()[0]?.settings).toBeUndefined()
+    expect(store.state.groups[0]?.settings).toBeUndefined()
+  })
+
+  it("launches a group command in a new focused session shape", async () => {
+    const command = {
+      id: "cmd-dev",
+      name: "dev",
+      command: "nvm use\npnpm dev",
+      createdAt: "2026-06-24T00:01:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+    }
+    const group = createGroup({
+      settings: {
+        defaultCwd: tempDir,
+        commands: [command],
+      },
+    })
+    const pty = new FakePty()
+    const spawnInputs: Array<{ cwd: string; cols: number; rows: number }> = []
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty], spawnInputs },
+    )
+
+    const session = await service.launchGroupCommand({
+      groupId: group.id,
+      commandId: command.id,
+      cols: 120,
+      rows: 40,
+    })
+
+    expect(session).toMatchObject({
+      groupId: group.id,
+      title: "dev",
+      cwd: tempDir,
+      cols: 120,
+      rows: 40,
+      status: "running",
+    })
+    expect(spawnInputs).toEqual([expect.objectContaining({ cwd: tempDir, cols: 120, rows: 40 })])
+    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
+  })
+
+  it("rejects launching an unknown group command", async () => {
+    const group = createGroup({
+      settings: {
+        commands: [{
+          id: "cmd-dev",
+          name: "dev",
+          command: "pnpm dev",
+          createdAt: "2026-06-24T00:01:00.000Z",
+          updatedAt: "2026-06-24T00:01:00.000Z",
+        }],
+      },
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await expect(service.launchGroupCommand({
+      groupId: group.id,
+      commandId: "missing",
+    })).rejects.toThrow("Terminal command not found")
+
+    expect(pty.write).not.toHaveBeenCalled()
+    expect(service.listSessions()).toEqual([])
+  })
+
   it("rejects empty renamed terminal group names", async () => {
     const group = createGroup()
     const service = await createStartedService(createMemoryStore({ groups: [group], sessions: [], output: [] }))

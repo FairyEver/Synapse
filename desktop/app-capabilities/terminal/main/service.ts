@@ -6,13 +6,16 @@ import path from "node:path"
 import * as pty from "node-pty"
 import { TERMINAL_SESSION_OUTPUT_RETENTION_BYTES } from "../../../config"
 import type {
+  TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalDeleteGroupCommandInput,
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
   TerminalGroup,
   TerminalGroupCommand,
   TerminalGroupSettings,
+  TerminalLaunchGroupCommandInput,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
@@ -22,6 +25,7 @@ import type {
   TerminalRunStartupCommandInput,
   TerminalSession,
   TerminalStopSessionInput,
+  TerminalUpdateGroupCommandInput,
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
@@ -169,6 +173,12 @@ export function createTerminalService(deps: {
     return group
   }
 
+  function getGroupCommandOrThrow(group: TerminalGroup, commandId: string): TerminalGroupCommand {
+    const command = group.settings?.commands?.find((item) => item.id === commandId)
+    if (!command) throw new Error("Terminal command not found")
+    return command
+  }
+
   function getRunningRuntime(sessionId: string): TerminalRuntime {
     const session = getSessionOrThrow(sessionId)
     const runtime = runtimes.get(sessionId)
@@ -192,8 +202,12 @@ export function createTerminalService(deps: {
   function runPendingStartupCommand(sessionId: string): void {
     const command = pendingStartupCommands.get(sessionId)
     if (!command) return
-    const runtime = getRunningRuntime(sessionId)
     pendingStartupCommands.delete(sessionId)
+    writeStartupCommand(sessionId, command)
+  }
+
+  function writeStartupCommand(sessionId: string, command: string): void {
+    const runtime = getRunningRuntime(sessionId)
     startupEchoFilters.set(sessionId, createStartupEchoFilter(command))
     runtime.pty.write(appendTerminalNewline(command))
   }
@@ -285,6 +299,55 @@ export function createTerminalService(deps: {
     sessions.delete(session.id)
     buffers.delete(session.id)
     events.emit("sessionDeleted", { sessionId: session.id })
+  }
+
+  function withGroupCommands(group: TerminalGroup, commands: TerminalGroupCommand[]): TerminalGroup {
+    const settings = normalizeGroupSettings({
+      ...(group.settings?.defaultCwd ? { defaultCwd: group.settings.defaultCwd } : {}),
+      ...(commands.length > 0 ? { commands } : {}),
+    }, now())
+    const updated: TerminalGroup = {
+      ...group,
+      updatedAt: now(),
+    }
+    if (settings) {
+      updated.settings = settings
+    } else {
+      delete updated.settings
+    }
+    return updated
+  }
+
+  async function createSessionRecord(input: TerminalCreateSessionInput): Promise<TerminalSession> {
+    const group = input.groupId ? groups.get(input.groupId) : ensureDefaultGroup()
+    if (!group) throw new Error("Terminal group not found")
+
+    const cwd = resolveCwd(input.cwd ?? group.settings?.defaultCwd ?? (deps.resolveDefaultCwd?.() ?? defaultCwd()))
+    const shell = deps.resolveDefaultShell?.() ?? defaultShell()
+    const cols = input.cols ?? 80
+    const rows = input.rows ?? 24
+    const timestamp = now()
+    const session: TerminalSession = {
+      id: randomUUID(),
+      groupId: group.id,
+      title: input.title ?? path.basename(shell),
+      cwd,
+      shell,
+      status: "running",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      startedAt: timestamp,
+      cols,
+      rows,
+      lastOutputSeq: 0,
+    }
+    const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
+    const child = deps.spawnPty?.({ shell, cwd, cols, rows }) ?? spawnNodePty({ shell, cwd, cols, rows })
+    buffers.set(session.id, buffer)
+    sessions.set(session.id, session)
+    attachRuntime(session, child, buffer)
+    await flushPersist()
+    return session
   }
 
   return {
@@ -414,6 +477,51 @@ export function createTerminalService(deps: {
       await flushPersist()
       return updated
     },
+    async createGroupCommand(input: TerminalCreateGroupCommandInput): Promise<TerminalGroupCommand> {
+      const group = getGroupOrThrow(input.groupId)
+      const normalized = normalizeGroupCommandInput(input)
+      const timestamp = now()
+      const command: TerminalGroupCommand = {
+        id: randomUUID(),
+        name: normalized.name,
+        command: normalized.command,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      const updated = withGroupCommands(group, [...(group.settings?.commands ?? []), command])
+      groups.set(group.id, updated)
+      await flushPersist()
+      return command
+    },
+    async updateGroupCommand(input: TerminalUpdateGroupCommandInput): Promise<TerminalGroupCommand> {
+      const group = getGroupOrThrow(input.groupId)
+      const currentCommand = getGroupCommandOrThrow(group, input.commandId)
+      const normalized = normalizeGroupCommandInput(input)
+      const updatedCommand: TerminalGroupCommand = {
+        ...currentCommand,
+        name: normalized.name,
+        command: normalized.command,
+        updatedAt: now(),
+      }
+      const updated = withGroupCommands(
+        group,
+        (group.settings?.commands ?? []).map((command) =>
+          command.id === input.commandId ? updatedCommand : command),
+      )
+      groups.set(group.id, updated)
+      await flushPersist()
+      return updatedCommand
+    },
+    async deleteGroupCommand(input: TerminalDeleteGroupCommandInput): Promise<void> {
+      const group = getGroupOrThrow(input.groupId)
+      getGroupCommandOrThrow(group, input.commandId)
+      const updated = withGroupCommands(
+        group,
+        (group.settings?.commands ?? []).filter((command) => command.id !== input.commandId),
+      )
+      groups.set(group.id, updated)
+      await flushPersist()
+    },
     async deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
       const group = getGroupOrThrow(input.groupId)
       const groupSessions = [...sessions.values()].filter((session) => session.groupId === group.id)
@@ -430,34 +538,18 @@ export function createTerminalService(deps: {
       return getSessionOrThrow(input.sessionId)
     },
     async createSession(input: TerminalCreateSessionInput): Promise<TerminalSession> {
-      const group = input.groupId ? groups.get(input.groupId) : ensureDefaultGroup()
-      if (!group) throw new Error("Terminal group not found")
-
-      const cwd = resolveCwd(input.cwd ?? group.settings?.defaultCwd ?? (deps.resolveDefaultCwd?.() ?? defaultCwd()))
-      const shell = deps.resolveDefaultShell?.() ?? defaultShell()
-      const cols = input.cols ?? 80
-      const rows = input.rows ?? 24
-      const timestamp = now()
-      const session: TerminalSession = {
-        id: randomUUID(),
+      return createSessionRecord(input)
+    },
+    async launchGroupCommand(input: TerminalLaunchGroupCommandInput): Promise<TerminalSession> {
+      const group = getGroupOrThrow(input.groupId)
+      const command = getGroupCommandOrThrow(group, input.commandId)
+      const session = await createSessionRecord({
         groupId: group.id,
-        title: input.title ?? path.basename(shell),
-        cwd,
-        shell,
-        status: "running",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        startedAt: timestamp,
-        cols,
-        rows,
-        lastOutputSeq: 0,
-      }
-      const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
-      const child = deps.spawnPty?.({ shell, cwd, cols, rows }) ?? spawnNodePty({ shell, cwd, cols, rows })
-      buffers.set(session.id, buffer)
-      sessions.set(session.id, session)
-      attachRuntime(session, child, buffer)
-      await flushPersist()
+        title: command.name,
+        cols: input.cols,
+        rows: input.rows,
+      })
+      writeStartupCommand(session.id, command.command)
       return session
     },
     readSession(input: TerminalReadSessionInput): TerminalReadSessionResult {
@@ -610,17 +702,23 @@ function normalizeGroupSettings(
 
 function normalizeGroupCommands(commands: TerminalGroupCommand[] | undefined): TerminalGroupCommand[] {
   return (commands ?? []).map((command) => {
-    const name = command.name.trim()
-    if (!name) throw new Error("Terminal command name is required")
-    if (name.length > 80) throw new Error("Terminal command name is too long")
-    const normalizedCommand = normalizeStartupCommand(command.command)
-    if (!normalizedCommand) throw new Error("Terminal command is required")
+    const normalized = normalizeGroupCommandInput(command)
     return {
       ...command,
-      name,
-      command: normalizedCommand,
+      name: normalized.name,
+      command: normalized.command,
     }
   })
+}
+
+function normalizeGroupCommandInput(input: { name: string; command: string }): { name: string; command: string } {
+  const name = input.name.trim()
+  if (!name) throw new Error("Terminal command name is required")
+  if (name.length > 80) throw new Error("Terminal command name is too long")
+  const command = normalizeStartupCommand(input.command)
+  if (!command) throw new Error("Terminal command is required")
+  if (Buffer.byteLength(command) > 64 * 1024) throw new Error("Terminal command is too long")
+  return { name, command }
 }
 
 function normalizeStartupCommand(command: string | undefined): string | undefined {
