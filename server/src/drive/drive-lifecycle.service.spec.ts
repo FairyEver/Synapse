@@ -726,6 +726,9 @@ function createLifecyclePrismaMemory() {
         return item
       },
     },
+    driveShare: {
+      updateMany: async () => ({ count: 0 }),
+    },
     driveUploadSession: {
       create: async ({ data }: any) => {
         const session = {

@@ -77,6 +77,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
       )}
     >
       {state.status === 'loading' ? <DriveBrowserLoading mode={loadingMode} /> : null}
+      {state.status === 'invalidShare' ? <DriveInvalidShareState /> : null}
       {state.status === 'error' ? <DriveBrowserError message={state.message} /> : null}
       {state.status === 'passwordRequired' ? (
         <DriveBrowserPasswordForm
@@ -272,6 +273,17 @@ function DriveReaderLoading() {
           <Skeleton className='h-4 w-10/12' />
         </div>
         <Skeleton className='h-56 w-full' />
+      </div>
+    </div>
+  )
+}
+
+function DriveInvalidShareState() {
+  return (
+    <div className='flex w-full flex-col gap-3 rounded-lg border bg-background p-5'>
+      <div className='space-y-1.5'>
+        <h1 className='text-base font-semibold'>链接已失效</h1>
+        <p className='text-sm text-muted-foreground'>请向文件所有者确认最新链接。</p>
       </div>
     </div>
   )

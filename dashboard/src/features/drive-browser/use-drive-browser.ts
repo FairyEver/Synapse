@@ -7,7 +7,7 @@ import type {
   DriveBrowserSurface,
   DriveFileContentUpdateResult,
 } from '@synapse/shared'
-import { driveBrowserApi } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
 
 export type DriveBrowserInput =
   | {
@@ -27,6 +27,7 @@ export type DriveBrowserInput =
 
 export type DriveBrowserState =
   | { status: 'loading' }
+  | { status: 'invalidShare' }
   | { status: 'error'; message: string }
   | {
       status: 'passwordRequired'
@@ -198,6 +199,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     }
   }
   if (query.isLoading) return { status: 'loading' }
+  if (query.isError && isInvalidShareError(input, query.error)) return { status: 'invalidShare' }
   if (query.isError) return { status: 'error', message: getErrorMessage(query.error) }
   if (isDriveBrowserPasswordRequired(query.data)) {
     return {
@@ -339,6 +341,10 @@ function requireDriveBrowserSnapshot(
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : '加载失败'
+}
+
+function isInvalidShareError(input: DriveBrowserInput, error: unknown): boolean {
+  return input.context === 'share' && error instanceof ApiError && error.status === 404
 }
 
 function mergeDriveBrowserSnapshots(

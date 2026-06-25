@@ -113,6 +113,7 @@ export class DriveLifecycleService {
         },
       })
       assertLifecycleTransitionCount(updatedItems.count, itemIds.length)
+      await disableDriveSharesForItems(tx, itemIds, trashedAt)
       await updatePublicAssetLifecycle(tx, itemIds, {
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
         trashedAt,
@@ -164,6 +165,7 @@ export class DriveLifecycleService {
         },
       })
       assertLifecycleTransitionCount(updatedItems.count, itemIds.length)
+      await disableDriveSharesForItems(tx, itemIds, hiddenAt)
       await updatePublicAssetLifecycle(tx, itemIds, {
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
         hiddenAt,
@@ -536,6 +538,18 @@ function belongsToDeletedTree(rootId: string, lifecycleStatus: string): (item: D
 
 function assertLifecycleTransitionCount(actual: number, expected: number): void {
   if (actual !== expected) throw new NotFoundException("文件不存在。")
+}
+
+async function disableDriveSharesForItems(
+  tx: Prisma.TransactionClient,
+  itemIds: readonly string[],
+  disabledAt: Date,
+): Promise<void> {
+  if (itemIds.length === 0) return
+  await tx.driveShare.updateMany({
+    where: { itemId: { in: [...itemIds] }, enabled: true },
+    data: { enabled: false, disabledAt },
+  })
 }
 
 function splitFileName(name: string): { readonly baseName: string; readonly extension: string } {

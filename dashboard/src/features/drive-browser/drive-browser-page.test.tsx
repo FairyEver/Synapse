@@ -41,6 +41,11 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 
 beforeEach(() => {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   Range.prototype.getBoundingClientRect = vi.fn(() => domRect({ left: 80, top: 120, width: 48, height: 20 }))
   Range.prototype.getClientRects = vi.fn(() => [domRect({ left: 80, top: 120, width: 48, height: 20 })] as unknown as DOMRectList)
 })
@@ -79,6 +84,18 @@ describe('DriveBrowserPage', () => {
     )
 
     expect(onInitialPasswordConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders invalid share links without exposing the underlying reason', () => {
+    mockDriveBrowserState({
+      status: 'invalidShare',
+    })
+
+    renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
+
+    expect(document.body.textContent).toContain('链接已失效')
+    expect(document.body.textContent).toContain('请向文件所有者确认最新链接。')
+    expect(document.body.textContent).not.toContain('文件未找到')
   })
 
   it('allows selected-text comments in console markdown file views', async () => {

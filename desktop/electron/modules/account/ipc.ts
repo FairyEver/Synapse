@@ -71,6 +71,13 @@ const driveItemSchema = z.object({
   storageStatus: z.enum(["pending", "active", "delete_pending", "deleted", "failed"]),
   shared: z.boolean(),
   activeShareId: z.string().nullable().optional(),
+  activeShare: z.object({
+    id: z.string(),
+    passwordEnabled: z.boolean(),
+    expiresAt: z.string().nullable(),
+    accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]),
+    editorCount: z.number().int().nonnegative(),
+  }).nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

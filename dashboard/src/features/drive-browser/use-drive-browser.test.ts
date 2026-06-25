@@ -5,13 +5,22 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto, DriveFileContentUpdateResult } from '@synapse/shared'
-import { driveBrowserApi } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
 
 import { loadDriveBrowser, toDriveBrowserQueryKey, useDriveBrowser, type DriveBrowserInput } from './use-drive-browser'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/lib/api', () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number
+
+    constructor(message: string, status: number) {
+      super(message)
+      this.name = 'ApiError'
+      this.status = status
+    }
+  },
   driveBrowserApi: {
     getConsoleRoot: vi.fn(),
     getOwnerItem: vi.fn(),
@@ -73,6 +82,24 @@ describe('toDriveBrowserQueryKey', () => {
     expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'link-password', 'item-1', {})
     expect(driveBrowserApi.getShareItem).not.toHaveBeenCalled()
     expect(driveBrowserApi.getShareRoot).not.toHaveBeenCalled()
+  })
+
+  it('maps share browser 404 responses to invalid share state', async () => {
+    vi.mocked(driveBrowserApi.getShareRoot).mockRejectedValue(new ApiError('文件未找到', 404))
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, {
+      context: 'share',
+      shareId: 'share-1',
+    })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('invalidShare')
+    })
   })
 
   it('passes child pagination options to owner browser requests', async () => {

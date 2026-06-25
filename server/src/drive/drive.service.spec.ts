@@ -2226,7 +2226,7 @@ describe("DriveService", () => {
     expect(retryVersions).toHaveBeenCalledTimes(1)
   })
 
-  it("admin delete moves active files to trash without disabling shares or deleting storage", async () => {
+  it("admin delete moves active files to trash and disables shares without deleting storage", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -2258,8 +2258,62 @@ describe("DriveService", () => {
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(11n)
     const shareRecord = await prisma.driveShare.findFirst({ where: { id: share.id } })
-    expect(shareRecord?.enabled).toBe(true)
+    expect(shareRecord).toMatchObject({ enabled: false })
+    expect(shareRecord?.disabledAt).toBeInstanceOf(Date)
     expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it("user delete disables shares and restore does not reactivate old links", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "shared.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    await service.deleteItem("user-1", file.id)
+
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(prisma.driveShare.findFirst({ where: { id: share.id } })).resolves.toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
+    })
+
+    await service.restoreItem("user-1", file.id)
+
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(prisma.driveShare.findFirst({ where: { id: share.id } })).resolves.toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
+    })
+  })
+
+  it("deleting a folder disables shares for the folder subtree", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "共享" })
+    const child = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "child.txt",
+      mimeType: "text/plain",
+    })
+    const folderShare = await service.createShare("user-1", folder.id, "https://synapse.test")
+    const childShare = await service.createShare("user-1", child.id, "https://synapse.test")
+
+    await service.deleteItem("user-1", folder.id)
+
+    await expect(prisma.driveShare.findFirst({ where: { id: folderShare.id } })).resolves.toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
+    })
+    await expect(prisma.driveShare.findFirst({ where: { id: childShare.id } })).resolves.toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
+    })
   })
 
   it("redacts admin delete audit write failures in logs", async () => {

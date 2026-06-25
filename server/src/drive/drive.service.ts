@@ -194,7 +194,18 @@ type DriveAuditContext = {
 const driveItemWithShares = {
   shares: {
     where: { enabled: true },
-    select: { id: true, enabled: true, expiresAt: true },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      enabled: true,
+      passwordEnabled: true,
+      expiresAt: true,
+      accessMode: true,
+      editors: {
+        select: { email: true },
+        orderBy: { email: "asc" },
+      },
+    },
   },
 } as const
 

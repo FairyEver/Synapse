@@ -64,8 +64,17 @@ export interface DriveItemDto {
   readonly storageStatus: DriveStorageStatus
   readonly shared: boolean
   readonly activeShareId?: string | null
+  readonly activeShare?: DriveItemActiveShareDto | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface DriveItemActiveShareDto {
+  readonly id: string
+  readonly passwordEnabled: boolean
+  readonly expiresAt: string | null
+  readonly accessMode: DriveShareAccessMode
+  readonly editorCount: number
 }
 
 export interface DriveUploadPrepareResult {

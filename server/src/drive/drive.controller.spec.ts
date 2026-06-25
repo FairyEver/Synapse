@@ -1427,6 +1427,18 @@ describe("DriveController", () => {
     expect(drive.openShareBrowserItemDownload).not.toHaveBeenCalled()
   })
 
+  it("renders invalid link pages for unavailable direct downloads", async () => {
+    drive.resolvePublicShareAccess.mockRejectedValue(new NotFoundException("文件未找到"))
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/download")
+      .expect(404)
+
+    expect(response.text).toContain("链接已失效")
+    expect(response.text).toContain("请向文件所有者确认最新链接。")
+    expect(response.text).not.toContain("文件未找到")
+  })
+
   it("renders password pages for protected direct renders opened without a cookie", async () => {
     drive.resolveShareRenderAccess.mockResolvedValue({ status: "password_required" })
 
@@ -1442,6 +1454,18 @@ describe("DriveController", () => {
       itemId: undefined,
       cookie: undefined,
     })
+  })
+
+  it("renders invalid link pages for unavailable direct renders", async () => {
+    drive.resolveShareRenderAccess.mockRejectedValue(new NotFoundException("文件未找到"))
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/render")
+      .expect(404)
+
+    expect(response.text).toContain("链接已失效")
+    expect(response.text).toContain("请向文件所有者确认最新链接。")
+    expect(response.text).not.toContain("文件未找到")
   })
 
   it("streams canonical public file downloads", async () => {

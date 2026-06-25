@@ -1428,69 +1428,85 @@ export class DrivePublicController {
     readonly shareId: string
     readonly itemId?: string
   }): Promise<void> {
-    const password = readPasswordQuery(request)
-    const access = await this.drive.resolvePublicShareAccess({
-      shareId: input.shareId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
-    })
-    if (access.status !== "ok") {
-      if (access.status === "password_required" && !password) {
-        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+    try {
+      const password = readPasswordQuery(request)
+      const access = await this.drive.resolvePublicShareAccess({
+        shareId: input.shareId,
+        password,
+        cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
+      })
+      if (access.status !== "ok") {
+        if (access.status === "password_required" && !password) {
+          response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+          return
+        }
+        throw new NotFoundException("文件未找到")
+      }
+      if (access.cookie) {
+        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
+      }
+      if (password) {
+        response.redirect(302, cleanPasswordUrl(request))
         return
       }
-      throw new NotFoundException("文件未找到")
+      const transfer = await this.drive.openShareBrowserItemDownload({
+        shareId: input.shareId,
+        itemId: input.itemId,
+        cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
+      })
+      await sendDriveTransfer(response, transfer, this.storage)
+    } catch (error) {
+      if (isNotFoundException(error)) {
+        sendDriveInvalidSharePage(response)
+        return
+      }
+      throw error
     }
-    if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
-    }
-    if (password) {
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    const transfer = await this.drive.openShareBrowserItemDownload({
-      shareId: input.shareId,
-      itemId: input.itemId,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
-    })
-    await sendDriveTransfer(response, transfer, this.storage)
   }
 
   private async sendShareRenderedAsset(response: Response, request: Request, input: {
     readonly shareId: string
     readonly itemId?: string
   }): Promise<void> {
-    const password = readPasswordQuery(request)
-    const cookie = readDriveAccessCookie(request, { kind: "share", publicId: input.shareId })
-    if (password) {
-      const shareAccess = await this.drive.resolvePublicShareAccess({
-        shareId: input.shareId,
-        password,
-        cookie,
-      })
-      if (shareAccess.status !== "ok") throw new NotFoundException("文件未找到")
-      if (shareAccess.cookie) {
-        setDriveAccessCookie(response, shareAccess.cookie, { kind: "share", publicId: input.shareId })
-      }
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    const access = await this.drive.resolveShareRenderAccess({
-      shareId: input.shareId,
-      itemId: input.itemId,
-      cookie,
-    })
-    if (access.status !== "ok") {
-      if (access.status === "password_required") {
-        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+    try {
+      const password = readPasswordQuery(request)
+      const cookie = readDriveAccessCookie(request, { kind: "share", publicId: input.shareId })
+      if (password) {
+        const shareAccess = await this.drive.resolvePublicShareAccess({
+          shareId: input.shareId,
+          password,
+          cookie,
+        })
+        if (shareAccess.status !== "ok") throw new NotFoundException("文件未找到")
+        if (shareAccess.cookie) {
+          setDriveAccessCookie(response, shareAccess.cookie, { kind: "share", publicId: input.shareId })
+        }
+        response.redirect(302, cleanPasswordUrl(request))
         return
       }
-      throw new NotFoundException("文件未找到")
+      const access = await this.drive.resolveShareRenderAccess({
+        shareId: input.shareId,
+        itemId: input.itemId,
+        cookie,
+      })
+      if (access.status !== "ok") {
+        if (access.status === "password_required") {
+          response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+          return
+        }
+        throw new NotFoundException("文件未找到")
+      }
+      if (access.cookie) {
+        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
+      }
+      await sendDriveHtmlRenderedAsset(response, access.value)
+    } catch (error) {
+      if (isNotFoundException(error)) {
+        sendDriveInvalidSharePage(response)
+        return
+      }
+      throw error
     }
-    if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
-    }
-    await sendDriveHtmlRenderedAsset(response, access.value)
   }
 }
 
@@ -1926,6 +1942,17 @@ ${renderDrivePublicPageCss()}
 </main>
 </body>
 </html>`
+}
+
+function sendDriveInvalidSharePage(response: Response): void {
+  response.status(404).type("html").send(renderDrivePublicStatusPage({
+    title: "链接已失效",
+    message: "请向文件所有者确认最新链接。",
+  }))
+}
+
+function isNotFoundException(error: unknown): error is NotFoundException {
+  return error instanceof NotFoundException
 }
 
 function renderDrivePasswordPage(input: { readonly actionPath: string; readonly error?: boolean }): string {

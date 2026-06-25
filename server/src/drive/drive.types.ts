@@ -3,6 +3,7 @@ import {
   type DriveItemDto,
   type DriveItemLifecycleStatus,
   type DrivePublicAssetDto,
+  type DriveShareAccessMode,
   type DriveSiteDto,
   type DriveStorageStatus,
   buildDriveUrlWithPassword,
@@ -139,11 +140,28 @@ export type DriveItemRecord = {
   readonly storageStatus: string
   readonly createdAt: Date
   readonly updatedAt: Date
-  readonly shares?: readonly { readonly id?: string; readonly enabled: boolean; readonly expiresAt?: Date | null }[]
+  readonly shares?: readonly {
+    readonly id?: string
+    readonly enabled: boolean
+    readonly passwordEnabled?: boolean
+    readonly expiresAt?: Date | null
+    readonly accessMode?: string
+    readonly editors?: readonly { readonly email: string }[]
+  }[]
 }
 
 export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
   const activeShares = item.shares?.filter(isActiveDriveShare) ?? []
+  const activeShare = activeShares[0]
+  const activeShareDetails = activeShare?.id && activeShare.accessMode
+    ? {
+        id: activeShare.id,
+        passwordEnabled: activeShare.passwordEnabled ?? false,
+        expiresAt: activeShare.expiresAt?.toISOString() ?? null,
+        accessMode: activeShare.accessMode as DriveShareAccessMode,
+        editorCount: activeShare.editors?.length ?? 0,
+      }
+    : null
   return {
     id: item.id,
     parentId: item.parentId,
@@ -153,7 +171,8 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
     mimeType: item.mimeType,
     storageStatus: item.storageStatus as DriveStorageStatus,
     shared: activeShares.length > 0,
-    activeShareId: activeShares[0]?.id ?? null,
+    activeShareId: activeShare?.id ?? null,
+    activeShare: activeShareDetails,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   }

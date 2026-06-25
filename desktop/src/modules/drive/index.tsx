@@ -1501,40 +1501,45 @@ function DriveBreadcrumbs({
 
 function DriveInlineBadges({
   badges,
-  item,
-  onOpenShareDetails,
 }: {
   readonly badges: readonly DriveStatusBadge[]
-  readonly item: DriveItemDto
-  readonly onOpenShareDetails: (item: DriveItemDto) => void
 }) {
   if (badges.length === 0) return null
   return (
     <div className="flex shrink-0 items-center gap-1">
-      {badges.map((badge) => {
-        if (badge.key === "shared" && item.activeShareId) {
-          return (
-            <Badge key={badge.key} variant={badge.variant} asChild>
-              <button
-                type="button"
-                className="cursor-pointer"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onOpenShareDetails(item)
-                }}
-              >
-                {badge.label}
-              </button>
-            </Badge>
-          )
-        }
-        return (
-          <Badge key={badge.key} variant={badge.variant}>
-            {badge.label}
-          </Badge>
-        )
-      })}
+      {badges.map((badge) => (
+        <Badge key={badge.key} variant={badge.variant}>
+          {badge.label}
+        </Badge>
+      ))}
     </div>
+  )
+}
+
+function DriveShareInlineSummary({
+  item,
+  onOpenShareDetails,
+}: {
+  readonly item: DriveItemDto
+  readonly onOpenShareDetails: (item: DriveItemDto) => void
+}) {
+  const summary = formatDriveItemShareSummary(item)
+  if (!summary) return null
+  if (!item.activeShareId) {
+    return <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>
+  }
+  return (
+    <button
+      type="button"
+      className="min-w-0 truncate text-left text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      title={summary}
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpenShareDetails(item)
+      }}
+    >
+      {summary}
+    </button>
   )
 }
 
@@ -1641,49 +1646,48 @@ function DriveFileListRow({
           ) : (
             <DriveItemIcon kind="file" />
           )}
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <DriveItemNameContextMenu
-              drivePath={drivePath}
-              item={item}
-              onRename={onRename}
-            >
-              {isFolder ? (
-                <span
-                  className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
-                  data-drive-item-name="true"
-                  title={item.name}
-                  onContextMenu={(event) => {
-                    event.stopPropagation()
-                  }}
-                >
-                  {item.name}
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "block min-w-0 truncate whitespace-nowrap font-medium select-text",
-                    canOpenFileName && "cursor-pointer underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  )}
-                  data-drive-item-name="true"
-                  role={canOpenFileName ? "button" : undefined}
-                  tabIndex={canOpenFileName ? 0 : undefined}
-                  title={item.name}
-                  onClick={handleFileNameClick}
-                  onKeyDown={handleFileNameKeyDown}
-                  onContextMenu={(event) => {
-                    event.stopPropagation()
-                  }}
-                >
-                  <span className="sr-only">文件 </span>
-                  {item.name}
-                </span>
-              )}
-            </DriveItemNameContextMenu>
-            <DriveInlineBadges
-              badges={statusBadges}
-              item={item}
-              onOpenShareDetails={onOpenShareDetails}
-            />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <DriveItemNameContextMenu
+                drivePath={drivePath}
+                item={item}
+                onRename={onRename}
+              >
+                {isFolder ? (
+                  <span
+                    className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
+                    data-drive-item-name="true"
+                    title={item.name}
+                    onContextMenu={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    {item.name}
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "block min-w-0 truncate whitespace-nowrap font-medium select-text",
+                      canOpenFileName && "cursor-pointer underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    )}
+                    data-drive-item-name="true"
+                    role={canOpenFileName ? "button" : undefined}
+                    tabIndex={canOpenFileName ? 0 : undefined}
+                    title={item.name}
+                    onClick={handleFileNameClick}
+                    onKeyDown={handleFileNameKeyDown}
+                    onContextMenu={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    <span className="sr-only">文件 </span>
+                    {item.name}
+                  </span>
+                )}
+              </DriveItemNameContextMenu>
+              <DriveInlineBadges badges={statusBadges} />
+            </div>
+            <DriveShareInlineSummary item={item} onOpenShareDetails={onOpenShareDetails} />
           </div>
         </div>
       </TableCell>
@@ -2911,9 +2915,6 @@ function getDriveStatusBadges(item: DriveItemDto): DriveStatusBadge[] {
   const badges: DriveStatusBadge[] = []
   const storageBadge = getDriveStorageStatusBadge(item.storageStatus)
   if (storageBadge) badges.push(storageBadge)
-  if (item.shared || item.activeShareId) {
-    badges.push({ key: "shared", label: "已分享", variant: "outline" })
-  }
   return badges
 }
 
@@ -2943,18 +2944,45 @@ function formatDriveAccessExpiresAt(value: string | null): string {
   return formatDriveDateTime(value)
 }
 
+function formatDriveItemShareSummary(item: DriveItemDto): string | null {
+  if (!item.shared && !item.activeShareId) return null
+  const activeShare = item.activeShare
+  if (!activeShare) return "已分享"
+  return [
+    `分享：${formatDriveShareExpiresInline(activeShare.expiresAt)}`,
+    activeShare.passwordEnabled ? "密码" : "无密码",
+    formatDriveShareAccessModeLabel(activeShare.accessMode, activeShare.editorCount),
+  ].join(" · ")
+}
+
+function formatDriveShareExpiresInline(value: string | null): string {
+  if (!value) return "永久"
+  const expiresAt = new Date(value)
+  if (Number.isNaN(expiresAt.getTime())) return "到期时间未知"
+  const remainingMs = expiresAt.getTime() - Date.now()
+  if (remainingMs <= 0) return "已过期"
+  if (remainingMs < 86_400_000) return "今天到期"
+  const remainingDays = Math.ceil(remainingMs / 86_400_000)
+  if (remainingDays >= 365) return "1年"
+  return `${remainingDays}天`
+}
+
 function formatDriveAccessPassword(item: { readonly passwordEnabled?: boolean; readonly password?: string | null }): string {
   if (!item.passwordEnabled) return "无"
   return item.password || "无"
+}
+
+function formatDriveShareAccessModeLabel(accessMode: DriveShareAccessMode | undefined, editorCount = 0): string {
+  if (accessMode === "link_edit") return "可编辑"
+  if (accessMode === "specified_users_edit") return `${editorCount}人可编辑`
+  return "可阅读"
 }
 
 function formatDriveShareAccessSummary(item: {
   readonly accessMode?: DriveShareAccessMode
   readonly editorEmails?: readonly string[]
 }): string {
-  if (item.accessMode === "link_edit") return "链接可编辑"
-  if (item.accessMode === "specified_users_edit") return `${item.editorEmails?.length ?? 0} 人可编辑`
-  return "可阅读"
+  return formatDriveShareAccessModeLabel(item.accessMode, item.editorEmails?.length ?? 0)
 }
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {

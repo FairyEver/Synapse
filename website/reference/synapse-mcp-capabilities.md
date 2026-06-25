@@ -128,7 +128,7 @@ Content MCP 的更新和删除只允许修改当前仓库身份创建的资源�
 
 ## Drive MCP
 
-Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。整理云盘时，Agent 应先用 `drive_stats_get` 和 `drive_item_tree_list` 获取元数据，再用 `drive_folder_path_ensure` 准备目录，最后通过 `drive_reorganization_preview` 生成计划并用 `drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
+Drive MCP 暴露云盘文件、文件夹、预览、下载、分享和整理能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/share/...` 链接，可浏览、渲染预览 HTML 或下载文件和文件夹。删除云盘文件或文件夹会禁用对应分享链接，恢复文件不会重新启用旧链接。整理云盘时，Agent 应先用 `drive_stats_get` 和 `drive_item_tree_list` 获取元数据，再用 `drive_folder_path_ensure` 准备目录，最后通过 `drive_reorganization_preview` 生成计划并用 `drive_reorganization_apply` 按 `planId` 应用。Drive MCP 不提供批量读取文件内容 API；内容判断只能少量、逐个调用现有文本读取工具。
 
 ## App MCP
 

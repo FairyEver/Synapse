@@ -91,7 +91,7 @@ Never reveal COS AK, SK, Authorization headers, local secrets, share passwords f
 
 Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 
-`app_drive_item_delete` and `app_drive_direct_link_delete` move items to Drive trash. A trashed public asset keeps its asset id, but `/files/<assetId>` returns 404 until restored. `app_drive_trash_delete` hides a trashed item from ordinary user views; admins can still see and restore it.
+`app_drive_item_delete` and `app_drive_direct_link_delete` move items to Drive trash. Deleting a Drive file or folder disables its `/share/...` links, including shares for files inside a deleted folder. Restoring the item does not reactivate old share links; create a new share if the user wants to share it again. A trashed public asset keeps its asset id, but `/files/<assetId>` returns 404 until restored. `app_drive_trash_delete` hides a trashed item from ordinary user views; admins can still see and restore it.
 
 Shares use `/share/...` and let others browse files and folders, render previewable HTML, download content, and, when the owner chooses an editable mode, edit supported text files after login. HTML shares are live links to the current Drive file, not static site snapshots.
 

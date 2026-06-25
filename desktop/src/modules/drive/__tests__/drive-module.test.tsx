@@ -512,7 +512,18 @@ describe("DriveModule", () => {
       createDriveItem({ id: "failed-file", name: "failed.txt", type: "file", storageStatus: "failed" }),
       createDriveItem({ id: "failed-folder", name: "failed-folder", type: "folder", storageStatus: "failed" }),
       createDriveItem({ id: "deleting-file", name: "deleting.txt", type: "file", storageStatus: "delete_pending" }),
-      createDriveItem({ id: "shared-file", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
+      createDriveItem({
+        id: "shared-file",
+        name: "shared.txt",
+        type: "file",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({
+          accessMode: "link_edit",
+          expiresAt: driveShareExpiresInDays(3),
+          passwordEnabled: true,
+        }),
+      }),
       createDriveItem({ id: "folder-1", name: "folder", type: "folder" }),
     ])
 
@@ -522,14 +533,14 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("上传中")
     expect(document.body.textContent).toContain("上传失败")
     expect(document.body.textContent).toContain("删除中")
-    expect(document.body.textContent).toContain("已分享")
+    expect(document.body.textContent).toContain("分享：3天 · 密码 · 可编辑")
     expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
     expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
     expect(getTableRow("pending.txt").querySelector("td")?.textContent).toContain("上传中")
     expect(getTableRow("failed.txt").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("failed-folder").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("deleting.txt").querySelector("td")?.textContent).toContain("删除中")
-    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("已分享")
+    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("分享：3天 · 密码 · 可编辑")
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
       .find((element) => element.textContent === "上传失败")
     expect(failedBadge?.dataset.variant).toBe("destructive")
@@ -547,9 +558,15 @@ describe("DriveModule", () => {
     expect(rowButton("shared.txt", "取消分享")?.disabled).toBe(false)
   })
 
-  it("shows shared state inline with the item name", async () => {
+  it("shows shared state as lightweight inline metadata", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
+        activeShare: createDriveActiveShare({
+          accessMode: "specified_users_edit",
+          editorCount: 2,
+          expiresAt: driveShareExpiresInDays(7),
+          passwordEnabled: true,
+        }),
         activeShareId: "share-row-1",
         id: "html-1",
         mimeType: "text/html",
@@ -566,7 +583,8 @@ describe("DriveModule", () => {
     const nameCell = reportRow.querySelector("td")
     const reportBadges = Array.from(nameCell?.querySelectorAll<HTMLElement>("[data-slot='badge']") ?? [])
       .map((element) => element.textContent)
-    expect(reportBadges).toEqual(["已分享"])
+    expect(reportBadges).toEqual([])
+    expect(nameCell?.textContent).toContain("分享：7天 · 密码 · 2人可编辑")
   })
 
   it("renders the full current folder without a local search input", async () => {
@@ -1263,7 +1281,14 @@ describe("DriveModule", () => {
 
   it("shows cancel share as the shared row action", async () => {
     mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "file-1", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
+      createDriveItem({
+        id: "file-1",
+        name: "shared.txt",
+        type: "file",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({ expiresAt: driveShareExpiresInDays(3), passwordEnabled: true }),
+      }),
     ])
     await render(<DriveModule />)
     await flushAct()
@@ -1277,9 +1302,19 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
-  it("opens existing share details from the shared badge", async () => {
+  it("opens existing share details from the shared summary", async () => {
     mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "folder-1", name: "文档", type: "folder", shared: true, activeShareId: "share-row-1" }),
+      createDriveItem({
+        id: "folder-1",
+        name: "文档",
+        type: "folder",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({
+          expiresAt: driveShareExpiresInDays(3),
+          passwordEnabled: true,
+        }),
+      }),
     ])
     mocks.getDriveShare.mockResolvedValue(createDriveShare({
       id: "share-row-1",
@@ -1295,7 +1330,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickRowButtonText("文档", "已分享")
+    await clickInlineShareSummary("文档")
 
     expect(mocks.getDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
     expect(mocks.listDriveShares).not.toHaveBeenCalled()
@@ -1689,7 +1724,14 @@ describe("DriveModule", () => {
 
   it("refreshes the main list after disabling a share from the public links dialog", async () => {
     let driveItems = [
-      createDriveItem({ id: "file-1", name: "report.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
+      createDriveItem({
+        id: "file-1",
+        name: "report.txt",
+        type: "file",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({ expiresAt: driveShareExpiresInDays(3), passwordEnabled: true }),
+      }),
     ]
     mocks.listDriveItems.mockImplementation(() => Promise.resolve(driveItems))
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
@@ -1702,14 +1744,14 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getTableRow("report.txt").textContent).toContain("已分享")
+    expect(getTableRow("report.txt").textContent).toContain("分享：3天 · 密码 · 可阅读")
 
     await clickButtonText("我的分享")
     await flushAct()
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
 
-    expect(getTableRow("report.txt").textContent).not.toContain("已分享")
+    expect(getTableRow("report.txt").textContent).not.toContain("分享：")
   })
 
   it("shows share loading, empty, and retry states in the public links dialog", async () => {
@@ -2144,6 +2186,16 @@ async function clickRowButtonText(rowText: string, buttonText: string): Promise<
   })
 }
 
+async function clickInlineShareSummary(rowText: string): Promise<void> {
+  const element = Array.from(getTableRow(rowText).querySelectorAll<HTMLButtonElement>("td:first-child button"))
+    .find((button) => button.textContent?.includes("分享："))
+  if (!element) throw new Error(`Share summary not found in row ${rowText}`)
+  await act(async () => {
+    element.click()
+    await flushPromises()
+  })
+}
+
 async function clickTabText(text: string): Promise<void> {
   const element = Array.from(document.body.querySelectorAll<HTMLButtonElement>("[role='tab']"))
     .find((candidate) => candidate.textContent?.trim() === text)
@@ -2235,6 +2287,7 @@ async function clickSwitchByLabel(label: string): Promise<void> {
 
 function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
   return {
+    activeShare: null,
     activeShareId: null,
     createdAt: "2026-06-07T00:00:00.000Z",
     id: "item-1",
@@ -2248,6 +2301,21 @@ function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
     updatedAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
   }
+}
+
+function createDriveActiveShare(overrides: Partial<NonNullable<DriveItemDto["activeShare"]>> = {}): NonNullable<DriveItemDto["activeShare"]> {
+  return {
+    accessMode: "link_read",
+    editorCount: 0,
+    expiresAt: null,
+    id: "share-row-1",
+    passwordEnabled: false,
+    ...overrides,
+  }
+}
+
+function driveShareExpiresInDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString()
 }
 
 function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): DriveShareListItemDto {
