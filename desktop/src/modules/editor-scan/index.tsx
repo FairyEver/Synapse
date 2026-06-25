@@ -206,6 +206,52 @@ function EditorScanModule() {
       )}
     </Button>
   )
+  const contentToolbar = (
+    <div data-editor-scan-content-toolbar className="flex shrink-0 flex-col gap-2 px-2 py-2.5">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">
+          {globalResult?.editorLabel ?? "IDE"}
+        </h2>
+        {contentTab === "skill" && selectedSkills.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
+            <Button variant="outline" size="sm" onClick={clearSkillSelection}>
+              <X data-icon="inline-start" />
+              取消选择
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
+              <Copy data-icon="inline-start" />
+              复制到...
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+              <Trash2 data-icon="inline-start" />
+              移到废纸篓
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Tabs
+          value={contentTab}
+          onValueChange={(v) => setContentTab(v as ContentTab)}
+        >
+          <TabsList>
+            <TabsTrigger value="skill">Skill</TabsTrigger>
+            <TabsTrigger value="rule">Rule</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Tabs
+          value={scopeTab}
+          onValueChange={(v) => setScopeTab(v as ScopeTab)}
+        >
+          <TabsList>
+            <TabsTrigger value="global">全局</TabsTrigger>
+            <TabsTrigger value="project">项目</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+    </div>
+  )
 
   const renderContent = () => {
     if (!data && loading) {
@@ -307,55 +353,16 @@ function EditorScanModule() {
     >
       <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
         {appViewTab === "content" ? (
-          <div className="flex h-full flex-col">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold">
-                  {globalResult?.editorLabel ?? "IDE"}
-                </h2>
-                <Tabs
-                  value={contentTab}
-                  onValueChange={(v) => setContentTab(v as ContentTab)}
-                >
-                  <TabsList>
-                    <TabsTrigger value="skill">Skill</TabsTrigger>
-                    <TabsTrigger value="rule">Rule</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-                <Tabs
-                  value={scopeTab}
-                  onValueChange={(v) => setScopeTab(v as ScopeTab)}
-                >
-                  <TabsList>
-                    <TabsTrigger value="global">全局</TabsTrigger>
-                    <TabsTrigger value="project">项目</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-              {contentTab === "skill" && selectedSkills.length > 0 ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
-                  <Button variant="outline" size="sm" onClick={clearSkillSelection}>
-                    <X data-icon="inline-start" />
-                    取消选择
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
-                    <Copy data-icon="inline-start" />
-                    复制到...
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
-                    <Trash2 data-icon="inline-start" />
-                    移到废纸篓
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+          <div data-editor-scan-content-panel className="flex h-full flex-col">
+            {contentToolbar}
             <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
               {renderContent()}
             </div>
           </div>
         ) : (
-          <EditorDirectoriesView selectedEditorId={selectedEditorId} />
+          <div data-editor-scan-content-panel className="h-full min-h-0">
+            <EditorDirectoriesView selectedEditorId={selectedEditorId} />
+          </div>
         )}
       </SidebarContentLayout>
       <ScanItemDetailDialog

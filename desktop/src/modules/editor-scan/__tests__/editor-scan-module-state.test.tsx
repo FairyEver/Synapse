@@ -88,12 +88,13 @@ vi.mock("@/modules/apps/components/system-app-window-shell", () => ({
     readonly children: ReactNode
   }) => (
     <div>
-      <nav>
+      <nav aria-label="应用页面">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             aria-pressed={value === tab.id}
+            data-app-tab={tab.id}
             onClick={() => onValueChange(tab.id)}
           >
             {tab.label}
@@ -163,6 +164,19 @@ describe("EditorScanModule", () => {
     expect(buttonByText("项目")).not.toBeUndefined()
   })
 
+  it("keeps content filters in the selected IDE content toolbar", async () => {
+    await renderEditorScanModule(roots)
+
+    const contentPanel = document.querySelector("[data-editor-scan-content-panel]")
+    const contentToolbar = document.querySelector("[data-editor-scan-content-toolbar]")
+
+    expect(contentPanel?.textContent).toContain("Cursor")
+    expect(contentToolbar?.textContent).toContain("Skill")
+    expect(contentToolbar?.textContent).toContain("Rule")
+    expect(contentToolbar?.textContent).toContain("全局")
+    expect(contentToolbar?.textContent).toContain("项目")
+  })
+
   it("hides content filters in the directory view", async () => {
     await renderEditorScanModule(roots)
 
@@ -175,6 +189,22 @@ describe("EditorScanModule", () => {
     expect(buttonByText("Rule")).toBeUndefined()
     expect(buttonByText("全局")).toBeUndefined()
     expect(buttonByText("项目")).toBeUndefined()
+  })
+
+  it("keeps directory view focused on the selected IDE", async () => {
+    await renderEditorScanModule(roots)
+
+    await act(async () => {
+      buttonByText("目录")?.click()
+      await Promise.resolve()
+    })
+
+    const contentPanel = document.querySelector("[data-editor-scan-content-panel]")
+
+    expect(contentPanel?.textContent).toContain("Cursor")
+    expect(contentPanel?.textContent).toContain("全局规则")
+    expect(contentPanel?.textContent).not.toContain("Skill")
+    expect(contentPanel?.textContent).not.toContain("Rule")
   })
 })
 
