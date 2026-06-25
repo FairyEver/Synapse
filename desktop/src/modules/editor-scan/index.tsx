@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseEditorId } from "@/types/editor"
 import { EDITOR_ORDER } from "@/lib/editor-registry"
 import type {
@@ -24,7 +25,9 @@ import { ScanItemDetailDialog } from "./components/scan-item-detail-dialog"
 import { EditorBulkSkillCopyDialog } from "./components/editor-bulk-skill-copy-dialog"
 import { EditorBulkSkillTrashDialog } from "./components/editor-bulk-skill-trash-dialog"
 import type { EditorScanSkillCopyItem } from "./lib/editor-copy-source"
+import { EditorDirectoriesView } from "./components/editor-directories-view"
 
+type AppViewTab = "content" | "directories"
 type ContentTab = "skill" | "rule"
 type ScopeTab = "global" | "project"
 
@@ -33,6 +36,7 @@ function EditorScanModule() {
   const { success: showSuccess, error: showError } = useAppNotifications()
   const [selectedEditorId, setSelectedEditorId] =
     useState<SynapseEditorId>(EDITOR_ORDER[0] ?? "")
+  const [appViewTab, setAppViewTab] = useState<AppViewTab>("content")
   const [contentTab, setContentTab] = useState<ContentTab>("skill")
   const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
   const [detailItem, setDetailItem] = useState<ScanItemForDetail | null>(null)
@@ -179,6 +183,29 @@ function EditorScanModule() {
       onSelect={setSelectedEditorId}
     />
   )
+  const appViewTabs = useMemo(
+    () => [
+      { id: "content", label: "内容" },
+      { id: "directories", label: "目录" },
+    ] as const,
+    [],
+  )
+  const headerActions = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-7"
+      onClick={() => void handleRefresh()}
+      disabled={loading}
+      title="刷新"
+    >
+      {loading ? (
+        <LoaderCircle className="size-4 animate-spin" />
+      ) : (
+        <RotateCcw className="size-4" />
+      )}
+    </Button>
+  )
 
   const renderContent = () => {
     if (!data && loading) {
@@ -272,71 +299,65 @@ function EditorScanModule() {
   }
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
-      <div className="flex h-full flex-col">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">
-              {globalResult?.editorLabel ?? "IDE"}
-            </h2>
-            <Tabs
-              value={contentTab}
-              onValueChange={(v) => setContentTab(v as ContentTab)}
-            >
-              <TabsList>
-                <TabsTrigger value="skill">Skill</TabsTrigger>
-                <TabsTrigger value="rule">Rule</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Tabs
-              value={scopeTab}
-              onValueChange={(v) => setScopeTab(v as ScopeTab)}
-            >
-              <TabsList>
-                <TabsTrigger value="global">全局</TabsTrigger>
-                <TabsTrigger value="project">项目</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <div className="flex items-center gap-2">
-            {contentTab === "skill" && selectedSkills.length > 0 ? (
+    <SystemAppWindowShell
+      tabs={appViewTabs}
+      value={appViewTab}
+      onValueChange={setAppViewTab}
+      actions={headerActions}
+    >
+      <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
+        {appViewTab === "content" ? (
+          <div className="flex h-full flex-col">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
-                <Button variant="outline" size="sm" onClick={clearSkillSelection}>
-                  <X data-icon="inline-start" />
-                  取消选择
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
-                  <Copy data-icon="inline-start" />
-                  复制到...
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
-                  <Trash2 data-icon="inline-start" />
-                  移到废纸篓
-                </Button>
+                <h2 className="text-lg font-semibold">
+                  {globalResult?.editorLabel ?? "IDE"}
+                </h2>
+                <Tabs
+                  value={contentTab}
+                  onValueChange={(v) => setContentTab(v as ContentTab)}
+                >
+                  <TabsList>
+                    <TabsTrigger value="skill">Skill</TabsTrigger>
+                    <TabsTrigger value="rule">Rule</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Tabs
+                  value={scopeTab}
+                  onValueChange={(v) => setScopeTab(v as ScopeTab)}
+                >
+                  <TabsList>
+                    <TabsTrigger value="global">全局</TabsTrigger>
+                    <TabsTrigger value="project">项目</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={() => void handleRefresh()}
-              disabled={loading}
-              title="刷新"
-            >
-              {loading ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <RotateCcw className="size-4" />
-              )}
-            </Button>
+              {contentTab === "skill" && selectedSkills.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
+                  <Button variant="outline" size="sm" onClick={clearSkillSelection}>
+                    <X data-icon="inline-start" />
+                    取消选择
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
+                    <Copy data-icon="inline-start" />
+                    复制到...
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+                    <Trash2 data-icon="inline-start" />
+                    移到废纸篓
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
+              {renderContent()}
+            </div>
           </div>
-        </div>
-        <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
-          {renderContent()}
-        </div>
-      </div>
-
+        ) : (
+          <EditorDirectoriesView selectedEditorId={selectedEditorId} />
+        )}
+      </SidebarContentLayout>
       <ScanItemDetailDialog
         item={detailItem}
         onChanged={refresh}
@@ -361,7 +382,7 @@ function EditorScanModule() {
         open={bulkTrashOpen}
         onOpenChange={setBulkTrashOpen}
       />
-    </SidebarContentLayout>
+    </SystemAppWindowShell>
   )
 }
 
