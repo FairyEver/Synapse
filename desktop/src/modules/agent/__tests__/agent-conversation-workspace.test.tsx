@@ -14,9 +14,11 @@ vi.mock("../components/agent-composer", () => ({
   AgentComposer: (props: {
     readonly onStartNewConversation?: () => void
     readonly disabled?: boolean
+    readonly quickInputs?: readonly { readonly content: string }[]
   }) => {
     return (
       <div data-testid="agent-composer">
+        {props.quickInputs?.map((item) => <span key={item.content}>{item.content}</span>)}
         <button type="button" aria-label="新建对话" disabled={props.disabled} onClick={props.onStartNewConversation} />
       </div>
     )
@@ -55,6 +57,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
@@ -191,6 +194,39 @@ describe("AgentConversationWorkspace", () => {
 
     expect(createSession).toHaveBeenCalled()
     expect(onReplaceDetachedTarget).not.toHaveBeenCalled()
+  })
+
+  it("loads quick inputs from the Quick Input bridge", async () => {
+    const list = vi.fn(async () => [{
+      id: "quick-1",
+      schemaVersion: 1 as const,
+      content: "桥接快捷输入",
+      sortOrder: 10,
+      createdAt: "2026-06-25T00:00:00.000Z",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    }])
+    ;(window as unknown as {
+      synapse?: {
+        quickInput: {
+          list: typeof list
+          onChanged: () => () => void
+        }
+      }
+    }).synapse = {
+      quickInput: {
+        list,
+        onChanged: () => () => undefined,
+      },
+    }
+
+    const container = renderWorkspace({ mode: "embedded" })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(list).toHaveBeenCalled()
+    expect(container.textContent).toContain("桥接快捷输入")
   })
 })
 

@@ -6,7 +6,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireBridgeDomain, requireSynapseBridge } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import type {
   SynapseAgentDisplayProfile,
@@ -18,7 +18,8 @@ import type {
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import type { AgentConversationTarget as ImportedAgentConversationTarget } from "@/types/agent-conversation-window"
-import type { SynapseProjectConfig, SynapseQuickInput } from "@/types/config"
+import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseQuickInputItem } from "@/types/quick-input"
 import {
   type AgentDraftAttachment,
   formatDraftAttachmentsForMessage,
@@ -41,7 +42,6 @@ import {
 } from "../pending-message-queue"
 import {
   toAgentSlashCandidates,
-  toQuickInputSlashCandidates,
   uniqueAgentSlashCandidates,
 } from "../slash-menu"
 import {
@@ -61,6 +61,7 @@ import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { AgentTimeline } from "./agent-timeline"
 
 const logger = createRendererLogger("agent")
+const EMPTY_QUICK_INPUTS: readonly SynapseQuickInputItem[] = []
 
 export type AgentConversationTarget = ImportedAgentConversationTarget
 
@@ -102,7 +103,7 @@ type AgentConversationWorkspaceProps = {
   readonly project?: SynapseProjectConfig
   readonly target: AgentConversationTarget
   readonly chat: AgentConversationWorkspaceController
-  readonly quickInputs: readonly SynapseQuickInput[]
+  readonly quickInputs?: readonly SynapseQuickInputItem[]
   readonly commands: readonly SynapseAgentPublishedCommand[]
   readonly providers: SynapseAgentProviderState | null
   readonly currentConversationModel?: string
@@ -169,6 +170,7 @@ function AgentConversationWorkspace({
   )
   const [conversationRolloverPromptNow, setConversationRolloverPromptNow] = useState(() => Date.now())
   const canManageKnowledgeSources = canUseManagedKnowledgeBase(project)
+  const quickInputItems = useQuickInputItems(quickInputs)
 
   useEffect(() => {
     setConversationRolloverPromptNow(Date.now())
@@ -428,11 +430,10 @@ function AgentConversationWorkspace({
   )
   const slashCandidates = useMemo(
     () => uniqueAgentSlashCandidates([
-      ...toQuickInputSlashCandidates(quickInputs),
       ...knowledgeBaseSlashCandidates,
       ...toAgentSlashCandidates(commands),
     ]),
-    [commands, knowledgeBaseSlashCandidates, quickInputs],
+    [commands, knowledgeBaseSlashCandidates],
   )
   const knowledgeBaseActions = useMemo(
     () => canManageKnowledgeSources ? toKnowledgeBaseComposerActions() : [],
@@ -657,7 +658,7 @@ function AgentConversationWorkspace({
         creatingConversation={creatingConversation}
         cancelPhase={chat.cancelPhase}
         permissionMode={selectedPermissionMode}
-        quickInputs={quickInputs}
+        quickInputs={quickInputItems}
         onPermissionModeChange={(nextMode) => chat.setPermissionMode(nextMode, target)}
         onCreatePermissionModeSession={(nextMode) => {
           void createConversationFromCurrent(nextMode)
@@ -704,6 +705,44 @@ function trackDirectAgentSend(input: DirectSendTrackInput): void {
       ...(input.preserveDraft === undefined ? {} : { preserveDraft: input.preserveDraft }),
     },
   })
+}
+
+function useQuickInputItems(initialItems: readonly SynapseQuickInputItem[] = EMPTY_QUICK_INPUTS): readonly SynapseQuickInputItem[] {
+  const [items, setItems] = useState<SynapseQuickInputItem[]>(() => [...initialItems])
+
+  useEffect(() => {
+    setItems([...initialItems])
+  }, [initialItems])
+
+  useEffect(() => {
+    let disposed = false
+    let unsubscribe: (() => void) | undefined
+    try {
+      const bridge = requireBridgeDomain("quickInput")
+      void bridge.list().then((nextItems) => {
+        if (!disposed) setItems(nextItems)
+      }).catch((rawError: unknown) => {
+        logger.warn("Agent quick input load failed.", {
+          boundary: "renderer.agent.quick-input.load",
+          ...errorDiagnostic(rawError),
+        })
+      })
+      unsubscribe = bridge.onChanged((event) => {
+        setItems(event.items)
+      })
+    } catch (rawError) {
+      logger.warn("Agent quick input bridge unavailable.", {
+        boundary: "renderer.agent.quick-input.bridge",
+        ...errorDiagnostic(rawError),
+      })
+    }
+    return () => {
+      disposed = true
+      unsubscribe?.()
+    }
+  }, [])
+
+  return items
 }
 
 function slashCommandName(content: string): string {

@@ -136,7 +136,6 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
           project={project}
           target={target}
           chat={chat}
-          quickInputs={config.global.quickInputs ?? []}
           commands={commands}
           providers={chat.providers}
           currentConversationModel={chat.currentConversationModel}

@@ -13,12 +13,6 @@ import type { AgentSlashCandidate } from "../slash-menu"
 
 const candidates: AgentSlashCandidate[] = [
   {
-    name: "日报模板",
-    description: "整理今天完成的工作",
-    kind: "quickInput",
-    insertText: "日报模板\n整理今天完成的工作",
-  },
-  {
     name: "wiki-query",
     description: "查询知识库并基于已有页面回答",
     kind: "knowledgeBase",
@@ -137,7 +131,7 @@ describe("AgentSlashMenu", () => {
     Element.prototype.scrollIntoView = originalScrollIntoView
   })
 
-  it("renders quick inputs, knowledge base, skills, and commands in order", () => {
+  it("renders knowledge base, skills, and commands in order", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={candidates}
@@ -147,15 +141,11 @@ describe("AgentSlashMenu", () => {
       />,
     )
 
-    expect(html).toContain("片段")
     expect(html).toContain("知识库")
     expect(html).toContain("Skills")
     expect(html).toContain("Commands")
-    expect(html.indexOf("片段")).toBeLessThan(html.indexOf("知识库"))
     expect(html.indexOf("知识库")).toBeLessThan(html.indexOf("Skills"))
     expect(html.indexOf("Skills")).toBeLessThan(html.indexOf("Commands"))
-    expect(html).toContain("/日报模板")
-    expect(html).toContain("整理今天完成的工作")
     expect(html).toContain("/wiki-query")
     expect(html).toContain("查询知识库并基于已有页面回答")
     expect(html).toContain("/review-code")
@@ -164,7 +154,7 @@ describe("AgentSlashMenu", () => {
     expect(html).toContain("Show agent status")
   })
 
-  it("uses a text input icon for quick input items", () => {
+  it("does not render quick input slash items", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={candidates}
@@ -174,7 +164,7 @@ describe("AgentSlashMenu", () => {
       />,
     )
 
-    expect(html).toContain("data-slash-candidate-kind=\"quickInput\"")
+    expect(html).not.toContain("data-slash-candidate-kind=\"quickInput\"")
   })
 
   it("renders a short empty state", () => {
@@ -216,6 +206,6 @@ describe("AgentSlashMenu", () => {
       button?.click()
     })
 
-    expect(onSelect).toHaveBeenCalledWith(candidates[3])
+    expect(onSelect).toHaveBeenCalledWith(candidates[2])
   })
 })
