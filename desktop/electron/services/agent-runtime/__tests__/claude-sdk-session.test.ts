@@ -700,6 +700,64 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("canUseTool returns the original input when allowed without updated input", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    const input = { command: "pwd" }
+    const permission = canUseTool(getOptions())("Bash", input, {
+      signal: new AbortController().signal,
+    })
+    const event = await session.nextEvent()
+
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected permission request")
+    }
+    await session.respondPermission(event.requestId, {
+      behavior: "allow",
+    })
+
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: input,
+    })
+  })
+
+  it("canUseTool returns the original ExitPlanMode input when allowed", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    const input = {
+      plan: "# Plan",
+      planFilePath: "/Users/liyang/.claude/plans/example.md",
+      allowedPrompts: [
+        { tool: "Bash", prompt: "List files" },
+      ],
+    }
+    const permission = canUseTool(getOptions())("ExitPlanMode", input, {
+      signal: new AbortController().signal,
+    })
+    const event = await session.nextEvent()
+
+    expect(event).toMatchObject({
+      type: "permissionRequest",
+      toolName: "ExitPlanMode",
+      toolInputRaw: input,
+    })
+
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected permission request")
+    }
+    await session.respondPermission(event.requestId, {
+      behavior: "allow",
+    })
+
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: input,
+    })
+  })
+
   it("canUseTool forwards AskUserQuestion as a structured user question request", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)
