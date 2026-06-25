@@ -62,6 +62,7 @@ const MODULE_SOURCES = [
   { id: "automation", importPath: "electron/modules/automation/ipc.ts" },
   { id: "apps", importPath: "electron/modules/apps/ipc.ts" },
   { id: "documentTemplate", importPath: "app-capabilities/document-template/main/ipc.ts" },
+  { id: "quick-input", outputId: "quickInput", importPath: "app-capabilities/quick-input/main/ipc.ts" },
   { id: "terminal", importPath: "app-capabilities/terminal/main/ipc.ts" },
   { id: "screenshot", importPath: "app-capabilities/screenshot/main/ipc.ts" },
   { id: "git", importPath: "electron/modules/git/ipc.ts" },
@@ -315,6 +316,7 @@ async function generate() {
         `Module id mismatch: expected "${entry.id}" but ${entry.importPath} exports "${descriptor.id}"`,
       )
     }
+    descriptor.outputId = entry.outputId ?? descriptor.id
     descriptors.push(descriptor)
   }
 
@@ -340,7 +342,7 @@ async function generate() {
 
   out.push("export const IPC_CHANNELS = {")
   for (const descriptor of descriptors) {
-    out.push(`  ${quote(descriptor.id)}: {`)
+    out.push(`  ${quote(descriptor.outputId)}: {`)
     for (const [methodName, method] of Object.entries(descriptor.methods)) {
       out.push(`    ${quote(methodName)}: ${quote(method.channel)},`)
     }
