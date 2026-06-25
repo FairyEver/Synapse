@@ -11,6 +11,7 @@ import type {
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
   TerminalGroup,
+  TerminalGroupCommand,
   TerminalGroupSettings,
   TerminalOutputChunk,
   TerminalReadSessionInput,
@@ -297,7 +298,16 @@ export function createTerminalService(deps: {
       startupEchoFilters.clear()
 
       const state = await deps.store.loadState()
-      for (const group of state.groups) groups.set(group.id, group)
+      for (const group of state.groups) {
+        const settings = normalizeGroupSettings(group.settings, group.updatedAt)
+        const normalized = { ...group }
+        if (settings) {
+          normalized.settings = settings
+        } else {
+          delete normalized.settings
+        }
+        groups.set(group.id, normalized)
+      }
 
       const outputBySession = new Map<string, TerminalOutputChunk[]>()
       for (const chunk of state.output) {
@@ -389,7 +399,7 @@ export function createTerminalService(deps: {
       const name = input.name.trim()
       if (!name) throw new Error("Terminal group name is required")
       if (name.length > 80) throw new Error("Terminal group name is too long")
-      const settings = normalizeGroupSettings(input.settings)
+      const settings = normalizeGroupSettings(input.settings, now())
       const updated: TerminalGroup = {
         ...group,
         name,
@@ -443,14 +453,10 @@ export function createTerminalService(deps: {
         lastOutputSeq: 0,
       }
       const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
-      const startupCommand = group.settings?.startupCommand
       const child = deps.spawnPty?.({ shell, cwd, cols, rows }) ?? spawnNodePty({ shell, cwd, cols, rows })
       buffers.set(session.id, buffer)
       sessions.set(session.id, session)
       attachRuntime(session, child, buffer)
-      if (startupCommand) {
-        pendingStartupCommands.set(session.id, startupCommand)
-      }
       await flushPersist()
       return session
     },
@@ -579,14 +585,42 @@ function resolveCwd(cwd: string): string {
   return cwd
 }
 
-function normalizeGroupSettings(settings: TerminalGroupSettings | undefined): TerminalGroupSettings | undefined {
+function normalizeGroupSettings(
+  settings: TerminalGroupSettings | undefined,
+  legacyCommandTimestamp: string,
+): TerminalGroupSettings | undefined {
   const defaultCwd = settings?.defaultCwd?.trim()
+  const commands = normalizeGroupCommands(settings?.commands)
   const startupCommand = normalizeStartupCommand(settings?.startupCommand)
   const normalized: TerminalGroupSettings = {
     ...(defaultCwd ? { defaultCwd: validateAbsoluteCwdInput(defaultCwd) } : {}),
-    ...(startupCommand ? { startupCommand } : {}),
+    ...(commands.length > 0 ? { commands } : {}),
+  }
+  if (!normalized.commands && startupCommand) {
+    normalized.commands = [{
+      id: randomUUID(),
+      name: "启动命令",
+      command: startupCommand,
+      createdAt: legacyCommandTimestamp,
+      updatedAt: legacyCommandTimestamp,
+    }]
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function normalizeGroupCommands(commands: TerminalGroupCommand[] | undefined): TerminalGroupCommand[] {
+  return (commands ?? []).map((command) => {
+    const name = command.name.trim()
+    if (!name) throw new Error("Terminal command name is required")
+    if (name.length > 80) throw new Error("Terminal command name is too long")
+    const normalizedCommand = normalizeStartupCommand(command.command)
+    if (!normalizedCommand) throw new Error("Terminal command is required")
+    return {
+      ...command,
+      name,
+      command: normalizedCommand,
+    }
+  })
 }
 
 function normalizeStartupCommand(command: string | undefined): string | undefined {

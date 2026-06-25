@@ -147,7 +147,12 @@ describe("TerminalService", () => {
       name: "构建",
       settings: {
         defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
+        commands: [
+          expect.objectContaining({
+            name: "启动命令",
+            command: "nvm use\npnpm dev",
+          }),
+        ],
       },
     })
     expect(store.state.groups).toEqual([expect.objectContaining({
@@ -155,9 +160,84 @@ describe("TerminalService", () => {
       name: "构建",
       settings: {
         defaultCwd: tempDir,
-        startupCommand: "nvm use\npnpm dev",
+        commands: [
+          expect.objectContaining({
+            name: "启动命令",
+            command: "nvm use\npnpm dev",
+          }),
+        ],
       },
     })])
+  })
+
+  it("migrates legacy startup command into a named group command", async () => {
+    const group = createGroup({
+      updatedAt: "2026-06-24T00:02:00.000Z",
+      settings: {
+        defaultCwd: tempDir,
+        startupCommand: "nvm use\npnpm dev",
+      },
+    })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    const [migrated] = service.listGroups()
+
+    expect(migrated.settings).toMatchObject({
+      defaultCwd: tempDir,
+      commands: [
+        expect.objectContaining({
+          name: "启动命令",
+          command: "nvm use\npnpm dev",
+          createdAt: "2026-06-24T00:02:00.000Z",
+          updatedAt: "2026-06-24T00:02:00.000Z",
+        }),
+      ],
+    })
+    expect(migrated.settings).not.toHaveProperty("startupCommand")
+    expect(store.state.groups[0]?.settings).not.toHaveProperty("startupCommand")
+  })
+
+  it("does not overwrite explicit commands when legacy startup command is also present", async () => {
+    const existingCommand = {
+      id: "cmd-dev",
+      name: "dev",
+      command: "pnpm dev",
+      createdAt: "2026-06-24T00:01:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+    }
+    const group = createGroup({
+      settings: {
+        startupCommand: "pnpm old",
+        commands: [existingCommand],
+      },
+    })
+    const store = createMemoryStore({ groups: [group], sessions: [], output: [] })
+    const service = await createStartedService(store)
+
+    expect(service.listGroups()[0]?.settings).toEqual({
+      commands: [existingCommand],
+    })
+    expect(store.state.groups[0]?.settings).toEqual({
+      commands: [existingCommand],
+    })
+  })
+
+  it("creates clean sessions without running migrated commands", async () => {
+    const group = createGroup({
+      settings: {
+        startupCommand: "pnpm dev",
+      },
+    })
+    const pty = new FakePty()
+    const service = await createStartedService(
+      createMemoryStore({ groups: [group], sessions: [], output: [] }),
+      { ptys: [pty] },
+    )
+
+    await service.createSession({ groupId: group.id })
+
+    expect(pty.write).not.toHaveBeenCalled()
   })
 
   it("uses explicit cwd before group default cwd", async () => {
@@ -220,7 +300,7 @@ describe("TerminalService", () => {
     expect(service.listSessions()).toEqual([])
   })
 
-  it("runs group startup command only after the renderer marks the session ready", async () => {
+  it("keeps runStartupCommand as a no-op when no pending command exists", async () => {
     const group = createGroup({
       settings: {
         startupCommand: "nvm use\npnpm dev",
@@ -242,15 +322,14 @@ describe("TerminalService", () => {
 
     service.runStartupCommand({ sessionId: session.id })
 
-    expect(pty.write).toHaveBeenCalledWith("nvm use\npnpm dev\n")
-    expect(pty.write).toHaveBeenCalledTimes(1)
+    expect(pty.write).not.toHaveBeenCalled()
 
     service.runStartupCommand({ sessionId: session.id })
 
-    expect(pty.write).toHaveBeenCalledTimes(1)
+    expect(pty.write).not.toHaveBeenCalled()
   })
 
-  it("filters startup command echo while keeping command output", async () => {
+  it("keeps command-like output for clean sessions", async () => {
     const group = createGroup({
       settings: {
         startupCommand: "ls",
@@ -270,9 +349,9 @@ describe("TerminalService", () => {
     pty.emitData("README.md\r\n")
     await service.flushPersistQueue()
 
-    expect(onData).toHaveBeenCalledTimes(1)
+    expect(onData).toHaveBeenCalledTimes(2)
     expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data))
-      .toEqual(["README.md\r\n"])
+      .toEqual(["ls\r\n", "README.md\r\n"])
   })
 
   it("does not write an empty startup command", async () => {
