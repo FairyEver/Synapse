@@ -207,7 +207,7 @@ function EditorScanModule() {
     </Button>
   )
   const contentToolbar = (
-    <div data-editor-scan-content-toolbar className="flex shrink-0 flex-col gap-2 px-2 py-2.5">
+    <div data-editor-scan-content-toolbar className="flex shrink-0 flex-col gap-2 border-b bg-background px-3 py-2.5">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">
           {globalResult?.editorLabel ?? "IDE"}
@@ -230,25 +230,31 @@ function EditorScanModule() {
           </div>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Tabs
-          value={contentTab}
-          onValueChange={(v) => setContentTab(v as ContentTab)}
-        >
-          <TabsList>
-            <TabsTrigger value="skill">Skill</TabsTrigger>
-            <TabsTrigger value="rule">Rule</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Tabs
-          value={scopeTab}
-          onValueChange={(v) => setScopeTab(v as ScopeTab)}
-        >
-          <TabsList>
-            <TabsTrigger value="global">全局</TabsTrigger>
-            <TabsTrigger value="project">项目</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">类型</span>
+          <Tabs
+            value={contentTab}
+            onValueChange={(v) => setContentTab(v as ContentTab)}
+          >
+            <TabsList>
+              <TabsTrigger value="skill">Skill</TabsTrigger>
+              <TabsTrigger value="rule">Rule</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">范围</span>
+          <Tabs
+            value={scopeTab}
+            onValueChange={(v) => setScopeTab(v as ScopeTab)}
+          >
+            <TabsList>
+              <TabsTrigger value="global">全局</TabsTrigger>
+              <TabsTrigger value="project">项目</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
     </div>
   )
@@ -355,7 +361,7 @@ function EditorScanModule() {
         {appViewTab === "content" ? (
           <div data-editor-scan-content-panel className="flex h-full flex-col">
             {contentToolbar}
-            <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
+            <div className="min-h-0 flex-1 p-2">
               {renderContent()}
             </div>
           </div>

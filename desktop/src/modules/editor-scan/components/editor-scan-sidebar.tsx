@@ -64,6 +64,9 @@ function EditorScanSidebar({
 
   return (
     <ModuleSidebar variant="bare">
+      <div data-editor-scan-sidebar-heading className="px-2 py-1 text-xs font-medium text-muted-foreground">
+        编辑器
+      </div>
       <ModuleSidebarList data-track="editor-scan-sidebar-list">
         {summaries.map((s) => (
           <ModuleSidebarItem

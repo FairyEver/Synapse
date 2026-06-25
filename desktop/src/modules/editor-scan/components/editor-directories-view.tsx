@@ -50,25 +50,27 @@ function EditorDirectoriesView({ selectedEditorId }: EditorDirectoriesViewProps)
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-2">
-      <div className="flex shrink-0 items-center gap-2 px-1 py-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b bg-background px-3 py-2.5">
         <h2 className="text-lg font-semibold">{directory.label || getEditorLabel(selectedEditorId)}</h2>
       </div>
-      <div className="flex flex-col overflow-hidden rounded-lg border bg-background">
-        <DirectoryRow
-          label="全局规则"
-          dirPath={directory.rulesPath}
-          exists={directory.rulesExists}
-          onOpen={handleOpen}
-          onCreate={handleCreate}
-        />
-        <DirectoryRow
-          label="全局技能"
-          dirPath={directory.skillsPath}
-          exists={directory.skillsExists}
-          onOpen={handleOpen}
-          onCreate={handleCreate}
-        />
+      <div className="min-h-0 flex-1 p-2">
+        <div className="flex flex-col overflow-hidden rounded-lg border bg-background">
+          <DirectoryRow
+            label="全局规则"
+            dirPath={directory.rulesPath}
+            exists={directory.rulesExists}
+            onOpen={handleOpen}
+            onCreate={handleCreate}
+          />
+          <DirectoryRow
+            label="全局技能"
+            dirPath={directory.skillsPath}
+            exists={directory.skillsExists}
+            onOpen={handleOpen}
+            onCreate={handleCreate}
+          />
+        </div>
       </div>
     </div>
   )

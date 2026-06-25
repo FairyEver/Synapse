@@ -138,6 +138,7 @@ describe("EditorScanModule", () => {
 
     expect(screenText()).toContain("内容")
     expect(screenText()).toContain("目录")
+    expect(screenText()).toContain("编辑器")
     expect(screenText()).toContain("Cursor")
     expect(screenText()).toContain("未检测到 Cursor 的 skill 或规则")
   })
@@ -171,8 +172,10 @@ describe("EditorScanModule", () => {
     const contentToolbar = document.querySelector("[data-editor-scan-content-toolbar]")
 
     expect(contentPanel?.textContent).toContain("Cursor")
+    expect(contentToolbar?.textContent).toContain("类型")
     expect(contentToolbar?.textContent).toContain("Skill")
     expect(contentToolbar?.textContent).toContain("Rule")
+    expect(contentToolbar?.textContent).toContain("范围")
     expect(contentToolbar?.textContent).toContain("全局")
     expect(contentToolbar?.textContent).toContain("项目")
   })
