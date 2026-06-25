@@ -156,28 +156,21 @@ describe("EditorScanModule", () => {
     expect(screenText()).toContain("/Users/liyang/.cursor/skills")
   })
 
-  it("keeps Skill and Rule filters inside the content view", async () => {
+  it("keeps content controls inside the content sidebar", async () => {
     await renderEditorScanModule(roots)
 
-    expect(buttonByText("Skill")).not.toBeUndefined()
-    expect(buttonByText("Rule")).not.toBeUndefined()
-    expect(buttonByText("全局")).not.toBeUndefined()
-    expect(buttonByText("项目")).not.toBeUndefined()
-  })
-
-  it("keeps content filters in the selected IDE content toolbar", async () => {
-    await renderEditorScanModule(roots)
-
+    const contentSidebarControls = document.querySelector("[data-editor-scan-sidebar-controls]")
     const contentPanel = document.querySelector("[data-editor-scan-content-panel]")
-    const contentToolbar = document.querySelector("[data-editor-scan-content-toolbar]")
 
     expect(contentPanel?.textContent).toContain("Cursor")
-    expect(contentToolbar?.textContent).toContain("类型")
-    expect(contentToolbar?.textContent).toContain("Skill")
-    expect(contentToolbar?.textContent).toContain("Rule")
-    expect(contentToolbar?.textContent).toContain("范围")
-    expect(contentToolbar?.textContent).toContain("全局")
-    expect(contentToolbar?.textContent).toContain("项目")
+    expect(contentPanel?.textContent).not.toContain("类型")
+    expect(contentPanel?.textContent).not.toContain("范围")
+    expect(contentSidebarControls?.textContent).toContain("类型")
+    expect(contentSidebarControls?.textContent).toContain("Skill")
+    expect(contentSidebarControls?.textContent).toContain("Rule")
+    expect(contentSidebarControls?.textContent).toContain("范围")
+    expect(contentSidebarControls?.textContent).toContain("全局")
+    expect(contentSidebarControls?.textContent).toContain("项目")
   })
 
   it("hides content filters in the directory view", async () => {

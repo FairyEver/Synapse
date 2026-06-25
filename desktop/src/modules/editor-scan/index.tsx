@@ -176,13 +176,6 @@ function EditorScanModule() {
     })
   }, [globalResult, data, selectedEditorId])
 
-  const sidebar = (
-    <EditorScanSidebar
-      data={data}
-      selectedEditorId={selectedEditorId}
-      onSelect={setSelectedEditorId}
-    />
-  )
   const appViewTabs = useMemo(
     () => [
       { id: "content", label: "内容" },
@@ -206,56 +199,64 @@ function EditorScanModule() {
       )}
     </Button>
   )
-  const contentToolbar = (
-    <div data-editor-scan-content-toolbar className="flex shrink-0 flex-col gap-2 border-b bg-background px-3 py-2.5">
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">
-          {globalResult?.editorLabel ?? "IDE"}
-        </h2>
-        {contentTab === "skill" && selectedSkills.length > 0 ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
-            <Button variant="outline" size="sm" onClick={clearSkillSelection}>
-              <X data-icon="inline-start" />
-              取消选择
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
-              <Copy data-icon="inline-start" />
-              复制到...
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
-              <Trash2 data-icon="inline-start" />
-              移到废纸篓
-            </Button>
-          </div>
-        ) : null}
+  const contentSidebarControls = (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">类型</span>
+        <Tabs
+          value={contentTab}
+          onValueChange={(v) => setContentTab(v as ContentTab)}
+        >
+          <TabsList className="w-full">
+            <TabsTrigger className="flex-1" value="skill">Skill</TabsTrigger>
+            <TabsTrigger className="flex-1" value="rule">Rule</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">类型</span>
-          <Tabs
-            value={contentTab}
-            onValueChange={(v) => setContentTab(v as ContentTab)}
-          >
-            <TabsList>
-              <TabsTrigger value="skill">Skill</TabsTrigger>
-              <TabsTrigger value="rule">Rule</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">范围</span>
-          <Tabs
-            value={scopeTab}
-            onValueChange={(v) => setScopeTab(v as ScopeTab)}
-          >
-            <TabsList>
-              <TabsTrigger value="global">全局</TabsTrigger>
-              <TabsTrigger value="project">项目</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">范围</span>
+        <Tabs
+          value={scopeTab}
+          onValueChange={(v) => setScopeTab(v as ScopeTab)}
+        >
+          <TabsList className="w-full">
+            <TabsTrigger className="flex-1" value="global">全局</TabsTrigger>
+            <TabsTrigger className="flex-1" value="project">项目</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
+    </>
+  )
+  const sidebar = (
+    <EditorScanSidebar
+      controls={appViewTab === "content" ? contentSidebarControls : undefined}
+      data={data}
+      selectedEditorId={selectedEditorId}
+      onSelect={setSelectedEditorId}
+    />
+  )
+  const contentHeader = (
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2.5">
+      <h2 className="text-lg font-semibold">
+        {globalResult?.editorLabel ?? "IDE"}
+      </h2>
+      {contentTab === "skill" && selectedSkills.length > 0 ? (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
+          <Button variant="outline" size="sm" onClick={clearSkillSelection}>
+            <X data-icon="inline-start" />
+            取消选择
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
+            <Copy data-icon="inline-start" />
+            复制到...
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+            <Trash2 data-icon="inline-start" />
+            移到废纸篓
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 
@@ -360,7 +361,7 @@ function EditorScanModule() {
       <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
         {appViewTab === "content" ? (
           <div data-editor-scan-content-panel className="flex h-full flex-col">
-            {contentToolbar}
+            {contentHeader}
             <div className="min-h-0 flex-1 p-2">
               {renderContent()}
             </div>
