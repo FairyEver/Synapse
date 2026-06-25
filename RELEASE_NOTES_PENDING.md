@@ -9,5 +9,6 @@
 ## 问题修复
 
 - 修复 Claude Code 会话退出 Plan Mode 时权限确认失败，导致对话卡在计划模式的问题。
+- 知识库资料清单如果被 Windows 工具保存成带 BOM 的 JSON，Synapse 会自动修复后继续读取，不再让 `/wiki-ingest` 卡在“资料清单已损坏”。
 
 ## 技术调整

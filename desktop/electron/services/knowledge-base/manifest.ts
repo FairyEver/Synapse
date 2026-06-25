@@ -4,6 +4,8 @@ import path from "node:path"
 import { atomicWriteTextFile } from "./atomic-write"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
+const UTF8_BOM = "\uFEFF"
+
 export interface KnowledgeBaseManifestSourceEntry {
   readonly hash: string
   readonly ingested_at?: string
@@ -28,8 +30,16 @@ export async function readKnowledgeBaseManifest(projectPath: string): Promise<Kn
   const manifestPath = path.join(projectPath, ".raw", ".manifest.json")
   try {
     const raw = await readFile(manifestPath, "utf8")
-    const parsed = JSON.parse(raw) as unknown
+    const normalizedRaw = raw.startsWith(UTF8_BOM) ? raw.slice(1) : raw
+    const parsed = JSON.parse(normalizedRaw) as unknown
     const manifest = parseKnowledgeBaseManifest(parsed)
+    if (normalizedRaw !== raw) {
+      await assertNoSymlinkInPath(path.resolve(projectPath), ".raw/.manifest.json")
+      await atomicWriteTextFile(manifestPath, normalizedRaw)
+      knowledgeBaseLogger.info("Knowledge Base manifest UTF-8 BOM repaired.", {
+        manifestPath: ".raw/.manifest.json",
+      })
+    }
     return { status: "valid", manifest }
   } catch (error) {
     if (isMissingPathError(error)) {
