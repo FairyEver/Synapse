@@ -40,6 +40,7 @@ import {
   ModuleSidebarList,
   ModuleSidebarRow,
 } from "../../../src/components/module-sidebar"
+import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { cn } from "../../../src/lib/utils"
@@ -450,111 +451,116 @@ export function TerminalModule() {
     }
   }, [terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
 
-  return (
-    <SystemAppWindowShell>
-      <div
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background md:grid-cols-[13.5rem_minmax(0,1fr)] md:grid-rows-1"
-      >
-        <ModuleSidebar
-          variant="bare"
-          className="max-h-48 min-h-0 border-b bg-background md:max-h-none md:border-b-0 md:border-r"
-        >
-          <div className="flex items-center justify-start">
-            <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
-              <Plus data-icon="inline-start" />
-              新建分组
-            </Button>
-          </div>
-          <ModuleSidebarList>
-            <div className="grid gap-1">
-              {loading ? (
+  const sidebar = (
+    <ModuleSidebar
+      variant="bare"
+      className="min-h-0 bg-background"
+    >
+      <div className="flex items-center justify-start">
+        <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
+          <Plus data-icon="inline-start" />
+          新建分组
+        </Button>
+      </div>
+      <ModuleSidebarList>
+        <div className="grid gap-1">
+          {loading ? (
+            <>
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </>
+          ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
+            <ModuleSidebarGroup
+              key={group.id}
+              open={openGroupIds[group.id] ?? true}
+              onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [group.id]: open }))}
+              data-track="terminal-session-group"
+              title={group.name}
+              openIcon={FolderOpen}
+              closedIcon={Folder}
+              headerClassName="pl-0 pr-3"
+              contentClassName="pl-0"
+              actions={group.id !== "ungrouped" ? (
                 <>
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                </>
-              ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
-                <ModuleSidebarGroup
-                  key={group.id}
-                  open={openGroupIds[group.id] ?? true}
-                  onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [group.id]: open }))}
-                  data-track="terminal-session-group"
-                  title={group.name}
-                  openIcon={FolderOpen}
-                  closedIcon={Folder}
-                  headerClassName="pl-0 pr-3"
-                  contentClassName="pl-0"
-                  actions={group.id !== "ungrouped" ? (
-                    <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    title="新建终端"
+                    onClick={() => { void createSession({ groupId: group.id }) }}
+                  >
+                    <Plus className="size-3.5" />
+                    <span className="sr-only">新建终端</span>
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         type="button"
-                        variant="ghost"
                         size="icon-xs"
-                        title="新建终端"
-                        onClick={() => { void createSession({ groupId: group.id }) }}
+                        variant="ghost"
+                        aria-label={`终端分组操作：${group.name}`}
                       >
-                        <Plus className="size-3.5" />
-                        <span className="sr-only">新建终端</span>
+                        <MoreHorizontal className="size-3.5" />
                       </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label={`终端分组操作：${group.name}`}
-                          >
-                            <MoreHorizontal className="size-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openGroupSettingsDialog(group)}>
-                            <Settings />
-                            设置
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
-                            <Pencil />
-                            重命名
-                          </DropdownMenuItem>
-                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteGroupTarget(group)}>
-                            <Trash2 />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </>
-                  ) : null}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openGroupSettingsDialog(group)}>
+                        <Settings />
+                        设置
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
+                        <Pencil />
+                        重命名
+                      </DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" onClick={() => setDeleteGroupTarget(group)}>
+                        <Trash2 />
+                        删除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : null}
+            >
+              {group.sessions.map((session) => (
+                <ModuleSidebarRow
+                  key={session.id}
+                  active={session.id === activeSession?.id}
+                  data-track="terminal-session-select"
+                  icon={<TerminalSessionStatusIcon status={session.status} />}
+                  trailing={
+                    <TerminalSessionDeleteButton
+                      disabled={deletingSessionId === session.id}
+                      session={session}
+                      onDelete={() => { void deleteSession(session) }}
+                    />
+                  }
+                  trackValue={session.id}
+                  onSelect={() => setActiveSessionId(session.id)}
+                  onDoubleClick={() => openRenameDialog(session)}
                 >
-                  {group.sessions.map((session) => (
-                    <ModuleSidebarRow
-                      key={session.id}
-                      active={session.id === activeSession?.id}
-                      data-track="terminal-session-select"
-                      icon={<TerminalSessionStatusIcon status={session.status} />}
-                      trailing={
-                        <TerminalSessionDeleteButton
-                          disabled={deletingSessionId === session.id}
-                          session={session}
-                          onDelete={() => { void deleteSession(session) }}
-                        />
-                      }
-                      trackValue={session.id}
-                      onSelect={() => setActiveSessionId(session.id)}
-                      onDoubleClick={() => openRenameDialog(session)}
-                    >
-                      {session.title}
-                    </ModuleSidebarRow>
-                  ))}
-                </ModuleSidebarGroup>
-              )) : (
-                <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
-                  暂无会话
-                </div>
-              )}
+                  {session.title}
+                </ModuleSidebarRow>
+              ))}
+            </ModuleSidebarGroup>
+          )) : (
+            <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
+              暂无会话
             </div>
-          </ModuleSidebarList>
-        </ModuleSidebar>
+          )}
+        </div>
+      </ModuleSidebarList>
+    </ModuleSidebar>
+  )
+
+  return (
+    <SystemAppWindowShell>
+      <SidebarContentLayout
+        sidebar={sidebar}
+        contentScrollable={false}
+        sidebarResizable
+      >
         <main className="flex min-h-0 min-w-0 flex-col">
           {activeSession ? (
             <div className="dark flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -581,7 +587,7 @@ export function TerminalModule() {
             </div>
           )}
         </main>
-      </div>
+      </SidebarContentLayout>
       <Dialog open={groupDialogMode !== null} onOpenChange={(open) => {
         if (!open) {
           setGroupDialogMode(null)
