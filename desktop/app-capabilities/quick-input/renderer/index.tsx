@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
-import { Pencil, Pin, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
@@ -124,15 +124,6 @@ export function QuickInputModule() {
     }
   }
 
-  const pinToTop = async (item: SynapseQuickInputItem) => {
-    try {
-      setItems(await quickInputBridge.pinToTop({ id: item.id }))
-    } catch (error) {
-      logger.error("Failed to pin quick input item.", error)
-      toast.error("置顶失败")
-    }
-  }
-
   const deleteItem = async (item: SynapseQuickInputItem) => {
     try {
       await quickInputBridge.delete({ id: item.id })
@@ -175,7 +166,6 @@ export function QuickInputModule() {
                   item={item}
                   onDelete={() => void deleteItem(item)}
                   onEdit={() => openEditForm(item)}
-                  onPin={() => void pinToTop(item)}
                 />
               ))}
             </div>
@@ -204,12 +194,10 @@ function QuickInputRow({
   item,
   onDelete,
   onEdit,
-  onPin,
 }: {
   readonly item: SynapseQuickInputItem
   readonly onDelete: () => void
   readonly onEdit: () => void
-  readonly onPin: () => void
 }) {
   return (
     <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -217,9 +205,6 @@ function QuickInputRow({
       <div className="flex shrink-0 items-center gap-1 sm:justify-end">
         <Button type="button" variant="ghost" size="icon" aria-label="编辑" onClick={onEdit}>
           <Pencil />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label="置顶" onClick={onPin}>
-          <Pin />
         </Button>
         <Button type="button" variant="ghost" size="icon" aria-label="删除" onClick={onDelete}>
           <Trash2 />

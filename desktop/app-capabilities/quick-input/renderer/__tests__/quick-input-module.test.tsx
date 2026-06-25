@@ -115,20 +115,19 @@ describe("QuickInputModule", () => {
     expect(toast.success).toHaveBeenCalledWith("已保存")
   })
 
-  it("updates, pins, and deletes an item", async () => {
+  it("updates and deletes an item", async () => {
     await renderModule()
 
     await clickButton("编辑")
     await changeTextarea("更新后的快捷输入")
     await clickButton("保存")
-    await clickButton("置顶")
     await clickButton("删除")
 
     expect(quickInputBridge.update).toHaveBeenCalledWith({
       id: "quick-1",
       content: "更新后的快捷输入",
     })
-    expect(quickInputBridge.pinToTop).toHaveBeenCalledWith({ id: "quick-1" })
+    expect(quickInputBridge.pinToTop).not.toHaveBeenCalled()
     expect(quickInputBridge.delete).toHaveBeenCalledWith({ id: "quick-1" })
   })
 })
