@@ -160,6 +160,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
+- 快捷输入是独立系统应用，不属于系统设置页。Agent 对话只消费快捷输入库中的文本，并默认直接发送；不要恢复“直接发送”开关，也不要把快捷输入重新塞回 slash menu 的插入候选里，除非当前对话明确改变这个产品边界。
 - Knowledge Base 资料管理窗口是 `.raw` 文件管理器；上传和拖拽上传必须把用户选择的文件原样复制到当前 `.raw` 文件夹，不得自动转换格式、生成 Markdown 替代文件、额外保留一份 originals 附件，或把普通上传变成 source staging 流程。
 - Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
 - Workflow loop 的退出条件必须由子图内真实节点和 Loop Output 的 continue/break 出口表达，不要退回到隐藏在配置面板里的表达式字符串。
