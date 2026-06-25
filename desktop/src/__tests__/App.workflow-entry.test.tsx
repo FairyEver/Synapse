@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
     apps: Array<{ id: string; name: string }>
     onValueChange: (value: string) => void
   },
+  lastSystemAppContentProps: null as null | {
+    appId: string
+    launcherResetKey?: number
+  },
   openSystemApp: vi.fn(async () => undefined),
   updateConfig: vi.fn(async () => undefined),
   currentConfig: {
@@ -166,14 +170,17 @@ vi.mock("@/modules/apps/components/system-app-content", async () => {
   return {
     SystemAppContent: ({
       appId,
+      launcherResetKey,
       resourceContentOpenRequest,
       onResourceContentOpenRequestConsumed,
     }: {
       appId: string
+      launcherResetKey?: number
       resourceContentOpenRequest?: ContentOpenRequest | null
       onResourceContentOpenRequestConsumed?: (requestId: string) => void
     }) => {
       const { setSlot } = useSystemAppHeaderSlot()
+      mocks.lastSystemAppContentProps = { appId, launcherResetKey }
 
       useEffect(() => {
         if (appId !== "settings") return undefined
@@ -186,6 +193,7 @@ vi.mock("@/modules/apps/components/system-app-content", async () => {
       return (
         <div>
           {appId === "agent" ? "对话模块" : appId === "launcher" ? "应用模块" : appId === "workflow" ? "工作流模块" : appId}
+          {appId === "launcher" ? <span>launcher-reset:{launcherResetKey ?? "none"}</span> : null}
           {resourceContentOpenRequest ? (
             <button
               type="button"
@@ -221,6 +229,7 @@ beforeEach(() => {
   mocks.cheatCodeStateListener = null
   mocks.contentOpenRequestListener = null
   mocks.lastDockProps = null
+  mocks.lastSystemAppContentProps = null
   mocks.currentConfig = {
     global: {
       dockAppIds: ["agent", "drive", "automation", "workflow", "settings", "launcher"],
@@ -269,6 +278,34 @@ describe("App workflow entry visibility", () => {
     })
 
     expect(document.body.textContent).toContain("应用模块")
+  })
+
+  it("increments the launcher reset key when clicking the active launcher Dock icon", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      findTopNavigationButton("应用").click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.lastSystemAppContentProps).toMatchObject({
+      appId: "launcher",
+      launcherResetKey: 0,
+    })
+    expect(document.body.textContent).toContain("launcher-reset:0")
+
+    await act(async () => {
+      findTopNavigationButton("应用").click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.lastSystemAppContentProps).toMatchObject({
+      appId: "launcher",
+      launcherResetKey: 1,
+    })
+    expect(document.body.textContent).toContain("launcher-reset:1")
   })
 
   it("renders Dock app header slots without launcher controls", async () => {

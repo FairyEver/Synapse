@@ -133,6 +133,23 @@ describe("SystemAppContent launcher", () => {
     expect(document.body.textContent).not.toContain("数据库内容")
   })
 
+  it("returns to the launcher list when the launcher reset key changes", async () => {
+    const launcher = await renderLauncher(roots)
+
+    await act(async () => {
+      findButton("本地数据库").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("数据库内容")
+
+    await launcher.rerender({ launcherResetKey: 1 })
+
+    expect(document.body.textContent).toContain("本地数据库")
+    expect(document.body.textContent).not.toContain("数据库内容")
+    expect(document.querySelector("button[aria-label='返回应用列表']")).toBeNull()
+  })
+
   it("opens pending resource content requests inside a reachable embedded app shell", async () => {
     const onConsumed = vi.fn()
     await renderLauncher(roots, {
@@ -158,22 +175,33 @@ async function renderLauncher(
   roots: Root[],
   request: ContentOpenRequest | null = null,
   onConsumed?: (requestId: string) => void,
-): Promise<void> {
+): Promise<{
+  rerender: (options?: { readonly launcherResetKey?: number }) => Promise<void>
+}> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
-  await act(async () => {
-    root.render(
-      <SystemAppContent
-        appId="launcher"
-        resourceContentOpenRequest={request}
-        onResourceContentOpenRequestConsumed={onConsumed}
-      />,
-    )
-    await Promise.resolve()
-  })
+  const render = async (options: { readonly launcherResetKey?: number } = {}) => {
+    await act(async () => {
+      root.render(
+        <SystemAppContent
+          appId="launcher"
+          resourceContentOpenRequest={request}
+          onResourceContentOpenRequestConsumed={onConsumed}
+          launcherResetKey={options.launcherResetKey}
+        />,
+      )
+      await Promise.resolve()
+    })
+  }
+
+  await render()
+
+  return {
+    rerender: render,
+  }
 }
 
 function findButton(label: string): HTMLButtonElement {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -20,23 +20,33 @@ function requireAppsBridge(): AppsBridge {
 type AppsModuleProps = {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  readonly resetKey?: number
   readonly workflowEntryVisible?: boolean
 }
 
 export function AppsModule({
   pendingContentOpenRequest = null,
   onPendingContentOpenRequestConsumed,
+  resetKey = 0,
   workflowEntryVisible = false,
 }: AppsModuleProps = {}) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const resetKeyRef = useRef(resetKey)
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
     setActiveAppId("resource-repository")
     setResourceContentOpenRequest(pendingContentOpenRequest)
   }, [pendingContentOpenRequest])
+
+  useEffect(() => {
+    if (resetKeyRef.current === resetKey) return
+    resetKeyRef.current = resetKey
+    setActiveAppId(null)
+    setResourceContentOpenRequest(null)
+  }, [resetKey])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
     if (appId === "launcher") {
