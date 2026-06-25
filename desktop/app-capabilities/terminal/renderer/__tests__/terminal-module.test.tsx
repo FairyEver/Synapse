@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
@@ -232,6 +232,29 @@ vi.mock("sonner", () => ({
   toast: toastState,
 }))
 
+vi.mock("../../../../src/components/sidebar-content-layout", () => ({
+  SidebarContentLayout: ({
+    sidebar,
+    children,
+    contentScrollable,
+    sidebarResizable,
+  }: {
+    readonly sidebar: ReactNode
+    readonly children: ReactNode
+    readonly contentScrollable?: boolean
+    readonly sidebarResizable?: boolean
+  }) => (
+    <div
+      data-testid="terminal-sidebar-content-layout"
+      data-content-scrollable={String(contentScrollable)}
+      data-sidebar-resizable={String(sidebarResizable)}
+    >
+      <div data-testid="terminal-sidebar">{sidebar}</div>
+      {children}
+    </div>
+  ),
+}))
+
 import { Terminal as XtermTerminal } from "@xterm/xterm"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { TerminalModule } from "../index"
@@ -311,6 +334,15 @@ afterEach(() => {
 })
 
 describe("TerminalModule", () => {
+  it("uses the shared resizable sidebar layout", async () => {
+    await renderModule()
+
+    const layout = document.querySelector('[data-testid="terminal-sidebar-content-layout"]')
+    expect(layout).toBeTruthy()
+    expect(layout?.getAttribute("data-sidebar-resizable")).toBe("true")
+    expect(layout?.getAttribute("data-content-scrollable")).toBe("false")
+  })
+
   it("shows the empty state and creates a terminal session", async () => {
     await renderModule()
 
