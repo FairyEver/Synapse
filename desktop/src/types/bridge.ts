@@ -66,6 +66,7 @@ import type {
   SynapseContentStoreInstallResolveResult,
 } from "./content-store-install"
 import type {
+  SynapseInstallSourceToEditorPayload,
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
@@ -1049,6 +1050,9 @@ export type SynapseBridge = {
     recordComplete: (sessionId: string) => Promise<{ ok: true }>
   }
   installers: {
+    installSourceToEditor: (
+      payload: SynapseInstallSourceToEditorPayload,
+    ) => Promise<SynapseContentInstallResult>
     prepareLocalSkillSource: (
       payload: SynapsePrepareLocalSkillSourcePayload,
     ) => Promise<SynapseSkillInstallerSource>

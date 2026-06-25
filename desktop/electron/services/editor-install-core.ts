@@ -13,6 +13,12 @@ import type {
   SynapseInstallToEditorPayload,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
+import type {
+  SynapseInstallSourceToEditorPayload,
+  SynapseInstallerSource,
+  SynapseRuleInstallerSource,
+  SynapseSkillInstallerSource,
+} from "../../src/types/installers"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { builtinContentService } from "./builtin-content-service"
@@ -60,8 +66,25 @@ export type PreparedContentInstallSourceProvider = {
 }
 
 export type EditorInstallCoreDeps = {
+  installerSourceProvider?: InstallerInstallSourceProvider
   preparedSourceProvider: PreparedContentInstallSourceProvider
   resolveEditorInstallTarget(payload: SynapseResolveEditorTargetPayload): Promise<SynapseEditorResolvedTarget>
+}
+
+export type InstallerInstallSourceProvider = {
+  copyLocalSkillAttachment(
+    source: SynapseSkillInstallerSource,
+    relativePath: string,
+    targetPath: string,
+  ): Promise<void>
+  readInlineRule(source: SynapseRuleInstallerSource): Promise<string>
+  readLocalSkill(source: SynapseSkillInstallerSource): Promise<SynapseContentDetail<"skill">>
+}
+
+type EditorInstallSourceOverride = {
+  copySkillAttachment?: (relativePath: string, targetPath: string) => Promise<void>
+  readRuleBody?: () => Promise<string>
+  readSkillDetail?: () => Promise<SynapseContentDetail<"skill">>
 }
 
 type TrustedRuleTargetPath = {
@@ -207,6 +230,25 @@ function isTrustedRuleTargetPath(targetPath: string, trusted: TrustedRuleTargetP
   return isSamePath(targetPath, trusted.targetPath) || isPathInsideDirectory(targetPath, trusted.targetPath)
 }
 
+function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload): SynapseInstallToEditorPayload {
+  return {
+    editorId: payload.editorId,
+    scope: payload.scope,
+    projectPath: payload.projectPath,
+    contentType: payload.source.kind,
+    contentId: payload.source.sourceIdentity,
+    skillName: payload.source.kind === "skill" ? payload.source.name : undefined,
+    skillTitle: payload.source.kind === "skill" ? payload.source.title : undefined,
+    ruleName: payload.source.kind === "rule" ? payload.source.name : undefined,
+    installFormValues: payload.installFormValues,
+    overwriteConfirmed: payload.overwriteConfirmed,
+    replaceConfirmed: payload.replaceConfirmed,
+    replacedContentId: payload.replacedSourceIdentity,
+    variableSubstitutions: payload.variableSubstitutions,
+    preparedSourceId: payload.source.preparedSourceId,
+  }
+}
+
 async function getTrustedRuleTargets(editorId: string): Promise<TrustedRuleTargetPath[]> {
   const adapter = editorAdapterById.get(editorId)
   if (!adapter) return []
@@ -258,6 +300,50 @@ export class EditorInstallCore {
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
+    return this.runInstallToEditor(payload, security)
+  }
+
+  async installSourceToEditor(
+    payload: SynapseInstallSourceToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseContentInstallResult> {
+    return this.runInstallToEditor(
+      toInstallToEditorPayload(payload),
+      security,
+      this.createSourceOverride(payload.source),
+    )
+  }
+
+  private createSourceOverride(source: SynapseInstallerSource): EditorInstallSourceOverride | undefined {
+    if (source.kind === "rule" && source.origin === "inline") {
+      return {
+        readRuleBody: async () => this.requireInstallerSourceProvider().readInlineRule(source),
+      }
+    }
+
+    if (source.kind === "skill" && source.origin === "local-directory") {
+      return {
+        copySkillAttachment: async (relativePath, targetPath) =>
+          this.requireInstallerSourceProvider().copyLocalSkillAttachment(source, relativePath, targetPath),
+        readSkillDetail: async () => this.requireInstallerSourceProvider().readLocalSkill(source),
+      }
+    }
+
+    return undefined
+  }
+
+  private requireInstallerSourceProvider(): InstallerInstallSourceProvider {
+    if (!this.deps.installerSourceProvider) {
+      throw new Error("安装源服务尚未初始化。")
+    }
+    return this.deps.installerSourceProvider
+  }
+
+  private async runInstallToEditor(
+    payload: SynapseInstallToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+    sourceOverride?: EditorInstallSourceOverride,
+  ): Promise<SynapseContentInstallResult> {
     const target = await this.deps.resolveEditorInstallTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
 
@@ -295,7 +381,9 @@ export class EditorInstallCore {
             throw new Error(`当前编辑器没有返回合法的 ${definition.singularLabel} 安装目标。`)
           }
 
-          let ruleBody = payload.preparedSourceId
+          let ruleBody = sourceOverride?.readRuleBody
+            ? await sourceOverride.readRuleBody()
+            : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedRule(payload.preparedSourceId, payload.contentId)
             : (await contentService.getContent(payload.contentType, payload.contentId)).content
 
@@ -336,10 +424,12 @@ export class EditorInstallCore {
           }
 
           const prepareSkillDirectory = installStrategy.prepareSkillDirectory
-          const detail = payload.preparedSourceId
+          const detail = sourceOverride?.readSkillDetail
+            ? await sourceOverride.readSkillDetail()
+            : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
             : await contentService.getSkillDetail(payload.contentId)
-          const repositoryRootPath = payload.preparedSourceId || !detail || detail.source === "builtin"
+          const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail || detail.source === "builtin"
             ? null
             : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
@@ -409,7 +499,9 @@ export class EditorInstallCore {
                   logger.info("Staged skill file.", { filePath: path.basename(filePath) })
                 },
                 copyAttachment: async (attachment, attachmentTargetPath) => {
-                  if (payload.preparedSourceId) {
+                  if (sourceOverride?.copySkillAttachment) {
+                    await sourceOverride.copySkillAttachment(attachment.originalName, attachmentTargetPath)
+                  } else if (payload.preparedSourceId) {
                     await this.deps.preparedSourceProvider.copyPreparedSkillAttachment(
                       payload.preparedSourceId,
                       payload.contentId,

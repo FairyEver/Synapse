@@ -14,6 +14,7 @@ import type {
   SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
+import type { SynapseInstallSourceToEditorPayload } from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
@@ -37,6 +38,7 @@ import {
   replaceFileAtomically,
 } from "./editor-file-write-utils"
 import { EditorInstallCore } from "./editor-install-core"
+import { installerSourceService } from "./installer-source-service"
 
 const logger = createMainLogger("service.content-install")
 
@@ -373,10 +375,23 @@ export class ContentInstallService {
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
     const core = new EditorInstallCore({
+      installerSourceProvider: installerSourceService,
       preparedSourceProvider: this.preparedSourceProvider,
       resolveEditorInstallTarget: (nextPayload) => this.resolveEditorInstallTarget(nextPayload),
     })
     return core.installToEditor(payload, security)
+  }
+
+  async installSourceToEditor(
+    payload: SynapseInstallSourceToEditorPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseContentInstallResult> {
+    const core = new EditorInstallCore({
+      installerSourceProvider: installerSourceService,
+      preparedSourceProvider: this.preparedSourceProvider,
+      resolveEditorInstallTarget: (nextPayload) => this.resolveEditorInstallTarget(nextPayload),
+    })
+    return core.installSourceToEditor(payload, security)
   }
 
   async readEditorInstallFormValues(

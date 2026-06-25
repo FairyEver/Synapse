@@ -2,8 +2,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createInMemoryHarness } from "../../../runtime/ipc"
 
 const mocks = vi.hoisted(() => ({
+  installSourceToEditor: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
+}))
+
+vi.mock("../../../services/content-install-service", () => ({
+  contentInstallService: {
+    installSourceToEditor: mocks.installSourceToEditor,
+  },
+}))
+
+vi.mock("../../../services/install-status-cache-service", () => ({
+  installStatusCacheService: {
+    refresh: vi.fn(async () => []),
+  },
 }))
 
 vi.mock("../../../services/installer-source-service", () => ({
@@ -33,6 +46,15 @@ beforeEach(() => {
     name: "team-skill",
     description: "",
     mainContent: "# Skill",
+  })
+  mocks.installSourceToEditor.mockResolvedValue({
+    editorId: "codex",
+    label: "Codex",
+    scope: "global",
+    contentType: "rule",
+    contentId: "inline-rule:abc",
+    targetKind: "file",
+    targetPath: "/tmp/rules/team.rule.md",
   })
 })
 
@@ -80,6 +102,33 @@ describe("installersIpcModule", () => {
     expect(mocks.prepareLocalSkillSource).not.toHaveBeenCalled()
     expect(mocks.prepareInlineRuleSource).not.toHaveBeenCalled()
   })
+
+  it("installs prepared installer sources through the content install service", async () => {
+    const harness = createHarness()
+
+    await harness.invoke("synapse:installers:install-source-to-editor", {
+      editorId: "codex",
+      scope: "global",
+      source: {
+        kind: "rule",
+        origin: "inline",
+        sourceIdentity: "inline-rule:abc",
+        inlineSourceId: "source-1",
+        name: "team.rule",
+        body: "# Rule",
+      },
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editorId: "codex",
+        source: expect.objectContaining({ sourceIdentity: "inline-rule:abc" }),
+      }),
+      expect.objectContaining({
+        actor: { kind: "user" },
+      }),
+    )
+  })
 })
 
 function createHarness() {
@@ -87,6 +136,9 @@ function createHarness() {
   harness.registry.register(installersIpcModule, {
     moduleId: "installers",
     resolve: <T,>(_serviceId: string): T => {
+      if (_serviceId === "core.audit-sink") return { record: vi.fn() } as T
+      if (_serviceId === "core.permission-guard") return { check: vi.fn(async () => ({ allowed: true })) } as T
+      if (_serviceId === "core.event-bus") return { emit: vi.fn() } as T
       throw new Error("installer source IPC should not resolve broad services")
     },
   })

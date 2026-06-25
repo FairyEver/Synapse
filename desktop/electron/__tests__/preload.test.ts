@@ -445,6 +445,18 @@ describe("preload bridge", () => {
 
     await bridge.installers.prepareLocalSkillSource({ sourceDirectoryPath: "/tmp/skill" })
     await bridge.installers.prepareInlineRuleSource({ name: "team.rule", body: "# Rule" })
+    await bridge.installers.installSourceToEditor({
+      editorId: "codex" as never,
+      scope: "global",
+      source: {
+        kind: "rule",
+        origin: "inline",
+        sourceIdentity: "inline-rule:abc",
+        inlineSourceId: "source-1",
+        name: "team.rule",
+        body: "# Rule",
+      },
+    })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:installers:prepare-local-skill-source",
@@ -453,6 +465,21 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:installers:prepare-inline-rule-source",
       { name: "team.rule", body: "# Rule" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:installers:install-source-to-editor",
+      {
+        editorId: "codex",
+        scope: "global",
+        source: {
+          kind: "rule",
+          origin: "inline",
+          sourceIdentity: "inline-rule:abc",
+          inlineSourceId: "source-1",
+          name: "team.rule",
+          body: "# Rule",
+        },
+      },
     )
   })
 

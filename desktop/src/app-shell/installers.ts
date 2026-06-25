@@ -1,5 +1,7 @@
 import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseContentInstallResult } from "@/types/editor"
 import type {
+  SynapseInstallSourceToEditorPayload,
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
@@ -31,7 +33,14 @@ async function prepareInlineRuleSource(
   return requireInstallersBridge().prepareInlineRuleSource(payload)
 }
 
+async function installSourceToEditor(
+  payload: SynapseInstallSourceToEditorPayload,
+): Promise<SynapseContentInstallResult> {
+  return requireInstallersBridge().installSourceToEditor(payload)
+}
+
 export {
+  installSourceToEditor,
   prepareInlineRuleSource,
   prepareLocalSkillSource,
 }

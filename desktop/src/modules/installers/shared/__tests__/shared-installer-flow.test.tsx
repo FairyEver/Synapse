@@ -10,6 +10,19 @@ import { SharedInstallerFlow } from "../shared-installer-flow"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+const mocks = vi.hoisted(() => ({
+  installSourceToEditor: vi.fn(),
+  resolveEditorInstallTarget: vi.fn(),
+}))
+
+vi.mock("@/app-shell/content", () => ({
+  resolveEditorInstallTarget: mocks.resolveEditorInstallTarget,
+}))
+
+vi.mock("@/app-shell/installers", () => ({
+  installSourceToEditor: mocks.installSourceToEditor,
+}))
+
 const editor: SynapseEditorAdapterSummary = {
   id: "codex" as SynapseEditorAdapterSummary["id"],
   label: "Codex",
@@ -70,11 +83,24 @@ afterEach(() => {
 
 describe("SharedInstallerFlow", () => {
   it("starts embedded sources at editor selection", async () => {
+    mocks.resolveEditorInstallTarget.mockResolvedValue({
+      editorId: "codex",
+      label: "Codex",
+      scope: "global",
+      contentType: "rule",
+      message: null,
+      status: "ready",
+      targetKind: "file",
+      targetPath: "/tmp/rules/team.rule.md",
+      targetExists: false,
+    })
     await renderFlow()
 
     expect(document.body.textContent).toContain("选择编辑器")
     await act(async () => {
       clickButton("Codex")
+      await Promise.resolve()
+      await Promise.resolve()
     })
     expect(document.body.textContent).toContain("目标位置")
   })

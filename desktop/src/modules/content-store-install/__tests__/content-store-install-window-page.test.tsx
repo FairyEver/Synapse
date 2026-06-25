@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   recordComplete: vi.fn(),
   resolve: vi.fn(),
+  resolveEditorInstallTarget: vi.fn(),
+  installSourceToEditor: vi.fn(),
   startLogin: vi.fn(),
 }))
 
@@ -55,6 +57,14 @@ vi.mock("@/app-shell/content-store-install", () => ({
   prepareContentStoreInstallPackage: mocks.prepare,
   recordContentStoreInstallComplete: mocks.recordComplete,
   resolveContentStoreInstallSession: mocks.resolve,
+}))
+
+vi.mock("@/app-shell/content", () => ({
+  resolveEditorInstallTarget: mocks.resolveEditorInstallTarget,
+}))
+
+vi.mock("@/app-shell/installers", () => ({
+  installSourceToEditor: mocks.installSourceToEditor,
 }))
 
 vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
@@ -112,6 +122,26 @@ describe("ContentStoreInstallWindowPage", () => {
       },
     })
     mocks.recordComplete.mockResolvedValue({ ok: true })
+    mocks.resolveEditorInstallTarget.mockResolvedValue({
+      editorId: "codex",
+      label: "Codex",
+      scope: "global",
+      contentType: "skill",
+      message: null,
+      status: "ready",
+      targetKind: "directory",
+      targetPath: "/tmp/skills/store-skill",
+      targetExists: false,
+    })
+    mocks.installSourceToEditor.mockResolvedValue({
+      editorId: "codex",
+      label: "Codex",
+      scope: "global",
+      contentType: "skill",
+      contentId: "content-1",
+      targetKind: "directory",
+      targetPath: "/tmp/skills/store-skill",
+    })
 
     await renderPage()
 
@@ -120,6 +150,8 @@ describe("ContentStoreInstallWindowPage", () => {
 
     await act(async () => {
       clickButton("Codex")
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     expect(document.body.textContent).toContain("目标位置")

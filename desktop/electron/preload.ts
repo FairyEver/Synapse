@@ -74,6 +74,7 @@ const IPC_CHANNELS = {
     "recordComplete": "synapse:content-store-install:record-complete",
   },
   "installers": {
+    "installSourceToEditor": "synapse:installers:install-source-to-editor",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
   },
@@ -999,6 +1000,7 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["content-store-install"].recordComplete)({ sessionId }),
   },
   installers: {
+    installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
     prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),
     prepareInlineRuleSource: invoke(IPC_CHANNELS.installers.prepareInlineRuleSource),
   },

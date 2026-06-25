@@ -1,6 +1,13 @@
-import type { ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 
+import { resolveEditorInstallTarget } from "@/app-shell/content"
+import { installSourceToEditor } from "@/app-shell/installers"
 import { Button } from "@/components/ui/button"
+import {
+  EditorWriteTargetSelector,
+  type EditorWriteTargetSelection,
+  type ResolveEditorTargetInput,
+} from "@/modules/content/components/editor-write-target-selector"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type {
@@ -49,18 +56,55 @@ export function SharedInstallerFlow({
   onCancel,
   onInstall,
   onInstalled,
+  projects,
   renderSourceInput,
   source: initialSource,
 }: SharedInstallerFlowProps) {
   const flow = useInstallerFlow({ editors, kind, source: initialSource })
+  const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [error, setError] = useState("")
+
+  const resolveTarget = useCallback(async (input: ResolveEditorTargetInput) => {
+    if (!flow.source) {
+      throw new Error("安装源不可用。")
+    }
+    return resolveEditorInstallTarget({
+      editorId: input.editorId,
+      scope: input.scope,
+      projectPath: input.projectPath,
+      contentType: flow.source.kind,
+      contentId: flow.source.sourceIdentity,
+      preparedSourceId: flow.source.preparedSourceId,
+      skillName: flow.source.kind === "skill" ? flow.source.name : undefined,
+      skillTitle: flow.source.kind === "skill" ? flow.source.title : undefined,
+      ruleName: flow.source.kind === "rule" ? flow.source.name : undefined,
+    })
+  }, [flow.source])
 
   const handleInstall = async () => {
-    if (!flow.source || !flow.selectedEditor) {
+    if (!flow.source || !flow.selectedEditor || !selection || selection.activeTarget?.status !== "ready") {
       return
     }
-    await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
-    await onInstalled()
-    flow.markInstalled()
+    setInstalling(true)
+    setError("")
+    try {
+      await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
+      if (!onInstall) {
+        await installSourceToEditor({
+          editorId: flow.selectedEditor.id,
+          projectPath: selection.scope === "project" ? selection.projectPath : undefined,
+          scope: selection.scope,
+          source: flow.source,
+        })
+      }
+      await onInstalled()
+      flow.markInstalled()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "安装失败")
+    } finally {
+      setInstalling(false)
+    }
   }
 
   const containerClassName = mode === "page"
@@ -86,7 +130,11 @@ export function SharedInstallerFlow({
                 type="button"
                 variant="outline"
                 className="justify-start"
-                onClick={() => flow.selectEditor(editor)}
+                onClick={() => {
+                  setSelection(null)
+                  setError("")
+                  flow.selectEditor(editor)
+                }}
               >
                 {editor.label}
               </Button>
@@ -101,12 +149,29 @@ export function SharedInstallerFlow({
       {flow.step === "target" ? (
         <div className="flex flex-col gap-3">
           <h2 className="font-heading text-lg font-medium">目标位置</h2>
-          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-            {flow.selectedEditor?.label}
-          </div>
+          {flow.source && flow.selectedEditor ? (
+            <EditorWriteTargetSelector
+              actionKind="install"
+              contentType={flow.source.kind}
+              editor={flow.selectedEditor}
+              loggerName="installer.flow.target"
+              open
+              projects={projects}
+              resolveTarget={resolveTarget}
+              onError={setError}
+              onSelectionChange={setSelection}
+            />
+          ) : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={flow.back}>上一步</Button>
-            <Button type="button" onClick={handleInstall}>安装</Button>
+            <Button type="button" variant="outline" onClick={flow.back} disabled={installing}>上一步</Button>
+            <Button
+              type="button"
+              onClick={handleInstall}
+              disabled={installing || selection?.activeTarget?.status !== "ready"}
+            >
+              {installing ? "安装中" : "安装"}
+            </Button>
           </div>
         </div>
       ) : null}
