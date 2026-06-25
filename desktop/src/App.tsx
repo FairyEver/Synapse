@@ -67,6 +67,7 @@ function MainApp() {
     useState<OpenAgentSessionPayload | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
@@ -240,6 +241,17 @@ function MainApp() {
 
   const accountUiVisible = isAccountUiVisible()
 
+  const handleDockValueChange = useCallback((value: ActiveAppId) => {
+    if (value === activeAppIdRef.current) {
+      if (value === "launcher") {
+        setLauncherResetKey((current) => current + 1)
+      }
+      return
+    }
+
+    setActiveAppId(value, "navigation")
+  }, [setActiveAppId])
+
   return (
     <IdentityGate>
       <AppShellLayout
@@ -247,7 +259,7 @@ function MainApp() {
           <AppShellDock
             apps={dockApps}
             value={activeAppId}
-            onValueChange={(value) => setActiveAppId(value, "navigation")}
+            onValueChange={handleDockValueChange}
           />
         }
         actions={accountUiVisible ? (
@@ -261,6 +273,7 @@ function MainApp() {
             <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
               <SystemAppContent
                 appId={activeAppId}
+                launcherResetKey={launcherResetKey}
                 workflowEntryVisible={workflowEntryVisible}
                 resourceContentOpenRequest={pendingAppContentOpenRequest}
                 onResourceContentOpenRequestConsumed={(requestId) => {

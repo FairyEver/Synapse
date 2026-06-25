@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import {
@@ -33,6 +33,7 @@ type AppsBridge = {
 
 type SystemAppContentProps = {
   readonly appId: SynapseSystemAppId
+  readonly launcherResetKey?: number
   readonly workflowEntryVisible?: boolean
   readonly resourceContentOpenRequest?: ContentOpenRequest | null
   readonly onResourceContentOpenRequestConsumed?: (requestId: string) => void
@@ -43,6 +44,7 @@ type SystemAppContentProps = {
 
 function SystemAppContent({
   appId,
+  launcherResetKey = 0,
   workflowEntryVisible = false,
   resourceContentOpenRequest = null,
   onResourceContentOpenRequestConsumed,
@@ -71,6 +73,7 @@ function SystemAppContent({
       <LauncherContent
         pendingContentOpenRequest={resourceContentOpenRequest}
         onPendingContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
+        resetKey={launcherResetKey}
         workflowEntryVisible={workflowEntryVisible}
       />
     )
@@ -100,21 +103,31 @@ function SystemAppContent({
 function LauncherContent({
   pendingContentOpenRequest = null,
   onPendingContentOpenRequestConsumed,
+  resetKey = 0,
   workflowEntryVisible = false,
 }: {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  readonly resetKey?: number
   readonly workflowEntryVisible?: boolean
 }) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const resetKeyRef = useRef(resetKey)
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
     setActiveAppId("resource-repository")
     setResourceContentOpenRequest(pendingContentOpenRequest)
   }, [pendingContentOpenRequest])
+
+  useEffect(() => {
+    if (resetKeyRef.current === resetKey) return
+    resetKeyRef.current = resetKey
+    setActiveAppId(null)
+    setResourceContentOpenRequest(null)
+  }, [resetKey])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
     setActiveAppId(appId)

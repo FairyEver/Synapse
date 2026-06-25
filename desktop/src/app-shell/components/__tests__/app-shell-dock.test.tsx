@@ -73,6 +73,26 @@ describe("AppShellDock", () => {
     expect(findButtonByLabel("对话").getAttribute("draggable")).toBeNull()
     expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBeNull()
   })
+
+  it("reports clicks on the currently active app icon", async () => {
+    const onValueChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AppShellDock apps={apps} value="launcher" onValueChange={onValueChange} />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      findButtonByLabel("应用").click()
+      await Promise.resolve()
+    })
+
+    expect(onValueChange).toHaveBeenCalledWith("launcher")
+  })
 })
 
 function findButtonByLabel(label: string): HTMLButtonElement {
