@@ -30,6 +30,26 @@ vi.mock("../hooks/use-editor-scan", () => ({
   }),
 }))
 
+vi.mock("../hooks/use-editor-directories", () => ({
+  useEditorDirectories: () => ({
+    directories: [
+      {
+        editorId: "cursor",
+        label: "Cursor",
+        rulesPath: null,
+        rulesExists: false,
+        skillsPath: "/Users/liyang/.cursor/skills",
+        skillsExists: true,
+      },
+    ],
+    isLoading: false,
+    error: null,
+    handleOpen: vi.fn(),
+    handleCreate: vi.fn(),
+    reload: vi.fn(),
+  }),
+}))
+
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
     success: vi.fn(),
@@ -121,7 +141,7 @@ describe("EditorScanModule", () => {
     expect(screenText()).toContain("未检测到 Cursor 的 skill 或规则")
   })
 
-  it("switches to the selected IDE directory placeholder", async () => {
+  it("switches to the selected IDE directory view", async () => {
     await renderEditorScanModule(roots)
 
     await act(async () => {
@@ -129,7 +149,9 @@ describe("EditorScanModule", () => {
       await Promise.resolve()
     })
 
-    expect(screenText()).toContain("cursor")
+    expect(screenText()).toContain("全局规则")
+    expect(screenText()).toContain("不支持")
+    expect(screenText()).toContain("/Users/liyang/.cursor/skills")
   })
 })
 
