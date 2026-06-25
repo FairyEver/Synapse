@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
+  TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
   TERMINAL_GROUP_DELETE_CAPABILITY_ID,
   TERMINAL_GROUP_LIST_CAPABILITY_ID,
   TERMINAL_GROUP_RENAME_CAPABILITY_ID,
@@ -219,6 +221,86 @@ describe("createTerminalCapabilityDispatcher", () => {
         policyId: "terminal-deny",
       },
     }))
+  })
+
+  it("dispatches group command create with permission and audit metadata", async () => {
+    const created = createCommand()
+    const createGroupCommand = vi.fn(async () => created)
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { createGroupCommand } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    const result = await dispatcher.dispatch(TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID, {
+      groupId: "g1",
+      name: "dev",
+      command: "pnpm dev",
+    }, { source: "mcp-http" })
+
+    expect(createGroupCommand).toHaveBeenCalledWith({
+      groupId: "g1",
+      name: "dev",
+      command: "pnpm dev",
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "g1",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_COMMAND_CREATE_CAPABILITY_ID,
+        boundary: "terminal.mcp.createGroupCommand",
+        groupId: "g1",
+        byteCount: Buffer.byteLength("pnpm dev"),
+      },
+    }))
+    expect(result).toEqual({ ok: true, data: created, affected: 1 })
+  })
+
+  it("dispatches group command launch through the shell permission boundary", async () => {
+    const launched = createSession({ id: "session-command", title: "dev" })
+    const launchGroupCommand = vi.fn(async () => launched)
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: { launchGroupCommand } as never,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    const result = await dispatcher.dispatch(TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID, {
+      groupId: "g1",
+      commandId: "cmd-dev",
+      cols: 100,
+      rows: 30,
+    }, { source: "mcp-http" })
+
+    expect(launchGroupCommand).toHaveBeenCalledWith({
+      groupId: "g1",
+      commandId: "cmd-dev",
+      cols: 100,
+      rows: 30,
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "cmd-dev",
+      outcome: "allowed",
+      metadata: {
+        source: "mcp-http",
+        capabilityAction: TERMINAL_GROUP_COMMAND_LAUNCH_CAPABILITY_ID,
+        boundary: "terminal.mcp.launchGroupCommand",
+        groupId: "g1",
+        commandId: "cmd-dev",
+      },
+    }))
+    expect(result).toEqual({ ok: true, data: launched, affected: 1 })
   })
 
   it("authorizes group delete before calling service as the mcp actor", async () => {
@@ -510,5 +592,22 @@ function createGroupBase() {
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt: "2026-06-24T00:00:00.000Z",
     sortOrder: 0,
+  }
+}
+
+function createCommand(overrides: Partial<ReturnType<typeof createCommandBase>> = {}) {
+  return {
+    ...createCommandBase(),
+    ...overrides,
+  }
+}
+
+function createCommandBase() {
+  return {
+    id: "cmd-dev",
+    name: "dev",
+    command: "pnpm dev",
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt: "2026-06-24T00:00:00.000Z",
   }
 }
