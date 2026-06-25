@@ -18,6 +18,7 @@ export {
   coreModelPriceDescriptor,
   coreProcessEnvironmentDescriptor,
   coreHttpTestDescriptor,
+  coreQuickInputDescriptor,
   coreUpdateDescriptor,
   coreWorkflowPackageDescriptor,
   createUiTrayDescriptor,

@@ -24,6 +24,10 @@ import type {
   GenerateDocxResult,
 } from "../../app-capabilities/document-template/shared/schema"
 import type {
+  SynapseQuickInputChangedEvent,
+  SynapseQuickInputItem,
+} from "./quick-input"
+import type {
   ScreenshotArtifact,
   ScreenshotCaptureInput,
   ScreenshotCaptureToFileInput,
@@ -838,6 +842,14 @@ export type SynapseBridge = {
     chooseJsonFile: () => Promise<string | null>
     chooseOutputFile: (input?: { defaultPath?: string }) => Promise<string | null>
     generateDocx: (input: GenerateDocxInput) => Promise<GenerateDocxResult>
+  }
+  quickInput: {
+    list: () => Promise<SynapseQuickInputItem[]>
+    create: (input: { content: string }) => Promise<SynapseQuickInputItem>
+    update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
+    delete: (input: { id: string }) => Promise<void>
+    pinToTop: (input: { id: string }) => Promise<SynapseQuickInputItem[]>
+    onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>

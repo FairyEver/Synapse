@@ -40,6 +40,11 @@ import { createScreenshotService } from "../../app-capabilities/screenshot/main/
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
+import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
+import {
+  QUICK_INPUT_ITEMS_NAMESPACE,
+  QUICK_INPUT_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/quick-input/shared/capability"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -89,7 +94,7 @@ import {
   type ProviderService,
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
-import type { ConversationEntryV1 } from "../runtime/data-repo"
+import type { ConversationEntryV1, QuickInputItemEntryV1, QuickInputSettingsEntryV1 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
 import { ExecutionIsolationService } from "../services/execution-isolation"
@@ -164,6 +169,7 @@ import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunResult, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import type { SynapseConfig, SynapseProjectConfig, SynapseRepositoryConfig } from "../../src/types/config"
+import { SYNAPSE_APP_VERSION } from "../../src/lib/app-version"
 import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
@@ -308,6 +314,26 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   },
   async stop(instance) {
     await instance.stop()
+  },
+}
+
+export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
+  id: "core.quick-input",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.config"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createQuickInputService({
+      items: dataRepository.namespace<QuickInputItemEntryV1>(QUICK_INPUT_ITEMS_NAMESPACE),
+      settings: dataRepository.namespace<QuickInputSettingsEntryV1>(QUICK_INPUT_SETTINGS_NAMESPACE),
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      appVersion: SYNAPSE_APP_VERSION,
+      logger: ctx.logger.child("quick-input"),
+    })
+  },
+  async start(instance) {
+    await instance.initialize()
   },
 }
 
