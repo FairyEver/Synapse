@@ -235,30 +235,23 @@ function EditorScanModule() {
       onSelect={setSelectedEditorId}
     />
   )
-  const contentHeader = (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2.5">
-      <h2 className="text-lg font-semibold">
-        {globalResult?.editorLabel ?? "IDE"}
-      </h2>
-      {contentTab === "skill" && selectedSkills.length > 0 ? (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
-          <Button variant="outline" size="sm" onClick={clearSkillSelection}>
-            <X data-icon="inline-start" />
-            取消选择
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
-            <Copy data-icon="inline-start" />
-            复制到...
-          </Button>
-          <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
-            <Trash2 data-icon="inline-start" />
-            移到废纸篓
-          </Button>
-        </div>
-      ) : null}
+  const selectionToolbar = contentTab === "skill" && selectedSkills.length > 0 ? (
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b bg-background px-3 py-2">
+      <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
+      <Button variant="outline" size="sm" onClick={clearSkillSelection}>
+        <X data-icon="inline-start" />
+        取消选择
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
+        <Copy data-icon="inline-start" />
+        复制到...
+      </Button>
+      <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+        <Trash2 data-icon="inline-start" />
+        移到废纸篓
+      </Button>
     </div>
-  )
+  ) : null
 
   const renderContent = () => {
     if (!data && loading) {
@@ -358,10 +351,10 @@ function EditorScanModule() {
       onValueChange={setAppViewTab}
       actions={headerActions}
     >
-      <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
+      <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface" sidebarResizable>
         {appViewTab === "content" ? (
           <div data-editor-scan-content-panel className="flex h-full flex-col">
-            {contentHeader}
+            {selectionToolbar}
             <div className="min-h-0 flex-1 p-2">
               {renderContent()}
             </div>

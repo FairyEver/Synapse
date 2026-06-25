@@ -62,11 +62,13 @@ vi.mock("@/components/sidebar-content-layout", () => ({
   SidebarContentLayout: ({
     sidebar,
     children,
+    sidebarResizable,
   }: {
     readonly sidebar: ReactNode
     readonly children: ReactNode
+    readonly sidebarResizable?: boolean
   }) => (
-    <div>
+    <div data-sidebar-resizable={sidebarResizable ? "true" : "false"}>
       <aside>{sidebar}</aside>
       <main>{children}</main>
     </div>
@@ -138,9 +140,24 @@ describe("EditorScanModule", () => {
 
     expect(screenText()).toContain("内容")
     expect(screenText()).toContain("目录")
-    expect(screenText()).toContain("编辑器")
     expect(screenText()).toContain("Cursor")
     expect(screenText()).toContain("未检测到 Cursor 的 skill 或规则")
+  })
+
+  it("uses the same resizable sidebar layout as agent surfaces", async () => {
+    await renderEditorScanModule(roots)
+
+    expect(document.querySelector("[data-sidebar-resizable]")?.getAttribute("data-sidebar-resizable"))
+      .toBe("true")
+  })
+
+  it("does not render duplicate editor headings in the sidebar or content panel", async () => {
+    await renderEditorScanModule(roots)
+
+    const contentPanel = document.querySelector("[data-editor-scan-content-panel]")
+
+    expect(document.querySelector("[data-editor-scan-sidebar-heading]")).toBeNull()
+    expect(contentPanel?.querySelector("h2")).toBeNull()
   })
 
   it("switches to the selected IDE directory view", async () => {
