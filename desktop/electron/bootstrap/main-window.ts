@@ -63,16 +63,36 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
 
   attachDevelopmentInputShortcuts(window)
 
+  let pendingFullscreenClose = false
+
   window.once("ready-to-show", () => {
     logger.info("Main window is ready to show.")
     window.show()
   })
 
   window.on("close", (event) => {
-    if (!deps.isAppQuitting()) {
-      event.preventDefault()
-      window.hide()
+    if (deps.isAppQuitting()) {
+      return
     }
+
+    event.preventDefault()
+
+    if (pendingFullscreenClose) {
+      return
+    }
+
+    if (window.isFullScreen()) {
+      pendingFullscreenClose = true
+      window.once("leave-full-screen", () => {
+        pendingFullscreenClose = false
+        if (deps.isAppQuitting() || window.isDestroyed()) return
+        window.hide()
+      })
+      window.setFullScreen(false)
+      return
+    }
+
+    window.hide()
   })
 
   window.on("closed", () => {
