@@ -20,6 +20,7 @@ const modelPriceBridge = vi.hoisted(() => ({
   clearRules: vi.fn(),
   listPresets: vi.fn(),
   importPreset: vi.fn(),
+  importPresets: vi.fn(),
 }))
 
 vi.mock("@/app-shell/notifications", () => ({
@@ -55,6 +56,7 @@ beforeEach(() => {
   modelPriceBridge.clearRules.mockReset()
   modelPriceBridge.listPresets.mockReset()
   modelPriceBridge.importPreset.mockReset()
+  modelPriceBridge.importPresets.mockReset()
 })
 
 afterEach(() => {
@@ -145,8 +147,8 @@ describe("PriceRulesView", () => {
     expect(notifications.success).toHaveBeenCalledWith("已清空")
   })
 
-  it("imports a preset and updates rows", async () => {
-    modelPriceBridge.importPreset.mockResolvedValueOnce([
+  it("imports selected presets and updates rows", async () => {
+    modelPriceBridge.importPresets.mockResolvedValueOnce([
       priceRule({ id: "mpr_123456789abc", modelPattern: "deepseek-v4-pro", inputPer1M: 3 }),
     ])
     const onSaved = vi.fn()
@@ -182,7 +184,7 @@ describe("PriceRulesView", () => {
     expect(document.body.textContent).toContain("DeepSeek 官方")
 
     await act(async () => {
-      clickRadio("DeepSeek 官方")
+      clickCheckbox("DeepSeek 官方")
       await flushPromises()
     })
 
@@ -191,12 +193,12 @@ describe("PriceRulesView", () => {
       await flushPromises()
     })
 
-    expect(modelPriceBridge.importPreset).toHaveBeenCalledWith("deepseek-official")
+    expect(modelPriceBridge.importPresets).toHaveBeenCalledWith(["openai", "deepseek-official"])
     expect(inputValues()).toContain("deepseek-v4-pro")
     expect(inputValues()).not.toContain("local-model")
     expect(document.body.textContent).not.toContain("mpr_123456789abc")
     expect(onSaved).toHaveBeenCalledTimes(1)
-    expect(notifications.success).toHaveBeenCalledWith("已导入预设")
+    expect(notifications.success).toHaveBeenCalledWith("已导入 2 个预设")
   })
 
   it("surfaces save validation errors without zeroing invalid prices", async () => {
@@ -242,7 +244,7 @@ describe("PriceRulesView", () => {
 
   it("disables table controls while importing", async () => {
     let resolveImport: (rules: ModelPriceRule[]) => void = () => undefined
-    modelPriceBridge.importPreset.mockReturnValueOnce(new Promise<ModelPriceRule[]>((resolve) => {
+    modelPriceBridge.importPresets.mockReturnValueOnce(new Promise<ModelPriceRule[]>((resolve) => {
       resolveImport = resolve
     }))
     const host = document.createElement("div")
@@ -330,10 +332,10 @@ function clickButton(label: string): void {
   button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
-function clickRadio(label: string): void {
-  const radio = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
-  if (!radio) throw new Error(`Radio not found: ${label}`)
-  radio.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+function clickCheckbox(label: string): void {
+  const checkbox = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+  if (!checkbox) throw new Error(`Checkbox not found: ${label}`)
+  checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
 function changeInput(label: string, value: string): void {

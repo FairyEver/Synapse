@@ -52,13 +52,10 @@ export function registerModelPriceHandlers(): void {
   })
   handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsList, async () => modelPrice.listPresets())
   handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsImport, async (_event, input?: unknown) => {
-    if (!isModelPricePresetId(input)) {
-      throw new Error("Invalid model price preset id.")
-    }
-    const presetId: ModelPricePresetId = input
-    const importedRules = modelPrice.importPreset(presetId)
+    const presetIds = validateModelPricePresetImportInput(input)
+    const importedRules = modelPrice.importPresets(presetIds)
     logger.info("Model price preset import completed.", {
-      presetId,
+      presetIds,
       resultingRuleCount: importedRules.length,
     })
     return importedRules
@@ -95,6 +92,14 @@ export function registerModelPriceHandlers(): void {
   })
 
   registered = true
+}
+
+function validateModelPricePresetImportInput(input: unknown): ModelPricePresetId[] {
+  if (isModelPricePresetId(input)) return [input]
+  if (!Array.isArray(input) || input.length === 0 || !input.every(isModelPricePresetId)) {
+    throw new Error("Invalid model price preset id.")
+  }
+  return input
 }
 
 export function validateModelPriceRuleInputs(value: unknown): ModelPriceRuleInput[] {

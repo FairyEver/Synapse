@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   modelPriceService: {
     clearRules: vi.fn(),
     importPreset: vi.fn(),
+    importPresets: vi.fn(),
     listCoverage: vi.fn(),
     listPresets: vi.fn(),
     listRules: vi.fn(),
@@ -54,6 +55,7 @@ describe("model price IPC handlers", () => {
     mocks.logger.info.mockClear()
     mocks.modelPriceService.clearRules.mockReset()
     mocks.modelPriceService.importPreset.mockReset()
+    mocks.modelPriceService.importPresets.mockReset()
     mocks.modelPriceService.listCoverage.mockReset()
     mocks.modelPriceService.listPresets.mockReset()
     mocks.modelPriceService.listRules.mockReset()
@@ -64,23 +66,42 @@ describe("model price IPC handlers", () => {
     const presetSummaries = [{ id: "deepseek-official", label: "DeepSeek 官方", ruleCount: 2 }]
     const importedRules = [{ id: "mpr_123456789abc", modelPattern: "deepseek-v4-pro" }]
     mocks.modelPriceService.listPresets.mockReturnValueOnce(presetSummaries)
-    mocks.modelPriceService.importPreset.mockReturnValueOnce(importedRules)
+    mocks.modelPriceService.importPresets.mockReturnValueOnce(importedRules)
 
     const { registerModelPriceHandlers } = await import("../ipc-handlers")
     registerModelPriceHandlers()
 
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsList)?.({})).toBe(presetSummaries)
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, "deepseek-official")).toBe(importedRules)
-    expect(mocks.modelPriceService.importPreset).toHaveBeenCalledWith("deepseek-official")
+    expect(mocks.modelPriceService.importPresets).toHaveBeenCalledWith(["deepseek-official"])
     expect(mocks.logger.info).toHaveBeenCalledWith("Model price preset import completed.", {
-      presetId: "deepseek-official",
+      presetIds: ["deepseek-official"],
       resultingRuleCount: 1,
     })
 
     await expect(async () => {
       await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, "missing-preset")
     }).rejects.toThrow("Invalid model price preset id.")
-    expect(mocks.modelPriceService.importPreset).toHaveBeenCalledTimes(1)
+    expect(mocks.modelPriceService.importPresets).toHaveBeenCalledTimes(1)
+  })
+
+  it("imports multiple presets from the existing import channel", async () => {
+    const importedRules = [{ id: "mpr_123456789abc", modelPattern: "deepseek-v4-pro" }]
+    mocks.modelPriceService.importPresets.mockReturnValueOnce(importedRules)
+
+    const { registerModelPriceHandlers } = await import("../ipc-handlers")
+    registerModelPriceHandlers()
+
+    await expect(mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, ["deepseek-official", "aliyun-bailian"])).resolves.toBe(importedRules)
+    expect(mocks.modelPriceService.importPresets).toHaveBeenCalledWith(["deepseek-official", "aliyun-bailian"])
+
+    await expect(async () => {
+      await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, [])
+    }).rejects.toThrow("Invalid model price preset id.")
+    await expect(async () => {
+      await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, ["deepseek-official", "missing-preset"])
+    }).rejects.toThrow("Invalid model price preset id.")
+    expect(mocks.modelPriceService.importPresets).toHaveBeenCalledTimes(1)
   })
 
   it("keeps clear and reset channels mapped to clear semantics", async () => {

@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -81,7 +80,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   const [clearing, setClearing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
-  const [selectedPresetId, setSelectedPresetId] = useState<ModelPricePresetId | null>(null)
+  const [selectedPresetIds, setSelectedPresetIds] = useState<ModelPricePresetId[]>([])
   const busy = saving || clearing || importing
 
   useEffect(() => {
@@ -100,15 +99,23 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
     if (!importDialogOpen) return
     const presets = presetState.data
     if (!presets?.length) {
-      setSelectedPresetId(null)
+      setSelectedPresetIds([])
       return
     }
-    setSelectedPresetId((current) => (
-      current && presets.some((preset) => preset.id === current)
-        ? current
-        : presets[0].id
-    ))
+    setSelectedPresetIds((current) => {
+      const validIds = current.filter((presetId) => presets.some((preset) => preset.id === presetId))
+      return validIds.length > 0 ? validIds : [presets[0].id]
+    })
   }, [importDialogOpen, presetState.data])
+
+  const togglePresetSelection = (presetId: ModelPricePresetId, checked: boolean) => {
+    setSelectedPresetIds((current) => {
+      if (checked) {
+        return current.includes(presetId) ? current : [...current, presetId]
+      }
+      return current.filter((candidate) => candidate !== presetId)
+    })
+  }
 
   const updateRow = (clientId: string, field: PriceField, value: string) => {
     setRows((current) => current.map((row) => (
@@ -159,14 +166,17 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   const importPreset = async () => {
-    if (!selectedPresetId) return
+    if (selectedPresetIds.length === 0) return
     setImporting(true)
     try {
-      const importedRows = await requireSynapseBridge().modelPrice.importPreset(selectedPresetId)
+      const selectedIds = presetState.data
+        ?.map((preset) => preset.id)
+        .filter((presetId) => selectedPresetIds.includes(presetId)) ?? selectedPresetIds
+      const importedRows = await requireSynapseBridge().modelPrice.importPresets(selectedIds)
       setRows(importedRows.map(toEditableRule))
       setImportDialogOpen(false)
       onSaved()
-      showSuccess("已导入预设")
+      showSuccess(selectedIds.length > 1 ? `已导入 ${selectedIds.length} 个预设` : "已导入预设")
     } catch {
       showError("导入失败")
     } finally {
@@ -212,8 +222,9 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
               </DialogHeader>
               <PresetList
                 state={presetState}
-                selectedPresetId={selectedPresetId}
-                onSelect={setSelectedPresetId}
+                selectedPresetIds={selectedPresetIds}
+                disabled={importing}
+                onCheckedChange={togglePresetSelection}
               />
               <DialogFooter>
                 <Button
@@ -227,7 +238,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
                 <Button
                   type="button"
                   onClick={() => void importPreset()}
-                  disabled={importing || !selectedPresetId || presetState.loading || !!presetState.error}
+                  disabled={importing || selectedPresetIds.length === 0 || presetState.loading || !!presetState.error}
                 >
                   {importing ? "导入中" : "导入"}
                 </Button>
@@ -385,11 +396,12 @@ function parsePriceField(value: string): number {
 
 interface PresetListProps {
   readonly state: ModelPriceState<ModelPricePresetSummary[]>
-  readonly selectedPresetId: ModelPricePresetId | null
-  readonly onSelect: (presetId: ModelPricePresetId) => void
+  readonly selectedPresetIds: readonly ModelPricePresetId[]
+  readonly disabled: boolean
+  readonly onCheckedChange: (presetId: ModelPricePresetId, checked: boolean) => void
 }
 
-function PresetList({ state, selectedPresetId, onSelect }: PresetListProps) {
+function PresetList({ state, selectedPresetIds, disabled, onCheckedChange }: PresetListProps) {
   if (state.loading && !state.data) {
     return <div className="py-4 text-sm text-muted-foreground">正在加载</div>
   }
@@ -403,22 +415,26 @@ function PresetList({ state, selectedPresetId, onSelect }: PresetListProps) {
   }
 
   return (
-    <RadioGroup value={selectedPresetId ?? ""} onValueChange={(value) => onSelect(value as ModelPricePresetId)}>
-      <div className="overflow-hidden rounded-lg border">
-        {state.data.map((preset) => (
-          <label
-            key={preset.id}
-            htmlFor={`model-price-preset-${preset.id}`}
-            className="flex w-full cursor-pointer items-center justify-between gap-3 border-b px-3 py-3 text-left last:border-b-0"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <RadioGroupItem id={`model-price-preset-${preset.id}`} value={preset.id} aria-label={preset.label} />
-              <span className="truncate font-medium">{preset.label}</span>
-            </div>
-            <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{preset.ruleCount} 条</span>
-          </label>
-        ))}
-      </div>
-    </RadioGroup>
+    <div className="overflow-hidden rounded-lg border">
+      {state.data.map((preset) => (
+        <label
+          key={preset.id}
+          htmlFor={`model-price-preset-${preset.id}`}
+          className="flex w-full cursor-pointer items-center justify-between gap-3 border-b px-3 py-3 text-left last:border-b-0"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <Checkbox
+              id={`model-price-preset-${preset.id}`}
+              checked={selectedPresetIds.includes(preset.id)}
+              disabled={disabled}
+              aria-label={preset.label}
+              onCheckedChange={(checked) => onCheckedChange(preset.id, checked === true)}
+            />
+            <span className="truncate font-medium">{preset.label}</span>
+          </div>
+          <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{preset.ruleCount} 条</span>
+        </label>
+      ))}
+    </div>
   )
 }

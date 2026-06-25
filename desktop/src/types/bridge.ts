@@ -1495,6 +1495,7 @@ export type SynapseBridge = {
     listCoverage: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
     listPresets: () => Promise<ModelPricePresetSummary[]>
     importPreset: (presetId: ModelPricePresetId) => Promise<ModelPriceRule[]>
+    importPresets: (presetIds: ModelPricePresetId[]) => Promise<ModelPriceRule[]>
     getRules: () => Promise<ModelPriceRule[]>
     saveRules: (rules: ModelPriceRuleInput[]) => Promise<ModelPriceRule[]>
     clearRules: () => Promise<ModelPriceRule[]>

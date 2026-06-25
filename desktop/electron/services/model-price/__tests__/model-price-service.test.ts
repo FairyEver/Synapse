@@ -597,6 +597,35 @@ describe("model price service", () => {
     db.close()
   })
 
+  it("imports multiple presets at once and lets later presets win for overlapping model patterns", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const imported = service.importPresets(["deepseek-official", "aliyun-bailian"])
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      inputPer1M: 12,
+      outputPer1M: 24,
+      cacheReadPer1M: 1,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 24,
+      source: "builtin",
+    })
+    db.close()
+  })
+
+  it("does not change rules when a multi-preset import contains an unknown preset", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const existing = service.createRule({ modelPattern: "keep-me", inputPer1M: 7 })
+
+    expect(() => service.importPresets(["deepseek-official", "missing-preset" as never])).toThrow("Unknown model price preset: missing-preset")
+    expect(service.listRules()).toEqual([expect.objectContaining({ id: existing.id, modelPattern: "keep-me", inputPer1M: 7 })])
+    db.close()
+  })
+
   it("throws on unknown preset and does not change existing rules", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
