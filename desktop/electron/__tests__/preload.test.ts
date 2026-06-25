@@ -282,7 +282,6 @@ describe("preload bridge", () => {
     await bridge.quickInput.list()
     await bridge.quickInput.create({ content: "新的快捷输入" })
     await bridge.quickInput.update({ id: "quick-1", content: "更新快捷输入" })
-    await bridge.quickInput.pinToTop({ id: "quick-1" })
     await bridge.quickInput.delete({ id: "quick-1" })
     bridge.quickInput.onChanged(vi.fn())
 
@@ -303,11 +302,6 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
-      "synapse:quick-input:pin-to-top",
-      { id: "quick-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      5,
       "synapse:quick-input:delete",
       { id: "quick-1" },
     )

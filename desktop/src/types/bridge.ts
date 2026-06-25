@@ -848,7 +848,6 @@ export type SynapseBridge = {
     create: (input: { content: string }) => Promise<SynapseQuickInputItem>
     update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
     delete: (input: { id: string }) => Promise<void>
-    pinToTop: (input: { id: string }) => Promise<SynapseQuickInputItem[]>
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
   }
   terminal: {

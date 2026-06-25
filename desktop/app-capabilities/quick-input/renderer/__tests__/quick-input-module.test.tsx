@@ -33,16 +33,6 @@ const quickInputBridge = vi.hoisted(() => ({
     updatedAt: "2026-06-25T00:00:00.000Z",
   })),
   delete: vi.fn(async () => undefined),
-  pinToTop: vi.fn(async () => [
-    {
-      id: "quick-1",
-      schemaVersion: 1,
-      content: "今天的工作计划有什么",
-      sortOrder: 10,
-      createdAt: "2026-06-25T00:00:00.000Z",
-      updatedAt: "2026-06-25T00:00:00.000Z",
-    },
-  ]),
   onChanged: vi.fn(() => vi.fn()),
 }))
 
@@ -80,7 +70,6 @@ beforeEach(() => {
   quickInputBridge.create.mockClear()
   quickInputBridge.update.mockClear()
   quickInputBridge.delete.mockClear()
-  quickInputBridge.pinToTop.mockClear()
   quickInputBridge.onChanged.mockClear()
   toast.error.mockClear()
   toast.success.mockClear()
@@ -127,7 +116,6 @@ describe("QuickInputModule", () => {
       id: "quick-1",
       content: "更新后的快捷输入",
     })
-    expect(quickInputBridge.pinToTop).not.toHaveBeenCalled()
     expect(quickInputBridge.delete).toHaveBeenCalledWith({ id: "quick-1" })
   })
 })

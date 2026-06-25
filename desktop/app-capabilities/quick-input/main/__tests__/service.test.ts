@@ -10,18 +10,28 @@ import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/co
 import { createQuickInputService } from "../service"
 
 describe("QuickInputService", () => {
-  it("creates, updates, pins, deletes, and lists items by sortOrder", async () => {
+  it("creates, updates, deletes, and lists items by sortOrder", async () => {
     const harness = createHarness()
     const service = createQuickInputService(harness.deps)
 
-    const second = await service.create({ content: "第二条" })
     const first = await service.create({ content: "第一条" })
-    await service.pinToTop({ id: first.id })
+    const second = await service.create({ content: "第二条" })
     await service.update({ id: second.id, content: "第二条更新" })
 
-    expect((await service.list()).map((item) => item.content)).toEqual(["第一条", "第二条更新"])
+    expect((await service.list()).map((item) => ({
+      content: item.content,
+      sortOrder: item.sortOrder,
+    }))).toEqual([
+      { content: "第一条", sortOrder: 10 },
+      { content: "第二条更新", sortOrder: 20 },
+    ])
     await service.delete({ id: first.id })
-    expect((await service.list()).map((item) => item.content)).toEqual(["第二条更新"])
+    expect((await service.list()).map((item) => ({
+      content: item.content,
+      sortOrder: item.sortOrder,
+    }))).toEqual([
+      { content: "第二条更新", sortOrder: 10 },
+    ])
   })
 
   it("rejects blank content", async () => {

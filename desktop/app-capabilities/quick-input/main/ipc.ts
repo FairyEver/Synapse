@@ -66,14 +66,6 @@ export const quickInputIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof quickInputIdInputSchema>) =>
         resolveQuickInputService(ctx).delete(request),
     },
-    pinToTop: {
-      channel: "synapse:quick-input:pin-to-top",
-      kind: "invoke",
-      request: quickInputIdInputSchema,
-      response: z.array(quickInputItemSchema),
-      handler: (ctx, request: z.infer<typeof quickInputIdInputSchema>) =>
-        resolveQuickInputService(ctx).pinToTop(request),
-    },
   },
   events: {
     changed: {

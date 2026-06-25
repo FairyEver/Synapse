@@ -381,7 +381,6 @@ const IPC_CHANNELS = {
     "create": "synapse:quick-input:create",
     "update": "synapse:quick-input:update",
     "delete": "synapse:quick-input:delete",
-    "pinToTop": "synapse:quick-input:pin-to-top",
     "changed": "synapse:quick-input:changed",
   },
   "terminal": {
@@ -775,7 +774,6 @@ const synapseBridge: SynapseBridge = {
     create: (input) => invoke(IPC_CHANNELS.quickInput.create)(input),
     update: (input) => invoke(IPC_CHANNELS.quickInput.update)(input),
     delete: (input) => invoke(IPC_CHANNELS.quickInput.delete)(input),
-    pinToTop: (input) => invoke(IPC_CHANNELS.quickInput.pinToTop)(input),
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.quickInput.changed,

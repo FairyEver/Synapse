@@ -105,29 +105,6 @@ export function createQuickInputService(deps: QuickInputServiceDeps) {
     await emitChanged()
   }
 
-  async function pinToTop(input: QuickInputIdInput): Promise<QuickInputItem[]> {
-    const current = await deps.items.list()
-    if (!current.some((item) => item.id === input.id)) {
-      return list()
-    }
-
-    const now = timestamp()
-    const reordered = [
-      ...current.filter((item) => item.id === input.id),
-      ...current.filter((item) => item.id !== input.id).sort(compareQuickInputItems),
-    ].map((item, index) => ({
-      ...item,
-      sortOrder: (index + 1) * 10,
-      updatedAt: item.id === input.id ? now : item.updatedAt,
-    }))
-
-    for (const item of reordered) {
-      await deps.items.upsert(item)
-    }
-    await emitChanged()
-    return reordered.map(toPublicItem)
-  }
-
   async function migrateLegacyConfig(): Promise<void> {
     const settings = await loadSettings()
     if (settings.legacyConfigMigratedAt) return
@@ -223,7 +200,6 @@ export function createQuickInputService(deps: QuickInputServiceDeps) {
     create,
     update,
     delete: deleteItem,
-    pinToTop,
   }
 }
 

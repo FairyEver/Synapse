@@ -7,7 +7,6 @@ describe("quickInputIpcModule", () => {
     expect(quickInputIpcModule.methods.create.channel).toBe("synapse:quick-input:create")
     expect(quickInputIpcModule.methods.update.channel).toBe("synapse:quick-input:update")
     expect(quickInputIpcModule.methods.delete.channel).toBe("synapse:quick-input:delete")
-    expect(quickInputIpcModule.methods.pinToTop.channel).toBe("synapse:quick-input:pin-to-top")
     expect(quickInputIpcModule.events.changed.channel).toBe("synapse:quick-input:changed")
   })
 

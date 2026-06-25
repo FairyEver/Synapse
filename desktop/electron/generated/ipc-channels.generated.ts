@@ -260,7 +260,6 @@ export const IPC_CHANNELS = {
     "create": "synapse:quick-input:create",
     "update": "synapse:quick-input:update",
     "delete": "synapse:quick-input:delete",
-    "pinToTop": "synapse:quick-input:pin-to-top",
     "changed": "synapse:quick-input:changed",
   },
   "terminal": {
