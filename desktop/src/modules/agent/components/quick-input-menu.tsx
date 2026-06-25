@@ -1,4 +1,4 @@
-import { ChevronDown, SendHorizontal, TextCursorInput } from "lucide-react"
+import { ChevronDown, TextCursorInput } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -64,7 +64,6 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
               onDirectSend(item.content)
             }}
           >
-            <SendHorizontal aria-hidden="true" data-quick-input-action="send" />
             <span className="max-w-80 truncate">{quickInputMenuPreview(item.content)}</span>
           </DropdownMenuItem>
         ))}

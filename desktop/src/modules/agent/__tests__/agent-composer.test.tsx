@@ -1841,7 +1841,7 @@ describe("AgentComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it("truncates quick input menu labels and marks items as send actions", async () => {
+  it("truncates quick input menu labels without leading item icons", async () => {
     const longContent = "这是一段非常长的片段内容，用来验证菜单中只显示预览"
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -1873,7 +1873,7 @@ describe("AgentComposer", () => {
     expect(menu?.className).toContain("w-96")
     expect(item).toBeTruthy()
     expect(item?.textContent).toBe("这是一段非常长的片段内容，用来验证菜单中只显示预…")
-    expect(item?.querySelector('[aria-hidden="true"][data-quick-input-action="send"]')).toBeTruthy()
+    expect(item?.querySelector('[data-quick-input-action="send"]')).toBeNull()
   })
 
   it("does not render the knowledge base action button without actions", () => {
