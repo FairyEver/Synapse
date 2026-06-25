@@ -93,6 +93,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.process-environment",
         "core.process-runtime",
         "core.project-containers",
+        "core.quick-input",
         "core.relay",
         "core.side-channel",
         "core.terminal",

@@ -129,6 +129,11 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - App 类 MCP capability 命名采用 `app.<app_namespace>.<subdomain>.<action>`，MCP tool 名采用 capability id 的下划线形式，例如 `app.document_template.docx.generate` 对应 `app_document_template_docx_generate`。
 - 生成类能力使用 `generate` action。新增这类 action 或 domain 时，必须同步更新 capability 命名校验、MCP tool 映射、action router、内置 `synapse-skill` 模板和相关测试。
 - 能力包如果涉及本地文件读写、网络、shell、Agent、Drive 或其它敏感能力，入口适配器和核心 service 必须保留统一权限检查、审计、错误脱敏和日志边界，不得只在某一个入口处理。
+- 系统应用自有业务数据默认使用 DataRepository namespace，命名格式为 `app.<app-id>.<entity>`，例如 `app.quick-input.items`。`app-id` 使用系统应用 id 的短横线形式，`entity` 使用英文复数名词或明确单例名，例如 `items`、`groups`、`runs`、`settings`。
+- 系统应用自有数据不得直接手写 SQLite 业务表名；SQLite backend 的实际表名由 DataRepository namespace 自动映射，例如 `app.quick-input.items` 对应 `ns_app_quick_input_items`。只有确有理由绕过 DataRepository 时，必须先在设计文档中说明并获得当前对话确认。
+- 系统应用数据 backend 选择默认规则：小型单例配置用 `json`，列表型用户数据优先用 `sqlite`，密钥或 token 用 `encrypted-json`，追加型审计或运行日志用 `jsonl`。记录必须带 `schemaVersion`，schema 放在 `desktop/electron/runtime/data-repo/schemas/` 并注册进 `allSchemas`。
+- 系统应用从旧配置或旧文件迁移数据时，必须有幂等迁移标记，迁移成功后清理旧有效数据来源，避免用户清空新数据后又被旧数据复活。迁移失败不得删除旧数据，必须结构化记录错误并允许下次重试。
+- Renderer 不得直接读写 DataRepository。系统应用自有数据必须通过能力包 `main/service.ts` 或同级 core service 读写，再由 IPC、MCP、Workflow node 或 App UI 作为入口适配器调用。
 
 ### 参考模板目录
 
@@ -155,6 +160,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
+- 快捷输入是独立系统应用，不属于系统设置页。Agent 对话只消费快捷输入库中的文本，并默认直接发送；不要恢复“直接发送”开关，也不要把快捷输入重新塞回 slash menu 的插入候选里，除非当前对话明确改变这个产品边界。
 - Knowledge Base 资料管理窗口是 `.raw` 文件管理器；上传和拖拽上传必须把用户选择的文件原样复制到当前 `.raw` 文件夹，不得自动转换格式、生成 Markdown 替代文件、额外保留一份 originals 附件，或把普通上传变成 source staging 流程。
 - Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
 - Workflow loop 的退出条件必须由子图内真实节点和 Loop Output 的 continue/break 出口表达，不要退回到隐藏在配置面板里的表达式字符串。

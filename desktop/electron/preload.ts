@@ -376,6 +376,14 @@ const IPC_CHANNELS = {
     "chooseOutputFile": "synapse:document-template:output:choose",
     "generateDocx": "synapse:document-template:docx:generate",
   },
+  "quickInput": {
+    "list": "synapse:quick-input:list",
+    "create": "synapse:quick-input:create",
+    "update": "synapse:quick-input:update",
+    "delete": "synapse:quick-input:delete",
+    "pinToTop": "synapse:quick-input:pin-to-top",
+    "changed": "synapse:quick-input:changed",
+  },
   "terminal": {
     "chooseDefaultCwd": "synapse:terminal:group:choose-default-cwd",
     "listGroups": "synapse:terminal:group:list",
@@ -761,6 +769,17 @@ const synapseBridge: SynapseBridge = {
     chooseJsonFile: () => invoke(IPC_CHANNELS.documentTemplate.chooseJsonFile)(),
     chooseOutputFile: (input) => invoke(IPC_CHANNELS.documentTemplate.chooseOutputFile)(input),
     generateDocx: (input) => invoke(IPC_CHANNELS.documentTemplate.generateDocx)(input),
+  },
+  quickInput: {
+    list: () => invoke(IPC_CHANNELS.quickInput.list)(),
+    create: (input) => invoke(IPC_CHANNELS.quickInput.create)(input),
+    update: (input) => invoke(IPC_CHANNELS.quickInput.update)(input),
+    delete: (input) => invoke(IPC_CHANNELS.quickInput.delete)(input),
+    pinToTop: (input) => invoke(IPC_CHANNELS.quickInput.pinToTop)(input),
+    onChanged: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.quickInput.changed,
+    ),
   },
   terminal: {
     chooseDefaultCwd: () => invoke(IPC_CHANNELS.terminal.chooseDefaultCwd)(),

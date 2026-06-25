@@ -7,12 +7,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { SynapseQuickInput } from "@/types/config"
+import type { SynapseQuickInputItem } from "@/types/quick-input"
 
 type QuickInputMenuProps = {
-  readonly quickInputs: readonly SynapseQuickInput[]
+  readonly quickInputs: readonly SynapseQuickInputItem[]
   readonly disabled?: boolean
-  readonly onInsert: (content: string) => void
   readonly onDirectSend: (content: string) => void
 }
 
@@ -33,7 +32,7 @@ function quickInputMenuPreview(content: string): string {
     : label
 }
 
-function QuickInputMenu({ quickInputs, disabled, onInsert, onDirectSend }: QuickInputMenuProps) {
+function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuProps) {
   if (quickInputs.length === 0) return null
 
   return (
@@ -43,12 +42,12 @@ function QuickInputMenu({ quickInputs, disabled, onInsert, onDirectSend }: Quick
           type="button"
           variant="ghost"
           className="agent-composer__quick-input-trigger rounded-lg px-2.5 text-muted-foreground"
-          aria-label="片段"
+          aria-label="快捷输入"
           data-track="agent-quick-inputs"
           disabled={disabled}
         >
           <TextCursorInput />
-          <span>片段</span>
+          <span>快捷输入</span>
           <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
@@ -60,20 +59,12 @@ function QuickInputMenu({ quickInputs, disabled, onInsert, onDirectSend }: Quick
         {quickInputs.map((item) => (
           <DropdownMenuItem
             key={item.id}
-            aria-label={`${item.directSend ? "直接发送" : "插入"}片段：${quickInputMenuPreview(item.content)}`}
+            aria-label={`发送快捷输入：${quickInputMenuPreview(item.content)}`}
             onSelect={() => {
-              if (item.directSend) {
-                onDirectSend(item.content)
-                return
-              }
-              onInsert(item.content)
+              onDirectSend(item.content)
             }}
           >
-            {item.directSend ? (
-              <SendHorizontal aria-hidden="true" data-quick-input-action="send" />
-            ) : (
-              <TextCursorInput aria-hidden="true" data-quick-input-action="insert" />
-            )}
+            <SendHorizontal aria-hidden="true" data-quick-input-action="send" />
             <span className="max-w-80 truncate">{quickInputMenuPreview(item.content)}</span>
           </DropdownMenuItem>
         ))}

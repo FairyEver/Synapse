@@ -276,6 +276,47 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps quick input bridge methods to quick input IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.quickInput.list()
+    await bridge.quickInput.create({ content: "新的快捷输入" })
+    await bridge.quickInput.update({ id: "quick-1", content: "更新快捷输入" })
+    await bridge.quickInput.pinToTop({ id: "quick-1" })
+    await bridge.quickInput.delete({ id: "quick-1" })
+    bridge.quickInput.onChanged(vi.fn())
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:quick-input:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:quick-input:create",
+      { content: "新的快捷输入" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:quick-input:update",
+      { id: "quick-1", content: "更新快捷输入" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      4,
+      "synapse:quick-input:pin-to-top",
+      { id: "quick-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      5,
+      "synapse:quick-input:delete",
+      { id: "quick-1" },
+    )
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
+      "synapse:quick-input:changed",
+      expect.any(Function),
+    )
+  })
+
   it("rethrows structured IPC error envelopes with user-facing failure", async () => {
     const bridge = await loadPreloadBridge()
     electronMock.ipcRenderer.invoke.mockResolvedValue(undefined)

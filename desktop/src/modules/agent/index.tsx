@@ -296,7 +296,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           project={selectedProject}
           target={selectedTarget}
           chat={chat}
-          quickInputs={config.global.quickInputs ?? []}
           commands={mergedCommands}
           providers={chat.providers}
           currentConversationModel={chat.currentConversationModel}

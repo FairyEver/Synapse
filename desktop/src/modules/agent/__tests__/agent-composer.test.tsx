@@ -1699,65 +1699,6 @@ describe("AgentComposer", () => {
     expect(onInputKeyDown).not.toHaveBeenCalled()
   })
 
-  it("inserts a quick input from the slash menu without sending", async () => {
-    const onDraftChange = vi.fn()
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
-    const onQuickInputDirectSend = vi.fn()
-    const onInputKeyDown = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <AgentComposer
-          draft="请 /日报"
-          disabled={false}
-          canSend={true}
-          sending={false}
-          cancelPhase="idle"
-          slashCandidates={[
-            {
-              name: "日报模板",
-              description: "整理今天完成的工作",
-              kind: "quickInput",
-              insertText: "日报模板\n整理今天完成的工作",
-            },
-            {
-              name: "review-code",
-              description: "Review code changes",
-              kind: "skill",
-              source: "skill",
-            },
-          ]}
-          onDraftChange={onDraftChange}
-          onQuickInputDirectSend={onQuickInputDirectSend}
-          onInputKeyDown={onInputKeyDown}
-          onSubmit={onSubmit}
-          onCancelTurn={vi.fn()}
-          onForceKillTurn={vi.fn()}
-        />,
-      )
-    })
-
-    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
-    expect(textarea).not.toBeNull()
-    textarea!.setSelectionRange(5, 5)
-
-    await act(async () => {
-      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
-        key: "Enter",
-        bubbles: true,
-      }))
-    })
-
-    expect(onDraftChange).toHaveBeenCalledWith("请 日报模板\n整理今天完成的工作")
-    expect(onQuickInputDirectSend).not.toHaveBeenCalled()
-    expect(onSubmit).not.toHaveBeenCalled()
-    expect(onInputKeyDown).not.toHaveBeenCalled()
-  })
-
   it("inserts knowledge base slash candidates without submitting", async () => {
     const onDraftChange = vi.fn()
     const onSubmit = vi.fn()
@@ -1827,7 +1768,7 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).not.toContain("片段")
+    expect(html).not.toContain("快捷输入")
   })
 
   it("renders the quick input menu before knowledge base actions", () => {
@@ -1835,10 +1776,10 @@ describe("AgentComposer", () => {
       <AgentComposer
         draft=""
         disabled={false}
-        canSend={false}
-        sending={false}
-        cancelPhase="idle"
-        quickInputs={[{ id: "quick-1", content: "常用输入", directSend: false }]}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[quickInputItem("quick-1", "常用输入")]}
         knowledgeBaseActions={[{
           label: "查询知识库",
           description: "插入查询指令，继续输入要检索的问题。",
@@ -1854,53 +1795,8 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html.indexOf("片段")).toBeGreaterThan(-1)
-    expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("片段"))
-  })
-
-  it("inserts a quick input at the current cursor position without sending", async () => {
-    const onDraftChange = vi.fn()
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <AgentComposer
-          draft="请 "
-          disabled={false}
-          canSend={true}
-          sending={false}
-          cancelPhase="idle"
-          quickInputs={[{ id: "quick-1", content: "整理这段内容\n保留关键结论", directSend: false }]}
-          onDraftChange={onDraftChange}
-          onInputKeyDown={vi.fn()}
-          onSubmit={onSubmit}
-          onCancelTurn={vi.fn()}
-          onForceKillTurn={vi.fn()}
-        />,
-      )
-    })
-
-    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
-    expect(textarea).not.toBeNull()
-    textarea!.focus()
-    textarea!.setSelectionRange(2, 2)
-    openQuickInputMenu(container)
-    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
-      .find((node) => node.textContent === "整理这段内容") as HTMLElement
-    expect(item).toBeTruthy()
-
-    await act(async () => {
-      item.click()
-      await wait(0)
-    })
-
-    expect(onDraftChange).toHaveBeenCalledWith("请 整理这段内容\n保留关键结论")
-    expect(onSubmit).not.toHaveBeenCalled()
-    expect(document.activeElement?.tagName).toBe("TEXTAREA")
+    expect(html.indexOf("快捷输入")).toBeGreaterThan(-1)
+    expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("快捷输入"))
   })
 
   it("direct sends a quick input without changing the current draft", async () => {
@@ -1920,7 +1816,7 @@ describe("AgentComposer", () => {
           canSend={true}
           sending={false}
           cancelPhase="idle"
-          quickInputs={[{ id: "quick-1", content: "继续", directSend: true }]}
+          quickInputs={[quickInputItem("quick-1", "继续")]}
           onDraftChange={onDraftChange}
           onQuickInputDirectSend={onDirectSend}
           onInputKeyDown={vi.fn()}
@@ -1932,7 +1828,7 @@ describe("AgentComposer", () => {
     })
 
     openQuickInputMenu(container)
-    const item = document.querySelector('[role="menuitem"][aria-label="直接发送片段：继续"]') as HTMLElement | null
+    const item = document.querySelector('[role="menuitem"][aria-label="发送快捷输入：继续"]') as HTMLElement | null
     expect(item).toBeTruthy()
 
     await act(async () => {
@@ -1945,7 +1841,7 @@ describe("AgentComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it("truncates quick input menu labels and marks insert snippets with an icon label", async () => {
+  it("truncates quick input menu labels and marks items as send actions", async () => {
     const longContent = "这是一段非常长的片段内容，用来验证菜单中只显示预览"
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -1960,7 +1856,7 @@ describe("AgentComposer", () => {
           canSend={false}
           sending={false}
           cancelPhase="idle"
-          quickInputs={[{ id: "quick-1", content: longContent, directSend: false }]}
+          quickInputs={[quickInputItem("quick-1", longContent)]}
           onDraftChange={vi.fn()}
           onQuickInputDirectSend={vi.fn()}
           onInputKeyDown={vi.fn()}
@@ -1973,11 +1869,11 @@ describe("AgentComposer", () => {
 
     openQuickInputMenu(container)
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]') as HTMLElement | null
-    const item = document.querySelector('[role="menuitem"][aria-label^="插入片段："]') as HTMLElement | null
+    const item = document.querySelector('[role="menuitem"][aria-label^="发送快捷输入："]') as HTMLElement | null
     expect(menu?.className).toContain("w-96")
     expect(item).toBeTruthy()
     expect(item?.textContent).toBe("这是一段非常长的片段内容，用来验证菜单中只显示预…")
-    expect(item?.querySelector('[aria-hidden="true"][data-quick-input-action="insert"]')).toBeTruthy()
+    expect(item?.querySelector('[aria-hidden="true"][data-quick-input-action="send"]')).toBeTruthy()
   })
 
   it("does not render the knowledge base action button without actions", () => {
@@ -2445,7 +2341,7 @@ function openKnowledgeBaseMenu(container: HTMLElement) {
 }
 
 function openQuickInputMenu(container: HTMLElement) {
-  const trigger = container.querySelector('button[aria-label="片段"]')
+  const trigger = container.querySelector('button[aria-label="快捷输入"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
@@ -2479,6 +2375,17 @@ function withPath<T extends File>(file: T, path: string): T {
     value: path,
   })
   return file
+}
+
+function quickInputItem(id: string, content: string) {
+  return {
+    id,
+    schemaVersion: 1 as const,
+    content,
+    sortOrder: 10,
+    createdAt: "2026-06-25T00:00:00.000Z",
+    updatedAt: "2026-06-25T00:00:00.000Z",
+  }
 }
 
 function imageFile(bytes: readonly number[], name: string, type: "image/png" | "image/webp"): File {

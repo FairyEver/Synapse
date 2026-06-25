@@ -25,7 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
-import type { SynapseQuickInput } from "@/types/config"
+import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
@@ -109,7 +109,7 @@ function AgentComposer({
   readonly showIdleJumpToBottom?: boolean
   readonly showConversationRolloverPrompt?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
-  readonly quickInputs?: readonly SynapseQuickInput[]
+  readonly quickInputs?: readonly SynapseQuickInputItem[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (
@@ -547,7 +547,6 @@ function AgentComposer({
               <QuickInputMenu
                 quickInputs={quickInputs}
                 disabled={disabled}
-                onInsert={insertComposerText}
                 onDirectSend={(content) => onQuickInputDirectSend?.(content)}
               />
               <KnowledgeBaseActionMenu

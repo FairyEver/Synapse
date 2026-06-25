@@ -28,6 +28,12 @@ export {
   type RepoRepositoryV1,
 } from "./repo-repositories"
 export {
+  quickInputItemsSchema,
+  quickInputSettingsSchema,
+  type QuickInputItemEntryV1,
+  type QuickInputSettingsEntryV1,
+} from "./quick-input"
+export {
   auditSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
@@ -99,6 +105,7 @@ import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
+import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
 import {
   auditSchema,
   agentCompressStateSchema,
@@ -134,6 +141,8 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   repoRepositoriesSchema,
   repoPendingPushesSchema,
   cheatCodeStatesSchema,
+  quickInputItemsSchema,
+  quickInputSettingsSchema,
   secretsSchema,
   providersSchema,
   projectsSchema,

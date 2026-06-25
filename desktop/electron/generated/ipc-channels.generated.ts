@@ -255,6 +255,14 @@ export const IPC_CHANNELS = {
     "chooseOutputFile": "synapse:document-template:output:choose",
     "generateDocx": "synapse:document-template:docx:generate",
   },
+  "quickInput": {
+    "list": "synapse:quick-input:list",
+    "create": "synapse:quick-input:create",
+    "update": "synapse:quick-input:update",
+    "delete": "synapse:quick-input:delete",
+    "pinToTop": "synapse:quick-input:pin-to-top",
+    "changed": "synapse:quick-input:changed",
+  },
   "terminal": {
     "listGroups": "synapse:terminal:group:list",
     "createGroup": "synapse:terminal:group:create",

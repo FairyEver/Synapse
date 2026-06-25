@@ -11,7 +11,6 @@ describe("settingsCategories", () => {
       "general",
       "repositories",
       "projects",
-      "quick-inputs",
       "claude-code",
       "variables",
       "troubleshooting",
@@ -27,6 +26,7 @@ describe("settingsCategories", () => {
     expect(ids).not.toContain("database")
     expect(ids).not.toContain("mcp")
     expect(ids).not.toContain("tools")
+    expect(ids).not.toContain("quick-inputs")
   })
 
   it("has separate repositories and projects categories", () => {
@@ -43,7 +43,6 @@ describe("settingsCategories", () => {
     expect(labels.get("general")).toBe("基础设置")
     expect(labels.get("repositories")).toBe("资源仓库")
     expect(labels.get("projects")).toBe("项目和知识库")
-    expect(labels.get("quick-inputs")).toBe("提示词片段")
     expect(labels.get("tools")).toBeUndefined()
     expect(labels.get("claude-code")).toBe("模型与供应商")
     expect(labels.get("variables")).toBe("私人令牌")

@@ -16,6 +16,8 @@ import {
   outboxSchema,
   projectsSchema,
   providersSchema,
+  quickInputItemsSchema,
+  quickInputSettingsSchema,
   relayBindingsSchema,
   relayRunsSchema,
   repoPendingPushesSchema,
@@ -38,6 +40,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.compress_state",
         "agent.events",
         "agent.usage",
+        "app.quick-input.items",
+        "app.quick-input.settings",
         "automation.items",
         "automation.runs",
         "cheat-code.states",
@@ -96,6 +100,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(agentEventsSchema.backend).toBe("sqlite")
     expect(agentUsageSchema.backend).toBe("sqlite")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
+    expect(quickInputItemsSchema.backend).toBe("sqlite")
+    expect(quickInputSettingsSchema.backend).toBe("json")
   })
 
   it("encrypted flag is set only on secret-bearing namespaces", () => {
@@ -172,6 +178,30 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         name: "demo",
       }),
     ).toBe(true)
+    expect(
+      quickInputItemsSchema.validate({
+        id: "quick-1",
+        schemaVersion: 1,
+        content: "给个结论",
+        sortOrder: 10,
+        createdAt: "2026-06-25T00:00:00.000Z",
+        updatedAt: "2026-06-25T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      quickInputSettingsSchema.validate({
+        schemaVersion: 1,
+        legacyConfigMigratedAt: null,
+        defaultSeededVersion: null,
+      }),
+    ).toBe(true)
+    expect(quickInputItemsSchema.validate({
+      id: "bad",
+      schemaVersion: 1,
+      content: "",
+      sortOrder: 0,
+    })).toBe(false)
+    expect(quickInputSettingsSchema.validate({ schemaVersion: 1 })).toBe(false)
     expect(
       conversationsSchema.validate({
         id: "conv-1",

@@ -48,7 +48,11 @@ vi.mock("../user-identity-service", () => ({
 }))
 
 import { configStore } from "../config-store"
-import { configBackupService, createConfigBackupPayload } from "../config-backup-service"
+import {
+  configBackupService,
+  createConfigBackupPayload,
+  setConfigBackupDataRepository,
+} from "../config-backup-service"
 import { userIdentityService } from "../user-identity-service"
 
 describe("ConfigBackupService quick inputs", () => {
@@ -61,6 +65,7 @@ describe("ConfigBackupService quick inputs", () => {
       status: "ready",
       identity: createIdentity(),
     })
+    setConfigBackupDataRepository(null)
   })
 
   it("preserves valid multi-line quick inputs when importing a backup", async () => {
@@ -350,6 +355,74 @@ describe("ConfigBackupService quick inputs", () => {
     expect(backup.config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
   })
 
+  it("exports quick input DataRepository namespaces", async () => {
+    const exportAll = vi.fn(async () => ({
+      format: "synapse-backup-v1" as const,
+      exportedAt: "2026-06-25T00:00:00.000Z",
+      namespaces: [{
+        name: "app.quick-input.items",
+        schemaVersion: 1,
+        encrypted: false,
+        data: {
+          items: [{
+            id: "quick-1",
+            schemaVersion: 1,
+            content: "快捷输入",
+            sortOrder: 10,
+            createdAt: "2026-06-25T00:00:00.000Z",
+            updatedAt: "2026-06-25T00:00:00.000Z",
+          }],
+        },
+      }],
+    }))
+    setConfigBackupDataRepository({
+      exportAll,
+      importAll: vi.fn(async () => undefined),
+    })
+
+    const backup = await createConfigBackupPayload(new Date("2026-06-25T00:00:00.000Z"))
+
+    expect(exportAll).toHaveBeenCalledWith({ includeSecrets: false })
+    expect(backup.dataRepository?.namespaces.map((namespace) => namespace.name))
+      .toContain("app.quick-input.items")
+  })
+
+  it("imports DataRepository payloads from backups", async () => {
+    const importAll = vi.fn(async () => undefined)
+    setConfigBackupDataRepository({
+      exportAll: vi.fn(async () => ({ format: "synapse-backup-v1" as const, exportedAt: new Date().toISOString(), namespaces: [] })),
+      importAll,
+    })
+    const dataRepository = {
+      format: "synapse-backup-v1" as const,
+      exportedAt: "2026-06-25T00:00:00.000Z",
+      namespaces: [{
+        name: "app.quick-input.items",
+        schemaVersion: 1,
+        encrypted: false,
+        data: {
+          items: [{
+            id: "quick-1",
+            schemaVersion: 1,
+            content: "快捷输入",
+            sortOrder: 10,
+            createdAt: "2026-06-25T00:00:00.000Z",
+            updatedAt: "2026-06-25T00:00:00.000Z",
+          }],
+        },
+      }],
+    }
+    const filePath = await writeBackupFile({}, { dataRepository })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(importAll).toHaveBeenCalledWith(dataRepository)
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("preserves user variable definitions without exporting secret values", async () => {
     const repository = {
       uuid: "repo-1",
@@ -469,6 +542,7 @@ async function writeBackupFile(
     activeRepoUuid?: unknown
     repositories?: unknown[]
     agent?: unknown
+    dataRepository?: unknown
   } = {},
 ): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-backup-"))
@@ -484,6 +558,7 @@ function createBackup(
     activeRepoUuid?: unknown
     repositories?: unknown[]
     agent?: unknown
+    dataRepository?: unknown
   },
 ): Record<string, unknown> {
   const globalConfig: Record<string, unknown> = {
@@ -510,5 +585,6 @@ function createBackup(
       ...(options.agent !== undefined ? { agent: options.agent } : undefined),
     },
     identity: createIdentity(),
+    ...(options.dataRepository !== undefined ? { dataRepository: options.dataRepository } : undefined),
   }
 }

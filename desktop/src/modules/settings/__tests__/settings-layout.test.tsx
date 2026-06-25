@@ -10,7 +10,7 @@ import { createDefaultConfig } from "@/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "@/types/config"
 
 const requestedSettingsCategory = vi.hoisted((): { current: string | null } => ({
-  current: "quick-inputs",
+  current: "general",
 }))
 
 const updateConfig = vi.fn(async (patch: SynapseConfigPatch) => ({
@@ -24,13 +24,6 @@ vi.mock("@/app-shell/config", () => ({
       ...createDefaultConfig(),
       global: {
         ...createDefaultConfig().global,
-        quickInputs: [
-          {
-            id: "quick-1",
-            content: "总结当前仓库今天我在所有分支上的所有提交，归纳总结分类，记录为今天的工作日志，只记录和工作相关的功能",
-            directSend: true,
-          },
-        ],
       },
     } satisfies SynapseConfig,
     error: null,
@@ -107,13 +100,13 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
-  requestedSettingsCategory.current = "quick-inputs"
+  requestedSettingsCategory.current = "general"
   delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
 describe("SettingsModule layout", () => {
-  it("bounds settings content so long quick inputs cannot widen the panel", async () => {
+  it("bounds settings content to the available panel width", async () => {
     const container = await renderSettingsModule()
     const contentRoot = container.querySelector("section > div")
 
