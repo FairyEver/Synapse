@@ -71,6 +71,7 @@ const logger = createRendererLogger("terminal.app")
 
 export function TerminalModule() {
   const terminalBridge = requireBridgeDomain("terminal")
+  const shellBridge = requireBridgeDomain("shell")
   const [groups, setGroups] = useState<SynapseTerminalGroup[]>([])
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -472,7 +473,12 @@ export function TerminalModule() {
       disableStdin: terminalSessionStatus !== "running",
     }))
     const fitAddon = new FitAddon()
-    const webLinksAddon = new WebLinksAddon()
+    const webLinksAddon = new WebLinksAddon((_event, uri) => {
+      void shellBridge.openExternal(uri).catch((error) => {
+        logger.error("Failed to open terminal web link.", error)
+        toast.error("打开链接失败")
+      })
+    })
     xterm.loadAddon(fitAddon)
     xterm.loadAddon(webLinksAddon)
     xterm.open(container)
@@ -572,7 +578,7 @@ export function TerminalModule() {
       resizeObserver.disconnect()
       xterm.dispose()
     }
-  }, [terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
+  }, [shellBridge, terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
 
   const sidebar = (
     <ModuleSidebar

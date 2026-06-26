@@ -209,6 +209,10 @@ const terminalBridge = vi.hoisted(() => ({
   }),
 }))
 
+const shellBridge = vi.hoisted(() => ({
+  openExternal: vi.fn(async () => undefined),
+}))
+
 const xtermState = vi.hoisted(() => ({
   instances: [] as Array<{
     open: ReturnType<typeof vi.fn>
@@ -223,7 +227,9 @@ const xtermState = vi.hoisted(() => ({
     inputListener: ((data: string) => void) | null
   }>,
   fitInstances: [] as Array<{ fit: ReturnType<typeof vi.fn>; proposeDimensions: ReturnType<typeof vi.fn> }>,
-  webLinksInstances: [] as Array<Record<string, never>>,
+  webLinksInstances: [] as Array<{
+    handler: ((event: MouseEvent, uri: string) => void) | undefined
+  }>,
 }))
 
 const webglState = vi.hoisted(() => ({
@@ -242,6 +248,7 @@ const toastState = vi.hoisted(() => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalBridge
+    if (domain === "shell") return shellBridge
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -286,8 +293,10 @@ vi.mock("@xterm/addon-fit", () => ({
 }))
 
 vi.mock("@xterm/addon-web-links", () => ({
-  WebLinksAddon: vi.fn().mockImplementation(function WebLinksAddonMock() {
-    const instance = {}
+  WebLinksAddon: vi.fn().mockImplementation(function WebLinksAddonMock(
+    handler?: (event: MouseEvent, uri: string) => void,
+  ) {
+    const instance = { handler }
     xtermState.webLinksInstances.push(instance)
     return instance
   }),
@@ -394,6 +403,7 @@ beforeEach(() => {
   terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
   terminalBridge.runStartupCommand.mockClear()
+  shellBridge.openExternal.mockClear()
   toastState.error.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
@@ -925,6 +935,39 @@ describe("TerminalModule", () => {
     expect(xtermState.instances[0]?.open.mock.invocationCallOrder[0])
       .toBeLessThan(xtermState.instances[0]?.loadAddon.mock.invocationCallOrder.at(-1) ?? 0)
     expect(webglState.instances[0]?.onContextLoss).toHaveBeenCalled()
+  })
+
+  it("opens terminal web links through the system shell", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const handler = xtermState.webLinksInstances[0]?.handler
+    expect(handler).toEqual(expect.any(Function))
+
+    await act(async () => {
+      handler?.(new MouseEvent("click"), "http://localhost:5173/")
+      await Promise.resolve()
+    })
+
+    expect(shellBridge.openExternal).toHaveBeenCalledWith("http://localhost:5173/")
+  })
+
+  it("shows a user-visible error when a terminal web link cannot be opened", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    shellBridge.openExternal.mockRejectedValueOnce(new Error("open failed"))
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.webLinksInstances[0]?.handler?.(new MouseEvent("click"), "http://localhost:5173/")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(toastState.error).toHaveBeenCalledWith("打开链接失败")
   })
 
   it("attaches to a session, streams data, writes input, and cleans up without stopping it", async () => {
