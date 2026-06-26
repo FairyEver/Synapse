@@ -255,6 +255,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
+      '@mdxeditor/editor':
+        specifier: 4.0.4
+        version: 4.0.4(@codemirror/language@6.12.3)(@lezer/highlight@1.2.3)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(yjs@13.6.31)
       '@synapse/shared':
         specifier: workspace:*
         version: link:../shared
