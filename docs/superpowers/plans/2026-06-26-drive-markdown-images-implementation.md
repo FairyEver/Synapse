@@ -1881,6 +1881,13 @@ git commit -m "feat(drive): bridge markdown image source APIs"
 - Modify: `desktop/src/modules/drive/markdown/drive-markdown-image-source-panel.tsx`
 - Modify: `desktop/src/modules/drive/__tests__/drive-module.test.tsx`
 
+> Execution note (2026-06-27): current desktop Drive UI still opens file previews through
+> `getDriveItemPreviewUrl` + external browser URL. It does not yet have an in-app Drive
+> Browser preview/editor state where a Markdown renderer can register the generic renderer
+> action slot. Task 11 should therefore be executed only after adding or exposing the
+> in-app preview/editor surface; otherwise the `图片来源` toolbar action would be detached
+> from the current document context.
+
 - [ ] **Step 1: Write failing Drive module tests**
 
 Add test to `desktop/src/modules/drive/__tests__/drive-module.test.tsx`:
