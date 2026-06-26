@@ -33,12 +33,17 @@ interface DriveLookupAddress {
   readonly family?: number
 }
 
-type DriveLookup = (hostname: string) => Promise<readonly DriveLookupAddress[]>
-type DriveRemoteImageRequest = (
+export type DriveLookup = (hostname: string) => Promise<readonly DriveLookupAddress[]>
+export type DriveRemoteImageRequestImplementation = (
   url: URL,
   options: RequestOptions,
   callback: (response: IncomingMessage) => void,
 ) => ClientRequest
+
+export interface DriveRemoteImageFetcherTestOptions {
+  readonly lookupImplementation?: DriveLookup
+  readonly requestImplementation?: DriveRemoteImageRequestImplementation
+}
 
 export interface DriveFetchedRemoteImage {
   readonly body: Buffer
@@ -48,10 +53,15 @@ export interface DriveFetchedRemoteImage {
 
 @Injectable()
 export class DriveRemoteImageFetcher {
-  constructor(
-    private readonly requestImplementation: DriveRemoteImageRequest = requestRemoteImage,
-    private readonly lookupImplementation: DriveLookup = lookupAll,
-  ) {}
+  private requestImplementation: DriveRemoteImageRequestImplementation = requestRemoteImage
+  private lookupImplementation: DriveLookup = lookupAll
+
+  static createForTest(options: DriveRemoteImageFetcherTestOptions): DriveRemoteImageFetcher {
+    const fetcher = new DriveRemoteImageFetcher()
+    if (options.requestImplementation) fetcher.requestImplementation = options.requestImplementation
+    if (options.lookupImplementation) fetcher.lookupImplementation = options.lookupImplementation
+    return fetcher
+  }
 
   async fetchImage(src: string): Promise<DriveFetchedRemoteImage> {
     let url = parseRemoteImageUrl(src)

@@ -10,9 +10,19 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1
 type TestIncomingMessage = IncomingMessage & PassThrough
 
 describe("DriveRemoteImageFetcher", () => {
+  it("can be instantiated by Nest without explicit dependencies", () => {
+    const fetcher = new DriveRemoteImageFetcher()
+    const getMetadata = (Reflect as unknown as {
+      readonly getMetadata?: (key: string, target: unknown) => readonly unknown[] | undefined
+    }).getMetadata
+
+    expect(fetcher).toBeInstanceOf(DriveRemoteImageFetcher)
+    expect(getMetadata?.("design:paramtypes", DriveRemoteImageFetcher) ?? []).toEqual([])
+  })
+
   it("rejects private hosts before fetching", async () => {
     const request = vi.fn()
-    const fetcher = new DriveRemoteImageFetcher(request as never)
+    const fetcher = DriveRemoteImageFetcher.createForTest({ requestImplementation: request as never })
 
     await expect(fetcher.fetchImage("http://127.0.0.1/a.png")).rejects.toBeInstanceOf(BadRequestException)
     expect(request).not.toHaveBeenCalled()
@@ -26,9 +36,10 @@ describe("DriveRemoteImageFetcher", () => {
 
   it("downloads and validates a png image", async () => {
     const request = createStaticImageRequest(PNG_BYTES, { "content-type": "image/png" })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     const result = await fetcher.fetchImage("https://example.test/a.png")
 
@@ -38,18 +49,20 @@ describe("DriveRemoteImageFetcher", () => {
 
   it("rejects svg even when content type says image", async () => {
     const request = createStaticImageRequest(Buffer.from("<svg></svg>"), { "content-type": "image/svg+xml" })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.svg")).rejects.toThrow("格式不支持。")
   })
 
   it("rejects a public-looking hostname when DNS resolves to private IP", async () => {
     const request = vi.fn()
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "10.0.0.1", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "10.0.0.1", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
     expect(request).not.toHaveBeenCalled()
@@ -57,9 +70,10 @@ describe("DriveRemoteImageFetcher", () => {
 
   it("rejects redirect locations to private hosts", async () => {
     const request = createRedirectRequest("http://127.0.0.1/a.png")
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
   })
@@ -74,9 +88,10 @@ describe("DriveRemoteImageFetcher", () => {
         response.end(PNG_BYTES)
       },
     })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片过大。")
     expect(chunksRead).toBe(0)
@@ -84,9 +99,10 @@ describe("DriveRemoteImageFetcher", () => {
 
   it("rejects image content type without an image signature", async () => {
     const request = createStaticImageRequest(Buffer.from("not an image"), { "content-type": "image/png" })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("格式不支持。")
   })
@@ -102,18 +118,20 @@ describe("DriveRemoteImageFetcher", () => {
       0x00,
       0x00,
     ]), { "content-type": "image/png" })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("格式不支持。")
   })
 
   it("rejects ORCHIDv2 IPv6 DNS results before fetching", async () => {
     const request = vi.fn()
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "2001:20::1", family: 6 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "2001:20::1", family: 6 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
     expect(request).not.toHaveBeenCalled()
@@ -134,9 +152,10 @@ describe("DriveRemoteImageFetcher", () => {
         response.end()
       },
     })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片过大。")
     expect(chunksRead).toBeLessThan(150)
@@ -153,9 +172,10 @@ describe("DriveRemoteImageFetcher", () => {
       },
       writeBody: (response) => response.end(PNG_BYTES),
     })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await fetcher.fetchImage("https://example.test/a.png")
 
@@ -185,9 +205,12 @@ describe("DriveRemoteImageFetcher", () => {
       })
       return request
     })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async (hostname) => {
-      if (hostname === "example.test") return [{ address: "93.184.216.34", family: 4 }]
-      return [{ address: "93.184.216.35", family: 4 }]
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async (hostname) => {
+        if (hostname === "example.test") return [{ address: "93.184.216.34", family: 4 }]
+        return [{ address: "93.184.216.35", family: 4 }]
+      },
+      requestImplementation: request as never,
     })
 
     await fetcher.fetchImage("https://example.test/a.png")
@@ -207,9 +230,10 @@ describe("DriveRemoteImageFetcher", () => {
       }) as never
       return request
     })
-    const fetcher = new DriveRemoteImageFetcher(request as never, async () => [
-      { address: "93.184.216.34", family: 4 },
-    ])
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
   })
