@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 export type DriveRendererAction = {
   readonly id: string
   readonly label: string
-  readonly badge?: string
+  readonly badge?: number
   readonly disabled?: boolean
   readonly onClick: () => void
 }
