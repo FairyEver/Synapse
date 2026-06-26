@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_PUBLIC_ASSET_PATH_PREFIX,
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
@@ -26,6 +27,8 @@ import {
   buildShareDriveRenderUrl,
   inferDrivePublicAssetMimeType,
   isDrivePublicAssetId,
+  parseDrivePublicAssetUrl,
+  type DriveDocumentImageSource,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCommentDto,
   type DriveAnnotationCreateInput,
@@ -48,6 +51,34 @@ describe("drive URL helpers", () => {
       publicAppUrl: "https://synapse.example/",
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
     })).toBe("https://synapse.example/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("parses current public asset URLs", () => {
+    expect(parseDrivePublicAssetUrl("https://synapse.test/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toEqual({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    })
+    expect(parseDrivePublicAssetUrl("https://synapse.test/files/not-an-asset")).toBeNull()
+    expect(parseDrivePublicAssetUrl("https://synapse.test/share/shr_test")).toBeNull()
+  })
+
+  it("keeps image source DTO fields stable", () => {
+    const source: DriveDocumentImageSource = {
+      id: "img_1",
+      imageKey: "img_hash",
+      src: "https://example.test/a.png",
+      kind: "external",
+      occurrenceCount: 2,
+      altText: "diagram",
+      previewUrl: "https://example.test/a.png",
+      canImport: true,
+      status: "ready",
+    }
+    expect(source.kind).toBe("external")
+    expect(source.occurrenceCount).toBe(2)
+  })
+
+  it("sets a bounded image import source limit", () => {
+    expect(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES).toBe(20)
   })
 
   it("builds canonical site root URLs", () => {

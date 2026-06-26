@@ -10,6 +10,7 @@ export const DRIVE_SITE_DEFAULT_PAGE_SIZE = 50
 export const DRIVE_SITE_MAX_PAGE_SIZE = 200
 export const DRIVE_SITE_MAX_FILES = 1000
 export const DRIVE_SITE_MAX_TOTAL_BYTES = 200 * 1024 * 1024
+export const DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES = 20
 export const DRIVE_MAX_FILE_SIZE_LABEL = "100MB"
 export const DRIVE_DEFAULT_QUOTA_LABEL = "5GB"
 export const DRIVE_SITE_MAX_TOTAL_SIZE_LABEL = "200MB"
@@ -39,6 +40,28 @@ export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy
 export type DriveTrashItemKind = "normal" | "public_asset"
 export type DriveSiteStatus = "active" | "disabled" | "expired" | "deleted" | "failed"
 export type DriveSiteAccessMode = "public" | "password"
+export type DriveDocumentImageSourceKind =
+  | "owner_asset"
+  | "collaborator_asset"
+  | "external"
+  | "relative"
+  | "data"
+  | "invalid"
+  | "unsupported"
+export type DriveDocumentImageSourceStatus =
+  | "ready"
+  | "checking"
+  | "unreachable"
+  | "importing"
+  | "imported"
+  | "failed"
+export type DriveDocumentImageImportDisabledReason =
+  | "not_owner"
+  | "already_owned"
+  | "unreachable"
+  | "unsupported"
+  | "quota"
+  | "too_large"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -220,6 +243,65 @@ export interface DriveSiteListPageDto {
   readonly items: readonly DriveSiteDto[]
   readonly total: number
   readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DriveDocumentImageSource {
+  readonly id: string
+  readonly imageKey: string
+  readonly src: string
+  readonly kind: DriveDocumentImageSourceKind
+  readonly occurrenceCount: number
+  readonly altText?: string
+  readonly previewUrl?: string
+  readonly assetId?: string
+  readonly assetOwnerId?: string
+  readonly assetOwnerName?: string
+  readonly canImport: boolean
+  readonly status: DriveDocumentImageSourceStatus
+  readonly reason?: string
+  readonly importDisabledReason?: DriveDocumentImageImportDisabledReason
+}
+
+export interface DriveDocumentImageSourcesDto {
+  readonly itemId: string
+  readonly versionId: string | null
+  readonly canImport: boolean
+  readonly sources: readonly DriveDocumentImageSource[]
+  readonly summary: {
+    readonly total: number
+    readonly ownerAsset: number
+    readonly collaboratorAsset: number
+    readonly external: number
+    readonly invalid: number
+    readonly unsupported: number
+    readonly importable: number
+  }
+}
+
+export interface DriveDocumentImageImportRequest {
+  readonly baseVersionId: string
+  readonly sources: readonly { readonly src: string }[]
+}
+
+export interface DriveDocumentImageImportResult {
+  readonly itemId: string
+  readonly versionId: string
+  readonly imported: readonly {
+    readonly previousSrc: string
+    readonly nextSrc: string
+    readonly assetId: string
+    readonly size: string
+  }[]
+  readonly failed: readonly {
+    readonly src: string
+    readonly reason: "unreachable" | "unsupported" | "too_large" | "quota" | "changed" | "unknown"
+    readonly message: string
+  }[]
+  readonly summary: {
+    readonly importedCount: number
+    readonly failedCount: number
+    readonly replacedOccurrenceCount: number
+  }
 }
 
 export interface DriveSiteListInput {
@@ -563,6 +645,19 @@ export function buildDrivePublicAssetUrl(input: {
   readonly assetId: string
 }): string {
   return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_ASSET_PATH_PREFIX}/${encodeURIComponent(input.assetId)}`
+}
+
+export function parseDrivePublicAssetUrl(value: string): { readonly assetId: string } | null {
+  let pathname: string
+  try {
+    pathname = new URL(value).pathname
+  } catch {
+    return null
+  }
+  const segments = pathname.split("/").filter(Boolean)
+  if (segments.length !== 2 || `/${segments[0]}` !== DRIVE_PUBLIC_ASSET_PATH_PREFIX) return null
+  const assetId = decodeURIComponent(segments[1] ?? "")
+  return isDrivePublicAssetId(assetId) ? { assetId } : null
 }
 
 export function buildDriveSiteUrl(input: {
