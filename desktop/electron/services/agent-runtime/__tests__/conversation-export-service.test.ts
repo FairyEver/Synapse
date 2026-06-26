@@ -292,6 +292,91 @@ describe("AgentConversationExportService", () => {
     expect(chooseSavePath.mock.calls[0]?.[0]).not.toContain(TEST_SESSION_KEY)
   })
 
+  it("exports every stored assistant message when rebuilding transcript from history", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-transcript-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      history: [
+        {
+          role: "user",
+          content: "评估一下",
+          timestamp: "2026-06-26T00:30:00.000Z",
+        },
+        {
+          role: "assistant",
+          content: "正式评估正文",
+          timestamp: "2026-06-26T00:30:09.000Z",
+          metadata: { agentEventType: "assistant", sdkSessionId: "sdk-1" },
+        },
+        {
+          role: "tool",
+          content: "Skill\n{\"skill\":\"sy-worklog\"}",
+          timestamp: "2026-06-26T00:30:11.000Z",
+          metadata: {
+            agentEventType: "toolUse",
+            toolUseId: "toolu-1",
+            toolName: "Skill",
+          },
+        },
+        {
+          role: "tool",
+          content: "ok",
+          timestamp: "2026-06-26T00:30:27.000Z",
+          metadata: {
+            agentEventType: "toolResult",
+            toolUseId: "toolu-1",
+            toolName: "Skill",
+            success: true,
+          },
+        },
+        {
+          role: "assistant",
+          content: "工作记录已写入。",
+          timestamp: "2026-06-26T00:30:30.000Z",
+          metadata: {
+            agentEventType: "assistant",
+            sdkSessionId: "sdk-1",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      ],
+    })
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
+      const transcript = await readFile(path.join(sourceDirectoryPath, "transcript.md"), "utf8")
+      expect(transcript).toContain("正式评估正文")
+      expect(transcript).toContain("工作记录已写入。")
+      expect(transcript.indexOf("正式评估正文")).toBeLessThan(transcript.indexOf("工作记录已写入。"))
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      createZipArchive,
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      now: () => new Date("2026-06-26T00:31:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: TEST_SESSION_KEY,
+    })).resolves.toMatchObject({
+      success: true,
+      filePath: outputPath,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
+
   it("bounds default bundle and staging directory names for long conversation names", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-long-name-test-"))
     tempRoots.push(tempRoot)

@@ -101,6 +101,68 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("rebuilds visible assistant messages around stored tool history", () => {
+    const history = [
+      {
+        role: "assistant" as const,
+        content: "正式评估正文",
+        timestamp: "2026-06-26T00:30:09.000Z",
+        metadata: {
+          agentEventType: "assistant",
+          sdkSessionId: "sdk-1",
+        },
+      },
+      {
+        role: "tool" as const,
+        content: "Skill\n{\"skill\":\"sy-worklog\"}",
+        timestamp: "2026-06-26T00:30:11.000Z",
+        metadata: {
+          agentEventType: "toolUse",
+          toolUseId: "toolu-1",
+          toolName: "Skill",
+        },
+      },
+      {
+        role: "tool" as const,
+        content: "ok",
+        timestamp: "2026-06-26T00:30:27.000Z",
+        metadata: {
+          agentEventType: "toolResult",
+          toolUseId: "toolu-1",
+          toolName: "Skill",
+          success: true,
+        },
+      },
+      {
+        role: "assistant" as const,
+        content: "工作记录已写入。",
+        timestamp: "2026-06-26T00:30:30.000Z",
+        metadata: {
+          agentEventType: "assistant",
+          sdkSessionId: "sdk-1",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    ]
+
+    const items = history.map((entry, index) =>
+      historyRecordToTimelineItem("session-1", entry, index, "claude"))
+
+    expect(items.map((item) => item.kind)).toEqual(["message", "toolCall", "toolResult", "message"])
+    expect(items.filter((item) => item.kind === "message").map((item) => item.content)).toEqual([
+      "正式评估正文",
+      "工作记录已写入。",
+    ])
+    expect(items.at(-1)).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "工作记录已写入。",
+      metadata: expect.objectContaining({
+        model: "claude-sonnet-4-5",
+      }),
+    }))
+  })
+
   it("converts native slash passthrough events into visible annotations", () => {
     expect(agentEventToTimelineItem({
       type: "sdkEvent",
