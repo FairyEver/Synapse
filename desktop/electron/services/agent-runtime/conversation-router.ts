@@ -1190,6 +1190,7 @@ export class ConversationRouter {
     resultText: string,
     sdkSessionId?: string,
     metadata?: ConversationEntryV1["history"][number]["metadata"],
+    options: { readonly assistantHistoryPersisted?: boolean } = {},
   ): Promise<ConversationEntryV1> {
     let saved = conversation
     if (sdkSessionId) {
@@ -1199,10 +1200,13 @@ export class ConversationRouter {
       })
       this.savedSdkSessions.set(conversation.id, sdkSessionId)
     }
-    if (resultText) {
+    if (options.assistantHistoryPersisted) {
+      const updated = await this.repository.mergeLastHistoryMetadata(saved.id, "assistant", metadata)
+      saved = updated ?? saved
+    } else if (resultText) {
       saved = await this.repository.appendHistory(saved.id, "assistant", resultText, metadata)
     }
-    if (sdkSessionId || resultText) {
+    if (sdkSessionId || resultText || options.assistantHistoryPersisted) {
       this.emitConversationUpdated(saved)
     }
     return saved
@@ -1332,11 +1336,12 @@ export class ConversationRouter {
   private async saveEventHistory(
     conversationId: string,
     event: AgentEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const entry = historyEntryForAgentEvent(event)
-    if (!entry) return
+    if (!entry) return false
     try {
       await this.repository.appendHistory(conversationId, entry.role, entry.content, entry.metadata)
+      return entry.role === "assistant"
     } catch (error) {
       this.deps.logger?.warn("AgentRuntime history persistence failed.", {
         boundary: "agent-runtime.history-persistence",
@@ -1345,6 +1350,7 @@ export class ConversationRouter {
         eventType: event.type,
         ...queuedTurnFailureMetadata(error),
       })
+      return false
     }
   }
 
@@ -1692,9 +1698,28 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         }),
       }
     case "text":
+      return {
+        role: "assistant",
+        content: event.content,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          sdkSessionId: event.sdkSessionId,
+        }),
+      }
+    case "assistant": {
+      const content = assistantEventText(event)
+      if (!content) return null
+      return {
+        role: "assistant",
+        content,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          sdkSessionId: event.sdkSessionId,
+        }),
+      }
+    }
     case "result":
     case "sessionInit":
-    case "assistant":
     case "stream":
     case "status":
     case "compactBoundary":
