@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common"
 import { lookup as dnsLookup } from "node:dns/promises"
+import { request as httpRequest } from "node:http"
+import type { ClientRequest, IncomingHttpHeaders, IncomingMessage, RequestOptions } from "node:http"
+import { request as httpsRequest } from "node:https"
 import { isIP } from "node:net"
 
 export const MAX_REMOTE_IMAGE_BYTES = 100 * 1024 * 1024
@@ -31,6 +34,11 @@ interface DriveLookupAddress {
 }
 
 type DriveLookup = (hostname: string) => Promise<readonly DriveLookupAddress[]>
+type DriveRemoteImageRequest = (
+  url: URL,
+  options: RequestOptions,
+  callback: (response: IncomingMessage) => void,
+) => ClientRequest
 
 export interface DriveFetchedRemoteImage {
   readonly body: Buffer
@@ -41,7 +49,7 @@ export interface DriveFetchedRemoteImage {
 @Injectable()
 export class DriveRemoteImageFetcher {
   constructor(
-    private readonly fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+    private readonly requestImplementation: DriveRemoteImageRequest = requestRemoteImage,
     private readonly lookupImplementation: DriveLookup = lookupAll,
   ) {}
 
@@ -49,27 +57,27 @@ export class DriveRemoteImageFetcher {
     let url = parseRemoteImageUrl(src)
 
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECT_COUNT; redirectCount += 1) {
-      await this.assertSafeUrl(url)
-
-      const response = await this.fetchSafe(url)
+      const safeAddresses = await this.assertSafeUrl(url)
+      const response = await this.requestSafe(url, safeAddresses)
 
       if (isRedirectResponse(response)) {
         if (redirectCount >= MAX_REDIRECT_COUNT) throw new BadRequestException(GENERIC_FETCH_ERROR)
 
-        const location = response.headers.get("location")
+        const location = readHeader(response.headers, "location")
+        response.destroy()
         if (!location) throw new BadRequestException(GENERIC_FETCH_ERROR)
         url = parseRemoteImageUrl(location, url)
         continue
       }
 
-      if (!response.ok) throw new BadRequestException(GENERIC_FETCH_ERROR)
+      if (!isSuccessResponse(response)) throw new BadRequestException(GENERIC_FETCH_ERROR)
       return readImageResponse(response)
     }
 
     throw new BadRequestException(GENERIC_FETCH_ERROR)
   }
 
-  private async assertSafeUrl(url: URL): Promise<void> {
+  private async assertSafeUrl(url: URL): Promise<readonly DriveLookupAddress[]> {
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new BadRequestException(GENERIC_FETCH_ERROR)
 
     const hostname = normalizeHostname(url.hostname)
@@ -78,7 +86,7 @@ export class DriveRemoteImageFetcher {
     const literalIpVersion = isIP(hostname)
     if (literalIpVersion !== 0) {
       if (isBlockedIpAddress(hostname)) throw new BadRequestException(GENERIC_FETCH_ERROR)
-      return
+      return [{ address: hostname, family: literalIpVersion }]
     }
 
     const addresses = await this.lookupSafeAddresses(hostname)
@@ -86,6 +94,7 @@ export class DriveRemoteImageFetcher {
     if (addresses.some((address) => isBlockedIpAddress(address.address))) {
       throw new BadRequestException(GENERIC_FETCH_ERROR)
     }
+    return addresses
   }
 
   private async lookupSafeAddresses(hostname: string): Promise<readonly DriveLookupAddress[]> {
@@ -96,16 +105,74 @@ export class DriveRemoteImageFetcher {
     }
   }
 
-  private async fetchSafe(url: URL): Promise<Response> {
-    try {
-      return await this.fetchImplementation(url.href, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
-      })
-    } catch {
-      throw new BadRequestException(GENERIC_FETCH_ERROR)
-    }
+  private async requestSafe(url: URL, safeAddresses: readonly DriveLookupAddress[]): Promise<IncomingMessage> {
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let request: ClientRequest | null = null
+
+      const fail = () => {
+        if (settled) return
+        settled = true
+        request?.destroy()
+        reject(new BadRequestException(GENERIC_FETCH_ERROR))
+      }
+
+      try {
+        request = this.requestImplementation(url, {
+          headers: { accept: "image/*" },
+          lookup: createBoundLookup(safeAddresses),
+          method: "GET",
+        }, (response) => {
+          if (settled) return
+          settled = true
+          resolve(response)
+        })
+        request.on("error", fail)
+        request.setTimeout(REMOTE_IMAGE_TIMEOUT_MS, fail)
+        request.end()
+      } catch {
+        fail()
+      }
+    })
   }
+}
+
+function requestRemoteImage(
+  url: URL,
+  options: RequestOptions,
+  callback: (response: IncomingMessage) => void,
+): ClientRequest {
+  return url.protocol === "https:" ? httpsRequest(url, options, callback) : httpRequest(url, options, callback)
+}
+
+function createBoundLookup(safeAddresses: readonly DriveLookupAddress[]): NonNullable<RequestOptions["lookup"]> {
+  return ((_hostname: string, options: unknown, callback?: unknown) => {
+    const done = typeof options === "function" ? options : callback
+    if (typeof done !== "function") return
+
+    const wantsAll = typeof options === "object" && options !== null && "all" in options && Boolean(
+      (options as { readonly all?: boolean }).all,
+    )
+    if (wantsAll) {
+      done(null, safeAddresses.map((address) => ({
+        address: address.address,
+        family: normalizeAddressFamily(address),
+      })))
+      return
+    }
+
+    const selectedAddress = safeAddresses[0]
+    if (!selectedAddress) {
+      done(new Error(GENERIC_FETCH_ERROR))
+      return
+    }
+    done(null, selectedAddress.address, normalizeAddressFamily(selectedAddress))
+  }) as NonNullable<RequestOptions["lookup"]>
+}
+
+function normalizeAddressFamily(address: DriveLookupAddress): 4 | 6 {
+  const family = address.family === 6 ? 6 : address.family === 4 ? 4 : isIP(address.address)
+  return family === 6 ? 6 : 4
 }
 
 async function lookupAll(hostname: string): Promise<readonly DriveLookupAddress[]> {
@@ -123,24 +190,30 @@ function parseRemoteImageUrl(src: string, base?: URL): URL {
   }
 }
 
-function isRedirectResponse(response: Response): boolean {
-  return response.status >= 300 && response.status < 400
+function isRedirectResponse(response: IncomingMessage): boolean {
+  const statusCode = response.statusCode ?? 0
+  return statusCode >= 300 && statusCode < 400
 }
 
-async function readImageResponse(response: Response): Promise<DriveFetchedRemoteImage> {
-  const contentLength = parseContentLength(response.headers.get("content-length"))
+function isSuccessResponse(response: IncomingMessage): boolean {
+  const statusCode = response.statusCode ?? 0
+  return statusCode >= 200 && statusCode < 300
+}
+
+async function readImageResponse(response: IncomingMessage): Promise<DriveFetchedRemoteImage> {
+  const contentLength = parseContentLength(readHeader(response.headers, "content-length"))
   if (contentLength !== null && contentLength > BigInt(MAX_REMOTE_IMAGE_BYTES)) {
+    response.destroy()
     throw new BadRequestException(IMAGE_TOO_LARGE_ERROR)
   }
 
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? ""
+  const contentType = readHeader(response.headers, "content-type")?.toLowerCase() ?? ""
   if (contentType.split(";")[0]?.trim() === "image/svg+xml") {
+    response.destroy()
     throw new BadRequestException(UNSUPPORTED_FORMAT_ERROR)
   }
 
   const body = await readResponseBody(response)
-  if (body.byteLength > MAX_REMOTE_IMAGE_BYTES) throw new BadRequestException(IMAGE_TOO_LARGE_ERROR)
-
   const mimeType = detectRemoteImageMimeType(body)
   if (!mimeType) throw new BadRequestException(UNSUPPORTED_FORMAT_ERROR)
 
@@ -151,12 +224,52 @@ async function readImageResponse(response: Response): Promise<DriveFetchedRemote
   }
 }
 
-async function readResponseBody(response: Response): Promise<Buffer> {
-  try {
-    return Buffer.from(await response.arrayBuffer())
-  } catch {
-    throw new BadRequestException(GENERIC_FETCH_ERROR)
-  }
+function readHeader(headers: IncomingHttpHeaders, name: string): string | null {
+  const value = headers[name.toLowerCase()]
+  if (Array.isArray(value)) return value[0] ?? null
+  return value ?? null
+}
+
+async function readResponseBody(response: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let byteLength = 0
+    let settled = false
+
+    const fail = (message: string) => {
+      if (settled) return
+      settled = true
+      response.destroy()
+      reject(new BadRequestException(message))
+    }
+
+    response.on("data", (chunk: Buffer | string) => {
+      if (settled) return
+
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      const nextByteLength = byteLength + buffer.byteLength
+      if (nextByteLength > MAX_REMOTE_IMAGE_BYTES) {
+        fail(IMAGE_TOO_LARGE_ERROR)
+        return
+      }
+
+      byteLength = nextByteLength
+      chunks.push(buffer)
+    })
+    response.on("end", () => {
+      if (settled) return
+      settled = true
+      resolve(Buffer.concat(chunks, byteLength))
+    })
+    response.on("error", () => {
+      fail(GENERIC_FETCH_ERROR)
+    })
+    if (typeof response.setTimeout === "function") {
+      response.setTimeout(REMOTE_IMAGE_TIMEOUT_MS, () => {
+        fail(GENERIC_FETCH_ERROR)
+      })
+    }
+  })
 }
 
 function parseContentLength(value: string | null): bigint | null {
