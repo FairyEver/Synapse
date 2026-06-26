@@ -108,6 +108,11 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DriveItemIcon } from "./drive-item-icon"
+import {
+  DriveRendererActionsProvider,
+  useDriveRendererActions,
+  type DriveRendererAction,
+} from "./markdown/drive-renderer-actions"
 
 type DrivePathEntry = {
   readonly id: string | null
@@ -191,7 +196,16 @@ function driveMoveTreeKey(parentId: string | null): string {
 }
 
 function DriveModule() {
+  return (
+    <DriveRendererActionsProvider>
+      <DriveModuleContent />
+    </DriveRendererActionsProvider>
+  )
+}
+
+function DriveModuleContent() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
+  const { actions: rendererActions } = useDriveRendererActions()
   const [items, setItems] = useState<DriveItemDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [activeView, setActiveView] = useState<DriveActiveView>("files")
@@ -588,6 +602,7 @@ function DriveModule() {
     }
     return (
       <DriveToolbarActions
+        rendererActions={rendererActions}
         uploadDisabled={uploadActionsDisabled}
         createDisabled={actionsDisabled}
         publicLinksDisabled={!accountAuthenticated || loading}
@@ -1359,12 +1374,14 @@ function DriveToolbarActions({
   onUploadFolder,
   publicLinksDisabled,
   refreshDisabled,
+  rendererActions,
   uploadDisabled,
 }: {
   readonly children: ReactNode
   readonly createDisabled: boolean
   readonly publicLinksDisabled: boolean
   readonly refreshDisabled: boolean
+  readonly rendererActions: readonly DriveRendererAction[]
   readonly uploadDisabled: boolean
   readonly onCreateFolder: () => void
   readonly onOpenPublicLinks: () => void
@@ -1376,6 +1393,11 @@ function DriveToolbarActions({
   return (
     <div className="flex flex-wrap items-center justify-end gap-2" data-testid="drive-toolbar-actions">
       {children}
+      {rendererActions.map((action) => (
+        <Button key={action.id} type="button" variant="outline" size="sm" disabled={action.disabled} onClick={action.onClick}>
+          {action.badge ? `${action.label} ${action.badge}` : action.label}
+        </Button>
+      ))}
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}
