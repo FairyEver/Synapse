@@ -14,6 +14,9 @@ import type {
 import type {
   DriveLocalUploadFileItem,
   DriveLocalUploadFolderItem,
+  DriveDocumentImageImportBridgeRequest,
+  DriveDocumentImageSourceContext,
+  DrivePublicAssetBinaryUploadRequest,
   DrivePublicAssetLocalFile,
   DrivePublicAssetUploadRequest,
   DrivePublicAssetUploadResult,
@@ -25,6 +28,8 @@ import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
+  DriveDocumentImageImportResult,
+  DriveDocumentImageSourcesDto,
   DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
@@ -261,6 +266,16 @@ function currentOwnerDriveDownloadUrl(itemId: string): string {
 
 function currentOwnerDriveVersionDownloadUrl(itemId: string, versionId: string): string {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}/download`
+}
+
+function driveDocumentImageSourcesPath(input: DriveDocumentImageSourceContext): string {
+  if (input.kind === "owner") {
+    return `/drive/items/${encodeURIComponent(input.itemId)}/image-sources`
+  }
+  const sharePath = `/drive/browser/shares/${encodeURIComponent(input.shareId)}`
+  return input.itemId
+    ? `${sharePath}/items/${encodeURIComponent(input.itemId)}/image-sources`
+    : `${sharePath}/image-sources`
 }
 
 type DriveFileContentReadResult = {
@@ -865,6 +880,18 @@ export class AccountService {
     }
   }
 
+  private async putPreparedUploadFromBuffer(
+    upload: DriveUploadPrepareResult["upload"],
+    bytes: Buffer,
+  ): Promise<void> {
+    const response = await this.fetchImpl(upload.url, {
+      method: upload.method,
+      headers: withContentLengthHeader(upload.headers, bytes.byteLength),
+      body: bytes as unknown as RequestInit["body"],
+    })
+    if (!response.ok) throw await createHttpError(upload.method, upload.url, response, "上传失败。")
+  }
+
   private async cancelPreparedDriveUpload(sessionId: string, operation: string): Promise<void> {
     await this.cancelDriveUpload(sessionId).catch((error) => {
       logger.warn("Drive local upload cancel failed.", {
@@ -925,6 +952,50 @@ export class AccountService {
 
     await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, runNext))
     return { results }
+  }
+
+  async uploadDrivePublicAssetBinary(input: DrivePublicAssetBinaryUploadRequest): Promise<DrivePublicAssetDto> {
+    const bytes = Buffer.from(input.data)
+    const uploadLimits = await getDriveUploadLimits()
+    if (bytes.byteLength > uploadLimits.maxFileBytes) {
+      throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
+    }
+    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
+    const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,
+      { name: input.name, size: String(bytes.byteLength), mimeType },
+      "上传准备失败。",
+    )
+
+    try {
+      await this.putPreparedUploadFromBuffer(prepared.upload, bytes)
+      return await this.requestAuthenticatedJson<DrivePublicAssetDto>(
+        "POST",
+        `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
+        undefined,
+        "上传确认失败。",
+      )
+    } catch (error) {
+      await this.cancelDrivePublicAssetUpload(prepared.sessionId)
+      throw error
+    }
+  }
+
+  async scanDriveDocumentImageSources(input: DriveDocumentImageSourceContext): Promise<DriveDocumentImageSourcesDto> {
+    return this.getAuthenticatedJson<DriveDocumentImageSourcesDto>(
+      `${apiBaseUrl()}${driveDocumentImageSourcesPath(input)}`,
+      "图片来源加载失败。",
+    )
+  }
+
+  async importDriveDocumentImages(input: DriveDocumentImageImportBridgeRequest): Promise<DriveDocumentImageImportResult> {
+    return this.requestAuthenticatedJson<DriveDocumentImageImportResult>(
+      "POST",
+      `${apiBaseUrl()}${driveDocumentImageSourcesPath(input)}/import`,
+      { baseVersionId: input.baseVersionId, sources: input.sources },
+      "图片导入失败。",
+    )
   }
 
   async replaceDrivePublicAssetFile(input: { readonly assetId: string } & DrivePublicAssetLocalFile): Promise<DrivePublicAssetDto> {

@@ -187,6 +187,60 @@ const drivePublicAssetSchema = z.object({
   updatedAt: z.string(),
 })
 
+const driveDocumentImageSourceSchema = z.object({
+  id: z.string(),
+  imageKey: z.string(),
+  src: z.string(),
+  kind: z.enum(["owner_asset", "collaborator_asset", "external", "relative", "data", "invalid", "unsupported"]),
+  occurrenceCount: z.number().int().nonnegative(),
+  altText: z.string().optional(),
+  previewUrl: z.string().optional(),
+  assetId: z.string().optional(),
+  assetOwnerId: z.string().optional(),
+  assetOwnerName: z.string().optional(),
+  canImport: z.boolean(),
+  status: z.enum(["ready", "checking", "unreachable", "importing", "imported", "failed"]),
+  reason: z.string().optional(),
+  importDisabledReason: z.enum(["not_owner", "already_owned", "unreachable", "unsupported", "quota", "too_large"]).optional(),
+})
+
+const driveDocumentImageSourcesSchema = z.object({
+  itemId: z.string(),
+  versionId: z.string().nullable(),
+  canImport: z.boolean(),
+  sources: z.array(driveDocumentImageSourceSchema),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    ownerAsset: z.number().int().nonnegative(),
+    collaboratorAsset: z.number().int().nonnegative(),
+    external: z.number().int().nonnegative(),
+    invalid: z.number().int().nonnegative(),
+    unsupported: z.number().int().nonnegative(),
+    importable: z.number().int().nonnegative(),
+  }),
+})
+
+const driveDocumentImageImportResultSchema = z.object({
+  itemId: z.string(),
+  versionId: z.string(),
+  imported: z.array(z.object({
+    previousSrc: z.string(),
+    nextSrc: z.string(),
+    assetId: z.string(),
+    size: z.string(),
+  })),
+  failed: z.array(z.object({
+    src: z.string(),
+    reason: z.enum(["unreachable", "unsupported", "too_large", "quota", "changed", "unknown"]),
+    message: z.string(),
+  })),
+  summary: z.object({
+    importedCount: z.number().int().nonnegative(),
+    failedCount: z.number().int().nonnegative(),
+    replacedOccurrenceCount: z.number().int().nonnegative(),
+  }),
+})
+
 const driveSiteSchema = z.object({
   id: z.string(),
   siteId: z.string(),
@@ -306,6 +360,35 @@ const drivePublicAssetLocalFileSchema = z.object({
 const drivePublicAssetUploadSchema = z.object({
   files: z.array(drivePublicAssetLocalFileSchema).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
 })
+const drivePublicAssetBinaryUploadSchema = z.object({
+  name: z.string().min(1),
+  mimeType: z.string(),
+  data: z.custom<ArrayBuffer | ArrayBufferView>(
+    isArrayBufferOrViewLike,
+    "data must be an ArrayBuffer",
+  ).transform(toArrayBufferForIpc),
+}).strict()
+const driveDocumentImageSourceOwnerContextSchema = z.object({
+  kind: z.literal("owner"),
+  itemId: z.string().min(1),
+}).strict()
+const driveDocumentImageSourceShareContextSchema = z.object({
+  kind: z.literal("share"),
+  shareId: z.string().min(1),
+  itemId: z.string().min(1).nullable().optional(),
+}).strict()
+const driveDocumentImageSourceContextSchema = z.discriminatedUnion("kind", [
+  driveDocumentImageSourceOwnerContextSchema,
+  driveDocumentImageSourceShareContextSchema,
+])
+const driveDocumentImageImportSourcesSchema = z.object({
+  baseVersionId: z.string().min(1),
+  sources: z.array(z.object({ src: z.string().min(1) })),
+})
+const driveDocumentImageImportSchema = z.union([
+  driveDocumentImageSourceOwnerContextSchema.extend(driveDocumentImageImportSourcesSchema.shape),
+  driveDocumentImageSourceShareContextSchema.extend(driveDocumentImageImportSourcesSchema.shape),
+])
 const unsafeRelativePathSegmentPattern = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 
 const driveLocalUploadRelativePathSchema = z.string().min(1).refine(
@@ -411,6 +494,22 @@ const accountStateChangedDomainEventSchema = z.object({
 
 function isArrayBufferLike(value: unknown): value is ArrayBuffer {
   return Object.prototype.toString.call(value) === "[object ArrayBuffer]"
+}
+
+function isArrayBufferViewWithArrayBuffer(value: unknown): value is ArrayBufferView & { readonly buffer: ArrayBuffer } {
+  return ArrayBuffer.isView(value) && isArrayBufferLike(value.buffer)
+}
+
+function isArrayBufferOrViewLike(value: unknown): value is ArrayBuffer | ArrayBufferView {
+  return isArrayBufferLike(value) || isArrayBufferViewWithArrayBuffer(value)
+}
+
+function toArrayBufferForIpc(value: ArrayBuffer | ArrayBufferView): ArrayBuffer {
+  if (isArrayBufferLike(value)) return value
+  if (isArrayBufferViewWithArrayBuffer(value)) {
+    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+  }
+  throw new Error("data must be backed by an ArrayBuffer")
 }
 
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
@@ -913,6 +1012,27 @@ export const accountIpcModule: IpcModule = {
           run: () => accountService.uploadDrivePublicAssets(request),
         })
       },
+    },
+    uploadDrivePublicAssetBinary: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:upload-binary",
+      request: drivePublicAssetBinaryUploadSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => accountService.uploadDrivePublicAssetBinary(drivePublicAssetBinaryUploadSchema.parse(input)),
+    },
+    scanDriveDocumentImageSources: {
+      kind: "invoke",
+      channel: "synapse:account:drive:document-images:scan",
+      request: driveDocumentImageSourceContextSchema,
+      response: driveDocumentImageSourcesSchema,
+      handler: async (_ctx, input) => accountService.scanDriveDocumentImageSources(driveDocumentImageSourceContextSchema.parse(input)),
+    },
+    importDriveDocumentImages: {
+      kind: "invoke",
+      channel: "synapse:account:drive:document-images:import",
+      request: driveDocumentImageImportSchema,
+      response: driveDocumentImageImportResultSchema,
+      handler: async (_ctx, input) => accountService.importDriveDocumentImages(driveDocumentImageImportSchema.parse(input)),
     },
     replaceDrivePublicAssetFile: {
       kind: "invoke",

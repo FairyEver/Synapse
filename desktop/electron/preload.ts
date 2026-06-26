@@ -5,7 +5,13 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import type { DriveLocalUploadRequest, SynapseBridge } from "../src/types/bridge"
+import type {
+  DriveDocumentImageImportBridgeRequest,
+  DriveDocumentImageSourceContext,
+  DriveLocalUploadRequest,
+  DrivePublicAssetBinaryUploadRequest,
+  SynapseBridge,
+} from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { AgentDetachedConversation } from "../src/types/agent-conversation-window"
 import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
@@ -454,6 +460,12 @@ const IPC_CHANNELS = {
   },
 } as const satisfies IpcChannelMap
 
+const ACCOUNT_EXTRA_CHANNELS = {
+  uploadDrivePublicAssetBinary: "synapse:account:drive:public-assets:upload-binary",
+  scanDriveDocumentImageSources: "synapse:account:drive:document-images:scan",
+  importDriveDocumentImages: "synapse:account:drive:document-images:import",
+} as const
+
 // Legacy event channels that are not declared by IpcModule descriptors yet.
 const EVENT_CHANNELS = {
   update: {
@@ -695,6 +707,50 @@ function summarizeDriveLocalUploadRequest(input: unknown): unknown {
   }
 }
 
+function summarizeDrivePublicAssetBinaryUploadRequest(input: unknown): unknown {
+  if (!input || typeof input !== "object") {
+    return { inputType: typeof input }
+  }
+  const request = input as Partial<DrivePublicAssetBinaryUploadRequest>
+  return {
+    name: typeof request.name === "string" ? request.name : undefined,
+    mimeType: typeof request.mimeType === "string" ? request.mimeType : undefined,
+    byteLength: binaryDataByteLength(request.data),
+  }
+}
+
+function summarizeDriveDocumentImageSourceContext(input: unknown): unknown {
+  if (!input || typeof input !== "object") {
+    return { inputType: typeof input }
+  }
+  const request = input as Partial<DriveDocumentImageSourceContext>
+  return {
+    kind: request.kind,
+    itemId: "itemId" in request ? request.itemId : undefined,
+    shareId: "shareId" in request ? request.shareId : undefined,
+  }
+}
+
+function summarizeDriveDocumentImageImportRequest(input: unknown): unknown {
+  const context = summarizeDriveDocumentImageSourceContext(input)
+  if (!input || typeof input !== "object") return context
+  const request = input as Partial<DriveDocumentImageImportBridgeRequest>
+  return {
+    ...(context as Record<string, unknown>),
+    sourceCount: Array.isArray(request.sources) ? request.sources.length : undefined,
+  }
+}
+
+function binaryDataByteLength(value: unknown): number | undefined {
+  if (Object.prototype.toString.call(value) === "[object ArrayBuffer]") {
+    return (value as ArrayBuffer).byteLength
+  }
+  if (ArrayBuffer.isView(value)) {
+    return value.byteLength
+  }
+  return undefined
+}
+
 // Helper to create invoke wrapper
 const invoke = (channel: string) => async (args?: unknown) => {
   const startedAt = performance.now()
@@ -926,6 +982,18 @@ const synapseBridge: SynapseBridge = {
           )).slice(0, 10),
         }
       },
+    ),
+    uploadDrivePublicAssetBinary: invokeWithFailureLogRequest(
+      ACCOUNT_EXTRA_CHANNELS.uploadDrivePublicAssetBinary,
+      summarizeDrivePublicAssetBinaryUploadRequest,
+    ),
+    scanDriveDocumentImageSources: invokeWithFailureLogRequest(
+      ACCOUNT_EXTRA_CHANNELS.scanDriveDocumentImageSources,
+      summarizeDriveDocumentImageSourceContext,
+    ),
+    importDriveDocumentImages: invokeWithFailureLogRequest(
+      ACCOUNT_EXTRA_CHANNELS.importDriveDocumentImages,
+      summarizeDriveDocumentImageImportRequest,
     ),
     replaceDrivePublicAssetFile: invokeWithFailureLogRequest(
       IPC_CHANNELS.account.replaceDrivePublicAssetFile,

@@ -56,6 +56,9 @@ vi.mock("../../../services/account-service", () => ({
     listDrivePublicAssets: async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 }),
     getDrivePublicAsset: async () => ({}),
     uploadDrivePublicAssets: vi.fn(async () => ({ results: [] })),
+    uploadDrivePublicAssetBinary: vi.fn(async () => ({})),
+    scanDriveDocumentImageSources: vi.fn(async () => ({})),
+    importDriveDocumentImages: vi.fn(async () => ({})),
     replaceDrivePublicAssetFile: vi.fn(async () => ({})),
     renameDrivePublicAsset: vi.fn(async () => ({})),
     trashDrivePublicAsset: vi.fn(async () => ({})),
@@ -603,6 +606,122 @@ describe("accountIpcModule", () => {
         { path: "/tmp/banner.webp", name: "banner.webp", mimeType: "image/webp" },
       ],
     })
+  })
+
+  it("accepts binary public asset uploads without file-system permission checks", async () => {
+    const body = vm.runInNewContext("new ArrayBuffer(3)") as ArrayBuffer
+    const requestSchema = accountIpcModule.methods.uploadDrivePublicAssetBinary.request
+    expect(requestSchema).toBeDefined()
+    if (!requestSchema) throw new Error("expected binary public asset upload request schema")
+
+    expect(requestSchema.parse({
+      name: "logo.png",
+      mimeType: "image/png",
+      data: body,
+    })).toMatchObject({
+      name: "logo.png",
+      mimeType: "image/png",
+      data: body,
+    })
+
+    const { ctx, permissionGuard } = createAccountSecurityContext()
+    const uploadDrivePublicAssetBinary = vi.mocked(accountService.uploadDrivePublicAssetBinary)
+    const asset = {
+      assetId: "asset_123",
+      itemId: "item-1",
+      name: "logo.png",
+      size: "3",
+      mimeType: "image/png",
+      url: "https://synapse.test/files/asset_123",
+      lifecycleStatus: "active" as const,
+      accessCount: "0",
+      responseBytes: "0",
+      lastAccessedAt: null,
+      createdAt: "2026-06-26T00:00:00.000Z",
+      updatedAt: "2026-06-26T00:00:00.000Z",
+    }
+    uploadDrivePublicAssetBinary.mockResolvedValueOnce(asset)
+
+    await expect(accountIpcModule.methods.uploadDrivePublicAssetBinary.handler(ctx, {
+      name: "logo.png",
+      mimeType: "image/png",
+      data: body,
+    })).resolves.toEqual(asset)
+
+    expect(uploadDrivePublicAssetBinary).toHaveBeenCalledWith({
+      name: "logo.png",
+      mimeType: "image/png",
+      data: body,
+    })
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+  })
+
+  it("routes document image source scan and import requests", async () => {
+    const scanDriveDocumentImageSources = vi.mocked(accountService.scanDriveDocumentImageSources)
+    const importDriveDocumentImages = vi.mocked(accountService.importDriveDocumentImages)
+    scanDriveDocumentImageSources.mockResolvedValueOnce({
+      itemId: "item-1",
+      versionId: "version-1",
+      canImport: true,
+      sources: [],
+      summary: {
+        total: 0,
+        ownerAsset: 0,
+        collaboratorAsset: 0,
+        external: 0,
+        invalid: 0,
+        unsupported: 0,
+        importable: 0,
+      },
+    })
+    importDriveDocumentImages.mockResolvedValueOnce({
+      itemId: "item-1",
+      versionId: "version-2",
+      imported: [],
+      failed: [],
+      summary: {
+        importedCount: 0,
+        failedCount: 0,
+        replacedOccurrenceCount: 0,
+      },
+    })
+
+    await accountIpcModule.methods.scanDriveDocumentImageSources.handler({} as IpcHandlerContext, {
+      kind: "share",
+      shareId: "share-1",
+      itemId: "item-2",
+    })
+    await accountIpcModule.methods.importDriveDocumentImages.handler({} as IpcHandlerContext, {
+      kind: "owner",
+      itemId: "item-1",
+      baseVersionId: "version-1",
+      sources: [{ src: "https://example.test/logo.png" }],
+    })
+
+    expect(scanDriveDocumentImageSources).toHaveBeenCalledWith({
+      kind: "share",
+      shareId: "share-1",
+      itemId: "item-2",
+    })
+    expect(importDriveDocumentImages).toHaveBeenCalledWith({
+      kind: "owner",
+      itemId: "item-1",
+      baseVersionId: "version-1",
+      sources: [{ src: "https://example.test/logo.png" }],
+    })
+  })
+
+  it("rejects invalid document image source contexts", () => {
+    expect(accountIpcModule.methods.scanDriveDocumentImageSources.request?.safeParse({
+      kind: "workspace",
+      itemId: "item-1",
+    }).success).toBe(false)
+    expect(accountIpcModule.methods.importDriveDocumentImages.request?.safeParse({
+      kind: "share",
+      itemId: "item-1",
+      baseVersionId: "version-1",
+      sources: [],
+    }).success).toBe(false)
   })
 
   it("stops public asset replacement when file read permission is denied", async () => {

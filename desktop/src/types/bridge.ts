@@ -74,6 +74,9 @@ import type {
 } from "./installers"
 import type {
   DashboardWebhookDto,
+  DriveDocumentImageImportRequest,
+  DriveDocumentImageImportResult,
+  DriveDocumentImageSourcesDto,
   DriveAccessSettingsInput,
   DriveFileVersionDto,
   DriveFileVersionListInput,
@@ -139,6 +142,12 @@ export type DrivePublicAssetUploadRequest = {
   readonly files: readonly DrivePublicAssetLocalFile[]
 }
 
+export type DrivePublicAssetBinaryUploadRequest = {
+  readonly name: string
+  readonly mimeType: string
+  readonly data: ArrayBuffer
+}
+
 export type DrivePublicAssetUploadResultItem =
   | {
     readonly status: "fulfilled"
@@ -154,6 +163,13 @@ export type DrivePublicAssetUploadResultItem =
 export type DrivePublicAssetUploadResult = {
   readonly results: readonly DrivePublicAssetUploadResultItem[]
 }
+
+export type DriveDocumentImageSourceContext =
+  | { readonly kind: "owner"; readonly itemId: string }
+  | { readonly kind: "share"; readonly shareId: string; readonly itemId?: string | null }
+
+export type DriveDocumentImageImportBridgeRequest =
+  DriveDocumentImageSourceContext & DriveDocumentImageImportRequest
 
 import type {
   SynapseLiveState,
@@ -970,6 +986,9 @@ export type SynapseBridge = {
     listDrivePublicAssets: (input?: { offset?: number; limit?: number }) => Promise<DrivePublicAssetListPageDto>
     getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
     uploadDrivePublicAssets: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
+    uploadDrivePublicAssetBinary: (input: DrivePublicAssetBinaryUploadRequest) => Promise<DrivePublicAssetDto>
+    scanDriveDocumentImageSources: (input: DriveDocumentImageSourceContext) => Promise<DriveDocumentImageSourcesDto>
+    importDriveDocumentImages: (input: DriveDocumentImageImportBridgeRequest) => Promise<DriveDocumentImageImportResult>
     replaceDrivePublicAssetFile: (input: { assetId: string } & DrivePublicAssetLocalFile) => Promise<DrivePublicAssetDto>
     renameDrivePublicAsset: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
     trashDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
