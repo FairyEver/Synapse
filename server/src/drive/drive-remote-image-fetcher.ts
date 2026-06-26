@@ -9,6 +9,21 @@ const REMOTE_IMAGE_TIMEOUT_MS = 15_000
 const GENERIC_FETCH_ERROR = "图片无法转存。"
 const UNSUPPORTED_FORMAT_ERROR = "格式不支持。"
 const IMAGE_TOO_LARGE_ERROR = "图片过大。"
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const IPV6_BLOCKED_PREFIXES: readonly { readonly prefix: readonly number[]; readonly bits: number }[] = [
+  { prefix: new Array(16).fill(0), bits: 128 },
+  { prefix: [...new Array(15).fill(0), 1], bits: 128 },
+  { prefix: new Array(12).fill(0), bits: 96 },
+  { prefix: [0x00, 0x64, 0xff, 0x9b], bits: 96 },
+  { prefix: [0x00, 0x64, 0xff, 0x9b, 0x00, 0x01], bits: 48 },
+  { prefix: [0x01, 0x00], bits: 64 },
+  { prefix: [0x20, 0x01, 0x00], bits: 23 },
+  { prefix: [0x20, 0x01, 0x0d, 0xb8], bits: 32 },
+  { prefix: [0x20, 0x02], bits: 16 },
+  { prefix: [0xfc], bits: 7 },
+  { prefix: [0xfe, 0x80], bits: 10 },
+  { prefix: [0xff], bits: 8 },
+]
 
 interface DriveLookupAddress {
   readonly address: string
@@ -153,7 +168,7 @@ function parseContentLength(value: string | null): bigint | null {
 }
 
 function detectRemoteImageMimeType(bytes: Buffer): string | null {
-  if (bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))) return "image/png"
+  if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) return "image/png"
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg"
 
   const gifHeader = bytes.subarray(0, 6).toString("ascii")
@@ -242,20 +257,18 @@ function isBlockedIpv6Address(address: string): boolean {
   const bytes = parseIpv6Bytes(address)
   if (!bytes) return true
 
-  return (
-    matchesIpv6Prefix(bytes, new Array(16).fill(0), 128) ||
-    matchesIpv6Prefix(bytes, [...new Array(15).fill(0), 1], 128) ||
-    matchesIpv6Prefix(bytes, [0x00, 0x00, 0x00, 0x00], 96) ||
-    matchesIpv6Prefix(bytes, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff], 96) ||
-    matchesIpv6Prefix(bytes, [0x00, 0x64, 0xff, 0x9b], 96) ||
-    matchesIpv6Prefix(bytes, [0x01, 0x00], 64) ||
-    matchesIpv6Prefix(bytes, [0x20, 0x01, 0x00], 23) ||
-    matchesIpv6Prefix(bytes, [0x20, 0x01, 0x0d, 0xb8], 32) ||
-    matchesIpv6Prefix(bytes, [0x20, 0x02], 16) ||
-    matchesIpv6Prefix(bytes, [0xfc], 7) ||
-    matchesIpv6Prefix(bytes, [0xfe, 0x80], 10) ||
-    matchesIpv6Prefix(bytes, [0xff], 8)
-  )
+  const mappedIpv4 = extractMappedIpv4Address(bytes)
+  if (mappedIpv4) return isBlockedIpv4Address(mappedIpv4)
+
+  return IPV6_BLOCKED_PREFIXES.some((range) => matchesIpv6Prefix(bytes, range.prefix, range.bits))
+}
+
+function extractMappedIpv4Address(bytes: readonly number[]): string | null {
+  if (!matchesIpv6Prefix(bytes, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff], 96)) {
+    return null
+  }
+
+  return bytes.slice(12, 16).join(".")
 }
 
 function parseIpv6Bytes(address: string): readonly number[] | null {

@@ -18,7 +18,19 @@ describe("DriveRemoteImageFetcher", () => {
   })
 
   it("downloads and validates a png image", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]), {
+    const fetch = vi.fn().mockResolvedValue(new Response(new Uint8Array([
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
+      1,
+      2,
+      3,
+    ]), {
       status: 200,
       headers: { "content-type": "image/png" },
     }))
@@ -29,7 +41,7 @@ describe("DriveRemoteImageFetcher", () => {
     const result = await fetcher.fetchImage("https://example.test/a.png")
 
     expect(result.mimeType).toBe("image/png")
-    expect(result.body.length).toBe(7)
+    expect(result.body.length).toBe(11)
   })
 
   it("rejects svg even when content type says image", async () => {
@@ -92,5 +104,36 @@ describe("DriveRemoteImageFetcher", () => {
     ])
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("格式不支持。")
+  })
+
+  it("rejects png-like body with an incomplete png signature", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(new Uint8Array([
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+    ]), {
+      status: 200,
+      headers: { "content-type": "image/png" },
+    }))
+    const fetcher = new DriveRemoteImageFetcher(fetch as unknown as typeof globalThis.fetch, async () => [
+      { address: "93.184.216.34", family: 4 },
+    ])
+
+    await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("格式不支持。")
+  })
+
+  it("rejects ORCHIDv2 IPv6 DNS results before fetching", async () => {
+    const fetch = vi.fn()
+    const fetcher = new DriveRemoteImageFetcher(fetch as unknown as typeof globalThis.fetch, async () => [
+      { address: "2001:20::1", family: 6 },
+    ])
+
+    await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
