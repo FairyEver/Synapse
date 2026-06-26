@@ -19,6 +19,20 @@ describe("drive document image parser", () => {
     expect(images[0]!.imageKey).toMatch(/^img_[0-9a-f]{16}$/u)
   })
 
+  it("extracts malformed markdown image URLs without throwing", () => {
+    const images = extractDriveMarkdownImages("![bad](https://%)")
+
+    expect(images).toHaveLength(1)
+    expect(images[0]).toMatchObject({ src: "https://%", occurrenceCount: 1, altText: "bad" })
+  })
+
+  it("extracts malformed raw html image URLs without throwing", () => {
+    const images = extractDriveMarkdownImages('<img src="https://%" alt="bad" />')
+
+    expect(images).toHaveLength(1)
+    expect(images[0]).toMatchObject({ src: "https://%", occurrenceCount: 1, altText: "bad" })
+  })
+
   it("replaces only image node URLs and preserves links and prose", () => {
     const markdown = [
       "![diagram](https://example.test/a.png)",
@@ -35,6 +49,15 @@ describe("drive document image parser", () => {
     expect(result.markdown).toContain("![diagram](https://synapse.test/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ)")
     expect(result.markdown).toContain("[same url](https://example.test/a.png)")
     expect(result.markdown).toContain("`https://example.test/a.png`")
+    expect(result.replacedOccurrenceCount).toBe(1)
+  })
+
+  it("replaces malformed markdown image URLs by their trimmed source key", () => {
+    const result = replaceDriveMarkdownImageSources("![bad](https://%)", new Map([
+      ["https://%", "https://synapse.test/files/bad"],
+    ]))
+
+    expect(result.markdown).toBe("![bad](https://synapse.test/files/bad)")
     expect(result.replacedOccurrenceCount).toBe(1)
   })
 

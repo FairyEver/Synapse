@@ -40,7 +40,11 @@ const HTML_ALT_ATTRIBUTE_PATTERN = /\balt\s*=\s*(["'])(.*?)\1/iu
 export function normalizeDriveMarkdownImageSrc(src: string): string {
   const trimmed = src.trim()
   if (!ABSOLUTE_URL_PATTERN.test(trimmed)) return trimmed
-  return new URL(trimmed).toString()
+  try {
+    return new URL(trimmed).toString()
+  } catch {
+    return trimmed
+  }
 }
 
 export function driveMarkdownImageKey(src: string): string {
