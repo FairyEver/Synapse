@@ -1,10 +1,13 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common"
 import { DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES } from "@synapse/shared"
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { DriveDocumentImageService } from "./drive-document-image.service"
 import type { DrivePublicAssetService } from "./drive-public-asset.service"
 import type { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
+import type { DriveStoragePort } from "./drive-storage"
 import type { DriveService } from "./drive.service"
+import { DriveService as RealDriveService } from "./drive.service"
 
 const OWNER_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ"
 const COLLABORATOR_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5Yua"
@@ -123,6 +126,47 @@ describe("DriveDocumentImageService", () => {
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
     })).rejects.toBeInstanceOf(BadRequestException)
   })
+
+  it("resolves a document owner for non-owner scans through the real DriveService helper", async () => {
+    const previousSecret = process.env.USER_ACCESS_JWT_SECRET
+    process.env.USER_ACCESS_JWT_SECRET = "drive-document-image-service-test-secret"
+    const item = createDriveItemRecord()
+    const prisma = {
+      driveItem: {
+        findFirst: vi.fn(async ({ where }: { readonly where: Record<string, unknown> }) => {
+          if (where.id !== item.id || "userId" in where) return null
+          return item
+        }),
+      },
+      driveFileVersion: {
+        findFirst: vi.fn(async () => ({ id: "ver-1" })),
+      },
+    }
+    const storage = {
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("![external](https://example.test/a.png)") })),
+    }
+    try {
+      const service = new RealDriveService(prisma as never, storage as unknown as DriveStoragePort)
+
+      const result = await service.getOwnerMarkdownImageDocument({ actorUserId: "user-2", itemId: "item-1" })
+
+      expect(result).toEqual({
+        itemId: "item-1",
+        ownerId: "owner-1",
+        versionId: "ver-1",
+        markdown: "![external](https://example.test/a.png)",
+      })
+      expect(prisma.driveItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.not.objectContaining({ userId: expect.anything() }),
+      }))
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.USER_ACCESS_JWT_SECRET
+      } else {
+        process.env.USER_ACCESS_JWT_SECRET = previousSecret
+      }
+    }
+  })
 })
 
 function createService(options: CreateServiceOptions): DriveDocumentImageService {
@@ -154,4 +198,26 @@ interface CreateServiceOptions {
   readonly ownerId?: string
   readonly versionId?: string | null
   readonly assetOwners?: ReadonlyMap<string, string>
+}
+
+function createDriveItemRecord() {
+  const now = new Date("2026-06-27T00:00:00.000Z")
+  return {
+    id: "item-1",
+    userId: "owner-1",
+    parentId: null,
+    type: "file",
+    name: "doc.md",
+    size: 42n,
+    mimeType: "text/markdown",
+    storageStatus: "active",
+    lifecycleStatus: "active",
+    uploadStatus: "completed",
+    storageKey: "drive/item-1",
+    deletedAt: null,
+    objectMissing: false,
+    shares: [],
+    createdAt: now,
+    updatedAt: now,
+  }
 }
