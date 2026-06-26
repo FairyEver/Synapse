@@ -23,8 +23,12 @@ Synapse 云盘未来需要支持直接编辑 Markdown/MDX 文档。用户在编�
 - https://mdxeditor.dev/editor/docs/images
 - https://mdxeditor.dev/editor/api/functions/imagePlugin
 - https://mdxeditor.dev/editor/api/type-aliases/ImageUploadHandler
+- https://mdxeditor.dev/editor/docs/getting-started
 - https://mdxeditor.dev/editor/docs/customizing-toolbar
 - https://mdxeditor.dev/editor/docs/diff-source
+- https://mdxeditor.dev/editor/docs/error-handling
+- https://mdxeditor.dev/editor/docs/theming
+- https://mdxeditor.dev/editor/docs/content-styling
 
 ## 目标
 
@@ -44,8 +48,10 @@ Synapse 云盘未来需要支持直接编辑 Markdown/MDX 文档。用户在编�
 - 不做文档附件目录。
 - 不做 SVG 上传或转存。
 - 不做完整强一致图片引用表。
+- 不做公共素材删除前的全局强拦截。
 - 不做图片裁剪、压缩、标注等编辑功能。
 - 不把图片来源治理入口放到公共素材页面作为主入口。
+- 不把图片来源治理入口放到云盘文件列表行操作作为第一版主入口。
 
 ## 核心产品规则
 
@@ -86,11 +92,13 @@ Synapse 云盘未来需要支持直接编辑 Markdown/MDX 文档。用户在编�
 ### 所有者治理外部图片
 
 1. 文档中已有外部图片 URL。
-2. 所有者打开文档，顶栏显示 `图片来源 2`。
+2. 所有者在 Markdown 预览态或编辑态打开文档，顶栏显示 `图片来源 2`。
 3. 所有者打开图片来源面板。
 4. 所有者点击 `转存`、`转存所选` 或 `转存全部`。
 5. 服务端创建所有者公共素材，并替换 Markdown 图片 URL。
 6. 转存操作提交为新的文档版本。
+
+这个流程不要求用户进入 MDXEditor。预览态看到外部图片或协作者素材时，也可以从同一个图片来源面板完成转存。
 
 ## 架构分层
 
@@ -125,6 +133,7 @@ Public Asset 服务不关心图片来自 Markdown、公共素材页还是未来�
 - 提供 renderer action slot。
 - 当前 Markdown renderer 注册 `图片来源` action。
 - 顶栏只渲染 action，不判断文件类型。
+- 图片来源面板以当前文档上下文内的侧边面板或 Sheet 打开，不跳转到公共素材页。
 
 统一顶栏不直接包含 Markdown 图片逻辑。
 
@@ -139,6 +148,45 @@ Public Asset 服务不关心图片来自 Markdown、公共素材页还是未来�
 - 上传成功后插入 Markdown 图片。
 
 MDXEditor 不处理容量归属、转存、公共素材生命周期和文档图片治理。
+
+### MDXEditor 集成基线
+
+MDXEditor 按官方插件体系集成，不重写编辑器内核。
+
+第一版建议启用：
+
+- `headingsPlugin`
+- `listsPlugin`
+- `quotePlugin`
+- `linkPlugin`
+- `linkDialogPlugin`
+- `imagePlugin`
+- `tablePlugin`
+- `thematicBreakPlugin`
+- `codeBlockPlugin`
+- `codeMirrorPlugin`
+- `diffSourcePlugin`
+- `markdownShortcutPlugin`
+
+工具栏使用官方 toolbar 组件组合。`InsertImage` 依赖 `imagePlugin`，`CreateLink` 依赖 `linkDialogPlugin`，源码或 diff 切换依赖 `diffSourcePlugin`。
+
+Markdown 内容管理规则：
+
+- 初次打开文件时传入 `markdown`。
+- 编辑中用 `onChange` 维护 dirty 状态，不把变化后的内容反复回灌给 `markdown`。
+- 保存时通过 editor ref 获取当前 Markdown。
+- 外部切换文件或远端内容刷新时，通过 editor ref 更新 Markdown。
+
+错误恢复规则：
+
+- 保留 source/diff 模式，作为复杂 Markdown、HTML、历史内容或解析异常时的兜底入口。
+- 富文本解析异常不应导致文档空白或无法保存。
+
+样式规则：
+
+- 只把 MDXEditor 适配到 Synapse 现有 shadcn/Tailwind token。
+- 不写自定义颜色，不做独立编辑器皮肤。
+- 不用泛选择器覆盖编辑器内部 `div` 等基础节点。
 
 ## 上传设计
 
@@ -172,6 +220,14 @@ function uploadMarkdownImage(
 - 上传者只能给自己创建公共素材。
 - 文档上下文只能用于日志、来源标记或后续统计，不能决定资产归属。
 
+上传限制：
+
+- 支持格式必须复用公共素材图片白名单，第一版为 `jpg`、`jpeg`、`png`、`webp`、`gif`、`avif`、`ico`。
+- 粘贴或拖拽多图时保持插入顺序稳定。
+- 上传并发受控，第一版建议同一编辑器内并发 2 到 3 个。
+- 单次粘贴或拖拽数量需要有限制，第一版建议不超过 20 张。
+- 非图片文件不上传，提示 `仅支持图片`。
+
 ## 图片来源扫描
 
 图片来源分为：
@@ -189,6 +245,7 @@ DTO：
 ```ts
 type DriveDocumentImageSource = {
   id: string
+  imageKey: string
   src: string
   kind:
     | "owner_asset"
@@ -199,12 +256,21 @@ type DriveDocumentImageSource = {
     | "invalid"
     | "unsupported"
   occurrenceCount: number
+  altText?: string
+  previewUrl?: string
   assetId?: string
   assetOwnerId?: string
   assetOwnerName?: string
   canImport: boolean
   status: "ready" | "checking" | "unreachable" | "importing" | "imported" | "failed"
   reason?: string
+  importDisabledReason?:
+    | "not_owner"
+    | "already_owned"
+    | "unreachable"
+    | "unsupported"
+    | "quota"
+    | "too_large"
 }
 ```
 
@@ -235,9 +301,25 @@ type DriveDocumentImageSourcesDto = {
 - 打开图片来源面板时强扫描当前版本。
 - 转存前服务端必须重新扫描当前 Markdown，不能信任前端扫描结果。
 
+图片去重和排序：
+
+- 同一个规范化后的 `src` 在面板中合并为一行，使用 `occurrenceCount` 展示出现次数。
+- `imageKey` 由 `normalizeImageSrc(src)` 后哈希生成。
+- `normalizeImageSrc` 只做 trim、实体解码、URL 标准化等稳定处理，不丢弃 query 参数。
+- 面板默认按处理优先级排序：已失效图片、外部图片、协作者素材、data/base64、相对路径、所有者素材。
+
 ## 转存设计
 
 转存只允许文档所有者操作。
+
+接口形态：
+
+```text
+POST /api/drive/items/:itemId/image-sources/import
+POST /api/drive/browser/shares/:shareId/items/:itemId/image-sources/import
+```
+
+第二个接口只用于文档所有者通过分享页查看自己文件的场景。普通协作者即使有编辑权限，也不能转存到文档所有者公共素材。
 
 请求：
 
@@ -298,6 +380,11 @@ type DriveDocumentImageImportResult = {
 - 如果当前版本不等于 `baseVersionId`，不创建公共素材，不修改 Markdown。
 - 前端显示 `文档已更新`，提供 `刷新`。
 
+批量限制：
+
+- 单次 import 的 `sources` 数量必须有服务端上限，第一版建议不超过 20 个。
+- 超过上限时返回可读错误，不执行部分转存。
+
 ## 外部 URL 安全
 
 外链转存必须把 URL 当作不可信输入。
@@ -329,6 +416,10 @@ Markdown renderer 注册 action：
 
 badge 只统计需要关注的项，例如外部图片、协作者图片、失效图片、无法转存图片。不统计已经属于文档所有者的图片。
 
+扫描中可以显示轻量 loading。扫描失败不把顶栏变成强警告，只在打开面板后显示 `检查失败`。
+
+顶栏不显示 `转存全部`。批量动作只出现在图片来源面板内。
+
 ### 编辑器上传状态
 
 状态文案：
@@ -346,8 +437,12 @@ badge 只统计需要关注的项，例如外部图片、协作者图片、失�
 - 只有上传成功并拿到 URL 后才插入 Markdown 图片。
 - 多图上传可以并发，但插入顺序应保持粘贴或拖拽顺序。
 - 上传中禁止保存。
+- 拖拽投放区域只覆盖编辑器区域，不把整个 Finder 页面变成 drop zone。
+- 粘贴外部图片 URL 时默认作为外链插入，不自动转存。
 
 ### 图片来源面板
+
+图片来源面板从当前 Markdown 文件的顶栏 action 打开，使用侧边面板或 Sheet。它属于当前文档治理，不属于公共素材库管理页。
 
 分组：
 
@@ -366,6 +461,14 @@ badge 只统计需要关注的项，例如外部图片、协作者图片、失�
 - 可以查看来源状态。
 - 不显示批量转存主操作。
 - 对不能操作的项目显示短状态，例如 `所有者可转存`。
+
+行为规则：
+
+- owner 保存后如果发现外部图片或协作者素材，可以给轻提示 `发现 2 张需处理图片`，操作为 `查看`。
+- 协作者保存后不弹转存提示。
+- 不自动打开图片来源面板。
+- 转存成功后，成功行移动到 `已托管`，顶栏 badge 减少。
+- 部分失败时，失败行留在 `需处理` 并显示短原因和重试入口。
 
 状态文案：
 
@@ -438,6 +541,23 @@ importing
 
 可以增加派生缓存表，但它不是强一致引用表。
 
+建议结构：
+
+```ts
+type DriveDocumentImageInventory = {
+  itemId: string
+  versionId: string
+  imageKey: string
+  src: string
+  kind: string
+  occurrenceCount: number
+  assetId?: string
+  assetOwnerId?: string
+  lastSeenAt: string
+  status: string
+}
+```
+
 定位：
 
 - 加速顶栏 badge。
@@ -465,6 +585,7 @@ importing
 - 相对路径：第一版识别为不可转存。
 - data/base64：第一版可识别，默认不开放转存。
 - SVG：第一版不支持上传或转存。
+- 删除公共素材前可以基于 inventory 做影响提示，但第一版不阻止删除。
 
 ## 日志与审计
 
@@ -486,10 +607,19 @@ importing
 
 - 粘贴 PNG 后上传成功并插入 Markdown 图片。
 - 拖拽多张图片后插入顺序稳定。
+- 拖拽非编辑器区域不触发编辑器上传。
 - 上传中保存被阻止。
 - 上传失败不写入 Markdown。
 - 上传失败后重试成功。
 - 非图片文件拖入提示 `仅支持图片`。
+- 粘贴外部图片 URL 时默认插入外链，不自动转存。
+
+MDXEditor 集成：
+
+- `imagePlugin` 的 `imageUploadHandler(File)` 被调用并返回公共素材 URL。
+- 保存时通过 editor ref 获取 Markdown，不把 `onChange` 内容回灌为强受控 `markdown`。
+- source/diff 模式在复杂 Markdown 或解析异常时可用。
+- toolbar 组件和插件依赖匹配。
 
 归属和容量：
 
@@ -519,11 +649,14 @@ importing
 并发和安全：
 
 - `baseVersionId` 不一致时返回冲突。
+- 单次上传数量超过上限时被拦截。
+- 单次 import sources 数量超过上限时被拒绝。
 - 外部 URL 下载超时不创建 asset。
 - 外部 URL 不是图片不创建 asset。
 - SVG 不允许转存。
 - 超大图片不创建 asset。
 - 内网地址被拦截。
+- Synapse 公共素材 URL 通过集中解析器识别，不靠字符串 includes 判断。
 
 ## 实施顺序建议
 
