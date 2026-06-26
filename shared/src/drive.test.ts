@@ -73,6 +73,14 @@ describe("drive URL helpers", () => {
     expect(parseDrivePublicAssetUrl(`https://synapse.test/files//${assetId}`)).toBeNull()
   })
 
+  it("only parses http and https public asset URLs", () => {
+    const assetId = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ"
+
+    expect(parseDrivePublicAssetUrl(`file:///files/${assetId}`)).toBeNull()
+    expect(parseDrivePublicAssetUrl(`ftp://synapse.test/files/${assetId}`)).toBeNull()
+    expect(parseDrivePublicAssetUrl(`mailto:${assetId}@synapse.test`)).toBeNull()
+  })
+
   it("keeps image source DTO fields stable", () => {
     const source: DriveDocumentImageSource = {
       id: "img_1",

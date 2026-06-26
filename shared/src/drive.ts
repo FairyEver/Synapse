@@ -648,12 +648,14 @@ export function buildDrivePublicAssetUrl(input: {
 }
 
 export function parseDrivePublicAssetUrl(value: string): { readonly assetId: string } | null {
-  let pathname: string
+  let url: URL
   try {
-    pathname = new URL(value).pathname
+    url = new URL(value)
   } catch {
     return null
   }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null
+  const { pathname } = url
   const prefix = `${DRIVE_PUBLIC_ASSET_PATH_PREFIX}/`
   if (!pathname.startsWith(prefix)) return null
   const encodedAssetId = pathname.slice(prefix.length)
