@@ -8,6 +8,7 @@ import {
   type DriveDocumentImageSourcesDto,
 } from "@synapse/shared"
 import { extractDriveMarkdownImages } from "./drive-document-image-parser"
+import { buildDriveDocumentImageInventoryRows, type DriveDocumentImageInventoryRow } from "./drive-document-image-inventory"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveService } from "./drive.service"
@@ -39,6 +40,7 @@ export interface DriveDocumentImageDrivePort {
 @Injectable()
 export class DriveDocumentImageService {
   private readonly drive: DriveDocumentImageDrivePort
+  private readonly imageInventoryDebugRows = new Map<string, readonly DriveDocumentImageInventoryRow[]>()
 
   constructor(
     drive: DriveService,
@@ -111,6 +113,12 @@ export class DriveDocumentImageService {
         actorUserId: input.actorUserId,
       }))
     }
+
+    this.refreshInventory({
+      itemId: input.document.itemId,
+      versionId: input.document.versionId,
+      sources,
+    })
 
     return {
       itemId: input.document.itemId,
@@ -185,13 +193,15 @@ export class DriveDocumentImageService {
     }
   }
 
-  private importDocumentImages(input: {
+  private async importDocumentImages(input: {
     readonly actorUserId: string
     readonly document: DriveMarkdownImageDocument
     readonly body: DriveDocumentImageImportRequest
-  }): DriveDocumentImageImportResult {
+  }): Promise<DriveDocumentImageImportResult> {
     if (input.document.ownerId !== input.actorUserId) throw new ForbiddenException("只有所有者可以转存图片。")
     if (input.document.versionId !== input.body.baseVersionId) throw new BadRequestException("文档已更新。")
+
+    await this.buildScanDto({ document: input.document, actorUserId: input.actorUserId })
 
     return {
       itemId: input.document.itemId,
@@ -208,6 +218,14 @@ export class DriveDocumentImageService {
         replacedOccurrenceCount: 0,
       },
     }
+  }
+
+  private refreshInventory(input: {
+    readonly itemId: string
+    readonly versionId: string | null
+    readonly sources: readonly DriveDocumentImageSource[]
+  }): void {
+    this.imageInventoryDebugRows.set(input.itemId, buildDriveDocumentImageInventoryRows(input))
   }
 
   private async classifyPublicAssetSource(input: {
