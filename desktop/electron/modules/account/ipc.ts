@@ -385,7 +385,7 @@ const driveDocumentImageImportSourcesSchema = z.object({
   baseVersionId: z.string().min(1),
   sources: z.array(z.object({ src: z.string().min(1) })),
 })
-const driveDocumentImageImportSchema = z.union([
+const driveDocumentImageImportSchema = z.discriminatedUnion("kind", [
   driveDocumentImageSourceOwnerContextSchema.extend(driveDocumentImageImportSourcesSchema.shape),
   driveDocumentImageSourceShareContextSchema.extend(driveDocumentImageImportSourcesSchema.shape),
 ])

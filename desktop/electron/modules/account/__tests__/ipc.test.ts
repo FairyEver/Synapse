@@ -717,6 +717,12 @@ describe("accountIpcModule", () => {
       itemId: "item-1",
     }).success).toBe(false)
     expect(accountIpcModule.methods.importDriveDocumentImages.request?.safeParse({
+      kind: "workspace",
+      itemId: "item-1",
+      baseVersionId: "version-1",
+      sources: [],
+    }).success).toBe(false)
+    expect(accountIpcModule.methods.importDriveDocumentImages.request?.safeParse({
       kind: "share",
       itemId: "item-1",
       baseVersionId: "version-1",

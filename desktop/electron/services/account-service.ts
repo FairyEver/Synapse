@@ -961,6 +961,9 @@ export class AccountService {
       throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
     }
     const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
+    if (!mimeType || !mimeType.startsWith("image/")) {
+      throw new Error("格式不支持。")
+    }
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
       `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,

@@ -709,6 +709,22 @@ describe("AccountService", () => {
     )
   })
 
+  it("rejects unsupported binary public asset uploads before prepare", async () => {
+    const bytes = new TextEncoder().encode("plain text").buffer
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+
+    await expect(service.uploadDrivePublicAssetBinary({
+      name: "note.txt",
+      mimeType: "text/plain",
+      data: bytes,
+    })).rejects.toThrow("格式不支持。")
+
+    expect(requestAuthenticatedJson).not.toHaveBeenCalled()
+  })
+
   it("cancels binary public asset uploads when PUT fails after prepare", async () => {
     const bytes = new TextEncoder().encode("hello").buffer
     const fetch = vi.fn(async () => textResponse("upload failed", 500)) as unknown as typeof globalThis.fetch
