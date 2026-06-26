@@ -280,6 +280,14 @@ jobs:
             gh release create "$RELEASE_TAG" --title "$RELEASE_NAME" --notes-file cdn-release/release-body.md --repo "$RELEASE_REPO"
           fi
 
+      - name: Prune old COS release versions
+        run: |
+          set -euo pipefail
+          cd desktop
+          pnpm exec node scripts/release/prune-cos-release-versions.mjs \
+            --coscli "$RUNNER_TEMP/coscli" \
+            --cos-config "$RUNNER_TEMP/cos.yaml"
+
   notify:
     name: Notify package completion
     runs-on: macos-latest

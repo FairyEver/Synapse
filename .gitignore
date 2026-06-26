@@ -6,6 +6,8 @@ desktop/electron/generated/deployment-config.generated.ts
 desktop/src/generated/deployment-config.generated.ts
 dist-database
 release
+!desktop/scripts/release/
+!desktop/scripts/release/*.mjs
 .DS_Store
 *.log
 .env
