@@ -595,6 +595,7 @@ export class ConversationRouter {
     let resultCostCny: number | undefined
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
+    let assistantHistoryPersisted = false
     let error: string | undefined
 
     const accepted = await liveSession.send(message)
@@ -706,7 +707,7 @@ export class ConversationRouter {
       this.emitEvent(message, conversation.id, event)
       await this.persistAgentEvent(conversation.id, turnId, events.length, event)
       await this.saveEventSdkSession(conversation.id, event, liveSession)
-      await this.saveEventHistory(conversation.id, event)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
 
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
@@ -731,7 +732,9 @@ export class ConversationRouter {
     }
 
     const sdkSessionId = liveSession.currentSessionId()
-    const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId, resultMetadata)
+    const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId, resultMetadata, {
+      assistantHistoryPersisted,
+    })
 
     return {
       conversationId: saved.id,
@@ -810,6 +813,7 @@ export class ConversationRouter {
     let resultCostCny: number | undefined
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
+    let assistantHistoryPersisted = false
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(
@@ -850,7 +854,7 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, errorEvent)
           await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
           await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
-          await this.saveEventHistory(conversation.id, errorEvent)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -929,20 +933,11 @@ export class ConversationRouter {
             })
             events.push(projected)
             partialText = appendRelayText(partialText, projected)
-            this.emitEvent(message, conversation.id, projected)
-            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
-            await this.saveEventSdkSession(conversation.id, projected, liveSession)
-            await this.saveEventHistory(conversation.id, projected)
-            error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
-            break
-          }
-          events.push(event)
-          partialText = appendRelayText(partialText, event)
-          this.emitEvent(message, conversation.id, event)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-          await this.saveEventSdkSession(conversation.id, event, liveSession)
-          await this.saveEventHistory(conversation.id, event)
-          error = event.message
+          this.emitEvent(message, conversation.id, projected)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
+          error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
           break
         }
         events.push(event)
@@ -950,8 +945,17 @@ export class ConversationRouter {
         this.emitEvent(message, conversation.id, event)
         await this.persistAgentEvent(conversation.id, turnId, events.length, event)
         await this.saveEventSdkSession(conversation.id, event, liveSession)
-        await this.saveEventHistory(conversation.id, event)
-        if (event.type === "permissionRequest") {
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+        error = event.message
+        break
+      }
+      events.push(event)
+      partialText = appendRelayText(partialText, event)
+      this.emitEvent(message, conversation.id, event)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+      if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
             message: permissionRelayDenyMessage(event),
@@ -990,7 +994,7 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          await this.saveEventHistory(conversation.id, projected)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -1015,7 +1019,7 @@ export class ConversationRouter {
         this.emitEvent(message, conversation.id, errorEvent)
         await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
         await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
-        await this.saveEventHistory(conversation.id, errorEvent)
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         await this.sessionManager.closeCurrentTurn(conversation.id)
         return {
           conversationId: conversation.id,
@@ -1034,11 +1038,13 @@ export class ConversationRouter {
         if (errorEvent) {
           events.push(errorEvent)
           await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
-          await this.saveEventHistory(conversation.id, errorEvent)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         }
         error = errorResult.error
       }
-      const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId(), resultMetadata)
+      const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId(), resultMetadata, {
+        assistantHistoryPersisted,
+      })
       const result: AgentRuntimeRelayResult = {
         conversationId: saved.id,
         events,

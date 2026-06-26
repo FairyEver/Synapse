@@ -293,6 +293,28 @@ export class AgentSessionRepository {
     return updated
   }
 
+  async mergeLastHistoryMetadata(
+    conversationIdValue: string,
+    role: ConversationEntryV1["history"][number]["role"],
+    metadata: Record<string, unknown> | undefined,
+  ): Promise<ConversationEntryV1 | null> {
+    if (!metadata || Object.keys(metadata).length === 0) return null
+    const conversation = await this.requireConversation(conversationIdValue)
+    const historyIndex = findLastHistoryIndex(conversation.history, role)
+    if (historyIndex === -1) return null
+    const history = conversation.history.map((entry, index) =>
+      index === historyIndex
+        ? { ...entry, metadata: { ...(entry.metadata ?? {}), ...metadata } }
+        : entry)
+    const updated = {
+      ...conversation,
+      history,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
   async saveAgentSession(input: SaveAgentSessionInput): Promise<ConversationEntryV1> {
     const conversation = await this.requireConversation(input.conversationId)
     const updated = applyAgentSession(conversation, {
@@ -591,6 +613,16 @@ function pastAgentSessionIds(
   const values = current ? [...current] : []
   if (!values.includes(previous)) values.push(previous)
   return values.length > 0 ? values : undefined
+}
+
+function findLastHistoryIndex(
+  history: readonly ConversationEntryV1["history"][number][],
+  role: ConversationEntryV1["history"][number]["role"],
+): number {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index]?.role === role) return index
+  }
+  return -1
 }
 
 function usageSourceFields(

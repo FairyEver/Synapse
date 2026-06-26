@@ -512,6 +512,100 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("persists every visible assistant text around tool calls", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "assistant",
+          contentBlocks: [{ type: "text", text: "正式评估正文" }],
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "正式评估正文" }],
+          },
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "toolUse",
+          toolName: "Skill",
+          toolInput: "{\"skill\":\"sy-worklog\"}",
+          toolUseId: "toolu-1",
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "toolResult",
+          toolName: "Skill",
+          toolUseId: "toolu-1",
+          content: "ok",
+          success: true,
+          status: "success",
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "assistant",
+          contentBlocks: [{ type: "text", text: "工作记录已写入。" }],
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "工作记录已写入。" }],
+          },
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "result",
+          content: "工作记录已写入。",
+          done: true,
+          metadata: { model: "claude-sonnet-4-5" },
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("评估一下"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("工作记录已写入。")
+    expect(savedConversation?.history.map((entry) => [entry.role, entry.content])).toEqual([
+      ["user", "评估一下"],
+      ["assistant", "正式评估正文"],
+      ["tool", "Skill\n{\"skill\":\"sy-worklog\"}"],
+      ["tool", "ok"],
+      ["assistant", "工作记录已写入。"],
+    ])
+    expect(savedConversation?.history.at(-1)?.metadata).toEqual(expect.objectContaining({
+      model: "claude-sonnet-4-5",
+    }))
+  })
+
+  it("does not persist thinking-only assistant events as visible history", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "assistant",
+          contentBlocks: [{ type: "thinking", thinking: "private reasoning" }],
+          message: {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "private reasoning" }],
+          },
+          sdkSessionId: "sdk-1",
+        },
+        {
+          type: "result",
+          content: "fallback answer",
+          done: true,
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.resultText).toBe("fallback answer")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({ content: "fallback answer" }),
+    ])
+    expect(JSON.stringify(savedConversation?.history)).not.toContain("private reasoning")
+  })
+
   it("uses string SDK assistant content when no content blocks were emitted", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([
