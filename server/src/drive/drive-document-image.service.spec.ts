@@ -127,6 +127,100 @@ describe("DriveDocumentImageService", () => {
     })).rejects.toBeInstanceOf(BadRequestException)
   })
 
+  it("marks non-owner share scan sources as not importable", async () => {
+    const drive = createDriveMock({
+      currentMarkdown: [
+        `![other](https://synapse.test/files/${COLLABORATOR_ASSET_ID})`,
+        "![external](https://example.test/a.png)",
+      ].join("\n"),
+      ownerId: "owner-1",
+      assetOwners: new Map([[COLLABORATOR_ASSET_ID, "user-3"]]),
+    })
+    const service = new DriveDocumentImageService(
+      drive as unknown as DriveService,
+      {} as DrivePublicAssetService,
+      {} as DriveRemoteImageFetcher,
+    )
+
+    const result = await service.scanShareItemImages({
+      actorUserId: "user-2",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie-1",
+    })
+
+    expect(drive.getShareMarkdownImageDocument).toHaveBeenCalledWith({
+      actorUserId: "user-2",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie-1",
+    })
+    expect(result.canImport).toBe(false)
+    expect(result.summary.importable).toBe(0)
+    expect(result.sources.map((source) => source.kind)).toEqual(["collaborator_asset", "external"])
+    expect(result.sources.map((source) => source.importDisabledReason)).toEqual(["not_owner", "not_owner"])
+  })
+
+  it("rejects non-owner share import after resolving the share document", async () => {
+    const drive = createDriveMock({
+      currentMarkdown: "![external](https://example.test/a.png)",
+      ownerId: "owner-1",
+    })
+    const service = new DriveDocumentImageService(
+      drive as unknown as DriveService,
+      {} as DrivePublicAssetService,
+      {} as DriveRemoteImageFetcher,
+    )
+
+    await expect(service.importShareItemImages({
+      actorUserId: "user-2",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie-1",
+      body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+    })).rejects.toThrow("只有所有者可以转存图片。")
+    await expect(service.importShareItemImages({
+      actorUserId: "user-2",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie-1",
+      body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(drive.getShareMarkdownImageDocument).toHaveBeenCalled()
+  })
+
+  it("allows owner share import to reach the skeleton result when base version matches", async () => {
+    const service = createService({
+      currentMarkdown: "![external](https://example.test/a.png)",
+      ownerId: "owner-1",
+      versionId: "ver-1",
+    })
+
+    const result = await service.importShareItemImages({
+      actorUserId: "owner-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie-1",
+      body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+    })
+
+    expect(result).toMatchObject({
+      itemId: "item-1",
+      versionId: "ver-1",
+      imported: [],
+      summary: {
+        importedCount: 0,
+        failedCount: 1,
+        replacedOccurrenceCount: 0,
+      },
+    })
+    expect(result.failed).toEqual([{
+      src: "https://example.test/a.png",
+      reason: "unknown",
+      message: "转存失败。",
+    }])
+  })
+
   it("keeps the real DriveService owner helper bound to actor-owned documents", async () => {
     const previousSecret = process.env.USER_ACCESS_JWT_SECRET
     process.env.USER_ACCESS_JWT_SECRET = "drive-document-image-service-test-secret"
@@ -181,6 +275,18 @@ function createDriveMock(options: CreateServiceOptions) {
 
   return {
     getOwnerMarkdownImageDocument: vi.fn(async (_input: { readonly actorUserId: string; readonly itemId: string }) => ({
+      itemId: "item-1",
+      ownerId,
+      versionId,
+      markdown: options.currentMarkdown,
+    })),
+    getShareMarkdownImageDocument: vi.fn(async (_input: {
+      readonly actorUserId: string
+      readonly shareId: string
+      readonly itemId?: string | null
+      readonly cookie?: string
+      readonly accessCookie?: string
+    }) => ({
       itemId: "item-1",
       ownerId,
       versionId,

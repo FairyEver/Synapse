@@ -25,6 +25,14 @@ export interface DriveDocumentImageDrivePort {
     readonly itemId: string
   }): Promise<DriveMarkdownImageDocument>
 
+  getShareMarkdownImageDocument(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<DriveMarkdownImageDocument>
+
   findPublicAssetOwner(assetId: string): Promise<string | null>
 }
 
@@ -58,24 +66,37 @@ export class DriveDocumentImageService {
       actorUserId: input.actorUserId,
       itemId: input.itemId,
     })
-    if (document.ownerId !== input.actorUserId) throw new ForbiddenException("只有所有者可以转存图片。")
-    if (document.versionId !== input.body.baseVersionId) throw new BadRequestException("文档已更新。")
+    return this.importDocumentImages({ actorUserId: input.actorUserId, document, body: input.body })
+  }
 
-    return {
-      itemId: document.itemId,
-      versionId: document.versionId,
-      imported: [],
-      failed: input.body.sources.map((source) => ({
-        src: source.src,
-        reason: "unknown",
-        message: "转存失败。",
-      })),
-      summary: {
-        importedCount: 0,
-        failedCount: input.body.sources.length,
-        replacedOccurrenceCount: 0,
-      },
+  async scanShareItemImages(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+  }): Promise<DriveDocumentImageSourcesDto> {
+    const document = await this.drive.getShareMarkdownImageDocument(input)
+    return this.buildScanDto({ document, actorUserId: input.actorUserId })
+  }
+
+  async importShareItemImages(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly body: DriveDocumentImageImportRequest
+  }): Promise<DriveDocumentImageImportResult> {
+    if (input.body.sources.length > DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES) {
+      throw new BadRequestException("单次转存图片过多。")
     }
+
+    const document = await this.drive.getShareMarkdownImageDocument({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      itemId: input.itemId,
+      cookie: input.cookie,
+    })
+    return this.importDocumentImages({ actorUserId: input.actorUserId, document, body: input.body })
   }
 
   private async buildScanDto(input: {
@@ -161,6 +182,31 @@ export class DriveDocumentImageService {
       canImport: false,
       status: "unreachable",
       importDisabledReason: "unreachable",
+    }
+  }
+
+  private importDocumentImages(input: {
+    readonly actorUserId: string
+    readonly document: DriveMarkdownImageDocument
+    readonly body: DriveDocumentImageImportRequest
+  }): DriveDocumentImageImportResult {
+    if (input.document.ownerId !== input.actorUserId) throw new ForbiddenException("只有所有者可以转存图片。")
+    if (input.document.versionId !== input.body.baseVersionId) throw new BadRequestException("文档已更新。")
+
+    return {
+      itemId: input.document.itemId,
+      versionId: input.document.versionId,
+      imported: [],
+      failed: input.body.sources.map((source) => ({
+        src: source.src,
+        reason: "unknown",
+        message: "转存失败。",
+      })),
+      summary: {
+        importedCount: 0,
+        failedCount: input.body.sources.length,
+        replacedOccurrenceCount: 0,
+      },
     }
   }
 

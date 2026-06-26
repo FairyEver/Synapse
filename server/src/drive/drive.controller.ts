@@ -14,6 +14,7 @@ import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
+  DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
   type DriveBrowserPasswordRequiredDto,
@@ -21,6 +22,7 @@ import {
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveDocumentImageService } from "./drive-document-image.service"
 import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
@@ -89,6 +91,10 @@ const driveFileTextUpdateSchema = z.object({
   text: z.string(),
   baseVersionId: z.string().min(1),
 }).strict()
+const driveDocumentImageImportSchema = z.object({
+  baseVersionId: z.string().min(1),
+  sources: z.array(z.object({ src: z.string().min(1) }).strict()).max(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES),
+}).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
@@ -125,6 +131,7 @@ export class DriveUserController {
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
+    @Optional() private readonly documentImages?: DriveDocumentImageService,
   ) {}
 
   @Get("/public-assets")
@@ -295,6 +302,28 @@ export class DriveUserController {
   @Get("/items/:id")
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
+  }
+
+  @Get("/items/:itemId/image-sources")
+  scanOwnerItemImages(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveDocumentImageService(this.documentImages).scanOwnerItemImages({
+      actorUserId: request.user!.id,
+      itemId,
+    })
+  }
+
+  @Post("/items/:itemId/image-sources/import")
+  importOwnerItemImages(
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
+    return requireDriveDocumentImageService(this.documentImages).importOwnerItemImages({
+      actorUserId: request.user!.id,
+      itemId,
+      body: parsed,
+    })
   }
 
   @Get("/items/:id/versions")
@@ -832,6 +861,7 @@ export class DrivePublicController {
     @Optional() private readonly dashboardAuth?: AdminAuthService,
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
+    @Optional() private readonly documentImages?: DriveDocumentImageService,
   ) {}
 
   @Get("/files/:assetId")
@@ -1286,6 +1316,65 @@ export class DrivePublicController {
     })
   }
 
+  @UseGuards(UserAuthGuard)
+  @Get("/api/drive/browser/shares/:shareId/image-sources")
+  scanShareRootImages(@Param("shareId") shareId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveDocumentImageService(this.documentImages).scanShareItemImages({
+      actorUserId: request.user!.id,
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/api/drive/browser/shares/:shareId/items/:itemId/image-sources")
+  scanShareItemImages(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveDocumentImageService(this.documentImages).scanShareItemImages({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/image-sources/import")
+  importShareRootImages(
+    @Param("shareId") shareId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
+    return requireDriveDocumentImageService(this.documentImages).importShareItemImages({
+      actorUserId: request.user!.id,
+      shareId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parsed,
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/image-sources/import")
+  importShareItemImages(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
+    return requireDriveDocumentImageService(this.documentImages).importShareItemImages({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      body: parsed,
+    })
+  }
+
   private async unlockShareBrowserResponse(input: {
     readonly shareId: string
     readonly itemId?: string
@@ -1589,6 +1678,11 @@ function requireDriveAnnotationService(annotations: DriveAnnotationService | und
 function requireDriveSiteService(sites: DriveSiteService | undefined): DriveSiteService {
   if (!sites) throw new Error("DriveSiteService is not available.")
   return sites
+}
+
+function requireDriveDocumentImageService(documentImages: DriveDocumentImageService | undefined): DriveDocumentImageService {
+  if (!documentImages) throw new Error("DriveDocumentImageService is not available.")
+  return documentImages
 }
 
 function parseAccessSettings(body: unknown): DriveAccessSettingsInput | undefined {

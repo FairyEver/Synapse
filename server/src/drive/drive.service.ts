@@ -450,6 +450,32 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  async getShareMarkdownImageDocument(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<{ readonly itemId: string; readonly ownerId: string; readonly versionId: string | null; readonly markdown: string }> {
+    const access = await this.resolvePublicShareAccess({
+      shareId: input.shareId,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    if (access.status !== "ok") throw new UnauthorizedException("需要先解锁分享。")
+
+    const { current } = await this.resolveShareBrowserCurrent(access.value, input.itemId)
+    this.assertActiveBrowserItem(current)
+    this.assertEditableTextFile(current)
+    const storageKey = this.requireActiveFileStorage(current)
+    const preview = await this.readTextPreview(storageKey)
+    return {
+      itemId: current.id,
+      ownerId: access.value.ownerId,
+      versionId: await this.findCurrentDriveFileVersionId(current),
+      markdown: preview.text,
+    }
+  }
+
   async findPublicAssetOwner(assetId: string): Promise<string | null> {
     const asset = await this.prisma.publicAsset.findFirst({
       where: {
