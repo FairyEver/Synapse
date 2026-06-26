@@ -1,4 +1,4 @@
-import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, inferDrivePublicAssetMimeType } from "@synapse/shared"
 
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 
@@ -13,13 +13,16 @@ export function createDriveMarkdownImageUploader(
 ) {
   return {
     async upload(file: File): Promise<string> {
-      if (!supportedImageMimeTypes.has(file.type)) {
+      const name = file.name || "image.png"
+      const mimeType = file.type || inferDrivePublicAssetMimeType(name)
+
+      if (!mimeType || !supportedImageMimeTypes.has(mimeType)) {
         throw new Error("格式不支持。")
       }
 
       const asset = await getBridge().account.uploadDrivePublicAssetBinary({
-        name: file.name || "image.png",
-        mimeType: file.type,
+        name,
+        mimeType,
         data: await file.arrayBuffer(),
       })
 

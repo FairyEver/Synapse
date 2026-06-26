@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { DrivePublicAssetDto } from "@synapse/shared"
 
-import { createDriveMarkdownImageUploader, type DriveMarkdownImageUploaderBridge } from "./drive-markdown-image-uploader"
+import { createDriveMarkdownImageUploader, type DriveMarkdownImageUploaderBridge } from "../drive-markdown-image-uploader"
 
 describe("createDriveMarkdownImageUploader", () => {
   it("uploads an image file and returns the public URL", async () => {
@@ -30,6 +30,19 @@ describe("createDriveMarkdownImageUploader", () => {
     await expect(new Response(input.data).text()).resolves.toBe("image-bytes")
   })
 
+  it("infers MIME type from supported file names when File.type is empty", async () => {
+    const uploadDrivePublicAssetBinary = vi.fn().mockResolvedValue(createPublicAsset())
+    const uploader = createDriveMarkdownImageUploader(() => createBridge(uploadDrivePublicAssetBinary))
+    const file = new File(["image-bytes"], "note.png", { type: "" })
+
+    await uploader.upload(file)
+
+    expect(uploadDrivePublicAssetBinary).toHaveBeenCalledWith(expect.objectContaining({
+      name: "note.png",
+      mimeType: "image/png",
+    }))
+  })
+
   it("uses image.png when the file has no name", async () => {
     const uploadDrivePublicAssetBinary = vi.fn().mockResolvedValue(createPublicAsset())
     const uploader = createDriveMarkdownImageUploader(() => createBridge(uploadDrivePublicAssetBinary))
@@ -42,10 +55,19 @@ describe("createDriveMarkdownImageUploader", () => {
     }))
   })
 
-  it("rejects unsupported image formats before calling the bridge", async () => {
+  it("rejects unsupported image MIME types before calling the bridge", async () => {
     const uploadDrivePublicAssetBinary = vi.fn().mockResolvedValue(createPublicAsset())
     const uploader = createDriveMarkdownImageUploader(() => createBridge(uploadDrivePublicAssetBinary))
     const file = new File(["<svg />"], "vector.svg", { type: "image/svg+xml" })
+
+    await expect(uploader.upload(file)).rejects.toThrow("格式不支持")
+    expect(uploadDrivePublicAssetBinary).not.toHaveBeenCalled()
+  })
+
+  it("rejects unsupported file names when File.type is empty before calling the bridge", async () => {
+    const uploadDrivePublicAssetBinary = vi.fn().mockResolvedValue(createPublicAsset())
+    const uploader = createDriveMarkdownImageUploader(() => createBridge(uploadDrivePublicAssetBinary))
+    const file = new File(["<svg />"], "vector.svg", { type: "" })
 
     await expect(uploader.upload(file)).rejects.toThrow("格式不支持")
     expect(uploadDrivePublicAssetBinary).not.toHaveBeenCalled()
