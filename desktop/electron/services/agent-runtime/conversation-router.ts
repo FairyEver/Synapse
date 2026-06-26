@@ -813,6 +813,7 @@ export class ConversationRouter {
     let resultCostCny: number | undefined
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
+    let assistantHistoryPersisted = false
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(
@@ -853,7 +854,7 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, errorEvent)
           await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
           await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
-          await this.saveEventHistory(conversation.id, errorEvent)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -932,29 +933,29 @@ export class ConversationRouter {
             })
             events.push(projected)
             partialText = appendRelayText(partialText, projected)
-            this.emitEvent(message, conversation.id, projected)
-            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
-            await this.saveEventSdkSession(conversation.id, projected, liveSession)
-            await this.saveEventHistory(conversation.id, projected)
-            error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+          this.emitEvent(message, conversation.id, projected)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
+          error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
             break
           }
           events.push(event)
           partialText = appendRelayText(partialText, event)
-          this.emitEvent(message, conversation.id, event)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-          await this.saveEventSdkSession(conversation.id, event, liveSession)
-          await this.saveEventHistory(conversation.id, event)
-          error = event.message
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+        error = event.message
           break
         }
         events.push(event)
         partialText = appendRelayText(partialText, event)
-        this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
-        await this.saveEventHistory(conversation.id, event)
-        if (event.type === "permissionRequest") {
+      this.emitEvent(message, conversation.id, event)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+      if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
             message: permissionRelayDenyMessage(event),
@@ -993,7 +994,7 @@ export class ConversationRouter {
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          await this.saveEventHistory(conversation.id, projected)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
             conversationId: conversation.id,
@@ -1018,7 +1019,7 @@ export class ConversationRouter {
         this.emitEvent(message, conversation.id, errorEvent)
         await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
         await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
-        await this.saveEventHistory(conversation.id, errorEvent)
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         await this.sessionManager.closeCurrentTurn(conversation.id)
         return {
           conversationId: conversation.id,
@@ -1037,11 +1038,13 @@ export class ConversationRouter {
         if (errorEvent) {
           events.push(errorEvent)
           await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
-          await this.saveEventHistory(conversation.id, errorEvent)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         }
         error = errorResult.error
       }
-      const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId(), resultMetadata)
+      const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId(), resultMetadata, {
+        assistantHistoryPersisted,
+      })
       const result: AgentRuntimeRelayResult = {
         conversationId: saved.id,
         events,
@@ -1187,6 +1190,7 @@ export class ConversationRouter {
     resultText: string,
     sdkSessionId?: string,
     metadata?: ConversationEntryV1["history"][number]["metadata"],
+    options: { readonly assistantHistoryPersisted?: boolean } = {},
   ): Promise<ConversationEntryV1> {
     let saved = conversation
     if (sdkSessionId) {
@@ -1196,10 +1200,13 @@ export class ConversationRouter {
       })
       this.savedSdkSessions.set(conversation.id, sdkSessionId)
     }
-    if (resultText) {
+    if (options.assistantHistoryPersisted) {
+      const updated = await this.repository.mergeLastHistoryMetadata(saved.id, "assistant", metadata)
+      saved = updated ?? saved
+    } else if (resultText) {
       saved = await this.repository.appendHistory(saved.id, "assistant", resultText, metadata)
     }
-    if (sdkSessionId || resultText) {
+    if (sdkSessionId || resultText || options.assistantHistoryPersisted) {
       this.emitConversationUpdated(saved)
     }
     return saved
@@ -1329,11 +1336,12 @@ export class ConversationRouter {
   private async saveEventHistory(
     conversationId: string,
     event: AgentEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const entry = historyEntryForAgentEvent(event)
-    if (!entry) return
+    if (!entry) return false
     try {
       await this.repository.appendHistory(conversationId, entry.role, entry.content, entry.metadata)
+      return entry.role === "assistant"
     } catch (error) {
       this.deps.logger?.warn("AgentRuntime history persistence failed.", {
         boundary: "agent-runtime.history-persistence",
@@ -1342,6 +1350,7 @@ export class ConversationRouter {
         eventType: event.type,
         ...queuedTurnFailureMetadata(error),
       })
+      return false
     }
   }
 
@@ -1688,10 +1697,21 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           recoverable: event.recoverable,
         }),
       }
+    case "assistant": {
+      const content = assistantEventText(event)
+      if (!content) return null
+      return {
+        role: "assistant",
+        content,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          sdkSessionId: event.sdkSessionId,
+        }),
+      }
+    }
     case "text":
     case "result":
     case "sessionInit":
-    case "assistant":
     case "stream":
     case "status":
     case "compactBoundary":
