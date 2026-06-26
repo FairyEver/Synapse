@@ -237,6 +237,27 @@ describe("DriveRemoteImageFetcher", () => {
 
     await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
   })
+
+  it("destroys non-success responses before rejecting", async () => {
+    const captured: { response?: TestIncomingMessage } = {}
+    const request = vi.fn((_url: URL, _options: RequestOptions, callback: (response: IncomingMessage) => void) => {
+      const request = createMockClientRequest()
+      queueMicrotask(() => {
+        captured.response = createResponse(500)
+        callback(captured.response)
+        setImmediate(() => captured.response?.end("failed"))
+      })
+      return request
+    })
+    const fetcher = DriveRemoteImageFetcher.createForTest({
+      lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+      requestImplementation: request as never,
+    })
+
+    await expect(fetcher.fetchImage("https://example.test/a.png")).rejects.toThrow("图片无法转存。")
+    if (!captured.response) throw new Error("response not captured")
+    expect(captured.response.destroy).toHaveBeenCalled()
+  })
 })
 
 function createStaticImageRequest(body: Buffer, headers: Record<string, string> = {}) {
@@ -275,8 +296,10 @@ function createStreamingRequest(input: {
 
 function createResponse(statusCode: number, headers: Record<string, string> = {}): TestIncomingMessage {
   const response = new PassThrough() as unknown as TestIncomingMessage
+  const destroy = response.destroy.bind(response)
   response.statusCode = statusCode
   response.headers = headers
+  response.destroy = vi.fn((error?: Error) => destroy(error)) as never
   return response
 }
 

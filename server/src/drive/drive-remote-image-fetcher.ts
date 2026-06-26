@@ -80,7 +80,10 @@ export class DriveRemoteImageFetcher {
         continue
       }
 
-      if (!isSuccessResponse(response)) throw new BadRequestException(GENERIC_FETCH_ERROR)
+      if (!isSuccessResponse(response)) {
+        response.destroy()
+        throw new BadRequestException(GENERIC_FETCH_ERROR)
+      }
       return readImageResponse(response)
     }
 
