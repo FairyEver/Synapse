@@ -41,11 +41,11 @@ function AgentToolEvent({
   const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
   const failed = effectiveResult ? isFailedToolResult(effectiveResult) : false
   const permission = item.kind === "permissionRequest"
-  const defaultOpen = permission || failed || shouldDefaultOpen(
-    body,
-    rule?.defaultCollapsed ?? profile.toolDefaultCollapsed,
-  )
+  const automaticOpen = shouldAutoOpenToolEvent({ permission, failed, result: effectiveResult })
   const status = statusLabel(item, profile, result)
+  const userChangedOpenRef = useRef(false)
+  const [open, setOpen] = useState(automaticOpen)
+  const displayedOpen = userChangedOpenRef.current ? open : automaticOpen
   const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle")
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -54,6 +54,11 @@ function AgentToolEvent({
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     }
   }, [])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    userChangedOpenRef.current = true
+    setOpen(nextOpen)
+  }
 
   const handleCopy = () => {
     track({
@@ -96,7 +101,7 @@ function AgentToolEvent({
 
   return (
     <AgentAnnotation>
-      <Collapsible defaultOpen={defaultOpen}>
+      <Collapsible open={displayedOpen} onOpenChange={handleOpenChange}>
         <CollapsibleTrigger asChild>
           <Button
             type="button"
@@ -197,10 +202,17 @@ function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
   return status === "failed" || status === "error" || status === "denied"
 }
 
-function shouldDefaultOpen(body: string, mode: "expanded" | "collapsed" | "auto"): boolean {
-  if (mode === "expanded") return true
-  if (mode === "collapsed") return false
-  return body.trim().length > 0 && body.length <= 400
+function shouldAutoOpenToolEvent({
+  permission,
+  failed,
+  result,
+}: {
+  readonly permission: boolean
+  readonly failed: boolean
+  readonly result: SynapseAgentToolResultTimelineItem | undefined
+}): boolean {
+  if (permission || failed) return true
+  return !result
 }
 
 function previewText(value: string, limit: number): string {

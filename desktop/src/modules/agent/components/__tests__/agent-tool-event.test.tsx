@@ -39,6 +39,14 @@ const profile: SynapseAgentDisplayProfile = {
   },
 }
 
+const widePreviewProfile: SynapseAgentDisplayProfile = {
+  ...profile,
+  tools: {
+    ...profile.tools,
+    Bash: { ...profile.tools?.Bash, previewChars: 400 },
+  },
+}
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
@@ -59,8 +67,16 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+async function clickToolTrigger(container: HTMLElement) {
+  const trigger = container.querySelector("button")
+  expect(trigger).toBeTruthy()
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
 describe("AgentToolEvent", () => {
-  it("uses profile aliases and opens tools configured as expanded", () => {
+  it("uses profile aliases and opens running tools by default", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
         id: "tool-1",
@@ -82,6 +98,183 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("group-data-[state=closed]/agent-event-trigger:-rotate-90")
   })
 
+  it("collapses successful completed tools even when configured as expanded", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-success-collapsed",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "ok",
+        success: true,
+      }}
+      profile={{
+        ...profile,
+        toolDefaultCollapsed: "expanded",
+      }}
+    />)
+
+    expect(html).toContain("Bash")
+    expect(html).toContain("Done")
+    expect(html).toContain("data-state=\"closed\"")
+    const container = document.createElement("div")
+    container.innerHTML = html
+    expect(container.textContent).not.toContain("ok")
+  })
+
+  it("collapses a running tool after it receives a successful result", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const item = {
+      id: "tool-call-success",
+      kind: "toolCall" as const,
+      timestamp: "2026-04-28T00:00:00.000Z",
+      toolName: "Bash",
+      toolInput: "pnpm test",
+    }
+
+    await act(async () => {
+      root.render(<AgentToolEvent item={item} profile={profile} />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
+    expect(container.textContent).toContain("pnpm test")
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={item}
+        result={{
+          id: "tool-result-success",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:01.000Z",
+          toolName: "Bash",
+          content: "ok",
+          success: true,
+        }}
+        profile={widePreviewProfile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("closed")
+    expect(container.textContent).not.toContain("pnpm test")
+    expect(container.textContent).not.toContain("ok")
+  })
+
+  it("keeps a running tool open after it receives a failed result", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const item = {
+      id: "tool-call-failed",
+      kind: "toolCall" as const,
+      timestamp: "2026-04-28T00:00:00.000Z",
+      toolName: "Bash",
+      toolInput: "pnpm test",
+    }
+
+    await act(async () => {
+      root.render(<AgentToolEvent item={item} profile={profile} />)
+    })
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={item}
+        result={{
+          id: "tool-result-failed",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:01.000Z",
+          toolName: "Bash",
+          content: "boom",
+          success: false,
+        }}
+        profile={widePreviewProfile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
+    expect(container.textContent).toContain("pnpm test")
+    expect(container.textContent).toContain("boom")
+  })
+
+  it("does not override a manual collapse when a successful result arrives", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const item = {
+      id: "tool-call-manual-collapse",
+      kind: "toolCall" as const,
+      timestamp: "2026-04-28T00:00:00.000Z",
+      toolName: "Bash",
+      toolInput: "pnpm test",
+    }
+
+    await act(async () => {
+      root.render(<AgentToolEvent item={item} profile={profile} />)
+    })
+
+    await clickToolTrigger(container)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={item}
+        result={{
+          id: "tool-result-manual-collapse",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:01.000Z",
+          toolName: "Bash",
+          content: "ok",
+          success: true,
+        }}
+        profile={profile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("closed")
+  })
+
+  it("does not override a manual expansion when a successful result arrives", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const item = {
+      id: "tool-call-manual-expand",
+      kind: "toolCall" as const,
+      timestamp: "2026-04-28T00:00:00.000Z",
+      toolName: "Bash",
+      toolInput: "pnpm test",
+    }
+
+    await act(async () => {
+      root.render(<AgentToolEvent item={item} profile={profile} />)
+    })
+
+    await clickToolTrigger(container)
+    await clickToolTrigger(container)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={item}
+        result={{
+          id: "tool-result-manual-expand",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:01.000Z",
+          toolName: "Bash",
+          content: "ok",
+          success: true,
+        }}
+        profile={widePreviewProfile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
+    expect(container.textContent).toContain("ok")
+  })
+
   it("places result status next to the tool title", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
@@ -101,32 +294,32 @@ describe("AgentToolEvent", () => {
     expect(html.indexOf("Done")).toBeLessThan(html.indexOf("lucide-chevron-down"))
   })
 
-  it("redacts secret-shaped tool result content before rendering", () => {
-    const html = renderToStaticMarkup(<AgentToolEvent
-      item={{
-        id: "tool-secret",
-        kind: "toolResult",
-        timestamp: "2026-04-28T00:00:00.000Z",
-        toolName: "Bash",
-        content: "ANTHROPIC_AUTH_TOKEN=sk-render Authorization: Bearer sk-bearer /Users/liyang/project/file.ts",
-        success: true,
-      }}
-      profile={{
-        ...profile,
-        tools: {
-          ...profile.tools,
-          Bash: {
-            ...profile.tools?.Bash,
-            previewChars: 400,
-          },
-        },
-      }}
-    />)
+  it("redacts secret-shaped tool result content before rendering", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
 
-    expect(html).toContain("[redacted]")
-    expect(html).toContain("/Users/liyang/project/file.ts")
-    expect(html).not.toContain("sk-render")
-    expect(html).not.toContain("sk-bearer")
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-secret",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:00.000Z",
+          toolName: "Bash",
+          content: "ANTHROPIC_AUTH_TOKEN=sk-render Authorization: Bearer sk-bearer /Users/liyang/project/file.ts",
+          success: true,
+        }}
+        profile={widePreviewProfile}
+      />)
+    })
+
+    await clickToolTrigger(container)
+
+    expect(container.textContent).toContain("[redacted]")
+    expect(container.textContent).toContain("/Users/liyang/project/file.ts")
+    expect(container.textContent).not.toContain("sk-render")
+    expect(container.textContent).not.toContain("sk-bearer")
   })
 
   it("opens failed tool results even when profile default is collapsed", () => {
@@ -204,20 +397,26 @@ describe("AgentToolEvent", () => {
     expect(html).toContain("lucide-clipboard")
   })
 
-  it("makes the copy action visible when hovering tool output", () => {
-    const html = renderToStaticMarkup(<AgentToolEvent
-      item={{
-        id: "tool-hover-copy",
-        kind: "toolResult",
-        timestamp: "2026-04-28T00:00:00.000Z",
-        toolName: "Bash",
-        content: "command output",
-        success: true,
-      }}
-      profile={profile}
-    />)
+  it("makes the copy action visible when hovering tool output", async () => {
     const container = document.createElement("div")
-    container.innerHTML = html
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-hover-copy",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:00.000Z",
+          toolName: "Bash",
+          content: "command output",
+          success: true,
+        }}
+        profile={profile}
+      />)
+    })
+    await clickToolTrigger(container)
 
     const body = container.querySelector("pre")
     const outputGroup = body?.closest(".group")
@@ -350,6 +549,7 @@ describe("AgentToolEvent", () => {
       />)
     })
 
+    await clickToolTrigger(container)
     const copyButton = container.querySelectorAll("button")[1]
     expect(copyButton).toBeTruthy()
 
@@ -402,6 +602,7 @@ describe("AgentToolEvent", () => {
       />)
     })
 
+    await clickToolTrigger(container)
     const copyButton = container.querySelectorAll("button")[1]
     expect(copyButton).toBeTruthy()
 
@@ -410,8 +611,7 @@ describe("AgentToolEvent", () => {
       await Promise.resolve()
     })
 
-    expect(rendererLogger.info).toHaveBeenNthCalledWith(
-      2,
+    expect(rendererLogger.info).toHaveBeenCalledWith(
       "agent-tool-copy:click",
       expect.objectContaining({
         component: "agent",

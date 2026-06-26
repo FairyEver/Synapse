@@ -512,8 +512,8 @@ describe("AgentTimeline", () => {
     expect(html.match(/Glob/g)).toHaveLength(1)
     expect(html).toContain("Done")
     expect(html).not.toContain("Running")
-    expect(text).toContain("wiki/**/*frontend*")
-    expect(text).toContain("No files found")
+    expect(text).toBe("GlobDone")
+    expect(html).toContain("data-state=\"closed\"")
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {
@@ -540,8 +540,8 @@ describe("AgentTimeline", () => {
         toolUseId: "toolu-glob-b",
         toolName: "Glob",
         content: "content b",
-        status: "success",
-        success: true,
+        status: "error",
+        success: false,
         timestamp: "2026-06-04T00:00:02.000Z",
       },
       {
@@ -550,8 +550,8 @@ describe("AgentTimeline", () => {
         toolUseId: "toolu-glob-a",
         toolName: "Glob",
         content: "content a",
-        status: "success",
-        success: true,
+        status: "error",
+        success: false,
         timestamp: "2026-06-04T00:00:03.000Z",
       },
     ]
@@ -633,8 +633,8 @@ describe("AgentTimeline", () => {
         kind: "toolResult",
         toolName: "Read",
         content: "legacy content",
-        status: "success",
-        success: true,
+        status: "error",
+        success: false,
         timestamp: "2026-06-04T00:00:01.000Z",
       },
       {
@@ -650,8 +650,8 @@ describe("AgentTimeline", () => {
         toolUseId: "toolu-identified",
         toolName: "Read",
         content: "identified content",
-        status: "success",
-        success: true,
+        status: "error",
+        success: false,
         timestamp: "2026-06-04T00:00:03.000Z",
       },
     ]
