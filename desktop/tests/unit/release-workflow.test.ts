@@ -55,4 +55,17 @@ describe("desktop release workflow", () => {
     expect(workflowText).toContain("runs-on: macos-latest")
     expect(workflowText).toContain("os: windows-2022")
   })
+
+  it("prunes old COS release versions after publishing release notes", () => {
+    const workflowText = readFileSync(releaseWorkflowPath, "utf8")
+
+    expect(workflowText).toContain("Prune old COS release versions")
+    expect(workflowText).toContain("scripts/release/prune-cos-release-versions.mjs")
+    expect(workflowText.indexOf("Upload release artifacts to COS"))
+      .toBeLessThan(workflowText.indexOf("Refresh and verify CDN"))
+    expect(workflowText.indexOf("Refresh and verify CDN"))
+      .toBeLessThan(workflowText.indexOf("Publish release notes"))
+    expect(workflowText.indexOf("Publish release notes"))
+      .toBeLessThan(workflowText.indexOf("Prune old COS release versions"))
+  })
 })

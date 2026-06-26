@@ -54,6 +54,7 @@ describe("publish-mac-release", () => {
     expect(latestMac.path).toBe("v0.2.214/Synapse-0.2.214-mac-arm64.zip")
     expect(stdout).toContain("cos://release/v0.2.214/")
     expect(stdout).toContain("cos://release/latest-mac.yml")
+    expect(stdout).toContain("Would prune old COS release versions after publish")
     expect(stdout).not.toContain("latest-windows.yml")
     expect(stdout).not.toContain("cos://release/latest.yml")
   })
@@ -86,5 +87,26 @@ describe("publish-mac-release", () => {
     expect(stdout).toContain(`Loaded env file: ${envFile}`)
     expect(stdout).not.toContain("secret-id-from-file")
     expect(stdout).not.toContain("secret-key-from-file")
+  })
+
+  it("skips the COS prune dry-run when requested", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-publish-mac-skip-prune-"))
+    const artifactsDir = path.join(root, "release")
+    const outDir = path.join(root, "cdn-release")
+    await writeMacArtifacts(artifactsDir)
+
+    const { stdout } = await execFileAsync(process.execPath, [
+      scriptPath,
+      "--artifacts-dir",
+      artifactsDir,
+      "--out-dir",
+      outDir,
+      "--version",
+      "0.2.214",
+      "--dry-run",
+      "--skip-cos-prune",
+    ], { cwd: desktopRoot })
+
+    expect(stdout).not.toContain("Would prune old COS release versions after publish")
   })
 })

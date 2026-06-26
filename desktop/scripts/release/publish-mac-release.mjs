@@ -5,6 +5,7 @@ import path from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { prepareReleaseArtifacts } from "./prepare-cdn-release-artifacts.mjs"
+import { pruneCosReleaseVersions } from "./prune-cos-release-versions.mjs"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, "../..")
@@ -293,6 +294,7 @@ export async function publishMacRelease() {
       ...loadedEnvFiles.map((filePath) => `Loaded env file: ${filePath}`),
       `Prepared mac release v${version}`,
       ...commands.map((command) => `${command.from} -> ${command.to}`),
+      ...(hasArg("--skip-cos-prune") ? [] : ["Would prune old COS release versions after publish"]),
       "",
     ].join("\n"))
     return
@@ -307,6 +309,9 @@ export async function publishMacRelease() {
   }
   if (!hasArg("--skip-cdn-verify")) {
     await verifyCdn(cdnBaseUrl, outDir, version)
+  }
+  if (!hasArg("--skip-cos-prune")) {
+    await pruneCosReleaseVersions({ coscli, cosConfig })
   }
 }
 
