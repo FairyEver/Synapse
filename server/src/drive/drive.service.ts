@@ -437,17 +437,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly actorUserId: string
     readonly itemId: string
   }): Promise<{ readonly itemId: string; readonly ownerId: string; readonly versionId: string | null; readonly markdown: string }> {
-    const item = await this.prisma.driveItem.findFirst({
-      where: {
-        id: input.itemId,
-        deletedAt: null,
-        storageStatus: DRIVE_STORAGE_STATUS.active,
-        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
-        publicAsset: null,
-      },
-      include: driveItemWithShares,
-    }) as DriveItemRecordWithStorage | null
-    if (!item) throw new NotFoundException("文件不存在。")
+    const item = await this.requireOwnedItem(input.actorUserId, input.itemId) as DriveItemRecordWithStorage
     this.assertActiveBrowserItem(item)
     this.assertEditableTextFile(item)
     const storageKey = this.requireActiveFileStorage(item)

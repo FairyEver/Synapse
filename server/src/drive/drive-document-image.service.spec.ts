@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common"
 import { DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
@@ -127,15 +127,17 @@ describe("DriveDocumentImageService", () => {
     })).rejects.toBeInstanceOf(BadRequestException)
   })
 
-  it("resolves a document owner for non-owner scans through the real DriveService helper", async () => {
+  it("keeps the real DriveService owner helper bound to actor-owned documents", async () => {
     const previousSecret = process.env.USER_ACCESS_JWT_SECRET
     process.env.USER_ACCESS_JWT_SECRET = "drive-document-image-service-test-secret"
     const item = createDriveItemRecord()
     const prisma = {
       driveItem: {
         findFirst: vi.fn(async ({ where }: { readonly where: Record<string, unknown> }) => {
-          if (where.id !== item.id || "userId" in where) return null
-          return item
+          if (where.id !== item.id) return null
+          if (!("userId" in where)) return item
+          if (where.userId === item.userId) return item
+          return null
         }),
       },
       driveFileVersion: {
@@ -148,17 +150,12 @@ describe("DriveDocumentImageService", () => {
     try {
       const service = new RealDriveService(prisma as never, storage as unknown as DriveStoragePort)
 
-      const result = await service.getOwnerMarkdownImageDocument({ actorUserId: "user-2", itemId: "item-1" })
-
-      expect(result).toEqual({
-        itemId: "item-1",
-        ownerId: "owner-1",
-        versionId: "ver-1",
-        markdown: "![external](https://example.test/a.png)",
-      })
+      await expect(service.getOwnerMarkdownImageDocument({ actorUserId: "user-2", itemId: "item-1" }))
+        .rejects.toBeInstanceOf(NotFoundException)
       expect(prisma.driveItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.not.objectContaining({ userId: expect.anything() }),
+        where: expect.objectContaining({ userId: "user-2" }),
       }))
+      expect(storage.getObjectStream).not.toHaveBeenCalled()
     } finally {
       if (previousSecret === undefined) {
         delete process.env.USER_ACCESS_JWT_SECRET
