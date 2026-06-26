@@ -209,8 +209,13 @@ const terminalBridge = vi.hoisted(() => ({
   }),
 }))
 
+const droppedPathState = vi.hoisted(() => ({
+  paths: new WeakMap<object, string | null>(),
+}))
+
 const shellBridge = vi.hoisted(() => ({
   openExternal: vi.fn(async () => undefined),
+  filePathForDroppedFile: vi.fn((file: File) => droppedPathState.paths.get(file) ?? null),
 }))
 
 const xtermState = vi.hoisted(() => ({
@@ -404,6 +409,8 @@ beforeEach(() => {
   terminalBridge.stopSession.mockClear()
   terminalBridge.runStartupCommand.mockClear()
   shellBridge.openExternal.mockClear()
+  shellBridge.filePathForDroppedFile.mockClear()
+  droppedPathState.paths = new WeakMap<object, string | null>()
   toastState.error.mockClear()
   terminalBridge.onData.mockClear()
   terminalBridge.onSessionChanged.mockClear()
@@ -898,6 +905,110 @@ describe("TerminalModule", () => {
     expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
   })
 
+  it("inserts a dragged file path into the running terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const file = createDroppedFile("report.txt", "/Users/liyang/Documents/report.txt")
+
+    await renderModule()
+    const dragOverEvent = await dispatchTerminalDragEvent("dragover", [file])
+    await dispatchTerminalDragEvent("drop", [file])
+
+    expect(dragOverEvent.defaultPrevented).toBe(true)
+    expect(dragOverEvent.dataTransfer.dropEffect).toBe("copy")
+    expect(shellBridge.filePathForDroppedFile).toHaveBeenCalledWith(file)
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/Users/liyang/Documents/report.txt ",
+    })
+  })
+
+  it("inserts a dragged folder path into the running terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const folder = createDroppedFile("Projects", "/Users/liyang/Projects")
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [folder])
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/Users/liyang/Projects ",
+    })
+  })
+
+  it("inserts multiple dragged paths in order with shell escaping", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const first = createDroppedFile("Quarterly Report (final).txt", "/Users/liyang/My Files/Quarterly Report (final).txt")
+    const second = createDroppedFile("costs&notes\"$\\.md", "/tmp/costs&notes\"$\\.md")
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [first, second])
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/Users/liyang/My\\ Files/Quarterly\\ Report\\ \\(final\\).txt /tmp/costs\\&notes\\\"\\$\\\\.md ",
+    })
+  })
+
+  it("rejects dropped paths containing line breaks", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const file = createDroppedFile("bad.txt", "/tmp/bad\nname.txt")
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [file])
+
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+    expect(toastState.error).toHaveBeenCalledWith("拖拽路径不可用")
+  })
+
+  it("does not insert unresolved dropped file names", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const file = createDroppedFile("missing.txt", null)
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [file])
+
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+    expect(toastState.error).toHaveBeenCalledWith("拖拽路径不可用")
+  })
+
+  it("does not write dropped paths into a non-running terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      status: "exited",
+    })]
+    const file = createDroppedFile("report.txt", "/tmp/report.txt")
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [file])
+
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+    expect(toastState.error).toHaveBeenCalledWith("终端未运行")
+  })
+
+  it("chunks very long dragged path input below the terminal write limit", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const first = createDroppedFile("first.txt", `/tmp/${"a".repeat(35_000)}.txt`)
+    const second = createDroppedFile("second.txt", `/tmp/${"b".repeat(35_000)}.txt`)
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [first, second])
+
+    const writes = terminalBridge.writeSession.mock.calls.map(([input]) => input)
+    expect(writes.length).toBeGreaterThan(1)
+    expect(writes.every((input) => input.sessionId === "session-1")).toBe(true)
+    expect(writes.every((input) => input.data.length <= 64 * 1024)).toBe(true)
+    expect(writes.map((input) => input.data).join("")).toBe(`${first.path} ${second.path} `)
+  })
+
   it("creates xterm with iTerm-like rendering defaults", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -1237,6 +1348,60 @@ async function changeTextarea(label: string, value: string): Promise<void> {
     }
     await Promise.resolve()
   })
+}
+
+type DroppedTerminalFile = File & { readonly path: string | null }
+
+function createDroppedFile(name: string, path: string | null): DroppedTerminalFile {
+  const file = new File([""], name) as DroppedTerminalFile
+  droppedPathState.paths.set(file, path)
+  Object.defineProperty(file, "path", {
+    value: path,
+    configurable: true,
+  })
+  return file
+}
+
+type TerminalDragTestEvent = Event & {
+  readonly dataTransfer: {
+    readonly files: DroppedTerminalFile[]
+    readonly items: Array<{ readonly kind: "file"; readonly type: string; getAsFile: () => DroppedTerminalFile }>
+    readonly types: string[]
+    dropEffect: string
+    effectAllowed: string
+  }
+}
+
+async function dispatchTerminalDragEvent(
+  type: "dragover" | "drop",
+  files: DroppedTerminalFile[],
+): Promise<TerminalDragTestEvent> {
+  const terminalRegion = document.querySelector<HTMLElement>("[aria-label='终端输出与输入']")
+  if (!terminalRegion) throw new Error("Terminal region not found")
+
+  const dataTransfer = {
+    files,
+    items: files.map((file) => ({
+      kind: "file" as const,
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    types: ["Files"],
+    dropEffect: "none",
+    effectAllowed: "all",
+  }
+  const event = new Event(type, { bubbles: true, cancelable: true }) as TerminalDragTestEvent
+  Object.defineProperty(event, "dataTransfer", {
+    value: dataTransfer,
+    configurable: true,
+  })
+
+  await act(async () => {
+    terminalRegion.dispatchEvent(event)
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  return event
 }
 
 function createGroup(overrides: Partial<SynapseTerminalGroup> = {}): SynapseTerminalGroup {

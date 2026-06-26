@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
@@ -66,6 +66,7 @@ import { createTerminalRenderingOptions } from "./terminal-rendering"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 
 const logger = createRendererLogger("terminal.app")
 
@@ -114,6 +115,7 @@ export function TerminalModule() {
 
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
   const commandManagerCommands = commandManagerTarget?.settings?.commands ?? []
+  const activeSessionRunning = activeSession?.status === "running"
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -460,6 +462,42 @@ export function TerminalModule() {
     }
   }, [terminalBridge])
 
+  const handleTerminalDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!isExternalFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "copy"
+  }, [])
+
+  const handleTerminalDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!isExternalFileDrag(event)) return
+    event.preventDefault()
+
+    if (!terminalSessionId || !activeSessionRunning) {
+      toast.error("终端未运行")
+      return
+    }
+
+    const paths = Array.from(event.dataTransfer.files ?? [])
+      .map((file) => shellBridge.filePathForDroppedFile(file))
+    if (paths.length === 0 || paths.some((path) => !isValidDroppedTerminalPath(path))) {
+      toast.error("拖拽路径不可用")
+      return
+    }
+
+    const validPaths = paths.filter(isValidDroppedTerminalPath)
+    const input = formatDroppedTerminalPaths(validPaths)
+    void writeTerminalInputChunks({
+      input,
+      write: (data) => terminalBridge.writeSession({
+        sessionId: terminalSessionId,
+        data,
+      }),
+    }).catch((error) => {
+      logger.error("Failed to write dropped terminal paths.", error)
+      toast.error("写入终端失败")
+    })
+  }, [activeSessionRunning, shellBridge, terminalBridge, terminalSessionId])
+
   useEffect(() => {
     const container = terminalContainerRef.current
     if (!container || !terminalSessionId || !terminalSessionStatus) return undefined
@@ -729,6 +767,8 @@ export function TerminalModule() {
                 role="region"
                 aria-label="终端输出与输入"
                 tabIndex={0}
+                onDragOver={handleTerminalDragOver}
+                onDrop={handleTerminalDrop}
                 className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
@@ -1142,6 +1182,41 @@ function groupSessions(
       sessions: ungrouped,
     },
   ]
+}
+
+function isExternalFileDrag(event: DragEvent<HTMLElement>): boolean {
+  const types = Array.from(event.dataTransfer.types ?? [])
+  if (types.includes("Files")) return true
+  return Array.from(event.dataTransfer.files ?? []).length > 0
+}
+
+function isValidDroppedTerminalPath(path: string | null): path is string {
+  return typeof path === "string" && path.length > 0 && !/[\r\n]/.test(path)
+}
+
+function formatDroppedTerminalPaths(paths: readonly string[]): string {
+  return `${paths.map(escapeTerminalPath).join(" ")} `
+}
+
+function escapeTerminalPath(path: string): string {
+  return path.replace(/([\\\s"'`$&;()<>|*?\[\]{}!#~])/g, "\\$1")
+}
+
+async function writeTerminalInputChunks(options: {
+  readonly input: string
+  readonly write: (data: string) => Promise<void>
+}): Promise<void> {
+  for (const chunk of splitTerminalInput(options.input)) {
+    await options.write(chunk)
+  }
+}
+
+function splitTerminalInput(input: string): string[] {
+  const chunks: string[] = []
+  for (let index = 0; index < input.length; index += TERMINAL_WRITE_CHUNK_SIZE) {
+    chunks.push(input.slice(index, index + TERMINAL_WRITE_CHUNK_SIZE))
+  }
+  return chunks
 }
 
 function mergeSession(
