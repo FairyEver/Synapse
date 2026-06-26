@@ -357,6 +357,9 @@ const IPC_CHANNELS = {
     "listDrivePublicAssets": "synapse:account:drive:public-assets:list",
     "getDrivePublicAsset": "synapse:account:drive:public-assets:get",
     "uploadDrivePublicAssets": "synapse:account:drive:public-assets:upload",
+    "uploadDrivePublicAssetBinary": "synapse:account:drive:public-assets:upload-binary",
+    "scanDriveDocumentImageSources": "synapse:account:drive:document-images:scan",
+    "importDriveDocumentImages": "synapse:account:drive:document-images:import",
     "replaceDrivePublicAssetFile": "synapse:account:drive:public-assets:replace-file",
     "renameDrivePublicAsset": "synapse:account:drive:public-assets:rename",
     "trashDrivePublicAsset": "synapse:account:drive:public-assets:trash",
@@ -459,12 +462,6 @@ const IPC_CHANNELS = {
     "getCommit": "synapse:git:history:get-commit",
   },
 } as const satisfies IpcChannelMap
-
-const ACCOUNT_EXTRA_CHANNELS = {
-  uploadDrivePublicAssetBinary: "synapse:account:drive:public-assets:upload-binary",
-  scanDriveDocumentImageSources: "synapse:account:drive:document-images:scan",
-  importDriveDocumentImages: "synapse:account:drive:document-images:import",
-} as const
 
 // Legacy event channels that are not declared by IpcModule descriptors yet.
 const EVENT_CHANNELS = {
@@ -984,15 +981,15 @@ const synapseBridge: SynapseBridge = {
       },
     ),
     uploadDrivePublicAssetBinary: invokeWithFailureLogRequest(
-      ACCOUNT_EXTRA_CHANNELS.uploadDrivePublicAssetBinary,
+      IPC_CHANNELS.account.uploadDrivePublicAssetBinary,
       summarizeDrivePublicAssetBinaryUploadRequest,
     ),
     scanDriveDocumentImageSources: invokeWithFailureLogRequest(
-      ACCOUNT_EXTRA_CHANNELS.scanDriveDocumentImageSources,
+      IPC_CHANNELS.account.scanDriveDocumentImageSources,
       summarizeDriveDocumentImageSourceContext,
     ),
     importDriveDocumentImages: invokeWithFailureLogRequest(
-      ACCOUNT_EXTRA_CHANNELS.importDriveDocumentImages,
+      IPC_CHANNELS.account.importDriveDocumentImages,
       summarizeDriveDocumentImageImportRequest,
     ),
     replaceDrivePublicAssetFile: invokeWithFailureLogRequest(
