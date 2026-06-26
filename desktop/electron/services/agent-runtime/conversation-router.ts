@@ -595,6 +595,7 @@ export class ConversationRouter {
     let resultCostCny: number | undefined
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
+    let assistantHistoryPersisted = false
     let error: string | undefined
 
     const accepted = await liveSession.send(message)
@@ -706,7 +707,7 @@ export class ConversationRouter {
       this.emitEvent(message, conversation.id, event)
       await this.persistAgentEvent(conversation.id, turnId, events.length, event)
       await this.saveEventSdkSession(conversation.id, event, liveSession)
-      await this.saveEventHistory(conversation.id, event)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
 
       if (event.type === "permissionRequest") {
         await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
@@ -731,7 +732,9 @@ export class ConversationRouter {
     }
 
     const sdkSessionId = liveSession.currentSessionId()
-    const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId, resultMetadata)
+    const saved = await this.saveExecutionResult(conversation, resultText, sdkSessionId, resultMetadata, {
+      assistantHistoryPersisted,
+    })
 
     return {
       conversationId: saved.id,
