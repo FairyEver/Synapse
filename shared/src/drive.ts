@@ -654,9 +654,16 @@ export function parseDrivePublicAssetUrl(value: string): { readonly assetId: str
   } catch {
     return null
   }
-  const segments = pathname.split("/").filter(Boolean)
-  if (segments.length !== 2 || `/${segments[0]}` !== DRIVE_PUBLIC_ASSET_PATH_PREFIX) return null
-  const assetId = decodeURIComponent(segments[1] ?? "")
+  const prefix = `${DRIVE_PUBLIC_ASSET_PATH_PREFIX}/`
+  if (!pathname.startsWith(prefix)) return null
+  const encodedAssetId = pathname.slice(prefix.length)
+  if (!encodedAssetId || encodedAssetId.includes("/")) return null
+  let assetId: string
+  try {
+    assetId = decodeURIComponent(encodedAssetId)
+  } catch {
+    return null
+  }
   return isDrivePublicAssetId(assetId) ? { assetId } : null
 }
 

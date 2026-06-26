@@ -61,6 +61,18 @@ describe("drive URL helpers", () => {
     expect(parseDrivePublicAssetUrl("https://synapse.test/share/shr_test")).toBeNull()
   })
 
+  it("returns null for malformed encoded public asset paths", () => {
+    expect(parseDrivePublicAssetUrl("https://synapse.test/files/%E0%A4%A")).toBeNull()
+  })
+
+  it("only parses exact public asset URL paths", () => {
+    const assetId = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ"
+
+    expect(parseDrivePublicAssetUrl(`https://synapse.test//files/${assetId}`)).toBeNull()
+    expect(parseDrivePublicAssetUrl(`https://synapse.test/files/${assetId}/`)).toBeNull()
+    expect(parseDrivePublicAssetUrl(`https://synapse.test/files//${assetId}`)).toBeNull()
+  })
+
   it("keeps image source DTO fields stable", () => {
     const source: DriveDocumentImageSource = {
       id: "img_1",
