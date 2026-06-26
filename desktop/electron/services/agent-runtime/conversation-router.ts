@@ -1697,15 +1697,6 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           recoverable: event.recoverable,
         }),
       }
-    case "text":
-      return {
-        role: "assistant",
-        content: event.content,
-        metadata: compactMetadata({
-          agentEventType: event.type,
-          sdkSessionId: event.sdkSessionId,
-        }),
-      }
     case "assistant": {
       const content = assistantEventText(event)
       if (!content) return null
@@ -1718,6 +1709,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         }),
       }
     }
+    case "text":
     case "result":
     case "sessionInit":
     case "stream":
