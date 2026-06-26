@@ -433,6 +433,35 @@ export class DriveService implements OnApplicationBootstrap {
     })
   }
 
+  async getOwnerMarkdownImageDocument(input: {
+    readonly actorUserId: string
+    readonly itemId: string
+  }): Promise<{ readonly itemId: string; readonly ownerId: string; readonly versionId: string | null; readonly markdown: string }> {
+    const item = await this.requireOwnedItem(input.actorUserId, input.itemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(item)
+    this.assertEditableTextFile(item)
+    const storageKey = this.requireActiveFileStorage(item)
+    const preview = await this.readTextPreview(storageKey)
+    return {
+      itemId: item.id,
+      ownerId: item.userId,
+      versionId: await this.findCurrentDriveFileVersionId(item),
+      markdown: preview.text,
+    }
+  }
+
+  async findPublicAssetOwner(assetId: string): Promise<string | null> {
+    const asset = await this.prisma.publicAsset.findFirst({
+      where: {
+        assetId,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      },
+      select: { userId: true },
+    })
+    return asset?.userId ?? null
+  }
+
   async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
