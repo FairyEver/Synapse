@@ -12,6 +12,7 @@ import {
 } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
+import { timelineDisplayEntries } from "../agent-timeline-display"
 
 const track = vi.hoisted(() => vi.fn())
 
@@ -514,6 +515,35 @@ describe("AgentTimeline", () => {
     expect(html).not.toContain("Running")
     expect(text).toBe("GlobDone")
     expect(html).toContain("data-state=\"closed\"")
+  })
+
+  it("prepares completed tool calls as one display entry", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "tool-call",
+        kind: "toolCall",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/tmp/package.json" },
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-result",
+        kind: "toolResult",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        content: "package contents",
+        success: true,
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]
+
+    expect(timelineDisplayEntries(items)).toEqual([
+      {
+        item: expect.objectContaining({ id: "tool-call" }),
+        result: expect.objectContaining({ id: "tool-result" }),
+      },
+    ])
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {
