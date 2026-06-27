@@ -113,7 +113,7 @@ export function SoundNotifierModule() {
                   </div>
                 </FieldSet>
 
-                <FieldSet className="gap-3 border-t pt-5">
+                <FieldSet className="gap-3">
                   <FieldLegend className="mb-0">试听参数</FieldLegend>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <StepperField
@@ -166,7 +166,7 @@ function StepperField(props: {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-none"
+          className="h-10 w-10 rounded-none transition-transform duration-150 ease-out active:scale-[0.96]"
           aria-label={props.decreaseLabel}
           onClick={props.onDecrease}
         >
@@ -181,7 +181,7 @@ function StepperField(props: {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-none"
+          className="h-10 w-10 rounded-none transition-transform duration-150 ease-out active:scale-[0.96]"
           aria-label={props.increaseLabel}
           onClick={props.onIncrease}
         >
