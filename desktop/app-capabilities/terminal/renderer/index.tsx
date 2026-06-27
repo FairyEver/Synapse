@@ -53,6 +53,7 @@ import {
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { getRendererPlatform } from "../../../src/lib/runtime-platform"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
@@ -63,6 +64,12 @@ import type {
   SynapseTerminalSession,
 } from "../../../src/types/terminal"
 import { createTerminalRenderingOptions } from "./terminal-rendering"
+import {
+  getTerminalToolbarActions,
+  isTerminalToolbarActionEnabled,
+  resolveTerminalToolbarPayload,
+  type TerminalToolbarAction,
+} from "./terminal-toolbar-actions"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -103,6 +110,7 @@ export function TerminalModule() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
+  const xtermRef = useRef<Terminal | null>(null)
 
   const activeSession = useMemo(() => {
     if (!activeSessionId) return sessions[0] ?? null
@@ -116,6 +124,11 @@ export function TerminalModule() {
   const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
   const commandManagerCommands = commandManagerTarget?.settings?.commands ?? []
   const activeSessionRunning = activeSession?.status === "running"
+  const rendererPlatform = getRendererPlatform()
+  const toolbarActions = useMemo(
+    () => getTerminalToolbarActions(rendererPlatform),
+    [rendererPlatform],
+  )
 
   const refreshSessions = useCallback(async () => {
     const [nextGroups, nextSessions] = await Promise.all([
@@ -498,6 +511,32 @@ export function TerminalModule() {
     })
   }, [activeSessionRunning, shellBridge, terminalBridge, terminalSessionId])
 
+  const runToolbarAction = useCallback(async (action: TerminalToolbarAction) => {
+    if (!activeSession) return
+    if (!isTerminalToolbarActionEnabled(action, activeSession.status)) return
+
+    if (action.kind === "xterm-local") {
+      if (action.operation === "clear") {
+        xtermRef.current?.clear()
+      }
+      return
+    }
+
+    const payload = resolveTerminalToolbarPayload(action, rendererPlatform)
+    if (!payload) return
+
+    const data = action.kind === "shell-command" ? `${payload}\r` : payload
+    try {
+      await terminalBridge.writeSession({
+        sessionId: activeSession.id,
+        data,
+      })
+    } catch (error) {
+      logger.error("Failed to run terminal toolbar action.", error)
+      toast.error("写入终端失败")
+    }
+  }, [activeSession, rendererPlatform, terminalBridge])
+
   useEffect(() => {
     const container = terminalContainerRef.current
     if (!container || !terminalSessionId || !terminalSessionStatus) return undefined
@@ -510,6 +549,7 @@ export function TerminalModule() {
       container,
       disableStdin: terminalSessionStatus !== "running",
     }))
+    xtermRef.current = xterm
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
       void shellBridge.openExternal(uri).catch((error) => {
@@ -614,6 +654,9 @@ export function TerminalModule() {
       inputDisposable.dispose()
       webglContextLossDisposable?.dispose()
       resizeObserver.disconnect()
+      if (xtermRef.current === xterm) {
+        xtermRef.current = null
+      }
       xterm.dispose()
     }
   }, [shellBridge, terminalBridge, terminalSessionCols, terminalSessionId, terminalSessionRows, terminalSessionStatus])
@@ -761,6 +804,26 @@ export function TerminalModule() {
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
               {terminalReadError ? (
                 <div className="border-b bg-background px-3 py-2 text-sm text-muted-foreground">{terminalReadError}</div>
+              ) : null}
+              {toolbarActions.length ? (
+                <div
+                  data-terminal-toolbar
+                  className="flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1 whitespace-nowrap"
+                >
+                  {toolbarActions.map((action) => (
+                    <Button
+                      key={action.id}
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-label={action.ariaLabel}
+                      disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus)}
+                      onClick={() => { void runToolbarAction(action) }}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
               ) : null}
               <div
                 ref={terminalContainerRef}

@@ -222,6 +222,7 @@ const xtermState = vi.hoisted(() => ({
   instances: [] as Array<{
     open: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
+    clear: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
     onData: ReturnType<typeof vi.fn>
     dispose: ReturnType<typeof vi.fn>
@@ -269,6 +270,7 @@ vi.mock("@xterm/xterm", () => ({
       write: vi.fn((_data: string, callback?: () => void) => {
         callback?.()
       }),
+      clear: vi.fn(),
       loadAddon: vi.fn(),
       onData: vi.fn((listener: (data: string) => void) => {
         instance.inputListener = listener
@@ -377,6 +379,7 @@ const resizeObservers: Array<{ disconnect: ReturnType<typeof vi.fn>; trigger: ()
 let roots: Root[] = []
 
 beforeEach(() => {
+  window.synapse = { platform: "darwin" } as typeof window.synapse
   bridgeState.groups = []
   bridgeState.sessions = []
   bridgeState.chunks = []
@@ -508,6 +511,95 @@ describe("TerminalModule", () => {
     expect(main?.textContent).not.toContain("终止进程")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
+  })
+
+  it("renders a compact toolbar above the active terminal surface", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+    const terminalRegion = document.querySelector("[aria-label='终端输出与输入']")
+    expect(toolbar).toBeTruthy()
+    expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
+    expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
+    if (!toolbar || !terminalRegion) throw new Error("Missing terminal toolbar or region")
+    expect(toolbar.compareDocumentPosition(terminalRegion)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(document.body.textContent).toContain("Ctrl+C")
+    expect(document.body.textContent).toContain("Clear")
+    expect(document.body.textContent).toContain("Claude")
+    expect(document.body.textContent).toContain("Codex")
+    expect(document.body.textContent).toContain("code .")
+  })
+
+  it("does not render the toolbar in the empty terminal state", async () => {
+    await renderModule()
+
+    expect(document.body.querySelector("[data-terminal-toolbar]")).toBeNull()
+    expect(document.body.textContent).toContain("新建终端")
+  })
+
+  it("writes interrupt and shell launcher actions into the running terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await clickButton("Ctrl+C")
+    await clickButton("Claude")
+    await clickButton("Codex")
+    await clickButton("code .")
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "\x03",
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "claude\r",
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "codex\r",
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "code .\r",
+    })
+  })
+
+  it("keeps running-only toolbar actions disabled for a lost session while allowing local clear", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      status: "lost",
+    })]
+
+    await renderModule()
+
+    expect(buttonForText("Ctrl+C")?.disabled).toBe(true)
+    expect(buttonForText("Claude")?.disabled).toBe(true)
+    expect(buttonForText("Codex")?.disabled).toBe(true)
+    expect(buttonForText("code .")?.disabled).toBe(true)
+    expect(buttonForText("Clear")?.disabled).toBe(false)
+
+    await clickButton("Clear")
+
+    expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("shows a user-visible error when a toolbar write fails", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockRejectedValueOnce(new Error("write failed"))
+
+    await renderModule()
+    await clickButton("Ctrl+C")
+
+    expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
   })
 
   it("keeps the terminal workspace full height", async () => {
@@ -1242,12 +1334,16 @@ async function renderEmbeddedModule(): Promise<void> {
 }
 
 async function clickButton(text: string, root: ParentNode = document.body): Promise<void> {
-  const button = Array.from(root.querySelectorAll("button"))
-    .find((item) => item.textContent === text)
+  const button = buttonForText(text, root)
   await act(async () => {
     button?.click()
     await Promise.resolve()
   })
+}
+
+function buttonForText(text: string, root: ParentNode = document.body): HTMLButtonElement | undefined {
+  return Array.from(root.querySelectorAll("button"))
+    .find((item) => item.textContent === text)
 }
 
 async function clickButtonByTitle(title: string): Promise<void> {
