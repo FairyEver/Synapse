@@ -2,12 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/com
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   parseDrivePublicAssetUrl,
+  type DriveFileContentUpdateResult,
+  type DriveFileTextUpdateInput,
   type DriveDocumentImageImportRequest,
   type DriveDocumentImageImportResult,
   type DriveDocumentImageSource,
   type DriveDocumentImageSourcesDto,
 } from "@synapse/shared"
-import { extractDriveMarkdownImages } from "./drive-document-image-parser"
+import { extractDriveMarkdownImages, normalizeDriveMarkdownImageSrc, replaceDriveMarkdownImageSources } from "./drive-document-image-parser"
 import { buildDriveDocumentImageInventoryRows, type DriveDocumentImageInventoryRow } from "./drive-document-image-inventory"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
@@ -35,19 +37,30 @@ export interface DriveDocumentImageDrivePort {
   }): Promise<DriveMarkdownImageDocument>
 
   findPublicAssetOwner(assetId: string): Promise<string | null>
+
+  updateOwnerFileText(
+    userId: string,
+    itemId: string,
+    input: DriveFileTextUpdateInput,
+    auditContext?: { readonly ipAddress?: string },
+  ): Promise<DriveFileContentUpdateResult>
 }
 
 @Injectable()
 export class DriveDocumentImageService {
   private readonly drive: DriveDocumentImageDrivePort
+  private readonly publicAssets: DrivePublicAssetService
+  private readonly fetcher: DriveRemoteImageFetcher
   private readonly imageInventoryDebugRows = new Map<string, readonly DriveDocumentImageInventoryRow[]>()
 
   constructor(
     drive: DriveService,
-    _publicAssets: DrivePublicAssetService,
-    _fetcher: DriveRemoteImageFetcher,
+    publicAssets: DrivePublicAssetService,
+    fetcher: DriveRemoteImageFetcher,
   ) {
     this.drive = drive
+    this.publicAssets = publicAssets
+    this.fetcher = fetcher
   }
 
   async scanOwnerItemImages(input: { readonly actorUserId: string; readonly itemId: string }): Promise<DriveDocumentImageSourcesDto> {
@@ -59,6 +72,8 @@ export class DriveDocumentImageService {
     readonly actorUserId: string
     readonly itemId: string
     readonly body: DriveDocumentImageImportRequest
+    readonly publicAppUrl: string
+    readonly auditContext?: { readonly ipAddress?: string }
   }): Promise<DriveDocumentImageImportResult> {
     if (input.body.sources.length > DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES) {
       throw new BadRequestException("单次转存图片过多。")
@@ -68,7 +83,13 @@ export class DriveDocumentImageService {
       actorUserId: input.actorUserId,
       itemId: input.itemId,
     })
-    return this.importDocumentImages({ actorUserId: input.actorUserId, document, body: input.body })
+    return this.importDocumentImages({
+      actorUserId: input.actorUserId,
+      document,
+      body: input.body,
+      publicAppUrl: input.publicAppUrl,
+      auditContext: input.auditContext,
+    })
   }
 
   async scanShareItemImages(input: {
@@ -87,6 +108,8 @@ export class DriveDocumentImageService {
     readonly itemId?: string | null
     readonly cookie?: string
     readonly body: DriveDocumentImageImportRequest
+    readonly publicAppUrl: string
+    readonly auditContext?: { readonly ipAddress?: string }
   }): Promise<DriveDocumentImageImportResult> {
     if (input.body.sources.length > DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES) {
       throw new BadRequestException("单次转存图片过多。")
@@ -98,7 +121,13 @@ export class DriveDocumentImageService {
       itemId: input.itemId,
       cookie: input.cookie,
     })
-    return this.importDocumentImages({ actorUserId: input.actorUserId, document, body: input.body })
+    return this.importDocumentImages({
+      actorUserId: input.actorUserId,
+      document,
+      body: input.body,
+      publicAppUrl: input.publicAppUrl,
+      auditContext: input.auditContext,
+    })
   }
 
   private async buildScanDto(input: {
@@ -197,27 +226,97 @@ export class DriveDocumentImageService {
     readonly actorUserId: string
     readonly document: DriveMarkdownImageDocument
     readonly body: DriveDocumentImageImportRequest
+    readonly publicAppUrl: string
+    readonly auditContext?: { readonly ipAddress?: string }
   }): Promise<DriveDocumentImageImportResult> {
     if (input.document.ownerId !== input.actorUserId) throw new ForbiddenException("只有所有者可以转存图片。")
     if (input.document.versionId !== input.body.baseVersionId) throw new BadRequestException("文档已更新。")
 
-    await this.buildScanDto({ document: input.document, actorUserId: input.actorUserId })
+    const scan = await this.buildScanDto({ document: input.document, actorUserId: input.actorUserId })
+    const sourcesBySrc = new Map(scan.sources.map((source) => [normalizeDriveMarkdownImageSrc(source.src), source]))
+    const replacements = new Map<string, string>()
+    const imported: Array<DriveDocumentImageImportResult["imported"][number]> = []
+    const failed: Array<DriveDocumentImageImportResult["failed"][number]> = []
+
+    for (const requestedSource of input.body.sources) {
+      const requestedSrc = normalizeDriveMarkdownImageSrc(requestedSource.src)
+      const source = sourcesBySrc.get(requestedSrc)
+      if (!source || !source.canImport) {
+        failed.push({
+          src: requestedSource.src,
+          reason: source ? importFailureReasonForSource(source) : "changed",
+          message: source ? importFailureMessageForSource(source) : "图片来源已变化。",
+        })
+        continue
+      }
+
+      try {
+        const asset = await this.importSourceImage({
+          actorUserId: input.actorUserId,
+          publicAppUrl: input.publicAppUrl,
+          source,
+        })
+        replacements.set(source.src, asset.url)
+        imported.push({
+          previousSrc: source.src,
+          nextSrc: asset.url,
+          assetId: asset.assetId,
+          size: asset.size,
+        })
+      } catch (error) {
+        failed.push({
+          src: source.src,
+          reason: importFailureReason(error),
+          message: importFailureMessage(error),
+        })
+      }
+    }
+
+    let versionId = input.document.versionId
+    let replacedOccurrenceCount = 0
+    if (imported.length > 0) {
+      const replaced = replaceDriveMarkdownImageSources(input.document.markdown, replacements)
+      replacedOccurrenceCount = replaced.replacedOccurrenceCount
+      if (replacedOccurrenceCount > 0) {
+        const saved = await this.drive.updateOwnerFileText(input.actorUserId, input.document.itemId, {
+          contentType: "text",
+          text: replaced.markdown,
+          baseVersionId: input.body.baseVersionId,
+        }, input.auditContext)
+        versionId = saved.version.id
+      }
+    }
 
     return {
       itemId: input.document.itemId,
-      versionId: input.document.versionId,
-      imported: [],
-      failed: input.body.sources.map((source) => ({
-        src: source.src,
-        reason: "unknown",
-        message: "转存失败。",
-      })),
+      versionId: versionId ?? input.body.baseVersionId,
+      imported,
+      failed,
       summary: {
-        importedCount: 0,
-        failedCount: input.body.sources.length,
-        replacedOccurrenceCount: 0,
+        importedCount: imported.length,
+        failedCount: failed.length,
+        replacedOccurrenceCount,
       },
     }
+  }
+
+  private async importSourceImage(input: {
+    readonly actorUserId: string
+    readonly publicAppUrl: string
+    readonly source: DriveDocumentImageSource
+  }) {
+    if (input.source.kind === "collaborator_asset" && input.source.assetId) {
+      return this.publicAssets.copyPublicAssetToUser(input.actorUserId, input.source.assetId, input.publicAppUrl)
+    }
+    if (input.source.kind === "external") {
+      const fetched = await this.fetcher.fetchImage(input.source.src)
+      return this.publicAssets.importImageBuffer(input.actorUserId, input.publicAppUrl, {
+        name: importedImageName(input.source.src, fetched.mimeType),
+        mimeType: fetched.mimeType,
+        body: fetched.body,
+      })
+    }
+    throw new BadRequestException("图片无法转存。")
   }
 
   private refreshInventory(input: {
@@ -302,4 +401,59 @@ function isHttpImageSource(src: string): boolean {
   } catch {
     return false
   }
+}
+
+function importFailureReason(error: unknown): DriveDocumentImageImportResult["failed"][number]["reason"] {
+  const message = error instanceof Error ? error.message : ""
+  if (message.includes("格式不支持") || message.includes("仅支持图片") || message.includes("文件类型与扩展名不匹配")) return "unsupported"
+  if (message.includes("图片过大") || message.includes("文件超过")) return "too_large"
+  if (message.includes("云盘空间不足")) return "quota"
+  if (message.includes("文档已更新") || message.includes("文件已有新内容")) return "changed"
+  if (message.includes("无法转存") || message.includes("不存在")) return "unreachable"
+  return "unknown"
+}
+
+function importFailureMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return "转存失败。"
+}
+
+function importFailureReasonForSource(source: DriveDocumentImageSource): DriveDocumentImageImportResult["failed"][number]["reason"] {
+  if (source.importDisabledReason === "unsupported") return "unsupported"
+  if (source.importDisabledReason === "unreachable") return "unreachable"
+  return "changed"
+}
+
+function importFailureMessageForSource(source: DriveDocumentImageSource): string {
+  if (source.importDisabledReason === "not_owner") return "只有所有者可以转存图片。"
+  if (source.importDisabledReason === "already_owned") return "图片已属于当前文档所有者。"
+  if (source.importDisabledReason === "unsupported") return "格式不支持。"
+  if (source.importDisabledReason === "unreachable") return "图片无法转存。"
+  return "图片来源已变化。"
+}
+
+function importedImageName(src: string, mimeType: string): string {
+  const extension = extensionForImageMime(mimeType)
+  try {
+    const url = new URL(src)
+    const lastSegment = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "")
+    const name = lastSegment.replace(/[\\/:*?"<>|]/gu, "-").trim()
+    if (name) return `${stripImageExtension(name)}.${extension}`
+  } catch {
+    // Fall through to a stable default name.
+  }
+  return `imported-image.${extension}`
+}
+
+function stripImageExtension(name: string): string {
+  return name.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, "") || "imported-image"
+}
+
+function extensionForImageMime(mimeType: string): string {
+  if (mimeType === "image/jpeg") return "jpg"
+  if (mimeType === "image/gif") return "gif"
+  if (mimeType === "image/webp") return "webp"
+  if (mimeType === "image/avif") return "avif"
+  if (mimeType === "image/x-icon") return "ico"
+  return "png"
 }

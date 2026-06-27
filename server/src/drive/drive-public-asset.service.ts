@@ -372,6 +372,55 @@ export class DrivePublicAssetService {
     }
   }
 
+  async importImageBuffer(userId: string, publicAppUrl: string, input: {
+    readonly name: string
+    readonly mimeType: string
+    readonly body: Buffer
+  }): Promise<DrivePublicAssetDto> {
+    let session: PublicAssetUploadSession | null = null
+    try {
+      const prepared = await this.prepareUpload(userId, {
+        name: input.name,
+        mimeType: input.mimeType,
+        size: input.body.byteLength.toString(),
+        publicAppUrl,
+      })
+      session = await this.requireUploadSession(userId, prepared.sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
+      await this.storage.putObject({
+        key: session.storageKey,
+        body: input.body,
+        contentType: input.mimeType,
+      })
+      return await this.completeUpload(userId, session.id, { publicAppUrl })
+    } catch (error) {
+      if (session) await this.failSessionSafely(userId, session)
+      throw error
+    }
+  }
+
+  async copyPublicAssetToUser(userId: string, sourceAssetId: string, publicAppUrl: string): Promise<DrivePublicAssetDto> {
+    const source = await this.requireActivePublicAsset(sourceAssetId)
+    let session: PublicAssetUploadSession | null = null
+    try {
+      const prepared = await this.prepareUpload(userId, {
+        name: source.name,
+        mimeType: source.mimeType,
+        size: source.size.toString(),
+        publicAppUrl,
+      })
+      session = await this.requireUploadSession(userId, prepared.sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
+      await this.storage.copyObject({
+        fromKey: source.storageKey,
+        toKey: session.storageKey,
+        contentType: source.mimeType,
+      })
+      return await this.completeUpload(userId, session.id, { publicAppUrl })
+    } catch (error) {
+      if (session) await this.failSessionSafely(userId, session)
+      throw error
+    }
+  }
+
   async cancelUpload(userId: string, sessionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const session = await this.requirePendingSession(userId, sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
     await this.failSession(userId, session, DRIVE_UPLOAD_STATUS.cancelled)
@@ -823,6 +872,20 @@ export class DrivePublicAssetService {
     return asset
   }
 
+  private async requireActivePublicAsset(assetId: string): Promise<PublicAssetWithItem> {
+    if (!isDrivePublicAssetId(assetId)) throw new NotFoundException("公共资源不存在。")
+    const asset = await this.prisma.publicAsset.findFirst({
+      where: {
+        assetId,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      },
+      include: { item: true },
+    }) as PublicAssetWithItem | null
+    if (!asset || asset.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) throw new NotFoundException("公共资源不存在。")
+    return asset
+  }
+
   private assertPublicAssetId(assetId: string): void {
     if (!isDrivePublicAssetId(assetId)) throw new BadRequestException("公共资源 ID 无效。")
   }
@@ -871,6 +934,21 @@ export class DrivePublicAssetService {
     if (await this.isStorageKeyPublished(session.storageKey)) return true
     await this.deleteObjectSafely(session.storageKey)
     return true
+  }
+
+  private async failSessionSafely(
+    userId: string,
+    session: Pick<PublicAssetUploadSession, "id" | "itemId" | "reservedBytes" | "storageKey">,
+  ): Promise<void> {
+    try {
+      await this.failSession(userId, session, DRIVE_UPLOAD_STATUS.failed)
+    } catch (error) {
+      this.logger.warn({
+        sessionId: session.id,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Failed to rollback public asset import session")
+    }
   }
 
   private async readObjectEtag(storageKey: string): Promise<string | null> {

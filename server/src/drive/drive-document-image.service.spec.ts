@@ -12,6 +12,7 @@ import { DriveService as RealDriveService } from "./drive.service"
 const OWNER_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ"
 const COLLABORATOR_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5Yua"
 const UNKNOWN_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5Yub"
+const PUBLIC_APP_URL = "https://synapse.test"
 
 describe("DriveDocumentImageService", () => {
   it("classifies owner asset, collaborator asset, external, relative, and data images", async () => {
@@ -49,6 +50,7 @@ describe("DriveDocumentImageService", () => {
       actorUserId: "user-2",
       itemId: "item-1",
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toBeInstanceOf(ForbiddenException)
   })
 
@@ -108,6 +110,7 @@ describe("DriveDocumentImageService", () => {
           src: `https://example.test/${index}.png`,
         })),
       },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toThrow("单次转存图片过多。")
     expect(drive.getOwnerMarkdownImageDocument).not.toHaveBeenCalled()
   })
@@ -119,11 +122,13 @@ describe("DriveDocumentImageService", () => {
       actorUserId: "owner-1",
       itemId: "item-1",
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toThrow("文档已更新。")
     await expect(service.importOwnerItemImages({
       actorUserId: "owner-1",
       itemId: "item-1",
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toBeInstanceOf(BadRequestException)
   })
 
@@ -178,6 +183,7 @@ describe("DriveDocumentImageService", () => {
       itemId: "item-1",
       cookie: "cookie-1",
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toThrow("只有所有者可以转存图片。")
     await expect(service.importShareItemImages({
       actorUserId: "user-2",
@@ -185,40 +191,111 @@ describe("DriveDocumentImageService", () => {
       itemId: "item-1",
       cookie: "cookie-1",
       body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      publicAppUrl: PUBLIC_APP_URL,
     })).rejects.toBeInstanceOf(ForbiddenException)
     expect(drive.getShareMarkdownImageDocument).toHaveBeenCalled()
   })
 
-  it("allows owner share import to reach the skeleton result when base version matches", async () => {
-    const service = createService({
-      currentMarkdown: "![external](https://example.test/a.png)",
+  it("imports owner-selected images and saves a new markdown version", async () => {
+    const harness = createServiceHarness({
+      currentMarkdown: [
+        `![other](https://synapse.test/files/${COLLABORATOR_ASSET_ID})`,
+        "![external](https://example.test/a.png)",
+      ].join("\n"),
       ownerId: "owner-1",
       versionId: "ver-1",
+      assetOwners: new Map([[COLLABORATOR_ASSET_ID, "user-2"]]),
+      remoteImages: new Map([[
+        "https://example.test/a.png",
+        { body: Buffer.from([0x89, 0x50, 0x4e, 0x47]), mimeType: "image/png", size: 4n },
+      ]]),
     })
 
-    const result = await service.importShareItemImages({
+    const result = await harness.service.importShareItemImages({
       actorUserId: "owner-1",
       shareId: "share-1",
       itemId: "item-1",
       cookie: "cookie-1",
-      body: { baseVersionId: "ver-1", sources: [{ src: "https://example.test/a.png" }] },
+      body: {
+        baseVersionId: "ver-1",
+        sources: [
+          { src: `https://synapse.test/files/${COLLABORATOR_ASSET_ID}` },
+          { src: "https://example.test/a.png" },
+        ],
+      },
+      publicAppUrl: PUBLIC_APP_URL,
     })
 
     expect(result).toMatchObject({
       itemId: "item-1",
-      versionId: "ver-1",
-      imported: [],
+      versionId: "ver-2",
+      imported: [
+        {
+          previousSrc: `https://synapse.test/files/${COLLABORATOR_ASSET_ID}`,
+          nextSrc: "https://synapse.test/files/asset_copied",
+          assetId: "asset_copied",
+          size: "10",
+        },
+        {
+          previousSrc: "https://example.test/a.png",
+          nextSrc: "https://synapse.test/files/asset_imported",
+          assetId: "asset_imported",
+          size: "4",
+        },
+      ],
       summary: {
-        importedCount: 0,
-        failedCount: 1,
-        replacedOccurrenceCount: 0,
+        importedCount: 2,
+        failedCount: 0,
+        replacedOccurrenceCount: 2,
       },
     })
+    expect(harness.drive.updateOwnerFileText).toHaveBeenCalledWith(
+      "owner-1",
+      "item-1",
+      {
+        contentType: "text",
+        text: [
+          "![other](https://synapse.test/files/asset_copied)",
+          "![external](https://synapse.test/files/asset_imported)",
+        ].join("\n"),
+        baseVersionId: "ver-1",
+      },
+      undefined,
+    )
+  })
+
+  it("keeps successful imports when another requested image cannot be fetched", async () => {
+    const harness = createServiceHarness({
+      currentMarkdown: [
+        `![other](https://synapse.test/files/${COLLABORATOR_ASSET_ID})`,
+        "![external](https://example.test/missing.png)",
+      ].join("\n"),
+      ownerId: "owner-1",
+      versionId: "ver-1",
+      assetOwners: new Map([[COLLABORATOR_ASSET_ID, "user-2"]]),
+      fetchErrors: new Map([["https://example.test/missing.png", new BadRequestException("图片无法转存。")]]),
+    })
+
+    const result = await harness.service.importOwnerItemImages({
+      actorUserId: "owner-1",
+      itemId: "item-1",
+      body: {
+        baseVersionId: "ver-1",
+        sources: [
+          { src: `https://synapse.test/files/${COLLABORATOR_ASSET_ID}` },
+          { src: "https://example.test/missing.png" },
+        ],
+      },
+      publicAppUrl: PUBLIC_APP_URL,
+    })
+
+    expect(result.imported).toHaveLength(1)
     expect(result.failed).toEqual([{
-      src: "https://example.test/a.png",
-      reason: "unknown",
-      message: "转存失败。",
+      src: "https://example.test/missing.png",
+      reason: "unreachable",
+      message: "图片无法转存。",
     }])
+    expect(result.summary.replacedOccurrenceCount).toBe(1)
   })
 
   it("keeps the real DriveService owner helper bound to actor-owned documents", async () => {
@@ -261,11 +338,42 @@ describe("DriveDocumentImageService", () => {
 })
 
 function createService(options: CreateServiceOptions): DriveDocumentImageService {
-  return new DriveDocumentImageService(
-    createDriveMock(options) as unknown as DriveService,
-    {} as DrivePublicAssetService,
-    {} as DriveRemoteImageFetcher,
-  )
+  return createServiceHarness(options).service
+}
+
+function createServiceHarness(options: CreateServiceOptions) {
+  const drive = createDriveMock(options)
+  const publicAssets = {
+    copyPublicAssetToUser: vi.fn(async () => ({
+      assetId: "asset_copied",
+      url: `${PUBLIC_APP_URL}/files/asset_copied`,
+      size: "10",
+    })),
+    importImageBuffer: vi.fn(async (_userId: string, _publicAppUrl: string, input: { readonly body: Buffer }) => ({
+      assetId: "asset_imported",
+      url: `${PUBLIC_APP_URL}/files/asset_imported`,
+      size: input.body.byteLength.toString(),
+    })),
+  }
+  const fetcher = {
+    fetchImage: vi.fn(async (src: string) => {
+      const error = options.fetchErrors?.get(src)
+      if (error) throw error
+      const image = options.remoteImages?.get(src)
+      if (image) return image
+      throw new BadRequestException("图片无法转存。")
+    }),
+  }
+  return {
+    service: new DriveDocumentImageService(
+      drive as unknown as DriveService,
+      publicAssets as unknown as DrivePublicAssetService,
+      fetcher as unknown as DriveRemoteImageFetcher,
+    ),
+    drive,
+    publicAssets,
+    fetcher,
+  }
 }
 
 function createDriveMock(options: CreateServiceOptions) {
@@ -293,6 +401,10 @@ function createDriveMock(options: CreateServiceOptions) {
       markdown: options.currentMarkdown,
     })),
     findPublicAssetOwner: vi.fn(async (assetId: string) => assetOwners.get(assetId) ?? null),
+    updateOwnerFileText: vi.fn(async (_userId: string, _itemId: string, _input: unknown) => ({
+      item: {},
+      version: { id: "ver-2" },
+    })),
   }
 }
 
@@ -301,6 +413,8 @@ interface CreateServiceOptions {
   readonly ownerId?: string
   readonly versionId?: string | null
   readonly assetOwners?: ReadonlyMap<string, string>
+  readonly remoteImages?: ReadonlyMap<string, { readonly body: Buffer; readonly mimeType: string; readonly size: bigint }>
+  readonly fetchErrors?: ReadonlyMap<string, Error>
 }
 
 function createDriveItemRecord() {

@@ -323,6 +323,8 @@ export class DriveUserController {
       actorUserId: request.user!.id,
       itemId,
       body: parsed,
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1354,6 +1356,8 @@ export class DrivePublicController {
       shareId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parsed,
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1372,6 +1376,8 @@ export class DrivePublicController {
       itemId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parsed,
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+      auditContext: driveAuditContext(request),
     })
   }
 
