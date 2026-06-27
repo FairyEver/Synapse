@@ -13,6 +13,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -245,8 +246,7 @@ export default function UsersPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
       ),
-      cell: ({ row }) =>
-        new Date(row.original.createdAt).toLocaleDateString('zh-CN'),
+      cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
     },
     {
       id: 'actions',

@@ -9,10 +9,10 @@ import type { AutomationItem } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import {
   formatAutomationExecutorType,
-  formatAutomationNextRun,
   formatAutomationScope,
   formatAutomationTriggerType,
 } from "../utils"
+import { AutomationNextRunTime } from "./automation-time"
 
 type AutomationListRowProps = {
   readonly item: AutomationItem
@@ -89,7 +89,7 @@ function AutomationListRow({
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </TableCell>
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">
-        {formatAutomationNextRun(item)}
+        <AutomationNextRunTime item={item} />
       </TableCell>
       <TableCell className="truncate text-right text-muted-foreground">
         {formatAutomationScope(item, projects)}

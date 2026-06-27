@@ -1,29 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, LoaderCircle, Trash2 } from "lucide-react"
 
-function formatRelativeTime(timestamp: string): string | undefined {
-  const now = Date.now()
-  const then = new Date(timestamp).getTime()
-  if (!Number.isFinite(then)) return undefined
-  const diffMs = now - then
-  if (diffMs < 0) return "刚刚"
-
-  const minutes = Math.floor(diffMs / 60_000)
-  if (minutes < 1) return "刚刚"
-  if (minutes < 60) return `${minutes} 分`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时`
-
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days} 天`
-
-  const weeks = Math.floor(days / 7)
-  if (weeks < 4) return `${weeks} 周`
-
-  const months = Math.floor(days / 30)
-  return `${months} 月`
-}
+import { RelativeTime } from "@/components/relative-time"
 
 function SessionTrailing({
   updatedAt,
@@ -41,7 +19,6 @@ function SessionTrailing({
   const [armed, setArmed] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const relativeTime = updatedAt ? formatRelativeTime(updatedAt) : undefined
 
   useEffect(() => {
     if (!armed) return undefined
@@ -69,10 +46,12 @@ function SessionTrailing({
           className="size-2 rounded-full bg-blue-500 group-hover/item:hidden"
           aria-label="未读"
         />
-      ) : relativeTime ? (
-        <span className="text-xs text-muted-foreground group-hover/item:hidden">
-          {relativeTime}
-        </span>
+      ) : updatedAt ? (
+        <RelativeTime
+          value={updatedAt}
+          fallback=""
+          className="text-xs text-muted-foreground group-hover/item:hidden"
+        />
       ) : null}
       {canDelete ? (
         <button

@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -154,7 +155,7 @@ export default function DriveAdminPage() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='上传时间' />
         ),
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleString('zh-CN'),
+        cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
       },
       {
         id: 'actions',

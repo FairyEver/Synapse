@@ -5,6 +5,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { RelativeTime } from "@/components/relative-time"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { SynapseGitFileChange } from "@/types/git"
@@ -22,12 +23,6 @@ const statusLabels: Record<SynapseGitFileChange["status"], string> = {
   untracked: "未跟踪",
   conflicted: "冲突",
   unknown: "未知",
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
 }
 
 export function GitHistoryTab({ history }: GitHistoryTabProps) {
@@ -54,7 +49,7 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
               >
                 <span className="truncate text-sm font-medium">{commit.subject}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {commit.shortHash} · {commit.authorName} · {formatDate(commit.committedAt)}
+                  {commit.shortHash} · {commit.authorName} · <RelativeTime value={commit.committedAt} fallback={commit.committedAt} />
                 </span>
               </button>
             ))
@@ -80,7 +75,7 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
               <div className="grid min-w-0 gap-1">
                 <div className="truncate text-base font-semibold">{history.selectedCommit.subject}</div>
                 <div className="truncate text-sm text-muted-foreground">
-                  {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · {formatDate(history.selectedCommit.committedAt)}
+                  {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · <RelativeTime value={history.selectedCommit.committedAt} fallback={history.selectedCommit.committedAt} />
                 </div>
               </div>
               {history.selectedCommit.files.length > 0 ? (

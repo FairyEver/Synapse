@@ -7,13 +7,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { SynapseProjectConfig } from "@/types/config"
 import type { AutomationItem } from "@/types/automation"
 import {
-  formatAutomationDate,
   formatAutomationExecutor,
-  formatAutomationNextRun,
   formatAutomationScope,
-  formatAutomationStatus,
   formatAutomationTrigger,
 } from "../utils"
+import { AutomationLastRunTime, AutomationNextRunTime } from "./automation-time"
 
 type AutomationCardProps = {
   item: AutomationItem
@@ -38,12 +36,6 @@ function getStatusBadge(item: AutomationItem): {
     return { label: "上次失败", variant: "destructive" }
   }
   return { label: "已启用", variant: "secondary" }
-}
-
-function formatLastRun(item: AutomationItem): string {
-  const date = formatAutomationDate(item.lastRunAt, "—")
-  if (!item.lastStatus) return date
-  return `${date} · ${formatAutomationStatus(item.lastStatus)}`
 }
 
 function AutomationCard({
@@ -109,7 +101,9 @@ function AutomationCard({
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/50 p-3">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">下次执行</p>
-          <p className="mt-1 truncate text-sm font-medium">{formatAutomationNextRun(item)}</p>
+          <p className="mt-1 truncate text-sm font-medium">
+            <AutomationNextRunTime item={item} />
+          </p>
         </div>
         <div className="min-w-0 border-l border-border pl-3">
           <p className="text-xs text-muted-foreground">触发器</p>
@@ -124,7 +118,7 @@ function AutomationCard({
         </div>
         <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
           <span className="text-muted-foreground">上次</span>
-          <span className="truncate">{formatLastRun(item)}</span>
+          <AutomationLastRunTime item={item} className="truncate" />
         </div>
         <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
           <span className="text-muted-foreground">范围</span>

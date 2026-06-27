@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,7 +16,6 @@ import {
   canInstallContent,
 } from './content-store-actions'
 import {
-  formatContentStoreDate,
   formatContentStoreSize,
   getContentStoreOwnerName,
   getContentStoreTypeLabel,
@@ -163,7 +163,7 @@ export function ContentStoreDetailView({
           <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
             <span>{getContentStoreOwnerName(detail.owner)}</span>
             <span>安装 {detail.installCount}</span>
-            <span>更新 {formatContentStoreDate(detail.updatedAt)}</span>
+            <span>更新 <RelativeTime value={detail.updatedAt} /></span>
             {detail.latestVersionNumber ? (
               <span>v{detail.latestVersionNumber}</span>
             ) : null}

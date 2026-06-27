@@ -5,6 +5,7 @@ import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, t
 
 import { FormDialog } from "@/components/form-dialog"
 import { ModuleContentPanel } from "@/components/module-page"
+import { RelativeTime } from "@/components/relative-time"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -556,7 +557,9 @@ function DrivePublicAssetRow({
       <TableCell className="text-right tabular-nums text-muted-foreground">
         <span title={formatDriveDateTime(asset.lastAccessedAt)}>{asset.accessCount}</span>
       </TableCell>
-      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">{formatDriveDateTime(asset.createdAt)}</TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
+        <RelativeTime value={asset.createdAt} />
+      </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">
           <Button type="button" variant="ghost" size="xs" disabled={busy || unavailable || trashed} aria-label={`复制 ${asset.name}`} onClick={onCopy}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Download, Eye } from 'lucide-react'
@@ -14,6 +14,7 @@ import {
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -124,7 +125,7 @@ export function AdminPublicAssets() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='创建时间' />
         ),
-        cell: ({ row }) => formatDriveBrowserDate(row.original.createdAt),
+        cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
       },
       {
         id: 'actions',
@@ -307,15 +308,15 @@ function PublicAssetDetailTable({ asset }: { readonly asset: AdminDrivePublicAss
           <DetailRow label='类型' value={asset.mimeType} />
           <DetailRow label='大小' value={formatDriveBytes(asset.size)} />
           <DetailRow label='状态' value={driveLifecycleLabel(asset.lifecycleStatus)} />
-          <DetailRow label='创建时间' value={formatDriveBrowserDate(asset.createdAt)} />
-          <DetailRow label='更新时间' value={formatDriveBrowserDate(asset.updatedAt)} />
+          <DetailRow label='创建时间' value={<RelativeTime value={asset.createdAt} />} />
+          <DetailRow label='更新时间' value={<RelativeTime value={asset.updatedAt} />} />
         </TableBody>
       </Table>
     </div>
   )
 }
 
-function DetailRow({ label, value }: { readonly label: string; readonly value: string | null }) {
+function DetailRow({ label, value }: { readonly label: string; readonly value: ReactNode }) {
   return (
     <TableRow>
       <TableCell className='w-32 text-muted-foreground'>{label}</TableCell>
@@ -416,7 +417,7 @@ function RevisionTable({
         accessorKey: 'replacedAt',
         header: '替换时间',
         enableHiding: false,
-        cell: ({ row }) => formatDriveBrowserDate(row.original.replacedAt),
+        cell: ({ row }) => <RelativeTime value={row.original.replacedAt} />,
       },
       {
         id: 'actions',

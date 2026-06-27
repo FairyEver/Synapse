@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Loader2, MoreHorizontal } from 'lucide-react'
+import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -207,7 +208,7 @@ export function DrivePreviewFloatingMenu({
             <span className='min-w-0 truncate'>{identity.name}</span>
           </DropdownMenuLabel>
           <div className='px-2 pb-2 text-xs text-muted-foreground'>
-            {identity.sizeLabel} / {identity.kindLabel} / {identity.updatedAtLabel}
+            {identity.sizeLabel} / {identity.kindLabel} / <RelativeTime value={identity.updatedAt} />
           </div>
           {rendererItems.length > 0 ? <DropdownMenuSeparator /> : null}
           {rendererItems.map((item) => <DrivePreviewFloatingRendererItem key={item.id} item={item} />)}

@@ -17,6 +17,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +36,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import {
-  formatContentStoreDate,
   getContentStoreOwnerName,
   getContentStoreTypeLabel,
 } from './content-store-display'
@@ -203,7 +203,7 @@ export default function ContentStoreAdminPage({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='更新时间' />
         ),
-        cell: ({ row }) => formatContentStoreDate(row.original.updatedAt),
+        cell: ({ row }) => <RelativeTime value={row.original.updatedAt} />,
       },
       {
         id: 'actions',

@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MoreHorizontal } from 'lucide-react'
 import { DataTableColumnHeader } from '@/components/data-table'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  formatOptionalWebhookDateTime,
   getWebhookDeliveryStatusLabel,
 } from './webhook-display'
 
@@ -68,7 +68,7 @@ export function buildWebhookColumns({
       ),
       cell: ({ row }) => (
         <span className='tabular-nums'>
-          {formatOptionalWebhookDateTime(row.original.lastDeliveryAt)}
+          <RelativeTime value={row.original.lastDeliveryAt} />
         </span>
       ),
       enableSorting: false,
