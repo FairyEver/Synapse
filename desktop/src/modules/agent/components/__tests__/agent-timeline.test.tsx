@@ -13,6 +13,7 @@ import {
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
 import {
+  defaultProcessGroupOpen,
   groupTimelineDisplayEntries,
   timelineDisplayEntries,
 } from "../agent-timeline-display"
@@ -677,6 +678,70 @@ describe("AgentTimeline", () => {
         item: expect.objectContaining({ id: "permission-live" }),
       }),
     }))
+  })
+
+  it("collapses successful completed process groups by default", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-call",
+        kind: "toolCall",
+        toolUseId: "toolu-ok",
+        toolName: "Read",
+        toolInput: "package.json",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-result",
+        kind: "toolResult",
+        toolUseId: "toolu-ok",
+        toolName: "Read",
+        content: "ok",
+        success: true,
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    const group = nodes.find((node) => node.kind === "processGroup")
+    expect(group?.kind).toBe("processGroup")
+    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : true).toBe(false)
+  })
+
+  it("opens active and failed process groups by default", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-call",
+        kind: "toolCall",
+        toolUseId: "toolu-failed",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-result",
+        kind: "toolResult",
+        toolUseId: "toolu-failed",
+        toolName: "Bash",
+        content: "failed",
+        success: false,
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+    const failedGroup = nodes.find((node) => node.kind === "processGroup")
+
+    const activeNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-running",
+        kind: "toolCall",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+    const activeGroup = activeNodes.find((node) => node.kind === "processGroup")
+
+    expect(failedGroup?.kind === "processGroup" ? defaultProcessGroupOpen(failedGroup, { sending: false }) : false).toBe(true)
+    expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: false }) : false).toBe(true)
+    expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {

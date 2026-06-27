@@ -182,3 +182,14 @@ function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
   const status = item.status?.toLowerCase()
   return status === "failed" || status === "error" || status === "denied"
 }
+
+export function defaultProcessGroupOpen(
+  group: Extract<AgentTimelineDisplayNode, { kind: "processGroup" }>,
+  context: { readonly sending: boolean },
+): boolean {
+  if (group.state.pendingPermission) return true
+  if (group.state.failed || group.state.denied) return true
+  if (group.state.active) return true
+  if (context.sending && group.state.active) return true
+  return false
+}
