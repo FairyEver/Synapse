@@ -9,6 +9,7 @@ describe("settingsCategories", () => {
     expect(ids).toEqual([
       "account",
       "general",
+      "dock",
       "repositories",
       "projects",
       "claude-code",
@@ -41,6 +42,7 @@ describe("settingsCategories", () => {
 
     expect(labels.get("account")).toBe("账号")
     expect(labels.get("general")).toBe("基础设置")
+    expect(labels.get("dock")).toBe("Dock 栏")
     expect(labels.get("repositories")).toBe("资源仓库")
     expect(labels.get("projects")).toBe("项目和知识库")
     expect(labels.get("tools")).toBeUndefined()

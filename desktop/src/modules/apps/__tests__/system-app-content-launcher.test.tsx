@@ -8,7 +8,9 @@ import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { SystemAppContent } from "../components/system-app-content"
 
 const mocks = vi.hoisted(() => ({
+  addDockApp: vi.fn(),
   openSystemApp: vi.fn(async () => undefined),
+  removeDockApp: vi.fn(),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -16,6 +18,15 @@ vi.mock("@/lib/electron-bridge", () => ({
     apps: {
       openSystemApp: mocks.openSystemApp,
     },
+  }),
+}))
+
+vi.mock("@/modules/apps/hooks/use-dock-preferences", () => ({
+  useDockPreferences: () => ({
+    addDockApp: mocks.addDockApp,
+    dockAppIds: ["agent", "launcher"],
+    removeDockApp: mocks.removeDockApp,
+    saving: false,
   }),
 }))
 
@@ -112,7 +123,9 @@ describe("SystemAppContent launcher", () => {
 
   beforeEach(() => {
     document.body.innerHTML = ""
+    mocks.addDockApp.mockClear()
     mocks.openSystemApp.mockClear()
+    mocks.removeDockApp.mockClear()
   })
 
   afterEach(() => {

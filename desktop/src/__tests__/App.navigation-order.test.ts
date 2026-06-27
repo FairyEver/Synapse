@@ -26,16 +26,13 @@ describe("app Dock order", () => {
     ])
   })
 
-  it("ignores user pinned app order", () => {
+  it("respects user pinned app order", () => {
     expect(listDockApps(
       listSystemApps(),
       { workflowEntryVisible: false, dockAppIds: ["database", "agent", "launcher"] },
     ).map((app) => app.id)).toEqual([
+      "database",
       "agent",
-      "drive",
-      "automation",
-      "terminal",
-      "settings",
       "launcher",
     ])
   })
