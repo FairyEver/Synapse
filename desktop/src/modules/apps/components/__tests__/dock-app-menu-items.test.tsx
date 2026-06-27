@@ -20,4 +20,12 @@ describe("resolveDockAppMenuActions", () => {
     expect(resolveDockAppMenuActions({ pinned: false, removable: true, includePinAction: false }))
       .toEqual(["open", "manage"])
   })
+
+  it("can omit management actions for optional menu integrations", () => {
+    expect(resolveDockAppMenuActions({
+      pinned: true,
+      removable: true,
+      includeManageAction: false,
+    })).toEqual(["open", "unpin"])
+  })
 })

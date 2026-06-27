@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { AppShellDock } from "@/app-shell/components/app-shell-dock"
@@ -16,6 +16,7 @@ import {
   publishActiveAppTab,
   requestOpenSettingsAccount,
   requestOpenSettingsAbout,
+  requestOpenSettingsDock,
   subscribeOpenAgentSession,
   subscribeOpenSettingsTab,
 } from "@/app-shell/navigation"
@@ -38,10 +39,9 @@ import { ContentWindowPage } from "@/modules/content/components/content-window-p
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
 import {
-  listDockApps,
-  normalizeDockAppIds,
   resolveDefaultDockAppId,
 } from "@/modules/apps/dock"
+import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
@@ -70,6 +70,7 @@ function MainApp() {
     useState<ContentOpenRequest | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
+  const dock = useDockPreferences({ workflowEntryVisible })
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
   // 检查是否需要显示空状态页面
@@ -147,21 +148,11 @@ function MainApp() {
   useEffect(() => {
     if (activeAppId === "workflow" && !workflowEntryVisible) {
       setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
-        dockAppIds: config.global.dockAppIds,
+        dockAppIds: dock.dockAppIds,
         workflowEntryVisible: false,
       }), "cheat-code")
     }
-  }, [activeAppId, config.global.dockAppIds, setActiveAppId, workflowEntryVisible])
-
-  const dockAppIds = useMemo(
-    () => normalizeDockAppIds(config.global.dockAppIds),
-    [config.global.dockAppIds],
-  )
-
-  const dockApps = useMemo(
-    () => listDockApps(listSystemApps(), { workflowEntryVisible, dockAppIds }),
-    [dockAppIds, workflowEntryVisible],
-  )
+  }, [activeAppId, dock.dockAppIds, setActiveAppId, workflowEntryVisible])
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
@@ -259,9 +250,12 @@ function MainApp() {
       <AppShellLayout
         dock={
           <AppShellDock
-            apps={dockApps}
+            apps={dock.pinnedApps}
+            disabled={dock.saving}
             value={activeAppId}
             onValueChange={handleDockValueChange}
+            onRemoveApp={(appId) => void dock.removeDockApp(appId)}
+            onManageDock={requestOpenSettingsDock}
           />
         }
         actions={accountUiVisible ? (

@@ -110,6 +110,7 @@ vi.mock("@/app-shell/navigation", () => ({
   publishActiveAppTab: vi.fn(),
   requestOpenSettingsAccount: vi.fn(),
   requestOpenSettingsAbout: vi.fn(),
+  requestOpenSettingsDock: vi.fn(),
   requestOpenSettingsStorage: vi.fn(),
   subscribeOpenAgentSession: () => () => undefined,
   subscribeOpenSettingsTab: () => () => undefined,
@@ -134,6 +135,13 @@ vi.mock("@/app-shell/use-watch-next-agent-session", () => ({
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => mocks.logger,
+}))
+
+vi.mock("@/app-shell/notifications", () => ({
+  useAppNotifications: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
 }))
 
 vi.mock("@/lib/diagnostic-context", () => ({
@@ -261,7 +269,6 @@ describe("App workflow entry visibility", () => {
       "对话",
       "云盘",
       "自动化",
-      "终端",
       "设置",
       "应用",
     ])
@@ -333,23 +340,22 @@ describe("App workflow entry visibility", () => {
       "云盘",
       "自动化",
       "工作流",
-      "终端",
       "设置",
       "应用",
     ])
   })
 
-  it("uses the fixed first visible Dock app as the default main view", async () => {
+  it("uses the configured first visible Dock app as the default main view", async () => {
     mocks.currentConfig.global.dockAppIds = ["drive", "agent", "launcher"]
     mocks.getStates.mockResolvedValue({})
 
     await renderApp()
 
-    expect(document.body.textContent).toContain("对话模块")
-    expect(document.body.textContent).not.toContain("drive")
+    expect(document.body.textContent).toContain("drive")
+    expect(document.body.textContent).not.toContain("对话模块")
   })
 
-  it("falls back to the fixed first visible Dock app when workflow becomes hidden", async () => {
+  it("falls back to the configured first visible Dock app when workflow becomes hidden", async () => {
     mocks.currentConfig.global.dockAppIds = ["workflow", "drive", "launcher"]
     mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
 
@@ -363,7 +369,7 @@ describe("App workflow entry visibility", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("对话模块")
+    expect(document.body.textContent).toContain("drive")
     expect(document.body.textContent).not.toContain("工作流模块")
   })
 

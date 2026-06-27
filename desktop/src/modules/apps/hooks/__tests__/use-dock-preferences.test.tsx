@@ -133,7 +133,7 @@ describe("useDockPreferences", () => {
       global: { dockAppIds: ["drive", "agent", "launcher"] },
     } satisfies SynapseConfigPatch)
     expect(mocks.updateConfig).toHaveBeenNthCalledWith(2, {
-      global: { dockAppIds: DEFAULT_DOCK_APP_IDS },
+      global: { dockAppIds: [...DEFAULT_DOCK_APP_IDS] },
     } satisfies SynapseConfigPatch)
   })
 

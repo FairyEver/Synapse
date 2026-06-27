@@ -10,6 +10,7 @@ type ResolveDockAppMenuActionsOptions = {
   readonly pinned: boolean
   readonly removable: boolean
   readonly includePinAction?: boolean
+  readonly includeManageAction?: boolean
 }
 
 type DockAppMenuItemsProps = ResolveDockAppMenuActionsOptions & {
@@ -22,6 +23,7 @@ type DockAppMenuItemsProps = ResolveDockAppMenuActionsOptions & {
 }
 
 export function resolveDockAppMenuActions({
+  includeManageAction = true,
   pinned,
   removable,
   includePinAction = true,
@@ -39,7 +41,9 @@ export function resolveDockAppMenuActions({
     actions.push("unpin")
   }
 
-  actions.push("manage")
+  if (includeManageAction) {
+    actions.push("manage")
+  }
   return actions
 }
 
