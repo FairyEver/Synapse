@@ -35,6 +35,7 @@ import { ProjectListEditor } from "@/modules/settings/components/project-list-ed
 import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
+import { DockPanel } from "@/modules/settings/components/dock-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -59,7 +60,6 @@ type SettingsModuleProps = {
 }
 
 function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
-  void workflowEntryVisible
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
@@ -300,12 +300,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
 
         {isReady && activeCategory === "dock" ? (
-          <SettingsGroup>
-            <div className="flex flex-col gap-3">
-              <h2 className="text-sm font-medium">已固定</h2>
-              <p className="text-sm text-muted-foreground">Dock 设置加载中</p>
-            </div>
-          </SettingsGroup>
+          <DockPanel workflowEntryVisible={workflowEntryVisible} />
         ) : null}
 
         {isReady && activeCategory === "repositories" ? (
