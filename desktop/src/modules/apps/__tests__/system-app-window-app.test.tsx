@@ -43,6 +43,10 @@ vi.mock("../../../../app-capabilities/screenshot/renderer", () => ({
   ScreenshotModule: () => <div>截图窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
+  SoundNotifierModule: () => <div>Sound Notifier 窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
   SkillInstallerModule: () => <div>Skill 安装器窗口</div>,
 }))

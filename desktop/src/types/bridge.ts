@@ -28,6 +28,14 @@ import type {
   SynapseQuickInputItem,
 } from "./quick-input"
 import type {
+  SynapseSoundNotifierChangedEvent,
+  SynapseSoundNotifierPlayInput,
+  SynapseSoundNotifierPlayRequestedEvent,
+  SynapseSoundNotifierPlayResult,
+  SynapseSoundNotifierSettings,
+  SynapseSoundNotifierSettingsPatch,
+} from "./sound-notifier"
+import type {
   ScreenshotArtifact,
   ScreenshotCaptureInput,
   ScreenshotCaptureToFileInput,
@@ -872,6 +880,14 @@ export type SynapseBridge = {
     update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
     delete: (input: { id: string }) => Promise<void>
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+  }
+  soundNotifier: {
+    getSettings: () => Promise<SynapseSoundNotifierSettings>
+    updateSettings: (input: SynapseSoundNotifierSettingsPatch) => Promise<SynapseSoundNotifierSettings>
+    play: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
+    preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
+    onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
+    onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>

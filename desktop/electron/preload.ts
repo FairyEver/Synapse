@@ -397,6 +397,14 @@ const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "soundNotifier": {
+    "getSettings": "synapse:sound-notifier:settings:get",
+    "updateSettings": "synapse:sound-notifier:settings:update",
+    "play": "synapse:sound-notifier:play",
+    "preview": "synapse:sound-notifier:preview",
+    "changed": "synapse:sound-notifier:changed",
+    "playRequested": "synapse:sound-notifier:play-requested",
+  },
   "terminal": {
     "chooseDefaultCwd": "synapse:terminal:group:choose-default-cwd",
     "listGroups": "synapse:terminal:group:list",
@@ -835,6 +843,20 @@ const synapseBridge: SynapseBridge = {
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.quickInput.changed,
+    ),
+  },
+  soundNotifier: {
+    getSettings: () => invoke(IPC_CHANNELS.soundNotifier.getSettings)(),
+    updateSettings: (input) => invoke(IPC_CHANNELS.soundNotifier.updateSettings)(input),
+    play: (input = {}) => invoke(IPC_CHANNELS.soundNotifier.play)(input),
+    preview: (input = {}) => invoke(IPC_CHANNELS.soundNotifier.preview)(input),
+    onChanged: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.soundNotifier.changed,
+    ),
+    onPlayRequested: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.soundNotifier.playRequested,
     ),
   },
   terminal: {

@@ -47,6 +47,7 @@ import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-syste
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
+import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
 
 type ActiveAppId = SynapseSystemAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
@@ -254,6 +255,7 @@ function MainApp() {
 
   return (
     <IdentityGate>
+      <SoundNotifierHost />
       <AppShellLayout
         dock={
           <AppShellDock

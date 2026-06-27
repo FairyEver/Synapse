@@ -29,6 +29,11 @@ import {
   SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
+import {
+  SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+  SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+} from "../../app-capabilities/sound-notifier/shared/capability"
+import { SOUND_NOTIFIER_PRESET_IDS } from "../../app-capabilities/sound-notifier/shared/defaults"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
@@ -158,6 +163,12 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     description: "Capture a fullscreen or coordinate-region PNG screenshot and save it to a local .png file.",
     mutates: true,
   },
+  {
+    id: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+    title: "Play sound",
+    description: "Play the user's selected Sound Notifier preset on the local computer.",
+    mutates: false,
+  },
 ]
 
 export const APP_DOMAIN: CapabilityDomainDefinition = {
@@ -187,6 +198,7 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [TERMINAL_MCP_TOOL_NAMES.sessionStop]: TERMINAL_SESSION_STOP_CAPABILITY_ID,
   [SCREENSHOT_CAPTURE_MCP_TOOL_NAME]: SCREENSHOT_CAPTURE_CAPABILITY_ID,
   [SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME]: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
+  [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
 }
 
 const stringField = (description: string, options?: { minLength?: number; maxLength?: number }) => ({
@@ -511,6 +523,27 @@ export function buildAppTools(): McpToolDefinition[] {
           },
         },
         required: ["capture", "outputPath"],
+      },
+    },
+    {
+      name: SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+      description: "Play a short local Sound Notifier preset. Omit presetId and volume to use the user's Sound Notifier settings.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          presetId: {
+            type: "string",
+            enum: SOUND_NOTIFIER_PRESET_IDS,
+            description: "Optional sound preset id.",
+          },
+          volume: {
+            type: "integer",
+            minimum: 0,
+            maximum: 100,
+            description: "Optional playback volume from 0 to 100.",
+          },
+        },
+        additionalProperties: false,
       },
     },
   ]

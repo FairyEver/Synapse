@@ -34,6 +34,10 @@ export {
   type QuickInputSettingsEntryV1,
 } from "./quick-input"
 export {
+  soundNotifierSettingsSchemaDefinition,
+  type SoundNotifierSettingsEntryV1,
+} from "./sound-notifier"
+export {
   auditSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
@@ -106,6 +110,7 @@ import { coreIdentitySchema } from "./core-identity"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
+import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
   agentCompressStateSchema,
@@ -143,6 +148,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   cheatCodeStatesSchema,
   quickInputItemsSchema,
   quickInputSettingsSchema,
+  soundNotifierSettingsSchemaDefinition,
   secretsSchema,
   providersSchema,
   projectsSchema,

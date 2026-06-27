@@ -44,3 +44,13 @@ Rules:
 - Treat `tempPath` as a temporary local artifact path, not a permanent user file.
 - Use `app_screenshot_file_save` for durable output. Do not overwrite an existing output file unless the user explicitly asks to replace it.
 - MCP screenshot tools return metadata and local paths, not raw image bytes.
+
+## Sound Notifier
+
+Use `app_sound_notifier_sound_play` when the user asks to play a local sound reminder, remind them with sound, or notify them that an Agent or command has finished.
+
+Rules:
+
+- Omit `presetId` and `volume` unless the user asks for a specific preset or volume.
+- Treat the tool result `played: false` with `reason: "disabled"` as a user setting, not a failure.
+- Do not call this repeatedly in a loop. One completion reminder should use one call.

@@ -12,6 +12,10 @@ import {
   SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
+import {
+  SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+  SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+} from "../../app-capabilities/sound-notifier/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
 
@@ -139,5 +143,20 @@ describe("App capability domain", () => {
       SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
       SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
     ]))
+  })
+
+  it("registers Sound Notifier MCP play tool", () => {
+    expect(() => assertCanonicalCapabilityId(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)).not.toThrow()
+    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)
+    expect(APP_MCP_TOOL_ACTIONS[SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]).toBe(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)
+    expect(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema)
+      .toMatchObject({
+        type: "object",
+        properties: {
+          presetId: expect.objectContaining({ enum: expect.arrayContaining(["soft-chime", "done"]) }),
+          volume: expect.objectContaining({ minimum: 0, maximum: 100 }),
+        },
+        additionalProperties: false,
+      })
   })
 })

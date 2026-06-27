@@ -270,6 +270,14 @@ export const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "soundNotifier": {
+    "getSettings": "synapse:sound-notifier:settings:get",
+    "updateSettings": "synapse:sound-notifier:settings:update",
+    "play": "synapse:sound-notifier:play",
+    "preview": "synapse:sound-notifier:preview",
+    "changed": "synapse:sound-notifier:changed",
+    "playRequested": "synapse:sound-notifier:play-requested",
+  },
   "terminal": {
     "listGroups": "synapse:terminal:group:list",
     "createGroup": "synapse:terminal:group:create",
