@@ -1803,6 +1803,7 @@ function drivePreviewSnapshot(overrides: Partial<DrivePreviewSnapshot>): DrivePr
     childrenPage: drivePage(),
     preview: null,
     edit: null,
+    annotation: null,
     canDownload: true,
     canZip: false,
     ...overrides,

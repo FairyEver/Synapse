@@ -359,7 +359,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       },
     }
 
-    const service = coreSoundNotifierDescriptor.create(context as never)
+    const service = await coreSoundNotifierDescriptor.create(context as never)
     await service.play({ eventType: "success" })
 
     expect(broadcast).toHaveBeenCalledWith(
