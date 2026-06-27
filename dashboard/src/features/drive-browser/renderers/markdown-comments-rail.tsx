@@ -13,6 +13,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -229,10 +237,7 @@ function CommentView({
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly onDeleteThread?: () => CommentActionPromise
 }) {
-  const [replying, setReplying] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [replyValue, setReplyValue] = useState('')
-  const [editValue, setEditValue] = useState(comment.body)
+  const [textDialog, setTextDialog] = useState<CommentTextDialogState | null>(null)
   if (comment.deleted) {
     return <div className='text-xs text-muted-foreground'>评论已删除</div>
   }
@@ -251,48 +256,96 @@ function CommentView({
         </div>
       </div>
       {replyToName ? <div className='text-xs text-muted-foreground'>回复 {replyToName}</div> : null}
-      {editing ? (
-        <CommentComposer
-          value={editValue}
-          onChange={setEditValue}
-          submitLabel='保存'
-          onCancel={() => {
-            setEditValue(comment.body)
-            setEditing(false)
-          }}
-          onSubmit={async () => {
-            await onUpdateComment({ commentId: comment.id, body: editValue })
-            setEditing(false)
-          }}
-        />
-      ) : (
-        <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
-      )}
+      <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
       <div className='-ml-2 flex flex-wrap items-center gap-1'>
         {canReply ? (
-          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setReplying(true)}>回复</Button>
+          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setTextDialog({ mode: 'reply', value: '' })}>回复</Button>
         ) : null}
         {comment.permissions.canEdit ? (
-          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setEditing(true)}>编辑</Button>
+          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => setTextDialog({ mode: 'edit', value: comment.body })}>编辑</Button>
         ) : null}
       </div>
-      {canReply && replying ? (
-        <CommentComposer
-          value={replyValue}
-          onChange={setReplyValue}
-          submitLabel='发送'
-          onCancel={() => {
-            setReplyValue('')
-            setReplying(false)
-          }}
-          onSubmit={async () => {
-            await onReply(replyValue)
-            setReplyValue('')
-            setReplying(false)
+      {textDialog ? (
+        <CommentTextDialog
+          state={textDialog}
+          onStateChange={setTextDialog}
+          onSubmit={async (body) => {
+            if (textDialog.mode === 'reply') {
+              await onReply(body)
+              return
+            }
+            await onUpdateComment({ commentId: comment.id, body })
           }}
         />
       ) : null}
     </article>
+  )
+}
+
+type CommentTextDialogState =
+  | { readonly mode: 'reply'; readonly value: string }
+  | { readonly mode: 'edit'; readonly value: string }
+
+function CommentTextDialog({
+  state,
+  onStateChange,
+  onSubmit,
+}: {
+  readonly state: CommentTextDialogState
+  readonly onStateChange: (state: CommentTextDialogState | null) => void
+  readonly onSubmit: (body: string) => CommentActionPromise
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const title = state.mode === 'edit' ? '编辑评论' : '回复评论'
+  const submitLabel = state.mode === 'edit' ? '保存' : '发送'
+  const handleSubmit = async () => {
+    const body = state.value
+    if (!body.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSubmit(body)
+      onStateChange(null)
+    } catch (cause) {
+      setError(getCommentActionErrorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={true}
+      onOpenChange={(open) => {
+        if (submitting) return
+        if (!open) onStateChange(null)
+      }}
+    >
+      <DialogContent onClick={(event) => event.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className='sr-only'>{title}</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={state.value}
+          aria-label={title}
+          onChange={(event) => {
+            onStateChange({ ...state, value: event.currentTarget.value })
+            if (error) setError(null)
+          }}
+          className='min-h-24'
+          autoFocus
+        />
+        {error ? <div role='status' className='text-sm text-destructive'>{error}</div> : null}
+        <DialogFooter>
+          <Button type='button' variant='ghost' disabled={submitting} onClick={() => onStateChange(null)}>取消</Button>
+          <Button type='button' disabled={!state.value.trim() || submitting} onClick={() => { void handleSubmit() }}>
+            {submitting ? `${submitLabel}中` : submitLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -434,70 +487,6 @@ function DeleteConfirmDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
-}
-
-function CommentComposer({
-  value,
-  submitLabel,
-  onChange,
-  onSubmit,
-  onCancel,
-}: {
-  readonly value: string
-  readonly submitLabel: string
-  readonly onChange: (value: string) => void
-  readonly onSubmit: () => Promise<void>
-  readonly onCancel: () => void
-}) {
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const textareaRef = useAutosizedTextarea(value)
-  const handleSubmit = async () => {
-    if (!value.trim() || submitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await onSubmit()
-    } catch (cause) {
-      setError(getCommentActionErrorMessage(cause))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div className='space-y-2 pt-1' onClick={(event) => event.stopPropagation()}>
-      <Textarea
-        ref={textareaRef}
-        value={value}
-        aria-label={submitLabel === '保存' ? '编辑评论' : '回复评论'}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        className='min-h-20 resize-none overflow-hidden text-sm shadow-none'
-      />
-      <div className='flex items-center justify-between gap-2'>
-        {error ? <div role='status' className='min-w-0 text-xs text-destructive'>{error}</div> : <span />}
-        <div className='flex shrink-0 justify-end gap-1'>
-          <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={onCancel}>取消</Button>
-          <Button type='button' size='sm' className='h-7 px-2 text-xs' disabled={!value.trim() || submitting} onClick={() => { void handleSubmit() }}>
-            {submitting ? `${submitLabel}中` : submitLabel}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function useAutosizedTextarea(value: string) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  useLayoutEffect(() => {
-    const element = textareaRef.current
-    if (!element) return
-    element.style.height = 'auto'
-    element.style.height = `${element.scrollHeight}px`
-  }, [value])
-
-  return textareaRef
 }
 
 function getCommentDeleteConfig(

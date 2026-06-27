@@ -38,18 +38,21 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('暂无评论')
   })
 
-  it('submits replies without nesting the visual layout indefinitely', async () => {
+  it('submits replies from a dialog without adding an inline composer to the rail', async () => {
     const onReply = vi.fn(async () => undefined)
     renderRail({ onReply })
 
     await click(buttonWithText('回复'))
+    expect(document.body.textContent).toContain('回复评论')
+    expect(threadCard('thread-1').querySelector('textarea')).toBeNull()
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
     expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: 'comment-1', body: 'Reply body' })
+    expect(document.body.textContent).not.toContain('回复评论')
   })
 
-  it('shows reply failures instead of silently leaving the composer unchanged', async () => {
+  it('shows reply failures in the dialog and keeps the typed body', async () => {
     const onReply = vi.fn(async () => {
       throw new Error('回复失败')
     })
@@ -59,6 +62,7 @@ describe('MarkdownCommentsRail', () => {
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
+    expect(document.body.textContent).toContain('回复评论')
     expect(document.body.textContent).toContain('回复失败')
     expect(textarea().value).toBe('Reply body')
   })
@@ -74,6 +78,36 @@ describe('MarkdownCommentsRail', () => {
 
     expect(onReply).toHaveBeenCalled()
     expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
+  it('opens edits in a dialog with the existing body and saves changes', async () => {
+    const onUpdateComment = vi.fn(async () => undefined)
+    renderRail({ onUpdateComment })
+
+    await click(buttonWithText('编辑'))
+
+    expect(document.body.textContent).toContain('编辑评论')
+    expect(textarea().value).toBe('First line\nSecond line\n<strong>unsafe</strong>')
+    expect(threadCard('thread-1').querySelector('textarea')).toBeNull()
+
+    await inputValue(textarea(), 'Updated comment')
+    await click(buttonWithText('保存'))
+
+    expect(onUpdateComment).toHaveBeenCalledWith({ commentId: 'comment-1', body: 'Updated comment' })
+    expect(document.body.textContent).not.toContain('编辑评论')
+  })
+
+  it('cancels edit dialogs without updating the comment', async () => {
+    const onUpdateComment = vi.fn(async () => undefined)
+    renderRail({ onUpdateComment })
+
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Updated comment')
+    await click(buttonWithText('取消'))
+
+    expect(onUpdateComment).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('编辑评论')
+    expect(document.body.textContent).toContain('First line')
   })
 
   it('hides edit and delete actions when permissions are false', () => {
@@ -108,30 +142,19 @@ describe('MarkdownCommentsRail', () => {
     expect(buttonWithText('回复').className).toContain('h-7')
   })
 
-  it('keeps the composer compact and marks async errors as status text', async () => {
+  it('renders comment text input in a dialog and marks async errors as status text', async () => {
     const onReply = vi.fn(async () => {
       throw new Error('回复失败')
     })
     renderRail({ onReply })
 
     await click(buttonWithText('回复'))
-    expect(textarea().className).toContain('shadow-none')
-    expect(textarea().className).toContain('resize-none')
-    expect(textarea().className).toContain('overflow-hidden')
+    expect(dialogContent()).not.toBeNull()
+    expect(textarea().className).toContain('min-h-24')
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
     expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
-  })
-
-  it('grows the composer textarea with its content instead of scrolling inside it', async () => {
-    renderRail()
-
-    await click(buttonWithText('回复'))
-    Object.defineProperty(textarea(), 'scrollHeight', { configurable: true, value: 128 })
-    await inputValue(textarea(), 'First line\nSecond line\nThird line')
-
-    expect(textarea().style.height).toBe('128px')
   })
 
   it('positions attached comments by their markdown anchor', () => {
@@ -344,6 +367,12 @@ function textarea() {
   const element = document.querySelector('textarea')
   if (!element) throw new Error('Missing textarea')
   return element as HTMLTextAreaElement
+}
+
+function dialogContent() {
+  const element = document.querySelector('[data-slot="dialog-content"]')
+  if (!(element instanceof HTMLElement)) throw new Error('Missing dialog content')
+  return element
 }
 
 function threadSection(threadId: string) {
