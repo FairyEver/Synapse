@@ -1107,9 +1107,9 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
 
     await bridge.soundNotifier.getSettings()
-    await bridge.soundNotifier.updateSettings({ selectedPresetId: "done", volume: 40 })
-    await bridge.soundNotifier.play({ presetId: "done" })
-    await bridge.soundNotifier.preview({ presetId: "attention", volume: 50 })
+    await bridge.soundNotifier.updateSettings({})
+    await bridge.soundNotifier.play({ presetId: "done", repeatCount: 3 })
+    await bridge.soundNotifier.preview({ eventType: "input-required", intervalMs: 1500 })
     bridge.soundNotifier.onChanged(vi.fn())
     bridge.soundNotifier.onPlayRequested(vi.fn())
 
@@ -1121,17 +1121,17 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
       "synapse:sound-notifier:settings:update",
-      { selectedPresetId: "done", volume: 40 },
+      {},
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,
       "synapse:sound-notifier:play",
-      { presetId: "done" },
+      { presetId: "done", repeatCount: 3 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       4,
       "synapse:sound-notifier:preview",
-      { presetId: "attention", volume: 50 },
+      { eventType: "input-required", intervalMs: 1500 },
     )
     expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
       1,

@@ -56,7 +56,7 @@ afterEach(() => {
 })
 
 describe('DriveCodeRenderer', () => {
-  it('reloads from the returned snapshot instead of the old preview text', async () => {
+  it('asks before reloading dirty source text and then reloads from the returned snapshot', async () => {
     const editContext = createEditContext({
       reload: vi.fn(async () => baseSnapshot({ preview: { ...basePreview(), text: 'const answer = 42' } })),
     })
@@ -67,9 +67,31 @@ describe('DriveCodeRenderer', () => {
 
     await click(buttonWithText('重新加载'))
 
+    expect(editContext.reload).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('放弃本地修改？')
+    await click(buttonWithText('放弃并重新加载'))
+
     expect(editContext.reload).toHaveBeenCalled()
     expect(editor().value).toBe('const answer = 42')
     expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('downloads the dirty source draft without reloading it from the discard dialog', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-draft')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const clickAnchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const editContext = createEditContext()
+    renderRenderer({ editContext })
+
+    await inputValue(editor(), 'const draft = true')
+    await click(buttonWithText('重新加载'))
+    await click(buttonWithText('下载本地版本'))
+
+    expect(editContext.reload).not.toHaveBeenCalled()
+    expect(editor().value).toBe('const draft = true')
+    expect(createObjectURL).toHaveBeenCalled()
+    expect(clickAnchor).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-draft')
   })
 
   it('registers login action for shared read-only previews', () => {

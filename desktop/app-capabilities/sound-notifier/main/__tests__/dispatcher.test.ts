@@ -7,27 +7,31 @@ describe("createSoundNotifierCapabilityDispatcher", () => {
     const service = {
       play: vi.fn(async () => ({
         played: true,
+        eventType: "success",
         presetId: "done",
-        volume: 70,
+        repeatCount: 3,
+        intervalMs: 1234,
       })),
     }
     const dispatcher = createSoundNotifierCapabilityDispatcher({ service })
 
     await expect(dispatcher.dispatch(
       SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
-      { presetId: "done", volume: 70 },
+      { presetId: "done", repeatCount: 3, intervalMs: 1234 },
       { source: "mcp-http" },
     )).resolves.toEqual({
       ok: true,
       data: {
         played: true,
+        eventType: "success",
         presetId: "done",
-        volume: 70,
+        repeatCount: 3,
+        intervalMs: 1234,
       },
       affected: 1,
     })
 
-    expect(service.play).toHaveBeenCalledWith({ presetId: "done", volume: 70 })
+    expect(service.play).toHaveBeenCalledWith({ presetId: "done", repeatCount: 3, intervalMs: 1234 })
   })
 
   it("rejects unknown sound notifier actions", async () => {

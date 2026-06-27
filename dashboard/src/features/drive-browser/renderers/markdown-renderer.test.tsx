@@ -142,6 +142,31 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonWithText('阅读')).not.toBeNull()
   })
 
+  it('enables comments for markdown extensions and markdown mime types', () => {
+    const cases = [
+      current({ name: 'notes.md', mimeType: null }),
+      current({ name: 'notes.markdown', mimeType: null }),
+      current({ name: 'component.mdx', mimeType: null }),
+      current({ name: 'upload.bin', mimeType: 'text/markdown' }),
+    ]
+
+    for (const currentItem of cases) {
+      renderMarkdown({ currentItem })
+      expect(buttonWithText('评论 0')).not.toBeNull()
+      root?.unmount()
+      host?.remove()
+      root = null
+      host = null
+      document.body.innerHTML = ''
+    }
+  })
+
+  it('does not enable comments for non-markdown files', () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
+
+    expect(queryButtonWithText('评论 0')).toBeNull()
+  })
+
   it('keeps wide markdown tables scrollable inside the reader column', () => {
     renderMarkdown({
       previewData: preview({
@@ -358,8 +383,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).not.toContain('回复')
   })
 
-  it('does not show comment controls for markdown previews whose file name is not .md', async () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.mdx' }) })
+  it('does not show comment controls for non-markdown previews', async () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
     selectStrongText()
 
     await act(async () => {
@@ -637,13 +662,13 @@ function editable() {
   }
 }
 
-function current({ name = 'notes.md' }: { readonly name?: string } = {}) {
+function current({ name = 'notes.md', mimeType = 'text/markdown' }: { readonly name?: string; readonly mimeType?: string | null } = {}) {
   return {
     id: 'item-1',
     name,
     type: 'file',
     size: '12',
-    mimeType: 'text/markdown',
+    mimeType,
     updatedAt: '2026-06-21T00:00:00.000Z',
     previewKind: 'markdown',
     browserUrl: '/drive/items/item-1',
@@ -755,6 +780,11 @@ function buttonWithText(text: string) {
   const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
   if (!button) throw new Error(`Missing button ${text}`)
   return button as HTMLButtonElement
+}
+
+function queryButtonWithText(text: string) {
+  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
+  return button instanceof HTMLButtonElement ? button : null
 }
 
 function buttonByLabel(label: string) {

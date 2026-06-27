@@ -86,7 +86,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 
 ### Notifier 基础提醒能力
 
-- Sound Notifier 是声音提醒系统应用，负责本机声音提示、默认提示音设置，以及对外提供声音提醒 MCP 能力。
+- Sound Notifier 是声音提醒系统应用，负责本机语义声音提示、重复提醒参数，以及对外提供声音提醒 MCP 能力。
 - 未来可新增 System Notifier，负责跨平台系统消息通知、默认通知行为设置，以及对外提供系统通知 MCP 能力。
 - 未来可新增 Mobile Notifier，负责通过手机 App 向用户自己发送提醒，并对外提供手机提醒 MCP 能力。
 - 未来可新增 WeChat Notifier，负责通过微信公众号或微信相关通道向用户自己发送提醒，并对外提供微信提醒 MCP 能力。

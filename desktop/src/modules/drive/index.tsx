@@ -180,7 +180,7 @@ const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; read
 ]
 const DRIVE_SHARE_ACCESS_MODE_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveShareAccessModeOption }> = [
   { label: "可阅读", value: "link_read" },
-  { label: "链接可编辑", value: "link_edit" },
+  { label: "登录用户可编辑", value: "link_edit" },
   { label: "指定用户可编辑", value: "specified_users_edit" },
 ]
 
@@ -2995,7 +2995,7 @@ function formatDriveAccessPassword(item: { readonly passwordEnabled?: boolean; r
 }
 
 function formatDriveShareAccessModeLabel(accessMode: DriveShareAccessMode | undefined, editorCount = 0): string {
-  if (accessMode === "link_edit") return "可编辑"
+  if (accessMode === "link_edit") return "登录可编辑"
   if (accessMode === "specified_users_edit") return `${editorCount}人可编辑`
   return "可阅读"
 }

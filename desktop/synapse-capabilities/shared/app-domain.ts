@@ -33,7 +33,16 @@ import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
-import { SOUND_NOTIFIER_PRESET_IDS } from "../../app-capabilities/sound-notifier/shared/defaults"
+import {
+  SOUND_NOTIFIER_DEFAULT_INTERVAL_MS,
+  SOUND_NOTIFIER_DEFAULT_REPEAT_COUNT,
+  SOUND_NOTIFIER_EVENT_TYPES,
+  SOUND_NOTIFIER_MAX_INTERVAL_MS,
+  SOUND_NOTIFIER_MAX_REPEAT_COUNT,
+  SOUND_NOTIFIER_MIN_INTERVAL_MS,
+  SOUND_NOTIFIER_MIN_REPEAT_COUNT,
+  SOUND_NOTIFIER_PRESET_IDS,
+} from "../../app-capabilities/sound-notifier/shared/defaults"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
@@ -166,7 +175,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   {
     id: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
     title: "Play sound",
-    description: "Play the user's selected Sound Notifier preset on the local computer.",
+    description: "Play a semantic Sound Notifier reminder on the local computer.",
     mutates: false,
   },
 ]
@@ -527,22 +536,38 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
-      description: "Play a short local Sound Notifier preset. Omit presetId and volume to use the user's Sound Notifier settings.",
+      description: "Play a short local Sound Notifier reminder. Prefer eventType so the sound matches the reminder situation.",
       inputSchema: {
         type: "object",
         properties: {
+          eventType: {
+            type: "string",
+            enum: SOUND_NOTIFIER_EVENT_TYPES,
+            description: "Reminder event type: message, input-required, success, long-running-complete, or error. Defaults to message.",
+          },
           presetId: {
             type: "string",
             enum: SOUND_NOTIFIER_PRESET_IDS,
-            description: "Optional sound preset id.",
+            description: "legacy sound preset id. Prefer eventType. Do not pass both eventType and presetId.",
           },
-          volume: {
+          repeatCount: {
             type: "integer",
-            minimum: 0,
-            maximum: 100,
-            description: "Optional playback volume from 0 to 100.",
+            minimum: SOUND_NOTIFIER_MIN_REPEAT_COUNT,
+            maximum: SOUND_NOTIFIER_MAX_REPEAT_COUNT,
+            description: `Optional repeat count for this reminder. Defaults to ${SOUND_NOTIFIER_DEFAULT_REPEAT_COUNT}.`,
+          },
+          intervalMs: {
+            type: "integer",
+            minimum: SOUND_NOTIFIER_MIN_INTERVAL_MS,
+            maximum: SOUND_NOTIFIER_MAX_INTERVAL_MS,
+            description: `Optional start-to-start interval in milliseconds between repeated plays. Defaults to ${SOUND_NOTIFIER_DEFAULT_INTERVAL_MS}.`,
           },
         },
+        oneOf: [
+          { required: ["eventType"], not: { required: ["presetId"] } },
+          { required: ["presetId"], not: { required: ["eventType"] } },
+          { not: { anyOf: [{ required: ["eventType"] }, { required: ["presetId"] }] } },
+        ],
         additionalProperties: false,
       },
     },

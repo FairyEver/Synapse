@@ -1,7 +1,6 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
-import type { WindowManager } from "../../../electron/runtime/window"
 import type { SoundNotifierService } from "./service"
 import {
   soundNotifierChangedEventSchema,
@@ -12,28 +11,8 @@ import {
   soundNotifierSettingsSchema,
 } from "../shared/schema"
 
-const soundNotifierEventWiredServices = new WeakSet<SoundNotifierService>()
-
 function resolveSoundNotifierService(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): SoundNotifierService {
-  const service = ctx.resolve<SoundNotifierService>("core.sound-notifier")
-  wireSoundNotifierEvents(ctx, service)
-  return service
-}
-
-function wireSoundNotifierEvents(
-  ctx: Parameters<IpcModule["methods"][string]["handler"]>[0],
-  service: SoundNotifierService,
-): void {
-  if (soundNotifierEventWiredServices.has(service)) return
-
-  const windowManager = ctx.resolve<WindowManager>("core.window-manager")
-  service.events.on("changed", (payload) => {
-    windowManager.broadcast(soundNotifierIpcModule.events.changed.channel, payload)
-  })
-  service.events.on("playRequested", (payload) => {
-    windowManager.broadcast(soundNotifierIpcModule.events.playRequested.channel, payload)
-  })
-  soundNotifierEventWiredServices.add(service)
+  return ctx.resolve<SoundNotifierService>("core.sound-notifier")
 }
 
 export const soundNotifierIpcModule: IpcModule = {

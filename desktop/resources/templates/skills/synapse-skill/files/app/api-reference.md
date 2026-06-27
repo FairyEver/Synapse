@@ -247,16 +247,21 @@ Output:
 
 ## `app_sound_notifier_sound_play`
 
-Play a short Sound Notifier preset on the local computer.
+Play a short Sound Notifier reminder on the local computer.
 
 Input:
 
-- `presetId` optional: one of `soft-chime`, `done`, `attention`, `error`, or `long-done`. Defaults to the user's selected Sound Notifier preset.
-- `volume` optional: integer from `0` to `100`. Defaults to the user's Sound Notifier volume.
+- `eventType` optional: one of `message`, `input-required`, `success`, `long-running-complete`, or `error`. Defaults to `message`.
+- `presetId` optional: legacy preset id, one of `soft-chime`, `done`, `attention`, `error`, or `long-done`. Prefer `eventType`.
+- `repeatCount` optional: integer from `1` to `10`. Defaults to `1`.
+- `intervalMs` optional: integer from `100` to `60000`. Defaults to `1000`. It is the start-to-start interval between repeated plays.
+
+Do not pass both `eventType` and `presetId`.
 
 Output:
 
 - `played`: whether a sound was queued for playback.
+- `eventType`: reminder type selected for this request.
 - `presetId`: preset that was selected for this request.
-- `volume`: volume used for this request.
-- `reason`: present as `"disabled"` when MCP playback is disabled in Sound Notifier settings.
+- `repeatCount`: repeat count used for this request.
+- `intervalMs`: interval used for this request.

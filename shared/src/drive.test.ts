@@ -26,6 +26,7 @@ import {
   buildShareDriveDownloadUrl,
   buildShareDriveRenderUrl,
   inferDrivePublicAssetMimeType,
+  isDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
   type DriveDocumentImageSource,
@@ -240,6 +241,16 @@ describe("drive URL helpers", () => {
     const kind: DriveBrowserPreviewKind = "markdown"
 
     expect(kind).toBe("markdown")
+  })
+
+  it("recognizes markdown drive files by extension and mime type", () => {
+    expect(isDriveMarkdownItem({ name: "notes.md", type: "file", mimeType: null })).toBe(true)
+    expect(isDriveMarkdownItem({ name: "notes.markdown", type: "file", mimeType: null })).toBe(true)
+    expect(isDriveMarkdownItem({ name: "component.mdx", type: "file", mimeType: null })).toBe(true)
+    expect(isDriveMarkdownItem({ name: "upload.bin", type: "file", mimeType: "text/markdown" })).toBe(true)
+    expect(isDriveMarkdownItem({ name: "legacy.bin", type: "file", mimeType: "text/x-markdown" })).toBe(true)
+    expect(isDriveMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
+    expect(isDriveMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
   })
 
   it("defines drive annotation DTOs for text range comments", () => {

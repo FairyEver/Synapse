@@ -38,6 +38,7 @@ import { createDocumentTemplateService } from "../../app-capabilities/document-t
 import { createScreenshotCapabilityDispatcher } from "../../app-capabilities/screenshot/main/dispatcher"
 import { createScreenshotService } from "../../app-capabilities/screenshot/main/service"
 import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
+import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
@@ -101,7 +102,7 @@ import type {
   ConversationEntryV1,
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
-  SoundNotifierSettingsEntryV1,
+  SoundNotifierSettingsEntryV3,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -349,13 +350,29 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
 export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService> = {
   id: "core.sound-notifier",
   criticality: "degraded",
-  dependsOn: ["core.data-repository"],
+  dependsOn: ["core.data-repository", "core.window-manager"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    return createSoundNotifierService({
-      settings: dataRepository.namespace<SoundNotifierSettingsEntryV1>(SOUND_NOTIFIER_SETTINGS_NAMESPACE),
-      logger: ctx.logger.child("sound-notifier"),
+    const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
+    const logger = ctx.logger.child("sound-notifier")
+    const service = createSoundNotifierService({
+      settings: dataRepository.namespace<SoundNotifierSettingsEntryV3>(SOUND_NOTIFIER_SETTINGS_NAMESPACE),
+      logger,
     })
+
+    service.events.on("changed", (payload) => {
+      windowManager.broadcast(soundNotifierIpcModule.events.changed.channel, payload)
+    })
+    service.events.on("playRequested", (payload) => {
+      const sent = windowManager.broadcast(soundNotifierIpcModule.events.playRequested.channel, payload)
+      if (sent === 0) {
+        logger.warn("Sound notifier playback request had no renderer window.", {
+          eventType: payload.eventType,
+          presetId: payload.presetId,
+        })
+      }
+    })
+    return service
   },
 }
 

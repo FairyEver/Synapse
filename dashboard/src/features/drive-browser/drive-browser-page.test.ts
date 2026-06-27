@@ -263,7 +263,6 @@ describe('drive browser view model', () => {
     expect(headerHtml).toContain('notes.md')
     expect(headerHtml).toContain('已同步')
     expect(headerHtml).toContain('data-drive-preview-action-separator="true"')
-    expect(headerHtml).toContain('border-l')
     expect(headerHtml).not.toContain('下载')
     expect(headerHtml).toContain('在云盘中查看')
     expect(headerHtml).toContain('历史版本')
@@ -297,6 +296,8 @@ describe('drive browser view model', () => {
 
     expect(headerHtml).toContain('登录')
     expect(headerHtml).toContain('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+    expect(headerHtml).toContain('data-drive-preview-viewer-separator="true"')
+    expect(headerHtml.indexOf('打开方式')).toBeLessThan(headerHtml.indexOf('登录'))
   })
 
   it('keeps finder actions limited to browser actions', () => {
@@ -457,14 +458,14 @@ describe('drive browser view model', () => {
     const mdxeditor = options.find((option) => option.id === 'mdxeditor')
 
     expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
-    expect(mdxeditor?.disabledReason).toBe('文件过大')
+    expect(mdxeditor?.disabledReason).toBe('超过富文本限制')
     expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('markdown')
     if (!mdxeditor) throw new Error('MDXeditor option not found')
 
     const labelHtml = renderToStaticMarkup(createElement(DriveRendererOptionMenuLabel, { option: mdxeditor }))
 
     expect(labelHtml).toContain('MDXeditor')
-    expect(labelHtml).toContain('文件过大')
+    expect(labelHtml).toContain('超过富文本限制')
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
       snapshot,

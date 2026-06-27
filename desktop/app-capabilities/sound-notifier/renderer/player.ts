@@ -10,7 +10,8 @@ let audioContext: AudioContext | null = null
 
 export function playSoundNotifierPreset(input: {
   readonly presetId: SoundNotifierPresetId
-  readonly volume: number
+  readonly repeatCount: number
+  readonly intervalMs: number
 }): void {
   const preset = SOUND_NOTIFIER_PRESETS.find((item) => item.id === input.presetId)
   if (!preset) return
@@ -22,7 +23,9 @@ export function playSoundNotifierPreset(input: {
     void context.resume()
   }
 
-  playPreset(context, preset, Math.max(0, Math.min(100, input.volume)) / 100)
+  for (let index = 0; index < input.repeatCount; index += 1) {
+    playPreset(context, preset, index * input.intervalMs / 1000)
+  }
 }
 
 function getAudioContext(): AudioContext | null {
@@ -36,15 +39,15 @@ function getAudioContext(): AudioContext | null {
   return audioContext
 }
 
-function playPreset(context: AudioContext, preset: SoundNotifierPreset, volume: number): void {
+function playPreset(context: AudioContext, preset: SoundNotifierPreset, offsetSeconds: number): void {
   const masterGain = context.createGain()
-  masterGain.gain.setValueAtTime(volume, context.currentTime)
+  masterGain.gain.setValueAtTime(1, context.currentTime + offsetSeconds)
   masterGain.connect(context.destination)
 
   for (const event of preset.events) {
     const oscillator = context.createOscillator()
     const gain = context.createGain()
-    const start = context.currentTime + event.startMs / 1000
+    const start = context.currentTime + offsetSeconds + event.startMs / 1000
     const end = start + event.durationMs / 1000
     const targetGain = Math.max(0.0001, event.gain)
 

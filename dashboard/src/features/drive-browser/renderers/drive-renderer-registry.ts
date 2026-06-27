@@ -59,7 +59,7 @@ function firstEnabledDriveRendererOption(options: readonly DriveRendererOption[]
 }
 
 function driveMdxEditorRendererOption(snapshot: DriveBrowserSnapshotDto): DriveRendererOption {
-  const disabledReason = canRenderDriveMdxEditor(snapshot) ? undefined : '文件过大'
+  const disabledReason = canRenderDriveMdxEditor(snapshot) ? undefined : '超过富文本限制'
   return disabledReason ? { ...RENDERERS.mdxeditor, disabledReason } : RENDERERS.mdxeditor
 }
 

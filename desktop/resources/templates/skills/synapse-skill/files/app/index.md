@@ -47,10 +47,11 @@ Rules:
 
 ## Sound Notifier
 
-Use `app_sound_notifier_sound_play` when the user asks to play a local sound reminder, remind them with sound, or notify them that an Agent or command has finished.
+Use `app_sound_notifier_sound_play` when the user asks to play a local sound reminder, remind them with sound, or notify them that an Agent or command needs attention.
 
 Rules:
 
-- Omit `presetId` and `volume` unless the user asks for a specific preset or volume.
-- Treat the tool result `played: false` with `reason: "disabled"` as a user setting, not a failure.
-- Do not call this repeatedly in a loop. One completion reminder should use one call.
+- Choose `eventType` by situation: `message` for ordinary updates, `input-required` when user input or confirmation is needed, `success` for normal completion, `long-running-complete` for builds/tests/installs or other long tasks, and `error` for failures or blockers.
+- Use legacy `presetId` only when the user explicitly asks for a specific preset id.
+- Use `repeatCount` and `intervalMs` when the user asks to be reminded multiple times or after a specific spacing.
+- Do not call this repeatedly in a loop. One multi-reminder request should use one call with `repeatCount`.

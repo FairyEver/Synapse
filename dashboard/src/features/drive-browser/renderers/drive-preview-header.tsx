@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Separator } from '@/components/ui/separator'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
@@ -42,6 +43,8 @@ export function DrivePreviewHeader({
   const overflowActions = systemActions.filter((action) => !DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
   const hasHeaderActions = primaryActions.length > 0 || overflowActions.length > 0
   const showActionSeparator = rendererItems.length > 0 && hasHeaderActions
+  const showViewerStatus = snapshot.context === 'share'
+  const showViewerSeparator = showViewerStatus && (rendererItems.length > 0 || hasHeaderActions)
 
   return (
     <header data-drive-preview-header='true' className='flex shrink-0 flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
@@ -58,12 +61,11 @@ export function DrivePreviewHeader({
       </div>
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
         {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
-        <DriveShareViewerStatus snapshot={snapshot} />
         {showActionSeparator ? (
-          <span
-            aria-hidden='true'
+          <Separator
+            orientation='vertical'
             data-drive-preview-action-separator='true'
-            className='h-6 border-l border-border'
+            className='h-6'
           />
         ) : null}
         {primaryActions.map((action) => (
@@ -96,6 +98,18 @@ export function DrivePreviewHeader({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : null}
+        {showViewerStatus ? (
+          <div className='flex shrink-0 items-center gap-2'>
+            {showViewerSeparator ? (
+              <Separator
+                orientation='vertical'
+                data-drive-preview-viewer-separator='true'
+                className='h-6'
+              />
+            ) : null}
+            <DriveShareViewerStatus snapshot={snapshot} />
+          </div>
         ) : null}
       </div>
     </header>

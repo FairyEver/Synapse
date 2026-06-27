@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import type {
-  DriveAnnotationTextRangeTargetV1,
-  DriveBrowserEditDto,
-  DriveBrowserItemDto,
-  DriveBrowserPreviewDto,
-  DriveMarkdownOutlineItemDto,
+import {
+  isDriveMarkdownItem,
+  type DriveAnnotationTextRangeTargetV1,
+  type DriveBrowserEditDto,
+  type DriveBrowserItemDto,
+  type DriveBrowserPreviewDto,
+  type DriveMarkdownOutlineItemDto,
 } from '@synapse/shared'
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ export function DriveMarkdownRenderer({
   const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const commentsTouchedRef = useRef(false)
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
-  const annotationsEnabled = current.name.toLowerCase().endsWith('.md')
+  const annotationsEnabled = isDriveMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
   const [outlineOpen, setOutlineOpen] = useState(true)

@@ -153,10 +153,16 @@ describe("App capability domain", () => {
       .toMatchObject({
         type: "object",
         properties: {
+          eventType: expect.objectContaining({ enum: expect.arrayContaining(["message", "input-required"]) }),
           presetId: expect.objectContaining({ enum: expect.arrayContaining(["soft-chime", "done"]) }),
-          volume: expect.objectContaining({ minimum: 0, maximum: 100 }),
+          repeatCount: expect.objectContaining({ minimum: 1, maximum: 10 }),
+          intervalMs: expect.objectContaining({ minimum: 100, maximum: 60000 }),
         },
         additionalProperties: false,
       })
+    expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
+      .not.toContain("volume")
+    expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
+      .toContain("legacy")
   })
 })

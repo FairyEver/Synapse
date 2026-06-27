@@ -14,26 +14,19 @@ describe("soundNotifierIpcModule", () => {
 
   it("resolves the service for settings reads", async () => {
     const service = {
-      events: { on: vi.fn() },
       getSettings: vi.fn(async () => ({
-        schemaVersion: 1,
-        enabled: true,
-        selectedPresetId: "soft-chime",
-        volume: 70,
+        schemaVersion: 3,
       })),
     }
-    const windowManager = { broadcast: vi.fn() }
     const ctx = {
       resolve: (id: string) => {
         if (id === "core.sound-notifier") return service
-        if (id === "core.window-manager") return windowManager
         throw new Error(id)
       },
     }
 
     await expect(soundNotifierIpcModule.methods.getSettings.handler(ctx as never, undefined))
-      .resolves.toMatchObject({ selectedPresetId: "soft-chime" })
+      .resolves.toMatchObject({ schemaVersion: 3 })
     expect(service.getSettings).toHaveBeenCalled()
-    expect(service.events.on).toHaveBeenCalledTimes(2)
   })
 })

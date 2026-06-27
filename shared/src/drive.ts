@@ -64,6 +64,21 @@ export type DriveDocumentImageImportDisabledReason =
   | "quota"
   | "too_large"
 
+export function isDriveMarkdownItem(item: {
+  readonly type: DriveItemType | string
+  readonly name: string
+  readonly mimeType: string | null
+}): boolean {
+  if (item.type !== "file") return false
+  const lowerName = item.name.toLowerCase()
+  const mimeType = item.mimeType?.toLowerCase() ?? ""
+  return lowerName.endsWith(".md")
+    || lowerName.endsWith(".markdown")
+    || lowerName.endsWith(".mdx")
+    || mimeType === "text/markdown"
+    || mimeType === "text/x-markdown"
+}
+
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
   readonly expiresIn: DriveAccessExpiresIn

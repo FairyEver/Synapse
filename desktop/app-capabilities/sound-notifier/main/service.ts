@@ -1,10 +1,18 @@
 import { EventEmitter } from "node:events"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
-import type { SoundNotifierSettingsEntryV1 } from "../../../electron/runtime/data-repo/schemas/sound-notifier"
+import type { SoundNotifierSettingsEntryV3 } from "../../../electron/runtime/data-repo/schemas/sound-notifier"
+import {
+  getSoundNotifierPresetByEventType,
+  getSoundNotifierPresetById,
+  type SoundNotifierEventType,
+  type SoundNotifierPresetId,
+} from "../shared/defaults"
 import {
   defaultSoundNotifierSettings,
+  defaultSoundNotifierEventType,
   soundNotifierPlayInputSchema,
+  soundNotifierSettingsSchema,
   soundNotifierSettingsPatchSchema,
   type SoundNotifierPlayInput,
   type SoundNotifierPlayResult,
@@ -20,13 +28,18 @@ type SoundNotifierLogger = {
 }
 
 export type SoundNotifierServiceDeps = {
-  readonly settings: DataNamespace<SoundNotifierSettingsEntryV1>
+  readonly settings: DataNamespace<SoundNotifierSettingsEntryV3>
   readonly logger: SoundNotifierLogger
 }
 
 type SoundNotifierServiceEvents = {
   changed: [payload: { settings: SoundNotifierSettings }]
-  playRequested: [payload: { presetId: SoundNotifierSettings["selectedPresetId"]; volume: number }]
+  playRequested: [payload: {
+    eventType: SoundNotifierEventType
+    presetId: SoundNotifierPresetId
+    repeatCount: number
+    intervalMs: number
+  }]
 }
 
 class TypedSoundNotifierEventEmitter extends EventEmitter {
@@ -49,7 +62,8 @@ export function createSoundNotifierService(deps: SoundNotifierServiceDeps) {
   const events = new TypedSoundNotifierEventEmitter()
 
   async function getSettings(): Promise<SoundNotifierSettings> {
-    return await deps.settings.getSingleton() ?? defaultSoundNotifierSettings
+    const stored = await deps.settings.getSingleton()
+    return stored ? soundNotifierSettingsSchema.parse(stored) : defaultSoundNotifierSettings
   }
 
   async function updateSettings(input: SoundNotifierSettingsPatch): Promise<SoundNotifierSettings> {
@@ -65,34 +79,44 @@ export function createSoundNotifierService(deps: SoundNotifierServiceDeps) {
   }
 
   async function play(input: SoundNotifierPlayInput): Promise<SoundNotifierPlayResult> {
-    const parsed = soundNotifierPlayInputSchema.parse(input)
-    const settings = await getSettings()
-    const presetId = parsed.presetId ?? settings.selectedPresetId
-    const volume = parsed.volume ?? settings.volume
+    const playback = resolvePlayback(input)
 
-    if (!settings.enabled) {
-      return { played: false, presetId, volume, reason: "disabled" }
-    }
-
-    emitPlayRequested(presetId, volume)
-    return { played: true, presetId, volume }
+    emitPlayRequested(playback)
+    return { played: true, ...playback }
   }
 
   async function preview(input: SoundNotifierPlayInput): Promise<SoundNotifierPlayResult> {
-    const parsed = soundNotifierPlayInputSchema.parse(input)
-    const settings = await getSettings()
-    const presetId = parsed.presetId ?? settings.selectedPresetId
-    const volume = parsed.volume ?? settings.volume
+    const playback = resolvePlayback(input)
 
-    emitPlayRequested(presetId, volume)
-    return { played: true, presetId, volume }
+    emitPlayRequested(playback)
+    return { played: true, ...playback }
   }
 
-  function emitPlayRequested(
-    presetId: SoundNotifierSettings["selectedPresetId"],
-    volume: number,
-  ): void {
-    events.emit("playRequested", { presetId, volume })
+  function resolvePlayback(input: SoundNotifierPlayInput): {
+    eventType: SoundNotifierEventType
+    presetId: SoundNotifierPresetId
+    repeatCount: number
+    intervalMs: number
+  } {
+    const parsed = soundNotifierPlayInputSchema.parse(input)
+    const preset = parsed.presetId
+      ? getSoundNotifierPresetById(parsed.presetId)
+      : getSoundNotifierPresetByEventType(parsed.eventType ?? defaultSoundNotifierEventType)
+    return {
+      eventType: preset.eventType,
+      presetId: preset.id,
+      repeatCount: parsed.repeatCount,
+      intervalMs: parsed.intervalMs,
+    }
+  }
+
+  function emitPlayRequested(payload: {
+    eventType: SoundNotifierEventType
+    presetId: SoundNotifierPresetId
+    repeatCount: number
+    intervalMs: number
+  }): void {
+    events.emit("playRequested", payload)
   }
 
   return {

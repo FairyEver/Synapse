@@ -142,6 +142,7 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  window.localStorage.clear()
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
@@ -176,16 +177,38 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
-  it('reloads and clears dirty state', async () => {
+  it('asks before reloading dirty markdown and clears dirty state after confirmation', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
     await inputValue(editor(), '# Draft')
     await click(buttonWithText('重新加载'))
 
+    expect(editContext.reload).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('放弃本地修改？')
+    await click(buttonWithText('放弃并重新加载'))
+
     expect(editContext.reload).toHaveBeenCalled()
     expect(editor().value).toBe('# Notes')
     expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('downloads the dirty markdown draft without reloading it from the discard dialog', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-draft')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const clickAnchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Draft')
+    await click(buttonWithText('重新加载'))
+    await click(buttonWithText('下载本地版本'))
+
+    expect(editContext.reload).not.toHaveBeenCalled()
+    expect(editor().value).toBe('# Draft')
+    expect(createObjectURL).toHaveBeenCalled()
+    expect(clickAnchor).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-draft')
   })
 
   it('resets the mounted editor content after reload', async () => {
@@ -196,6 +219,7 @@ describe('DriveMDXeditorRenderer', () => {
 
     await inputValue(editor(), '# Draft')
     await click(buttonWithText('重新加载'))
+    await click(buttonWithText('放弃并重新加载'))
 
     expect(editor().value).toBe('# Server')
     expect(document.body.textContent).toContain('已同步')
@@ -283,7 +307,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(buttonWithText('插入图片')).toBeInstanceOf(HTMLButtonElement)
   })
 
-  it('uploads a selected image and inserts markdown at the editor cursor', async () => {
+  it('asks before uploading a selected image as a public asset', async () => {
     vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
       name: 'chart.png',
       url: 'https://synapse.test/files/asset_image',
@@ -292,12 +316,51 @@ describe('DriveMDXeditorRenderer', () => {
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
 
+    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('公开素材')
+
+    await click(buttonWithText('继续插入'))
+
     expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
       expect.any(File),
       { name: 'chart.png', mimeType: 'image/png' }
     )
     expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)')
     expect(document.body.textContent).toContain('未保存')
+  })
+
+  it('remembers public image consent after the first confirmed insertion', async () => {
+    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
+      .mockResolvedValueOnce(createPublicAsset({
+        name: 'first.png',
+        url: 'https://synapse.test/files/first',
+      }))
+      .mockResolvedValueOnce(createPublicAsset({
+        name: 'second.png',
+        url: 'https://synapse.test/files/second',
+      }))
+    renderRenderer({ edit: editable() })
+
+    await selectImage(new File(['image'], 'first.png', { type: 'image/png' }))
+    await click(buttonWithText('继续插入'))
+    await selectImage(new File(['image'], 'second.png', { type: 'image/png' }))
+
+    expect(document.body.textContent).not.toContain('公开素材')
+    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledTimes(2)
+    expect(editor().value).toBe(
+      '# Notes![first](https://synapse.test/files/first)![second](https://synapse.test/files/second)'
+    )
+  })
+
+  it('cancels public image insertion without uploading', async () => {
+    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
+    renderRenderer({ edit: editable() })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    await click(buttonWithText('取消'))
+
+    expect(upload).not.toHaveBeenCalled()
+    expect(editor().value).toBe('# Notes')
   })
 
   it('rejects unsupported selected image formats before uploading', async () => {
@@ -343,7 +406,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('文件已有新内容')
     expect(document.body.textContent).toContain('下载本地版本')
 
-    await click(buttonWithText('重新加载'))
+    await click(lastButtonWithText('重新加载'))
 
     expect(editContext.reload).toHaveBeenCalled()
     expect(document.body.textContent).not.toContain('文件已有新内容')
@@ -526,6 +589,13 @@ function editor(): HTMLTextAreaElement {
 
 function buttonWithText(text: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
+  return button
+}
+
+function lastButtonWithText(text: string): HTMLButtonElement {
+  const buttons = Array.from(document.querySelectorAll('button')).filter((item) => item.textContent?.includes(text))
+  const button = buttons[buttons.length - 1]
   if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
   return button
 }

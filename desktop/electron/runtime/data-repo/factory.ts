@@ -6,7 +6,11 @@ import { JsonNamespace } from "./backends/json"
 import { JsonLinesNamespace } from "./backends/jsonl"
 import { openSqliteDatabase, SqliteNamespace } from "./backends/sqlite"
 import { DataRepositoryImpl } from "./repository"
-import { allSchemas, reviveWorkflowsEnvelope } from "./schemas"
+import {
+  allSchemas,
+  reviveSoundNotifierSettingsEnvelope,
+  reviveWorkflowsEnvelope,
+} from "./schemas"
 import type { NamespaceSchema } from "./types"
 
 export interface FileBackedDataRepositoryOptions {
@@ -36,7 +40,7 @@ export function createFileBackedDataRepository(
           filePath: path.join(options.rootDir, `${safeFileName(schema.name)}.json`),
           defaults: recordSchema.defaults,
           validate: recordSchema.validate,
-          reviveEnvelope: schema.name === "workflows" ? reviveWorkflowsEnvelope : undefined,
+          reviveEnvelope: jsonReviveEnvelopeFor(schema.name),
         }))
         break
       case "encrypted-json":
@@ -123,4 +127,10 @@ export function sqliteIndexesFor(namespace: string): readonly string[] {
 
 function safeFileName(namespace: string): string {
   return namespace.replace(/[^a-zA-Z0-9_.-]/g, "_")
+}
+
+function jsonReviveEnvelopeFor(namespace: string) {
+  if (namespace === "workflows") return reviveWorkflowsEnvelope
+  if (namespace === "app.sound-notifier.settings") return reviveSoundNotifierSettingsEnvelope
+  return undefined
 }

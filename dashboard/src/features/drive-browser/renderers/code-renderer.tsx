@@ -37,6 +37,7 @@ export function DriveCodeRenderer({
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
+  const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
@@ -47,6 +48,7 @@ export function DriveCodeRenderer({
     setDirty(false)
     setError(null)
     setConflictOpen(false)
+    setReloadConfirmOpen(false)
   }, [current.id, edit?.currentVersionId, initialText])
 
   const handleSave = useCallback(async () => {
@@ -75,10 +77,19 @@ export function DriveCodeRenderer({
       setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
+      setReloadConfirmOpen(false)
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
   }, [editContext])
+
+  const requestReload = useCallback(() => {
+    if (dirty) {
+      setReloadConfirmOpen(true)
+      return
+    }
+    void handleReload()
+  }, [dirty, handleReload])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     if (!canEdit && !loginRequired) return []
@@ -107,7 +118,7 @@ export function DriveCodeRenderer({
           loading: editContext?.reloading,
           variant: 'outline',
           disabled: editContext?.reloading || editContext?.savingText,
-          onClick: () => { void handleReload() },
+          onClick: requestReload,
         },
         {
           kind: 'button',
@@ -130,6 +141,7 @@ export function DriveCodeRenderer({
     handleSave,
     loginRequired,
     loginUrl,
+    requestReload,
   ])
 
   useRegisterDriveRendererToolbarItems('code-editor', toolbarItems)
@@ -167,6 +179,24 @@ export function DriveCodeRenderer({
       {preview.truncated ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
+      <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
+            <AlertDialogDescription>
+              重新加载会用服务器内容覆盖当前未保存编辑。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
+              <Download data-icon='inline-start' />
+              下载本地版本
+            </Button>
+            <AlertDialogAction onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

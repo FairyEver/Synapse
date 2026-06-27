@@ -34,8 +34,11 @@ export {
   type QuickInputSettingsEntryV1,
 } from "./quick-input"
 export {
+  reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   type SoundNotifierSettingsEntryV1,
+  type SoundNotifierSettingsEntryV2,
+  type SoundNotifierSettingsEntryV3,
 } from "./sound-notifier"
 export {
   auditSchema,

@@ -17,20 +17,22 @@ import {
 import "@mdxeditor/editor/style.css"
 import { useMemo } from "react"
 
-import { createDriveMarkdownImageUploader } from "./drive-markdown-image-uploader"
+import { createDriveMarkdownImageUploader, type DriveMarkdownImageUploadConfirmation } from "./drive-markdown-image-uploader"
 
 export type DriveMdxEditorProps = {
   readonly markdown: string
   readonly onDirtyChange: (dirty: boolean) => void
   readonly onUploadingChange: (uploading: boolean) => void
+  readonly confirmPublicImageUpload?: DriveMarkdownImageUploadConfirmation
 }
 
 export function DriveMdxEditor({
   markdown,
   onDirtyChange,
   onUploadingChange,
+  confirmPublicImageUpload,
 }: DriveMdxEditorProps) {
-  const uploader = useMemo(() => createDriveMarkdownImageUploader(), [])
+  const uploader = useMemo(() => createDriveMarkdownImageUploader(undefined, confirmPublicImageUpload), [confirmPublicImageUpload])
   const plugins = useMemo(() => [
     headingsPlugin(),
     listsPlugin(),

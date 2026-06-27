@@ -144,6 +144,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
+    expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
     expect(byId.get("git.access-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
     expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
@@ -317,5 +318,58 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.window-manager",
       "provider",
     ].sort())
+  })
+
+  it("broadcasts sound notifier playback requests without requiring prior IPC calls", async () => {
+    const { coreSoundNotifierDescriptor } = await import("../descriptors")
+    const broadcast = vi.fn(() => 1)
+    const namespace = {
+      name: "memory",
+      schemaVersion: 3,
+      backend: "json",
+      getSingleton: vi.fn(async () => null),
+      setSingleton: vi.fn(),
+      clearSingleton: vi.fn(),
+      list: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
+      get: vi.fn(async () => null),
+      upsert: vi.fn(),
+      remove: vi.fn(),
+      onChange: vi.fn(() => () => {}),
+    }
+    const context = {
+      registry: {
+        get(id: string) {
+          if (id === "core.data-repository") {
+            return { namespace: vi.fn(() => namespace) }
+          }
+          if (id === "core.window-manager") {
+            return { broadcast }
+          }
+          throw new Error(id)
+        },
+      },
+      logger: {
+        child: vi.fn(() => ({
+          warn: vi.fn(),
+          error: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+        })),
+      },
+    }
+
+    const service = coreSoundNotifierDescriptor.create(context as never)
+    await service.play({ eventType: "success" })
+
+    expect(broadcast).toHaveBeenCalledWith(
+      "synapse:sound-notifier:play-requested",
+      {
+        eventType: "success",
+        presetId: "done",
+        repeatCount: 1,
+        intervalMs: 1000,
+      },
+    )
   })
 })

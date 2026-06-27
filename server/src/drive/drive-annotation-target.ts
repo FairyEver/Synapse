@@ -1,8 +1,9 @@
 import { BadRequestException } from "@nestjs/common"
-import type {
-  DriveAnnotationAnchorStatus,
-  DriveAnnotationCreateInput,
-  DriveAnnotationTextRangeTargetV1,
+import {
+  isDriveMarkdownItem,
+  type DriveAnnotationAnchorStatus,
+  type DriveAnnotationCreateInput,
+  type DriveAnnotationTextRangeTargetV1,
 } from "@synapse/shared"
 import { z } from "zod"
 
@@ -51,7 +52,7 @@ export function isCommentableMarkdownItem(item: {
   readonly type: string
   readonly mimeType: string | null
 }): boolean {
-  return item.type === "file" && item.name.toLowerCase().endsWith(".md")
+  return isDriveMarkdownItem(item)
 }
 
 export function parseDriveAnnotationCreateBody(value: unknown): DriveAnnotationCreateInput {

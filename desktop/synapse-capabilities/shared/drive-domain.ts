@@ -83,7 +83,7 @@ const searchablePageInputProperties = {
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
   expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Public access expiration. Defaults to 3d." },
-  accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets logged-in link holders edit supported text files; specified_users_edit lets only listed emails edit." },
+  accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
 

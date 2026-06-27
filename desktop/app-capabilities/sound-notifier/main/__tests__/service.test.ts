@@ -1,55 +1,22 @@
 import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
-import type { SoundNotifierSettingsEntryV1 } from "../../../../electron/runtime/data-repo/schemas/sound-notifier"
-import { SOUND_NOTIFIER_DEFAULT_PRESET_ID } from "../../shared/defaults"
+import type { SoundNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/sound-notifier"
 import { createSoundNotifierService } from "../service"
 
 describe("SoundNotifierService", () => {
-  it("loads default settings when the store is empty", async () => {
+  it("loads v3 default settings when the store is empty", async () => {
     const service = createSoundNotifierService(createHarness().deps)
 
     await expect(service.getSettings()).resolves.toEqual({
-      schemaVersion: 1,
-      enabled: true,
-      selectedPresetId: SOUND_NOTIFIER_DEFAULT_PRESET_ID,
-      volume: 70,
+      schemaVersion: 3,
     })
   })
 
-  it("updates settings and emits a changed event", async () => {
-    const harness = createHarness()
-    const service = createSoundNotifierService(harness.deps)
-    const changed = vi.fn()
-    service.events.on("changed", changed)
-
-    await service.updateSettings({
-      enabled: false,
-      selectedPresetId: "done",
-      volume: 35,
-    })
-
-    expect(await service.getSettings()).toMatchObject({
-      enabled: false,
-      selectedPresetId: "done",
-      volume: 35,
-    })
-    expect(changed).toHaveBeenCalledWith({
-      settings: expect.objectContaining({
-        enabled: false,
-        selectedPresetId: "done",
-        volume: 35,
-      }),
-    })
-  })
-
-  it("queues the selected preset for MCP playback", async () => {
+  it("queues message playback when no event type is provided", async () => {
     const service = createSoundNotifierService(createHarness({
       singleton: {
-        schemaVersion: 1,
-        enabled: true,
-        selectedPresetId: "attention",
-        volume: 45,
+        schemaVersion: 3,
       },
     }).deps)
     const playRequested = vi.fn()
@@ -57,69 +24,117 @@ describe("SoundNotifierService", () => {
 
     await expect(service.play({})).resolves.toEqual({
       played: true,
-      presetId: "attention",
-      volume: 45,
+      eventType: "message",
+      presetId: "soft-chime",
+      repeatCount: 1,
+      intervalMs: 1000,
     })
 
     expect(playRequested).toHaveBeenCalledWith({
-      presetId: "attention",
-      volume: 45,
+      eventType: "message",
+      presetId: "soft-chime",
+      repeatCount: 1,
+      intervalMs: 1000,
     })
   })
 
-  it("does not queue MCP playback when disabled", async () => {
+  it("queues playback by semantic event type", async () => {
     const service = createSoundNotifierService(createHarness({
       singleton: {
-        schemaVersion: 1,
-        enabled: false,
-        selectedPresetId: "done",
-        volume: 60,
+        schemaVersion: 3,
       },
     }).deps)
     const playRequested = vi.fn()
     service.events.on("playRequested", playRequested)
+
+    await expect(service.play({
+      eventType: "input-required",
+      repeatCount: 3,
+      intervalMs: 1500,
+    })).resolves.toEqual({
+      played: true,
+      eventType: "input-required",
+      presetId: "attention",
+      repeatCount: 3,
+      intervalMs: 1500,
+    })
+
+    expect(playRequested).toHaveBeenCalledWith({
+      eventType: "input-required",
+      presetId: "attention",
+      repeatCount: 3,
+      intervalMs: 1500,
+    })
+  })
+
+  it("keeps legacy preset id playback compatible", async () => {
+    const service = createSoundNotifierService(createHarness({
+      singleton: {
+        schemaVersion: 3,
+      },
+    }).deps)
 
     await expect(service.play({ presetId: "done" })).resolves.toEqual({
-      played: false,
+      played: true,
+      eventType: "success",
       presetId: "done",
-      volume: 60,
-      reason: "disabled",
+      repeatCount: 1,
+      intervalMs: 1000,
     })
-
-    expect(playRequested).not.toHaveBeenCalled()
   })
 
-  it("previews a preset even when MCP playback is disabled", async () => {
+  it("rejects playback requests that mix event type and preset id", async () => {
+    const service = createSoundNotifierService(createHarness().deps)
+
+    await expect(service.play({ eventType: "success", presetId: "done" }))
+      .rejects.toThrow()
+  })
+
+  it("rejects repeat options outside the supported range", async () => {
+    const service = createSoundNotifierService(createHarness().deps)
+
+    await expect(service.play({ repeatCount: 0 })).rejects.toThrow()
+    await expect(service.play({ repeatCount: 11 })).rejects.toThrow()
+    await expect(service.play({ intervalMs: 99 })).rejects.toThrow()
+    await expect(service.play({ intervalMs: 60001 })).rejects.toThrow()
+  })
+
+  it("previews a preset", async () => {
     const service = createSoundNotifierService(createHarness({
       singleton: {
-        schemaVersion: 1,
-        enabled: false,
-        selectedPresetId: "done",
-        volume: 20,
+        schemaVersion: 3,
       },
     }).deps)
     const playRequested = vi.fn()
     service.events.on("playRequested", playRequested)
 
-    await expect(service.preview({ presetId: "soft-chime", volume: 80 })).resolves.toEqual({
+    await expect(service.preview({
+      eventType: "long-running-complete",
+      repeatCount: 2,
+      intervalMs: 2500,
+    })).resolves.toEqual({
       played: true,
-      presetId: "soft-chime",
-      volume: 80,
+      eventType: "long-running-complete",
+      presetId: "long-done",
+      repeatCount: 2,
+      intervalMs: 2500,
     })
 
     expect(playRequested).toHaveBeenCalledWith({
-      presetId: "soft-chime",
-      volume: 80,
+      eventType: "long-running-complete",
+      presetId: "long-done",
+      repeatCount: 2,
+      intervalMs: 2500,
     })
   })
 })
 
 type HarnessOptions = {
-  readonly singleton?: SoundNotifierSettingsEntryV1 | null
+  readonly singleton?: SoundNotifierSettingsEntryV3 | null
 }
 
 function createHarness(options: HarnessOptions = {}) {
-  const settings = createMemoryNamespace<SoundNotifierSettingsEntryV1>({
+  const settings = createMemoryNamespace<SoundNotifierSettingsEntryV3>({
     singleton: options.singleton ?? null,
   })
 

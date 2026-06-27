@@ -15,6 +15,7 @@ import {
   type DriveBrowserPreviewKind,
   type DriveBrowserSurface,
   type DriveItemType,
+  isDriveMarkdownItem,
 } from "@synapse/shared"
 
 export const DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES = 128 * 1024
@@ -48,7 +49,7 @@ export function resolveDriveBrowserPreviewKind(item: Pick<DriveBrowserSourceItem
   if (mimeType.startsWith("image/")) return "image"
   if (isKnownImageName(lowerName)) return "image"
   if (mimeType === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) return "html-source"
-  if (isMarkdownDriveItem(lowerName, mimeType)) return "markdown"
+  if (isDriveMarkdownItem(item)) return "markdown"
   if (mimeType.startsWith("text/")) return "text"
   if (isKnownTextName(lowerName)) return "text"
   if (isKnownArchiveName(lowerName) || isKnownArchiveMimeType(mimeType)) return "download-only"
@@ -178,14 +179,6 @@ function isKnownTextName(lowerName: string): boolean {
 
 function isTextPreviewKind(kind: DriveBrowserPreviewKind): boolean {
   return kind === "text" || kind === "html-source" || kind === "markdown"
-}
-
-function isMarkdownDriveItem(lowerName: string, mimeType: string): boolean {
-  return lowerName.endsWith(".md")
-    || lowerName.endsWith(".markdown")
-    || lowerName.endsWith(".mdx")
-    || mimeType === "text/markdown"
-    || mimeType === "text/x-markdown"
 }
 
 function isKnownArchiveName(lowerName: string): boolean {
