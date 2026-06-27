@@ -425,6 +425,7 @@ function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowse
     children: [],
     preview: basePreview(),
     edit: editable(),
+    annotation: null,
     canDownload: true,
     canZip: false,
     ...input,

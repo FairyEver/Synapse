@@ -9,7 +9,7 @@ import { driveAnnotationApi } from '@/lib/api'
 
 export type DriveAnnotationContext =
   | { readonly context: 'owner'; readonly itemId: string }
-  | { readonly context: 'share'; readonly shareId: string; readonly itemId?: string | null; readonly canWrite?: boolean }
+  | { readonly context: 'share'; readonly shareId: string; readonly itemId?: string | null; readonly canComment?: boolean }
 
 export function driveAnnotationsQueryKey(input: DriveAnnotationContext) {
   return input.context === 'owner'

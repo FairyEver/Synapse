@@ -93,10 +93,10 @@ export function DriveMarkdownRenderer({
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
   )
-  const canWriteAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canWrite)
+  const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)
-    && canWriteAnnotations
+    && canCommentAnnotations
     && (effectiveAnnotationContext?.context === 'owner' || isAuthenticated)
   const resolvedByThreadId = useMemo(
     () => new Map(annotated.resolved.map((item) => [item.threadId, item])),
@@ -246,6 +246,12 @@ export function DriveMarkdownRenderer({
     window.getSelection()?.removeAllRanges()
   }, [])
 
+  const clearPendingSelectionAction = useCallback(() => {
+    setPendingTarget(null)
+    setSelectionPopover(null)
+    setCommentCreateError(null)
+  }, [])
+
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [
       {
@@ -301,19 +307,19 @@ export function DriveMarkdownRenderer({
     scrollPreviewContainerToRect(root, overlayRect)
   }
 
-  const handleBodyMouseUp = () => {
+  const syncSelectionActionFromCurrentSelection = useCallback(() => {
     if (!canCreateAnnotation) return
     const root = bodyRef.current
     if (!root) return
     const selection = window.getSelection()
-    const target = createMarkdownAnnotationTargetFromSelection(root, window.getSelection())
+    const target = createMarkdownAnnotationTargetFromSelection(root, selection)
     if (!target || !selection || selection.rangeCount === 0) {
-      if (!commentDialogOpen) clearPendingComment()
+      if (!commentDialogOpen) clearPendingSelectionAction()
       return
     }
     const rect = getSelectionRect(selection.getRangeAt(0))
     if (!rect) {
-      if (!commentDialogOpen) clearPendingComment()
+      if (!commentDialogOpen) clearPendingSelectionAction()
       return
     }
     setPendingTarget(target)
@@ -321,7 +327,35 @@ export function DriveMarkdownRenderer({
       top: Math.max(8, rect.top - 40),
       left: rect.left + rect.width / 2,
     })
-  }
+  }, [canCreateAnnotation, clearPendingSelectionAction, commentDialogOpen])
+
+  useEffect(() => {
+    if (!canCreateAnnotation) return
+    let frame: number | null = null
+    const scheduleSelectionSync = () => {
+      if (frame !== null) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        syncSelectionActionFromCurrentSelection()
+      })
+    }
+    const syncSelection = () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame)
+        frame = null
+      }
+      syncSelectionActionFromCurrentSelection()
+    }
+    document.addEventListener('selectionchange', scheduleSelectionSync)
+    document.addEventListener('pointerup', syncSelection)
+    document.addEventListener('keyup', syncSelection)
+    return () => {
+      document.removeEventListener('selectionchange', scheduleSelectionSync)
+      document.removeEventListener('pointerup', syncSelection)
+      document.removeEventListener('keyup', syncSelection)
+      if (frame !== null) window.cancelAnimationFrame(frame)
+    }
+  }, [canCreateAnnotation, syncSelectionActionFromCurrentSelection])
 
   const handleBodyClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const threadId = findOverlayThreadAtPoint(annotationOverlayRects, event.clientX, event.clientY, bodyRef.current)
@@ -458,7 +492,9 @@ export function DriveMarkdownRenderer({
                   data-testid='markdown-body'
                   className={MARKDOWN_BODY_CLASSNAME}
                   onClick={handleBodyClick}
-                  onMouseUp={handleBodyMouseUp}
+                  onMouseUp={syncSelectionActionFromCurrentSelection}
+                  onPointerUp={syncSelectionActionFromCurrentSelection}
+                  onKeyUp={syncSelectionActionFromCurrentSelection}
                   dangerouslySetInnerHTML={{ __html: annotated.html }}
                 />
                 {annotationOverlayRects.length > 0 ? (

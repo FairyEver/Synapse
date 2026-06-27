@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
+import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
 import type { DrivePreviewSystemAction } from './drive-preview-actions'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
@@ -57,6 +58,7 @@ export function DrivePreviewHeader({
       </div>
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
         {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+        <DriveShareViewerStatus snapshot={snapshot} />
         {showActionSeparator ? (
           <span
             aria-hidden='true'

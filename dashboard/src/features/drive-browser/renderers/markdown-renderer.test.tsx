@@ -266,6 +266,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
+  it('opens a selection action from a document selectionchange event', async () => {
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+    await flushAnimationFrames()
+
+    expect(buttonWithText('添加评论')).not.toBeNull()
+    expect(pendingOverlay()).not.toBeNull()
+  })
+
   it('shows an error when creating a comment fails', async () => {
     annotationsMock.createThread.mockRejectedValueOnce(new Error('文件已有新内容。'))
     renderMarkdown()
@@ -314,28 +327,25 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
-  it('does not open the composer for read-only share viewers', async () => {
+  it('opens the composer for logged-in share viewers even when editing is unavailable', async () => {
     useAuthStore.getState().auth.setUser({
-      id: 'reader-1',
       email: 'reader@example.com',
       displayName: null,
-      avatarUrl: null,
       role: 'user',
-      storageLimitBytes: '0',
-      storageUsedBytes: '0',
-      createdAt: '2026-06-21T00:00:00.000Z',
-      updatedAt: '2026-06-21T00:00:00.000Z',
+      sessionId: 'session-1',
     })
-    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1', canWrite: false } })
+    renderMarkdown({
+      edit: { ...editable(), canEdit: false, reason: 'permission_denied' },
+      annotationContext: { context: 'share', shareId: 'share-1', canComment: true },
+    })
     selectStrongText()
 
     await act(async () => {
       document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
     })
 
-    expect(document.querySelector('textarea')).toBeNull()
-    expect(document.body.textContent).not.toContain('添加评论')
-    expect(pendingOverlay()).toBeNull()
+    expect(buttonWithText('添加评论')).not.toBeNull()
+    expect(pendingOverlay()).not.toBeNull()
   })
 
   it('hides reply actions for logged-out share viewers', async () => {

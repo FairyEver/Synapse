@@ -1701,6 +1701,7 @@ function createBrowserSnapshot(): DriveBrowserSnapshotDto {
       visitUrl: null,
     },
     edit: null,
+    annotation: null,
     canDownload: true,
     canZip: false,
   }

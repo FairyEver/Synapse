@@ -1893,6 +1893,7 @@ describe("DriveService", () => {
     })
 
     expect(snapshot.current.previewKind).toBe("markdown")
+    expect(snapshot.annotation).toEqual({ canComment: true, reason: null })
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: expectedPreviewText,
@@ -2042,6 +2043,7 @@ describe("DriveService", () => {
     })
 
     expect(snapshot.current.browserUrl).toBe(`/share/${share.shareId}`)
+    expect(snapshot.annotation).toBeNull()
     expect(snapshot.preview).toMatchObject({
       kind: "html-source",
       text: "<html></html>",
@@ -2057,6 +2059,7 @@ describe("DriveService", () => {
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.user.create({ data: { id: "reader-1", email: "reader@example.com", passwordHash: "hash" } })
     const file = await createCompletedUpload(service, "user-1", {
       parentId: null,
       name: "notes.md",
@@ -2068,7 +2071,14 @@ describe("DriveService", () => {
       shareId: share.shareId,
       password: share.password ?? undefined,
     })
+    const loggedInSnapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+      actorUserId: "reader-1",
+    })
 
+    expect(snapshot.annotation).toEqual({ canComment: false, reason: "login_required" })
+    expect(loggedInSnapshot.annotation).toEqual({ canComment: true, reason: null })
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: "# Notes\n\n## Shared",

@@ -555,6 +555,7 @@ function createSnapshot(overrides: Partial<DriveBrowserSnapshotDto> = {}): Drive
     children: [],
     preview: null,
     edit: null,
+    annotation: null,
     canDownload: true,
     canZip: false,
     ...overrides,

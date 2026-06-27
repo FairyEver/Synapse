@@ -198,6 +198,7 @@ function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowse
       maxInlineEditBytes: '1048576',
       reason: null,
     },
+    annotation: null,
     canDownload: true,
     canZip: false,
     ...input,

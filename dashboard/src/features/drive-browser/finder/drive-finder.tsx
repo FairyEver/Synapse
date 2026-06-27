@@ -10,6 +10,7 @@ import {
   getDriveRendererOptions,
   type DriveRendererId,
 } from '../renderers/drive-renderer-registry'
+import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import { getDriveFinderActions } from '../shared/drive-view-model'
 import { DriveFinderBreadcrumbs } from './drive-finder-breadcrumbs'
 import { DriveFinderList } from './drive-finder-list'
@@ -43,7 +44,7 @@ export function DriveFinder({
 
   return (
     <section data-drive-finder-mode={mode} className='flex min-h-0 flex-1 flex-col gap-3'>
-      <DriveFinderToolbar snapshot={snapshot} />
+      <DriveFinderToolbar snapshot={snapshot} mode={mode} />
       {fileSelected ? (
         <DriveFinderFileLayout>
           <DriveRendererShell
@@ -68,12 +69,13 @@ export function DriveFinder({
   )
 }
 
-function DriveFinderToolbar({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+function DriveFinderToolbar({ snapshot, mode }: { readonly snapshot: DriveBrowserSnapshotDto; readonly mode: 'console' | 'share' | 'standalone' }) {
   const actions = getDriveFinderActions(snapshot)
   return (
     <div className='flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between'>
       <DriveFinderBreadcrumbs snapshot={snapshot} />
-      <div className='flex shrink-0 flex-wrap gap-2'>
+      <div className='flex shrink-0 flex-wrap items-center gap-2'>
+        {mode === 'share' ? <DriveShareViewerStatus snapshot={snapshot} /> : null}
         {actions.directoryDownloadUrl ? (
           <Button asChild variant='outline' size='sm'>
             <a href={actions.directoryDownloadUrl}>
