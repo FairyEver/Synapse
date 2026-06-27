@@ -854,6 +854,100 @@ describe("AgentTimeline", () => {
     expect(text).not.toContain("过程详情")
   })
 
+  it("keeps multiple assistant answers visible between process groups", () => {
+    const html = renderTimeline({
+      items: [
+        {
+          id: "answer-a",
+          kind: "message",
+          role: "assistant",
+          content: "First answer.",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
+        {
+          id: "thinking-b",
+          kind: "thinking",
+          content: "Inspecting.",
+          timestamp: "2026-06-27T00:00:01.000Z",
+        },
+        {
+          id: "tool-b",
+          kind: "toolCall",
+          toolUseId: "toolu-b",
+          toolName: "Read",
+          toolInput: "package.json",
+          timestamp: "2026-06-27T00:00:02.000Z",
+        },
+        {
+          id: "tool-b-result",
+          kind: "toolResult",
+          toolUseId: "toolu-b",
+          toolName: "Read",
+          content: "package contents",
+          success: true,
+          timestamp: "2026-06-27T00:00:03.000Z",
+        },
+        {
+          id: "answer-b",
+          kind: "message",
+          role: "assistant",
+          content: "Second answer.",
+          timestamp: "2026-06-27T00:00:04.000Z",
+        },
+        {
+          id: "thinking-c",
+          kind: "thinking",
+          content: "Checking tests.",
+          timestamp: "2026-06-27T00:00:05.000Z",
+        },
+        {
+          id: "answer-c",
+          kind: "message",
+          role: "assistant",
+          content: "Third answer.",
+          timestamp: "2026-06-27T00:00:06.000Z",
+        },
+      ],
+    })
+    const text = textFromMarkup(html)
+
+    expect(text).toContain("First answer.")
+    expect(text).toContain("Second answer.")
+    expect(text).toContain("Third answer.")
+    expect(text.indexOf("First answer.")).toBeLessThan(text.indexOf("过程详情"))
+    expect(text.indexOf("过程详情")).toBeLessThan(text.indexOf("Second answer."))
+    expect(html.match(/过程详情/g)).toHaveLength(2)
+    expect(text).not.toContain("package contents")
+  })
+
+  it("keeps result text visible after a tool boundary while grouping the tool", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "I will inspect it.",
+    }, "2026-06-27T00:00:00.000Z", "claude")
+    const withTool = appendAgentTimelineEvent(streamed, {
+      type: "toolResult",
+      toolName: "Read",
+      content: "package contents",
+      success: true,
+    }, "2026-06-27T00:00:01.000Z", "claude")
+    const items = appendAgentTimelineEvent(withTool, {
+      type: "result",
+      content: "Final answer.",
+      done: true,
+    }, "2026-06-27T00:00:02.000Z", "claude")
+
+    const html = renderTimeline({ items })
+    const text = textFromMarkup(html)
+
+    expect(text).toContain("I will inspect it.")
+    expect(text).toContain("Final answer.")
+    expect(text.indexOf("I will inspect it.")).toBeLessThan(text.indexOf("过程详情"))
+    expect(text.indexOf("过程详情")).toBeLessThan(text.indexOf("Final answer."))
+    expect(text).not.toContain("package contents")
+  })
+
   it("matches concurrent same-name tool results by tool use id", () => {
     const items: SynapseAgentTimelineItem[] = [
       {
