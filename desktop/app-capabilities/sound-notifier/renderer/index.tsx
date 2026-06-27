@@ -9,8 +9,6 @@ import {
   Field,
   FieldError,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "../../../src/components/ui/field"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
@@ -98,9 +96,11 @@ export function SoundNotifierModule() {
             </Alert>
           ) : settings ? (
             <Card className="rounded-lg py-0">
-              <CardContent className="grid gap-6 p-4 sm:p-5">
-                <FieldSet className="gap-3">
-                  <FieldLegend className="mb-0">提醒类型</FieldLegend>
+              <CardContent className="grid gap-8 p-4 sm:p-5">
+                <section className="grid gap-3" aria-labelledby="sound-notifier-presets-heading">
+                  <h2 id="sound-notifier-presets-heading" className="text-base font-medium text-foreground">
+                    提醒类型
+                  </h2>
                   <div className="overflow-hidden rounded-lg border bg-background" role="list">
                     {SOUND_NOTIFIER_PRESETS.map((preset) => (
                       <SoundPresetRow
@@ -111,11 +111,13 @@ export function SoundNotifierModule() {
                       />
                     ))}
                   </div>
-                </FieldSet>
+                </section>
 
-                <FieldSet className="gap-3">
-                  <FieldLegend className="mb-0">试听参数</FieldLegend>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                <section className="grid gap-4" aria-labelledby="sound-notifier-preview-heading">
+                  <h2 id="sound-notifier-preview-heading" className="text-base font-medium text-foreground">
+                    试听参数
+                  </h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <StepperField
                       label="循环次数"
                       value={repeatCount}
@@ -139,7 +141,7 @@ export function SoundNotifierModule() {
                       )}
                     />
                   </div>
-                </FieldSet>
+                </section>
               </CardContent>
             </Card>
           ) : null}
