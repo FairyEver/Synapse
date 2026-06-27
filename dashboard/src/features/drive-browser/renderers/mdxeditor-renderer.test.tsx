@@ -161,6 +161,21 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
+  it('normalizes mdxeditor html image output before saving', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Notes\n\n<img height="256" width="256" src="http://localhost:3000/files/asset_image" />')
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Notes\n\n![](http://localhost:3000/files/asset_image)',
+      baseVersionId: 'version-1',
+    })
+    expect(editor().value).toBe('# Notes\n\n![](http://localhost:3000/files/asset_image)')
+    expect(document.body.textContent).toContain('已同步')
+  })
+
   it('reloads and clears dirty state', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })

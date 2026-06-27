@@ -184,9 +184,15 @@ export function DriveMDXeditorRenderer({
   const handleSave = useCallback(async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
+    const normalizedValue = normalizeMdxEditorImageMarkdown(value)
     try {
-      await editContext.saveText({ text: value, baseVersionId: edit.currentVersionId })
-      savedValueRef.current = value
+      await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
+      if (normalizedValue !== value) {
+        setValue(normalizedValue)
+        beginExternalMarkdownSync(normalizedValue)
+        editorRef.current?.setMarkdown(normalizedValue)
+      }
+      savedValueRef.current = normalizedValue
       setDirty(false)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
@@ -195,7 +201,7 @@ export function DriveMDXeditorRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }, [canEdit, edit?.currentVersionId, editContext, value])
+  }, [beginExternalMarkdownSync, canEdit, edit?.currentVersionId, editContext, value])
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
@@ -354,4 +360,35 @@ function imageAltText(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) return fallback
   return trimmed.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, '') || fallback
+}
+
+function normalizeMdxEditorImageMarkdown(markdown: string): string {
+  return markdown.replace(/<img\b[^>]*>/giu, (tag) => {
+    const image = parseImageTag(tag)
+    if (!image?.src) return tag
+    const alt = image.alt ?? ''
+    const title = image.title ? ` "${escapeMarkdownImageTitle(image.title)}"` : ''
+    return `![${escapeMarkdownImageAlt(alt)}](${image.src}${title})`
+  })
+}
+
+function parseImageTag(tag: string): { readonly src: string; readonly alt?: string; readonly title?: string } | null {
+  if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') return null
+  const document = new window.DOMParser().parseFromString(tag, 'text/html')
+  const image = document.querySelector('img')
+  const src = image?.getAttribute('src')?.trim()
+  if (!src) return null
+  return {
+    src,
+    alt: image.getAttribute('alt') ?? undefined,
+    title: image.getAttribute('title') ?? undefined,
+  }
+}
+
+function escapeMarkdownImageAlt(value: string): string {
+  return value.replace(/\\/gu, '\\\\').replace(/\]/gu, '\\]')
+}
+
+function escapeMarkdownImageTitle(value: string): string {
+  return value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')
 }
