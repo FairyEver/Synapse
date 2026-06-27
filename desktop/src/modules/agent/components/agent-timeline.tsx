@@ -1,4 +1,4 @@
-import type { Ref } from "react"
+import { useState, type Ref } from "react"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
@@ -6,8 +6,13 @@ import type {
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
 import { AgentPhaseRow } from "./agent-phase-row"
+import { AgentProcessGroup } from "./agent-process-group"
 import { AgentRunStatus } from "./agent-run-status"
-import { timelineDisplayEntries } from "./agent-timeline-display"
+import {
+  defaultProcessGroupOpen,
+  groupTimelineDisplayEntries,
+  timelineDisplayEntries,
+} from "./agent-timeline-display"
 import { AgentTimelineItem } from "./agent-timeline-item"
 
 function AgentTimeline({
@@ -38,11 +43,14 @@ function AgentTimeline({
   useActivePhaseTicker(items)
   const now = Date.now()
   const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
+  const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
   const displayEntries = timelineDisplayEntries(items)
+  const displayNodes = groupTimelineDisplayEntries(displayEntries, { pendingPermissionRequestIds })
+  const [processGroupOpenOverrides, setProcessGroupOpenOverrides] = useState<Record<string, boolean>>({})
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        {displayEntries.length === 0 ? (
+        {displayNodes.length === 0 ? (
           <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center pr-4 pb-34 pt-4 text-center">
             {sending ? (
               <AgentRunStatus label="Agent 正在启动" />
@@ -52,8 +60,43 @@ function AgentTimeline({
           </div>
         ) : (
           <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-34 pt-4">
-            {displayEntries.map((entry) => (
-              entry.item.kind === "phase" ? (
+            {displayNodes.map((node) => {
+              if (node.kind === "processGroup") {
+                const defaultOpen = displayNodes.length === 1 || defaultProcessGroupOpen(node, { sending })
+                const open = processGroupOpenOverrides[node.id] ?? defaultOpen
+                return (
+                  <AgentProcessGroup
+                    key={node.id}
+                    summary={node.summary}
+                    open={open}
+                    onOpenChange={(nextOpen) =>
+                      setProcessGroupOpenOverrides((current) => ({
+                        ...current,
+                        [node.id]: nextOpen,
+                      }))}
+                  >
+                    {node.entries.map((entry) => (
+                      entry.item.kind === "phase" ? (
+                        <AgentPhaseRow key={entry.item.id} item={entry.item} now={now} />
+                      ) : (
+                        <AgentTimelineItem
+                          key={entry.item.id}
+                          item={entry.item}
+                          {...(entry.result ? { toolResult: entry.result } : {})}
+                          profile={profile}
+                          agentIcon={agentIcon}
+                          pendingPermissions={pendingPermissions}
+                          latestPendingItemIds={latestPendingItemIds}
+                          onOpenReference={onOpenReference}
+                          onRespondPermission={onRespondPermission}
+                        />
+                      )
+                    ))}
+                  </AgentProcessGroup>
+                )
+              }
+              const entry = node.entry
+              return entry.item.kind === "phase" ? (
                 <AgentPhaseRow key={entry.item.id} item={entry.item} now={now} />
               ) : (
                 <AgentTimelineItem
@@ -68,7 +111,7 @@ function AgentTimeline({
                   onRespondPermission={onRespondPermission}
                 />
               )
-            ))}
+            })}
           </div>
         )}
       </div>

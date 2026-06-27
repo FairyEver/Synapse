@@ -517,7 +517,8 @@ describe("AgentTimeline", () => {
     expect(html.match(/Glob/g)).toHaveLength(1)
     expect(html).toContain("Done")
     expect(html).not.toContain("Running")
-    expect(text).toBe("GlobDone")
+    expect(text).toContain("过程详情")
+    expect(text).toContain("GlobDone")
     expect(html).toContain("data-state=\"closed\"")
   })
 
@@ -779,6 +780,78 @@ describe("AgentTimeline", () => {
     expect(html).toContain('data-state="closed"')
     expect(text).toContain("Done")
     expect(text).not.toContain("package contents")
+  })
+
+  it("opens failed process groups by default", () => {
+    const html = renderTimeline({
+      items: [
+        {
+          id: "tool-call",
+          kind: "toolCall",
+          toolUseId: "toolu-fail",
+          toolName: "Bash",
+          toolInput: "pnpm test",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
+        {
+          id: "tool-result",
+          kind: "toolResult",
+          toolUseId: "toolu-fail",
+          toolName: "Bash",
+          content: "failed",
+          success: false,
+          timestamp: "2026-06-27T00:00:01.000Z",
+        },
+        {
+          id: "answer",
+          kind: "message",
+          role: "assistant",
+          content: "I found a failure.",
+          timestamp: "2026-06-27T00:00:02.000Z",
+        },
+      ],
+    })
+    const text = textFromMarkup(html)
+
+    expect(html).toContain('data-state="open"')
+    expect(text).toContain("Failed")
+    expect(text).toContain("I found a failure.")
+  })
+
+  it("keeps pending permission requests visible outside process groups", () => {
+    const html = renderTimeline({
+      items: [
+        {
+          id: "permission",
+          kind: "permissionRequest",
+          requestId: "request-1",
+          toolName: "Bash",
+          toolInput: "rm file",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
+        {
+          id: "answer",
+          kind: "message",
+          role: "assistant",
+          content: "Waiting for permission.",
+          timestamp: "2026-06-27T00:00:01.000Z",
+        },
+      ],
+      pendingPermissions: [{
+        requestId: "request-1",
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conversation-1",
+        toolName: "Bash",
+        toolInput: "rm file",
+        createdAt: "2026-06-27T00:00:00.000Z",
+      }],
+    })
+    const text = textFromMarkup(html)
+
+    expect(text).toContain("rm file")
+    expect(text).toContain("Waiting for permission.")
+    expect(text).not.toContain("过程详情")
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {
