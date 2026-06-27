@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
+  type DriveBrowserAnnotationCapabilityDto,
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
   buildDriveShareUrl,
@@ -91,6 +92,7 @@ import {
   type DriveBrowserRouteContext,
   type DriveBrowserSourceItem,
 } from "./drive-browser"
+import { isCommentableMarkdownItem } from "./drive-annotation-target"
 import { buildDriveBrowserEdit, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
 import {
   canUserEditShare,
@@ -1577,6 +1579,7 @@ export class DriveService implements OnApplicationBootstrap {
         preview,
         currentVersionId: await this.findCurrentDriveFileVersionId(current),
       }),
+      annotation: buildDriveBrowserAnnotationCapability({ item: current, canComment: true }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
@@ -1606,6 +1609,7 @@ export class DriveService implements OnApplicationBootstrap {
       childrenPage: page,
       preview: null,
       edit: null,
+      annotation: null,
       canDownload: false,
       canZip: false,
     }
@@ -1690,6 +1694,11 @@ export class DriveService implements OnApplicationBootstrap {
         preview,
         currentVersionId: await this.findCurrentDriveFileVersionId(current),
         unauthenticatedEditableShare: shareWrite.loginRequired,
+      }),
+      annotation: buildDriveBrowserAnnotationCapability({
+        item: current,
+        canComment: Boolean(input.actorUserId),
+        reason: input.actorUserId ? null : "login_required",
       }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
@@ -3399,6 +3408,18 @@ function buildDriveBrowserChildrenPage(
     limit: input.limit,
     hasMore,
     nextOffset: hasMore ? input.offset + input.limit : null,
+  }
+}
+
+function buildDriveBrowserAnnotationCapability(input: {
+  readonly item: { readonly name: string; readonly type: string; readonly mimeType: string | null }
+  readonly canComment: boolean
+  readonly reason?: DriveBrowserAnnotationCapabilityDto["reason"]
+}): DriveBrowserAnnotationCapabilityDto | null {
+  if (!isCommentableMarkdownItem(input.item)) return null
+  return {
+    canComment: input.canComment,
+    reason: input.canComment ? null : input.reason ?? "permission_denied",
   }
 }
 

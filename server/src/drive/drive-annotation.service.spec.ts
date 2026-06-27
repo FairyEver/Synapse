@@ -145,8 +145,57 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
-  it("rejects share annotation writes when the share cannot be edited", async () => {
-    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false }))
+  it("allows share annotation writes when the share can be commented but cannot be edited", async () => {
+    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false, canComment: true }))
+    const ownComment = commentRecord({ createdByUserId: "reader-1" })
+    prisma.driveAnnotationComment.findFirst.mockResolvedValue(ownComment)
+    prisma.driveAnnotationComment.update.mockResolvedValue({ ...ownComment, body: "updated" })
+
+    await service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: createInput(),
+    })
+    await service.replyShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      body: { body: "Reply body" },
+    })
+    await service.updateShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+      body: { body: "updated" },
+    })
+    await service.deleteShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+    })
+    await expect(service.deleteShareThread({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+    })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(prisma.driveAnnotationThread.create).toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.create).toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.update).toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects share annotation writes when the share cannot be commented", async () => {
+    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: true, canComment: false }))
 
     await expect(service.createShareAnnotation({
       actorUserId: "reader-1",
@@ -163,32 +212,8 @@ describe("DriveAnnotationService", () => {
       threadId: "thread-1",
       body: { body: "Reply body" },
     })).rejects.toBeInstanceOf(ForbiddenException)
-    await expect(service.updateShareComment({
-      actorUserId: "reader-1",
-      shareId: "share-1",
-      itemId: "item-1",
-      cookie: "cookie",
-      commentId: "comment-1",
-      body: { body: "updated" },
-    })).rejects.toBeInstanceOf(ForbiddenException)
-    await expect(service.deleteShareComment({
-      actorUserId: "reader-1",
-      shareId: "share-1",
-      itemId: "item-1",
-      cookie: "cookie",
-      commentId: "comment-1",
-    })).rejects.toBeInstanceOf(ForbiddenException)
-    await expect(service.deleteShareThread({
-      actorUserId: "reader-1",
-      shareId: "share-1",
-      itemId: "item-1",
-      cookie: "cookie",
-      threadId: "thread-1",
-    })).rejects.toBeInstanceOf(ForbiddenException)
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
     expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
-    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
-    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
   })
 
   it("projects share annotation permissions for the logged-in viewer", async () => {
@@ -270,7 +295,7 @@ function markdownItem() {
   }
 }
 
-function shareSnapshot(input: { readonly canEdit?: boolean } = {}) {
+function shareSnapshot(input: { readonly canEdit?: boolean; readonly canComment?: boolean } = {}) {
   return {
     context: "share",
     surface: "standalone",
@@ -285,6 +310,10 @@ function shareSnapshot(input: { readonly canEdit?: boolean } = {}) {
       editorKind: "text",
       reason: null,
       currentVersionId: "version-1",
+    },
+    annotation: {
+      canComment: input.canComment ?? true,
+      reason: null,
     },
   }
 }

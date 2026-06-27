@@ -35,6 +35,7 @@ export type DriveBrowserSurface = "standalone" | "console"
 export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdown" | "download-only"
 export type DriveBrowserEditKind = "text" | "replace" | "none"
 export type DriveBrowserEditUnavailableReason = "unsupported" | "truncated" | "login_required" | "permission_denied" | "quota"
+export type DriveBrowserAnnotationUnavailableReason = "login_required" | "permission_denied"
 export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
 export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy_missing"
 export type DriveTrashItemKind = "normal" | "public_asset"
@@ -498,6 +499,11 @@ export interface DriveBrowserEditDto {
   readonly reason: DriveBrowserEditUnavailableReason | null
 }
 
+export interface DriveBrowserAnnotationCapabilityDto {
+  readonly canComment: boolean
+  readonly reason: DriveBrowserAnnotationUnavailableReason | null
+}
+
 export interface DriveFileTextUpdateInput {
   readonly contentType: "text"
   readonly text: string
@@ -538,6 +544,7 @@ export interface DriveBrowserSnapshotDto {
   readonly childrenPage?: DriveBrowserChildrenPageDto
   readonly preview: DriveBrowserPreviewDto | null
   readonly edit: DriveBrowserEditDto | null
+  readonly annotation: DriveBrowserAnnotationCapabilityDto | null
   readonly canDownload: boolean
   readonly canZip: boolean
 }

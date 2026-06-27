@@ -275,6 +275,29 @@ describe('drive browser view model', () => {
     expect(floatingHtml).not.toContain('data-drive-preview-header')
   })
 
+  it('renders compact login status in shared preview headers', () => {
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: {
+        ...baseCurrent(),
+        browserUrl: '/share/share-1',
+      },
+    })
+    const rendererOptions = getDriveRendererOptions(snapshot)
+
+    const headerHtml = renderToStaticMarkup(createElement(DrivePreviewHeader, {
+      snapshot,
+      rendererItems: [],
+      rendererOptions,
+      selectedRendererId: 'html-source',
+      onRendererChange: vi.fn(),
+      onOpenVersions: vi.fn(),
+    }))
+
+    expect(headerHtml).toContain('登录')
+    expect(headerHtml).toContain('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+  })
+
   it('keeps finder actions limited to browser actions', () => {
     const folder = createSnapshot({
       current: {
@@ -778,6 +801,24 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-renderer-region="true"')
   })
 
+  it('renders compact login status in shared finder toolbars', () => {
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: {
+        ...baseCurrent(),
+        id: 'folder',
+        type: 'folder',
+        browserUrl: '/share/share-1',
+      },
+      preview: null,
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'share' }))
+
+    expect(html).toContain('登录')
+    expect(html).toContain('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+  })
+
   it('renders console files as a full renderer layout without sibling list', () => {
     const snapshot = createSnapshot({
       context: 'owner',
@@ -1071,6 +1112,7 @@ function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrow
     children: [],
     preview: basePreview(),
     edit: null,
+    annotation: null,
     canDownload: true,
     canZip: false,
     ...input,

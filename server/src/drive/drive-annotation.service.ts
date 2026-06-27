@@ -23,7 +23,7 @@ type DriveAnnotationItem = {
 
 type ShareAnnotationAccess = {
   readonly item: DriveAnnotationItem
-  readonly canWrite: boolean
+  readonly canComment: boolean
 }
 
 type AnnotationThreadRecord = {
@@ -153,13 +153,13 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly actorUserId?: string | null
   }): Promise<DriveAnnotationThreadDto[]> {
-    const { item, canWrite } = await this.resolveShareAnnotationAccess(input)
+    const { item, canComment } = await this.resolveShareAnnotationAccess(input)
     const threads = await this.prisma.driveAnnotationThread.findMany({
       where: { itemId: item.id, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
-    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId, canWrite, true)
+    return toVisibleThreadDtos(threads, input.actorUserId ?? null, item.userId, canComment, true)
   }
 
   async createShareAnnotation(input: {
@@ -169,7 +169,7 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly body: DriveAnnotationCreateInput
   }): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireWritableShareItem(input)
+    const item = await this.requireCommentableShareItem(input)
     assertCommentableItem(item)
     const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.body.baseVersionId ?? null)
     const thread = await this.prisma.driveAnnotationThread.create({
@@ -195,7 +195,7 @@ export class DriveAnnotationService {
     readonly threadId: string
     readonly body: DriveAnnotationReplyInput
   }): Promise<DriveAnnotationCommentDto> {
-    const item = await this.requireWritableShareItem(input)
+    const item = await this.requireCommentableShareItem(input)
     await this.requireThread(item.id, input.threadId)
     await this.requireParentComment(input.threadId, input.body.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
@@ -218,7 +218,7 @@ export class DriveAnnotationService {
     readonly commentId: string
     readonly body: DriveAnnotationCommentUpdateInput
   }): Promise<DriveAnnotationCommentDto> {
-    const item = await this.requireWritableShareItem(input)
+    const item = await this.requireCommentableShareItem(input)
     const comment = await this.requireComment(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
@@ -236,7 +236,7 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly commentId: string
   }): Promise<{ readonly ok: true }> {
-    const item = await this.requireWritableShareItem(input)
+    const item = await this.requireCommentableShareItem(input)
     const comment = await this.requireComment(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
@@ -250,7 +250,7 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly threadId: string
   }): Promise<{ readonly ok: true }> {
-    const item = await this.requireWritableShareItem(input)
+    const item = await this.requireCommentableShareItem(input)
     if (item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.requireThread(item.id, input.threadId)
     await this.prisma.driveAnnotationThread.update({ where: { id: input.threadId }, data: { deletedAt: new Date() } })
@@ -266,14 +266,14 @@ export class DriveAnnotationService {
     return item
   }
 
-  private async requireWritableShareItem(input: {
+  private async requireCommentableShareItem(input: {
     readonly shareId: string
     readonly itemId?: string
     readonly cookie?: string | null
     readonly actorUserId: string
   }): Promise<DriveAnnotationItem> {
     const access = await this.resolveShareAnnotationAccess(input)
-    if (!access.canWrite) throw new ForbiddenException("没有编辑权限。")
+    if (!access.canComment) throw new ForbiddenException("没有评论权限。")
     return access.item
   }
 
@@ -294,7 +294,7 @@ export class DriveAnnotationService {
       select: { id: true, userId: true, name: true, type: true, mimeType: true, storageKey: true },
     })
     if (!item) throw new NotFoundException("文件未找到")
-    return { item, canWrite: Boolean(snapshot.edit?.canEdit) }
+    return { item, canComment: Boolean(snapshot.annotation?.canComment) }
   }
 
   private async requireThread(itemId: string, threadId: string) {

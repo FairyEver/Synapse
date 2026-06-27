@@ -57,7 +57,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const annotationContext: DriveAnnotationContext | undefined = state.status === 'ready'
     ? props.context === 'owner'
       ? { context: 'owner', itemId: state.snapshot.current.id }
-      : { context: 'share', shareId: props.shareId, itemId: state.snapshot.current.id, canWrite: Boolean(state.snapshot.edit?.canEdit) }
+      : { context: 'share', shareId: props.shareId, itemId: state.snapshot.current.id, canComment: Boolean(state.snapshot.annotation?.canComment) }
     : undefined
   if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
     return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} annotationContext={annotationContext} />
