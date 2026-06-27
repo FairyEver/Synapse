@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { formatExactDateTime } from "@/components/relative-time"
+
 import { SessionTrailing } from "../session-trailing"
 
 afterEach(() => {
@@ -75,7 +77,9 @@ describe("SessionTrailing", () => {
     )
 
     expect(html).toContain("2 分钟前")
-    expect(html).toContain("aria-label=\"2026-06-04 13:58:00\"")
+    expect(html).toContain(
+      `aria-label="${formatExactDateTime(new Date("2026-06-04T05:58:00.000Z"))}"`,
+    )
     expect(html).not.toContain("animate-spin")
     expect(html).not.toContain("未读")
   })

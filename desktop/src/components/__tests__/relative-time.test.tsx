@@ -4,7 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { RelativeTime } from "@/components/relative-time"
+import { RelativeTime, formatExactDateTime } from "@/components/relative-time"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -44,7 +44,9 @@ describe("RelativeTime", () => {
     const time = container.querySelector("time")
     expect(time?.textContent).toBe("2 分钟前")
     expect(time?.getAttribute("dateTime")).toBe("2026-06-27T11:58:00.000Z")
-    expect(time?.getAttribute("aria-label")).toBe("2026-06-27 19:58:00")
+    expect(time?.getAttribute("aria-label")).toBe(
+      formatExactDateTime(new Date("2026-06-27T11:58:00.000Z")),
+    )
   })
 
   it("uses fallback text for missing or invalid timestamps", async () => {
