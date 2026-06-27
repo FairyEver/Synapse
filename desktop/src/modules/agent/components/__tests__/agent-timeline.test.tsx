@@ -12,7 +12,10 @@ import {
 } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
-import { timelineDisplayEntries } from "../agent-timeline-display"
+import {
+  groupTimelineDisplayEntries,
+  timelineDisplayEntries,
+} from "../agent-timeline-display"
 
 const track = vi.hoisted(() => vi.fn())
 
@@ -544,6 +547,136 @@ describe("AgentTimeline", () => {
         result: expect.objectContaining({ id: "tool-result" }),
       },
     ])
+  })
+
+  it("groups process entries before an assistant message", () => {
+    const entries = timelineDisplayEntries([
+      {
+        id: "thinking-1",
+        kind: "thinking",
+        content: "inspect",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-call-1",
+        kind: "toolCall",
+        toolName: "Read",
+        toolInput: "package.json",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "answer-1",
+        kind: "message",
+        role: "assistant",
+        content: "Answer",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+    ])
+
+    const nodes = groupTimelineDisplayEntries(entries, {
+      pendingPermissionRequestIds: new Set(),
+    })
+
+    expect(nodes.map((node) => node.kind)).toEqual(["processGroup", "item"])
+    expect(nodes[0]).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      itemCount: 2,
+      summary: "过程详情 · 2 项",
+    }))
+    expect(nodes[1]).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({
+        item: expect.objectContaining({ id: "answer-1" }),
+      }),
+    }))
+  })
+
+  it("creates separate process groups between multiple assistant messages", () => {
+    const entries = timelineDisplayEntries([
+      {
+        id: "answer-a",
+        kind: "message",
+        role: "assistant",
+        content: "A",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "thinking-b",
+        kind: "thinking",
+        content: "B process",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "answer-b",
+        kind: "message",
+        role: "assistant",
+        content: "B",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "tool-c",
+        kind: "toolCall",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+      {
+        id: "answer-c",
+        kind: "message",
+        role: "assistant",
+        content: "C",
+        timestamp: "2026-06-27T00:00:04.000Z",
+      },
+    ])
+
+    const nodes = groupTimelineDisplayEntries(entries, {
+      pendingPermissionRequestIds: new Set(),
+    })
+
+    expect(nodes.map((node) => node.kind)).toEqual([
+      "item",
+      "processGroup",
+      "item",
+      "processGroup",
+      "item",
+    ])
+    expect(nodes.filter((node) => node.kind === "item").map((node) => node.entry.item.id)).toEqual([
+      "answer-a",
+      "answer-b",
+      "answer-c",
+    ])
+  })
+
+  it("keeps pending permissions outside process groups", () => {
+    const entries = timelineDisplayEntries([
+      {
+        id: "permission-live",
+        kind: "permissionRequest",
+        requestId: "request-1",
+        toolName: "Bash",
+        toolInput: "rm file",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "answer",
+        kind: "message",
+        role: "assistant",
+        content: "Waiting",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ])
+
+    const nodes = groupTimelineDisplayEntries(entries, {
+      pendingPermissionRequestIds: new Set(["request-1"]),
+    })
+
+    expect(nodes.map((node) => node.kind)).toEqual(["item", "item"])
+    expect(nodes[0]).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({
+        item: expect.objectContaining({ id: "permission-live" }),
+      }),
+    }))
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {
