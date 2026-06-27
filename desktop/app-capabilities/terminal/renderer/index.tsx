@@ -808,20 +808,25 @@ export function TerminalModule() {
               {toolbarActions.length ? (
                 <div
                   data-terminal-toolbar
-                  className="flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1 whitespace-nowrap"
+                  className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b bg-card px-2.5 py-1.5 whitespace-nowrap"
                 >
                   {toolbarActions.map((action) => (
-                    <Button
-                      key={action.id}
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      aria-label={action.ariaLabel}
-                      disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus)}
-                      onClick={() => { void runToolbarAction(action) }}
-                    >
-                      {action.label}
-                    </Button>
+                    <div key={action.id} className="flex shrink-0 items-center gap-1">
+                      {action.id === "claude" ? (
+                        <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                        aria-label={action.ariaLabel}
+                        disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus)}
+                        onClick={() => { void runToolbarAction(action) }}
+                      >
+                        {action.label}
+                      </Button>
+                    </div>
                   ))}
                 </div>
               ) : null}

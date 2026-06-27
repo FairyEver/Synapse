@@ -79,7 +79,7 @@ export const TERMINAL_TOOLBAR_ACTIONS: readonly TerminalToolbarAction[] = [
 
 export function getTerminalToolbarActions(platform: string | undefined): readonly TerminalToolbarAction[] {
   const normalized = normalizeTerminalToolbarPlatform(platform)
-  if (!normalized) return []
+  if (!normalized) return TERMINAL_TOOLBAR_ACTIONS.filter(supportsAllPlatforms)
   return TERMINAL_TOOLBAR_ACTIONS.filter((action) => action.platforms.includes(normalized))
 }
 
@@ -104,4 +104,8 @@ export function isTerminalToolbarActionEnabled(
 function normalizeTerminalToolbarPlatform(platform: string | undefined): TerminalToolbarPlatform | undefined {
   if (platform === "darwin" || platform === "win32" || platform === "linux") return platform
   return undefined
+}
+
+function supportsAllPlatforms(action: TerminalToolbarAction): boolean {
+  return ALL_PLATFORMS.every((platform) => action.platforms.includes(platform))
 }

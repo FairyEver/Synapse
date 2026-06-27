@@ -524,6 +524,8 @@ describe("TerminalModule", () => {
     expect(toolbar).toBeTruthy()
     expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
     expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
+    expect(toolbar?.classList.contains("min-h-10")).toBe(true)
+    expect(toolbar?.classList.contains("bg-card")).toBe(true)
     if (!toolbar || !terminalRegion) throw new Error("Missing terminal toolbar or region")
     expect(toolbar.compareDocumentPosition(terminalRegion)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(document.body.textContent).toContain("Ctrl+C")
@@ -531,6 +533,28 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Claude")
     expect(document.body.textContent).toContain("Codex")
     expect(document.body.textContent).toContain("code .")
+
+    const toolbarButtons = Array.from(toolbar.querySelectorAll("button"))
+    expect(toolbarButtons).toHaveLength(5)
+    for (const button of toolbarButtons) {
+      expect(button.className).toContain("text-foreground/75")
+      expect(button.className).toContain("transition-[scale,background-color,color]")
+      expect(button.className).toContain("active:scale-[0.96]")
+      expect(button.className).toContain("hover:text-foreground")
+    }
+    expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
+  })
+
+  it("renders the terminal toolbar when renderer platform is unavailable", async () => {
+    window.synapse = {} as typeof window.synapse
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.body.querySelector("[data-terminal-toolbar]")).toBeTruthy()
+    expect(document.body.textContent).toContain("Ctrl+C")
+    expect(document.body.textContent).toContain("Clear")
   })
 
   it("does not render the toolbar in the empty terminal state", async () => {

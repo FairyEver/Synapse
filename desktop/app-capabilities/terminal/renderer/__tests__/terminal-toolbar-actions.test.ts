@@ -32,7 +32,20 @@ describe("terminal toolbar actions", () => {
       "codex",
       "vscode",
     ])
-    expect(getTerminalToolbarActions("sunos").map((action) => action.id)).toEqual([])
+    expect(getTerminalToolbarActions("sunos").map((action) => action.id)).toEqual([
+      "interrupt",
+      "clear",
+      "claude",
+      "codex",
+      "vscode",
+    ])
+    expect(getTerminalToolbarActions(undefined).map((action) => action.id)).toEqual([
+      "interrupt",
+      "clear",
+      "claude",
+      "codex",
+      "vscode",
+    ])
   })
 
   it("resolves terminal sequences and shell commands for the active platform", () => {
