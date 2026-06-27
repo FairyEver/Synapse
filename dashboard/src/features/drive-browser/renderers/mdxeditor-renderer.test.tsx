@@ -4,12 +4,13 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
+  DrivePublicAssetDto,
   DriveBrowserEditDto,
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveBrowserSnapshotDto,
 } from '@synapse/shared'
-import { ApiError } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
@@ -44,21 +45,39 @@ vi.mock('@mdxeditor/editor', async () => {
       readonly plugins?: readonly unknown[]
     }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
       const [value, setValue] = React.useState(markdown)
+      const valueRef = React.useRef(markdown)
+      const updateValue = (nextValue: string) => {
+        valueRef.current = nextValue
+        setValue(nextValue)
+        onChange?.(nextValue)
+      }
       React.useImperativeHandle(ref, () => ({
-        setMarkdown: (nextValue: string) => setValue(nextValue),
+        getMarkdown: () => valueRef.current,
+        setMarkdown: (nextValue: string) => {
+          valueRef.current = nextValue
+          setValue(nextValue)
+        },
+        insertMarkdown: (markdownValue: string) => updateValue(`${valueRef.current}${markdownValue}`),
+        focus: (callback?: () => void) => callback?.(),
       }), [])
 
-      return React.createElement('textarea', {
-        'data-mdxeditor': 'true',
-        'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
-        'data-toolbar-controls': Array.from(pluginCalls).join(','),
-        readOnly,
-        value,
-        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-          setValue(event.currentTarget.value)
-          onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
-        },
-      })
+      const toolbarContents = plugins
+        ?.map((plugin) => (plugin as { readonly toolbarContents?: () => React.ReactNode }).toolbarContents?.())
+        .filter(Boolean)
+      return React.createElement(React.Fragment, null,
+        React.createElement('div', { 'data-testid': 'mdx-toolbar' }, toolbarContents),
+        React.createElement('textarea', {
+          'data-mdxeditor': 'true',
+          'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
+          'data-toolbar-controls': Array.from(pluginCalls).join(','),
+          readOnly,
+          value,
+          onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+            setValue(event.currentTarget.value)
+            onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
+          },
+        })
+      )
     }),
     BlockTypeSelect: () => {
       pluginCalls.add('BlockTypeSelect')
@@ -91,6 +110,10 @@ vi.mock('@mdxeditor/editor', async () => {
     codeBlockPlugin: () => ({ name: 'codeBlockPlugin' }),
     codeMirrorPlugin: () => ({ name: 'codeMirrorPlugin' }),
     headingsPlugin: () => ({ name: 'headingsPlugin' }),
+    imagePlugin: (input: { readonly imageUploadHandler: (file: File) => Promise<string> }) => {
+      pluginCalls.add('imagePlugin')
+      return { name: 'imagePlugin', imageUploadHandler: input.imageUploadHandler }
+    },
     linkDialogPlugin: () => ({ name: 'linkDialogPlugin' }),
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
@@ -101,7 +124,7 @@ vi.mock('@mdxeditor/editor', async () => {
     toolbarPlugin: (input: { readonly toolbarContents: () => React.ReactNode }) => {
       pluginCalls.add('toolbarPlugin')
       collectToolbarControls(input.toolbarContents())
-      return { name: 'toolbarPlugin' }
+      return { name: 'toolbarPlugin', toolbarContents: input.toolbarContents }
     },
   }
 })
@@ -120,6 +143,7 @@ afterEach(() => {
   host = null
   document.body.innerHTML = ''
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 describe('DriveMDXeditorRenderer', () => {
@@ -237,9 +261,38 @@ describe('DriveMDXeditorRenderer', () => {
       'BoldItalicUnderlineToggles',
       'ListsToggle',
       'CreateLink',
+      'imagePlugin',
       'InsertTable',
       'InsertThematicBreak',
     ]))
+    expect(buttonWithText('插入图片')).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it('uploads a selected image and inserts markdown at the editor cursor', async () => {
+    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
+      name: 'chart.png',
+      url: 'https://synapse.test/files/asset_image',
+    }))
+    renderRenderer({ edit: editable() })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+
+    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
+      expect.any(File),
+      { name: 'chart.png', mimeType: 'image/png' }
+    )
+    expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)')
+    expect(document.body.textContent).toContain('未保存')
+  })
+
+  it('rejects unsupported selected image formats before uploading', async () => {
+    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
+    renderRenderer({ edit: editable() })
+
+    await selectImage(new File(['<svg />'], 'vector.svg', { type: 'image/svg+xml' }))
+
+    expect(upload).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('格式不支持。')
   })
 
   it('renders read-only when editing is unavailable', () => {
@@ -385,6 +438,24 @@ function editable(): DriveBrowserEditDto {
   }
 }
 
+function createPublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {
+  return {
+    assetId: 'asset_image',
+    itemId: 'item_image',
+    name: 'image.png',
+    size: '5',
+    mimeType: 'image/png',
+    url: 'https://synapse.test/files/asset_image',
+    lifecycleStatus: 'active',
+    accessCount: '0',
+    responseBytes: '0',
+    lastAccessedAt: null,
+    createdAt: '2026-06-27T00:00:00.000Z',
+    updatedAt: '2026-06-27T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
 function createEditContext(input: Partial<DriveRendererEditContext> = {}) {
   return {
     reload: vi.fn(async () => baseSnapshot()),
@@ -413,6 +484,20 @@ async function inputValue(input: HTMLTextAreaElement, value: string, initialNorm
 async function click(element: HTMLElement) {
   await act(async () => {
     element.click()
+    await Promise.resolve()
+  })
+}
+
+async function selectImage(file: File) {
+  const input = document.querySelector('input[type="file"]')
+  if (!(input instanceof HTMLInputElement)) throw new Error('image input not found')
+  await act(async () => {
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [file],
+    })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
     await Promise.resolve()
   })
 }

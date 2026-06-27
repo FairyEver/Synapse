@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -6,6 +6,7 @@ import {
   codeMirrorPlugin,
   CreateLink,
   headingsPlugin,
+  imagePlugin,
   InsertTable,
   InsertThematicBreak,
   linkDialogPlugin,
@@ -22,8 +23,14 @@ import {
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
 import type { MDXEditorMethods } from '@mdxeditor/editor'
-import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
-import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
+import {
+  DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION,
+  inferDrivePublicAssetMimeType,
+  type DriveBrowserEditDto,
+  type DriveBrowserItemDto,
+  type DriveBrowserPreviewDto,
+} from '@synapse/shared'
+import { Download, ImagePlus, LogIn, RefreshCw, Save } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +42,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { ApiError } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
@@ -53,6 +60,7 @@ export function DriveMDXeditorRenderer({
 }) {
   const initialText = preview.text ?? ''
   const editorRef = useRef<MDXEditorMethods | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
@@ -60,6 +68,7 @@ export function DriveMDXeditorRenderer({
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [conflictOpen, setConflictOpen] = useState(false)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
@@ -85,6 +94,39 @@ export function DriveMDXeditorRenderer({
       })
     })
   }, [])
+  const uploadImage = useCallback(async (file: File) => {
+    const name = file.name || 'image.png'
+    const mimeType = file.type || inferDrivePublicAssetMimeType(name)
+    if (!mimeType || !Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION).includes(mimeType)) {
+      setError('格式不支持。')
+      throw new Error('格式不支持。')
+    }
+    setUploadingImage(true)
+    setError(null)
+    try {
+      const asset = await driveBrowserApi.uploadPublicAssetFile(file, { name, mimeType })
+      return asset.url
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : '图片上传失败。')
+      throw uploadError
+    } finally {
+      setUploadingImage(false)
+    }
+  }, [])
+  const handleImageSelected = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file || !canEdit) return
+    try {
+      const url = await uploadImage(file)
+      const markdown = `![${imageAltText(file.name)}](${url})`
+      editorRef.current?.focus(() => {
+        editorRef.current?.insertMarkdown(markdown)
+      }, { defaultSelection: 'rootEnd' })
+    } catch {
+      // Error state is set by uploadImage.
+    }
+  }, [canEdit, uploadImage])
   const plugins = useMemo(() => [
     toolbarPlugin({
       toolbarContents: () => (
@@ -94,6 +136,16 @@ export function DriveMDXeditorRenderer({
           <BoldItalicUnderlineToggles />
           <ListsToggle />
           <CreateLink />
+          <Button
+            type='button'
+            variant='ghost'
+            size='sm'
+            disabled={!canEdit || uploadingImage}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            <ImagePlus data-icon='inline-start' />
+            插入图片
+          </Button>
           <InsertTable />
           <InsertThematicBreak />
         </>
@@ -105,17 +157,21 @@ export function DriveMDXeditorRenderer({
     thematicBreakPlugin(),
     linkPlugin(),
     linkDialogPlugin(),
+    imagePlugin({
+      imageUploadHandler: uploadImage,
+    }),
     tablePlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
     markdownShortcutPlugin(),
-  ], [])
+  ], [canEdit, uploadImage, uploadingImage])
 
   useEffect(() => {
     savedValueRef.current = initialText
     setValue(initialText)
     setDirty(false)
     setError(null)
+    setUploadingImage(false)
     setConflictOpen(false)
     beginExternalMarkdownSync(initialText)
     editorRef.current?.setMarkdown(initialText)
@@ -192,7 +248,7 @@ export function DriveMDXeditorRenderer({
           label: '保存',
           icon: Save,
           loading: editContext?.savingText,
-          disabled: !dirty || editContext?.savingText || editContext?.reloading,
+          disabled: !dirty || uploadingImage || editContext?.savingText || editContext?.reloading,
           onClick: () => { void handleSave() },
         },
       )
@@ -207,6 +263,7 @@ export function DriveMDXeditorRenderer({
     handleSave,
     loginRequired,
     loginUrl,
+    uploadingImage,
   ])
 
   useRegisterDriveRendererToolbarItems('mdxeditor', toolbarItems)
@@ -216,6 +273,14 @@ export function DriveMDXeditorRenderer({
       data-drive-mdxeditor-renderer='true'
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
     >
+      <input
+        ref={imageInputRef}
+        type='file'
+        className='hidden'
+        accept={Object.keys(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(',')}
+        disabled={!canEdit || uploadingImage}
+        onChange={(event) => { void handleImageSelected(event) }}
+      />
       <div className='min-h-0 flex-1 overflow-auto'>
         <MDXEditor
           ref={editorRef}
@@ -241,6 +306,9 @@ export function DriveMDXeditorRenderer({
       </div>
       {error ? (
         <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div>
+      ) : null}
+      {uploadingImage ? (
+        <div className='border-t px-3 py-2 text-xs text-muted-foreground'>上传中</div>
       ) : null}
       {preview.truncated ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
@@ -279,4 +347,11 @@ function downloadLocalVersion(name: string, value: string): void {
   anchor.download = name
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+function imageAltText(name: string): string {
+  const fallback = 'image'
+  const trimmed = name.trim()
+  if (!trimmed) return fallback
+  return trimmed.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, '') || fallback
 }

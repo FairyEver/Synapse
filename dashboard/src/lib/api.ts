@@ -23,6 +23,7 @@ import type {
   DriveItemDto,
   DriveItemLifecycleStatus,
   DrivePublicAssetDto,
+  DriveUploadPrepareResult,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -886,6 +887,31 @@ export const driveBrowserApi = {
         body: JSON.stringify(input),
       }
     ),
+  uploadPublicAssetFile: async (file: File, input: { readonly name: string; readonly mimeType: string }) => {
+    const prepared = await request<DriveUploadPrepareResult>(
+      `${driveApiBasePath}/public-assets/uploads/prepare`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          name: input.name,
+          size: String(file.size),
+          mimeType: input.mimeType,
+        }),
+      }
+    )
+    const uploadResponse = await fetch(prepared.upload.url, {
+      method: prepared.upload.method,
+      headers: prepared.upload.headers,
+      body: file,
+    })
+    if (!uploadResponse.ok) {
+      throw new ApiError(await readErrorMessage(uploadResponse), uploadResponse.status)
+    }
+    return request<DrivePublicAssetDto>(
+      `${driveApiBasePath}/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
+      { method: 'POST' }
+    )
+  },
 }
 
 function ownerAnnotationPath(itemId: string, suffix = '') {
