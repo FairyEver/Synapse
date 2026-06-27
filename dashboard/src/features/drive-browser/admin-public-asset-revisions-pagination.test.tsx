@@ -64,14 +64,14 @@ describe('AdminPublicAssetDetailsDialog', () => {
 
     await clickButtonText('历史版本')
     await waitForText('logo-old.png')
-    expect(document.body.textContent).toContain('1 / 2')
+    expect(document.body.textContent).toContain('1 / 3')
 
-    await clickLastEnabledButtonText('下一页')
+    await clickLastEnabledButtonContainingText('第 2 页')
 
     await waitFor(() => {
       expect(mockedAdminApi.listDrivePublicAssetRevisions).toHaveBeenLastCalledWith('asset/id', {
         page: 2,
-        pageSize: 20,
+        pageSize: 10,
         sortBy: 'replacedAt',
         sortOrder: 'desc',
       })
@@ -112,8 +112,21 @@ async function clickButtonText(text: string) {
 
 async function clickLastEnabledButtonText(text: string) {
   const button = await waitFor(() => {
-    const matches = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+    const root = document.querySelector('[role="tabpanel"][data-state="active"]') ?? document
+    const matches = Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
       .filter((item) => item.textContent?.trim() === text && !item.disabled)
+    const match = matches.at(-1)
+    if (!match) throw new Error(`enabled button not found: ${text}`)
+    return match
+  })
+  await clickButton(button)
+}
+
+async function clickLastEnabledButtonContainingText(text: string) {
+  const button = await waitFor(() => {
+    const root = document.querySelector('[role="tabpanel"][data-state="active"]') ?? document
+    const matches = Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
+      .filter((item) => item.textContent?.includes(text) && !item.disabled)
     const match = matches.at(-1)
     if (!match) throw new Error(`enabled button not found: ${text}`)
     return match

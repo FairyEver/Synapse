@@ -74,6 +74,7 @@ vi.mock('@mdxeditor/editor', async () => {
     codeBlockPlugin: () => null,
     codeMirrorPlugin: () => null,
     headingsPlugin: () => null,
+    imagePlugin: () => null,
     linkDialogPlugin: () => null,
     linkPlugin: () => null,
     listsPlugin: () => null,
@@ -768,7 +769,7 @@ describe('drive browser view model', () => {
     )
 
     expect(html).toContain('aria-label="目录"')
-    expect(html).toContain('class="w-52 shrink-0 px-4 py-6 md:px-6"')
+    expect(html).toContain('class="h-full overflow-hidden px-4 py-6 md:px-6"')
     expect(html).toContain('max-h-[calc(100vh-3rem)] overflow-auto')
     expect(html).not.toContain('overflow-auto border-l')
     expect(html).toContain('href="#notes"')
@@ -1012,7 +1013,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('预览')
     expect(html).not.toContain('源码')
     expect(html).toContain('<h1>Notes</h1>')
-    expect(html).not.toContain('data-slot="resizable-panel-group"')
+    expect(html).toContain('data-testid="markdown-layout"')
   })
 
   it('does not render the old fixed preview heights in fixed layout mode', () => {

@@ -102,13 +102,13 @@ describe('AdminPublicAssets', () => {
     await waitForText('资源 ID')
     expect(mockedAdminApi.listDrivePublicAssetAccessLogs).toHaveBeenCalledWith('asset/id', {
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       sortBy: 'accessedAt',
       sortOrder: 'desc',
     })
     expect(mockedAdminApi.listDrivePublicAssetRevisions).toHaveBeenCalledWith('asset/id', {
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       sortBy: 'replacedAt',
       sortOrder: 'desc',
     })

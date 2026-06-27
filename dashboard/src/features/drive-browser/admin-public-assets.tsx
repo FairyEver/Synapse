@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Download, Eye } from 'lucide-react'
 import {
   adminApi,
@@ -53,6 +53,7 @@ export function AdminPublicAssets() {
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-drive-public-assets', listQuery],
     queryFn: () => adminApi.listDrivePublicAssets(listQuery),
+    placeholderData: keepPreviousData,
   })
 
   const columns = useMemo<ColumnDef<AdminDrivePublicAssetRow>[]>(
@@ -228,6 +229,7 @@ export function AdminPublicAssetDetailsDialog({
       sortOrder: 'desc',
     }),
     enabled: Boolean(asset),
+    placeholderData: keepPreviousData,
   })
   const revisions = useQuery({
     queryKey: ['admin-drive-public-asset-revisions', asset?.assetId, revisionPage, revisionPageSize],
@@ -238,6 +240,7 @@ export function AdminPublicAssetDetailsDialog({
       sortOrder: 'desc',
     }),
     enabled: Boolean(asset),
+    placeholderData: keepPreviousData,
   })
 
   return (
