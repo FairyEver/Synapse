@@ -3,6 +3,7 @@ import { Copy, ExternalLink, LoaderCircle, MoreHorizontal, RefreshCw } from "luc
 import { toast } from "sonner"
 import type { DriveAccessExpiresIn, DriveSiteDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
+import { RelativeTime } from "@/components/relative-time"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -353,11 +354,11 @@ function DriveSiteRow({
       </TableCell>
       <TableCell><DriveSiteStatusBadge status={site.status} /></TableCell>
       <TableCell>{site.accessMode === "password" ? "密码" : "公开"}</TableCell>
-      <TableCell className="truncate text-right text-muted-foreground tabular-nums" title={formatNullableDate(site.expiresAt)}>
-        {formatNullableDate(site.expiresAt)}
+      <TableCell className="truncate text-right text-muted-foreground tabular-nums">
+        <RelativeTime value={site.expiresAt} fallback="永久" />
       </TableCell>
-      <TableCell className="truncate text-right text-muted-foreground tabular-nums" title={formatDateTime(site.updatedAt)}>
-        {formatDateTime(site.updatedAt)}
+      <TableCell className="truncate text-right text-muted-foreground tabular-nums">
+        <RelativeTime value={site.updatedAt} />
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums">{formatBytes(site.totalBytes)}</TableCell>
       <TableCell className="text-right">
@@ -554,21 +555,6 @@ function createInitialState(): DriveSitesState {
     error: null,
     page: null,
   }
-}
-
-function formatNullableDate(value: string | null): string {
-  return value ? formatDateTime(value) : "永久"
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
 }
 
 function formatBytes(value: string): string {

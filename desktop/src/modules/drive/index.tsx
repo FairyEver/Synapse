@@ -25,6 +25,7 @@ import {
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
+import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
@@ -1717,7 +1718,7 @@ function DriveFileListRow({
         {isFolder ? "-" : formatBytes(item.size)}
       </TableCell>
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">
-        {formatDriveDateTime(item.updatedAt)}
+        <RelativeTime value={item.updatedAt} />
       </TableCell>
       <TableCell className="text-right">
         <div
@@ -2407,8 +2408,8 @@ function DriveShareSuccessDialog({
             </div>
             <div className="min-w-0 border-b p-3 sm:border-r sm:border-b-0">
               <dt className="font-medium">到期</dt>
-              <dd className="mt-1 flex min-h-7 items-center truncate text-muted-foreground tabular-nums" title={formatDriveAccessExpiresAt(share.expiresAt)}>
-                <span className="truncate">{formatDriveAccessExpiresAt(share.expiresAt)}</span>
+              <dd className="mt-1 flex min-h-7 items-center truncate text-muted-foreground tabular-nums">
+                <RelativeTime value={share.expiresAt} fallback="永久" className="truncate" />
               </dd>
             </div>
             <div className="min-w-0 p-3">
@@ -2462,11 +2463,11 @@ function DriveShareList({
                   <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
-                  <span className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
-                    到期 {formatDriveAccessExpiresAt(item.expiresAt)}
+                  <span className="truncate">
+                    到期 <RelativeTime value={item.expiresAt} fallback="永久" />
                   </span>
-                  <span className="truncate" title={formatDriveDateTime(item.createdAt)}>
-                    时间 {formatDriveDateTime(item.createdAt)}
+                  <span className="truncate">
+                    时间 <RelativeTime value={item.createdAt} />
                   </span>
                 </div>
               </div>
@@ -2953,17 +2954,6 @@ function canShareDriveItem(item: DriveItemDto): boolean {
 
 function canOpenDriveItem(item: DriveItemDto): boolean {
   return item.storageStatus === "active"
-}
-
-function formatDriveDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString("zh-CN")
-}
-
-function formatDriveAccessExpiresAt(value: string | null): string {
-  if (!value) return "永久"
-  return formatDriveDateTime(value)
 }
 
 function formatDriveItemShareSummary(item: DriveItemDto): string | null {

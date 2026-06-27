@@ -1,5 +1,6 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { ChevronDown, Loader2, MoreHorizontal } from 'lucide-react'
+import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -56,7 +57,7 @@ export function DrivePreviewHeader({
         <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
           <span>{identity.sizeLabel}</span>
           <span>{identity.kindLabel}</span>
-          <span>{identity.updatedAtLabel}</span>
+          <RelativeTime value={identity.updatedAt} />
         </div>
       </div>
       <div className='flex shrink-0 flex-wrap items-center gap-2'>

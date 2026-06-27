@@ -13,6 +13,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -194,8 +195,7 @@ export default function InvitationsPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='过期时间' />
       ),
-      cell: ({ row }) =>
-        new Date(row.original.expiresAt).toLocaleString('zh-CN'),
+      cell: ({ row }) => <RelativeTime value={row.original.expiresAt} />,
     },
     {
       id: 'actions',

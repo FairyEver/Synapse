@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import type { DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
 
 import { ModuleContentPanel } from "@/components/module-page"
+import { RelativeTime } from "@/components/relative-time"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -336,7 +337,9 @@ function DriveTrashRow({
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">{isFolder ? "-" : formatBytes(item.size)}</TableCell>
       <TableCell className="truncate text-muted-foreground" title={item.originalPath ?? undefined}>{item.originalPath ?? "-"}</TableCell>
-      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">{formatDriveDateTime(item.trashedAt)}</TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
+        <RelativeTime value={item.trashedAt} />
+      </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">
           <Button type="button" variant="ghost" size="xs" disabled={busy} onClick={onRestore}>恢复</Button>
@@ -360,12 +363,6 @@ function formatBytes(value: string): string {
 
   const formattedValue = unitIndex === 0 ? String(Math.round(nextValue)) : DRIVE_BYTE_NUMBER_FORMAT.format(nextValue)
   return `${formattedValue} ${DRIVE_BYTE_UNITS[unitIndex]}`
-}
-
-function formatDriveDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString("zh-CN")
 }
 
 function errorMessage(error: unknown, fallback: string): string {

@@ -4,6 +4,7 @@ import type { DriveFileVersionDto, DriveFileVersionSource } from '@synapse/share
 import { Download, Loader2, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,7 +29,7 @@ import {
 } from '@/components/ui/tooltip'
 import { driveFileVersionsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { formatDriveBrowserBytes, formatDriveBrowserDate } from './shared/drive-format'
+import { formatDriveBrowserBytes } from './shared/drive-format'
 
 const versionPageSize = 100
 const versionSkeletonRows = [0, 1, 2] as const
@@ -334,8 +335,8 @@ function DriveFileVersionRow({
       <TableCell className='text-right tabular-nums text-muted-foreground'>
         {formatDriveBrowserBytes(version.size)}
       </TableCell>
-      <TableCell className='truncate tabular-nums text-muted-foreground' title={formatDriveBrowserDate(version.createdAt)}>
-        {formatDriveBrowserDate(version.createdAt)}
+      <TableCell className='truncate tabular-nums text-muted-foreground'>
+        <RelativeTime value={version.createdAt} />
       </TableCell>
       <TableCell>
         <div className='flex items-center justify-end gap-1'>

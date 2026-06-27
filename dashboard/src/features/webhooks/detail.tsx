@@ -12,6 +12,7 @@ import { dashboardApi } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +24,6 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  formatOptionalWebhookDateTime,
   getWebhookDeliveryStatusLabel,
   getWebhookUrlDisplayState,
 } from './webhook-display'
@@ -265,13 +265,13 @@ function WebhookDetailCard({
           </span>
         </WebhookDetailField>
         <WebhookDetailField label='创建时间'>
-          {formatOptionalWebhookDateTime(webhook.createdAt)}
+          <RelativeTime value={webhook.createdAt} />
         </WebhookDetailField>
         <WebhookDetailField label='更新时间'>
-          {formatOptionalWebhookDateTime(webhook.updatedAt)}
+          <RelativeTime value={webhook.updatedAt} />
         </WebhookDetailField>
         <WebhookDetailField label='最近触发'>
-          {formatOptionalWebhookDateTime(webhook.lastDeliveryAt)}
+          <RelativeTime value={webhook.lastDeliveryAt} />
         </WebhookDetailField>
         <WebhookDetailField label='触发状态'>
           {webhook.lastDeliveryStatus ? (

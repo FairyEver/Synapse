@@ -39,7 +39,7 @@ describe("SessionTrailing", () => {
     expect(html).toContain("正在输出")
     expect(html).not.toContain("未读")
     expect(html).not.toContain(">3<")
-    expect(html).not.toContain("2 分")
+    expect(html).not.toContain("2 分钟前")
   })
 
   it("shows an unread dot without a numeric badge after completion", () => {
@@ -58,7 +58,7 @@ describe("SessionTrailing", () => {
     expect(html).toContain("bg-blue-500")
     expect(html).toContain("未读")
     expect(html).not.toContain(">3<")
-    expect(html).not.toContain("2 分")
+    expect(html).not.toContain("2 分钟前")
   })
 
   it("shows relative time when completed and read", () => {
@@ -74,7 +74,8 @@ describe("SessionTrailing", () => {
       />,
     )
 
-    expect(html).toContain("2 分")
+    expect(html).toContain("2 分钟前")
+    expect(html).toContain("aria-label=\"2026-06-04 13:58:00\"")
     expect(html).not.toContain("animate-spin")
     expect(html).not.toContain("未读")
   })

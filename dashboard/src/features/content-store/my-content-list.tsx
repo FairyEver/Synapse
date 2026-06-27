@@ -14,6 +14,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,7 +32,6 @@ import {
   canSetContentPublic,
 } from './content-store-actions'
 import {
-  formatContentStoreDate,
   getContentStoreTypeLabel,
 } from './content-store-display'
 import { buildContentStoreSearch, parseContentStoreSearch } from './content-store-search'
@@ -153,7 +153,7 @@ export default function MyContentListPage({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='更新时间' />
         ),
-        cell: ({ row }) => formatContentStoreDate(row.original.updatedAt),
+        cell: ({ row }) => <RelativeTime value={row.original.updatedAt} />,
       },
       {
         accessorKey: 'installCount',

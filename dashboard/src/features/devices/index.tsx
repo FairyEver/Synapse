@@ -16,6 +16,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 
 export default function DevicesPage() {
@@ -120,14 +121,14 @@ export default function DevicesPage() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='最近在线' />
         ),
-        cell: ({ row }) => formatOptionalDateTime(row.original.lastSeenAt),
+        cell: ({ row }) => <RelativeTime value={row.original.lastSeenAt} />,
       },
       {
         accessorKey: 'firstSeenAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='首次连接' />
         ),
-        cell: ({ row }) => formatOptionalDateTime(row.original.firstSeenAt),
+        cell: ({ row }) => <RelativeTime value={row.original.firstSeenAt} />,
       },
     ],
     []
@@ -172,8 +173,4 @@ function DeviceName({ device }: { device: DashboardDeviceRow }) {
       ) : null}
     </div>
   )
-}
-
-function formatOptionalDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('zh-CN') : '-'
 }

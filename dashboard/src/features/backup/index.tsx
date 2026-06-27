@@ -11,6 +11,7 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import { downloadBackupWithFeedback } from './backup-download'
 import { getBackupListErrorMessage } from './backup-error'
@@ -81,7 +82,7 @@ export default function BackupPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
       ),
-      cell: ({ row }) => new Date(row.original.createdAt).toLocaleString('zh-CN'),
+      cell: ({ row }) => <RelativeTime value={row.original.createdAt} />,
       enableSorting: false,
     },
     {

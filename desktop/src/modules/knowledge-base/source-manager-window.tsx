@@ -52,6 +52,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { RelativeTime } from "@/components/relative-time"
 import { Input } from "@/components/ui/input"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -149,20 +150,15 @@ function formatBytes(size: number | null): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-function formatModifiedAt(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
-}
-
-function formatEntryMeta(entry: SynapseKnowledgeBaseRawEntry): string {
+function SourceEntryMeta({ entry }: { readonly entry: SynapseKnowledgeBaseRawEntry }) {
   const primary = entry.kind === "directory" ? "文件夹" : formatBytes(entry.size)
-  return `${primary} · ${formatModifiedAt(entry.modifiedAt)}`
+  return (
+    <div className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
+      <span className="shrink-0">{primary}</span>
+      <span className="shrink-0">·</span>
+      <RelativeTime value={entry.modifiedAt} />
+    </div>
+  )
 }
 
 function matchesSearch(entry: SynapseKnowledgeBaseRawEntry, keyword: string): boolean {
@@ -630,7 +626,7 @@ function SourceEntryList({
                 ) : (
                   <div className="truncate text-sm font-medium">{entry.name}</div>
                 )}
-                <div className="truncate text-xs text-muted-foreground">{formatEntryMeta(entry)}</div>
+                <SourceEntryMeta entry={entry} />
               </div>
             </div>
             <div

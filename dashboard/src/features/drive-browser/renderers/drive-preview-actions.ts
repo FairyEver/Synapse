@@ -5,7 +5,7 @@ import {
   type DriveBrowserSnapshotDto,
 } from '@synapse/shared'
 import { Download, ExternalLink, History, ListFilter, type LucideIcon } from 'lucide-react'
-import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
+import { driveBrowserKindLabel, formatDriveBrowserSize } from '../shared/drive-format'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import { getDriveRendererOptions, type DriveRendererId, type DriveRendererOption } from './drive-renderer-registry'
 
@@ -20,7 +20,7 @@ export type DrivePreviewFileIdentity = {
   readonly name: string
   readonly sizeLabel: string
   readonly kindLabel: string
-  readonly updatedAtLabel: string
+  readonly updatedAt: string
 }
 
 export type DrivePreviewLinkAction = {
@@ -64,7 +64,7 @@ export function getDrivePreviewFileIdentity(snapshot: DriveBrowserSnapshotDto): 
     name: snapshot.current.name,
     sizeLabel: formatDriveBrowserSize(snapshot.current),
     kindLabel: driveBrowserKindLabel(snapshot.current.previewKind),
-    updatedAtLabel: formatDriveBrowserDate(snapshot.current.updatedAt),
+    updatedAt: snapshot.current.updatedAt,
   }
 }
 

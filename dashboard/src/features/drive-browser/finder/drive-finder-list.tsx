@@ -1,5 +1,6 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Loader2 } from 'lucide-react'
+import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -11,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
+import { formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 
 export function DriveFinderList({
@@ -72,7 +73,7 @@ export function DriveFinderList({
                   {formatDriveBrowserSize(item)}
                 </TableCell>
                 <TableCell className='text-muted-foreground'>
-                  {formatDriveBrowserDate(item.updatedAt)}
+                  <RelativeTime value={item.updatedAt} />
                 </TableCell>
               </TableRow>
             )
