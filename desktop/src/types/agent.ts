@@ -264,6 +264,7 @@ export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBa
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
+  readonly startedAt?: string
 }
 
 export interface SynapseAgentToolResultTimelineItem extends SynapseAgentTimelineBase {
@@ -292,6 +293,7 @@ export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimeli
   readonly blockIndex?: number
   readonly inputCharCount: number
   readonly status: "preparing" | "stopped"
+  readonly startedAt?: string
 }
 
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {

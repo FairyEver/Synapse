@@ -1,15 +1,8 @@
-import { MoreHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { REQUIRED_DOCK_APP_ID } from "@/modules/apps/dock"
 import { DockAppMenuItems } from "@/modules/apps/components/dock-app-menu-items"
 import type { SynapseSystemAppManifest } from "@/modules/apps/types"
@@ -27,7 +20,6 @@ type AppLauncherGridProps = {
 
 export function AppLauncherGrid({
   apps,
-  disabled = false,
   onManageDock,
   onOpenApp,
   onPinApp,
@@ -62,32 +54,6 @@ export function AppLauncherGrid({
                     <span className="block max-w-full truncate text-sm font-medium leading-tight text-foreground">{app.name}</span>
                   </span>
                 </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1 size-7 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                      aria-label={`${app.name} 更多操作`}
-                      disabled={disabled}
-                    >
-                      <MoreHorizontal />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DockAppMenuItems
-                      appId={app.id}
-                      pinned={pinned}
-                      removable={removable}
-                      itemKind="dropdown"
-                      onOpen={onOpenApp}
-                      onPin={onPinApp}
-                      onUnpin={onUnpinApp}
-                      onManageDock={onManageDock}
-                    />
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </div>
             </ContextMenuTrigger>
             <ContextMenuContent>

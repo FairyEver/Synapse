@@ -278,9 +278,13 @@ export function appendAgentTimelineEvent(
   if (event.type === "toolUse" && item.kind === "toolCall") {
     const progressIndex = matchingToolProgressIndex(current, item)
     if (progressIndex !== -1) {
+      const progress = current[progressIndex]
+      const startedAt = progress?.kind === "toolProgress"
+        ? progress.startedAt ?? progress.timestamp
+        : undefined
       return [
         ...current.slice(0, progressIndex),
-        item,
+        { ...item, ...(startedAt ? { startedAt } : {}) },
         ...current.slice(progressIndex + 1),
       ]
     }
@@ -380,6 +384,7 @@ function toolProgressFromStreamEvent(
     ...(typeof event.blockIndex === "number" ? { blockIndex: event.blockIndex } : {}),
     inputCharCount: isToolInput ? toolInputDeltaLength(event) : 0,
     status: "preparing",
+    startedAt: timestamp,
   }
 }
 
@@ -391,12 +396,18 @@ function appendToolProgress(
 ): SynapseAgentTimelineItem[] {
   if (stringValue(event.event?.type) === "content_block_stop") {
     const progressIndex = matchingToolProgressIndex(current, progress)
-    return progressIndex === -1
-      ? [...current]
-      : [
-          ...current.slice(0, progressIndex),
-          ...current.slice(progressIndex + 1),
-        ]
+    if (progressIndex === -1) return [...current]
+    const existing = current[progressIndex]
+    if (existing?.kind !== "toolProgress") return [...current]
+    return [
+      ...current.slice(0, progressIndex),
+      {
+        ...existing,
+        timestamp,
+        status: "stopped" as const,
+      },
+      ...current.slice(progressIndex + 1),
+    ]
   }
   const progressIndex = matchingToolProgressIndex(current, progress)
   if (progressIndex === -1) return [...current, progress]

@@ -218,16 +218,10 @@ describe("AppsModule", () => {
     expect(mocks.requestOpenSettingsDock).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps the launcher more button isolated from app opening", async () => {
+  it("does not render hover more buttons in the launcher grid", async () => {
     await renderAppsModule(roots)
 
-    await act(async () => {
-      findButtonByLabel("本地数据库 更多操作").click()
-      await Promise.resolve()
-    })
-
-    expect(document.body.textContent).not.toContain("database 内容")
-    expect(mocks.openSystemApp).not.toHaveBeenCalled()
+    expect(document.querySelector("button[aria-label='本地数据库 更多操作']")).toBeNull()
   })
 
   it("does not expose draggable launcher icons", async () => {

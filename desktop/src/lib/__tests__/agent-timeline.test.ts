@@ -431,11 +431,46 @@ describe("agent timeline conversion", () => {
         blockIndex: 1,
         inputCharCount: 40 * 1024,
         status: "preparing",
+        startedAt: "2026-05-14T00:00:05.000Z",
+        timestamp: "2026-05-14T00:00:07.000Z",
       }),
     ])
   })
 
-  it("replaces matching tool progress with the final tool call", () => {
+  it("keeps stopped tool progress when SDK closes the tool content block", () => {
+    const progress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-write", name: "Write" },
+      },
+    }, "2026-05-14T00:00:05.000Z", "claude")
+    const stopped = appendAgentTimelineEvent(progress, {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      event: {
+        type: "content_block_stop",
+        index: 1,
+      },
+    }, "2026-05-14T00:00:08.000Z", "claude")
+
+    expect(stopped).toEqual([
+      expect.objectContaining({
+        kind: "toolProgress",
+        toolUseId: "toolu-write",
+        status: "stopped",
+        startedAt: "2026-05-14T00:00:05.000Z",
+        timestamp: "2026-05-14T00:00:08.000Z",
+      }),
+    ])
+  })
+
+  it("replaces matching tool progress with the final tool call and preserves the progress start", () => {
     const progress = appendAgentTimelineEvent([], {
       type: "stream",
       blockIndex: 1,
@@ -459,6 +494,8 @@ describe("agent timeline conversion", () => {
       kind: "toolCall",
       toolUseId: "toolu-write",
       toolName: "Write",
+      startedAt: "2026-05-14T00:00:05.000Z",
+      timestamp: "2026-05-14T00:00:08.000Z",
     }))
   })
 

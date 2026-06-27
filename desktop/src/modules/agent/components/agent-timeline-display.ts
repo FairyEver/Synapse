@@ -214,6 +214,15 @@ function itemTimeRange(item: SynapseAgentTimelineItem): { readonly startMs: numb
       endMs: endMs ?? startMs ?? 0,
     }
   }
+  if (item.kind === "toolCall" || item.kind === "toolProgress") {
+    const startMs = parseProcessTimestamp(item.startedAt) ?? parseProcessTimestamp(item.timestamp)
+    const endMs = parseProcessTimestamp(item.timestamp)
+    if (startMs === undefined && endMs === undefined) return undefined
+    return {
+      startMs: startMs ?? endMs ?? 0,
+      endMs: endMs ?? startMs ?? 0,
+    }
+  }
   const timestampMs = parseProcessTimestamp(item.timestamp)
   if (timestampMs === undefined) return undefined
   return { startMs: timestampMs, endMs: timestampMs }

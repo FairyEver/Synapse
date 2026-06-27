@@ -793,6 +793,88 @@ describe("AgentTimeline", () => {
     }))
   })
 
+  it("keeps the progress start time after a tool call completes", () => {
+    const progress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-read",
+      toolName: "Read",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-read", name: "Read" },
+      },
+    }, "2026-06-27T00:00:00.000Z", "claude")
+    const withTool = appendAgentTimelineEvent(progress, {
+      type: "toolUse",
+      toolUseId: "toolu-read",
+      toolName: "Read",
+      toolInput: "package.json",
+    }, "2026-06-27T00:00:05.000Z", "claude")
+    const withResult = appendAgentTimelineEvent(withTool, {
+      type: "toolResult",
+      toolUseId: "toolu-read",
+      toolName: "Read",
+      content: "ok",
+      success: true,
+    }, "2026-06-27T00:00:05.200Z", "claude")
+    const items = appendAgentTimelineEvent(withResult, {
+      type: "assistant",
+      content: "Done.",
+    }, "2026-06-27T00:00:05.300Z", "claude")
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:30.000Z"),
+    })
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "已处理",
+      durationLabel: "5s",
+      summary: "已处理 5s",
+      state: expect.objectContaining({ active: false }),
+    }))
+  })
+
+  it("freezes stopped tool progress duration instead of continuing to count", () => {
+    const progress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-read",
+      toolName: "Read",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-read", name: "Read" },
+      },
+    }, "2026-06-27T00:00:00.000Z", "claude")
+    const stopped = appendAgentTimelineEvent(progress, {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-read",
+      event: {
+        type: "content_block_stop",
+        index: 1,
+      },
+    }, "2026-06-27T00:00:05.000Z", "claude")
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(stopped), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:30.000Z"),
+    })
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "已处理",
+      durationLabel: "5s",
+      summary: "已处理 5s",
+      state: expect.objectContaining({ active: false }),
+    }))
+  })
+
   it("omits malformed process group durations instead of rendering NaN", () => {
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {

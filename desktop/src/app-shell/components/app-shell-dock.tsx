@@ -17,6 +17,12 @@ import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/app
 
 type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name" | "icon">
 const ignoreDockPin = () => undefined
+const dockContextMenuCollisionPadding = {
+  top: 12,
+  right: 12,
+  bottom: 64,
+  left: 12,
+} as const
 
 type AppShellDockProps = {
   readonly apps: readonly AppShellDockApp[]
@@ -122,7 +128,7 @@ function DockButton({
         </TooltipTrigger>
         <TooltipContent side="top">{app.name}</TooltipContent>
       </Tooltip>
-      <ContextMenuContent>
+      <ContextMenuContent collisionPadding={dockContextMenuCollisionPadding}>
         <DockAppMenuItems
           appId={app.id}
           pinned
