@@ -6,6 +6,7 @@ import { documentTemplateAppManifest } from "../../../app-capabilities/document-
 import { skillInstallerAppManifest } from "../../../app-capabilities/skill-installer/renderer/app-manifest"
 import { ruleInstallerAppManifest } from "../../../app-capabilities/rule-installer/renderer/app-manifest"
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
+import { soundNotifierAppManifest } from "../../../app-capabilities/sound-notifier/renderer/app-manifest"
 import { terminalAppManifest } from "../../../app-capabilities/terminal/renderer/app-manifest"
 import { screenshotAppManifest } from "../../../app-capabilities/screenshot/renderer/app-manifest"
 import { editorScanAppManifest } from "@/modules/editor-scan/app-manifest"
@@ -33,6 +34,7 @@ const systemApps = [
   skillInstallerAppManifest,
   ruleInstallerAppManifest,
   quickInputAppManifest,
+  soundNotifierAppManifest,
   terminalAppManifest,
   screenshotAppManifest,
   editorScanAppManifest,

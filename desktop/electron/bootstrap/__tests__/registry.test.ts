@@ -96,6 +96,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.quick-input",
         "core.relay",
         "core.side-channel",
+        "core.sound-notifier",
         "core.terminal",
         "core.update",
         "core.usage-analysis",
@@ -236,6 +237,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.terminal",
+      "core.sound-notifier",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([

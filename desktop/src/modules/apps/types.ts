@@ -12,6 +12,7 @@ export const SYSTEM_APP_IDS = [
   "skill-installer",
   "rule-installer",
   "quick-input",
+  "sound-notifier",
   "terminal",
   "screenshot",
   "editor-scan",
@@ -35,6 +36,7 @@ export type SynapseSystemAppNamespace =
   | "skill_installer"
   | "rule_installer"
   | "quick_input"
+  | "sound_notifier"
   | "terminal"
   | "screenshot"
   | "editor_scan"

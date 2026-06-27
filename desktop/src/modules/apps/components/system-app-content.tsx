@@ -22,6 +22,7 @@ import { DocumentTemplateModule } from "../../../../app-capabilities/document-te
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
+import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
@@ -94,6 +95,7 @@ function SystemAppContent({
   if (appId === "skill-installer") return <SkillInstallerModule />
   if (appId === "rule-installer") return <RuleInstallerModule />
   if (appId === "quick-input") return <QuickInputModule />
+  if (appId === "sound-notifier") return <SoundNotifierModule />
   if (appId === "terminal") return <TerminalModule />
   if (appId === "screenshot") return <ScreenshotModule />
   if (appId === "git") return <GitModule />

@@ -26,6 +26,7 @@ describe("system app registry", () => {
       "skill-installer",
       "rule-installer",
       "quick-input",
+      "sound-notifier",
       "terminal",
       "screenshot",
       "editor-scan",
@@ -96,6 +97,7 @@ describe("system app registry", () => {
     expect(definitions.every((app) => !("icon" in app))).toBe(true)
     expect(getSystemAppDefinition("model-price")?.windowTitle).toBe("价格管理")
     expect(getSystemAppDefinition("screenshot")?.windowTitle).toBe("截图")
+    expect(getSystemAppDefinition("sound-notifier")?.windowTitle).toBe("Sound Notifier")
   })
 
   it("gets and parses known app ids only", () => {

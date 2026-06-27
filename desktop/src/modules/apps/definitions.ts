@@ -6,6 +6,7 @@ import { documentTemplateAppDefinition } from "../../../app-capabilities/documen
 import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
 import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
+import { soundNotifierAppDefinition } from "../../../app-capabilities/sound-notifier/renderer/app-definition"
 import { terminalAppDefinition } from "../../../app-capabilities/terminal/renderer/app-definition"
 import { screenshotAppDefinition } from "../../../app-capabilities/screenshot/renderer/app-definition"
 import { editorScanAppDefinition } from "../editor-scan/app-definition"
@@ -33,6 +34,7 @@ const systemAppDefinitions = [
   skillInstallerAppDefinition,
   ruleInstallerAppDefinition,
   quickInputAppDefinition,
+  soundNotifierAppDefinition,
   terminalAppDefinition,
   screenshotAppDefinition,
   editorScanAppDefinition,

@@ -37,6 +37,9 @@ import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabiliti
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
 import { createScreenshotCapabilityDispatcher } from "../../app-capabilities/screenshot/main/dispatcher"
 import { createScreenshotService } from "../../app-capabilities/screenshot/main/service"
+import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
+import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
+import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
@@ -94,7 +97,12 @@ import {
   type ProviderService,
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
-import type { ConversationEntryV1, QuickInputItemEntryV1, QuickInputSettingsEntryV1 } from "../runtime/data-repo"
+import type {
+  ConversationEntryV1,
+  QuickInputItemEntryV1,
+  QuickInputSettingsEntryV1,
+  SoundNotifierSettingsEntryV1,
+} from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
 import { ExecutionIsolationService } from "../services/execution-isolation"
@@ -335,6 +343,19 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
   },
   async start(instance) {
     await instance.initialize()
+  },
+}
+
+export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService> = {
+  id: "core.sound-notifier",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createSoundNotifierService({
+      settings: dataRepository.namespace<SoundNotifierSettingsEntryV1>(SOUND_NOTIFIER_SETTINGS_NAMESPACE),
+      logger: ctx.logger.child("sound-notifier"),
+    })
   },
 }
 
@@ -717,6 +738,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.permission-guard",
     "core.audit-sink",
     "core.terminal",
+    "core.sound-notifier",
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -855,9 +877,13 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
+      service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
+    })
     const appDispatcher = createAppCapabilityDispatcher({
       documentTemplate: documentTemplateDispatcher,
       screenshot: screenshotDispatcher,
+      soundNotifier: soundNotifierDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({

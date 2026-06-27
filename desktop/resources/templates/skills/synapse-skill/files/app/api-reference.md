@@ -244,3 +244,19 @@ Output:
 - `fileName`: saved file name.
 - `size`: saved file size in bytes.
 - `artifact`: screenshot artifact metadata without raw image bytes.
+
+## `app_sound_notifier_sound_play`
+
+Play a short Sound Notifier preset on the local computer.
+
+Input:
+
+- `presetId` optional: one of `soft-chime`, `done`, `attention`, `error`, or `long-done`. Defaults to the user's selected Sound Notifier preset.
+- `volume` optional: integer from `0` to `100`. Defaults to the user's Sound Notifier volume.
+
+Output:
+
+- `played`: whether a sound was queued for playback.
+- `presetId`: preset that was selected for this request.
+- `volume`: volume used for this request.
+- `reason`: present as `"disabled"` when MCP playback is disabled in Sound Notifier settings.

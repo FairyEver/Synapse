@@ -1102,4 +1102,46 @@ describe("preload bridge", () => {
 
     expect(listener).toHaveBeenCalledWith({ status: "downloaded" })
   })
+
+  it("maps Sound Notifier bridge methods to sound notifier IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.soundNotifier.getSettings()
+    await bridge.soundNotifier.updateSettings({ selectedPresetId: "done", volume: 40 })
+    await bridge.soundNotifier.play({ presetId: "done" })
+    await bridge.soundNotifier.preview({ presetId: "attention", volume: 50 })
+    bridge.soundNotifier.onChanged(vi.fn())
+    bridge.soundNotifier.onPlayRequested(vi.fn())
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:sound-notifier:settings:get",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:sound-notifier:settings:update",
+      { selectedPresetId: "done", volume: 40 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:sound-notifier:play",
+      { presetId: "done" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      4,
+      "synapse:sound-notifier:preview",
+      { presetId: "attention", volume: 50 },
+    )
+    expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
+      1,
+      "synapse:sound-notifier:changed",
+      expect.any(Function),
+    )
+    expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
+      2,
+      "synapse:sound-notifier:play-requested",
+      expect.any(Function),
+    )
+  })
 })
