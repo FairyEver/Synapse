@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { requestOpenSettingsDock } from "@/app-shell/navigation"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
@@ -34,6 +36,7 @@ export function AppsModule({
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const resetKeyRef = useRef(resetKey)
+  const dock = useDockPreferences({ workflowEntryVisible })
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
@@ -108,7 +111,12 @@ export function AppsModule({
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
               apps={listLaunchableSystemApps({ workflowEntryVisible })}
+              pinnedAppIds={dock.dockAppIds}
+              disabled={dock.saving}
               onOpenApp={openApp}
+              onPinApp={(appId) => void dock.addDockApp(appId)}
+              onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+              onManageDock={requestOpenSettingsDock}
             />
           </div>
         </div>
