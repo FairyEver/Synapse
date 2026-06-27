@@ -690,8 +690,6 @@ export function TerminalModule() {
               title={group.name}
               openIcon={FolderOpen}
               closedIcon={Folder}
-              headerClassName="pl-0 pr-3"
-              contentClassName="pl-0"
               actions={group.id !== "ungrouped" ? (
                 <>
                   <Button
@@ -1267,7 +1265,7 @@ function formatDroppedTerminalPaths(paths: readonly string[]): string {
 }
 
 function escapeTerminalPath(path: string): string {
-  return path.replace(/([\\\s"'`$&;()<>|*?\[\]{}!#~])/g, "\\$1")
+  return path.replace(/([\\\s"'`$&;()<>|*?[\]{}!#~])/g, "\\$1")
 }
 
 async function writeTerminalInputChunks(options: {
