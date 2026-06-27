@@ -57,7 +57,7 @@ describe("AppShellDock", () => {
     expect(onValueChange).toHaveBeenCalledWith("launcher")
   })
 
-  it("does not expose drag or unpin affordances", async () => {
+  it("does not expose drag affordances", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -71,7 +71,95 @@ describe("AppShellDock", () => {
     const nav = document.querySelector("[data-track='app-shell-dock']")
     expect(nav?.getAttribute("draggable")).toBeNull()
     expect(findButtonByLabel("对话").getAttribute("draggable")).toBeNull()
-    expect(findButtonByLabel("对话").getAttribute("data-can-unpin")).toBeNull()
+  })
+
+  it("handles app actions from the Dock context menu", async () => {
+    const onManageDock = vi.fn()
+    const onRemoveApp = vi.fn()
+    const onValueChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AppShellDock
+          apps={apps}
+          value="agent"
+          onValueChange={onValueChange}
+          onRemoveApp={onRemoveApp}
+          onManageDock={onManageDock}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      openContextMenuByButtonLabel("云盘")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("打开")
+    expect(document.body.textContent).toContain("从 Dock 移除")
+    expect(document.body.textContent).toContain("管理 Dock")
+
+    await act(async () => {
+      findMenuItem("打开").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onValueChange).toHaveBeenCalledWith("drive")
+
+    await act(async () => {
+      openContextMenuByButtonLabel("云盘")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      findMenuItem("从 Dock 移除").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onRemoveApp).toHaveBeenCalledWith("drive")
+
+    await act(async () => {
+      openContextMenuByButtonLabel("云盘")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      findMenuItem("管理 Dock").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onManageDock).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps launcher protected in the Dock context menu", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AppShellDock
+          apps={apps}
+          value="agent"
+          onValueChange={vi.fn()}
+          onRemoveApp={vi.fn()}
+          onManageDock={vi.fn()}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      openContextMenuByButtonLabel("应用")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("管理 Dock")
+    expect(document.body.textContent).not.toContain("从 Dock 移除")
   })
 
   it("reports clicks on the currently active app icon", async () => {
@@ -103,4 +191,18 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
+}
+
+function findMenuItem(label: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll("[role='menuitem']")).find((element) => element.textContent?.includes(label))
+
+  if (!(item instanceof HTMLElement)) {
+    throw new Error(`Menu item not found: ${label}`)
+  }
+
+  return item
+}
+
+function openContextMenuByButtonLabel(label: string): void {
+  findButtonByLabel(label).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
 }

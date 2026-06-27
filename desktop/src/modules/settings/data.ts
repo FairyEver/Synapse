@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Info,
   CircleUserRound,
+  PanelBottom,
   Settings2,
   Shield,
 } from "lucide-react"
@@ -27,6 +28,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Settings2,
     label: "基础设置",
     description: "身份、外观与应用数据。",
+  },
+  {
+    id: "dock",
+    icon: PanelBottom,
+    label: "Dock 栏",
+    description: "固定应用和顺序。",
   },
   {
     id: "repositories",

@@ -79,6 +79,7 @@ vi.mock("@/app-shell/navigation", () => ({
   publishActiveAppTab: vi.fn(),
   requestOpenSettingsAccount: vi.fn(),
   requestOpenSettingsAbout: vi.fn(),
+  requestOpenSettingsDock: vi.fn(),
   requestOpenSettingsStorage: vi.fn(),
   subscribeOpenAgentSession: () => () => undefined,
   subscribeOpenSettingsTab: () => () => undefined,
@@ -98,6 +99,13 @@ vi.mock("@/app-shell/use-watch-next-agent-session", () => ({
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => mocks.logger,
+}))
+
+vi.mock("@/app-shell/notifications", () => ({
+  useAppNotifications: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
 }))
 
 vi.mock("@/lib/diagnostic-context", () => ({
@@ -181,7 +189,7 @@ describe("App without repositories", () => {
 
     expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
     expect(document.body.textContent).toContain("Dock")
-    expect(document.body.textContent).toContain("对话模块")
+    expect(document.body.textContent).toContain("应用模块")
   })
 })
 

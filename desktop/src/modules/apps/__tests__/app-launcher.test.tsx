@@ -9,7 +9,10 @@ import type { SynapseSystemAppId } from "../types"
 import { AppsModule } from "../index"
 
 const mocks = vi.hoisted(() => ({
+  addDockApp: vi.fn(),
   openSystemApp: vi.fn(),
+  removeDockApp: vi.fn(),
+  requestOpenSettingsDock: vi.fn(),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -17,6 +20,19 @@ vi.mock("@/lib/electron-bridge", () => ({
     apps: {
       openSystemApp: mocks.openSystemApp,
     },
+  }),
+}))
+
+vi.mock("@/app-shell/navigation", () => ({
+  requestOpenSettingsDock: mocks.requestOpenSettingsDock,
+}))
+
+vi.mock("@/modules/apps/hooks/use-dock-preferences", () => ({
+  useDockPreferences: () => ({
+    addDockApp: mocks.addDockApp,
+    dockAppIds: ["agent", "launcher"],
+    removeDockApp: mocks.removeDockApp,
+    saving: false,
   }),
 }))
 
@@ -73,7 +89,10 @@ describe("AppsModule", () => {
   const roots: Root[] = []
 
   beforeEach(() => {
+    mocks.addDockApp.mockReset()
     mocks.openSystemApp.mockReset()
+    mocks.removeDockApp.mockReset()
+    mocks.requestOpenSettingsDock.mockReset()
     document.body.innerHTML = ""
   })
 
@@ -148,6 +167,67 @@ describe("AppsModule", () => {
     expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("主视图")
     expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("App 操作")
     expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
+  })
+
+  it("pins an unpinned app from the launcher context menu", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      openContextMenuByButtonLabel("本地数据库")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("固定到 Dock")
+
+    await act(async () => {
+      findMenuItem("固定到 Dock").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.addDockApp).toHaveBeenCalledWith("database")
+    expect(mocks.openSystemApp).not.toHaveBeenCalled()
+  })
+
+  it("unpins a pinned app and opens Dock management from the launcher context menu", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      openContextMenuByButtonLabel("对话")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("从 Dock 移除")
+    expect(document.body.textContent).toContain("管理 Dock")
+
+    await act(async () => {
+      findMenuItem("从 Dock 移除").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.removeDockApp).toHaveBeenCalledWith("agent")
+
+    await act(async () => {
+      openContextMenuByButtonLabel("对话")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      findMenuItem("管理 Dock").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.requestOpenSettingsDock).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the launcher more button isolated from app opening", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      findButtonByLabel("本地数据库 更多操作").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("database 内容")
+    expect(mocks.openSystemApp).not.toHaveBeenCalled()
   })
 
   it("does not expose draggable launcher icons", async () => {
@@ -245,4 +325,18 @@ function findButtonByLabel(label: string): HTMLButtonElement {
   }
 
   return button
+}
+
+function findMenuItem(label: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll("[role='menuitem']")).find((element) => element.textContent?.includes(label))
+
+  if (!(item instanceof HTMLElement)) {
+    throw new Error(`Menu item not found: ${label}`)
+  }
+
+  return item
+}
+
+function openContextMenuByButtonLabel(label: string): void {
+  findButton(label).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
 }

@@ -49,6 +49,7 @@ vi.mock("@/app-shell/navigation", () => ({
   consumeRequestedSettingsCategory: () => requestedSettingsCategory.current,
   subscribeOpenSettingsAccount: () => () => undefined,
   subscribeOpenSettingsAbout: () => () => undefined,
+  subscribeOpenSettingsDock: () => () => undefined,
   subscribeOpenSettingsStorage: () => () => undefined,
 }))
 
@@ -144,6 +145,15 @@ describe("SettingsModule layout", () => {
     const sidebar = container.querySelector("aside")
 
     expect(sidebar?.textContent).toContain("账号")
+  })
+
+  it("opens Dock settings when requested", async () => {
+    requestedSettingsCategory.current = "dock"
+
+    const container = await renderSettingsModule()
+
+    expect(container.textContent).toContain("Dock 栏")
+    expect(container.textContent).toContain("已固定")
   })
 })
 

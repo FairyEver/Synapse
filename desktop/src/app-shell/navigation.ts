@@ -6,6 +6,7 @@ import {
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:open-settings-account"
 const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
+const OPEN_SETTINGS_DOCK_EVENT = "synapse:open-settings-dock"
 const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
 const WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:watch-next-agent-session"
@@ -16,7 +17,7 @@ type WatchNextAgentSessionPayload = {
   platform?: string
   sessionKeyPrefix?: string
 }
-type RequestedSettingsCategory = "account" | "repositories" | "about"
+type RequestedSettingsCategory = "account" | "repositories" | "about" | "dock"
 let currentAppId = "agent"
 let requestedSettingsCategory: RequestedSettingsCategory | null = null
 
@@ -74,6 +75,24 @@ function subscribeOpenSettingsAbout(listener: () => void): () => void {
 
   return () => {
     window.removeEventListener(OPEN_SETTINGS_ABOUT_EVENT, handleEvent)
+  }
+}
+
+function requestOpenSettingsDock(): void {
+  requestedSettingsCategory = "dock"
+  requestOpenSettingsTab()
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_DOCK_EVENT))
+}
+
+function subscribeOpenSettingsDock(listener: () => void): () => void {
+  const handleEvent = () => {
+    listener()
+  }
+
+  window.addEventListener(OPEN_SETTINGS_DOCK_EVENT, handleEvent)
+
+  return () => {
+    window.removeEventListener(OPEN_SETTINGS_DOCK_EVENT, handleEvent)
   }
 }
 
@@ -181,6 +200,7 @@ export {
   requestOpenAgentSession,
   requestOpenSettingsAccount,
   requestOpenSettingsAbout,
+  requestOpenSettingsDock,
   requestOpenSettingsStorage,
   requestOpenSettingsTab,
   requestWatchNextAgentSession,
@@ -189,6 +209,7 @@ export {
   subscribeOpenAgentSession,
   subscribeOpenSettingsAccount,
   subscribeOpenSettingsAbout,
+  subscribeOpenSettingsDock,
   subscribeOpenSettingsStorage,
   subscribeOpenSettingsTab,
   subscribeWatchNextAgentSession,

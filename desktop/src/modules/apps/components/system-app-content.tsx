@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
+import { requestOpenSettingsDock, type OpenAgentSessionPayload } from "@/app-shell/navigation"
 import {
   subscribeContentOpenRequest,
   type ContentOpenRequest,
@@ -18,6 +18,7 @@ import { SettingsModule } from "@/modules/settings"
 import { UsageMonitorModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
@@ -81,7 +82,7 @@ function SystemAppContent({
       />
     )
   }
-  if (appId === "settings") return <SettingsModule />
+  if (appId === "settings") return <SettingsModule workflowEntryVisible={workflowEntryVisible} />
   if (appId === "resource-repository") {
     return (
       <ResourceRepositoryModule
@@ -121,6 +122,7 @@ function LauncherContent({
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const resetKeyRef = useRef(resetKey)
+  const dock = useDockPreferences({ workflowEntryVisible })
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
@@ -196,7 +198,12 @@ function LauncherContent({
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
               apps={listLaunchableSystemApps({ workflowEntryVisible })}
+              pinnedAppIds={dock.dockAppIds}
+              disabled={dock.saving}
               onOpenApp={openApp}
+              onPinApp={(appId) => void dock.addDockApp(appId)}
+              onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+              onManageDock={requestOpenSettingsDock}
             />
           </div>
         </div>

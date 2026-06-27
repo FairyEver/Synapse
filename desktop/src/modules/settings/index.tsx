@@ -7,6 +7,7 @@ import {
   consumeRequestedSettingsCategory,
   subscribeOpenSettingsAccount,
   subscribeOpenSettingsAbout,
+  subscribeOpenSettingsDock,
   subscribeOpenSettingsStorage,
 } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -34,6 +35,7 @@ import { ProjectListEditor } from "@/modules/settings/components/project-list-ed
 import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
+import { DockPanel } from "@/modules/settings/components/dock-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -53,7 +55,11 @@ function resolveSettingsCategory(
   return nextCategory
 }
 
-function SettingsModule() {
+type SettingsModuleProps = {
+  readonly workflowEntryVisible?: boolean
+}
+
+function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
@@ -88,6 +94,12 @@ function SettingsModule() {
   useEffect(() => {
     return subscribeOpenSettingsAccount(() => {
       setActiveCategory("account")
+    })
+  }, [setActiveCategory])
+
+  useEffect(() => {
+    return subscribeOpenSettingsDock(() => {
+      setActiveCategory("dock")
     })
   }, [setActiveCategory])
 
@@ -286,6 +298,10 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
+
+        {isReady && activeCategory === "dock" ? (
+          <DockPanel workflowEntryVisible={workflowEntryVisible} />
+        ) : null}
 
         {isReady && activeCategory === "repositories" ? (
           <RepositoryListEditor onSave={handleSaveRepositories} />
