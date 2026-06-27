@@ -81,7 +81,7 @@ function SystemAppContent({
       />
     )
   }
-  if (appId === "settings") return <SettingsModule />
+  if (appId === "settings") return <SettingsModule workflowEntryVisible={workflowEntryVisible} />
   if (appId === "resource-repository") {
     return (
       <ResourceRepositoryModule

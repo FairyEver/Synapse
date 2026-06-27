@@ -7,6 +7,7 @@ import {
   consumeRequestedSettingsCategory,
   subscribeOpenSettingsAccount,
   subscribeOpenSettingsAbout,
+  subscribeOpenSettingsDock,
   subscribeOpenSettingsStorage,
 } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -53,7 +54,12 @@ function resolveSettingsCategory(
   return nextCategory
 }
 
-function SettingsModule() {
+type SettingsModuleProps = {
+  readonly workflowEntryVisible?: boolean
+}
+
+function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
+  void workflowEntryVisible
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
@@ -88,6 +94,12 @@ function SettingsModule() {
   useEffect(() => {
     return subscribeOpenSettingsAccount(() => {
       setActiveCategory("account")
+    })
+  }, [setActiveCategory])
+
+  useEffect(() => {
+    return subscribeOpenSettingsDock(() => {
+      setActiveCategory("dock")
     })
   }, [setActiveCategory])
 
@@ -286,6 +298,15 @@ function SettingsModule() {
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
+
+        {isReady && activeCategory === "dock" ? (
+          <SettingsGroup>
+            <div className="flex flex-col gap-3">
+              <h2 className="text-sm font-medium">已固定</h2>
+              <p className="text-sm text-muted-foreground">Dock 设置加载中</p>
+            </div>
+          </SettingsGroup>
+        ) : null}
 
         {isReady && activeCategory === "repositories" ? (
           <RepositoryListEditor onSave={handleSaveRepositories} />
