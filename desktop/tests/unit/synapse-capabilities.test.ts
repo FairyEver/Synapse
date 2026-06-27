@@ -31,6 +31,7 @@ import {
   SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
+import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
@@ -62,6 +63,7 @@ describe("App capability domain", () => {
       ...Object.values(TERMINAL_MCP_TOOL_NAMES),
       SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
       SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
+      SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
