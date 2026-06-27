@@ -244,7 +244,7 @@ describe("AgentSessionSidebar", () => {
     expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps compact session actions on the same rail as project actions", () => {
+  it("keeps compact session actions right-aligned on the trailing rail", () => {
     const html = renderToStaticMarkup(
       <AgentSidebarSessionRow
         active={false}
@@ -261,8 +261,9 @@ describe("AgentSessionSidebar", () => {
     const trailingRail = [...wrapper.querySelectorAll("span")]
       .find((span) => span.textContent === "status" && span.className.includes("shrink-0"))
 
-    expect(trailingRail?.className).toContain("min-w-6")
-    expect(trailingRail?.className).toContain("justify-center")
+    expect(trailingRail?.className).toContain("min-w-7")
+    expect(trailingRail?.className).toContain("justify-end")
+    expect(trailingRail?.className).toContain("tabular-nums")
   })
 
   it("defaults to user conversations and filters by source", async () => {

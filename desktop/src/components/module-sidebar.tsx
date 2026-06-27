@@ -192,16 +192,16 @@ function ModuleSidebarGroup({
   const Icon = open ? OpenIcon : ClosedIcon
 
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} data-track={dataTrack} className={className}>
-      <div className={cn("flex h-8 w-full items-center justify-between rounded-lg px-3", headerClassName)}>
-        <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
-          {Icon ? <Icon className="size-4 shrink-0" /> : null}
+    <Collapsible open={open} onOpenChange={onOpenChange} data-track={dataTrack} className={cn("grid gap-0.5", className)}>
+      <div className={cn("flex h-8 w-full items-center justify-between rounded-lg px-2 transition-colors hover:bg-muted/50", headerClassName)}>
+        <CollapsibleTrigger className="flex h-full min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
+          {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
           <span className="truncate">{title}</span>
         </CollapsibleTrigger>
-        {actions ? <div className="ml-1 flex shrink-0 items-center gap-0.5">{actions}</div> : null}
+        {actions ? <div className="ml-1 flex h-full shrink-0 items-center gap-0.5">{actions}</div> : null}
       </div>
       <CollapsibleContent>
-        <div className={cn("flex w-full min-w-0 flex-col gap-0 pl-3", contentClassName)}>
+        <div className={cn("flex w-full min-w-0 flex-col gap-0.5 pl-3", contentClassName)}>
           {children}
         </div>
       </CollapsibleContent>
@@ -261,7 +261,7 @@ function ModuleSidebarRow({
         handleSelect(event)
       }}
       className={cn(
-        "group/item flex h-8 w-full min-w-0 items-center rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "group/item flex h-8 w-full min-w-0 items-center rounded-md px-2 text-sm font-medium text-foreground/80 transition-colors outline-none",
         "hover:bg-muted/60 hover:text-foreground",
         "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
         active && "bg-secondary text-secondary-foreground hover:bg-secondary",
@@ -273,7 +273,7 @@ function ModuleSidebarRow({
         <span className="block min-w-0 flex-1 truncate">{children}</span>
       </span>
       {trailing ? (
-        <span className="ml-2 flex min-w-6 shrink-0 items-center justify-center">{trailing}</span>
+        <span className="ml-2 flex min-w-7 shrink-0 items-center justify-end text-right tabular-nums">{trailing}</span>
       ) : null}
     </div>
   )
