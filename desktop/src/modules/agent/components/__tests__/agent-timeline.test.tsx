@@ -744,6 +744,43 @@ describe("AgentTimeline", () => {
     expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
   })
 
+  it("renders successful process groups collapsed with a compact title", () => {
+    const html = renderTimeline({
+      items: [
+        {
+          id: "tool-call",
+          kind: "toolCall",
+          toolUseId: "toolu-ok",
+          toolName: "Read",
+          toolInput: "package.json",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
+        {
+          id: "tool-result",
+          kind: "toolResult",
+          toolUseId: "toolu-ok",
+          toolName: "Read",
+          content: "package contents",
+          success: true,
+          timestamp: "2026-06-27T00:00:01.000Z",
+        },
+        {
+          id: "answer",
+          kind: "message",
+          role: "assistant",
+          content: "Done",
+          timestamp: "2026-06-27T00:00:02.000Z",
+        },
+      ],
+    })
+    const text = textFromMarkup(html)
+
+    expect(html).toContain("过程详情")
+    expect(html).toContain('data-state="closed"')
+    expect(text).toContain("Done")
+    expect(text).not.toContain("package contents")
+  })
+
   it("matches concurrent same-name tool results by tool use id", () => {
     const items: SynapseAgentTimelineItem[] = [
       {
