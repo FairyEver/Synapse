@@ -517,7 +517,8 @@ describe("AgentTimeline", () => {
     expect(html.match(/Glob/g)).toHaveLength(1)
     expect(html).toContain("Done")
     expect(html).not.toContain("Running")
-    expect(text).toContain("过程详情")
+    expect(text).toContain("已处理1s")
+    expect(text).not.toContain("过程详情")
     expect(text).toContain("GlobDone")
     expect(html).toContain("data-state=\"closed\"")
   })
@@ -577,13 +578,16 @@ describe("AgentTimeline", () => {
 
     const nodes = groupTimelineDisplayEntries(entries, {
       pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:01.000Z"),
     })
 
     expect(nodes.map((node) => node.kind)).toEqual(["processGroup", "item"])
     expect(nodes[0]).toEqual(expect.objectContaining({
       kind: "processGroup",
       itemCount: 2,
-      summary: "过程详情 · 2 项",
+      summary: "处理中 1s",
+      label: "处理中",
+      durationLabel: "1s",
     }))
     expect(nodes[1]).toEqual(expect.objectContaining({
       kind: "item",
@@ -745,6 +749,73 @@ describe("AgentTimeline", () => {
     expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
   })
 
+  it("summarizes active and pending process groups with Codex-style labels", () => {
+    const activeNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-running",
+        kind: "toolCall",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+    ]), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:14.000Z"),
+    })
+    const pendingNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "permission-old",
+        kind: "permissionRequest",
+        requestId: "request-old",
+        toolName: "Bash",
+        toolInput: "rm file",
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+    ]), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:15.000Z"),
+    })
+
+    const activeGroup = activeNodes.find((node) => node.kind === "processGroup")
+    const pendingGroup = pendingNodes.find((node) => node.kind === "processGroup")
+
+    expect(activeGroup).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "处理中",
+      durationLabel: "12s",
+      summary: "处理中 12s",
+    }))
+    expect(pendingGroup).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "等待处理",
+      durationLabel: "12s",
+      summary: "等待处理 12s",
+    }))
+  })
+
+  it("omits malformed process group durations instead of rendering NaN", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "thinking-bad-time",
+        kind: "thinking",
+        content: "inspect",
+        timestamp: "not-a-date",
+      },
+    ]), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:15.000Z"),
+    })
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "已处理",
+      summary: "已处理",
+    }))
+    expect(group?.kind === "processGroup" ? group.durationLabel : undefined).toBeUndefined()
+    expect(group?.kind === "processGroup" ? group.summary : "").not.toContain("NaN")
+  })
+
   it("renders successful process groups collapsed with a compact title", () => {
     const html = renderTimeline({
       items: [
@@ -776,13 +847,16 @@ describe("AgentTimeline", () => {
     })
     const text = textFromMarkup(html)
 
-    expect(html).toContain("过程详情")
+    expect(html).toContain("已处理")
+    expect(html).toContain("1s")
+    expect(html).toContain("lucide-chevron-down")
+    expect(html).not.toContain("过程详情")
     expect(html).toContain('data-state="closed"')
     expect(text).toContain("Done")
     expect(text).not.toContain("package contents")
   })
 
-  it("collapses failed completed process groups by default while keeping the failure summary visible", () => {
+  it("collapses failed completed process groups by default while keeping the handled summary visible", () => {
     const html = renderTimeline({
       items: [
         {
@@ -814,7 +888,9 @@ describe("AgentTimeline", () => {
     const text = textFromMarkup(html)
 
     expect(html).toContain('data-state="closed"')
-    expect(text).toContain("过程详情 · 1 个工具失败")
+    expect(text).toContain("已处理1s")
+    expect(text).not.toContain("过程详情")
+    expect(text).not.toContain("1 个工具失败")
     expect(text).toContain("I found a failure.")
     expect(text).not.toContain("pnpm test")
   })
@@ -915,9 +991,10 @@ describe("AgentTimeline", () => {
     expect(text).toContain("First answer.")
     expect(text).toContain("Second answer.")
     expect(text).toContain("Third answer.")
-    expect(text.indexOf("First answer.")).toBeLessThan(text.indexOf("过程详情"))
-    expect(text.indexOf("过程详情")).toBeLessThan(text.indexOf("Second answer."))
-    expect(html.match(/过程详情/g)).toHaveLength(2)
+    expect(text.indexOf("First answer.")).toBeLessThan(text.indexOf("已处理"))
+    expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Second answer."))
+    expect(html.match(/已处理/g)).toHaveLength(2)
+    expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
   })
 
@@ -944,8 +1021,9 @@ describe("AgentTimeline", () => {
 
     expect(text).toContain("I will inspect it.")
     expect(text).toContain("Final answer.")
-    expect(text.indexOf("I will inspect it.")).toBeLessThan(text.indexOf("过程详情"))
-    expect(text.indexOf("过程详情")).toBeLessThan(text.indexOf("Final answer."))
+    expect(text.indexOf("I will inspect it.")).toBeLessThan(text.indexOf("已处理"))
+    expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Final answer."))
+    expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
   })
 
