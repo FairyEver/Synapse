@@ -162,7 +162,7 @@ describe("AgentToolEvent", () => {
     expect(container.textContent).not.toContain("ok")
   })
 
-  it("keeps a running tool open after it receives a failed result", async () => {
+  it("collapses a running tool after it receives a failed result", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -194,9 +194,10 @@ describe("AgentToolEvent", () => {
       />)
     })
 
-    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
-    expect(container.textContent).toContain("pnpm test")
-    expect(container.textContent).toContain("boom")
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("closed")
+    expect(container.textContent).toContain("Failed")
+    expect(container.textContent).not.toContain("pnpm test")
+    expect(container.textContent).not.toContain("boom")
   })
 
   it("does not override a manual collapse when a successful result arrives", async () => {
@@ -322,7 +323,7 @@ describe("AgentToolEvent", () => {
     expect(container.textContent).not.toContain("sk-bearer")
   })
 
-  it("opens failed tool results even when profile default is collapsed", () => {
+  it("collapses failed tool results while keeping the failed status visible", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
         id: "tool-2",
@@ -337,7 +338,8 @@ describe("AgentToolEvent", () => {
 
     expect(html).toContain("UnknownTool")
     expect(html).toContain("Failed")
-    expect(html).toContain("boom")
+    expect(html).toContain("data-state=\"closed\"")
+    expect(html).not.toContain("boom")
   })
 
   it("treats failed status without success as a failed tool result", () => {
@@ -355,8 +357,8 @@ describe("AgentToolEvent", () => {
     />)
 
     expect(html).toContain("Failed")
-    expect(html).toContain("command failed")
-    expect(html).toContain("exit 1")
+    expect(html).not.toContain("command failed")
+    expect(html).not.toContain("exit 1")
     expect(html).not.toContain("Done")
   })
 
@@ -374,27 +376,41 @@ describe("AgentToolEvent", () => {
     />)
 
     expect(html).toContain("Denied")
-    expect(html).toContain("permission denied")
+    expect(html).toContain("data-state=\"closed\"")
+    expect(html).not.toContain("permission denied")
     expect(html).not.toContain("Failed")
   })
 
-  it("keeps exit code and copy action for expanded tool results", () => {
-    const html = renderToStaticMarkup(<AgentToolEvent
-      item={{
-        id: "tool-3",
-        kind: "toolResult",
-        timestamp: "2026-04-28T00:00:00.000Z",
-        toolName: "Bash",
-        content: "command output",
-        exitCode: 2,
-        success: false,
-      }}
-      profile={profile}
-    />)
+  it("keeps exit code and copy action when a failed tool result is expanded", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
 
-    expect(html).toContain("command output")
-    expect(html).toContain("exit 2")
-    expect(html).toContain("lucide-clipboard")
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-3",
+          kind: "toolResult",
+          timestamp: "2026-04-28T00:00:00.000Z",
+          toolName: "Bash",
+          content: "command output",
+          exitCode: 2,
+          success: false,
+        }}
+        profile={profile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("closed")
+    expect(container.textContent).not.toContain("command output")
+
+    await clickToolTrigger(container)
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
+    expect(container.textContent).toContain("command output")
+    expect(container.textContent).toContain("exit 2")
+    expect(container.innerHTML).toContain("lucide-clipboard")
   })
 
   it("makes the copy action visible when hovering tool output", async () => {

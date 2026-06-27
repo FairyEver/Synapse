@@ -430,6 +430,57 @@ describe("ConversationRouter", () => {
     expect((await agentEvents.list()).map((entry) => entry.eventType)).toEqual(["result"])
   })
 
+  it("persists streamed thinking as process history after the turn completes", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "stream",
+          thinking: "I should answer briefly. ",
+          deltaType: "thinking_delta",
+          sdkSessionId: "sdk-1",
+          event: { type: "content_block_delta" },
+        },
+        {
+          type: "stream",
+          thinking: "No tool is needed.",
+          deltaType: "thinking_delta",
+          sdkSessionId: "sdk-1",
+          event: { type: "content_block_delta" },
+        },
+        {
+          type: "stream",
+          text: "Agent means",
+          deltaType: "text_delta",
+          sdkSessionId: "sdk-1",
+          event: { type: "content_block_delta" },
+        },
+        {
+          type: "assistant",
+          contentBlocks: [{ type: "text", text: "Agent means autonomous worker." }],
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Agent means autonomous worker." }],
+          },
+          sdkSessionId: "sdk-1",
+        },
+        { type: "result", content: "Agent means autonomous worker.", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("what is agent"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(savedConversation?.history.map((entry) => [
+      entry.role,
+      entry.metadata?.agentEventType,
+      entry.content,
+    ])).toEqual([
+      ["user", undefined, "what is agent"],
+      ["system", "thinking", "I should answer briefly. No tool is needed."],
+      ["assistant", "assistant", "Agent means autonomous worker."],
+    ])
+  })
+
   it("persists a terminal error when the SDK session ends without result or error", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { eventBus, events } = createEventBusRecorder()

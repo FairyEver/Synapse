@@ -41,7 +41,7 @@ function AgentToolEvent({
   const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
   const failed = effectiveResult ? isFailedToolResult(effectiveResult) : false
   const permission = item.kind === "permissionRequest"
-  const automaticOpen = shouldAutoOpenToolEvent({ permission, failed, result: effectiveResult })
+  const automaticOpen = shouldAutoOpenToolEvent({ permission, result: effectiveResult })
   const status = statusLabel(item, profile, result)
   const userChangedOpenRef = useRef(false)
   const [open, setOpen] = useState(automaticOpen)
@@ -204,14 +204,12 @@ function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
 
 function shouldAutoOpenToolEvent({
   permission,
-  failed,
   result,
 }: {
   readonly permission: boolean
-  readonly failed: boolean
   readonly result: SynapseAgentToolResultTimelineItem | undefined
 }): boolean {
-  if (permission || failed) return true
+  if (permission) return true
   return !result
 }
 

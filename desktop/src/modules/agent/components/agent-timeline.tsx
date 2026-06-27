@@ -45,7 +45,7 @@ function AgentTimeline({
   const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
   const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
   const displayEntries = timelineDisplayEntries(items)
-  const displayNodes = groupTimelineDisplayEntries(displayEntries, { pendingPermissionRequestIds })
+  const displayNodes = groupTimelineDisplayEntries(displayEntries, { pendingPermissionRequestIds, nowMs: now })
   const [processGroupOpenOverrides, setProcessGroupOpenOverrides] = useState<Record<string, boolean>>({})
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
@@ -67,7 +67,8 @@ function AgentTimeline({
                 return (
                   <AgentProcessGroup
                     key={node.id}
-                    summary={node.summary}
+                    label={node.label}
+                    durationLabel={node.durationLabel}
                     open={open}
                     onOpenChange={(nextOpen) =>
                       setProcessGroupOpenOverrides((current) => ({

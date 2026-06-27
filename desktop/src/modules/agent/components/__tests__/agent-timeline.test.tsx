@@ -707,7 +707,7 @@ describe("AgentTimeline", () => {
     expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : true).toBe(false)
   })
 
-  it("opens active and failed process groups by default", () => {
+  it("opens active process groups and collapses failed completed process groups by default", () => {
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {
         id: "tool-call",
@@ -740,7 +740,7 @@ describe("AgentTimeline", () => {
     ]), { pendingPermissionRequestIds: new Set() })
     const activeGroup = activeNodes.find((node) => node.kind === "processGroup")
 
-    expect(failedGroup?.kind === "processGroup" ? defaultProcessGroupOpen(failedGroup, { sending: false }) : false).toBe(true)
+    expect(failedGroup?.kind === "processGroup" ? defaultProcessGroupOpen(failedGroup, { sending: false }) : true).toBe(false)
     expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: false }) : false).toBe(true)
     expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
   })
@@ -782,7 +782,7 @@ describe("AgentTimeline", () => {
     expect(text).not.toContain("package contents")
   })
 
-  it("opens failed process groups by default", () => {
+  it("collapses failed completed process groups by default while keeping the failure summary visible", () => {
     const html = renderTimeline({
       items: [
         {
@@ -813,9 +813,10 @@ describe("AgentTimeline", () => {
     })
     const text = textFromMarkup(html)
 
-    expect(html).toContain('data-state="open"')
-    expect(text).toContain("Failed")
+    expect(html).toContain('data-state="closed"')
+    expect(text).toContain("过程详情 · 1 个工具失败")
     expect(text).toContain("I found a failure.")
+    expect(text).not.toContain("pnpm test")
   })
 
   it("keeps pending permission requests visible outside process groups", () => {
@@ -988,18 +989,12 @@ describe("AgentTimeline", () => {
       },
     ]
 
-    const html = renderTimeline({
-      items,
-      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
-    })
-    const text = textFromMarkup(html)
+    const entries = timelineDisplayEntries(items)
 
-    expect(html.match(/Glob/g)).toHaveLength(2)
-    expect(html).not.toContain("Running")
-    expect(text.indexOf("/Users/liyang/project/a.md")).toBeLessThan(text.indexOf("content a"))
-    expect(text.indexOf("/Users/liyang/project/b.md")).toBeLessThan(text.indexOf("content b"))
-    expect(text.indexOf("/Users/liyang/project/a.md")).toBeLessThan(text.indexOf("/Users/liyang/project/b.md"))
-    expect(text.indexOf("content a")).toBeLessThan(text.indexOf("/Users/liyang/project/b.md"))
+    expect(entries.map((entry) => [entry.item.id, entry.result?.id])).toEqual([
+      ["tool-call-a", "tool-result-a"],
+      ["tool-call-b", "tool-result-b"],
+    ])
   })
 
   it("shows failed and denied statuses on matched tool calls", () => {
@@ -1088,16 +1083,13 @@ describe("AgentTimeline", () => {
       },
     ]
 
-    const html = renderTimeline({
-      items,
-      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
-    })
-    const text = textFromMarkup(html)
+    const entries = timelineDisplayEntries(items)
 
-    expect(html.match(/Read/g)).toHaveLength(3)
-    expect(text).toContain("legacy content")
-    expect(text).toContain("identified content")
-    expect(html).toContain("Running")
+    expect(entries.map((entry) => [entry.item.id, entry.result?.id])).toEqual([
+      ["legacy-tool", "legacy-result"],
+      ["identified-tool", undefined],
+      ["identified-result", undefined],
+    ])
   })
 
   it("hides generic SDK status events from the conversation timeline", () => {

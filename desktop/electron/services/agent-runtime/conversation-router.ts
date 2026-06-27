@@ -596,7 +596,20 @@ export class ConversationRouter {
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let assistantHistoryPersisted = false
+    let streamedThinking = ""
     let error: string | undefined
+
+    const flushStreamedThinkingHistory = async (): Promise<void> => {
+      const content = streamedThinking.trim()
+      streamedThinking = ""
+      if (!content) return
+      await this.saveEventHistory(conversation.id, {
+        type: "thinking",
+        content,
+        sdkSessionId: liveSession.currentSessionId(),
+        timestamp: this.isoNow(),
+      })
+    }
 
     const accepted = await liveSession.send(message)
     if (!accepted) {
@@ -623,6 +636,12 @@ export class ConversationRouter {
       const assistantText = assistantEventText(event)
       if (assistantText) latestAssistantText = assistantText
       else streamedText = appendStreamedText(streamedText, event)
+      const thinkingDelta = streamedThinkingDelta(event)
+      if (thinkingDelta) {
+        streamedThinking = `${streamedThinking}${thinkingDelta}`
+      } else {
+        await flushStreamedThinkingHistory()
+      }
 
       if (event.type === "result") {
         resultText = latestAssistantText || event.content || streamedText
@@ -714,6 +733,8 @@ export class ConversationRouter {
         continue
       }
     }
+
+    await flushStreamedThinkingHistory()
 
     if (error && events[events.length - 1]?.type !== "error" && !hasTerminalTurnOutcome(events[events.length - 1])) {
       const errorEvent: AgentEvent = {
@@ -1746,6 +1767,11 @@ function isAgentStreamDeltaEvent(event: AgentEvent): event is Extract<AgentEvent
   if (!isAgentStreamEvent(event)) return false
   if (event.deltaType?.endsWith("_delta")) return true
   return event.event.type === "content_block_delta"
+}
+
+function streamedThinkingDelta(event: AgentEvent): string {
+  if (!isAgentStreamEvent(event)) return ""
+  return event.deltaType === "thinking_delta" ? event.thinking ?? "" : ""
 }
 
 function resultHistoryMetadata(

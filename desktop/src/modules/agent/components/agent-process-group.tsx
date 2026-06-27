@@ -1,4 +1,4 @@
-import { ChevronDown, ListTree } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -8,14 +8,16 @@ import {
 import { AgentAnnotation } from "./agent-annotation"
 
 type AgentProcessGroupProps = {
-  readonly summary: string
+  readonly label: string
+  readonly durationLabel?: string
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly children: React.ReactNode
 }
 
 function AgentProcessGroup({
-  summary,
+  label,
+  durationLabel,
   open,
   onOpenChange,
   children,
@@ -30,8 +32,10 @@ function AgentProcessGroup({
             size="sm"
             className="group/agent-process-trigger h-7 w-full min-w-0 justify-start gap-1.5 px-0 py-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
           >
-            <ListTree className="size-3.5" />
-            <span className="truncate">{summary}</span>
+            <span className="shrink-0">{label}</span>
+            {durationLabel ? (
+              <span className="shrink-0 tabular-nums">{durationLabel}</span>
+            ) : null}
             <ChevronDown
               data-icon="inline-end"
               className="size-3.5 transition-transform group-data-[state=closed]/agent-process-trigger:-rotate-90"
