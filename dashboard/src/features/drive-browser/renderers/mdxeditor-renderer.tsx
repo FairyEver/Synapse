@@ -5,8 +5,11 @@ import {
   codeBlockPlugin,
   codeMirrorPlugin,
   CreateLink,
+  DiffSourceToggleWrapper,
+  diffSourcePlugin,
   headingsPlugin,
   imagePlugin,
+  InsertCodeBlock,
   InsertTable,
   InsertThematicBreak,
   linkDialogPlugin,
@@ -42,9 +45,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { ApiError, driveBrowserApi } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
+import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const PUBLIC_IMAGE_UPLOAD_CONSENT_STORAGE_KEY = 'synapse.drive.markdown.publicImageUploadConsent.v1'
@@ -61,11 +67,13 @@ export function DriveMDXeditorRenderer({
   preview,
   edit,
   editContext,
+  imageSourceContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
+  readonly imageSourceContext?: DriveMarkdownImageSourceContext
 }) {
   const initialText = preview.text ?? ''
   const editorRef = useRef<MDXEditorMethods | null>(null)
@@ -81,9 +89,16 @@ export function DriveMDXeditorRenderer({
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [pendingPublicImageUpload, setPendingPublicImageUpload] = useState<PendingPublicImageUpload | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
+  const imageSources = useDriveMarkdownImageSources({
+    context: imageSourceContext,
+    edit,
+    editContext,
+    disabled: dirty,
+  })
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
     externalMarkdownTargetRef.current = null
@@ -193,10 +208,13 @@ export function DriveMDXeditorRenderer({
       toolbarContents: () => (
         <>
           <UndoRedo />
-          <BlockTypeSelect />
-          <BoldItalicUnderlineToggles />
-          <ListsToggle />
-          <CreateLink />
+          <DiffSourceToggleWrapper options={['rich-text', 'source']}>
+            <BlockTypeSelect />
+            <BoldItalicUnderlineToggles />
+            <ListsToggle />
+            <CreateLink />
+            <InsertCodeBlock />
+          </DiffSourceToggleWrapper>
           <Button
             type='button'
             variant='ghost'
@@ -224,6 +242,7 @@ export function DriveMDXeditorRenderer({
     tablePlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
+    diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     markdownShortcutPlugin(),
   ], [canEdit, confirmPublicImageUpload, uploadingImage])
 
@@ -233,6 +252,7 @@ export function DriveMDXeditorRenderer({
     setDirty(false)
     setError(null)
     setUploadingImage(false)
+    setParseError(null)
     setConflictOpen(false)
     setReloadConfirmOpen(false)
     setPendingPublicImageUpload(null)
@@ -266,6 +286,16 @@ export function DriveMDXeditorRenderer({
     }
   }, [beginExternalMarkdownSync, canEdit, edit?.currentVersionId, editContext, value])
 
+  const handleEditorError = useCallback((payload: { readonly error: unknown; readonly source: string }) => {
+    const message = typeof payload.error === 'string'
+      ? payload.error
+      : payload.error instanceof Error
+        ? payload.error.message
+        : '解析失败。'
+    setValue(payload.source)
+    setParseError(message || '解析失败。')
+  }, [])
+
   const handleReload = useCallback(async () => {
     if (!editContext) return
     setError(null)
@@ -275,6 +305,7 @@ export function DriveMDXeditorRenderer({
       savedValueRef.current = nextText
       setValue(nextText)
       setDirty(false)
+      setParseError(null)
       setConflictOpen(false)
       setReloadConfirmOpen(false)
       beginExternalMarkdownSync(nextText)
@@ -298,6 +329,7 @@ export function DriveMDXeditorRenderer({
       id: 'mdxeditor-edit-status',
       label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
     }]
+    if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     if (loginRequired) {
       items.push({
         kind: 'button',
@@ -339,6 +371,7 @@ export function DriveMDXeditorRenderer({
     editContext?.savingText,
     handleReload,
     handleSave,
+    imageSources.toolbarItem,
     loginRequired,
     loginUrl,
     requestReload,
@@ -361,27 +394,49 @@ export function DriveMDXeditorRenderer({
         onChange={(event) => { void handleImageSelected(event) }}
       />
       <div className='min-h-0 flex-1 overflow-auto'>
-        <MDXEditor
-          ref={editorRef}
-          markdown={value}
-          readOnly={!canEdit}
-          onChange={(nextValue, initialMarkdownNormalize) => {
-            if (!canEdit) return
-            setValue(nextValue)
-            const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
-              && externalMarkdownTargetRef.current === nextValue
-            if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
-              savedValueRef.current = nextValue
-              setDirty(false)
-              return
-            }
-            clearExternalMarkdownSync()
-            setDirty(nextValue !== savedValueRef.current)
-          }}
-          plugins={plugins}
-          className='h-full min-h-full'
-          contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 py-6 md:px-6'
-        />
+        {parseError ? (
+          <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='text-sm font-medium text-foreground'>源码</span>
+              <span className='text-xs text-destructive'>解析失败</span>
+            </div>
+            <Textarea
+              value={value}
+              readOnly={!canEdit}
+              className='min-h-96 flex-1 font-mono text-sm'
+              onChange={(event) => {
+                if (!canEdit) return
+                const nextValue = event.currentTarget.value
+                setValue(nextValue)
+                setDirty(nextValue !== savedValueRef.current)
+              }}
+            />
+          </div>
+        ) : (
+          <MDXEditor
+            ref={editorRef}
+            markdown={value}
+            readOnly={!canEdit}
+            onError={handleEditorError}
+            onChange={(nextValue, initialMarkdownNormalize) => {
+              if (!canEdit) return
+              setValue(nextValue)
+              const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
+                && externalMarkdownTargetRef.current === nextValue
+              if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
+                savedValueRef.current = nextValue
+                setDirty(false)
+                return
+              }
+              clearExternalMarkdownSync()
+              setDirty(nextValue !== savedValueRef.current)
+            }}
+            plugins={plugins}
+            translation={mdxEditorZhCnTranslation}
+            className='min-h-full'
+            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 py-6 md:px-6'
+          />
+        )}
       </div>
       {error ? (
         <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div>
@@ -410,6 +465,7 @@ export function DriveMDXeditorRenderer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {imageSources.panel}
       <AlertDialog open={pendingPublicImageUpload !== null} onOpenChange={(open) => {
         if (!open) cancelPendingPublicImageUpload()
       }}>

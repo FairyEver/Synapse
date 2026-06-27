@@ -24,6 +24,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
 import { DriveCodeRenderer } from './code-renderer'
+import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
+import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationTargetFromSelection, getMarkdownRenderedText } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
@@ -60,11 +62,15 @@ export function DriveMarkdownRenderer({
   preview,
   edit,
   annotationContext,
+  editContext,
+  imageSourceContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly annotationContext?: DriveAnnotationContext
+  readonly editContext?: DriveRendererEditContext
+  readonly imageSourceContext?: DriveMarkdownImageSourceContext
 }) {
   const renderedHtml = preview.html?.trim()
   if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} />
@@ -78,6 +84,15 @@ export function DriveMarkdownRenderer({
   const annotationsEnabled = isDriveMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
+  const resolvedImageSourceContext = useMemo(
+    () => imageSourceContext ?? driveMarkdownImageSourceContextFromAnnotation(current, annotationContext),
+    [annotationContext, current, imageSourceContext]
+  )
+  const imageSources = useDriveMarkdownImageSources({
+    context: resolvedImageSourceContext,
+    edit,
+    editContext,
+  })
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
@@ -286,11 +301,13 @@ export function DriveMarkdownRenderer({
         }
       )
     }
+    if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     return items
   }, [
     annotations.threads.length,
     annotationsEnabled,
     commentsOpen,
+    imageSources.toolbarItem,
     outline.length,
     outlineOpen,
     setCommentPanelOpen,
@@ -566,6 +583,7 @@ export function DriveMarkdownRenderer({
       {annotations.error ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
+      {imageSources.panel}
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
         <div className='sr-only'>位置已变化</div>
       ) : null}
@@ -575,6 +593,21 @@ export function DriveMarkdownRenderer({
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
   return `${value}%`
+}
+
+function driveMarkdownImageSourceContextFromAnnotation(
+  current: DriveBrowserItemDto,
+  annotationContext?: DriveAnnotationContext
+): DriveMarkdownImageSourceContext | undefined {
+  if (current.type !== 'file') return undefined
+  if (annotationContext?.context === 'share') {
+    return {
+      context: 'share',
+      shareId: annotationContext.shareId,
+      itemId: annotationContext.itemId ?? current.id,
+    }
+  }
+  return { context: 'owner', itemId: current.id }
 }
 
 function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {

@@ -21,6 +21,7 @@ import {
 import { DriveDownloadRenderer } from './download-renderer'
 import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
+import type { DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 
@@ -180,6 +181,7 @@ export function DriveRendererContent({
   readonly annotationContext?: DriveAnnotationContext
 }) {
   const preview = snapshot.preview
+  const imageSourceContext = getDriveMarkdownImageSourceContext(snapshot, annotationContext)
   const containerClassName = selected.container === 'media'
     ? MEDIA_CONTAINER_CLASSNAME
     : selected.container === 'reading'
@@ -199,10 +201,27 @@ export function DriveRendererContent({
     return renderContent(<DriveDownloadRenderer current={snapshot.current} />)
   }
   if (selected.id === 'markdown') {
-    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} annotationContext={annotationContext} />)
+    return renderContent(
+      <DriveMarkdownRenderer
+        current={snapshot.current}
+        preview={preview}
+        edit={snapshot.edit}
+        editContext={editContext}
+        annotationContext={annotationContext}
+        imageSourceContext={imageSourceContext}
+      />
+    )
   }
   if (selected.id === 'mdxeditor') {
-    return renderContent(<DriveMDXeditorRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
+    return renderContent(
+      <DriveMDXeditorRenderer
+        current={snapshot.current}
+        preview={preview}
+        edit={snapshot.edit}
+        editContext={editContext}
+        imageSourceContext={imageSourceContext}
+      />
+    )
   }
   if (selected.id === 'code') {
     return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
@@ -214,4 +233,20 @@ export function DriveRendererContent({
     return renderContent(<DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />)
   }
   return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
+}
+
+function getDriveMarkdownImageSourceContext(
+  snapshot: DriveBrowserSnapshotDto,
+  annotationContext?: DriveAnnotationContext
+): DriveMarkdownImageSourceContext | undefined {
+  if (snapshot.current.type !== 'file' || snapshot.preview?.kind !== 'markdown') return undefined
+  if (annotationContext?.context === 'share') {
+    const rootItemId = snapshot.breadcrumbs[0]?.id ?? snapshot.current.id
+    return {
+      context: 'share',
+      shareId: annotationContext.shareId,
+      itemId: snapshot.current.id === rootItemId ? null : snapshot.current.id,
+    }
+  }
+  return { context: 'owner', itemId: snapshot.current.id }
 }

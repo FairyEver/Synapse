@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -9,6 +9,8 @@ import type {
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveBrowserSnapshotDto,
+  DriveDocumentImageSource,
+  DriveDocumentImageSourcesDto,
 } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
@@ -37,12 +39,18 @@ vi.mock('@mdxeditor/editor', async () => {
       markdown,
       readOnly,
       onChange,
+      onError,
       plugins,
+      className,
+      translation,
     }: {
       readonly markdown: string
       readonly readOnly?: boolean
       readonly onChange?: (value: string, initialMarkdownNormalize?: boolean) => void
+      readonly onError?: (payload: { readonly error: Error; readonly source: string }) => void
       readonly plugins?: readonly unknown[]
+      readonly className?: string
+      readonly translation?: (key: string, defaultValue: string, interpolations?: Record<string, unknown>) => string
     }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
       const [value, setValue] = React.useState(markdown)
       const valueRef = React.useRef(markdown)
@@ -50,6 +58,9 @@ vi.mock('@mdxeditor/editor', async () => {
         valueRef.current = nextValue
         setValue(nextValue)
         onChange?.(nextValue)
+        if (nextValue.includes('broken-mdx')) {
+          onError?.({ error: new Error('Parse failed'), source: nextValue })
+        }
       }
       React.useImperativeHandle(ref, () => ({
         getMarkdown: () => valueRef.current,
@@ -64,17 +75,24 @@ vi.mock('@mdxeditor/editor', async () => {
       const toolbarContents = plugins
         ?.map((plugin) => (plugin as { readonly toolbarContents?: () => React.ReactNode }).toolbarContents?.())
         .filter(Boolean)
-      return React.createElement(React.Fragment, null,
+      return React.createElement('div', { 'data-testid': 'mdx-editor-root', className },
         React.createElement('div', { 'data-testid': 'mdx-toolbar' }, toolbarContents),
         React.createElement('textarea', {
           'data-mdxeditor': 'true',
           'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
           'data-toolbar-controls': Array.from(pluginCalls).join(','),
+          'data-translation-bold': translation?.('toolbar.bold', 'Bold') ?? '',
+          'data-translation-undo': translation?.('toolbar.undo', 'Undo {{shortcut}}', { shortcut: 'Ctrl+Z' }) ?? '',
+          'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
+          'data-translation-unknown': translation?.('unknown.key', 'Fallback {{value}}', { value: 'OK' }) ?? '',
           readOnly,
           value,
           onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
             setValue(event.currentTarget.value)
             onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
+            if (event.currentTarget.value.includes('broken-mdx')) {
+              onError?.({ error: new Error('Parse failed'), source: event.currentTarget.value })
+            }
           },
         })
       )
@@ -95,6 +113,10 @@ vi.mock('@mdxeditor/editor', async () => {
       pluginCalls.add('InsertTable')
       return null
     },
+    InsertCodeBlock: () => {
+      pluginCalls.add('InsertCodeBlock')
+      return null
+    },
     InsertThematicBreak: () => {
       pluginCalls.add('InsertThematicBreak')
       return null
@@ -109,6 +131,11 @@ vi.mock('@mdxeditor/editor', async () => {
     },
     codeBlockPlugin: () => ({ name: 'codeBlockPlugin' }),
     codeMirrorPlugin: () => ({ name: 'codeMirrorPlugin' }),
+    diffSourcePlugin: () => ({ name: 'diffSourcePlugin' }),
+    DiffSourceToggleWrapper: ({ children }: { readonly children: React.ReactNode }) => {
+      pluginCalls.add('DiffSourceToggleWrapper')
+      return React.createElement(React.Fragment, null, children)
+    },
     headingsPlugin: () => ({ name: 'headingsPlugin' }),
     imagePlugin: (input: { readonly imageUploadHandler: (file: File) => Promise<string> }) => {
       pluginCalls.add('imagePlugin')
@@ -295,16 +322,58 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().dataset.toolbarPlugin).toBe('true')
     expect(editor().dataset.toolbarControls?.split(',')).toEqual(expect.arrayContaining([
       'toolbarPlugin',
+      'DiffSourceToggleWrapper',
       'UndoRedo',
       'BlockTypeSelect',
       'BoldItalicUnderlineToggles',
       'ListsToggle',
       'CreateLink',
+      'InsertCodeBlock',
       'imagePlugin',
       'InsertTable',
       'InsertThematicBreak',
     ]))
     expect(buttonWithText('插入图片')).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it('localizes mdxeditor toolbar labels through the translation prop', () => {
+    renderRenderer({ edit: editable() })
+
+    expect(editor().dataset.translationBold).toBe('加粗')
+    expect(editor().dataset.translationUndo).toBe('撤销 Ctrl+Z')
+    expect(editor().dataset.translationHeading).toBe('标题 2')
+    expect(editor().dataset.translationUnknown).toBe('Fallback OK')
+  })
+
+  it('lets the mdxeditor root grow with long content so the sticky toolbar remains bounded by the full document', () => {
+    renderRenderer({ edit: editable() })
+
+    const rootElement = mdxEditorRoot()
+    expect(rootElement.classList.contains('min-h-full')).toBe(true)
+    expect(rootElement.classList.contains('h-full')).toBe(false)
+  })
+
+  it('disables image source import while markdown has unsaved edits', async () => {
+    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+      canImport: true,
+      sources: [
+        imageSource({
+          src: 'https://example.test/external.png',
+          canImport: true,
+          kind: 'external',
+        }),
+      ],
+    }))
+    const importImages = vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
+    renderRenderer({ edit: editable(), imageSourceContext: { context: 'owner', itemId: 'file' } })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await inputValue(editor(), '# Draft')
+
+    expect(buttonWithText('图片来源 1').disabled).toBe(true)
+    expect(importImages).not.toHaveBeenCalled()
   })
 
   it('asks before uploading a selected image as a public asset', async () => {
@@ -417,6 +486,15 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(document.body.textContent).toContain('内容已截断')
   })
+
+  it('shows recoverable source editing when mdx parsing fails', async () => {
+    renderRenderer({ edit: editable() })
+
+    await inputValue(editor(), '# broken-mdx')
+
+    expect(document.body.textContent).toContain('源码')
+    expect(document.body.textContent).toContain('解析失败')
+  })
 })
 
 function renderRenderer(input: {
@@ -424,6 +502,7 @@ function renderRenderer(input: {
   readonly preview?: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
+  readonly imageSourceContext?: ComponentProps<typeof DriveMDXeditorRenderer>['imageSourceContext']
 } = {}) {
   host = document.createElement('div')
   document.body.append(host)
@@ -438,6 +517,7 @@ function renderRenderer(input: {
           preview={nextInput.preview ?? basePreview()}
           edit={nextInput.edit === undefined ? editable() : nextInput.edit}
           editContext={nextInput.editContext ?? createEditContext()}
+          imageSourceContext={nextInput.imageSourceContext}
         />
       </DriveRendererToolbarProvider>
     )
@@ -535,6 +615,58 @@ function createPublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DriveP
   }
 }
 
+function imageSources(overrides: Partial<DriveDocumentImageSourcesDto> = {}): DriveDocumentImageSourcesDto {
+  const sources = overrides.sources ?? []
+  return {
+    itemId: 'file',
+    versionId: 'version-1',
+    canImport: false,
+    sources,
+    summary: {
+      total: sources.length,
+      ownerAsset: sources.filter((source) => source.kind === 'owner_asset').length,
+      collaboratorAsset: sources.filter((source) => source.kind === 'collaborator_asset').length,
+      external: sources.filter((source) => source.kind === 'external').length,
+      invalid: sources.filter((source) => source.kind === 'invalid').length,
+      unsupported: sources.filter((source) => source.kind === 'unsupported').length,
+      importable: sources.filter((source) => source.canImport).length,
+    },
+    ...overrides,
+  }
+}
+
+function imageSource(overrides: Partial<DriveDocumentImageSource> = {}): DriveDocumentImageSource {
+  return {
+    id: 'source-1',
+    imageKey: 'source-1',
+    src: 'https://example.test/image.png',
+    kind: 'external',
+    occurrenceCount: 1,
+    canImport: true,
+    status: 'ready',
+    ...overrides,
+  }
+}
+
+function imageImportResult() {
+  return {
+    itemId: 'file',
+    versionId: 'version-2',
+    imported: [{
+      previousSrc: 'https://example.test/external.png',
+      nextSrc: 'https://synapse.test/files/asset',
+      assetId: 'asset-1',
+      size: '10',
+    }],
+    failed: [],
+    summary: {
+      importedCount: 1,
+      failedCount: 0,
+      replacedOccurrenceCount: 1,
+    },
+  }
+}
+
 function createEditContext(input: Partial<DriveRendererEditContext> = {}) {
   return {
     reload: vi.fn(async () => baseSnapshot()),
@@ -584,6 +716,12 @@ async function selectImage(file: File) {
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-mdxeditor="true"]')
   if (!(element instanceof HTMLTextAreaElement)) throw new Error('mdx editor not found')
+  return element
+}
+
+function mdxEditorRoot(): HTMLElement {
+  const element = document.querySelector('[data-testid="mdx-editor-root"]')
+  if (!(element instanceof HTMLElement)) throw new Error('mdx editor root not found')
   return element
 }
 

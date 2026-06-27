@@ -3,10 +3,13 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { DriveDocumentImageSource, DriveDocumentImageSourcesDto } from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
+import { driveBrowserApi } from '@/lib/api'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
+import type { DriveRendererEditContext } from './drive-renderer-shell'
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
@@ -603,6 +606,35 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(elementWithText('Lost comment').textContent).toContain('位置已变化')
   })
+
+  it('registers image source action and imports owner markdown images', async () => {
+    const reload = vi.fn(async () => ({} as never))
+    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+      canImport: true,
+      sources: [
+        imageSource({
+          src: 'https://example.test/external.png',
+          canImport: true,
+          kind: 'external',
+        }),
+      ],
+    }))
+    vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
+
+    renderMarkdown({ editContext: { reload, reloading: false, saveText: vi.fn(), savingText: false } })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await click(buttonWithText('图片来源 1'))
+    await click(buttonWithText('转存全部'))
+
+    expect(driveBrowserApi.importOwnerImageSources).toHaveBeenCalledWith('item-1', {
+      baseVersionId: 'version-1',
+      sources: [{ src: 'https://example.test/external.png' }],
+    })
+    expect(reload).toHaveBeenCalled()
+  })
 })
 
 function renderMarkdown({
@@ -610,11 +642,13 @@ function renderMarkdown({
   previewData = preview(),
   edit = editable(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
+  editContext,
 }: {
   readonly currentItem?: ReturnType<typeof current>
   readonly previewData?: ReturnType<typeof preview>
   readonly edit?: ComponentProps<typeof DriveMarkdownRenderer>['edit']
   readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
+  readonly editContext?: DriveRendererEditContext
 } = {}) {
   host = document.createElement('div')
   host.style.overflow = 'auto'
@@ -637,6 +671,7 @@ function renderMarkdown({
           preview={previewData}
           edit={edit}
           annotationContext={annotationContext}
+          editContext={editContext}
         />
       </DriveRendererToolbarProvider>
     )
@@ -767,6 +802,58 @@ function createAnnotationsMock() {
     deletingComment: false,
     deleteThread: vi.fn(async () => undefined),
     deletingThread: false,
+  }
+}
+
+function imageSources(overrides: Partial<DriveDocumentImageSourcesDto> = {}): DriveDocumentImageSourcesDto {
+  const sources = overrides.sources ?? []
+  return {
+    itemId: 'item-1',
+    versionId: 'version-1',
+    canImport: false,
+    sources,
+    summary: {
+      total: sources.length,
+      ownerAsset: sources.filter((source) => source.kind === 'owner_asset').length,
+      collaboratorAsset: sources.filter((source) => source.kind === 'collaborator_asset').length,
+      external: sources.filter((source) => source.kind === 'external').length,
+      invalid: sources.filter((source) => source.kind === 'invalid').length,
+      unsupported: sources.filter((source) => source.kind === 'unsupported').length,
+      importable: sources.filter((source) => source.canImport).length,
+    },
+    ...overrides,
+  }
+}
+
+function imageSource(overrides: Partial<DriveDocumentImageSource> = {}): DriveDocumentImageSource {
+  return {
+    id: 'source-1',
+    imageKey: 'source-1',
+    src: 'https://example.test/image.png',
+    kind: 'external',
+    occurrenceCount: 1,
+    canImport: true,
+    status: 'ready',
+    ...overrides,
+  }
+}
+
+function imageImportResult() {
+  return {
+    itemId: 'item-1',
+    versionId: 'version-2',
+    imported: [{
+      previousSrc: 'https://example.test/external.png',
+      nextSrc: 'https://synapse.test/files/asset',
+      assetId: 'asset-1',
+      size: '10',
+    }],
+    failed: [],
+    summary: {
+      importedCount: 1,
+      failedCount: 0,
+      replacedOccurrenceCount: 1,
+    },
   }
 }
 

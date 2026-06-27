@@ -16,6 +16,9 @@ import type {
   DriveAnnotationThreadDto,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
+  DriveDocumentImageImportRequest,
+  DriveDocumentImageImportResult,
+  DriveDocumentImageSourcesDto,
   DriveFileContentUpdateResult,
   DriveFileTextUpdateInput,
   DriveFileVersionDto,
@@ -884,6 +887,34 @@ export const driveBrowserApi = {
         : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/content`,
       {
         method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    ),
+  scanOwnerImageSources: (itemId: string) =>
+    request<DriveDocumentImageSourcesDto>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/image-sources`
+    ),
+  importOwnerImageSources: (itemId: string, input: DriveDocumentImageImportRequest) =>
+    request<DriveDocumentImageImportResult>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/image-sources/import`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    ),
+  scanShareImageSources: (shareId: string, itemId?: string | null) =>
+    request<DriveDocumentImageSourcesDto>(
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/image-sources`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/image-sources`
+    ),
+  importShareImageSources: (shareId: string, itemId: string | null | undefined, input: DriveDocumentImageImportRequest) =>
+    request<DriveDocumentImageImportResult>(
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/image-sources/import`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/image-sources/import`,
+      {
+        method: 'POST',
         body: JSON.stringify(input),
       }
     ),

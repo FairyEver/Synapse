@@ -434,6 +434,62 @@ describe('driveBrowserApi', () => {
     )
   })
 
+  it('uses markdown image source endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveBrowserApi.scanOwnerImageSources('item/id')
+    await driveBrowserApi.importOwnerImageSources('item/id', {
+      baseVersionId: 'version-1',
+      sources: [{ src: 'https://example.test/a.png' }],
+    })
+    await driveBrowserApi.scanShareImageSources('shr/id')
+    await driveBrowserApi.scanShareImageSources('shr/id', 'child/id')
+    await driveBrowserApi.importShareImageSources('shr/id', 'child/id', {
+      baseVersionId: 'version-2',
+      sources: [{ src: 'https://example.test/b.png' }],
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/owner/items/item%2Fid/image-sources',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/owner/items/item%2Fid/image-sources/import',
+      expect.objectContaining({
+        body: JSON.stringify({
+          baseVersionId: 'version-1',
+          sources: [{ src: 'https://example.test/a.png' }],
+        }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/drive/browser/shares/shr%2Fid/image-sources',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources/import',
+      expect.objectContaining({
+        body: JSON.stringify({
+          baseVersionId: 'version-2',
+          sources: [{ src: 'https://example.test/b.png' }],
+        }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+  })
+
   it('does not pass share password query when loading public browser snapshots', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
