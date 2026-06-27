@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_QUICK_INPUTS } from "../../constants/defaults"
+import { DEFAULT_DOCK_APP_IDS } from "../../modules/apps/dock"
 import { SYNAPSE_APP_VERSION } from "../app-version"
 import {
   applySynapseConfigPatch,
@@ -673,15 +674,7 @@ describe("Synapse user variables config", () => {
   })
 
   it("seeds and normalizes Dock app ids in global config", () => {
-    expect(createDefaultConfig().global.dockAppIds).toEqual([
-      "agent",
-      "drive",
-      "automation",
-      "workflow",
-      "terminal",
-      "settings",
-      "launcher",
-    ])
+    expect(createDefaultConfig().global.dockAppIds).toEqual(DEFAULT_DOCK_APP_IDS)
 
     const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
@@ -693,14 +686,6 @@ describe("Synapse user variables config", () => {
       },
     })
 
-    expect(config.global.dockAppIds).toEqual([
-      "agent",
-      "drive",
-      "automation",
-      "workflow",
-      "terminal",
-      "settings",
-      "launcher",
-    ])
+    expect(config.global.dockAppIds).toEqual(["database", "launcher"])
   })
 })
