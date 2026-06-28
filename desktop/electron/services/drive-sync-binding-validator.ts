@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { lstat, readFile } from "node:fs/promises"
 import path from "node:path"
 import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
@@ -12,6 +12,7 @@ export async function previewDriveSyncBinding(input: {
   readonly kind: "file" | "folder"
   readonly localPath: string
   readonly remoteExists: boolean
+  readonly remoteSize?: string | null
   readonly directionHint?: DriveSyncInitialDirection | null
   readonly activeBindings: readonly DriveSyncBindingEntryV1[]
   readonly importGitignore?: boolean
@@ -29,6 +30,18 @@ export async function previewDriveSyncBinding(input: {
     : []
 
   if (input.kind === "file") {
+    if (input.remoteExists && input.directionHint === "bind_existing") {
+      if (local.kind !== "file") {
+        const reason = local.kind === "folder"
+          ? "本地路径是文件夹，不能绑定云盘文件。"
+          : "本地文件不存在，不能和已有云盘文件建立绑定。"
+        return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules)
+      }
+      if (!await localFileSizeMatchesRemote(localPath, input.remoteSize)) {
+        return blocked(localPath, local.kind, local.empty, "本地文件与云盘文件大小不一致，不能直接建立绑定。", importedGitignoreRules)
+      }
+      return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules)
+    }
     if (input.remoteExists && local.kind === "missing") {
       return ready(localPath, local.kind, local.empty, "remote_to_local", importedGitignoreRules)
     }
@@ -44,6 +57,15 @@ export async function previewDriveSyncBinding(input: {
   }
 
   if (input.remoteExists) {
+    if (input.directionHint === "bind_existing") {
+      if (local.kind !== "folder") {
+        const reason = local.kind === "file"
+          ? "本地路径是文件，不能绑定云盘文件夹。"
+          : "本地文件夹不存在，不能和已有云盘文件夹建立绑定。"
+        return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules)
+      }
+      return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules)
+    }
     if (local.kind === "missing" || (local.kind === "folder" && local.empty === true)) {
       return ready(localPath, local.kind, local.empty, "remote_to_local", importedGitignoreRules)
     }
@@ -61,6 +83,13 @@ export async function previewDriveSyncBinding(input: {
     ? "本地路径是文件，不能创建云盘文件夹绑定。"
     : "本地文件夹不存在，不能上传到新的云盘文件夹。"
   return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules)
+}
+
+async function localFileSizeMatchesRemote(localPath: string, remoteSize: string | null | undefined): Promise<boolean> {
+  const size = Number(remoteSize)
+  if (!Number.isSafeInteger(size) || size < 0) return false
+  const stats = await lstat(localPath)
+  return stats.size === size
 }
 
 function ready(

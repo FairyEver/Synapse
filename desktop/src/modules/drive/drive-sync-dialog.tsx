@@ -24,6 +24,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 
+type DriveSyncBindingMode = "bind_existing" | "remote_to_local"
+
 export type DriveSyncDialogState =
   | { readonly mode: "status"; readonly item: null }
   | { readonly mode: "bind"; readonly item: DriveItemDto }
@@ -42,6 +44,7 @@ export function DriveSyncDialog({
   readonly state: DriveSyncDialogState | null
 }) {
   const [localPath, setLocalPath] = useState("")
+  const [bindingMode, setBindingMode] = useState<DriveSyncBindingMode>("bind_existing")
   const [preview, setPreview] = useState<DriveSyncBindingPreviewDto | null>(null)
   const [excludeText, setExcludeText] = useState("")
   const [busy, setBusy] = useState(false)
@@ -50,6 +53,7 @@ export function DriveSyncDialog({
   useEffect(() => {
     if (!open) {
       setLocalPath("")
+      setBindingMode("bind_existing")
       setPreview(null)
       setExcludeText("")
     }
@@ -61,32 +65,50 @@ export function DriveSyncDialog({
 
   const chooseLocalPath = async () => {
     if (!item) return
-    const nextPath = await requireSynapseBridge().driveSync.chooseLocalPath({ kind: item.type })
-    if (nextPath) setLocalPath(nextPath)
+    const nextPath = await requireSynapseBridge().driveSync.chooseLocalPath({
+      kind: item.type,
+      mode: bindingMode,
+      defaultName: item.name,
+    })
+    if (!nextPath) return
+    setLocalPath(nextPath)
+    await previewBinding(nextPath, bindingMode)
   }
 
-  const previewBinding = async () => {
-    if (!item || localPath.trim().length === 0) return
+  const previewBinding = async (
+    nextLocalPath = localPath,
+    nextMode: DriveSyncBindingMode = bindingMode,
+  ): Promise<DriveSyncBindingPreviewDto | null> => {
+    if (!item || nextLocalPath.trim().length === 0) return null
     setBusy(true)
     try {
-      setPreview(await requireSynapseBridge().driveSync.previewBinding({
+      const nextPreview = await requireSynapseBridge().driveSync.previewBinding({
         driveItemId: item.id,
         driveItemName: item.name,
         kind: item.type,
         drivePathHint: item.name,
-        localPath: localPath.trim(),
+        localPath: nextLocalPath.trim(),
         remoteExists: true,
+        directionHint: nextMode,
         importGitignore: item.type === "folder",
-      }))
+      })
+      setPreview(nextPreview)
+      return nextPreview
     } catch (error) {
       toast(errorMessage(error, "校验失败"))
+      return null
     } finally {
       setBusy(false)
     }
   }
 
   const createBinding = async () => {
-    if (!item || !preview?.direction || preview.status !== "ready") return
+    if (!item) return
+    const currentPath = localPath.trim()
+    const currentPreview = preview?.localPath === currentPath && preview.direction === bindingMode
+      ? preview
+      : await previewBinding(currentPath, bindingMode)
+    if (!currentPreview?.direction || currentPreview.status !== "ready") return
     setBusy(true)
     try {
       await requireSynapseBridge().driveSync.createSafeBinding({
@@ -94,9 +116,9 @@ export function DriveSyncDialog({
         driveItemName: item.name,
         kind: item.type,
         drivePathHint: item.name,
-        localPath: localPath.trim(),
-        direction: preview.direction,
-        excludeRules: parseExcludeText(excludeText),
+        localPath: currentPath,
+        direction: currentPreview.direction,
+        excludeRules: item.type === "folder" ? parseExcludeText(excludeText) : [],
         importGitignore: item.type === "folder",
       })
       await refreshSnapshot()
@@ -111,41 +133,88 @@ export function DriveSyncDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>{item ? "绑定同步" : "同步状态"}</DialogTitle>
-        </DialogHeader>
-        {item ? (
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="drive-sync-local-path">本地路径</Label>
-              <InputGroup>
-                <InputGroupInput id="drive-sync-local-path" value={localPath} onChange={(event) => setLocalPath(event.target.value)} />
-                <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>选择</InputGroupButton>
-              </InputGroup>
+      <DialogContent
+        className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
+        aria-describedby={undefined}
+      >
+        <div className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden">
+          <DialogHeader className="px-5 pt-5">
+            <DialogTitle>{item ? "绑定同步" : "同步状态"}</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="px-5 py-4">
+              {item ? (
+                <div className="grid gap-4">
+                  <div className="inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
+                    <Button
+                      type="button"
+                      variant={bindingMode === "bind_existing" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => {
+                        setBindingMode("bind_existing")
+                        setLocalPath("")
+                        setPreview(null)
+                      }}
+                    >
+                      绑定已有本地项
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={bindingMode === "remote_to_local" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => {
+                        setBindingMode("remote_to_local")
+                        setLocalPath("")
+                        setPreview(null)
+                      }}
+                    >
+                      下载到本地
+                    </Button>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="drive-sync-local-path">本地路径</Label>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="drive-sync-local-path"
+                        value={localPath}
+                        onChange={(event) => {
+                          setLocalPath(event.target.value)
+                          setPreview(null)
+                        }}
+                      />
+                      <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>选择</InputGroupButton>
+                    </InputGroup>
+                  </div>
+                  {item.type === "folder" ? (
+                    <details className="grid gap-2">
+                      <summary className="cursor-default text-sm font-medium">高级设置</summary>
+                      <div className="mt-2 grid gap-2">
+                        <Label htmlFor="drive-sync-excludes">排除规则（可选）</Label>
+                        <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => setExcludeText(event.target.value)} />
+                      </div>
+                    </details>
+                  ) : null}
+                  {preview ? <DriveSyncPreview preview={preview} /> : null}
+                </div>
+              ) : (
+                <DriveSyncStatusPanel snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
+              )}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="drive-sync-excludes">排除规则</Label>
-              <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => setExcludeText(event.target.value)} />
-            </div>
-            {preview ? <DriveSyncPreview preview={preview} /> : null}
-          </div>
-        ) : (
-          <DriveSyncStatusPanel snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
-        )}
-        <DialogFooter>
-          {item ? (
-            <>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => { void previewBinding() }}>校验</Button>
-              <Button type="button" disabled={busy || preview?.status !== "ready"} onClick={() => { void createBinding() }}>创建绑定</Button>
-            </>
-          ) : (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => { void refreshSnapshot() }}>
-              <RefreshCw data-icon="inline-start" />
-              刷新
-            </Button>
-          )}
-        </DialogFooter>
+          </ScrollArea>
+          <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+            {item ? (
+              <>
+                <Button type="button" variant="outline" disabled={busy || localPath.trim().length === 0} onClick={() => { void previewBinding() }}>校验</Button>
+                <Button type="button" disabled={busy || localPath.trim().length === 0} onClick={() => { void createBinding() }}>创建绑定</Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" disabled={busy} onClick={() => { void refreshSnapshot() }}>
+                <RefreshCw data-icon="inline-start" />
+                刷新
+              </Button>
+            )}
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -198,26 +267,26 @@ function DriveSyncStatusPanel({
   }
 
   return (
-    <Tabs defaultValue="bindings">
+    <Tabs defaultValue="bindings" className="grid gap-3">
       <TabsList>
         <TabsTrigger value="bindings">绑定</TabsTrigger>
         <TabsTrigger value="conflicts">冲突</TabsTrigger>
         <TabsTrigger value="operations">记录</TabsTrigger>
       </TabsList>
-      <TabsContent value="bindings">
-        <ScrollArea className="max-h-96">
-          <div className="grid gap-3 pr-3">
-            {bindings.length === 0 ? (
-              <div className="flex min-h-24 items-center justify-center rounded-lg border text-sm text-muted-foreground">暂无绑定</div>
-            ) : bindings.map((binding) => (
-              <div key={binding.id} className="rounded-lg border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
-                    <div className="truncate text-xs text-muted-foreground">{binding.localPath}</div>
-                  </div>
-                  <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} />
+      <TabsContent value="bindings" className="mt-0">
+        <div className="grid gap-3">
+          {bindings.length === 0 ? (
+            <DriveSyncEmptyState title="暂无绑定" />
+          ) : bindings.map((binding) => (
+            <div key={binding.id} className="rounded-lg border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
+                  <div className="truncate text-xs text-muted-foreground">{binding.localPath}</div>
                 </div>
+                <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} />
+              </div>
+              {binding.kind === "folder" ? (
                 <div className="mt-3 grid gap-2">
                   <Label htmlFor={`drive-sync-excludes-${binding.id}`}>排除规则</Label>
                   <Textarea
@@ -244,18 +313,26 @@ function DriveSyncStatusPanel({
                     </Button>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
+              ) : null}
+            </div>
+          ))}
+        </div>
       </TabsContent>
-      <TabsContent value="conflicts">
+      <TabsContent value="conflicts" className="mt-0">
         <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
       </TabsContent>
-      <TabsContent value="operations">
+      <TabsContent value="operations" className="mt-0">
         <DriveSyncOperationTable operations={operations} />
       </TabsContent>
     </Tabs>
+  )
+}
+
+function DriveSyncEmptyState({ title }: { readonly title: string }) {
+  return (
+    <div className="flex min-h-48 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+      {title}
+    </div>
   )
 }
 
@@ -288,7 +365,7 @@ function DriveSyncConflictTable({
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (conflicts.length === 0) {
-    return <div className="flex min-h-24 items-center justify-center rounded-lg border text-sm text-muted-foreground">暂无冲突</div>
+    return <DriveSyncEmptyState title="暂无冲突" />
   }
   return (
     <Table>
@@ -321,7 +398,7 @@ function DriveSyncConflictTable({
 
 function DriveSyncOperationTable({ operations }: { readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]> }) {
   if (operations.length === 0) {
-    return <div className="flex min-h-24 items-center justify-center rounded-lg border text-sm text-muted-foreground">暂无记录</div>
+    return <DriveSyncEmptyState title="暂无记录" />
   }
   return (
     <Table>
@@ -380,6 +457,7 @@ function parseExcludeText(value: string): string[] {
 function formatDirection(direction: DriveSyncBindingPreviewDto["direction"]): string {
   if (direction === "remote_to_local") return "云端到本地"
   if (direction === "local_to_remote") return "本地到云端"
+  if (direction === "bind_existing") return "建立绑定"
   return "-"
 }
 

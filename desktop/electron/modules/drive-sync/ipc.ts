@@ -1,11 +1,12 @@
 import { dialog } from "electron"
+import path from "node:path"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
-const driveSyncInitialDirectionSchema = z.enum(["remote_to_local", "local_to_remote"])
+const driveSyncInitialDirectionSchema = z.enum(["remote_to_local", "local_to_remote", "bind_existing"])
 const driveSyncBindingPreviewStatusSchema = z.enum(["ready", "blocked", "warning"])
 const driveSyncConflictResolutionSchema = z.enum(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
 const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "removed"] as const
@@ -91,6 +92,7 @@ const driveSyncPreviewBindingInputSchema = z.object({
   drivePathHint: z.string().nullable().optional(),
   localPath: z.string().min(1),
   remoteExists: z.boolean(),
+  directionHint: driveSyncInitialDirectionSchema.nullable().optional(),
   importGitignore: z.boolean().optional(),
 })
 
@@ -122,6 +124,8 @@ const driveSyncResolveConflictInputSchema = z.object({
 
 const driveSyncChooseLocalPathInputSchema = z.object({
   kind: driveItemKindSchema,
+  mode: z.enum(["bind_existing", "remote_to_local"]).optional(),
+  defaultName: z.string().optional(),
 })
 
 const driveSyncEventWiredServices = new WeakSet<DriveSyncService>()
@@ -241,10 +245,22 @@ export const driveSyncIpcModule: IpcModule = {
       request: driveSyncChooseLocalPathInputSchema,
       response: z.string().nullable(),
       handler: async (_ctx, request: z.infer<typeof driveSyncChooseLocalPathInputSchema>) => {
+        const mode = request.mode ?? "bind_existing"
+        if (mode === "remote_to_local" && request.kind === "file") {
+          const result = await dialog.showSaveDialog({
+            defaultPath: request.defaultName,
+          })
+          return result.canceled ? null : result.filePath ?? null
+        }
         const result = await dialog.showOpenDialog({
-          properties: [request.kind === "folder" ? "openDirectory" : "openFile"],
+          properties: [request.kind === "folder" || mode === "remote_to_local" ? "openDirectory" : "openFile"],
         })
-        return result.canceled ? null : result.filePaths[0] ?? null
+        const selectedPath = result.canceled ? null : result.filePaths[0] ?? null
+        if (!selectedPath) return null
+        if (mode === "remote_to_local" && request.kind === "folder") {
+          return path.join(selectedPath, request.defaultName || "同步文件夹")
+        }
+        return selectedPath
       },
     },
   },

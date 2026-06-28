@@ -399,7 +399,7 @@ describe("drive URL helpers", () => {
   })
 
   it("exports stable Drive sync completion values", () => {
-    expect(DRIVE_SYNC_INITIAL_DIRECTIONS).toEqual(["remote_to_local", "local_to_remote"])
+    expect(DRIVE_SYNC_INITIAL_DIRECTIONS).toEqual(["remote_to_local", "local_to_remote", "bind_existing"])
     expect(DRIVE_SYNC_BINDING_PREVIEW_STATUSES).toEqual(["ready", "blocked", "warning"])
     expect(DRIVE_SYNC_CONFLICT_RESOLUTIONS).toEqual(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
   })
