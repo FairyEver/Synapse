@@ -1674,6 +1674,26 @@ describe("DrivePublicController public asset streaming", () => {
   })
 })
 
+describe("DrivePublicController link intake", () => {
+  it("resolves a Drive link without requiring user auth", async () => {
+    const links = {
+      resolve: vi.fn(async () => ({
+        ok: true,
+        linkType: "share",
+        access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+        root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
+        ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+      })),
+    }
+    const controller = new DrivePublicController({} as never, {} as never, undefined, undefined, undefined, undefined, undefined, links as never)
+
+    await expect(controller.resolveDriveLink({ url: "https://synapse.test/share/shr_123" })).resolves.toMatchObject({
+      linkType: "share",
+      root: { name: "需求说明.md" },
+    })
+  })
+})
+
 function createBrowserSnapshot(): DriveBrowserSnapshotDto {
   return {
     context: "share",
