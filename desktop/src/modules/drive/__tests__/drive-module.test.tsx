@@ -33,6 +33,8 @@ import { DriveModule } from "../index"
 
 const mocks = vi.hoisted(() => ({
   completeDriveUpload: vi.fn(),
+  chooseDriveSyncLocalPath: vi.fn(),
+  createDriveSyncBinding: vi.fn(),
   createDriveFolder: vi.fn(),
   deleteDriveItem: vi.fn(),
   disableDriveShare: vi.fn(),
@@ -58,6 +60,13 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
   onDriveSyncChanged: vi.fn(),
+  pauseDriveSyncBinding: vi.fn(),
+  rescanDriveSyncBinding: vi.fn(),
+  resolveDriveSyncConflict: vi.fn(),
+  resumeDriveSyncBinding: vi.fn(),
+  retryDriveSyncOperation: vi.fn(),
+  removeDriveSyncBinding: vi.fn(),
+  updateDriveSyncExcludeRules: vi.fn(),
   writeClipboardText: vi.fn(),
 }))
 
@@ -126,7 +135,16 @@ vi.mock("@/lib/electron-bridge", () => ({
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
     driveSync: {
+      chooseLocalPath: mocks.chooseDriveSyncLocalPath,
+      createBinding: mocks.createDriveSyncBinding,
       getSnapshot: mocks.getDriveSyncSnapshot,
+      pauseBinding: mocks.pauseDriveSyncBinding,
+      removeBinding: mocks.removeDriveSyncBinding,
+      rescanBinding: mocks.rescanDriveSyncBinding,
+      resolveConflict: mocks.resolveDriveSyncConflict,
+      resumeBinding: mocks.resumeDriveSyncBinding,
+      retryOperation: mocks.retryDriveSyncOperation,
+      updateExcludeRules: mocks.updateDriveSyncExcludeRules,
       onChanged: mocks.onDriveSyncChanged,
     },
     shell: {
@@ -142,6 +160,20 @@ beforeEach(() => {
   accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
   accountActions.refresh.mockResolvedValue(accountState.current)
   accountActions.logout.mockResolvedValue({ status: "unauthenticated" })
+  mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/docs")
+  mocks.createDriveSyncBinding.mockResolvedValue({
+    id: "binding-1",
+    driveItemId: "folder-1",
+    driveItemName: "Docs",
+    kind: "folder",
+    localPath: "/Users/me/docs",
+    status: "active",
+    remoteCursor: null,
+    excludeRules: [".git/"],
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
+    lastSyncedAt: null,
+  })
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: mocks.writeClipboardText },
@@ -204,6 +236,13 @@ beforeEach(() => {
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
   mocks.onDriveSyncChanged.mockReturnValue(() => undefined)
+  mocks.pauseDriveSyncBinding.mockResolvedValue({})
+  mocks.rescanDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.resolveDriveSyncConflict.mockResolvedValue(undefined)
+  mocks.resumeDriveSyncBinding.mockResolvedValue({})
+  mocks.retryDriveSyncOperation.mockResolvedValue(undefined)
+  mocks.removeDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.updateDriveSyncExcludeRules.mockResolvedValue({})
   mocks.writeClipboardText.mockResolvedValue(undefined)
 })
 
@@ -402,6 +441,141 @@ describe("DriveModule", () => {
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("同步")
     expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("2")
+  })
+
+  it("opens drive sync status actions for conflicts and failed operations", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue({
+      bindings: [{
+        id: "binding-1",
+        driveItemId: "folder-1",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: "/Users/me/docs",
+        status: "active",
+        remoteCursor: "1",
+        excludeRules: [".git/"],
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        lastSyncedAt: null,
+      }],
+      conflicts: [{
+        id: "conflict-1",
+        bindingId: "binding-1",
+        relativePath: "a.md",
+        type: "delete_vs_modify",
+        createdAt: "2026-06-28T00:00:00.000Z",
+      }],
+      operations: [{
+        id: "operation-1",
+        bindingId: "binding-1",
+        relativePath: "a.md",
+        status: "error",
+        message: "network",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }],
+      summary: {
+        activeBindingCount: 1,
+        runningOperationCount: 0,
+        conflictCount: 1,
+        errorCount: 1,
+      },
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个冲突")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("确认删除")
+    expect(document.body.textContent).toContain("重试")
+
+    await clickButtonText("确认删除")
+    await flushAct()
+    expect(mocks.resolveDriveSyncConflict).toHaveBeenCalledWith({ id: "conflict-1", action: "confirm_delete" })
+
+    await clickButtonText("重试")
+    await flushAct()
+    expect(mocks.retryDriveSyncOperation).toHaveBeenCalledWith({ id: "operation-1" })
+  })
+
+  it("updates and removes a binding from drive sync settings", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue({
+      bindings: [{
+        id: "binding-1",
+        driveItemId: "folder-1",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: "/Users/me/docs",
+        status: "active",
+        remoteCursor: "1",
+        excludeRules: [".git/", "dist/"],
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        lastSyncedAt: null,
+      }],
+      conflicts: [],
+      operations: [],
+      summary: {
+        activeBindingCount: 1,
+        runningOperationCount: 0,
+        conflictCount: 0,
+        errorCount: 0,
+      },
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await flushAct()
+    await clickButtonText("设置")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("同步设置")
+    await setTextareaValue("#drive-sync-exclude-rules", "dist/\n*.tmp")
+    await clickButtonText("保存")
+    await flushAct()
+
+    expect(mocks.updateDriveSyncExcludeRules).toHaveBeenCalledWith({
+      id: "binding-1",
+      excludeRules: ["dist/", "*.tmp"],
+    })
+
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await flushAct()
+    await clickButtonText("设置")
+    await flushAct()
+    await clickButtonText("解除绑定")
+    await flushAct()
+
+    expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+  })
+
+  it("binds a drive row to a selected local path", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "Docs", type: "folder" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+    await openRowMenu("Docs")
+    await clickMenuItemText("同步")
+    await flushAct()
+
+    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({ kind: "folder", defaultName: "Docs" })
+    expect(document.body.textContent).toContain("绑定同步")
+    expect(Array.from(document.body.querySelectorAll<HTMLInputElement>("input")).map((input) => input.value)).toContain("/Users/me/docs")
+
+    await clickButtonText("绑定")
+    await flushAct()
+
+    expect(mocks.createDriveSyncBinding).toHaveBeenCalledWith({
+      driveItemId: "folder-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      drivePathHint: "/Docs",
+      localPath: "/Users/me/docs",
+      initialDirection: "download_remote",
+    })
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -1619,6 +1793,7 @@ describe("DriveModule", () => {
     expect(menu?.querySelectorAll("[role='menuitem'] svg")).toHaveLength(0)
     expect(menu?.querySelectorAll("[role='separator']")).toHaveLength(0)
     expect(menuItemTexts()).toEqual([
+      "同步",
       "重命名",
       "移动",
     ])
@@ -1634,7 +1809,7 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["重命名", "移动"])
+    expect(menuItemTexts()).toEqual(["同步", "重命名", "移动"])
     expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
   })
 
@@ -2251,11 +2426,32 @@ async function clickText(text: string): Promise<void> {
   })
 }
 
+async function clickMenuItemText(text: string): Promise<void> {
+  const element = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!element) throw new Error(`Menu item not found: ${text}`)
+  await act(async () => {
+    element.click()
+    await flushPromises()
+  })
+}
+
 async function clickButtonByLabel(label: string): Promise<void> {
   const button = queryButtonByLabel(label)
   if (!button) throw new Error(`Button not found: ${label}`)
   await act(async () => {
     button.click()
+    await flushPromises()
+  })
+}
+
+async function setTextareaValue(selector: string, value: string): Promise<void> {
+  const textarea = document.querySelector<HTMLTextAreaElement>(selector)
+  if (!textarea) throw new Error(`Textarea not found: ${selector}`)
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+    setter?.call(textarea, value)
+    textarea.dispatchEvent(new Event("input", { bubbles: true }))
     await flushPromises()
   })
 }

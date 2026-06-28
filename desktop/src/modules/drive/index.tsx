@@ -72,6 +72,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -99,6 +100,7 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -145,6 +147,18 @@ type DriveUsageState =
 type DriveAccessSettingsTarget = {
   readonly kind: "share"
   readonly item: DriveItemDto
+}
+
+type DriveSyncBindTarget = {
+  readonly item: DriveItemDto
+  readonly drivePathHint: string
+  readonly localPath: string
+}
+
+type DriveSyncBindingSettingsState = {
+  readonly bindingId: string
+  readonly driveItemName: string
+  readonly excludeRulesText: string
 }
 
 type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
@@ -228,6 +242,9 @@ function DriveModuleContent() {
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
   const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [syncBindTarget, setSyncBindTarget] = useState<DriveSyncBindTarget | null>(null)
+  const [syncBindingSettings, setSyncBindingSettings] = useState<DriveSyncBindingSettingsState | null>(null)
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
   const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -515,6 +532,96 @@ function DriveModuleContent() {
     }
   }, [deleteTarget, loadDriveUsage, loadItems])
 
+  const refreshSyncSnapshot = useCallback(async () => {
+    try {
+      setSyncSnapshot(await requireSynapseBridge().driveSync.getSnapshot())
+    } catch (rawError) {
+      toast(errorMessage(rawError, "同步状态加载失败"))
+    }
+  }, [])
+
+  const runSyncAction = useCallback(async (action: () => Promise<void>, successMessage?: string) => {
+    setSubmitting(true)
+    try {
+      await action()
+      if (successMessage) toast(successMessage)
+      await refreshSyncSnapshot()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "操作失败"))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [refreshSyncSnapshot])
+
+  const handleOpenSyncBinding = useCallback(async (item: DriveItemDto, drivePathHint: string) => {
+    try {
+      const localPath = await requireSynapseBridge().driveSync.chooseLocalPath({
+        kind: item.type,
+        defaultName: item.name,
+      })
+      if (!localPath) return
+      setSyncBindTarget({ item, drivePathHint, localPath })
+    } catch (rawError) {
+      toast(errorMessage(rawError, "本地路径选择失败"))
+    }
+  }, [])
+
+  const confirmSyncBinding = useCallback(async () => {
+    if (!syncBindTarget) return
+    setSubmitting(true)
+    try {
+      await requireSynapseBridge().driveSync.createBinding({
+        driveItemId: syncBindTarget.item.id,
+        driveItemName: syncBindTarget.item.name,
+        kind: syncBindTarget.item.type,
+        drivePathHint: syncBindTarget.drivePathHint,
+        localPath: syncBindTarget.localPath,
+        initialDirection: "download_remote",
+      })
+      toast("已绑定")
+      setSyncBindTarget(null)
+      setSyncDialogOpen(true)
+      await refreshSyncSnapshot()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "绑定失败"))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [refreshSyncSnapshot, syncBindTarget])
+
+  const openSyncBindingSettings = useCallback((binding: DriveSyncSnapshotDto["bindings"][number]) => {
+    setSyncBindingSettings({
+      bindingId: binding.id,
+      driveItemName: binding.driveItemName,
+      excludeRulesText: binding.excludeRules.join("\n"),
+    })
+  }, [])
+
+  const saveSyncBindingSettings = useCallback(async () => {
+    if (!syncBindingSettings) return
+    const excludeRules = syncBindingSettings.excludeRulesText
+      .split(/\r?\n/)
+      .map((rule) => rule.trim())
+      .filter(Boolean)
+    await runSyncAction(
+      () => requireSynapseBridge().driveSync.updateExcludeRules({
+        id: syncBindingSettings.bindingId,
+        excludeRules,
+      }).then(() => undefined),
+      "已保存",
+    )
+    setSyncBindingSettings(null)
+  }, [runSyncAction, syncBindingSettings])
+
+  const removeSyncBinding = useCallback(async () => {
+    if (!syncBindingSettings) return
+    await runSyncAction(
+      () => requireSynapseBridge().driveSync.removeBinding({ id: syncBindingSettings.bindingId }),
+      "已解除绑定",
+    )
+    setSyncBindingSettings(null)
+  }, [runSyncAction, syncBindingSettings])
+
   const handleShare = useCallback((item: DriveItemDto) => {
     setAccessSettingsTarget({ kind: "share", item })
   }, [])
@@ -637,6 +744,7 @@ function DriveModuleContent() {
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
         onOpenSites={() => setSitesOpen(true)}
+        onOpenSyncStatus={() => setSyncDialogOpen(true)}
         onRefresh={() => { void refreshDriveView() }}
       >
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
@@ -737,6 +845,7 @@ function DriveModuleContent() {
         onMove={handleMove}
         onDelete={handleDelete}
         onOpenItem={handlePreview}
+        onBind={handleOpenSyncBinding}
         onShare={handleShare}
         onPublishSite={setSiteCreateTarget}
         onOpenShareDetails={handleOpenShareDetails}
@@ -838,6 +947,31 @@ function DriveModuleContent() {
               open={publicLinksOpen}
               onOpenChange={setPublicLinksOpen}
               onDriveItemsChanged={loadItems}
+            />
+            <DriveSyncStatusDialog
+              open={syncDialogOpen}
+              snapshot={syncSnapshot}
+              submitting={submitting}
+              onOpenChange={setSyncDialogOpen}
+              onRefresh={refreshSyncSnapshot}
+              onRunAction={runSyncAction}
+              onOpenBindingSettings={openSyncBindingSettings}
+            />
+            <DriveSyncBindDialog
+              target={syncBindTarget}
+              submitting={submitting}
+              onCancel={() => setSyncBindTarget(null)}
+              onConfirm={confirmSyncBinding}
+            />
+            <DriveSyncBindingSettingsDialog
+              settings={syncBindingSettings}
+              submitting={submitting}
+              onChange={(excludeRulesText) => {
+                setSyncBindingSettings((current) => current ? { ...current, excludeRulesText } : current)
+              }}
+              onCancel={() => setSyncBindingSettings(null)}
+              onRemove={removeSyncBinding}
+              onSave={saveSyncBindingSettings}
             />
             <DriveSiteCreateDialog
               folder={siteCreateTarget}
@@ -1200,6 +1334,7 @@ function DriveFileList({
   onMove,
   onDelete,
   onOpenItem,
+  onBind,
   onShare,
   onPublishSite,
   onOpenShareDetails,
@@ -1218,6 +1353,7 @@ function DriveFileList({
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
+  readonly onBind: (item: DriveItemDto, drivePathHint: string) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
@@ -1299,6 +1435,7 @@ function DriveFileList({
                   onMove={onMove}
                   onDelete={onDelete}
                   onOpenItem={onOpenItem}
+                  onBind={onBind}
                   onShare={onShare}
                   onPublishSite={onPublishSite}
                   onOpenShareDetails={onOpenShareDetails}
@@ -1394,6 +1531,7 @@ function DriveToolbarActions({
   onCreateFolder,
   onOpenPublicLinks,
   onOpenSites,
+  onOpenSyncStatus,
   onRefresh,
   onUploadFiles,
   onUploadFolder,
@@ -1413,6 +1551,7 @@ function DriveToolbarActions({
   readonly onCreateFolder: () => void
   readonly onOpenPublicLinks: () => void
   readonly onOpenSites: () => void
+  readonly onOpenSyncStatus: () => void
   readonly onRefresh: () => void
   readonly onUploadFiles: () => void
   readonly onUploadFolder: () => void
@@ -1425,7 +1564,7 @@ function DriveToolbarActions({
           {action.badge ? `${action.label} ${action.badge}` : action.label}
         </Button>
       ))}
-      <DriveSyncStatusButton snapshot={syncSnapshot} />
+      <DriveSyncStatusButton snapshot={syncSnapshot} onOpen={onOpenSyncStatus} />
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}
@@ -1447,7 +1586,13 @@ function DriveToolbarActions({
   )
 }
 
-function DriveSyncStatusButton({ snapshot }: { readonly snapshot: DriveSyncSnapshotDto | null }) {
+function DriveSyncStatusButton({
+  snapshot,
+  onOpen,
+}: {
+  readonly snapshot: DriveSyncSnapshotDto | null
+  readonly onOpen: () => void
+}) {
   const summary = snapshot?.summary
   const conflictCount = summary?.conflictCount ?? 0
   const errorCount = summary?.errorCount ?? 0
@@ -1465,12 +1610,409 @@ function DriveSyncStatusButton({ snapshot }: { readonly snapshot: DriveSyncSnaps
   const message = badge?.message ?? "暂无同步绑定"
 
   return (
-    <Button type="button" variant={conflictCount > 0 || errorCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={() => toast(`同步：${message}`)}>
+    <Button type="button" variant={conflictCount > 0 || errorCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={onOpen}>
       <RefreshCw data-icon="inline-start" />
       同步
       {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
     </Button>
   )
+}
+
+function DriveSyncBindDialog({
+  target,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  readonly target: DriveSyncBindTarget | null
+  readonly submitting: boolean
+  readonly onCancel: () => void
+  readonly onConfirm: () => void
+}) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => {
+      if (!open) onCancel()
+    }}>
+      {target ? (
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>绑定同步</DialogTitle>
+            <DialogDescription className="text-pretty">
+              将云盘内容下载到本地路径；文件需不存在，文件夹需为空或不存在。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>云盘条目</Label>
+              <Input value={target.item.name} readOnly />
+            </div>
+            <div className="grid gap-2">
+              <Label>本地路径</Label>
+              <Input value={target.localPath} readOnly />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>取消</Button>
+            <Button type="button" disabled={submitting} onClick={onConfirm}>绑定</Button>
+          </DialogFooter>
+        </DialogContent>
+      ) : null}
+    </Dialog>
+  )
+}
+
+function DriveSyncBindingSettingsDialog({
+  settings,
+  submitting,
+  onCancel,
+  onChange,
+  onRemove,
+  onSave,
+}: {
+  readonly settings: DriveSyncBindingSettingsState | null
+  readonly submitting: boolean
+  readonly onCancel: () => void
+  readonly onChange: (value: string) => void
+  readonly onRemove: () => void
+  readonly onSave: () => void
+}) {
+  return (
+    <Dialog open={settings !== null} onOpenChange={(open) => {
+      if (!open) onCancel()
+    }}>
+      {settings ? (
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>同步设置</DialogTitle>
+            <DialogDescription className="text-pretty">
+              每行一条规则；.git/ 和 .synapse-sync/ 始终排除。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="drive-sync-exclude-rules">排除规则</Label>
+            <Textarea
+              id="drive-sync-exclude-rules"
+              value={settings.excludeRulesText}
+              onChange={(event) => onChange(event.target.value)}
+              rows={8}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button type="button" variant="destructive" disabled={submitting} onClick={onRemove}>解除绑定</Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>取消</Button>
+              <Button type="button" disabled={submitting} onClick={onSave}>保存</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      ) : null}
+    </Dialog>
+  )
+}
+
+function DriveSyncStatusDialog({
+  open,
+  snapshot,
+  submitting,
+  onOpenChange,
+  onOpenBindingSettings,
+  onRefresh,
+  onRunAction,
+}: {
+  readonly open: boolean
+  readonly snapshot: DriveSyncSnapshotDto | null
+  readonly submitting: boolean
+  readonly onOpenChange: (open: boolean) => void
+  readonly onOpenBindingSettings: (binding: DriveSyncSnapshotDto["bindings"][number]) => void
+  readonly onRefresh: () => Promise<void>
+  readonly onRunAction: (action: () => Promise<void>, successMessage?: string) => Promise<void>
+}) {
+  const bindings = snapshot?.bindings ?? []
+  const conflicts = snapshot?.conflicts ?? []
+  const operations = snapshot?.operations ?? []
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>同步状态</DialogTitle>
+          <DialogDescription>查看绑定、冲突和最近操作。</DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="h-96 pr-3">
+          <div className="grid gap-6">
+            <DriveSyncBindingTable
+              bindings={bindings}
+              submitting={submitting}
+              onOpenSettings={onOpenBindingSettings}
+              onRunAction={onRunAction}
+            />
+            <DriveSyncConflictTable conflicts={conflicts} submitting={submitting} onRunAction={onRunAction} />
+            <DriveSyncOperationTable operations={operations} submitting={submitting} onRunAction={onRunAction} />
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={submitting} onClick={() => { void onRefresh() }}>
+            刷新
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DriveSyncBindingTable({
+  bindings,
+  onOpenSettings,
+  submitting,
+  onRunAction,
+}: {
+  readonly bindings: DriveSyncSnapshotDto["bindings"]
+  readonly onOpenSettings: (binding: DriveSyncSnapshotDto["bindings"][number]) => void
+  readonly submitting: boolean
+  readonly onRunAction: (action: () => Promise<void>, successMessage?: string) => Promise<void>
+}) {
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium">绑定</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>名称</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>本地路径</TableHead>
+            <TableHead className="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {bindings.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-muted-foreground">暂无绑定</TableCell>
+            </TableRow>
+          ) : bindings.map((binding) => (
+            <TableRow key={binding.id}>
+              <TableCell>{binding.driveItemName}</TableCell>
+              <TableCell>{driveSyncBindingStatusLabel(binding.status)}</TableCell>
+              <TableCell className="max-w-80 truncate">{binding.localPath}</TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  {binding.status === "paused" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={submitting}
+                      onClick={() => {
+                        void onRunAction(() => requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }).then(() => undefined), "已恢复")
+                      }}
+                    >
+                      恢复
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={submitting}
+                      onClick={() => {
+                        void onRunAction(() => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }).then(() => undefined), "已暂停")
+                      }}
+                    >
+                      暂停
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => {
+                      void onRunAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已重新扫描")
+                    }}
+                  >
+                    扫描
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => {
+                      void onRunAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已拉取")
+                    }}
+                  >
+                    拉取
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => onOpenSettings(binding)}
+                  >
+                    设置
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function DriveSyncConflictTable({
+  conflicts,
+  submitting,
+  onRunAction,
+}: {
+  readonly conflicts: DriveSyncSnapshotDto["conflicts"]
+  readonly submitting: boolean
+  readonly onRunAction: (action: () => Promise<void>, successMessage?: string) => Promise<void>
+}) {
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium">冲突</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>路径</TableHead>
+            <TableHead>类型</TableHead>
+            <TableHead className="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {conflicts.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={3} className="text-muted-foreground">暂无冲突</TableCell>
+            </TableRow>
+          ) : conflicts.map((conflict) => (
+            <TableRow key={conflict.id}>
+              <TableCell className="max-w-96 truncate">{conflict.relativePath || "."}</TableCell>
+              <TableCell>{driveSyncConflictTypeLabel(conflict.type)}</TableCell>
+              <TableCell>
+                <div className="flex justify-end gap-2">
+                  {(["use_local", "use_remote", "keep_both", "skip", "confirm_delete"] as const).map((action) => (
+                    <Button
+                      key={action}
+                      type="button"
+                      size="sm"
+                      variant={action === "confirm_delete" ? "destructive" : "outline"}
+                      disabled={submitting}
+                      onClick={() => {
+                        void onRunAction(() => requireSynapseBridge().driveSync.resolveConflict({ id: conflict.id, action }), "已处理")
+                      }}
+                    >
+                      {driveSyncConflictActionLabel(action)}
+                    </Button>
+                  ))}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function DriveSyncOperationTable({
+  operations,
+  submitting,
+  onRunAction,
+}: {
+  readonly operations: DriveSyncSnapshotDto["operations"]
+  readonly submitting: boolean
+  readonly onRunAction: (action: () => Promise<void>, successMessage?: string) => Promise<void>
+}) {
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium">最近操作</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>路径</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>时间</TableHead>
+            <TableHead className="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {operations.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-muted-foreground">暂无操作</TableCell>
+            </TableRow>
+          ) : operations.map((operation) => (
+            <TableRow key={operation.id}>
+              <TableCell className="max-w-96 truncate">{operation.relativePath || "."}</TableCell>
+              <TableCell>{driveSyncOperationStatusLabel(operation.status)}</TableCell>
+              <TableCell><RelativeTime value={operation.updatedAt} /></TableCell>
+              <TableCell className="text-right">
+                {operation.status === "error" || operation.status === "retry_wait" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => {
+                      void onRunAction(() => requireSynapseBridge().driveSync.retryOperation({ id: operation.id }), "已重试")
+                    }}
+                  >
+                    重试
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function driveSyncBindingStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    active: "同步中",
+    paused: "已暂停",
+    conflict: "有冲突",
+    error: "错误",
+    removed: "已解除",
+  }
+  return labels[status] ?? status
+}
+
+function driveSyncOperationStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "等待中",
+    running: "运行中",
+    succeeded: "已完成",
+    retry_wait: "等待重试",
+    conflict: "有冲突",
+    error: "失败",
+  }
+  return labels[status] ?? status
+}
+
+function driveSyncConflictTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    both_modified: "双方修改",
+    delete_vs_modify: "删除和修改",
+    type_mismatch: "类型冲突",
+    metadata_mismatch: "元数据冲突",
+    path_conflict: "路径冲突",
+  }
+  return labels[type] ?? type
+}
+
+function driveSyncConflictActionLabel(action: "use_local" | "use_remote" | "keep_both" | "skip" | "confirm_delete"): string {
+  const labels = {
+    use_local: "用本地",
+    use_remote: "用云端",
+    keep_both: "保留两份",
+    skip: "稍后",
+    confirm_delete: "确认删除",
+  }
+  return labels[action]
 }
 
 function DrivePublicAssetToolbarActions({
@@ -1657,6 +2199,7 @@ function DriveFileListRow({
   onMove,
   onDelete,
   onOpenItem,
+  onBind,
   onShare,
   onPublishSite,
   onOpenShareDetails,
@@ -1670,6 +2213,7 @@ function DriveFileListRow({
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
+  readonly onBind: (item: DriveItemDto, drivePathHint: string) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
@@ -1796,6 +2340,8 @@ function DriveFileListRow({
           </Button>
           <DriveItemMenu
             item={item}
+            drivePath={drivePath}
+            onBind={onBind}
             onRename={onRename}
             onMove={onMove}
             onPublishSite={onPublishSite}
@@ -1855,12 +2401,16 @@ function DriveItemNameContextMenu({
 }
 
 function DriveItemMenu({
+  drivePath,
   item,
+  onBind,
   onRename,
   onMove,
   onPublishSite,
 }: {
+  readonly drivePath: string
   readonly item: DriveItemDto
+  readonly onBind: (item: DriveItemDto, drivePathHint: string) => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
@@ -1874,6 +2424,7 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => onBind(item, drivePath)}>同步</DropdownMenuItem>
           {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>

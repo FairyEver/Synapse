@@ -55,6 +55,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "conversations",
         "core.config",
         "core.identity",
+        "drive.sync.baselines",
         "drive.sync.bindings",
         "drive.sync.conflicts",
         "drive.sync.operations",

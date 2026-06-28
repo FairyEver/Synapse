@@ -170,6 +170,7 @@ export interface DriveSyncBindingDto {
   readonly localPath: string
   readonly status: DriveSyncBindingStatus
   readonly remoteCursor: string | null
+  readonly excludeRules: readonly string[]
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastSyncedAt: string | null

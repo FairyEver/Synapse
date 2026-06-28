@@ -116,6 +116,27 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
+  it("invokes drive sync retry and conflict resolution channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.driveSync.chooseLocalPath({ kind: "folder", defaultName: "Docs" })
+    await bridge.driveSync.retryOperation({ id: "op-1" })
+    await bridge.driveSync.resolveConflict({ id: "conflict-1", action: "confirm_delete" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:drive-sync:local-path:choose",
+      { kind: "folder", defaultName: "Docs" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:drive-sync:operations:retry",
+      { id: "op-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:drive-sync:conflicts:resolve",
+      { id: "conflict-1", action: "confirm_delete" },
+    )
+  })
+
   it("subscribes automation change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

@@ -100,6 +100,7 @@ import {
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
   ConversationEntryV1,
+  DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
   DriveSyncConflictEntryV1,
   DriveSyncOperationEntryV1,
@@ -388,11 +389,28 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createDriveSyncService({
+      baselines: dataRepository.namespace<DriveSyncBaselineEntryV1>("drive.sync.baselines"),
       bindings: dataRepository.namespace<DriveSyncBindingEntryV1>("drive.sync.bindings"),
       operations: dataRepository.namespace<DriveSyncOperationEntryV1>("drive.sync.operations"),
       conflicts: dataRepository.namespace<DriveSyncConflictEntryV1>("drive.sync.conflicts"),
       state: dataRepository.namespace<DriveSyncStateEntryV1>("drive.sync.state"),
+      drive: {
+        listDriveChanges: (input) => accountService.listDriveChanges(input),
+        listDriveItems: (parentId) => accountService.listDriveItems(parentId),
+        downloadDriveFile: (input) => accountService.downloadDriveFile(input),
+        uploadDriveLocalItems: (input) => accountService.uploadDriveLocalItems(input),
+        renameDriveItem: (itemId, name) => accountService.renameDriveItem(itemId, name),
+        moveDriveItem: (itemId, parentId) => accountService.moveDriveItem(itemId, parentId),
+        deleteDriveItem: (itemId) => accountService.deleteDriveItem(itemId),
+        createDriveFolder: (input) => accountService.createDriveFolder(input),
+      },
     })
+  },
+  async start(instance) {
+    await instance.start()
+  },
+  async stop(instance) {
+    await instance.stop()
   },
 }
 

@@ -18,6 +18,22 @@ export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
   updatedAt: string
 }
 
+export interface DriveSyncBaselineEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  bindingId: string
+  relativePath: string
+  driveItemId: string
+  parentDriveItemId: string | null
+  kind: "file" | "folder"
+  localHash: string | null
+  localMtimeMs: number | null
+  remotePathHint: string | null
+  remoteVersionId: string | null
+  remoteEtag: string | null
+  updatedAt: string
+}
+
 export interface DriveSyncOperationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -102,6 +118,15 @@ export const driveSyncBindingsSchema: NamespaceSchema<DriveSyncBindingEntryV1> =
   encrypted: false,
 }
 
+export const driveSyncBaselinesSchema: NamespaceSchema<DriveSyncBaselineEntryV1> = {
+  name: "drive.sync.baselines",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: isDriveSyncBaselineEntryV1,
+  encrypted: false,
+}
+
 export const driveSyncOperationsSchema: NamespaceSchema<DriveSyncOperationEntryV1> = {
   name: "drive.sync.operations",
   backend: "sqlite",
@@ -153,6 +178,23 @@ function isDriveSyncBindingEntryV1(value: unknown): value is DriveSyncBindingEnt
     && isNullableString(value.lastError)
     && isStringArray(value.excludeRules)
     && isIsoDateString(value.createdAt)
+    && isIsoDateString(value.updatedAt)
+}
+
+function isDriveSyncBaselineEntryV1(value: unknown): value is DriveSyncBaselineEntryV1 {
+  if (!isRecord(value)) return false
+  return value.schemaVersion === 1
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.bindingId)
+    && typeof value.relativePath === "string"
+    && isNonEmptyString(value.driveItemId)
+    && isNullableString(value.parentDriveItemId)
+    && isStringEnum(value.kind, itemKinds)
+    && isNullableString(value.localHash)
+    && isNullableNumber(value.localMtimeMs)
+    && isNullableString(value.remotePathHint)
+    && isNullableString(value.remoteVersionId)
+    && isNullableString(value.remoteEtag)
     && isIsoDateString(value.updatedAt)
 }
 
@@ -213,6 +255,10 @@ function isNullableCursor(value: unknown): value is string | null {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string"
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || typeof value === "number"
 }
 
 function isStringArray(value: unknown): value is readonly string[] {

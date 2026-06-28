@@ -894,6 +894,7 @@ export type SynapseBridge = {
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
   }
   driveSync: {
+    chooseLocalPath: (input: { kind: "file" | "folder"; defaultName: string }) => Promise<string | null>
     getSnapshot: () => Promise<DriveSyncSnapshotDto>
     createBinding: (input: {
       driveItemId: string
@@ -903,8 +904,19 @@ export type SynapseBridge = {
       localPath: string
       remoteCursor?: string | null
       excludeRules?: readonly string[]
+      initialDirection?: "download_remote" | "none"
     }) => Promise<DriveSyncBindingDto>
     removeBinding: (input: { id: string }) => Promise<void>
+    pauseBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
+    resumeBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
+    updateExcludeRules: (input: { id: string; excludeRules: readonly string[] }) => Promise<DriveSyncBindingDto>
+    rescanBinding: (input: { id: string }) => Promise<void>
+    pollRemoteChanges: (input: { id: string }) => Promise<void>
+    retryOperation: (input: { id: string }) => Promise<void>
+    resolveConflict: (input: {
+      id: string
+      action: "use_local" | "use_remote" | "keep_both" | "skip" | "confirm_delete"
+    }) => Promise<void>
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   soundNotifier: {

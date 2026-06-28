@@ -104,6 +104,7 @@ export {
   type ConversationUsageV1,
   type CoreConfigV1,
   type CoreIdentityV2,
+  type DriveSyncBaselineEntryV1,
   type DriveSyncBindingEntryV1,
   type DriveSyncConflictEntryV1,
   type DriveSyncOperationEntryV1,
