@@ -1,0 +1,254 @@
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { DriveSyncBaselineEntryV1, DriveSyncBindingEntryV1 } from "../../runtime/data-repo"
+import { createDriveSyncBaselineStore } from "../drive-sync-baseline"
+import { createDefaultDriveSyncExcludeRules } from "../drive-sync-excludes"
+import { executeDriveSyncOperation } from "../drive-sync-executor"
+import type { DriveSyncPlannedOperation } from "../drive-sync-planner"
+
+describe("drive sync executor", () => {
+  let tempDir: string
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-executor-"))
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it("downloads remote files and updates baseline", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const bindingEntry = binding({ localPath: tempDir })
+    const accountService = createAccountService({
+      downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote", "utf8")
+        return { ok: true as const, path: outputPath }
+      }),
+    })
+
+    await executeDriveSyncOperation({
+      binding: bindingEntry,
+      operation: operation({
+        kind: "download",
+        relativePath: "spec.md",
+        driveItemId: "remote-spec",
+        localPath: path.join(tempDir, "spec.md"),
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("remote")
+    await expect(namespace.list()).resolves.toMatchObject([
+      { bindingId: "binding-1", relativePath: "spec.md", remoteItemId: "remote-spec", kind: "file" },
+    ])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "download", status: "succeeded", relativePath: "spec.md" }),
+    ])
+  })
+
+  it("uploads local files and updates baseline with the remote item id", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    await writeFile(path.join(tempDir, "local.md"), "local", "utf8")
+    const accountService = createAccountService({
+      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+      listDriveItemTree: vi.fn(async () => ({
+        items: [{ id: "remote-local", name: "local.md", type: "file" }],
+      })),
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "upload",
+        relativePath: "local.md",
+        driveItemId: null,
+        localPath: path.join(tempDir, "local.md"),
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.uploadDriveLocalItems).toHaveBeenCalled()
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "local.md", remoteItemId: "remote-local", kind: "file" },
+    ])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "upload", status: "succeeded", relativePath: "local.md" }),
+    ])
+  })
+
+  it("creates remote folders for local folder uploads", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    await mkdir(path.join(tempDir, "Folder"))
+    const accountService = createAccountService({
+      createDriveFolder: vi.fn(async () => ({ id: "remote-folder", name: "Folder", type: "folder" })),
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({ kind: "upload", relativePath: "Folder", driveItemId: null, localPath: path.join(tempDir, "Folder") }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Folder" })
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "Folder", remoteItemId: "remote-folder", kind: "folder" },
+    ])
+  })
+
+  it("deletes local files through a recoverable trash strategy", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "gone.md",
+      kind: "file",
+      remoteItemId: "remote-gone",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+    const trashLocalPath = vi.fn(async () => undefined)
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "delete_local",
+        relativePath: "gone.md",
+        driveItemId: "remote-gone",
+        localPath: path.join(tempDir, "gone.md"),
+      }),
+      baselineStore: store,
+      accountService: createAccountService(),
+      recordOperation: async () => undefined,
+      trashLocalPath,
+    })
+
+    expect(trashLocalPath).toHaveBeenCalledWith(path.join(tempDir, "gone.md"))
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "gone.md", deletedAt: "2026-06-28T00:00:00.000Z" },
+    ])
+  })
+
+  it("records failed operations without updating baseline", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const accountService = createAccountService({
+      downloadDriveFile: vi.fn(async () => {
+        throw new Error("disk unavailable")
+      }),
+    })
+
+    await expect(executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "download",
+        relativePath: "spec.md",
+        driveItemId: "remote-spec",
+        localPath: path.join(tempDir, "spec.md"),
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })).rejects.toThrow("disk unavailable")
+
+    await expect(namespace.list()).resolves.toEqual([])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "download", status: "error", message: "disk unavailable" }),
+    ])
+  })
+})
+
+function fixedNow(): Date {
+  return new Date("2026-06-28T00:00:00.000Z")
+}
+
+function binding(input: Partial<DriveSyncBindingEntryV1>): DriveSyncBindingEntryV1 {
+  return {
+    id: "binding-1",
+    schemaVersion: 1,
+    driveItemId: "drive-root",
+    driveItemName: "Docs",
+    kind: "folder",
+    drivePathHint: "/Docs",
+    localPath: input.localPath ?? "/Users/me/Docs",
+    status: "active",
+    remoteCursor: "41",
+    lastSyncedAt: null,
+    lastError: null,
+    excludeRules: createDefaultDriveSyncExcludeRules(),
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
+    ...input,
+  }
+}
+
+function operation(input: Partial<DriveSyncPlannedOperation> & {
+  readonly kind: DriveSyncPlannedOperation["kind"]
+  readonly relativePath: string
+}): DriveSyncPlannedOperation {
+  return {
+    bindingId: "binding-1",
+    kind: input.kind,
+    driveItemId: input.driveItemId === undefined ? "remote-item" : input.driveItemId,
+    relativePath: input.relativePath,
+    localPath: input.localPath ?? path.join("/Users/me/Docs", input.relativePath),
+    remotePathHint: null,
+  }
+}
+
+function createAccountService(overrides: Record<string, unknown> = {}) {
+  return {
+    downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "" })),
+    downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "" })),
+    uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+    createDriveFolder: vi.fn(async () => ({ id: "folder-1", name: "Folder", type: "folder" })),
+    renameDriveItem: vi.fn(),
+    moveDriveItem: vi.fn(),
+    deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
+    listDriveItemTree: vi.fn(async () => ({ items: [] })),
+    ensureDriveFolderPath: vi.fn(),
+    ...overrides,
+  }
+}
+
+function createMemoryNamespace<T extends Record<string, unknown>>() {
+  const records = new Map<string, T>()
+  return {
+    name: "memory",
+    schemaVersion: 1,
+    backend: "sqlite" as const,
+    async getSingleton() { return null },
+    async setSingleton() {},
+    async clearSingleton() {},
+    async list(filter?: Partial<T>) {
+      const entries = Array.from(records.values())
+      if (!filter) return entries
+      return entries.filter((entry) =>
+        Object.entries(filter).every(([key, value]) => entry[key as keyof T] === value),
+      )
+    },
+    async count() { return records.size },
+    async get(id: string) { return records.get(id) ?? null },
+    async upsert(item: T) { records.set(item.id as string, item) },
+    async remove(id: string) { records.delete(id) },
+    onChange() { return () => undefined },
+  }
+}
