@@ -25,6 +25,7 @@ import {
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentImageService } from "./drive-document-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
@@ -160,6 +161,7 @@ export class DriveUserController {
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly documentImages?: DriveDocumentImageService,
+    @Optional() private readonly changes?: DriveChangeLogService,
   ) {}
 
   @Get("/public-assets")
@@ -306,6 +308,18 @@ export class DriveUserController {
   @Delete("/sites/:siteId")
   deleteSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
     return requireDriveSiteService(this.sites).deleteSite(request.user!.id, siteId)
+  }
+
+  @Get("/changes")
+  listChanges(
+    @Query("cursor") cursor: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveChangeLog(this.changes).list(request.user!.id, {
+      cursor: cursor ?? null,
+      limit: parseOptionalPositiveInteger(limit, "limit"),
+    })
   }
 
   @Get("/items")
@@ -1747,6 +1761,11 @@ function requireDriveSiteService(sites: DriveSiteService | undefined): DriveSite
   return sites
 }
 
+function requireDriveChangeLog(changes: DriveChangeLogService | undefined): DriveChangeLogService {
+  if (!changes) throw new Error("DriveChangeLogService is not available.")
+  return changes
+}
+
 function requireDriveLinkIntakeService(linkIntake: DriveLinkIntakeService | undefined): DriveLinkIntakeService {
   if (!linkIntake) throw new Error("DriveLinkIntakeService is not available.")
   return linkIntake
@@ -1824,6 +1843,13 @@ function parseOptionalNonNegativeInteger(value: string | undefined, name: string
   if (!/^\d+$/u.test(value)) throw new BadRequestException(`${name} 必须是非负整数。`)
   const parsed = Number(value)
   if (!Number.isSafeInteger(parsed)) throw new BadRequestException(`${name} 必须是安全整数。`)
+  return parsed
+}
+
+function parseOptionalPositiveInteger(value: string | undefined, name: string): number | undefined {
+  const parsed = parseOptionalNonNegativeInteger(value, name)
+  if (parsed === undefined) return undefined
+  if (parsed <= 0) throw new BadRequestException(`${name} 必须是正整数。`)
   return parsed
 }
 
