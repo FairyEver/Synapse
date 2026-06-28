@@ -757,6 +757,25 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("returns invalid-name raw upload skips without failing response validation", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [{ path: "/tmp/CON.txt", reason: "invalid-name" }],
+    })
+    const { harness } = createHarness({ service: { uploadRawFiles } })
+
+    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "",
+      filePaths: ["/tmp/CON.txt"],
+    })).resolves.toEqual({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [{ path: "/tmp/CON.txt", reason: "invalid-name" }],
+    })
+  })
+
   it("selects raw files into the requested folder through guarded read and write permissions", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
