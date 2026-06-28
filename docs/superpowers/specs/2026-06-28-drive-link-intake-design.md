@@ -416,7 +416,7 @@ drive_link_download_file
 
 ### Capability Dispatcher
 
-Extend `desktop/electron/capabilities/drive-dispatcher.ts` with new actions. Resolve, list, and text reads are non-mutating. Materialize and download tools do not mutate remote Drive content, but they write local files and must use existing permission and audit boundaries for local file writes.
+Extend `desktop/electron/capabilities/drive-dispatcher.ts` with `drive.link.*` dispatcher actions, matching the existing Drive dispatcher convention. Resolve, list, and text reads are non-mutating. Materialize and download tools do not mutate remote Drive content, but they write local files and must use existing permission and audit boundaries for local file writes.
 
 Risk classification:
 
@@ -450,7 +450,7 @@ The Drive skill should teach Agents:
 
 ```text
 If the user provides a /share, /sites, or /files URL, use app_drive_link_* tools.
-If the user asks to manage their own Drive files, use existing app_drive_* tools.
+If the user asks to manage their own Drive files, use existing drive_* owner tools.
 Prefer resolve -> list -> read_text, and materialize only when local files are useful.
 ```
 
