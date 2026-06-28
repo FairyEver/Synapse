@@ -555,7 +555,7 @@ export class AccountService {
 
   async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
     const targetPath = input.outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
-    const response = await this.fetchAuthenticated(input.url, {}, "云盘链接下载失败。")
+    const response = await this.fetchAuthenticated(driveLinkUrlWithPassword(input.url, input.password), {}, "云盘链接下载失败。")
     await writeResponseBodyToFile(response, targetPath)
     const fileStat = await safeLocalFileStat(targetPath)
     return { localPath: targetPath, mimeType: null, size: String(fileStat?.size ?? 0) }
@@ -2015,6 +2015,13 @@ function safeDriveLinkOutputPath(value: string): string {
     throw new Error("云盘链接路径无效。")
   }
   return normalized
+}
+
+function driveLinkUrlWithPassword(url: string, password: string | undefined): string {
+  if (!password) return url
+  const parsed = new URL(url)
+  parsed.searchParams.set("password", password)
+  return parsed.toString()
 }
 
 function driveLinkFileKind(previewKind: string, mimeType: string | null): "markdown" | "html" | "text" | "image" | "binary" | "folder" {

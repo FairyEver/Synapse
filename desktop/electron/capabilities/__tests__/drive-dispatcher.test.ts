@@ -221,7 +221,7 @@ describe("createDriveCapabilityDispatcher", () => {
         access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
         root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
         ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
-      })),
+      } as const)),
     })
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
@@ -230,7 +230,7 @@ describe("createDriveCapabilityDispatcher", () => {
       .resolves.toMatchObject({ ok: true, data: { linkType: "share" } })
 
     expect(accountService.resolveDriveLink).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
-    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
   })
 
   it("authorizes Drive link materialize as a local write", async () => {

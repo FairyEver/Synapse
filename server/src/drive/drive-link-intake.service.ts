@@ -39,13 +39,13 @@ export type DriveLinkIntakeDeps = {
     readonly resolvePublicShareAccess: (input: {
       readonly shareId: string
       readonly password?: string
-      readonly cookie?: string | null
+      readonly cookie?: string
     }) => Promise<PublicShareAccessResult>
     readonly getShareBrowserSnapshot: (input: {
       readonly shareId: string
       readonly itemId?: string
       readonly password?: string
-      readonly cookie?: string | null
+      readonly cookie?: string
       readonly childrenPage?: { readonly offset?: number; readonly limit?: number }
     }) => Promise<DriveBrowserSnapshotDto>
   }
@@ -55,14 +55,13 @@ export type DriveLinkIntakeDeps = {
       readonly relativePath?: string
     }) => Promise<
       | { readonly status: "ok"; readonly asset: { readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null } }
-      | { readonly status: "password_required" }
-      | { readonly status: string }
+      | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
     >
   }
   readonly publicAssets: {
     readonly resolvePublicAsset: (assetId: string, headers: Record<string, never>) => Promise<
       | { readonly status: "ok"; readonly name: string; readonly mimeType: string; readonly size: bigint; readonly storageKey: string }
-      | { readonly status: string }
+      | { readonly status: "not_found" | "not_modified" }
     >
   }
   readonly storage: {
@@ -104,7 +103,7 @@ export class DriveLinkIntakeService {
       shareId: parsed.shareId,
       itemId: input.itemId ?? parsed.itemId ?? undefined,
       password: input.password,
-      cookie: null,
+      cookie: undefined,
       childrenPage: { offset: input.offset, limit: input.limit },
     })
 
@@ -130,7 +129,7 @@ export class DriveLinkIntakeService {
     const access = await this.deps.drive.resolvePublicShareAccess({
       shareId: parsed.shareId,
       password: input.password,
-      cookie: null,
+      cookie: undefined,
     })
     const ref = toShareRef(parsed)
     if (access.status === "password_required") {
@@ -181,7 +180,7 @@ export class DriveLinkIntakeService {
       shareId: parsed.shareId,
       itemId: input.itemId ?? parsed.itemId ?? undefined,
       password: input.password,
-      cookie: null,
+      cookie: undefined,
     })
     if (!snapshot.preview?.text || snapshot.preview.kind === "download-only") {
       throw new BadRequestException("该链接不是可读取的文本内容。")

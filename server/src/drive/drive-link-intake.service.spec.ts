@@ -113,7 +113,7 @@ describe("DriveLinkIntakeService", () => {
 
   it("returns password_required without echoing password", async () => {
     const { service, drive } = createService()
-    drive.resolvePublicShareAccess.mockResolvedValueOnce({ status: "password_required" })
+    drive.resolvePublicShareAccess.mockResolvedValueOnce({ status: "password_required" } as never)
 
     await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123`, password: "secret" })).resolves.toMatchObject({
       access: { status: "password_required", canRead: false },
@@ -136,7 +136,7 @@ describe("DriveLinkIntakeService", () => {
       annotation: null,
       canDownload: true,
       canZip: true,
-    })
+    } as never)
 
     await expect(service.list({ url: `${publicAppUrl}/share/shr_123` })).resolves.toEqual({
       items: [{ path: "需求说明.md", name: "需求说明.md", type: "file", mimeType: "text/markdown", previewKind: "markdown", size: "12", itemId: "item-1" }],
