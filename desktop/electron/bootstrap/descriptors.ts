@@ -100,6 +100,7 @@ import {
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
   ConversationEntryV1,
+  DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
   DriveSyncConflictEntryV1,
   DriveSyncOperationEntryV1,
@@ -389,9 +390,11 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createDriveSyncService({
       bindings: dataRepository.namespace<DriveSyncBindingEntryV1>("drive.sync.bindings"),
+      baseline: dataRepository.namespace<DriveSyncBaselineEntryV1>("drive.sync.baseline"),
       operations: dataRepository.namespace<DriveSyncOperationEntryV1>("drive.sync.operations"),
       conflicts: dataRepository.namespace<DriveSyncConflictEntryV1>("drive.sync.conflicts"),
       state: dataRepository.namespace<DriveSyncStateEntryV1>("drive.sync.state"),
+      accountService,
     })
   },
 }

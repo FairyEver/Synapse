@@ -1,6 +1,10 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import type {
+  DriveSyncBindingPreviewDto,
+  DriveSyncCreateSafeBindingInput,
   DriveSyncBindingDto,
   DriveSyncBindingStatus,
   DriveSyncOperationDto,
@@ -10,19 +14,40 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DataNamespace,
+  DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
   DriveSyncConflictEntryV1,
   DriveSyncOperationEntryV1,
   DriveSyncStateEntryV1,
 } from "../runtime/data-repo"
+import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
+import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
+import { hashDriveSyncFile, inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
 
 export interface DriveSyncServiceDeps {
   readonly bindings: DataNamespace<DriveSyncBindingEntryV1>
+  readonly baseline: DataNamespace<DriveSyncBaselineEntryV1>
   readonly operations: DataNamespace<DriveSyncOperationEntryV1>
   readonly conflicts: DataNamespace<DriveSyncConflictEntryV1>
   readonly state: DataNamespace<DriveSyncStateEntryV1>
+  readonly accountService: DriveSyncAccountService
   readonly now?: () => Date
   readonly createId?: (prefix: string) => string
+}
+
+export interface DriveSyncAccountService {
+  readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<{ readonly ok: true; readonly path: string }>
+  readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<{ readonly ok: true; readonly path: string }>
+  readonly uploadDriveLocalItems: (input: {
+    readonly parentId?: string | null
+    readonly items: ReadonlyArray<{ readonly kind: "file"; readonly path: string; readonly name: string }>
+  }) => Promise<{ readonly completed: number; readonly failed: number; readonly skipped: number; readonly message?: string }>
+  readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<{ readonly id: string; readonly name: string; readonly type: string }>
+  readonly renameDriveItem: (itemId: string, name: string) => Promise<unknown>
+  readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<unknown>
+  readonly deleteDriveItem: (itemId: string) => Promise<{ readonly ok: true }>
+  readonly listDriveItemTree: (input: { readonly parentId?: string | null }) => Promise<{ readonly items: ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: string }> }>
+  readonly ensureDriveFolderPath: (input: unknown) => Promise<unknown>
 }
 
 export interface DriveSyncCreateBindingInput {
@@ -87,6 +112,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const events = new TypedDriveSyncEventEmitter()
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
   const createId = (prefix: string) => deps.createId?.(prefix) ?? `${prefix}:${randomUUID()}`
+  const baselineStore = createDriveSyncBaselineStore({ baseline: deps.baseline, now: deps.now })
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindings = (await deps.bindings.list())
@@ -171,7 +197,113 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function removeBinding(id: string): Promise<void> {
+    await baselineStore.removeBinding(id)
     await updateBindingStatus(id, "removed")
+  }
+
+  async function previewBinding(input: Omit<DriveSyncCreateSafeBindingInput, "direction"> & {
+    readonly remoteExists: boolean
+  }): Promise<DriveSyncBindingPreviewDto> {
+    return previewDriveSyncBinding({
+      ...input,
+      activeBindings: await deps.bindings.list(),
+    })
+  }
+
+  async function createSafeBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
+    const binding = await createBinding({
+      driveItemId: input.driveItemId,
+      driveItemName: input.driveItemName,
+      kind: input.kind,
+      drivePathHint: input.drivePathHint ?? null,
+      localPath: input.localPath,
+      excludeRules: input.excludeRules ?? [],
+    })
+
+    try {
+      if (input.kind === "file" && input.direction === "remote_to_local") {
+        await downloadInitialFile(binding)
+      } else if (input.kind === "file" && input.direction === "local_to_remote") {
+        await uploadInitialFile(binding)
+      }
+      return await updateBindingStatus(binding.id, "active")
+    } catch (error) {
+      await recordOperation({
+        bindingId: binding.id,
+        kind: input.direction === "remote_to_local" ? "download" : "upload",
+        status: "error",
+        driveItemId: input.driveItemId,
+        relativePath: "",
+        localPath: input.localPath,
+        remotePathHint: input.drivePathHint ?? null,
+        message: errorMessage(error),
+      })
+      return await updateBindingStatus(binding.id, "error", errorMessage(error))
+    }
+  }
+
+  async function downloadInitialFile(binding: DriveSyncBindingDto): Promise<void> {
+    await mkdir(path.dirname(binding.localPath), { recursive: true })
+    await deps.accountService.downloadDriveFile({ itemId: binding.driveItemId, outputPath: binding.localPath })
+    const local = await inspectDriveSyncLocalPath(binding.localPath)
+    await baselineStore.upsert({
+      bindingId: binding.id,
+      relativePath: "",
+      kind: "file",
+      remoteItemId: binding.driveItemId,
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: local.kind === "file" ? await hashDriveSyncFile(binding.localPath) : null,
+      deletedAt: null,
+    })
+    await recordOperation({
+      bindingId: binding.id,
+      kind: "download",
+      status: "succeeded",
+      driveItemId: binding.driveItemId,
+      relativePath: "",
+      localPath: binding.localPath,
+      remotePathHint: null,
+      message: null,
+    })
+  }
+
+  async function uploadInitialFile(binding: DriveSyncBindingDto): Promise<void> {
+    const upload = await deps.accountService.uploadDriveLocalItems({
+      parentId: null,
+      items: [{ kind: "file", path: binding.localPath, name: binding.driveItemName }],
+    })
+    if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
+    const remoteItemId = await findUploadedRemoteItemId(binding.driveItemName)
+    await baselineStore.upsert({
+      bindingId: binding.id,
+      relativePath: "",
+      kind: "file",
+      remoteItemId,
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: await hashDriveSyncFile(binding.localPath),
+      deletedAt: null,
+    })
+    await recordOperation({
+      bindingId: binding.id,
+      kind: "upload",
+      status: "succeeded",
+      driveItemId: remoteItemId,
+      relativePath: "",
+      localPath: binding.localPath,
+      remotePathHint: null,
+      message: null,
+    })
+  }
+
+  async function findUploadedRemoteItemId(name: string): Promise<string> {
+    const tree = await deps.accountService.listDriveItemTree({ parentId: null })
+    return tree.items.find((item) => item.name === name)?.id ?? name
   }
 
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
@@ -267,6 +399,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     events,
     getSnapshot,
     createBinding,
+    previewBinding,
+    createSafeBinding,
     updateBindingStatus,
     removeBinding,
     recordOperation,
@@ -342,4 +476,8 @@ function compareUpdatedDesc(left: { readonly updatedAt: string }, right: { reado
 
 function compareCreatedAsc(left: { readonly createdAt: string }, right: { readonly createdAt: string }): number {
   return Date.parse(left.createdAt) - Date.parse(right.createdAt)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "同步操作失败。"
 }
