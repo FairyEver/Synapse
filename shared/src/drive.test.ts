@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_CHANGE_TYPES,
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
@@ -17,6 +18,8 @@ import {
   DRIVE_SITE_PATH_PREFIX,
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SHARE_BROWSER_PATH_PREFIX,
+  DRIVE_SYNC_BINDING_STATUSES,
+  DRIVE_SYNC_OPERATION_STATUSES,
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
@@ -360,5 +363,35 @@ describe("drive URL helpers", () => {
     expect(DRIVE_SHARE_BROWSER_PATH_PREFIX).toBe("/share")
     expect(DRIVE_OWNER_BROWSER_PATH_PREFIX).toBe("/drive/items")
     expect(DRIVE_CONSOLE_BROWSER_PATH_PREFIX).toBe("/console/drive")
+  })
+
+  it("exports stable Drive change types for sync cursors", () => {
+    expect(DRIVE_CHANGE_TYPES).toEqual([
+      "created",
+      "content_updated",
+      "renamed",
+      "moved",
+      "trashed",
+      "restored",
+      "deleted",
+    ])
+  })
+
+  it("exports stable Drive sync status values", () => {
+    expect(DRIVE_SYNC_BINDING_STATUSES).toEqual([
+      "active",
+      "paused",
+      "conflict",
+      "error",
+      "removed",
+    ])
+    expect(DRIVE_SYNC_OPERATION_STATUSES).toEqual([
+      "pending",
+      "running",
+      "succeeded",
+      "retry_wait",
+      "conflict",
+      "error",
+    ])
   })
 })
