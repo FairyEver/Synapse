@@ -31,6 +31,7 @@ import { gitIpcModule } from "../modules/git/ipc"
 import { workflowIpcModule } from "../modules/workflow/ipc"
 import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
+import { driveSyncIpcModule } from "../modules/drive-sync/ipc"
 import { liveIpcModule } from "../modules/live/ipc"
 import { documentTemplateIpcModule } from "../../app-capabilities/document-template/main/ipc"
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
@@ -70,6 +71,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(workflowIpcModule, ctx)
   registry.register(knowledgeBaseIpcModule, ctx)
   registry.register(accountIpcModule, ctx)
+  registry.register(driveSyncIpcModule, ctx)
   registry.register(liveIpcModule, ctx)
   registry.register(documentTemplateIpcModule, ctx)
   registry.register(terminalIpcModule, ctx)
@@ -108,6 +110,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   workflowIpcModule,
   knowledgeBaseIpcModule,
   accountIpcModule,
+  driveSyncIpcModule,
   liveIpcModule,
   documentTemplateIpcModule,
   terminalIpcModule,

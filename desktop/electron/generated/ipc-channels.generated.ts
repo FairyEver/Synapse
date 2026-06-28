@@ -275,6 +275,12 @@ export const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "driveSync": {
+    "getSnapshot": "synapse:drive-sync:snapshot:get",
+    "createBinding": "synapse:drive-sync:bindings:create",
+    "removeBinding": "synapse:drive-sync:bindings:remove",
+    "changed": "synapse:drive-sync:changed",
+  },
   "soundNotifier": {
     "getSettings": "synapse:sound-notifier:settings:get",
     "updateSettings": "synapse:sound-notifier:settings:update",
