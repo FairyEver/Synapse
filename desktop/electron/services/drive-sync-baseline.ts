@@ -2,6 +2,20 @@ import type { DataNamespace, DriveSyncBaselineEntryV1 } from "../runtime/data-re
 
 export type DriveSyncBaselineStore = ReturnType<typeof createDriveSyncBaselineStore>
 
+export interface DriveSyncBaselineUpsertInput {
+  readonly bindingId: string
+  readonly relativePath: string
+  readonly kind: "file" | "folder"
+  readonly remoteItemId: string
+  readonly remoteVersionId: string | null
+  readonly remoteEtag: string | null
+  readonly localSize: number | null
+  readonly localMtimeMs: number | null
+  readonly localHash: string | null
+  readonly lastSyncedAt?: string
+  readonly deletedAt: string | null
+}
+
 export function createDriveSyncBaselineStore(deps: {
   readonly baseline: DataNamespace<DriveSyncBaselineEntryV1>
   readonly now?: () => Date
@@ -13,11 +27,7 @@ export function createDriveSyncBaselineStore(deps: {
       .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
   }
 
-  async function upsert(
-    input: Omit<DriveSyncBaselineEntryV1, "id" | "schemaVersion" | "lastSyncedAt"> & {
-      readonly lastSyncedAt?: string
-    },
-  ): Promise<DriveSyncBaselineEntryV1> {
+  async function upsert(input: DriveSyncBaselineUpsertInput): Promise<DriveSyncBaselineEntryV1> {
     const entry: DriveSyncBaselineEntryV1 = {
       id: baselineId(input.bindingId, input.relativePath),
       schemaVersion: 1,
@@ -54,10 +64,15 @@ export function createDriveSyncBaselineStore(deps: {
     await Promise.all(entries.map((entry) => deps.baseline.remove(entry.id)))
   }
 
+  async function removePath(bindingId: string, relativePath: string): Promise<void> {
+    await deps.baseline.remove(baselineId(bindingId, relativePath))
+  }
+
   return {
     listByBinding,
     upsert,
     markDeleted,
+    removePath,
     removeBinding,
   }
 }

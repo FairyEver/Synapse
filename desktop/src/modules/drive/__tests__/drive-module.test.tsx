@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   getDriveShare: vi.fn(),
   getDriveSyncSnapshot: vi.fn(),
   getDriveUsage: vi.fn(),
+  chooseDriveSyncLocalPath: vi.fn(),
+  createDriveSyncSafeBinding: vi.fn(),
   listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
   listDriveSites: vi.fn(),
@@ -58,6 +60,14 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
   onDriveSyncChanged: vi.fn(),
+  pauseDriveSyncBinding: vi.fn(),
+  pollDriveSyncRemoteChanges: vi.fn(),
+  previewDriveSyncBinding: vi.fn(),
+  removeDriveSyncBinding: vi.fn(),
+  rescanDriveSyncBinding: vi.fn(),
+  resolveDriveSyncConflict: vi.fn(),
+  resumeDriveSyncBinding: vi.fn(),
+  updateDriveSyncExcludeRules: vi.fn(),
   writeClipboardText: vi.fn(),
 }))
 
@@ -126,8 +136,18 @@ vi.mock("@/lib/electron-bridge", () => ({
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
     driveSync: {
+      chooseLocalPath: mocks.chooseDriveSyncLocalPath,
+      createSafeBinding: mocks.createDriveSyncSafeBinding,
       getSnapshot: mocks.getDriveSyncSnapshot,
       onChanged: mocks.onDriveSyncChanged,
+      pauseBinding: mocks.pauseDriveSyncBinding,
+      pollRemoteChanges: mocks.pollDriveSyncRemoteChanges,
+      previewBinding: mocks.previewDriveSyncBinding,
+      removeBinding: mocks.removeDriveSyncBinding,
+      rescanBinding: mocks.rescanDriveSyncBinding,
+      resolveConflict: mocks.resolveDriveSyncConflict,
+      resumeBinding: mocks.resumeDriveSyncBinding,
+      updateExcludeRules: mocks.updateDriveSyncExcludeRules,
     },
     shell: {
       openExternal: mocks.openExternal,
@@ -155,6 +175,8 @@ beforeEach(() => {
   mocks.getDriveShare.mockResolvedValue(createDriveShare())
   mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
+  mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/Docs")
+  mocks.createDriveSyncSafeBinding.mockResolvedValue(undefined)
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
   mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
@@ -204,6 +226,24 @@ beforeEach(() => {
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
   mocks.onDriveSyncChanged.mockReturnValue(() => undefined)
+  mocks.pauseDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.pollDriveSyncRemoteChanges.mockResolvedValue(undefined)
+  mocks.previewDriveSyncBinding.mockResolvedValue({
+    status: "ready",
+    direction: "remote_to_local",
+    reason: null,
+    localPath: "/Users/me/Docs/report.txt",
+    localKind: "missing",
+    localEmpty: null,
+    forcedExcludeRules: [".git/**", ".git"],
+    defaultExcludeRules: [],
+    importedGitignoreRules: [],
+  })
+  mocks.removeDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.rescanDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.resolveDriveSyncConflict.mockResolvedValue(undefined)
+  mocks.resumeDriveSyncBinding.mockResolvedValue(undefined)
+  mocks.updateDriveSyncExcludeRules.mockResolvedValue(undefined)
   mocks.writeClipboardText.mockResolvedValue(undefined)
 })
 
@@ -402,6 +442,60 @@ describe("DriveModule", () => {
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("同步")
     expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("2")
+  })
+
+  it("opens the drive sync status dialog from the toolbar", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 1 },
+      {
+        bindings: [createDriveSyncBinding()],
+        conflicts: [{
+          id: "conflict-1",
+          bindingId: "binding-1",
+          relativePath: "spec.md",
+          type: "both_modified",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }],
+        operations: [{
+          id: "operation-1",
+          bindingId: "binding-1",
+          relativePath: "spec.md",
+          status: "succeeded",
+          message: null,
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        }],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个冲突")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Drive sync dialog not found")
+    expect(dialog.textContent).toContain("同步状态")
+    expect(dialog.textContent).toContain("绑定")
+    expect(dialog.textContent).toContain("冲突")
+    expect(dialog.textContent).toContain("记录")
+    expect(dialog.textContent).toContain("Docs")
+  })
+
+  it("opens the drive sync binding wizard from a row menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.txt")
+    await clickMenuItemText("同步")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Drive sync binding dialog not found")
+    expect(dialog.textContent).toContain("绑定同步")
+    expect(dialog.textContent).toContain("本地路径")
+    expect(dialog.textContent).toContain("排除规则")
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -1619,6 +1713,7 @@ describe("DriveModule", () => {
     expect(menu?.querySelectorAll("[role='menuitem'] svg")).toHaveLength(0)
     expect(menu?.querySelectorAll("[role='separator']")).toHaveLength(0)
     expect(menuItemTexts()).toEqual([
+      "同步",
       "重命名",
       "移动",
     ])
@@ -1634,7 +1729,7 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["重命名", "移动"])
+    expect(menuItemTexts()).toEqual(["同步", "重命名", "移动"])
     expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
   })
 
@@ -2251,6 +2346,16 @@ async function clickText(text: string): Promise<void> {
   })
 }
 
+async function clickMenuItemText(text: string): Promise<void> {
+  const element = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!element) throw new Error(`Menu item not found: ${text}`)
+  await act(async () => {
+    element.click()
+    await flushPromises()
+  })
+}
+
 async function clickButtonByLabel(label: string): Promise<void> {
   const button = queryButtonByLabel(label)
   if (!button) throw new Error(`Button not found: ${label}`)
@@ -2457,7 +2562,10 @@ function createDriveTrashPage(
   }
 }
 
-function createDriveSyncSnapshot(summary: Partial<DriveSyncSnapshotDto["summary"]> = {}): DriveSyncSnapshotDto {
+function createDriveSyncSnapshot(
+  summary: Partial<DriveSyncSnapshotDto["summary"]> = {},
+  entries: Partial<Pick<DriveSyncSnapshotDto, "bindings" | "conflicts" | "operations">> = {},
+): DriveSyncSnapshotDto {
   const nextSummary = {
     activeBindingCount: 0,
     runningOperationCount: 0,
@@ -2466,10 +2574,32 @@ function createDriveSyncSnapshot(summary: Partial<DriveSyncSnapshotDto["summary"
     ...summary,
   }
   return {
-    bindings: [],
-    conflicts: [],
-    operations: [],
+    bindings: entries.bindings ?? [],
+    conflicts: entries.conflicts ?? [],
+    operations: entries.operations ?? [],
     summary: nextSummary,
+  }
+}
+
+function createDriveSyncBinding(input: Partial<DriveSyncSnapshotDto["bindings"][number]> = {}): DriveSyncSnapshotDto["bindings"][number] {
+  return {
+    id: "binding-1",
+    driveItemId: "drive-root",
+    driveItemName: "Docs",
+    kind: "folder",
+    localPath: "/Users/me/Docs",
+    status: "active",
+    remoteCursor: "42",
+    excludeRules: {
+      forced: [".git/**", ".git"],
+      defaults: [],
+      importedGitignore: [],
+      user: ["node_modules/**"],
+    },
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
+    lastSyncedAt: null,
+    ...input,
   }
 }
 

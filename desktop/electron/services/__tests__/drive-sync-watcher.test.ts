@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { DriveSyncBaselineEntryV1, DriveSyncBindingEntryV1 } from "../../runtime/data-repo"
-import { createDriveSyncWatcher, type DriveSyncLocalChange } from "../drive-sync-watcher"
+import { createDriveSyncWatcher, type DriveSyncLocalChange, type DriveSyncWatchFactory } from "../drive-sync-watcher"
 import { createDefaultDriveSyncExcludeRules } from "../drive-sync-excludes"
 
 describe("drive sync watcher", () => {
@@ -21,7 +21,7 @@ describe("drive sync watcher", () => {
   })
 
   it("debounces local file changes and ignores excluded paths", async () => {
-    const changes: DriveSyncLocalChange[][] = []
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
     const fakeWatch = createFakeWatch()
     const watcher = createDriveSyncWatcher({
       debounceMs: 10,
@@ -53,7 +53,7 @@ describe("drive sync watcher", () => {
   })
 
   it("ignores paths marked as self writes once", async () => {
-    const changes: DriveSyncLocalChange[][] = []
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
     const fakeWatch = createFakeWatch()
     const watcher = createDriveSyncWatcher({
       debounceMs: 1,
@@ -91,7 +91,7 @@ describe("drive sync watcher", () => {
   })
 
   it("detects delete events", async () => {
-    const changes: DriveSyncLocalChange[][] = []
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
     const fakeWatch = createFakeWatch()
     const filePath = path.join(tempDir, "gone.md")
     await writeFile(filePath, "bye", "utf8")
@@ -114,13 +114,14 @@ describe("drive sync watcher", () => {
 
 function createFakeWatch() {
   const listeners = new Map<string, (eventType: string, filename: string | Buffer | null) => void>()
+  const watch: DriveSyncWatchFactory = (rootPath, _options, listener) => {
+    listeners.set(rootPath, listener)
+    const watcher = new EventEmitter() as unknown as ReturnType<DriveSyncWatchFactory> & { close: () => void }
+    watcher.close = vi.fn()
+    return watcher
+  }
   return {
-    watch: vi.fn((rootPath: string, _options: unknown, listener: (eventType: string, filename: string | Buffer | null) => void) => {
-      listeners.set(rootPath, listener)
-      const watcher = new EventEmitter() as EventEmitter & { close: () => void }
-      watcher.close = vi.fn()
-      return watcher
-    }),
+    watch,
     emit(rootPath: string, eventType: string, filename: string) {
       listeners.get(rootPath)?.(eventType, filename)
     },

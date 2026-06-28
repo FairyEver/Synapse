@@ -1,4 +1,4 @@
-import { mkdir, lstat } from "node:fs/promises"
+import { mkdir, lstat, rename } from "node:fs/promises"
 import path from "node:path"
 import type { DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBaselineStore } from "./drive-sync-baseline"
@@ -40,6 +40,9 @@ async function executeOperationBody(deps: DriveSyncExecutorDeps): Promise<void> 
     case "delete_local":
       await deleteLocalItem(deps)
       return
+    case "move_local":
+      await moveLocalItem(deps)
+      return
     default:
       throw new Error(`暂不支持的同步操作：${deps.operation.kind}`)
   }
@@ -70,7 +73,7 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
   const stats = await lstat(localPath)
   if (stats.isDirectory()) {
     const created = await deps.accountService.createDriveFolder({
-      parentId: parentRemoteId(deps),
+      parentId: await parentRemoteId(deps),
       name: path.basename(localPath),
     })
     await deps.baselineStore.upsert({
@@ -90,7 +93,7 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
   if (!stats.isFile()) throw new Error("本地条目类型不支持同步。")
 
   const upload = await deps.accountService.uploadDriveLocalItems({
-    parentId: parentRemoteId(deps),
+    parentId: await parentRemoteId(deps),
     items: [{ kind: "file", path: localPath, name: path.basename(localPath) }],
   })
   if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
@@ -119,15 +122,48 @@ async function deleteLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
   await deps.baselineStore.markDeleted(deps.binding.id, deps.operation.relativePath)
 }
 
+async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
+  const driveItemId = requireDriveItemId(deps.operation)
+  const localPath = requireLocalPath(deps.operation)
+  const existing = (await deps.baselineStore.listByBinding(deps.binding.id))
+    .find((entry) => entry.remoteItemId === driveItemId && entry.deletedAt === null)
+  if (!existing) {
+    await downloadFile(deps)
+    return
+  }
+
+  const previousLocalPath = path.join(deps.binding.localPath, existing.relativePath)
+  if (previousLocalPath !== localPath) {
+    await mkdir(path.dirname(localPath), { recursive: true })
+    await rename(previousLocalPath, localPath)
+  }
+  const stats = await lstat(localPath)
+  await deps.baselineStore.removePath(deps.binding.id, existing.relativePath)
+  await deps.baselineStore.upsert({
+    bindingId: deps.binding.id,
+    relativePath: deps.operation.relativePath,
+    kind: stats.isDirectory() ? "folder" : "file",
+    remoteItemId: driveItemId,
+    remoteVersionId: null,
+    remoteEtag: null,
+    localSize: stats.isFile() ? stats.size : null,
+    localMtimeMs: stats.mtimeMs,
+    localHash: stats.isFile() ? await hashDriveSyncFile(localPath) : null,
+    deletedAt: null,
+  })
+}
+
 async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: string): Promise<string> {
-  const tree = await deps.accountService.listDriveItemTree({ parentId: parentRemoteId(deps) })
+  const tree = await deps.accountService.listDriveItemTree({ parentId: await parentRemoteId(deps) })
   return tree.items.find((item) => item.name === name)?.id ?? name
 }
 
-function parentRemoteId(deps: DriveSyncExecutorDeps): string | null {
+async function parentRemoteId(deps: DriveSyncExecutorDeps): Promise<string | null> {
   const parentPath = parentRelativePath(deps.operation.relativePath)
   if (parentPath === null) return deps.binding.driveItemId
-  return deps.binding.driveItemId
+  const parentBaseline = (await deps.baselineStore.listByBinding(deps.binding.id))
+    .find((entry) => entry.relativePath === parentPath && entry.deletedAt === null)
+  return parentBaseline?.remoteItemId ?? deps.binding.driveItemId
 }
 
 function parentRelativePath(relativePath: string): string | null {

@@ -122,7 +122,7 @@ export function planDriveSyncRemoteChanges(input: {
         driveItemId: change.itemId,
         relativePath,
         localPath,
-        remotePathHint: change.pathHint,
+        remotePathHint: change.pathHint ?? null,
         type: change.type === "trashed" || change.type === "deleted" ? "delete_vs_modify" : "both_modified",
         localSnapshot: null,
         remoteSnapshot: { change },
@@ -137,7 +137,7 @@ export function planDriveSyncRemoteChanges(input: {
         relativePath,
         localPath,
         driveItemId: change.itemId,
-        remotePathHint: change.pathHint,
+        remotePathHint: change.pathHint ?? null,
       }))
       continue
     }
@@ -148,7 +148,7 @@ export function planDriveSyncRemoteChanges(input: {
         relativePath,
         localPath,
         driveItemId: change.itemId,
-        remotePathHint: change.pathHint,
+        remotePathHint: change.pathHint ?? null,
       }))
       continue
     }
@@ -159,7 +159,7 @@ export function planDriveSyncRemoteChanges(input: {
       relativePath,
       localPath,
       driveItemId: change.itemId,
-      remotePathHint: change.pathHint,
+      remotePathHint: change.pathHint ?? null,
     }))
   }
 

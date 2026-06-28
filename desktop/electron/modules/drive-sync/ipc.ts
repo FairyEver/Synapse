@@ -12,6 +12,12 @@ const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "remo
 const driveSyncOperationStatuses = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"] as const
 const bindingStatusSchema = z.enum(driveSyncBindingStatuses)
 const operationStatusSchema = z.enum(driveSyncOperationStatuses)
+const driveSyncExcludeRulesSchema = z.object({
+  forced: z.array(z.string()),
+  defaults: z.array(z.string()),
+  importedGitignore: z.array(z.string()),
+  user: z.array(z.string()),
+})
 
 const driveSyncBindingSchema = z.object({
   id: z.string().min(1),
@@ -21,6 +27,7 @@ const driveSyncBindingSchema = z.object({
   localPath: z.string().min(1),
   status: bindingStatusSchema,
   remoteCursor: z.string().min(1).nullable(),
+  excludeRules: driveSyncExcludeRulesSchema,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   lastSyncedAt: z.string().min(1).nullable(),

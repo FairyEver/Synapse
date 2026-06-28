@@ -109,6 +109,88 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("uploads nested files under their remote parent folder", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await mkdir(path.join(tempDir, "Folder"), { recursive: true })
+    await writeFile(path.join(tempDir, "Folder", "local.md"), "local", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "Folder",
+      kind: "folder",
+      remoteItemId: "remote-folder",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+    const accountService = createAccountService({
+      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+      listDriveItemTree: vi.fn(async () => ({
+        items: [{ id: "remote-local", name: "local.md", type: "file" }],
+      })),
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "upload",
+        relativePath: "Folder/local.md",
+        driveItemId: null,
+        localPath: path.join(tempDir, "Folder", "local.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-folder" }))
+    await expect(namespace.list()).resolves.toContainEqual(
+      expect.objectContaining({ relativePath: "Folder/local.md", remoteItemId: "remote-local", kind: "file" }),
+    )
+  })
+
+  it("moves local entries for remote rename or move changes", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await mkdir(path.join(tempDir, "old"), { recursive: true })
+    await writeFile(path.join(tempDir, "old", "spec.md"), "remote", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old/spec.md",
+      kind: "file",
+      remoteItemId: "remote-spec",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_local",
+        relativePath: "new/spec.md",
+        driveItemId: "remote-spec",
+        localPath: path.join(tempDir, "new", "spec.md"),
+      }),
+      baselineStore: store,
+      accountService: createAccountService(),
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(readFile(path.join(tempDir, "new", "spec.md"), "utf8")).resolves.toBe("remote")
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "new/spec.md", remoteItemId: "remote-spec", deletedAt: null },
+    ])
+  })
+
   it("deletes local files through a recoverable trash strategy", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })

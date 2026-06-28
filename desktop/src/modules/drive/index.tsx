@@ -32,6 +32,7 @@ import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
 import { DriveSitesDialog } from "./drive-sites-dialog"
+import { DriveSyncDialog, DriveSyncStatusButton, type DriveSyncDialogState } from "./drive-sync-dialog"
 import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
 import {
   DRIVE_PUBLIC_ASSETS_ENTRY_ID,
@@ -228,6 +229,7 @@ function DriveModuleContent() {
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
   const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
+  const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
   const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -637,6 +639,7 @@ function DriveModuleContent() {
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
         onOpenSites={() => setSitesOpen(true)}
+        onOpenSyncStatus={() => setSyncDialog({ mode: "status", item: null })}
         onRefresh={() => { void refreshDriveView() }}
       >
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
@@ -739,6 +742,7 @@ function DriveModuleContent() {
         onOpenItem={handlePreview}
         onShare={handleShare}
         onPublishSite={setSiteCreateTarget}
+        onOpenSyncBinding={(item) => setSyncDialog({ mode: "bind", item })}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
@@ -848,6 +852,15 @@ function DriveModuleContent() {
               onCreated={() => setSitesOpen(true)}
             />
             <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
+            <DriveSyncDialog
+              open={syncDialog !== null}
+              state={syncDialog}
+              snapshot={syncSnapshot}
+              onOpenChange={(open) => {
+                if (!open) setSyncDialog(null)
+              }}
+              onSnapshotChange={setSyncSnapshot}
+            />
             <DriveAccessSettingsDialog
               target={accessSettingsTarget}
               submitting={submitting}
@@ -1202,6 +1215,7 @@ function DriveFileList({
   onOpenItem,
   onShare,
   onPublishSite,
+  onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
   onUploadDroppedFiles,
@@ -1220,6 +1234,7 @@ function DriveFileList({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
@@ -1301,6 +1316,7 @@ function DriveFileList({
                   onOpenItem={onOpenItem}
                   onShare={onShare}
                   onPublishSite={onPublishSite}
+                  onOpenSyncBinding={onOpenSyncBinding}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
                 />
@@ -1394,6 +1410,7 @@ function DriveToolbarActions({
   onCreateFolder,
   onOpenPublicLinks,
   onOpenSites,
+  onOpenSyncStatus,
   onRefresh,
   onUploadFiles,
   onUploadFolder,
@@ -1413,6 +1430,7 @@ function DriveToolbarActions({
   readonly onCreateFolder: () => void
   readonly onOpenPublicLinks: () => void
   readonly onOpenSites: () => void
+  readonly onOpenSyncStatus: () => void
   readonly onRefresh: () => void
   readonly onUploadFiles: () => void
   readonly onUploadFolder: () => void
@@ -1425,7 +1443,7 @@ function DriveToolbarActions({
           {action.badge ? `${action.label} ${action.badge}` : action.label}
         </Button>
       ))}
-      <DriveSyncStatusButton snapshot={syncSnapshot} />
+      <DriveSyncStatusButton snapshot={syncSnapshot} onOpen={onOpenSyncStatus} />
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}
@@ -1444,32 +1462,6 @@ function DriveToolbarActions({
         刷新
       </Button>
     </div>
-  )
-}
-
-function DriveSyncStatusButton({ snapshot }: { readonly snapshot: DriveSyncSnapshotDto | null }) {
-  const summary = snapshot?.summary
-  const conflictCount = summary?.conflictCount ?? 0
-  const errorCount = summary?.errorCount ?? 0
-  const runningCount = summary?.runningOperationCount ?? 0
-  const activeCount = summary?.activeBindingCount ?? 0
-  const badge = conflictCount > 0
-    ? { label: String(conflictCount), variant: "destructive" as const, message: `${conflictCount} 个冲突` }
-    : errorCount > 0
-      ? { label: String(errorCount), variant: "destructive" as const, message: `${errorCount} 个错误` }
-      : runningCount > 0
-        ? { label: String(runningCount), variant: "secondary" as const, message: `${runningCount} 项同步中` }
-        : activeCount > 0
-          ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
-          : null
-  const message = badge?.message ?? "暂无同步绑定"
-
-  return (
-    <Button type="button" variant={conflictCount > 0 || errorCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={() => toast(`同步：${message}`)}>
-      <RefreshCw data-icon="inline-start" />
-      同步
-      {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
-    </Button>
   )
 }
 
@@ -1659,6 +1651,7 @@ function DriveFileListRow({
   onOpenItem,
   onShare,
   onPublishSite,
+  onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
 }: {
@@ -1672,6 +1665,7 @@ function DriveFileListRow({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: (item: DriveItemDto) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
@@ -1799,6 +1793,7 @@ function DriveFileListRow({
             onRename={onRename}
             onMove={onMove}
             onPublishSite={onPublishSite}
+            onOpenSyncBinding={onOpenSyncBinding}
           />
         </div>
       </TableCell>
@@ -1859,11 +1854,13 @@ function DriveItemMenu({
   onRename,
   onMove,
   onPublishSite,
+  onOpenSyncBinding,
 }: {
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: (item: DriveItemDto) => void
 }) {
   return (
     <DropdownMenu>
@@ -1875,6 +1872,7 @@ function DriveItemMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
+          <DropdownMenuItem onClick={() => onOpenSyncBinding(item)}>同步</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
         </DropdownMenuGroup>

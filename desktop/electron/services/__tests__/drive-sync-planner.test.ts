@@ -165,7 +165,7 @@ function localChange(input: Partial<DriveSyncLocalChange> & {
   }
 }
 
-function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type" | "pathHint">): DriveChangeDto {
+function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & { readonly pathHint: string }): DriveChangeDto {
   return {
     id: `change:${input.itemId}`,
     sequence: "42",

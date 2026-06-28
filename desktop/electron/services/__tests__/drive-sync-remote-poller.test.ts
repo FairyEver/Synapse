@@ -159,7 +159,8 @@ function baseline(input: Partial<DriveSyncBaselineEntryV1> & {
   }
 }
 
-function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type" | "pathHint"> & {
+function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
+  readonly pathHint: string
   readonly sequence?: string
 }): DriveChangeDto {
   return {
