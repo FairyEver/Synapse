@@ -12,3 +12,4 @@
 ## 技术调整
 
 - 改进 Agent skill 发现失败时的路径脱敏，保留 `/wiki-ingest` 等 slash 名称便于诊断。
+- 移除 Agent command 路由中的空 catch，避免事件持久化异常被静默吞掉。
