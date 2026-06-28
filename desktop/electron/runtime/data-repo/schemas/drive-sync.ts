@@ -1,4 +1,4 @@
-import type { DriveSyncBindingStatus, DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { DriveSyncBindingStatus, DriveSyncExcludeRulesDto, DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { Migration, NamespaceSchema } from "../types"
 
 export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
@@ -13,9 +13,25 @@ export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
   remoteCursor: string | null
   lastSyncedAt: string | null
   lastError: string | null
-  excludeRules: readonly string[]
+  excludeRules: DriveSyncExcludeRulesDto
   createdAt: string
   updatedAt: string
+}
+
+export interface DriveSyncBaselineEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  bindingId: string
+  relativePath: string
+  kind: "file" | "folder"
+  remoteItemId: string
+  remoteVersionId: string | null
+  remoteEtag: string | null
+  localSize: number | null
+  localMtimeMs: number | null
+  localHash: string | null
+  lastSyncedAt: string
+  deletedAt: string | null
 }
 
 export interface DriveSyncOperationEntryV1 extends Record<string, unknown> {
@@ -102,6 +118,15 @@ export const driveSyncBindingsSchema: NamespaceSchema<DriveSyncBindingEntryV1> =
   encrypted: false,
 }
 
+export const driveSyncBaselineSchema: NamespaceSchema<DriveSyncBaselineEntryV1> = {
+  name: "drive.sync.baseline",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: isDriveSyncBaselineEntryV1,
+  encrypted: false,
+}
+
 export const driveSyncOperationsSchema: NamespaceSchema<DriveSyncOperationEntryV1> = {
   name: "drive.sync.operations",
   backend: "sqlite",
@@ -151,9 +176,26 @@ function isDriveSyncBindingEntryV1(value: unknown): value is DriveSyncBindingEnt
     && isNullableCursor(value.remoteCursor)
     && isNullableIsoDateString(value.lastSyncedAt)
     && isNullableString(value.lastError)
-    && isStringArray(value.excludeRules)
+    && isDriveSyncExcludeRules(value.excludeRules)
     && isIsoDateString(value.createdAt)
     && isIsoDateString(value.updatedAt)
+}
+
+function isDriveSyncBaselineEntryV1(value: unknown): value is DriveSyncBaselineEntryV1 {
+  if (!isRecord(value)) return false
+  return value.schemaVersion === 1
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.bindingId)
+    && isSafeRelativePath(value.relativePath)
+    && isStringEnum(value.kind, itemKinds)
+    && isNonEmptyString(value.remoteItemId)
+    && isNullableString(value.remoteVersionId)
+    && isNullableString(value.remoteEtag)
+    && isNullableNonNegativeNumber(value.localSize)
+    && isNullableNonNegativeNumber(value.localMtimeMs)
+    && isNullableString(value.localHash)
+    && isIsoDateString(value.lastSyncedAt)
+    && isNullableIsoDateString(value.deletedAt)
 }
 
 function isDriveSyncOperationEntryV1(value: unknown): value is DriveSyncOperationEntryV1 {
@@ -215,8 +257,28 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string"
 }
 
+function isDriveSyncExcludeRules(value: unknown): value is DriveSyncExcludeRulesDto {
+  if (!isRecord(value)) return false
+  return isStringArray(value.forced)
+    && isStringArray(value.defaults)
+    && isStringArray(value.importedGitignore)
+    && isStringArray(value.user)
+}
+
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string")
+}
+
+function isNullableNonNegativeNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0)
+}
+
+function isSafeRelativePath(value: unknown): value is string {
+  if (typeof value !== "string") return false
+  if (value === "") return true
+  if (value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/u.test(value)) return false
+  const segments = value.split(/[\\/]+/u)
+  return segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
 }
 
 function isNullableRecord(value: unknown): value is Record<string, unknown> | null {

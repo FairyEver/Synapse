@@ -143,7 +143,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       remoteCursor: input.remoteCursor ?? null,
       lastSyncedAt: null,
       lastError: null,
-      excludeRules: [...(input.excludeRules ?? [])],
+      excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
       createdAt: now,
       updatedAt: now,
     }
@@ -317,6 +317,15 @@ function normalizeRequiredString(value: string, message: string): string {
   const normalized = value.trim()
   if (!normalized) throw new Error(message)
   return normalized
+}
+
+function createBindingExcludeRules(userRules: readonly string[]): DriveSyncBindingEntryV1["excludeRules"] {
+  return {
+    forced: [".git/**", ".git"],
+    defaults: [],
+    importedGitignore: [],
+    user: [...userRules],
+  }
 }
 
 function isRunningOperationStatus(status: DriveSyncOperationStatus): boolean {

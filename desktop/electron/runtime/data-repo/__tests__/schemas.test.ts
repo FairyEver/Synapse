@@ -12,6 +12,7 @@ import {
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
+  driveSyncBaselineSchema,
   driveSyncBindingsSchema,
   driveSyncConflictsSchema,
   driveSyncOperationsSchema,
@@ -56,6 +57,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "core.config",
         "core.identity",
         "drive.sync.bindings",
+        "drive.sync.baseline",
         "drive.sync.conflicts",
         "drive.sync.operations",
         "drive.sync.state",
@@ -115,6 +117,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(quickInputSettingsSchema.backend).toBe("json")
     expect(soundNotifierSettingsSchemaDefinition.backend).toBe("json")
     expect(driveSyncBindingsSchema.backend).toBe("sqlite")
+    expect(driveSyncBaselineSchema.backend).toBe("sqlite")
     expect(driveSyncOperationsSchema.backend).toBe("sqlite")
     expect(driveSyncConflictsSchema.backend).toBe("sqlite")
     expect(driveSyncStateSchema.backend).toBe("json")
@@ -242,7 +245,12 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         remoteCursor: "42",
         lastSyncedAt: null,
         lastError: null,
-        excludeRules: [".git/**"],
+        excludeRules: {
+          forced: [".git/**"],
+          defaults: ["node_modules/**"],
+          importedGitignore: [],
+          user: ["private/**"],
+        },
         createdAt: "2026-06-28T00:00:00.000Z",
         updatedAt: "2026-06-28T00:00:00.000Z",
       }),
@@ -255,9 +263,62 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       kind: "folder",
       localPath: "",
       status: "active",
-      excludeRules: [],
+      excludeRules: {
+        forced: [".git/**"],
+        defaults: [],
+        importedGitignore: [],
+        user: [],
+      },
       createdAt: "2026-06-28T00:00:00.000Z",
       updatedAt: "2026-06-28T00:00:00.000Z",
+    })).toBe(false)
+    expect(driveSyncBindingsSchema.validate({
+      id: "binding-1",
+      schemaVersion: 1,
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+      status: "active",
+      remoteCursor: "42",
+      lastSyncedAt: null,
+      lastError: null,
+      excludeRules: [".git/**"],
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    })).toBe(false)
+    expect(
+      driveSyncBaselineSchema.validate({
+        id: "baseline-1",
+        schemaVersion: 1,
+        bindingId: "binding-1",
+        relativePath: "docs/spec.md",
+        kind: "file",
+        remoteItemId: "drive-item-1",
+        remoteVersionId: "version-1",
+        remoteEtag: "etag-1",
+        localSize: 42,
+        localMtimeMs: 1_798_000_000_000,
+        localHash: "sha256:abc",
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      }),
+    ).toBe(true)
+    expect(driveSyncBaselineSchema.validate({
+      id: "baseline-1",
+      schemaVersion: 1,
+      bindingId: "binding-1",
+      relativePath: "../secret.md",
+      kind: "file",
+      remoteItemId: "drive-item-1",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      lastSyncedAt: "2026-06-28T00:00:00.000Z",
+      deletedAt: null,
     })).toBe(false)
     expect(
       driveSyncOperationsSchema.validate({
