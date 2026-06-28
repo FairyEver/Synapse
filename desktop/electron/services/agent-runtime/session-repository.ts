@@ -255,17 +255,26 @@ export class AgentSessionRepository {
     if (!target || target.projectId !== this.projectId || target.sessionKey !== sessionKey) {
       throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
     }
+    const effectivePlatform = platform ?? target.platform
+    const effectiveWorkspaceKey = workspaceKey ?? target.workspaceKey
+    const previouslyActive = (await this.conversations.list({
+      projectId: this.projectId,
+      sessionKey,
+      workspaceKey: effectiveWorkspaceKey,
+      active: true,
+    } as Partial<ConversationEntryV1>)).filter((conversation) =>
+      effectivePlatform === undefined || conversation.platform === effectivePlatform)
     const updated = { ...target, active: true, updatedAt: this.isoNow() }
     await this.conversations.upsert(updated)
     try {
       await this.deactivateActive(
         sessionKey,
-        platform ?? target.platform,
+        effectivePlatform,
         conversationIdValue,
-        workspaceKey ?? target.workspaceKey,
+        effectiveWorkspaceKey,
       )
     } catch (e) {
-      await this.conversations.upsert({ ...target, active: false, updatedAt: this.isoNow() }).catch(() => {})
+      await this.restoreActiveSessionRollback(target, previouslyActive, e)
       throw e
     }
     return updated
@@ -537,6 +546,36 @@ export class AgentSessionRepository {
         active: false,
         updatedAt: this.isoNow(),
       })
+    }
+  }
+
+  private async restoreActiveSessionRollback(
+    target: ConversationEntryV1,
+    previouslyActive: readonly ConversationEntryV1[],
+    cause: unknown,
+  ): Promise<void> {
+    const updatedAt = this.isoNow()
+    const restoreTargets = [
+      target,
+      ...previouslyActive.filter((conversation) => conversation.id !== target.id),
+    ]
+    for (const conversation of restoreTargets) {
+      try {
+        await this.conversations.upsert({
+          ...conversation,
+          active: conversation.id === target.id ? target.active : true,
+          updatedAt,
+        })
+      } catch (rollbackError) {
+        this.logger?.warn("Failed to rollback Agent active session state.", {
+          conversationId: conversation.id,
+          sessionKey: conversation.sessionKey,
+          platform: conversation.platform,
+          workspaceKey: conversation.workspaceKey,
+          causeName: cause instanceof Error ? cause.name : typeof cause,
+          rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+        })
+      }
     }
   }
 
