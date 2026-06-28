@@ -250,6 +250,10 @@ export class ConversationRouter {
     state.cancelState = undefined
   }
 
+  forgetSavedSdkSession(conversationId: string): void {
+    this.savedSdkSessions.delete(conversationId)
+  }
+
   buildCancelledResult(
     message: AgentMessage,
     conversationId: string,

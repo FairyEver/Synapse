@@ -1282,6 +1282,40 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
+  it("clears cached SDK session ids when resetting or deleting sessions", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const id = conversationId("local", "s1", "active")
+    await conversations.upsert({
+      id,
+      schemaVersion: 1,
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local",
+      name: "s1",
+      active: true,
+      history: [],
+      createdAt: fixedNow().toISOString(),
+      updatedAt: fixedNow().toISOString(),
+    })
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      now: fixedNow,
+    })
+    const router = (service as unknown as {
+      conversationRouter: { forgetSavedSdkSession?: (conversationIdValue: string) => void }
+    }).conversationRouter
+    router.forgetSavedSdkSession = vi.fn()
+
+    await service.resetSession("s1", "local")
+    await service.deleteSession(id)
+
+    expect(router.forgetSavedSdkSession).toHaveBeenCalledWith(id)
+    expect(router.forgetSavedSdkSession).toHaveBeenCalledTimes(2)
+  })
+
   it("deleteSession resolves queued sends for a busy conversation", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new HangingSession()
