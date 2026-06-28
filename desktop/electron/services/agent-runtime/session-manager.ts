@@ -337,7 +337,12 @@ export class SessionManager {
     if (!state) return
     this.settlePending(state)
     if (!state.liveSession) return
-    await this.closeLiveSession(state, conversationId)
+    state.closing = true
+    try {
+      await this.closeLiveSession(state, conversationId)
+    } finally {
+      state.closing = false
+    }
   }
 
   private async closeLiveSession(

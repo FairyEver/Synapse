@@ -684,6 +684,35 @@ describe("SessionManager", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
   })
 
+  it("marks the session state as closing while closeCurrentTurn is waiting for SDK close", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const session = new SlowCloseLiveSession()
+    state.liveSession = session
+
+    const closing = manager.closeCurrentTurn("conversation-1")
+    await session.waitForCloseStart()
+
+    expect(state.closing).toBe(true)
+
+    session.finishClose()
+    await closing
+
+    expect(state.closing).toBe(false)
+    expect(state.liveSession).toBeUndefined()
+  })
+
   it("logs idle session reclaim with SDK session correlation", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const logger = structuredLogger()
@@ -868,6 +897,30 @@ class FakeLiveSession implements AgentLiveSession {
 
   setCloseError(error: Error): void {
     this.closeError = error
+  }
+}
+
+class SlowCloseLiveSession extends FakeLiveSession {
+  private closeStarted: (() => void) | undefined
+  private closeStartedPromise = new Promise<void>((resolve) => {
+    this.closeStarted = resolve
+  })
+  private releaseClose: (() => void) | undefined
+
+  override readonly close = vi.fn(async () => {
+    this.closeStarted?.()
+    await new Promise<void>((resolve) => {
+      this.releaseClose = resolve
+    })
+    await super.close()
+  })
+
+  waitForCloseStart(): Promise<void> {
+    return this.closeStartedPromise
+  }
+
+  finishClose(): void {
+    this.releaseClose?.()
   }
 }
 
