@@ -14,3 +14,4 @@
 - 改进 Agent skill 发现失败时的路径脱敏，保留 `/wiki-ingest` 等 slash 名称便于诊断。
 - 移除 Agent command 路由中的空 catch，避免事件持久化异常被静默吞掉。
 - 修复 Agent 会话 reset/delete 后 SDK session 去重缓存未清理的问题，避免长期运行时缓存持续增长。
+- 改进知识库 manifest 串行变更失败后的日志记录，后续变更继续执行时会保留前次失败诊断。
