@@ -112,6 +112,7 @@ export class DataRepositoryImpl implements DataRepository {
 
         const existing = snapshot
         const removedItems: unknown[] = []
+        let importStarted = false
 
         try {
           for (const item of existing) {
@@ -124,10 +125,14 @@ export class DataRepositoryImpl implements DataRepository {
           if (shouldClearSingleton) {
             await this.clearNamespaceSingleton(entry)
           }
+          importStarted = true
           await this.importNamespaceData(entry, data)
         } catch (err) {
           // Restore from snapshot to prevent data loss.
-          if (removedItems.length > 0) {
+          if (importStarted) {
+            await this.clearNamespaceItems(entry)
+          }
+          if (removedItems.length > 0 || importStarted) {
             for (const item of snapshot) {
               const id = (item as { id?: string }).id
               if (typeof id === "string") {
@@ -153,6 +158,16 @@ export class DataRepositoryImpl implements DataRepository {
       return
     }
     throw new Error(`Namespace "${entry.schema.name}" does not support clearing singleton data`)
+  }
+
+  private async clearNamespaceItems(entry: RegistrationEntry<unknown>): Promise<void> {
+    const currentItems = await entry.handle.list()
+    for (const item of currentItems) {
+      const id = (item as { id?: string }).id
+      if (typeof id === "string") {
+        await entry.handle.remove(id)
+      }
+    }
   }
 
   private async importNamespaceData(

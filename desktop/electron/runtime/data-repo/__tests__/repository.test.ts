@@ -402,6 +402,46 @@ describe("DataRepositoryImpl (T2.13)", () => {
     ])
   })
 
+  it("importAll() removes partially imported items when replace import fails midway", async () => {
+    type TestItem = { id: string; name: string }
+    const repo = createDataRepository()
+    const fakeSchema = {
+      name: "replace-test",
+      backend: "json" as const,
+      currentVersion: 1,
+      migrations: [],
+      validate: (v: unknown): v is TestItem =>
+        typeof v === "object"
+        && v !== null
+        && typeof (v as { id?: string }).id === "string"
+        && typeof (v as { name?: string }).name === "string",
+    }
+    const handle = createMidwayUpsertFailureHandle<TestItem>([
+      { id: "old-1", name: "Old 1" },
+    ], "new-2")
+    repo.register(fakeSchema, handle)
+
+    await expect(repo.importAll({
+      format: "synapse-backup-v1",
+      exportedAt: "2026-04-25T00:00:00Z",
+      namespaces: [{
+        name: "replace-test",
+        schemaVersion: 1,
+        encrypted: false,
+        data: {
+          items: [
+            { id: "new-1", name: "New 1" },
+            { id: "new-2", name: "New 2" },
+          ],
+        },
+      }],
+    })).rejects.toThrow("upsert failed")
+
+    expect(await handle.list()).toEqual([
+      { id: "old-1", name: "Old 1" },
+    ])
+  })
+
   it("register() rejects duplicates", () => {
     const repo = createDataRepository()
     const fakeSchema = {
@@ -507,6 +547,31 @@ function createMidwayRemoveFailureHandle<T extends { id: string }>(
     },
     remove: async (id) => {
       if (id === failRemoveId) throw new Error("remove failed")
+      items = items.filter((item) => item.id !== id)
+    },
+    onChange: () => () => {},
+  }
+}
+
+function createMidwayUpsertFailureHandle<T extends { id: string }>(
+  initialItems: T[],
+  failUpsertId: string,
+): DataNamespace<T> {
+  let items = [...initialItems]
+  return {
+    name: "replace-test",
+    schemaVersion: 1,
+    backend: "json",
+    getSingleton: async () => null,
+    setSingleton: async () => {},
+    list: async () => [...items],
+    get: async (id) => items.find((item) => item.id === id) ?? null,
+    upsert: async (item) => {
+      if (item.id === failUpsertId) throw new Error("upsert failed")
+      items = items.filter((existing) => existing.id !== item.id)
+      items.push(item)
+    },
+    remove: async (id) => {
       items = items.filter((item) => item.id !== id)
     },
     onChange: () => () => {},
