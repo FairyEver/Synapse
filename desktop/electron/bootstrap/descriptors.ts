@@ -100,6 +100,10 @@ import {
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
   ConversationEntryV1,
+  DriveSyncBindingEntryV1,
+  DriveSyncConflictEntryV1,
+  DriveSyncOperationEntryV1,
+  DriveSyncStateEntryV1,
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
@@ -117,6 +121,7 @@ import { readSkillDraftFromDirectory } from "../services/content-skill-source-se
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
+import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
 import {
   AutomationExecutionService,
   AutomationItemRepository,
@@ -373,6 +378,21 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
       }
     })
     return service
+  },
+}
+
+export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
+  id: "core.drive-sync",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createDriveSyncService({
+      bindings: dataRepository.namespace<DriveSyncBindingEntryV1>("drive.sync.bindings"),
+      operations: dataRepository.namespace<DriveSyncOperationEntryV1>("drive.sync.operations"),
+      conflicts: dataRepository.namespace<DriveSyncConflictEntryV1>("drive.sync.conflicts"),
+      state: dataRepository.namespace<DriveSyncStateEntryV1>("drive.sync.state"),
+    })
   },
 }
 

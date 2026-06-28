@@ -116,6 +116,8 @@ import type {
   DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
+  DriveSyncBindingDto,
+  DriveSyncSnapshotDto,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
@@ -890,6 +892,20 @@ export type SynapseBridge = {
     update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
     delete: (input: { id: string }) => Promise<void>
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+  }
+  driveSync: {
+    getSnapshot: () => Promise<DriveSyncSnapshotDto>
+    createBinding: (input: {
+      driveItemId: string
+      driveItemName: string
+      kind: "file" | "folder"
+      drivePathHint?: string | null
+      localPath: string
+      remoteCursor?: string | null
+      excludeRules?: readonly string[]
+    }) => Promise<DriveSyncBindingDto>
+    removeBinding: (input: { id: string }) => Promise<void>
+    onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   soundNotifier: {
     getSettings: () => Promise<SynapseSoundNotifierSettings>

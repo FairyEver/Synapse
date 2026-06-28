@@ -42,6 +42,33 @@ export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy
 export type DriveTrashItemKind = "normal" | "public_asset"
 export type DriveSiteStatus = "active" | "disabled" | "expired" | "deleted" | "failed"
 export type DriveSiteAccessMode = "public" | "password"
+export const DRIVE_CHANGE_TYPES = [
+  "created",
+  "content_updated",
+  "renamed",
+  "moved",
+  "trashed",
+  "restored",
+  "deleted",
+] as const
+export type DriveChangeType = typeof DRIVE_CHANGE_TYPES[number]
+export const DRIVE_SYNC_BINDING_STATUSES = [
+  "active",
+  "paused",
+  "conflict",
+  "error",
+  "removed",
+] as const
+export type DriveSyncBindingStatus = typeof DRIVE_SYNC_BINDING_STATUSES[number]
+export const DRIVE_SYNC_OPERATION_STATUSES = [
+  "pending",
+  "running",
+  "succeeded",
+  "retry_wait",
+  "conflict",
+  "error",
+] as const
+export type DriveSyncOperationStatus = typeof DRIVE_SYNC_OPERATION_STATUSES[number]
 export type DriveDocumentImageSourceKind =
   | "owner_asset"
   | "collaborator_asset"
@@ -107,6 +134,74 @@ export interface DriveItemDto {
   readonly activeShare?: DriveItemActiveShareDto | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface DriveChangeDto {
+  readonly id: string
+  readonly sequence: string
+  readonly itemId: string
+  readonly parentId: string | null
+  readonly type: DriveChangeType
+  readonly versionId?: string | null
+  readonly etag?: string | null
+  readonly name?: string | null
+  readonly pathHint?: string | null
+  readonly actor?: string | null
+  readonly occurredAt: string
+}
+
+export interface DriveChangeListInput {
+  readonly cursor?: string | null
+  readonly limit?: number
+}
+
+export interface DriveChangeListPageDto {
+  readonly items: readonly DriveChangeDto[]
+  readonly nextCursor: string | null
+  readonly hasMore: boolean
+  readonly resyncRequired: boolean
+}
+
+export interface DriveSyncBindingDto {
+  readonly id: string
+  readonly driveItemId: string
+  readonly driveItemName: string
+  readonly kind: DriveItemType
+  readonly localPath: string
+  readonly status: DriveSyncBindingStatus
+  readonly remoteCursor: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly lastSyncedAt: string | null
+}
+
+export interface DriveSyncConflictDto {
+  readonly id: string
+  readonly bindingId: string
+  readonly relativePath: string
+  readonly type: string
+  readonly createdAt: string
+}
+
+export interface DriveSyncOperationDto {
+  readonly id: string
+  readonly bindingId: string
+  readonly relativePath: string
+  readonly status: DriveSyncOperationStatus
+  readonly message: string | null
+  readonly updatedAt: string
+}
+
+export interface DriveSyncSnapshotDto {
+  readonly bindings: readonly DriveSyncBindingDto[]
+  readonly conflicts: readonly DriveSyncConflictDto[]
+  readonly operations: readonly DriveSyncOperationDto[]
+  readonly summary: {
+    readonly activeBindingCount: number
+    readonly runningOperationCount: number
+    readonly conflictCount: number
+    readonly errorCount: number
+  }
 }
 
 export interface DriveItemActiveShareDto {

@@ -93,6 +93,7 @@ import {
   type DriveBrowserSourceItem,
 } from "./drive-browser"
 import { isCommentableMarkdownItem } from "./drive-annotation-target"
+import { DriveChangeLogService, type DriveChangeAppendInput } from "./drive-change-log"
 import { buildDriveBrowserEdit, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
 import {
   canUserEditShare,
@@ -266,6 +267,7 @@ export class DriveService implements OnApplicationBootstrap {
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly lifecycle?: DriveLifecycleService,
+    @Optional() private readonly changes?: DriveChangeLogService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -343,7 +345,7 @@ export class DriveService implements OnApplicationBootstrap {
           reservedBytes: 0n,
           usedBytesDelta: version.size,
         })
-        return tx.driveItem.update({
+        const restored = await tx.driveItem.update({
           where: { id: item.id },
           data: {
             storageKey: nextStorageKey,
@@ -354,6 +356,17 @@ export class DriveService implements OnApplicationBootstrap {
           },
           include: driveItemWithShares,
         })
+        await this.recordDriveChange({
+          userId,
+          itemId: restored.id,
+          parentId: restored.parentId,
+          type: "content_updated",
+          versionId: nextVersionId,
+          etag: version.etag,
+          name: restored.name,
+          actor: userId,
+        }, tx)
+        return restored
       })
       committed = true
       await this.recordDriveAudit({
@@ -878,6 +891,16 @@ export class DriveService implements OnApplicationBootstrap {
         },
         include: driveItemWithShares,
       })
+      await this.recordDriveChange({
+        userId,
+        itemId: item.id,
+        parentId: item.parentId,
+        type: "content_updated",
+        versionId,
+        etag: object.etag ?? null,
+        name: item.name,
+        actor: userId,
+      }, tx)
       return { item, completedNow: true }
     }).then((transactionResult) => {
       committed = true
@@ -932,17 +955,28 @@ export class DriveService implements OnApplicationBootstrap {
       select: { id: true },
     })
     if (existingFolder) throw new BadRequestException("同名文件夹已存在。")
-    const folder = await this.prisma.driveItem.create({
-      data: {
+    const folder = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.driveItem.create({
+        data: {
+          userId,
+          parentId: input.parentId,
+          type: DRIVE_ITEM_TYPE.folder,
+          name,
+          size: 0n,
+          storageStatus: DRIVE_STORAGE_STATUS.active,
+          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+        },
+        include: driveItemWithShares,
+      })
+      await this.recordDriveChange({
         userId,
-        parentId: input.parentId,
-        type: DRIVE_ITEM_TYPE.folder,
-        name,
-        size: 0n,
-        storageStatus: DRIVE_STORAGE_STATUS.active,
-        uploadStatus: DRIVE_UPLOAD_STATUS.completed,
-      },
-      include: driveItemWithShares,
+        itemId: created.id,
+        parentId: created.parentId,
+        type: "created",
+        name: created.name,
+        actor: userId,
+      }, tx)
+      return created
     })
     await this.recordDriveAudit({
       userId,
@@ -981,10 +1015,21 @@ export class DriveService implements OnApplicationBootstrap {
       type: item.type,
       userId,
     })
-    const updated = await this.prisma.driveItem.update({
-      where: { id: itemId },
-      data: { name: nextName },
-      include: driveItemWithShares,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.driveItem.update({
+        where: { id: itemId },
+        data: { name: nextName },
+        include: driveItemWithShares,
+      })
+      await this.recordDriveChange({
+        userId,
+        itemId: next.id,
+        parentId: next.parentId,
+        type: "renamed",
+        name: next.name,
+        actor: userId,
+      }, tx)
+      return next
     })
     await this.recordDriveAudit({
       userId,
@@ -1012,10 +1057,21 @@ export class DriveService implements OnApplicationBootstrap {
       type: item.type,
       userId,
     })
-    const updated = await this.prisma.driveItem.update({
-      where: { id: item.id },
-      data: { parentId },
-      include: driveItemWithShares,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.driveItem.update({
+        where: { id: item.id },
+        data: { parentId },
+        include: driveItemWithShares,
+      })
+      await this.recordDriveChange({
+        userId,
+        itemId: next.id,
+        parentId: next.parentId,
+        type: "moved",
+        name: next.name,
+        actor: userId,
+      }, tx)
+      return next
     })
     await this.recordDriveAudit({
       userId,
@@ -2254,6 +2310,16 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: nextVersionId },
         })
         if (!version) throw new NotFoundException("历史版本不存在。")
+        await this.recordDriveChange({
+          userId: input.ownerId,
+          itemId: item.id,
+          parentId: item.parentId,
+          type: "content_updated",
+          versionId: version.id,
+          etag: version.etag,
+          name: item.name,
+          actor: input.actorUserId,
+        }, tx)
         return { item, version }
       })
       committed = true
@@ -2943,7 +3009,16 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   private getLifecycleService(): DriveLifecycleService {
-    return this.lifecycle ?? new DriveLifecycleService(this.prisma, this.storage, this.auditLog)
+    return this.lifecycle ?? new DriveLifecycleService(this.prisma, this.storage, this.auditLog, this.changes)
+  }
+
+  private async recordDriveChange(input: DriveChangeAppendInput, client?: DrivePrismaClient): Promise<void> {
+    if (!this.changes) return
+    if (client) {
+      await this.changes.append(input, client)
+      return
+    }
+    await this.changes.append(input)
   }
 }
 

@@ -68,6 +68,7 @@ model User {
   driveUsage                  DriveUsage?
   driveUploadSessions         DriveUploadSession[]
   driveFileVersions           DriveFileVersion[]
+  driveChanges                DriveChange[]
   driveAnnotationThreads      DriveAnnotationThread[]
   driveAnnotationComments     DriveAnnotationComment[]
   publicAssets                PublicAsset[]
@@ -301,6 +302,7 @@ model DriveItem {
   shares               DriveShare[]
   uploadSessions       DriveUploadSession[]
   fileVersions         DriveFileVersion[]
+  changes              DriveChange[]
   annotationThreads    DriveAnnotationThread[]
   publicAsset          PublicAsset?
   publicAssetRevisions PublicAssetRevision[]
@@ -312,6 +314,27 @@ model DriveItem {
   @@index([deleteRootId, lifecycleStatus])
   @@index([storageStatus])
   @@index([objectMissing])
+}
+
+model DriveChange {
+  id         String    @id @default(cuid())
+  sequence   BigInt    @unique @default(autoincrement())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  parentId   String?
+  type       String    @db.VarChar(32)
+  versionId  String?
+  etag       String?
+  name       String?
+  pathHint   String?
+  actor      String?
+  occurredAt DateTime  @default(now())
+
+  @@index([userId, sequence])
+  @@index([itemId, sequence])
+  @@index([userId, itemId, sequence])
 }
 
 model DriveShare {

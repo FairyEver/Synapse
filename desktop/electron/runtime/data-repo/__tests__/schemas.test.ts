@@ -12,6 +12,10 @@ import {
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
+  driveSyncBindingsSchema,
+  driveSyncConflictsSchema,
+  driveSyncOperationsSchema,
+  driveSyncStateSchema,
   opsDiagnosticsSchema,
   outboxSchema,
   projectsSchema,
@@ -51,6 +55,10 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "conversations",
         "core.config",
         "core.identity",
+        "drive.sync.bindings",
+        "drive.sync.conflicts",
+        "drive.sync.operations",
+        "drive.sync.state",
         "ops.diagnostics",
         "outbox",
         "projects",
@@ -106,6 +114,10 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(quickInputItemsSchema.backend).toBe("sqlite")
     expect(quickInputSettingsSchema.backend).toBe("json")
     expect(soundNotifierSettingsSchemaDefinition.backend).toBe("json")
+    expect(driveSyncBindingsSchema.backend).toBe("sqlite")
+    expect(driveSyncOperationsSchema.backend).toBe("sqlite")
+    expect(driveSyncConflictsSchema.backend).toBe("sqlite")
+    expect(driveSyncStateSchema.backend).toBe("json")
   })
 
   it("encrypted flag is set only on secret-bearing namespaces", () => {
@@ -217,6 +229,106 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         volume: 70,
       }),
     ).toBe(false)
+    expect(
+      driveSyncBindingsSchema.validate({
+        id: "binding-1",
+        schemaVersion: 1,
+        driveItemId: "drive-item-1",
+        driveItemName: "产品文档",
+        kind: "folder",
+        drivePathHint: "/产品文档",
+        localPath: "/Users/me/docs",
+        status: "active",
+        remoteCursor: "42",
+        lastSyncedAt: null,
+        lastError: null,
+        excludeRules: [".git/**"],
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(driveSyncBindingsSchema.validate({
+      id: "binding-1",
+      schemaVersion: 1,
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      localPath: "",
+      status: "active",
+      excludeRules: [],
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    })).toBe(false)
+    expect(
+      driveSyncOperationsSchema.validate({
+        id: "operation-1",
+        schemaVersion: 1,
+        bindingId: "binding-1",
+        kind: "download",
+        status: "running",
+        driveItemId: "drive-item-1",
+        relativePath: "spec.md",
+        localPath: "/Users/me/docs/spec.md",
+        remotePathHint: "/产品文档/spec.md",
+        message: null,
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        startedAt: "2026-06-28T00:00:01.000Z",
+        completedAt: null,
+      }),
+    ).toBe(true)
+    expect(driveSyncOperationsSchema.validate({
+      id: "operation-1",
+      schemaVersion: 1,
+      bindingId: "binding-1",
+      kind: "download",
+      status: "maybe",
+      relativePath: "spec.md",
+      message: null,
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    })).toBe(false)
+    expect(
+      driveSyncConflictsSchema.validate({
+        id: "conflict-1",
+        schemaVersion: 1,
+        bindingId: "binding-1",
+        driveItemId: "drive-item-1",
+        relativePath: "spec.md",
+        localPath: "/Users/me/docs/spec.md",
+        remotePathHint: "/产品文档/spec.md",
+        type: "both_modified",
+        status: "open",
+        localSnapshot: { mtimeMs: 1000, size: 10 },
+        remoteSnapshot: { sequence: "43", versionId: "version-1" },
+        resolution: null,
+        createdAt: "2026-06-28T00:00:00.000Z",
+        resolvedAt: null,
+      }),
+    ).toBe(true)
+    expect(driveSyncConflictsSchema.validate({
+      id: "conflict-1",
+      schemaVersion: 1,
+      bindingId: "binding-1",
+      relativePath: "spec.md",
+      type: "both_modified",
+      status: "open",
+      resolution: "invented",
+      createdAt: "2026-06-28T00:00:00.000Z",
+      resolvedAt: null,
+    })).toBe(false)
+    expect(
+      driveSyncStateSchema.validate({
+        schemaVersion: 1,
+        health: "idle",
+        lastCursor: "42",
+        lastStartedAt: null,
+        lastStoppedAt: null,
+        lastError: null,
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(driveSyncStateSchema.validate({ schemaVersion: 1, health: "invented" })).toBe(false)
     expect(
       conversationsSchema.validate({
         id: "conv-1",

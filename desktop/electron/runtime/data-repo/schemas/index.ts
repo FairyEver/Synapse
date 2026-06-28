@@ -20,6 +20,16 @@ export {
   type CoreIdentityV2,
 } from "./core-identity"
 export {
+  driveSyncBindingsSchema,
+  driveSyncConflictsSchema,
+  driveSyncOperationsSchema,
+  driveSyncStateSchema,
+  type DriveSyncBindingEntryV1,
+  type DriveSyncConflictEntryV1,
+  type DriveSyncOperationEntryV1,
+  type DriveSyncStateEntryV1,
+} from "./drive-sync"
+export {
   repoPendingPushesSchema,
   type RepoPendingPushV1,
 } from "./repo-pending-pushes"
@@ -110,6 +120,7 @@ export {
 import { coreConfigSchema } from "./core-config"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
+import { driveSyncBindingsSchema, driveSyncConflictsSchema, driveSyncOperationsSchema, driveSyncStateSchema } from "./drive-sync"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
@@ -146,6 +157,10 @@ import type { NamespaceSchema } from "../types"
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   coreConfigSchema,
   coreIdentitySchema,
+  driveSyncBindingsSchema,
+  driveSyncOperationsSchema,
+  driveSyncConflictsSchema,
+  driveSyncStateSchema,
   repoRepositoriesSchema,
   repoPendingPushesSchema,
   cheatCodeStatesSchema,

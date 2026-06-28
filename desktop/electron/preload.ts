@@ -402,6 +402,12 @@ const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "driveSync": {
+    "getSnapshot": "synapse:drive-sync:snapshot:get",
+    "createBinding": "synapse:drive-sync:bindings:create",
+    "removeBinding": "synapse:drive-sync:bindings:remove",
+    "changed": "synapse:drive-sync:changed",
+  },
   "soundNotifier": {
     "getSettings": "synapse:sound-notifier:settings:get",
     "updateSettings": "synapse:sound-notifier:settings:update",
@@ -848,6 +854,15 @@ const synapseBridge: SynapseBridge = {
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.quickInput.changed,
+    ),
+  },
+  driveSync: {
+    getSnapshot: () => invoke(IPC_CHANNELS.driveSync.getSnapshot)(),
+    createBinding: (input) => invoke(IPC_CHANNELS.driveSync.createBinding)(input),
+    removeBinding: (input) => invoke(IPC_CHANNELS.driveSync.removeBinding)(input),
+    onChanged: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.driveSync.changed,
     ),
   },
   soundNotifier: {

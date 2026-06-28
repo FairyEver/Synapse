@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveChangeLogService } from "./drive-change-log"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveSiteService } from "./drive-site.service"
@@ -93,6 +94,9 @@ describe("DriveController", () => {
     resolvePublicSite: vi.fn(),
     verifySitePassword: vi.fn(),
   }
+  const changes = {
+    list: vi.fn(),
+  }
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
   }
@@ -150,6 +154,7 @@ describe("DriveController", () => {
     sites.republishSite.mockReset()
     sites.resolvePublicSite.mockReset()
     sites.verifySitePassword.mockReset()
+    changes.list.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
@@ -161,6 +166,7 @@ describe("DriveController", () => {
         { provide: DrivePublicAssetService, useValue: publicAssets },
         { provide: DriveAnnotationService, useValue: annotations },
         { provide: DriveSiteService, useValue: sites },
+        { provide: DriveChangeLogService, useValue: changes },
         { provide: "DriveStoragePort", useValue: storage },
       ],
     })
@@ -180,6 +186,46 @@ describe("DriveController", () => {
 
   it("requires user auth for /api/drive/items", async () => {
     await request(app!.getHttpServer()).get("/api/drive/items").expect(401)
+  })
+
+  it("lists Drive changes for the authenticated user", async () => {
+    changes.list.mockResolvedValue({
+      items: [],
+      nextCursor: "42",
+      hasMore: false,
+      resyncRequired: false,
+    })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveChangeLogService, useValue: changes },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const response = await request(userApp.getHttpServer())
+        .get("/api/drive/changes?cursor=41&limit=50")
+        .expect(200)
+      expect(response.body).toEqual({
+        items: [],
+        nextCursor: "42",
+        hasMore: false,
+        resyncRequired: false,
+      })
+      expect(changes.list).toHaveBeenCalledWith("user-1", { cursor: "41", limit: 50 })
+    } finally {
+      await userApp.close()
+    }
   })
 
   it("requires user auth for owner direct file responses", async () => {

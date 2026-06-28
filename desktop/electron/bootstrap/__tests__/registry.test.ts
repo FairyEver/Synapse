@@ -83,6 +83,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.data-repository",
         "core.database",
         "core.diagnostics",
+        "core.drive-sync",
         "core.event-bus",
         "core.execution-isolation",
         "core.http-test",
@@ -145,6 +146,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
+    expect(byId.get("core.drive-sync")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("git.access-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
     expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
     expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner", "core.process-environment"])

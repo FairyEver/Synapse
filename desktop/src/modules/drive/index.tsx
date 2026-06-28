@@ -20,6 +20,7 @@ import {
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
+  type DriveSyncSnapshotDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -226,6 +227,7 @@ function DriveModuleContent() {
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
+  const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
   const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -284,6 +286,7 @@ function DriveModuleContent() {
     if (!accountAuthenticated) {
       setItems([])
       setUsageState({ status: "idle", usage: null })
+      setSyncSnapshot(null)
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
@@ -298,6 +301,26 @@ function DriveModuleContent() {
     }
     void refreshDriveView()
   }, [accountAuthenticated, parentId, refreshDriveView])
+
+  useEffect(() => {
+    if (!accountAuthenticated) return
+    const bridge = requireSynapseBridge()
+    let disposed = false
+    void bridge.driveSync.getSnapshot()
+      .then((snapshot) => {
+        if (!disposed) setSyncSnapshot(snapshot)
+      })
+      .catch(() => {
+        if (!disposed) setSyncSnapshot(null)
+      })
+    const unsubscribe = bridge.driveSync.onChanged((snapshot) => {
+      setSyncSnapshot(snapshot)
+    })
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
+  }, [accountAuthenticated])
 
   const actionsDisabled = activeView !== "files" || !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
@@ -604,6 +627,7 @@ function DriveModuleContent() {
     return (
       <DriveToolbarActions
         rendererActions={rendererActions}
+        syncSnapshot={syncSnapshot}
         uploadDisabled={uploadActionsDisabled}
         createDisabled={actionsDisabled}
         publicLinksDisabled={!accountAuthenticated || loading}
@@ -1376,6 +1400,7 @@ function DriveToolbarActions({
   publicLinksDisabled,
   refreshDisabled,
   rendererActions,
+  syncSnapshot,
   uploadDisabled,
 }: {
   readonly children: ReactNode
@@ -1383,6 +1408,7 @@ function DriveToolbarActions({
   readonly publicLinksDisabled: boolean
   readonly refreshDisabled: boolean
   readonly rendererActions: readonly DriveRendererAction[]
+  readonly syncSnapshot: DriveSyncSnapshotDto | null
   readonly uploadDisabled: boolean
   readonly onCreateFolder: () => void
   readonly onOpenPublicLinks: () => void
@@ -1399,6 +1425,7 @@ function DriveToolbarActions({
           {action.badge ? `${action.label} ${action.badge}` : action.label}
         </Button>
       ))}
+      <DriveSyncStatusButton snapshot={syncSnapshot} />
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}
@@ -1417,6 +1444,32 @@ function DriveToolbarActions({
         刷新
       </Button>
     </div>
+  )
+}
+
+function DriveSyncStatusButton({ snapshot }: { readonly snapshot: DriveSyncSnapshotDto | null }) {
+  const summary = snapshot?.summary
+  const conflictCount = summary?.conflictCount ?? 0
+  const errorCount = summary?.errorCount ?? 0
+  const runningCount = summary?.runningOperationCount ?? 0
+  const activeCount = summary?.activeBindingCount ?? 0
+  const badge = conflictCount > 0
+    ? { label: String(conflictCount), variant: "destructive" as const, message: `${conflictCount} 个冲突` }
+    : errorCount > 0
+      ? { label: String(errorCount), variant: "destructive" as const, message: `${errorCount} 个错误` }
+      : runningCount > 0
+        ? { label: String(runningCount), variant: "secondary" as const, message: `${runningCount} 项同步中` }
+        : activeCount > 0
+          ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
+          : null
+  const message = badge?.message ?? "暂无同步绑定"
+
+  return (
+    <Button type="button" variant={conflictCount > 0 || errorCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={() => toast(`同步：${message}`)}>
+      <RefreshCw data-icon="inline-start" />
+      同步
+      {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
+    </Button>
   )
 }
 
