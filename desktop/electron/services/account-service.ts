@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { createReadStream, createWriteStream, type Stats } from "node:fs"
-import { mkdir, rename, rm, stat } from "node:fs/promises"
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
@@ -39,6 +39,16 @@ import type {
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
+  DriveLinkDownloadFileDto,
+  DriveLinkDownloadFileInput,
+  DriveLinkListDto,
+  DriveLinkListInput,
+  DriveLinkMaterializeDto,
+  DriveLinkMaterializeInput,
+  DriveLinkReadTextDto,
+  DriveLinkReadTextInput,
+  DriveLinkResolveDto,
+  DriveLinkResolveInput,
   DrivePublicAssetDto,
   DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
@@ -74,6 +84,8 @@ const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
 const HTTP_ERROR_BODY_MAX_LENGTH = 200
 const ACCOUNT_WEBHOOK_PAGE_SIZE = 100
+const DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES = 200
+const DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|api[-_]?key/i
 const UNSAFE_DRIVE_RELATIVE_PATH_PATTERN = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 const sharedUrlsPromise = import("@synapse/shared")
@@ -486,6 +498,67 @@ export class AccountService {
     const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), {}, "文件下载失败。")
     await writeResponseBodyToFile(response, input.outputPath)
     return { ok: true, path: input.outputPath }
+  }
+
+  async resolveDriveLink(input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
+    return this.requestAuthenticatedJson<DriveLinkResolveDto>("POST", `${apiBaseUrl()}/drive/link-intake/resolve`, input, "云盘链接解析失败。")
+  }
+
+  async listDriveLink(input: DriveLinkListInput): Promise<DriveLinkListDto> {
+    return this.requestAuthenticatedJson<DriveLinkListDto>("POST", `${apiBaseUrl()}/drive/link-intake/list`, input, "云盘链接目录加载失败。")
+  }
+
+  async readDriveLinkText(input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
+    return this.requestAuthenticatedJson<DriveLinkReadTextDto>("POST", `${apiBaseUrl()}/drive/link-intake/read-text`, input, "云盘链接正文读取失败。")
+  }
+
+  async materializeDriveLink(input: DriveLinkMaterializeInput): Promise<DriveLinkMaterializeDto> {
+    const page = await this.listDriveLink(input)
+    const root = await createDriveLinkIntakeRunDirectory()
+    const files: DriveLinkMaterializeDto["files"] = []
+    const skipped: DriveLinkMaterializeDto["skipped"] = []
+    const warnings: string[] = []
+    let totalBytes = 0
+    const maxFiles = input.maxFiles ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES
+    const maxBytes = input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES
+
+    for (const item of page.items.slice(0, maxFiles)) {
+      if (!["markdown", "html-source", "text"].includes(item.previewKind)) {
+        skipped.push({ path: item.path, reason: "not-text" })
+        continue
+      }
+      const text = await this.readDriveLinkText({
+        url: input.url,
+        password: input.password,
+        itemId: item.itemId ?? undefined,
+        path: item.path,
+      })
+      const relativePath = safeDriveLinkOutputPath(item.path)
+      const outputPath = path.join(root.contentPath, relativePath)
+      const bytes = Buffer.byteLength(text.text, "utf8")
+      if (totalBytes + bytes > maxBytes) {
+        skipped.push({ path: item.path, reason: "max-bytes" })
+        continue
+      }
+      await mkdir(path.dirname(outputPath), { recursive: true })
+      await writeFile(outputPath, text.text, "utf8")
+      totalBytes += bytes
+      files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+    }
+
+    if (page.page.hasMore) warnings.push("目录还有更多文件，本次只处理第一页。")
+    const entryPath = files[0] ? path.join(root.contentPath, files[0].relativePath) : null
+    const manifest = { sourceUrl: input.url, fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
+    await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+    return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
+  }
+
+  async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
+    const targetPath = input.outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
+    const response = await this.fetchAuthenticated(input.url, {}, "云盘链接下载失败。")
+    await writeResponseBodyToFile(response, targetPath)
+    const fileStat = await safeLocalFileStat(targetPath)
+    return { localPath: targetPath, mimeType: null, size: String(fileStat?.size ?? 0) }
   }
 
   async downloadDriveFolderZip(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
@@ -1923,6 +1996,31 @@ function isSafeDriveRelativePath(value: string): boolean {
     return false
   }
   return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+}
+
+async function createDriveLinkIntakeRunDirectory(): Promise<{
+  readonly rootPath: string
+  readonly contentPath: string
+  readonly manifestPath: string
+}> {
+  const rootPath = path.join(app.getPath("userData"), "drive-link-intake", `run_${Date.now()}_${randomBytes(4).toString("hex")}`)
+  const contentPath = path.join(rootPath, "content")
+  await mkdir(contentPath, { recursive: true })
+  return { rootPath, contentPath, manifestPath: path.join(rootPath, "manifest.json") }
+}
+
+function safeDriveLinkOutputPath(value: string): string {
+  const normalized = value.replace(/\\/gu, "/").split("/").filter(Boolean).join("/")
+  if (!isSafeDriveRelativePath(normalized)) {
+    throw new Error("云盘链接路径无效。")
+  }
+  return normalized
+}
+
+function driveLinkFileKind(previewKind: string, mimeType: string | null): "markdown" | "html" | "text" | "image" | "binary" | "folder" {
+  if (previewKind === "markdown") return "markdown"
+  if (previewKind === "html-source" || mimeType === "text/html") return "html"
+  return "text"
 }
 
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {

@@ -289,6 +289,52 @@ describe("AccountService", () => {
     await expect(readdir(dir)).resolves.toEqual(["report.txt"])
   })
 
+  it("posts Drive link resolve requests without leaking password into URL", async () => {
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson").mockResolvedValueOnce({
+      ok: true,
+      linkType: "share",
+      access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+      root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
+      ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+    })
+
+    await service.resolveDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret" })
+
+    expect(requestAuthenticatedJson).toHaveBeenCalledWith(
+      "POST",
+      expectedApiUrl("/drive/link-intake/resolve"),
+      { url: "https://synapse.test/share/shr_123", password: "secret" },
+      "云盘链接解析失败。",
+    )
+    expect(String(requestAuthenticatedJson.mock.calls[0]?.[1])).not.toContain("secret")
+  })
+
+  it("materializes Drive link text into a local cache manifest", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
+      items: [{ path: "需求说明.md", name: "需求说明.md", type: "file", mimeType: "text/markdown", previewKind: "markdown", size: "12", itemId: "item-1" }],
+      page: { hasMore: false, nextOffset: null },
+    })
+    vi.spyOn(service, "readDriveLinkText").mockResolvedValueOnce({
+      path: "需求说明.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      text: "# 需求\n正文",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+
+    const result = await service.materializeDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret", scope: "text" })
+
+    expect(result.localRootPath).toContain(path.join(os.tmpdir(), "synapse-account-userData", "drive-link-intake"))
+    expect(result.entryPath).toContain("需求说明.md")
+    expect(result.files).toEqual([{ relativePath: "需求说明.md", kind: "markdown", size: "15" }])
+    expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
+  })
+
   it("rejects local files over the shared single file limit before preparing upload", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-too-large-"))
     const filePath = path.join(dir, "large.bin")
