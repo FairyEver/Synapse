@@ -16,3 +16,4 @@
 - 移除 Agent command 路由中的空 catch，避免事件持久化异常被静默吞掉。
 - 修复 Agent 会话 reset/delete 后 SDK session 去重缓存未清理的问题，避免长期运行时缓存持续增长。
 - 改进知识库 manifest 串行变更失败后的日志记录，后续变更继续执行时会保留前次失败诊断。
+- 为 Agent skill 解析增加实例缓存，减少重复 slash 解析时的文件扫描和读取开销。

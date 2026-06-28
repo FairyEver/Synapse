@@ -38,6 +38,32 @@ describe("SkillRegistry", () => {
       .toContain("## User Arguments:\nsrc/app.ts")
   })
 
+  it("reuses cached skill metadata for repeated resolves", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const skillDir = path.join(workspace, ".agents", "skills", "reviewer")
+    const skillPath = path.join(skillDir, "SKILL.md")
+    await fs.mkdir(skillDir, { recursive: true })
+    await fs.writeFile(skillPath, [
+      "---",
+      "name: Reviewer",
+      "description: Review code",
+      "---",
+      "Inspect the diff.",
+    ].join("\n"))
+
+    const originalReadFile = fs.readFile.bind(fs)
+    const readFile = vi.spyOn(fs, "readFile").mockImplementation((filePath, options) =>
+      originalReadFile(filePath, options))
+    const registry = new SkillRegistry({ workspacePath: workspace })
+
+    await expect(registry.resolve("reviewer")).resolves.toEqual(expect.objectContaining({ name: "reviewer" }))
+    await expect(registry.resolve("reviewer")).resolves.toEqual(expect.objectContaining({ name: "reviewer" }))
+
+    expect(readFile.mock.calls.filter(([filePath]) =>
+      path.basename(String(filePath)) === "SKILL.md"
+      && path.basename(path.dirname(String(filePath))) === "reviewer").length).toBe(1)
+  })
+
   it("skips unreadable skill files with diagnostics", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const goodDir = path.join(workspace, ".agents", "skills", "reviewer")
