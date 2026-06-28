@@ -4,6 +4,7 @@ import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES } from "./drive-browser"
+import type { DriveChangeLogService } from "./drive-change-log"
 import { DriveService } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 
@@ -25,6 +26,25 @@ const storageMock: DriveStoragePort = {
   copyObject: vi.fn(async () => undefined),
   getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
   deleteObject: vi.fn(async () => undefined),
+}
+
+function createDriveChangeLogMock(): Pick<DriveChangeLogService, "append"> & {
+  append: ReturnType<typeof vi.fn<DriveChangeLogService["append"]>>
+} {
+  const append = vi.fn<DriveChangeLogService["append"]>(async (input) => ({
+    id: "change-1",
+    sequence: "1",
+    itemId: input.itemId,
+    parentId: input.parentId,
+    type: input.type,
+    versionId: input.versionId ?? null,
+    etag: input.etag ?? null,
+    name: input.name ?? null,
+    pathHint: input.pathHint ?? null,
+    actor: input.actor ?? null,
+    occurredAt: "2026-06-28T00:00:00.000Z",
+  }))
+  return { append }
 }
 
 describe("DriveService", () => {
@@ -142,8 +162,8 @@ describe("DriveService", () => {
 
   it("records a content change when an upload is completed", async () => {
     const prisma = createPrismaMemory()
-    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as never)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const prepared = await service.prepareUpload("user-1", {
       parentId: null,
@@ -372,14 +392,14 @@ describe("DriveService", () => {
 
   it("records a content change when a historical version is restored", async () => {
     const prisma = createPrismaMemory()
-    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
+    const changes = createDriveChangeLogMock()
     const storage: DriveStoragePort = {
       ...storageMock,
       copyObject: vi.fn(async () => undefined),
       deleteObject: vi.fn(async () => undefined),
       headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
     }
-    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, changes as never)
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
     const v1 = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
@@ -2363,8 +2383,8 @@ describe("DriveService", () => {
 
   it("records item changes for folder create, rename, move, delete, and restore", async () => {
     const prisma = createPrismaMemory()
-    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as never)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const target = await service.createFolder("user-1", { parentId: null, name: "目标" })
     const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })

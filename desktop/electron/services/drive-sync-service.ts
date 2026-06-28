@@ -7,7 +7,7 @@ import type {
   DriveSyncOperationStatus,
   DriveSyncConflictDto,
   DriveSyncSnapshotDto,
-} from "@synapse/shared"
+} from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DataNamespace,
   DriveSyncBindingEntryV1,

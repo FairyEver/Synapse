@@ -1,9 +1,4 @@
-import {
-  DRIVE_SYNC_BINDING_STATUSES,
-  DRIVE_SYNC_OPERATION_STATUSES,
-  type DriveSyncBindingStatus,
-  type DriveSyncOperationStatus,
-} from "@synapse/shared"
+import type { DriveSyncBindingStatus, DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { Migration, NamespaceSchema } from "../types"
 
 export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
@@ -89,8 +84,8 @@ type DriveSyncConflictResolution = "use_local" | "use_remote" | "keep_both" | "s
 type DriveSyncHealth = "idle" | "syncing" | "paused" | "error"
 
 const noMigrations: readonly Migration[] = []
-const bindingStatuses = new Set<string>(DRIVE_SYNC_BINDING_STATUSES)
-const operationStatuses = new Set<string>(DRIVE_SYNC_OPERATION_STATUSES)
+const bindingStatuses = new Set<string>(["active", "paused", "conflict", "error", "removed"])
+const operationStatuses = new Set<string>(["pending", "running", "succeeded", "retry_wait", "conflict", "error"])
 const itemKinds = new Set<string>(["file", "folder"])
 const operationKinds = new Set<string>(["download", "upload", "delete_local", "delete_remote", "move_local", "move_remote", "scan", "resync"])
 const conflictTypes = new Set<string>(["both_modified", "delete_vs_modify", "type_mismatch", "metadata_mismatch", "path_conflict"])

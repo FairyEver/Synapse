@@ -1,15 +1,13 @@
 import { z } from "zod"
-import {
-  DRIVE_SYNC_BINDING_STATUSES,
-  DRIVE_SYNC_OPERATION_STATUSES,
-} from "@synapse/shared"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
-const bindingStatusSchema = z.enum(DRIVE_SYNC_BINDING_STATUSES)
-const operationStatusSchema = z.enum(DRIVE_SYNC_OPERATION_STATUSES)
+const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "removed"] as const
+const driveSyncOperationStatuses = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"] as const
+const bindingStatusSchema = z.enum(driveSyncBindingStatuses)
+const operationStatusSchema = z.enum(driveSyncOperationStatuses)
 
 const driveSyncBindingSchema = z.object({
   id: z.string().min(1),

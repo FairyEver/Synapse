@@ -142,7 +142,7 @@ function createHarness() {
   }
 }
 
-function createMemoryNamespace<T extends { id?: string }>() {
+function createMemoryNamespace<T extends Record<string, unknown>>() {
   const events = new EventEmitter()
   let singleton: T | null = null
   const records = new Map<string, T>()
