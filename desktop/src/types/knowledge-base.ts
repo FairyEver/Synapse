@@ -29,28 +29,6 @@ export type SynapseKnowledgeBaseOpenSourceManagerPayload = {
   projectName: string
 }
 
-export type SynapseKnowledgeBaseSourceStatus =
-  | "pending"
-  | "changed"
-  | "imported"
-  | "unsupported"
-  | "error"
-
-export type SynapseKnowledgeBaseSourceEntry = {
-  relativePath: string
-  name: string
-  size: number
-  modifiedAt: string
-  supported: boolean
-  status: SynapseKnowledgeBaseSourceStatus
-  hash?: string
-}
-
-export type SynapseKnowledgeBaseListSourcesResult = {
-  projectId: string
-  sources: SynapseKnowledgeBaseSourceEntry[]
-}
-
 export type SynapseKnowledgeBaseAddUrlSourcePayload = {
   projectId: string
   targetDirectoryPath?: string

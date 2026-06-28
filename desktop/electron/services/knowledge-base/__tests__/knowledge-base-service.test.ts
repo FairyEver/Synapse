@@ -459,52 +459,14 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(victimPath, "CLAUDE.md"), "utf8")).resolves.toBe("# Victim\n")
   })
 
-  it("lists raw source files with user-facing import statuses", async () => {
-    const { projectId, projectPath, service } = await managedFixture()
-    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
-    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
-    await writeFile(path.join(projectPath, ".raw", "deck.pdf"), "binary")
-    const initial = await service.listSources(projectId)
-    const note = initial.sources.find((source) => source.relativePath === ".raw/note.md")
-    if (!note) throw new Error("expected note source")
-    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), `${JSON.stringify({
-      version: 1,
-      sources: {
-        ".raw/note.md": {
-          hash: note.hash,
-          ingested_at: "2026-05-23T00:00:00.000Z",
-          pages_created: [],
-          pages_updated: [],
-        },
-      },
-    })}\n`)
-    mocks.logger.info.mockClear()
-
-    const result = await service.listSources(projectId)
-
-    expect(result.sources.map((source) => ({
-      relativePath: source.relativePath,
-      status: source.status,
-      supported: source.supported,
-    }))).toEqual([
-      { relativePath: ".raw/deck.pdf", status: "unsupported", supported: false },
-      { relativePath: ".raw/note.md", status: "imported", supported: true },
-    ])
-    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base sources listed.", {
-      projectId,
-      sourceCount: 2,
-      statusCounts: {
-        imported: 1,
-        unsupported: 1,
-      },
-    })
-  })
-
-  it("does not create missing raw directory while listing sources", async () => {
+  it("does not create missing raw directory while listing raw entries", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await rm(path.join(projectPath, ".raw"), { recursive: true, force: true })
 
-    await expect(service.listSources(projectId)).rejects.toThrow("知识库资料目录缺失")
+    await expect(service.listRawDirectory({
+      projectId,
+      directoryPath: "",
+    })).rejects.toThrow("知识库资料目录缺失")
     await expect(access(path.join(projectPath, ".raw"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
@@ -1046,7 +1008,10 @@ describe("KnowledgeBaseService", () => {
     await rm(projectPath, { recursive: true, force: true })
     await symlink(outsidePath, projectPath)
 
-    await expect(service.listSources(projectId)).rejects.toThrow("知识库根目录不能是符号链接。")
+    await expect(service.listRawDirectory({
+      projectId,
+      directoryPath: "",
+    })).rejects.toThrow("知识库根目录不能是符号链接。")
   })
 
   it("rejects raw paths outside the raw directory", async () => {

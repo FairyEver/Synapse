@@ -1,6 +1,5 @@
 import { app, shell } from "electron"
 import { constants, existsSync } from "node:fs"
-import type { Dirent } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
@@ -19,12 +18,9 @@ import type {
   SynapseKnowledgeBaseTrashRawEntriesPayload,
   SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseUploadRawItemsPayload,
-  SynapseKnowledgeBaseListSourcesResult,
-  SynapseKnowledgeBaseSourceEntry,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
 import type { SynapseConfig, SynapseKnowledgeBaseStorageConfig, SynapseProjectConfig } from "../../../src/types/config"
-import { scanKnowledgeBaseSources } from "./source-scan"
 import { stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
 import type { FetchUrl } from "../source-acquisition/url-source"
@@ -173,42 +169,6 @@ export class KnowledgeBaseService {
       runtimePath,
     })
     return { projectId: payload.projectId, runtimePath, deleted: true }
-  }
-
-  async listSources(projectId: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
-    const projectPath = await this.resolveProjectPath(projectId)
-    const rawPath = await this.requireRawRoot(projectPath)
-    const scan = await scanKnowledgeBaseSources(projectPath)
-    const supportedByPath = new Map(scan.sources.map((source) => [source.relativePath, source]))
-    const rawFiles = await walkRawFiles(projectPath, rawPath)
-    const sources: SynapseKnowledgeBaseSourceEntry[] = []
-
-    for (const file of rawFiles) {
-      const scanned = supportedByPath.get(file.relativePath)
-      const status = scanned
-        ? scanned.state === "new" ? "pending" : scanned.state === "changed" ? "changed" : "imported"
-        : isSupportedSourcePath(file.relativePath) ? "error" : "unsupported"
-      sources.push({
-        relativePath: file.relativePath,
-        name: path.basename(file.relativePath),
-        size: file.size,
-        modifiedAt: file.modifiedAt,
-        supported: Boolean(scanned),
-        status,
-        ...(scanned?.hash ? { hash: scanned.hash } : undefined),
-      })
-    }
-
-    const sortedSources = sources.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath))
-    logger.info("Knowledge Base sources listed.", {
-      projectId,
-      sourceCount: sortedSources.length,
-      statusCounts: sourceStatusCounts(sortedSources),
-    })
-    return {
-      projectId,
-      sources: sortedSources,
-    }
   }
 
   async addUrlSource(
@@ -577,12 +537,6 @@ export class KnowledgeBaseService {
   }
 }
 
-type RawFileEntry = {
-  relativePath: string
-  size: number
-  modifiedAt: string
-}
-
 type RawMutationLogDetails = {
   readonly rawNewName?: string
   readonly rawRelativePaths?: readonly string[]
@@ -601,70 +555,6 @@ function basenameForLog(pathValue: string): string {
   return path.posix.basename(pathValue.replace(/\\/g, "/"))
 }
 
-const SUPPORTED_SOURCE_EXTENSIONS = new Set([
-  ".md",
-  ".markdown",
-  ".txt",
-  ".csv",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".html",
-  ".xml",
-])
-
-async function walkRawFiles(projectPath: string, directoryPath: string): Promise<RawFileEntry[]> {
-  let entries: Dirent[]
-  try {
-    entries = await readdir(directoryPath, { withFileTypes: true })
-  } catch (error) {
-    logger.warn("Knowledge Base raw file walk failed.", {
-      relativePath: normalizeRelativePath(path.relative(projectPath, directoryPath)),
-      ...knowledgeBaseErrorMeta(error),
-    })
-    return []
-  }
-
-  const files: RawFileEntry[] = []
-  for (const entry of entries) {
-    const absolutePath = path.join(directoryPath, entry.name)
-    const relativePath = normalizeRelativePath(path.relative(projectPath, absolutePath))
-    if (entry.isSymbolicLink()) continue
-    if (entry.isDirectory()) {
-      files.push(...await walkRawFiles(projectPath, absolutePath))
-      continue
-    }
-    if (!entry.isFile() || relativePath === ".raw/.manifest.json") continue
-    try {
-      const stat = await lstat(absolutePath)
-      files.push({
-        relativePath,
-        size: stat.size,
-        modifiedAt: stat.mtime.toISOString(),
-      })
-    } catch (error) {
-      logger.warn("Knowledge Base raw file stat failed.", {
-        relativePath,
-        ...knowledgeBaseErrorMeta(error),
-      })
-      files.push({
-        relativePath,
-        size: 0,
-        modifiedAt: new Date(0).toISOString(),
-      })
-    }
-  }
-  return files
-}
-
-function isSupportedSourcePath(relativePath: string): boolean {
-  return SUPPORTED_SOURCE_EXTENSIONS.has(path.extname(relativePath).toLowerCase())
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/")
-}
-
 function skippedReasonCounts(
   skipped: readonly { readonly reason: string }[],
 ): Record<string, number> {
@@ -676,15 +566,6 @@ function skippedReasonCounts(
 
 function limitRawLogPaths(paths: readonly string[]): string[] {
   return paths.slice(0, RAW_MUTATION_LOG_PATH_LIMIT).map((pathValue) => normalizeRawRelativePath(pathValue))
-}
-
-function sourceStatusCounts(
-  sources: readonly Pick<SynapseKnowledgeBaseSourceEntry, "status">[],
-): Record<string, number> {
-  return sources.reduce<Record<string, number>>((counts, source) => {
-    counts[source.status] = (counts[source.status] ?? 0) + 1
-    return counts
-  }, {})
 }
 
 type RawManifestChange = {
