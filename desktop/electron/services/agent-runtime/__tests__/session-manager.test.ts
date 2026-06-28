@@ -863,7 +863,7 @@ class FakeLiveSession implements AgentLiveSession {
     this.closed = true
   })
   readonly cancelCurrentTurn?: () => Promise<boolean>
-  private closed = false
+  protected closed = false
   private closeError: Error | undefined
 
   constructor(options: { readonly cancelError?: Error } = {}) {
@@ -912,7 +912,7 @@ class SlowCloseLiveSession extends FakeLiveSession {
     await new Promise<void>((resolve) => {
       this.releaseClose = resolve
     })
-    await super.close()
+    this.closed = true
   })
 
   waitForCloseStart(): Promise<void> {
