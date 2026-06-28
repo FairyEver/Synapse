@@ -8,6 +8,10 @@ function validateKnowledgeBaseRawEntryNameInput(value: string): string | null {
     return "请输入名称。"
   }
 
+  if (value !== trimmed) {
+    return "名称包含 Windows 不支持的字符或保留名。"
+  }
+
   if (trimmed === "."
     || trimmed === ".."
     || /[\\/]/.test(trimmed)

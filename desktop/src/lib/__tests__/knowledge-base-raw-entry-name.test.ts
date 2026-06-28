@@ -14,6 +14,7 @@ describe("validateKnowledgeBaseRawEntryNameInput", () => {
 
   it("rejects Windows-invalid characters and trailing dots or spaces", () => {
     expect(validateKnowledgeBaseRawEntryNameInput("会议:纪要")).toBe("名称包含 Windows 不支持的字符或保留名。")
+    expect(validateKnowledgeBaseRawEntryNameInput(" name")).toBe("名称包含 Windows 不支持的字符或保留名。")
     expect(validateKnowledgeBaseRawEntryNameInput("name.")).toBe("名称包含 Windows 不支持的字符或保留名。")
     expect(validateKnowledgeBaseRawEntryNameInput("name ")).toBe("名称包含 Windows 不支持的字符或保留名。")
   })
