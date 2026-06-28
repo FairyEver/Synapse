@@ -473,6 +473,7 @@ describe("DriveModule", () => {
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync dialog not found")
+    expect(document.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-4xl")
     expect(dialog.textContent).toContain("同步状态")
     expect(dialog.textContent).toContain("绑定")
     expect(dialog.textContent).toContain("冲突")
@@ -494,8 +495,54 @@ describe("DriveModule", () => {
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync binding dialog not found")
     expect(dialog.textContent).toContain("绑定同步")
+    expect(dialog.textContent).toContain("绑定已有本地项")
+    expect(dialog.textContent).toContain("下载到本地")
     expect(dialog.textContent).toContain("本地路径")
-    expect(dialog.textContent).toContain("排除规则")
+    expect(dialog.textContent).not.toContain("排除规则")
+  })
+
+  it("selects local paths for bind-existing and remote download modes", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
+    ])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop/report.txt")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "bind_existing",
+      reason: null,
+      localPath: "/Users/me/Desktop/report.txt",
+      localKind: "file",
+      localEmpty: null,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await openRowMenu("report.txt")
+    await clickMenuItemText("同步")
+    await clickText("选择")
+
+    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
+      kind: "file",
+      mode: "bind_existing",
+      defaultName: "report.txt",
+    })
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "file-1",
+      directionHint: "bind_existing",
+      localPath: "/Users/me/Desktop/report.txt",
+    }))
+
+    await clickText("下载到本地")
+    await clickText("选择")
+
+    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenLastCalledWith({
+      kind: "file",
+      mode: "remote_to_local",
+      defaultName: "report.txt",
+    })
   })
 
   it("shows drive capacity usage next to the title", async () => {

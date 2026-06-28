@@ -69,7 +69,7 @@ export const DRIVE_SYNC_OPERATION_STATUSES = [
   "error",
 ] as const
 export type DriveSyncOperationStatus = typeof DRIVE_SYNC_OPERATION_STATUSES[number]
-export const DRIVE_SYNC_INITIAL_DIRECTIONS = ["remote_to_local", "local_to_remote"] as const
+export const DRIVE_SYNC_INITIAL_DIRECTIONS = ["remote_to_local", "local_to_remote", "bind_existing"] as const
 export type DriveSyncInitialDirection = typeof DRIVE_SYNC_INITIAL_DIRECTIONS[number]
 export const DRIVE_SYNC_BINDING_PREVIEW_STATUSES = ["ready", "blocked", "warning"] as const
 export type DriveSyncBindingPreviewStatus = typeof DRIVE_SYNC_BINDING_PREVIEW_STATUSES[number]

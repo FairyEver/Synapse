@@ -66,6 +66,41 @@ describe("drive sync binding validator", () => {
     })
   })
 
+  it("allows existing local files to bind existing remote files when sizes match", async () => {
+    const localPath = path.join(tempDir, "spec.md")
+    await writeFile(localPath, "spec", "utf8")
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "item-1",
+      driveItemName: "spec.md",
+      kind: "file",
+      localPath,
+      remoteExists: true,
+      remoteSize: "4",
+      directionHint: "bind_existing",
+      activeBindings: [],
+    })).resolves.toMatchObject({
+      status: "ready",
+      direction: "bind_existing",
+      localKind: "file",
+    })
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "item-1",
+      driveItemName: "spec.md",
+      kind: "file",
+      localPath,
+      remoteExists: true,
+      remoteSize: "8",
+      directionHint: "bind_existing",
+      activeBindings: [],
+    })).resolves.toMatchObject({
+      status: "blocked",
+      direction: null,
+      reason: "本地文件与云盘文件大小不一致，不能直接建立绑定。",
+    })
+  })
+
   it("allows remote folders to bind to missing or empty local folders and blocks non-empty folders", async () => {
     const emptyFolder = path.join(tempDir, "empty")
     const fullFolder = path.join(tempDir, "full")

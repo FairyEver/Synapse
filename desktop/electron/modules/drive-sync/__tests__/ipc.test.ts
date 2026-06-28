@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("electron", () => ({
   dialog: {
     showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })),
+    showSaveDialog: vi.fn(async () => ({ canceled: true, filePath: undefined })),
   },
 }))
 
+import { dialog } from "electron"
 import { driveSyncIpcModule } from "../ipc"
 
 describe("driveSyncIpcModule", () => {
@@ -139,7 +141,7 @@ describe("driveSyncIpcModule", () => {
       driveItemName: "spec.md",
       kind: "file",
       localPath: "/tmp/spec.md",
-      direction: "remote_to_local",
+      direction: "bind_existing",
     })
     await driveSyncIpcModule.methods.pauseBinding.handler(ctx as never, { id: "binding-1" })
     await driveSyncIpcModule.methods.resumeBinding.handler(ctx as never, { id: "binding-1" })
@@ -156,5 +158,30 @@ describe("driveSyncIpcModule", () => {
     expect(service.rescanBinding).toHaveBeenCalledWith("binding-1")
     expect(service.pollRemoteChanges).toHaveBeenCalledWith("binding-1")
     expect(service.resolveConflict).toHaveBeenCalledWith({ conflictId: "conflict-1", action: "keep_local" })
+  })
+
+  it("chooses local paths with mode-specific dialogs", async () => {
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: ["/Users/me/Desktop/spec.md"] })
+    await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {
+      kind: "file",
+      mode: "bind_existing",
+      defaultName: "spec.md",
+    })).resolves.toBe("/Users/me/Desktop/spec.md")
+    expect(dialog.showOpenDialog).toHaveBeenCalledWith({ properties: ["openFile"] })
+
+    vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({ canceled: false, filePath: "/Users/me/Desktop/spec.md" })
+    await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {
+      kind: "file",
+      mode: "remote_to_local",
+      defaultName: "spec.md",
+    })).resolves.toBe("/Users/me/Desktop/spec.md")
+    expect(dialog.showSaveDialog).toHaveBeenCalledWith({ defaultPath: "spec.md" })
+
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: ["/Users/me/Desktop"] })
+    await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {
+      kind: "folder",
+      mode: "remote_to_local",
+      defaultName: "Docs",
+    })).resolves.toBe("/Users/me/Desktop/Docs")
   })
 })
