@@ -263,9 +263,9 @@ describe("drive URL helpers", () => {
         canDownload: true,
       },
       root: {
-        name: "需求说明.md",
-        type: "file",
-        previewKind: "markdown",
+        name: "受密码保护的分享",
+        type: "protected",
+        previewKind: "download-only",
       },
       ref: {
         kind: "share",
@@ -278,7 +278,7 @@ describe("drive URL helpers", () => {
     }
 
     expect(scope).toBe("text")
-    expect(resolved.root.previewKind).toBe("markdown")
+    expect(resolved.root.previewKind).toBe("download-only")
   })
 
   it("allows markdown as a drive browser preview kind", () => {

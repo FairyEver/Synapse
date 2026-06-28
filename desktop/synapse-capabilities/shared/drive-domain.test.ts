@@ -160,6 +160,10 @@ describe("Drive capability domain", () => {
       },
       required: ["url"],
     })
+    expect(tools.get("app_drive_link_read_text")?.inputSchema.properties.password.description).toContain("actual link password")
+    expect(tools.get("app_drive_link_resolve")?.description).toContain("password_required")
+    expect(tools.get("app_drive_link_resolve")?.description).toContain("Raw MCP")
+    expect(tools.get("app_drive_link_resolve")?.inputSchema.properties.password.description).toContain("Environment variables are not expanded")
     expect(tools.get("drive_link_materialize")?.inputSchema.properties).toMatchObject({
       scope: { type: "string", enum: ["entry", "text", "all"] },
       maxFiles: { type: "number" },

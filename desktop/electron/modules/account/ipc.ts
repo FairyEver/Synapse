@@ -352,7 +352,7 @@ const driveLinkResolveResponseSchema = z.object({
   access: driveLinkAccessSchema,
   root: z.object({
     name: z.string(),
-    type: z.enum(["file", "folder", "site", "asset"]),
+    type: z.enum(["file", "folder", "site", "asset", "protected"]),
     previewKind: z.string(),
   }),
   ref: driveLinkRefSchema,

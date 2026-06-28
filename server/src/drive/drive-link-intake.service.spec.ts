@@ -127,9 +127,21 @@ describe("DriveLinkIntakeService", () => {
 
     await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123`, password: "secret" })).resolves.toMatchObject({
       access: { status: "password_required", canRead: false },
+      root: { name: "受密码保护的分享", type: "protected", previewKind: "download-only" },
     })
     await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123`, password: "secret" }))
       .resolves.not.toHaveProperty("password")
+  })
+
+  it("returns a protected root placeholder for password-required sites", async () => {
+    const { service, sites } = createService()
+    sites.resolvePublicSite.mockResolvedValueOnce({ status: "password_required" } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_123/` })).resolves.toMatchObject({
+      linkType: "site",
+      access: { status: "password_required", canRead: false, canList: false, canReadText: false, canDownload: false },
+      root: { name: "受密码保护的站点", type: "protected", previewKind: "download-only" },
+    })
   })
 
   it("lists share folder children from a browser snapshot", async () => {

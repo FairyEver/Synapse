@@ -125,9 +125,11 @@ Use these tools for Synapse `/share/...`, `/sites/...`, and `/files/...` URLs se
 Input:
 
 - `url` required.
-- `password` optional.
+- `password` optional: pass the actual password string. MCP parameters do not expand `$ENV_VAR`; read the variable first or ask the user.
 
-Output includes `linkType`, `access`, `root`, and `ref`.
+Output includes `linkType`, `access`, `root`, and `ref`. When `access.status` is `password_required`, `root.type` may be `protected` and the real file/folder shape is intentionally hidden until a valid password is supplied.
+
+Raw MCP or Codex `--json` event streams may include tool arguments. Do not save or quote logs that contain share passwords.
 
 ### `app_drive_link_list`
 

@@ -17,7 +17,6 @@ import {
   type DriveLinkRefDto,
   type DriveLinkResolveDto,
   type DriveLinkResolveInput,
-  type DriveLinkRootType,
   type DriveLinkType,
 } from "@synapse/shared"
 
@@ -402,15 +401,13 @@ function passwordRequiredResolve(linkType: DriveLinkType, ref: DriveLinkRefDto):
     ok: true,
     linkType,
     access: { status: "password_required", canRead: false, canList: false, canReadText: false, canDownload: false },
-    root: { name: "", type: rootTypeFromRef(ref), previewKind: "download-only" },
+    root: { name: protectedRootName(ref), type: "protected", previewKind: "download-only" },
     ref,
   }
 }
 
-function rootTypeFromRef(ref: DriveLinkRefDto): DriveLinkRootType {
-  if (ref.kind === "site") return "site"
-  if (ref.kind === "public_asset") return "asset"
-  return "file"
+function protectedRootName(ref: DriveLinkRefDto): string {
+  return ref.kind === "site" ? "受密码保护的站点" : "受密码保护的分享"
 }
 
 function previewKindFromMime(mimeType: string | null | undefined, name: string): DriveLinkPreviewKind {

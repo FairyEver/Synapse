@@ -87,7 +87,7 @@ const searchablePageInputProperties = {
 }
 const driveLinkBaseProperties = {
   url: stringField("Absolute Synapse Drive /share, /sites, or /files URL."),
-  password: stringField("Optional link password. Used only for this call and never returned."),
+  password: stringField("Optional actual link password. Environment variables are not expanded in MCP parameters; read the variable first or ask the user. Used only for this call and never returned."),
 }
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
@@ -298,7 +298,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_resolve",
-      description: "Resolve a Synapse Drive /share, /sites, or /files URL and return access state plus an Agent-friendly reference.",
+      description: "Resolve a Synapse Drive /share, /sites, or /files URL and return access state plus an Agent-friendly reference. password_required means the password must be supplied as the actual password value. Raw MCP or --json event streams may include tool arguments, so do not save or quote logs containing passwords.",
       inputSchema: { type: "object", properties: driveLinkBaseProperties, required: ["url"] },
     },
     {

@@ -61,6 +61,8 @@ Do not use this skill for database records, Resource Repository resources, sched
 When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL, use Drive Link tools instead of owner Drive item tools.
 
 1. Call `app_drive_link_resolve` with `url` and optional `password`.
+   - `password` must be the actual password string. MCP parameters do not expand `$ENV_VAR`; read the variable in your own runtime first, or ask the user for the password.
+   - If `access.status` is `password_required`, stop and ask for the password. A protected result may use `root.type: "protected"` until access is unlocked.
 2. If the result is a folder or site, call `app_drive_link_list` before reading content.
 3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`. For `/share` children, prefer the `itemId` returned by `app_drive_link_list`; use `path` mainly for `/sites` assets or as a share fallback.
 4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`.
@@ -68,6 +70,7 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 
 Do not use these tools to edit shared files, create comments, import shared content into the user's Drive, or crawl arbitrary websites.
 Do not repeat passwords in the final answer.
+When using Codex `--json` or raw MCP event logs for debugging, remember tool arguments can include passwords. Do not save, quote, or attach those raw logs unless the password parameters are removed first.
 
 ## Default Flow
 
