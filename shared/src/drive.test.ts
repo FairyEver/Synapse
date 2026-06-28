@@ -8,6 +8,7 @@ import {
   DRIVE_LINK_INTAKE_SCOPES,
   DRIVE_LINK_SUPPORTED_PATH_PREFIXES,
   DRIVE_PUBLIC_ASSET_PATH_PREFIX,
+  DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
   DRIVE_OWNER_BROWSER_PATH_PREFIX,
@@ -143,6 +144,14 @@ describe("drive URL helpers", () => {
     expect(inferDrivePublicAssetMimeType("logo.PNG")).toBe("image/png")
     expect(inferDrivePublicAssetMimeType("photo.jpeg")).toBe("image/jpeg")
     expect(inferDrivePublicAssetMimeType("icon.svg")).toBeNull()
+  })
+
+  it("describes supported public asset image formats", () => {
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("PNG")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("JPG")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("WebP")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("SVG")
+    expect(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE).toContain("暂不支持")
   })
 
   it("encodes share ids", () => {

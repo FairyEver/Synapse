@@ -1,6 +1,6 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
-import type { DrivePublicAssetDto, DriveSiteDto, DriveSiteListPageDto, DriveTrashListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DrivePublicAssetDto, type DriveSiteDto, type DriveSiteListPageDto, type DriveTrashListPageDto } from "@synapse/shared"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
@@ -534,7 +534,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
   it("returns a failed dispatch result when public asset upload is rejected", async () => {
     const uploadDrivePublicAssets = vi.fn(async () => ({
-      results: [{ status: "rejected" as const, fileName: "logo.txt", message: "仅支持图片。" }],
+      results: [{ status: "rejected" as const, fileName: "logo.txt", message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE }],
     }))
     const permissionGuard = {
       registerPolicy: vi.fn(),
@@ -550,8 +550,8 @@ describe("createDriveCapabilityDispatcher", () => {
       filePath: "/tmp/logo.txt",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: false,
-      error: "仅支持图片。",
-      data: { status: "rejected", fileName: "logo.txt", message: "仅支持图片。" },
+      error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+      data: { status: "rejected", fileName: "logo.txt", message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE },
     })
   })
 

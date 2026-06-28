@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Opt
 import { Prisma } from "@prisma/client"
 import {
   DRIVE_MAX_FILE_SIZE_LABEL,
+  DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
   isDrivePublicAssetId,
   maskDriveBrowserUrl,
   type DrivePublicAssetDto,
@@ -1058,7 +1059,7 @@ function normalizePublicAssetUploadInput(input: DrivePublicAssetPrepareUploadInp
   try {
     policy = validatePublicAssetNameAndMime({ name, mimeType: input.mimeType ?? null })
   } catch (error) {
-    throw new BadRequestException(error instanceof Error ? error.message : "仅支持图片。")
+    throw new BadRequestException(error instanceof Error ? error.message : DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
   }
   return { name, size, mimeType: policy.mimeType }
 }

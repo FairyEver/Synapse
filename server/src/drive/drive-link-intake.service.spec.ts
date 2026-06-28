@@ -144,6 +144,32 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("marks resolved site links as listable", async () => {
+    const { service } = createService()
+
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_public/` })).resolves.toMatchObject({
+      linkType: "site",
+      access: { status: "ok", canRead: true, canList: true, canReadText: true, canDownload: true },
+      root: { name: "index.html", type: "site", previewKind: "html-source" },
+      ref: { kind: "site", siteId: "site_public", path: null },
+    })
+  })
+
+  it("keeps resolved site path links listable", async () => {
+    const { service, sites } = createService()
+    sites.resolvePublicSite.mockResolvedValueOnce({
+      status: "ok",
+      asset: { relativePath: "pages/create-task.html", storageKey: "site/pages/create-task.html", contentType: "text/html" },
+    } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_public/pages/create-task.html` })).resolves.toMatchObject({
+      linkType: "site_path",
+      access: { status: "ok", canRead: true, canList: true, canReadText: true, canDownload: true },
+      root: { name: "pages/create-task.html", type: "site", previewKind: "html-source" },
+      ref: { kind: "site", siteId: "site_public", path: "pages/create-task.html" },
+    })
+  })
+
   it("lists share folder children from a browser snapshot", async () => {
     const { service, drive } = createService()
     drive.getShareBrowserSnapshot.mockResolvedValueOnce({

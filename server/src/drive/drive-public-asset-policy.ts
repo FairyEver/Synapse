@@ -1,17 +1,17 @@
-import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
 
 const PUBLIC_ASSET_TYPES: ReadonlyMap<string, string> = new Map(Object.entries(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
 const PUBLIC_ASSET_MIME_TYPES: ReadonlySet<string> = new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
 
 export function validatePublicAssetNameAndMime(input: { readonly name: string; readonly mimeType?: string | null }) {
   const mimeType = input.mimeType?.trim().toLowerCase() ?? null
-  if (!mimeType || !PUBLIC_ASSET_MIME_TYPES.has(mimeType)) throw new Error("仅支持图片。")
+  if (!mimeType || !PUBLIC_ASSET_MIME_TYPES.has(mimeType)) throw new Error(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
 
   const extension = publicAssetNameExtension(input.name)
   if (!extension) return { extension: null, mimeType }
 
   const expected = PUBLIC_ASSET_TYPES.get(extension)
-  if (!expected) throw new Error("仅支持图片。")
+  if (!expected) throw new Error(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
   if (mimeType !== expected) throw new Error("文件类型与扩展名不匹配。")
   return { extension, mimeType: expected }
 }

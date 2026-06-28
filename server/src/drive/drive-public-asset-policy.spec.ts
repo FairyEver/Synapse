@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
 import { detectPublicAssetImageType, validatePublicAssetNameAndMime } from "./drive-public-asset-policy"
 
 describe("public asset policy", () => {
@@ -18,7 +19,13 @@ describe("public asset policy", () => {
 
   it("rejects svg", () => {
     expect(() => validatePublicAssetNameAndMime({ name: "logo.svg", mimeType: "image/svg+xml" })).toThrow(
-      "仅支持图片",
+      DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+    )
+  })
+
+  it("rejects unsupported non-image MIME with the shared format message", () => {
+    expect(() => validatePublicAssetNameAndMime({ name: "logo.txt", mimeType: "text/plain" })).toThrow(
+      DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
     )
   })
 

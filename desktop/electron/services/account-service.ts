@@ -1096,7 +1096,8 @@ export class AccountService {
     }
     const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
     if (!mimeType || !mimeType.startsWith("image/")) {
-      throw new Error("格式不支持。")
+      const shared = await sharedUrlsPromise
+      throw new Error(shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
     }
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",

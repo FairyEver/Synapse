@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveDocumentImageImportResult, type DriveDocumentImageSourcesDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveDocumentImageImportResult, type DriveDocumentImageSourcesDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -880,7 +880,7 @@ describe("AccountService", () => {
       name: "note.txt",
       mimeType: "text/plain",
       data: bytes,
-    })).rejects.toThrow("格式不支持。")
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
 
     expect(requestAuthenticatedJson).not.toHaveBeenCalled()
   })

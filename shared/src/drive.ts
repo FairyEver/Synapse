@@ -23,6 +23,7 @@ export const DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION = {
   avif: "image/avif",
   ico: "image/x-icon",
 } as const
+export const DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO 图片；暂不支持 SVG。"
 
 export type DriveItemType = "file" | "folder"
 export type DriveShareItemType = "file" | "folder"

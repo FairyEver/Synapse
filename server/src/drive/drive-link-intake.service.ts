@@ -245,7 +245,7 @@ export class DriveLinkIntakeService {
     return {
       ok: true,
       linkType: parsed.path ? "site_path" : "site",
-      access: { status: "ok", canRead: true, canList: false, canReadText: previewKind !== "download-only", canDownload: true },
+      access: { status: "ok", canRead: true, canList: true, canReadText: previewKind !== "download-only", canDownload: true },
       root: { name: access.asset.relativePath || "index.html", type: "site", previewKind },
       ref,
     }

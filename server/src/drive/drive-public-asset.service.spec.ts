@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -108,7 +109,7 @@ describe("DrivePublicAssetService", () => {
       size: "8",
       mimeType: "text/plain",
       publicAppUrl: "https://synapse.example",
-    })).rejects.toThrow("仅支持图片。")
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
     expect(await prisma.driveUploadSession.findMany()).toEqual([])
   })
 
