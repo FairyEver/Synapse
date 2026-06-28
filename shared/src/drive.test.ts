@@ -3,6 +3,10 @@ import {
   DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
+  DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
+  DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
+  DRIVE_LINK_INTAKE_SCOPES,
+  DRIVE_LINK_SUPPORTED_PATH_PREFIXES,
   DRIVE_PUBLIC_ASSET_PATH_PREFIX,
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
@@ -36,6 +40,8 @@ import {
   type DriveAnnotationTargetKind,
   type DriveAnnotationThreadDto,
   type DriveBrowserPreviewKind,
+  type DriveLinkMaterializeScope,
+  type DriveLinkResolveDto,
   maskDriveBrowserUrl,
   maskDriveShareUrl,
 } from "./drive"
@@ -235,6 +241,44 @@ describe("drive URL helpers", () => {
   it("defines office-oriented drive upload limits", () => {
     expect(DRIVE_MAX_FILE_BYTES).toBe(100 * 1024 * 1024)
     expect(DRIVE_DEFAULT_QUOTA_BYTES).toBe(5 * 1024 * 1024 * 1024)
+  })
+
+  it("defines Drive link intake defaults and supported path prefixes", () => {
+    expect(DRIVE_LINK_SUPPORTED_PATH_PREFIXES).toEqual(["/share", "/sites", "/files"])
+    expect(DRIVE_LINK_INTAKE_SCOPES).toEqual(["entry", "text", "all"])
+    expect(DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES).toBe(200)
+    expect(DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES).toBe(50 * 1024 * 1024)
+  })
+
+  it("keeps Drive link intake DTOs typed around raw material output", () => {
+    const scope: DriveLinkMaterializeScope = "text"
+    const resolved: DriveLinkResolveDto = {
+      ok: true,
+      linkType: "share",
+      access: {
+        status: "ok",
+        canRead: true,
+        canList: true,
+        canReadText: true,
+        canDownload: true,
+      },
+      root: {
+        name: "需求说明.md",
+        type: "file",
+        previewKind: "markdown",
+      },
+      ref: {
+        kind: "share",
+        shareId: "shr_123",
+        itemId: null,
+        siteId: null,
+        path: null,
+        assetId: null,
+      },
+    }
+
+    expect(scope).toBe("text")
+    expect(resolved.root.previewKind).toBe("markdown")
   })
 
   it("allows markdown as a drive browser preview kind", () => {

@@ -569,6 +569,139 @@ export interface DriveBrowserPasswordRequiredDto {
   readonly message: string
 }
 
+export const DRIVE_LINK_SUPPORTED_PATH_PREFIXES = [DRIVE_PUBLIC_PATH_PREFIX, DRIVE_SITE_PATH_PREFIX, DRIVE_PUBLIC_ASSET_PATH_PREFIX] as const
+export const DRIVE_LINK_INTAKE_SCOPES = ["entry", "text", "all"] as const
+export const DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES = 200
+export const DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES = 50 * 1024 * 1024
+
+export type DriveLinkType = "share" | "share_item" | "site" | "site_path" | "public_asset"
+export type DriveLinkRefKind = "share" | "site" | "public_asset"
+export type DriveLinkAccessStatus = "ok" | "password_required" | "login_required" | "not_found"
+export type DriveLinkRootType = "file" | "folder" | "site" | "asset"
+export type DriveLinkEntryType = "file" | "folder" | "site" | "asset"
+export type DriveLinkPreviewKind = DriveBrowserPreviewKind | "html" | "text"
+export type DriveLinkMaterializeScope = typeof DRIVE_LINK_INTAKE_SCOPES[number]
+export type DriveLinkMaterializedFileKind = "markdown" | "html" | "text" | "image" | "binary" | "folder"
+
+export interface DriveLinkAccessDto {
+  readonly status: DriveLinkAccessStatus
+  readonly canRead: boolean
+  readonly canList: boolean
+  readonly canReadText: boolean
+  readonly canDownload: boolean
+}
+
+export interface DriveLinkRefDto {
+  readonly kind: DriveLinkRefKind
+  readonly shareId: string | null
+  readonly itemId: string | null
+  readonly siteId: string | null
+  readonly path: string | null
+  readonly assetId: string | null
+}
+
+export interface DriveLinkRootDto {
+  readonly name: string
+  readonly type: DriveLinkRootType
+  readonly previewKind: DriveLinkPreviewKind
+}
+
+export interface DriveLinkResolveInput {
+  readonly url: string
+  readonly password?: string
+}
+
+export interface DriveLinkResolveDto {
+  readonly ok: true
+  readonly linkType: DriveLinkType
+  readonly access: DriveLinkAccessDto
+  readonly root: DriveLinkRootDto
+  readonly ref: DriveLinkRefDto
+}
+
+export interface DriveLinkPageDto {
+  readonly hasMore: boolean
+  readonly nextOffset: number | null
+}
+
+export interface DriveLinkEntryDto {
+  readonly path: string
+  readonly name: string
+  readonly type: DriveLinkEntryType
+  readonly mimeType: string | null
+  readonly previewKind: DriveLinkPreviewKind
+  readonly size: string
+  readonly itemId?: string | null
+}
+
+export interface DriveLinkListInput extends DriveLinkResolveInput {
+  readonly path?: string
+  readonly itemId?: string
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DriveLinkListDto {
+  readonly items: readonly DriveLinkEntryDto[]
+  readonly page: DriveLinkPageDto
+}
+
+export interface DriveLinkReadTextInput extends DriveLinkResolveInput {
+  readonly itemId?: string
+  readonly path?: string
+  readonly maxBytes?: number
+}
+
+export interface DriveLinkReadTextDto {
+  readonly path: string
+  readonly mimeType: string | null
+  readonly previewKind: DriveLinkPreviewKind
+  readonly text: string
+  readonly truncated: boolean
+  readonly source: {
+    readonly linkType: DriveLinkType
+    readonly versionId?: string | null
+  }
+}
+
+export interface DriveLinkMaterializeInput extends DriveLinkResolveInput {
+  readonly scope?: DriveLinkMaterializeScope
+  readonly maxFiles?: number
+  readonly maxBytes?: number
+}
+
+export interface DriveLinkMaterializedFileDto {
+  readonly relativePath: string
+  readonly kind: DriveLinkMaterializedFileKind
+  readonly size: string
+}
+
+export interface DriveLinkSkippedEntryDto {
+  readonly path: string
+  readonly reason: string
+}
+
+export interface DriveLinkMaterializeDto {
+  readonly localRootPath: string
+  readonly manifestPath: string
+  readonly entryPath: string | null
+  readonly files: readonly DriveLinkMaterializedFileDto[]
+  readonly skipped: readonly DriveLinkSkippedEntryDto[]
+  readonly warnings: readonly string[]
+}
+
+export interface DriveLinkDownloadFileInput extends DriveLinkResolveInput {
+  readonly itemId?: string
+  readonly path?: string
+  readonly outputPath?: string
+}
+
+export interface DriveLinkDownloadFileDto {
+  readonly localPath: string
+  readonly mimeType: string | null
+  readonly size: string
+}
+
 export type DriveAnnotationTargetKind = "textRange"
 export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
 
