@@ -22,6 +22,11 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a historical Synapse Drive file version as the current version.", mutates: true },
   { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current historical Synapse Drive file version.", mutates: true, risk: "high" },
   { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
+  { id: "app.drive.link.resolve" as CapabilityId, title: "Resolve Drive link", description: "Resolve a Synapse Drive /share, /sites, or /files URL for Agent consumption.", mutates: false },
+  { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
+  { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link.", mutates: false },
+  { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
+  { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
   { id: "app.drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
   { id: "app.drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link. Existing shares keep their settings unless access settings are supplied.", mutates: true },
@@ -79,6 +84,10 @@ const pageInputProperties = {
 const searchablePageInputProperties = {
   ...pageInputProperties,
   search: stringField("Optional search text. Public assets match name or assetId; trash matches name, original path, or public asset id."),
+}
+const driveLinkBaseProperties = {
+  url: stringField("Absolute Synapse Drive /share, /sites, or /files URL."),
+  password: stringField("Optional link password. Used only for this call and never returned."),
 }
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to true." },
@@ -285,6 +294,67 @@ export function buildDriveTools(): McpToolDefinition[] {
           isPinned: { type: "boolean", description: "true keeps the version; false lets automatic cleanup remove it later." },
         },
         required: ["itemId", "versionId", "isPinned"],
+      },
+    },
+    {
+      name: "drive_link_resolve",
+      description: "Resolve a Synapse Drive /share, /sites, or /files URL and return access state plus an Agent-friendly reference.",
+      inputSchema: { type: "object", properties: driveLinkBaseProperties, required: ["url"] },
+    },
+    {
+      name: "drive_link_list",
+      description: "List children for a Drive share folder or resources for a Drive site link. Public assets have no children.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkBaseProperties,
+          path: stringField("Optional site or share-relative path."),
+          itemId: stringField("Optional Drive item id inside a share."),
+          ...pageInputProperties,
+        },
+        required: ["url"],
+      },
+    },
+    {
+      name: "drive_link_read_text",
+      description: "Read Markdown, HTML source, JSON, or other previewable text from a Drive link. Use drive_link_download_file for binary files.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkBaseProperties,
+          path: stringField("Optional site or share-relative path."),
+          itemId: stringField("Optional Drive item id inside a share."),
+          maxBytes: { type: "number", description: "Maximum UTF-8 bytes to return." },
+        },
+        required: ["url"],
+      },
+    },
+    {
+      name: "drive_link_materialize",
+      description: "Download a Drive link into the local Drive link intake cache. Use for HTML prototypes, folders, assets, or local analysis tools.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkBaseProperties,
+          scope: { type: "string", enum: ["entry", "text", "all"], description: "entry downloads only the entry; text downloads previewable text; all downloads all allowed files within limits." },
+          maxFiles: { type: "number", description: "Maximum files to write." },
+          maxBytes: { type: "number", description: "Maximum total bytes to write." },
+        },
+        required: ["url"],
+      },
+    },
+    {
+      name: "drive_link_download_file",
+      description: "Download one file, site asset, or public asset from a Drive link. outputPath is optional; omitted writes to cache.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ...driveLinkBaseProperties,
+          path: stringField("Optional site or share-relative path."),
+          itemId: stringField("Optional Drive item id inside a share."),
+          outputPath: stringField("Optional absolute local output path."),
+        },
+        required: ["url"],
       },
     },
     {

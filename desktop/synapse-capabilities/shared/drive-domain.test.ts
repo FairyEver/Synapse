@@ -23,6 +23,11 @@ describe("Drive capability domain", () => {
       "app_drive_file_version_restore",
       "app_drive_file_version_delete",
       "app_drive_file_version_pin_update",
+      "app_drive_link_resolve",
+      "app_drive_link_list",
+      "app_drive_link_read_text",
+      "app_drive_link_materialize",
+      "app_drive_link_download_file",
       "app_drive_folder_zip_create",
       "app_drive_share_list",
       "app_drive_share_create",
@@ -67,6 +72,11 @@ describe("Drive capability domain", () => {
       "drive_file_version_restore",
       "drive_file_version_delete",
       "drive_file_version_pin_update",
+      "drive_link_resolve",
+      "drive_link_list",
+      "drive_link_read_text",
+      "drive_link_materialize",
+      "drive_link_download_file",
       "drive_folder_zip_create",
       "drive_share_list",
       "drive_share_create",
@@ -132,7 +142,32 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_delete).toBe("app.drive.trash.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_item_restore).toBe("app.drive.item.restore")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_item_restore).toBe("app.drive.item.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_resolve).toBe("app.drive.link.resolve")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_link_resolve).toBe("app.drive.link.resolve")
     expect(getActionDomainId("app.drive.item.list")).toBe("drive")
+  })
+
+  it("builds Drive link intake tool schemas and marks local writes", () => {
+    const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
+    const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
+
+    expect(tools.get("app_drive_link_read_text")?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        url: { type: "string" },
+        password: { type: "string" },
+        maxBytes: { type: "number" },
+      },
+      required: ["url"],
+    })
+    expect(tools.get("drive_link_materialize")?.inputSchema.properties).toMatchObject({
+      scope: { type: "string", enum: ["entry", "text", "all"] },
+      maxFiles: { type: "number" },
+      maxBytes: { type: "number" },
+    })
+    expect(capabilities.get("app.drive.link.resolve")).toMatchObject({ mutates: false })
+    expect(capabilities.get("app.drive.link.materialize")).toMatchObject({ mutates: true })
+    expect(capabilities.get("app.drive.link.download_file")).toMatchObject({ mutates: true })
   })
 
   it("builds public asset and trash tool schemas", () => {

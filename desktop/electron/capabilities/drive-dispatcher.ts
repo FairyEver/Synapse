@@ -15,6 +15,16 @@ import type {
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
+  DriveLinkDownloadFileDto,
+  DriveLinkDownloadFileInput,
+  DriveLinkListDto,
+  DriveLinkListInput,
+  DriveLinkMaterializeDto,
+  DriveLinkMaterializeInput,
+  DriveLinkReadTextDto,
+  DriveLinkReadTextInput,
+  DriveLinkResolveDto,
+  DriveLinkResolveInput,
   DrivePublicAssetDto,
   DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
@@ -102,6 +112,11 @@ type DriveAccountServicePort = {
   readonly restoreDriveFileVersion: (itemId: string, versionId: string) => Promise<DriveItemDto>
   readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ ok: true }>
   readonly updateDriveFileVersionPin: (itemId: string, versionId: string, isPinned: boolean) => Promise<DriveFileVersionDto>
+  readonly resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
+  readonly listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>
+  readonly readDriveLinkText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
+  readonly materializeDriveLink: (input: DriveLinkMaterializeInput) => Promise<DriveLinkMaterializeDto>
+  readonly downloadDriveLinkFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
   readonly getDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
@@ -296,6 +311,35 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               requireBoolean(params, "isPinned"),
             ),
           }))
+        case "drive.link.resolve":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.resolveDriveLink(parseDriveLinkResolveInput(params)),
+          }))
+        case "drive.link.list":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.listDriveLink(parseDriveLinkListInput(params)),
+          }))
+        case "drive.link.read_text":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.readDriveLinkText(parseDriveLinkReadTextInput(params)),
+          }))
+        case "drive.link.materialize":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.materializeDriveLink(parseDriveLinkMaterializeInput(params)),
+          }))
+        case "drive.link.download_file":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const input = parseDriveLinkDownloadFileInput(params)
+            if (input.outputPath) await authorizeFileWrite(deps, action, input.url, input.outputPath, context)
+            return {
+              ok: true,
+              data: await deps.accountService.downloadDriveLinkFile(input),
+            }
+          })
         case "drive.folder_zip.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
@@ -1129,6 +1173,53 @@ function parseDriveVersionListInput(params: Record<string, unknown>): DriveFileV
     ...(offset === undefined ? {} : { offset }),
     ...(limit === undefined ? {} : { limit }),
   }
+}
+
+function parseDriveLinkResolveInput(params: Record<string, unknown>): DriveLinkResolveInput {
+  return { url: requireString(params, "url"), password: optionalString(params.password) }
+}
+
+function parseDriveLinkListInput(params: Record<string, unknown>): DriveLinkListInput {
+  return {
+    ...parseDriveLinkResolveInput(params),
+    path: optionalString(params.path),
+    itemId: optionalString(params.itemId),
+    offset: optionalNumber(params.offset),
+    limit: optionalNumber(params.limit),
+  }
+}
+
+function parseDriveLinkReadTextInput(params: Record<string, unknown>): DriveLinkReadTextInput {
+  return {
+    ...parseDriveLinkResolveInput(params),
+    path: optionalString(params.path),
+    itemId: optionalString(params.itemId),
+    maxBytes: optionalNumber(params.maxBytes),
+  }
+}
+
+function parseDriveLinkMaterializeInput(params: Record<string, unknown>): DriveLinkMaterializeInput {
+  return {
+    ...parseDriveLinkResolveInput(params),
+    scope: optionalDriveLinkMaterializeScope(params.scope),
+    maxFiles: optionalNumber(params.maxFiles),
+    maxBytes: optionalNumber(params.maxBytes),
+  }
+}
+
+function parseDriveLinkDownloadFileInput(params: Record<string, unknown>): DriveLinkDownloadFileInput {
+  return {
+    ...parseDriveLinkResolveInput(params),
+    path: optionalString(params.path),
+    itemId: optionalString(params.itemId),
+    outputPath: optionalString(params.outputPath),
+  }
+}
+
+function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterializeInput["scope"] {
+  if (value === undefined || value === null) return undefined
+  if (value === "entry" || value === "text" || value === "all") return value
+  throw new Error("Expected scope to be entry, text, or all.")
 }
 
 function parseDriveTreeListInput(params: Record<string, unknown>): DriveItemTreeListInput {
