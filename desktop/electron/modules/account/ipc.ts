@@ -299,6 +299,104 @@ const driveFileVersionListPageSchema = z.object({
   }),
 })
 
+const driveLinkResolveSchema = z.object({
+  url: z.string().url(),
+  password: z.string().min(1).max(256).optional(),
+}).strict()
+
+const driveLinkListSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+}).strict()
+
+const driveLinkReadTextSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+  maxBytes: z.number().int().positive().optional(),
+}).strict()
+
+const driveLinkMaterializeSchema = driveLinkResolveSchema.extend({
+  scope: z.enum(["entry", "text", "all"]).optional(),
+  maxFiles: z.number().int().positive().optional(),
+  maxBytes: z.number().int().positive().optional(),
+}).strict()
+
+const driveLinkDownloadFileSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+  outputPath: z.string().min(1).optional(),
+}).strict()
+
+const driveLinkAccessSchema = z.object({
+  status: z.enum(["ok", "password_required", "login_required", "not_found"]),
+  canRead: z.boolean(),
+  canList: z.boolean(),
+  canReadText: z.boolean(),
+  canDownload: z.boolean(),
+})
+
+const driveLinkRefSchema = z.object({
+  kind: z.enum(["share", "site", "public_asset"]),
+  shareId: z.string().nullable(),
+  itemId: z.string().nullable(),
+  siteId: z.string().nullable(),
+  path: z.string().nullable(),
+  assetId: z.string().nullable(),
+})
+
+const driveLinkResolveResponseSchema = z.object({
+  ok: z.literal(true),
+  linkType: z.enum(["share", "share_item", "site", "site_path", "public_asset"]),
+  access: driveLinkAccessSchema,
+  root: z.object({
+    name: z.string(),
+    type: z.enum(["file", "folder", "site", "asset"]),
+    previewKind: z.string(),
+  }),
+  ref: driveLinkRefSchema,
+})
+
+const driveLinkEntrySchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  type: z.enum(["file", "folder", "site", "asset"]),
+  mimeType: z.string().nullable(),
+  previewKind: z.string(),
+  size: z.string(),
+  itemId: z.string().nullable().optional(),
+})
+
+const driveLinkListResponseSchema = z.object({
+  items: z.array(driveLinkEntrySchema),
+  page: z.object({ hasMore: z.boolean(), nextOffset: z.number().int().nonnegative().nullable() }),
+})
+
+const driveLinkReadTextResponseSchema = z.object({
+  path: z.string(),
+  mimeType: z.string().nullable(),
+  previewKind: z.string(),
+  text: z.string(),
+  truncated: z.boolean(),
+  source: z.object({ linkType: z.string(), versionId: z.string().nullable().optional() }),
+})
+
+const driveLinkMaterializeResponseSchema = z.object({
+  localRootPath: z.string(),
+  manifestPath: z.string(),
+  entryPath: z.string().nullable(),
+  files: z.array(z.object({ relativePath: z.string(), kind: z.string(), size: z.string() })),
+  skipped: z.array(z.object({ path: z.string(), reason: z.string() })),
+  warnings: z.array(z.string()),
+})
+
+const driveLinkDownloadFileResponseSchema = z.object({
+  localPath: z.string(),
+  mimeType: z.string().nullable(),
+  size: z.string(),
+})
+
 const driveUsageSchema = z.object({
   usedBytes: z.string(),
   reservedBytes: z.string(),
@@ -934,6 +1032,53 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => {
         const parsed = driveFileVersionPinSchema.parse(input)
         return accountService.updateDriveFileVersionPin(parsed.itemId, parsed.versionId, parsed.isPinned)
+      },
+    },
+    resolveDriveLink: {
+      kind: "invoke",
+      channel: "synapse:account:drive:links:resolve",
+      request: driveLinkResolveSchema,
+      response: driveLinkResolveResponseSchema,
+      handler: async (_ctx, input) => accountService.resolveDriveLink(driveLinkResolveSchema.parse(input)),
+    },
+    listDriveLink: {
+      kind: "invoke",
+      channel: "synapse:account:drive:links:list",
+      request: driveLinkListSchema,
+      response: driveLinkListResponseSchema,
+      handler: async (_ctx, input) => accountService.listDriveLink(driveLinkListSchema.parse(input)),
+    },
+    readDriveLinkText: {
+      kind: "invoke",
+      channel: "synapse:account:drive:links:read-text",
+      request: driveLinkReadTextSchema,
+      response: driveLinkReadTextResponseSchema,
+      handler: async (_ctx, input) => accountService.readDriveLinkText(driveLinkReadTextSchema.parse(input)),
+    },
+    materializeDriveLink: {
+      kind: "invoke",
+      channel: "synapse:account:drive:links:materialize",
+      request: driveLinkMaterializeSchema,
+      response: driveLinkMaterializeResponseSchema,
+      handler: async (_ctx, input) => accountService.materializeDriveLink(driveLinkMaterializeSchema.parse(input)),
+    },
+    downloadDriveLinkFile: {
+      kind: "invoke",
+      channel: "synapse:account:drive:links:download-file",
+      request: driveLinkDownloadFileSchema,
+      response: driveLinkDownloadFileResponseSchema,
+      handler: async (ctx, input) => {
+        const parsed = driveLinkDownloadFileSchema.parse(input)
+        if (parsed.outputPath) {
+          await checkAccountPermission({
+            ctx,
+            action: "fs.write",
+            resource: parsed.outputPath,
+            source: "account.driveLinkDownload.write",
+            context: { url: sanitizeUrl(parsed.url) },
+          })
+        }
+        return accountService.downloadDriveLinkFile(parsed)
       },
     },
     shareDriveItem: {

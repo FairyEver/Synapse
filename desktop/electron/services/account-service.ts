@@ -515,8 +515,8 @@ export class AccountService {
   async materializeDriveLink(input: DriveLinkMaterializeInput): Promise<DriveLinkMaterializeDto> {
     const page = await this.listDriveLink(input)
     const root = await createDriveLinkIntakeRunDirectory()
-    const files: DriveLinkMaterializeDto["files"] = []
-    const skipped: DriveLinkMaterializeDto["skipped"] = []
+    const files: Array<DriveLinkMaterializeDto["files"][number]> = []
+    const skipped: Array<DriveLinkMaterializeDto["skipped"][number]> = []
     const warnings: string[] = []
     let totalBytes = 0
     const maxFiles = input.maxFiles ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES
