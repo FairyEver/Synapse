@@ -19,6 +19,9 @@ import {
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SHARE_BROWSER_PATH_PREFIX,
   DRIVE_SYNC_BINDING_STATUSES,
+  DRIVE_SYNC_BINDING_PREVIEW_STATUSES,
+  DRIVE_SYNC_CONFLICT_RESOLUTIONS,
+  DRIVE_SYNC_INITIAL_DIRECTIONS,
   DRIVE_SYNC_OPERATION_STATUSES,
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
@@ -393,5 +396,11 @@ describe("drive URL helpers", () => {
       "conflict",
       "error",
     ])
+  })
+
+  it("exports stable Drive sync completion values", () => {
+    expect(DRIVE_SYNC_INITIAL_DIRECTIONS).toEqual(["remote_to_local", "local_to_remote"])
+    expect(DRIVE_SYNC_BINDING_PREVIEW_STATUSES).toEqual(["ready", "blocked", "warning"])
+    expect(DRIVE_SYNC_CONFLICT_RESOLUTIONS).toEqual(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
   })
 })

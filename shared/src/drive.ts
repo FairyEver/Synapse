@@ -69,6 +69,12 @@ export const DRIVE_SYNC_OPERATION_STATUSES = [
   "error",
 ] as const
 export type DriveSyncOperationStatus = typeof DRIVE_SYNC_OPERATION_STATUSES[number]
+export const DRIVE_SYNC_INITIAL_DIRECTIONS = ["remote_to_local", "local_to_remote"] as const
+export type DriveSyncInitialDirection = typeof DRIVE_SYNC_INITIAL_DIRECTIONS[number]
+export const DRIVE_SYNC_BINDING_PREVIEW_STATUSES = ["ready", "blocked", "warning"] as const
+export type DriveSyncBindingPreviewStatus = typeof DRIVE_SYNC_BINDING_PREVIEW_STATUSES[number]
+export const DRIVE_SYNC_CONFLICT_RESOLUTIONS = ["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"] as const
+export type DriveSyncConflictResolutionAction = typeof DRIVE_SYNC_CONFLICT_RESOLUTIONS[number]
 export type DriveDocumentImageSourceKind =
   | "owner_asset"
   | "collaborator_asset"
@@ -202,6 +208,41 @@ export interface DriveSyncSnapshotDto {
     readonly conflictCount: number
     readonly errorCount: number
   }
+}
+
+export interface DriveSyncBindingPreviewDto {
+  readonly status: DriveSyncBindingPreviewStatus
+  readonly direction: DriveSyncInitialDirection | null
+  readonly reason: string | null
+  readonly localPath: string
+  readonly localKind: "missing" | "file" | "folder" | "other"
+  readonly localEmpty: boolean | null
+  readonly forcedExcludeRules: readonly string[]
+  readonly defaultExcludeRules: readonly string[]
+  readonly importedGitignoreRules: readonly string[]
+}
+
+export interface DriveSyncCreateSafeBindingInput {
+  readonly driveItemId: string
+  readonly driveItemName: string
+  readonly kind: DriveItemType
+  readonly drivePathHint?: string | null
+  readonly localPath: string
+  readonly direction: DriveSyncInitialDirection
+  readonly excludeRules?: readonly string[]
+  readonly importGitignore?: boolean
+}
+
+export interface DriveSyncExcludeRulesDto {
+  readonly forced: readonly string[]
+  readonly defaults: readonly string[]
+  readonly importedGitignore: readonly string[]
+  readonly user: readonly string[]
+}
+
+export interface DriveSyncConflictResolutionInput {
+  readonly conflictId: string
+  readonly action: DriveSyncConflictResolutionAction
 }
 
 export interface DriveItemActiveShareDto {
