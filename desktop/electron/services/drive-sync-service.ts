@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
-import { mkdir } from "node:fs/promises"
+import { mkdir, rename } from "node:fs/promises"
 import path from "node:path"
 import type {
   DriveSyncBindingPreviewDto,
@@ -24,7 +24,11 @@ import type {
 } from "../runtime/data-repo"
 import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
 import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
+import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
+import { planDriveSyncLocalChanges, type DriveSyncPlannedConflict, type DriveSyncPlannedOperation } from "./drive-sync-planner"
+import { pollDriveSyncRemoteChanges } from "./drive-sync-remote-poller"
+import { createDriveSyncWatcher, type DriveSyncLocalChange } from "./drive-sync-watcher"
 
 export interface DriveSyncServiceDeps {
   readonly bindings: DataNamespace<DriveSyncBindingEntryV1>
@@ -33,6 +37,7 @@ export interface DriveSyncServiceDeps {
   readonly conflicts: DataNamespace<DriveSyncConflictEntryV1>
   readonly state: DataNamespace<DriveSyncStateEntryV1>
   readonly accountService: DriveSyncAccountService
+  readonly trashLocalPath?: (localPath: string) => Promise<void>
   readonly now?: () => Date
   readonly createId?: (prefix: string) => string
 }
@@ -116,6 +121,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
   const createId = (prefix: string) => deps.createId?.(prefix) ?? `${prefix}:${randomUUID()}`
   const baselineStore = createDriveSyncBaselineStore({ baseline: deps.baseline, now: deps.now })
+  const localWatcher = createDriveSyncWatcher({
+    onChanges: handleLocalChanges,
+  })
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindings = (await deps.bindings.list())
@@ -178,6 +186,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
 
     await deps.bindings.upsert(entry)
+    await reconcileLocalWatcher()
     await emitChanged()
     return toBindingDto(entry)
   }
@@ -195,6 +204,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       updatedAt: timestamp(),
     }
     await deps.bindings.upsert(entry)
+    await reconcileLocalWatcher()
     await emitChanged()
     return toBindingDto(entry)
   }
@@ -202,6 +212,35 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function removeBinding(id: string): Promise<void> {
     await baselineStore.removeBinding(id)
     await updateBindingStatus(id, "removed")
+  }
+
+  async function rescanBinding(id: string): Promise<void> {
+    const binding = await requireBinding(id)
+    const baseline = await baselineStore.listByBinding(id)
+    const changes = await localWatcher.scanBinding({ binding, baseline })
+    await handleLocalChanges(changes)
+  }
+
+  async function pollRemoteChanges(id?: string): Promise<void> {
+    const bindings = (id ? [await requireBinding(id)] : await deps.bindings.list())
+      .filter((binding) => binding.status === "active")
+    for (const binding of bindings) {
+      const baseline = await baselineStore.listByBinding(binding.id)
+      const localChanges = await localWatcher.scanBinding({ binding, baseline }).catch(() => [])
+      await pollDriveSyncRemoteChanges({
+        binding,
+        baseline,
+        accountService: deps.accountService,
+        onOperations: executePlannedOperations,
+        onConflicts: recordPlannedConflicts,
+        updateBindingCursor,
+        localChangedPaths: new Set(localChanges.map((change) => change.relativePath)),
+      })
+    }
+  }
+
+  async function stopLocalWatcher(): Promise<void> {
+    localWatcher.stop()
   }
 
   async function previewBinding(input: Omit<DriveSyncCreateSafeBindingInput, "direction"> & {
@@ -309,6 +348,92 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return tree.items.find((item) => item.name === name)?.id ?? name
   }
 
+  async function handleLocalChanges(changes: readonly DriveSyncLocalChange[]): Promise<void> {
+    const changesByBinding = new Map<string, DriveSyncLocalChange[]>()
+    for (const change of changes) {
+      const group = changesByBinding.get(change.bindingId) ?? []
+      group.push(change)
+      changesByBinding.set(change.bindingId, group)
+    }
+
+    for (const [bindingId, bindingChanges] of changesByBinding) {
+      const binding = await requireBinding(bindingId)
+      if (binding.status !== "active") continue
+      const plan = planDriveSyncLocalChanges({
+        binding,
+        baseline: await baselineStore.listByBinding(bindingId),
+        changes: bindingChanges,
+      })
+      await recordPlannedConflicts(plan.conflicts)
+      await executePlannedOperations(plan.operations)
+    }
+  }
+
+  async function executePlannedOperations(operations: readonly DriveSyncPlannedOperation[]): Promise<void> {
+    for (const operation of operations) {
+      const binding = await requireBinding(operation.bindingId)
+      if (operation.kind === "resync") {
+        await recordOperation({
+          bindingId: operation.bindingId,
+          kind: "resync",
+          status: "retry_wait",
+          driveItemId: operation.driveItemId,
+          relativePath: operation.relativePath,
+          localPath: operation.localPath,
+          remotePathHint: operation.remotePathHint,
+          message: "需要重新扫描。",
+        })
+        continue
+      }
+      markSelfWriteForOperation(operation)
+      await executeDriveSyncOperation({
+        binding,
+        operation,
+        baselineStore,
+        accountService: deps.accountService,
+        recordOperation,
+        trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
+      })
+    }
+  }
+
+  async function recordPlannedConflicts(conflicts: readonly DriveSyncPlannedConflict[]): Promise<void> {
+    for (const conflict of conflicts) {
+      await recordConflict({
+        bindingId: conflict.bindingId,
+        driveItemId: conflict.driveItemId,
+        relativePath: conflict.relativePath,
+        localPath: conflict.localPath,
+        remotePathHint: conflict.remotePathHint,
+        type: conflict.type,
+        localSnapshot: conflict.localSnapshot,
+        remoteSnapshot: conflict.remoteSnapshot,
+      })
+    }
+  }
+
+  function markSelfWriteForOperation(operation: DriveSyncPlannedOperation): void {
+    if (operation.kind !== "download" && operation.kind !== "delete_local" && operation.kind !== "move_local") return
+    localWatcher.markSelfWrite({
+      bindingId: operation.bindingId,
+      relativePath: operation.relativePath,
+    })
+  }
+
+  async function updateBindingCursor(bindingId: string, cursor: string | null): Promise<void> {
+    const binding = await requireBinding(bindingId)
+    await deps.bindings.upsert({
+      ...binding,
+      remoteCursor: cursor,
+      updatedAt: timestamp(),
+    })
+    await emitChanged()
+  }
+
+  async function reconcileLocalWatcher(): Promise<void> {
+    localWatcher.reconcile(await deps.bindings.list())
+  }
+
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
     await requireBinding(input.bindingId)
     const now = timestamp()
@@ -404,6 +529,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     createBinding,
     previewBinding,
     createSafeBinding,
+    rescanBinding,
+    pollRemoteChanges,
+    stopLocalWatcher,
     updateBindingStatus,
     removeBinding,
     recordOperation,
@@ -483,4 +611,11 @@ function compareCreatedAsc(left: { readonly createdAt: string }, right: { readon
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "同步操作失败。"
+}
+
+async function moveLocalPathToRecoverableTrash(localPath: string): Promise<void> {
+  const trashRoot = path.join(path.dirname(localPath), ".synapse-sync-trash")
+  await mkdir(trashRoot, { recursive: true })
+  const targetPath = path.join(trashRoot, `${Date.now()}-${path.basename(localPath)}`)
+  await rename(localPath, targetPath)
 }

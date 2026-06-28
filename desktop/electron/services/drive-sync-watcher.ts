@@ -117,13 +117,17 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
   }
 
   function startBinding(binding: DriveSyncBindingEntryV1, rootPath: string): void {
-    const watcher = watch(rootPath, { persistent: false, recursive: true }, (eventType, filename) => {
-      handleRawEvent(binding.id, eventType, filename)
-    })
-    watcher.on("error", () => {
-      void enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
-    })
-    entries.set(binding.id, { binding, rootPath, watcher })
+    try {
+      const watcher = watch(rootPath, { persistent: false, recursive: true }, (eventType, filename) => {
+        handleRawEvent(binding.id, eventType, filename)
+      })
+      watcher.on("error", () => {
+        enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+      })
+      entries.set(binding.id, { binding, rootPath, watcher })
+    } catch {
+      enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+    }
   }
 
   function stopBinding(bindingId: string): void {

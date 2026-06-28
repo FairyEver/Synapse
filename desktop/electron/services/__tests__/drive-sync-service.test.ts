@@ -262,6 +262,151 @@ describe("DriveSyncService", () => {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
+
+  it("rescans missed local changes and uploads them", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "local.md"), "local", "utf8")
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-local", name: "local.md", type: "file" }],
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+
+      await service.rescanBinding(binding.id)
+
+      expect(harness.deps.accountService.uploadDriveLocalItems).toHaveBeenCalled()
+      await expect(harness.baseline.list()).resolves.toMatchObject([
+        { bindingId: binding.id, relativePath: "local.md", remoteItemId: "remote-local" },
+      ])
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("polls remote changes, downloads files, and advances the binding cursor", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await service.pollRemoteChanges(binding.id)
+
+      await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("remote")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "succeeded" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("records conflicts from simultaneous local and remote changes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      await harness.baseline.upsert({
+        id: `${binding.id}:spec.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        kind: "file",
+        remoteItemId: "remote-spec",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: null,
+        localMtimeMs: null,
+        localHash: "sha256:before",
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+
+      await writeFile(path.join(tempDir, "spec.md"), "local after baseline", "utf8")
+      await harness.deps.accountService.listDriveChanges.mockResolvedValueOnce({
+        items: [{
+          id: "change-1",
+          sequence: "43",
+          itemId: "remote-spec",
+          parentId: "drive-root",
+          type: "content_updated",
+          versionId: null,
+          etag: null,
+          name: "spec.md",
+          pathHint: "/Docs/spec.md",
+          actor: "user",
+          occurredAt: "2026-06-28T00:00:00.000Z",
+        }],
+        nextCursor: "43",
+        hasMore: false,
+        resyncRequired: false,
+      })
+      await service.pollRemoteChanges(binding.id)
+
+      await expect(harness.conflicts.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, relativePath: "spec.md", type: "both_modified", status: "open" }),
+      )
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function createHarness(overrides: { readonly accountService?: Record<string, unknown> } = {}) {
@@ -283,6 +428,7 @@ function createHarness(overrides: { readonly accountService?: Record<string, unk
     ensureDriveFolderPath: vi.fn(),
     ...overrides.accountService,
   }
+  let idCounter = 0
   return {
     bindings,
     baseline,
@@ -297,7 +443,7 @@ function createHarness(overrides: { readonly accountService?: Record<string, unk
       state,
       accountService,
       now: () => new Date("2026-06-28T00:00:00.000Z"),
-      createId: (prefix: string) => `${prefix}-1`,
+      createId: (prefix: string) => `${prefix}-${++idCounter}`,
     },
   }
 }
