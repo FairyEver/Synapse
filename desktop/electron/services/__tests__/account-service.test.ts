@@ -335,6 +335,120 @@ describe("AccountService", () => {
     expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
   })
 
+  it("downloads Drive link files through the link-intake download endpoint", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-link-download-"))
+    const outputPath = path.join(dir, "sample-data.json")
+    const { service } = await createTestAccountService()
+    const fetchAuthenticated = vi.spyOn(service, "fetchAuthenticated").mockResolvedValueOnce(new Response("{\"ok\":true}", {
+      headers: { "Content-Type": "application/json", "Content-Length": "11" },
+    }))
+
+    const result = await service.downloadDriveLinkFile({
+      url: "https://synapse.test/share/shr_123",
+      password: "secret",
+      path: "sample-data.json",
+      outputPath,
+    })
+
+    expect(fetchAuthenticated).toHaveBeenCalledWith(
+      expectedApiUrl("/drive/link-intake/download-file"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://synapse.test/share/shr_123",
+          password: "secret",
+          path: "sample-data.json",
+        }),
+      },
+      "云盘链接下载失败。",
+    )
+    expect(await readFile(outputPath, "utf8")).toBe("{\"ok\":true}")
+    expect(result).toEqual({ localPath: outputPath, mimeType: "application/json", size: "11" })
+  })
+
+  it("recursively materializes Drive link text without sending materialize-only fields to list", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink").mockImplementation(async (input) => {
+      if (input.itemId === "folder-pages") {
+        return {
+          items: [
+            { path: "create-task.html", name: "create-task.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "21", itemId: "page-create" },
+            { path: "review-task.html", name: "review-task.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "21", itemId: "page-review" },
+          ],
+          page: { hasMore: false, nextOffset: null },
+        }
+      }
+      if (input.itemId === "folder-assets") {
+        return {
+          items: [
+            { path: "styles.css", name: "styles.css", type: "file", mimeType: "text/css", previewKind: "text", size: "18", itemId: "asset-css" },
+            { path: "logo.png", name: "logo.png", type: "file", mimeType: "image/png", previewKind: "image", size: "12", itemId: "asset-logo" },
+          ],
+          page: { hasMore: false, nextOffset: null },
+        }
+      }
+      return {
+        items: [
+          { path: "index.html", name: "index.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "13", itemId: "index" },
+          { path: "pages", name: "pages", type: "folder", mimeType: null, previewKind: "download-only", size: "0", itemId: "folder-pages" },
+          { path: "assets", name: "assets", type: "folder", mimeType: null, previewKind: "download-only", size: "0", itemId: "folder-assets" },
+        ],
+        page: { hasMore: false, nextOffset: null },
+      }
+    })
+    vi.spyOn(service, "readDriveLinkText").mockImplementation(async (input) => ({
+      path: input.path ?? "",
+      mimeType: input.path?.endsWith(".css") ? "text/css" : "text/html",
+      previewKind: input.path?.endsWith(".css") ? "text" : "html-source",
+      text: `content:${input.path}`,
+      truncated: false,
+      source: { linkType: "share" },
+    }))
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/share/shr_html",
+      password: "secret",
+      scope: "text",
+      maxFiles: 20,
+      maxBytes: 1024 * 1024,
+    })
+
+    expect(listDriveLink).toHaveBeenNthCalledWith(1, { url: "https://synapse.test/share/shr_html", password: "secret" })
+    expect(result.files.map((file) => file.relativePath)).toEqual([
+      "index.html",
+      "pages/create-task.html",
+      "pages/review-task.html",
+      "assets/styles.css",
+    ])
+    expect(result.skipped).toEqual([{ path: "assets/logo.png", reason: "not-text" }])
+    await expect(readFile(path.join(result.localRootPath, "content", "pages", "create-task.html"), "utf8"))
+      .resolves.toBe("content:pages/create-task.html")
+  })
+
+  it("materializes binary files when Drive link scope is all", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
+      items: [{ path: "assets/logo.png", name: "logo.png", type: "file", mimeType: "image/png", previewKind: "image", size: "7", itemId: "asset-logo" }],
+      page: { hasMore: false, nextOffset: null },
+    })
+    vi.spyOn(service, "downloadDriveLinkFile").mockImplementation(async (input) => {
+      if (!input.outputPath) throw new Error("outputPath required")
+      await writeFile(input.outputPath, "pngdata")
+      return { localPath: input.outputPath, mimeType: "image/png", size: "7" }
+    })
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/share/shr_html",
+      scope: "all",
+      maxFiles: 5,
+      maxBytes: 1024,
+    })
+
+    expect(result.files).toEqual([{ relativePath: "assets/logo.png", kind: "image", size: "7" }])
+    await expect(readFile(path.join(result.localRootPath, "content", "assets", "logo.png"), "utf8")).resolves.toBe("pngdata")
+  })
+
   it("rejects local files over the shared single file limit before preparing upload", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-too-large-"))
     const filePath = path.join(dir, "large.bin")

@@ -62,9 +62,9 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 
 1. Call `app_drive_link_resolve` with `url` and optional `password`.
 2. If the result is a folder or site, call `app_drive_link_list` before reading content.
-3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`.
+3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`. For `/share` children, prefer the `itemId` returned by `app_drive_link_list`; use `path` mainly for `/sites` assets or as a share fallback.
 4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`.
-5. For one specific linked file or public asset, call `app_drive_link_download_file`.
+5. For one specific linked file or public asset, call `app_drive_link_download_file`. For `/share` children, prefer the listed `itemId`; for `/sites`, pass the site-relative `path`.
 
 Do not use these tools to edit shared files, create comments, import shared content into the user's Drive, or crawl arbitrary websites.
 Do not repeat passwords in the final answer.

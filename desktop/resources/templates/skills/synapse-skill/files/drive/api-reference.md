@@ -142,6 +142,8 @@ Input:
 
 Output includes `items` and `page`.
 
+For `/share` folders, each file entry includes an `itemId`. Prefer that `itemId` for later `read_text` or `download_file` calls. For `/sites`, use the returned site-relative `path`.
+
 ### `app_drive_link_read_text`
 
 Input:
@@ -153,6 +155,8 @@ Input:
 - `maxBytes` optional.
 
 Use for Markdown, HTML source, JSON, and text. Binary files should use `app_drive_link_download_file`.
+
+For `/share` children, prefer `itemId` from `app_drive_link_list`; `path` is primarily for `/sites` assets and share fallback lookup.
 
 ### `app_drive_link_materialize`
 
@@ -177,6 +181,8 @@ Input:
 - `outputPath` optional.
 
 Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache.
+
+For `/share` children, prefer `itemId` from `app_drive_link_list`; for `/sites`, pass the site-relative `path`.
 
 ## Share Tools
 

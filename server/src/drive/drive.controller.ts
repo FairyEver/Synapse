@@ -920,6 +920,13 @@ export class DrivePublicController {
     return requireDriveLinkIntakeService(this.linkIntake).resolve(parseBody(driveLinkDownloadFileSchema, body, "云盘链接下载请求无效。"))
   }
 
+  @Post("/api/drive/link-intake/download-file")
+  async downloadDriveLinkFile(@Body() body: unknown, @Res() response: Response): Promise<void> {
+    const download = await requireDriveLinkIntakeService(this.linkIntake)
+      .openDownload(parseBody(driveLinkDownloadFileSchema, body, "云盘链接下载请求无效。"))
+    await sendDriveFileDownload(response, download)
+  }
+
   @Get("/files/:assetId")
   @Head("/files/:assetId")
   async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {

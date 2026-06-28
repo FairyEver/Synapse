@@ -513,52 +513,113 @@ export class AccountService {
   }
 
   async materializeDriveLink(input: DriveLinkMaterializeInput): Promise<DriveLinkMaterializeDto> {
-    const page = await this.listDriveLink(input)
+    const baseInput: DriveLinkListInput = {
+      url: input.url,
+      password: input.password,
+    }
     const root = await createDriveLinkIntakeRunDirectory()
     const files: Array<DriveLinkMaterializeDto["files"][number]> = []
     const skipped: Array<DriveLinkMaterializeDto["skipped"][number]> = []
     const warnings: string[] = []
     let totalBytes = 0
-    const maxFiles = input.maxFiles ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES
+    const scope = input.scope ?? "text"
+    const maxFiles = scope === "entry" ? 1 : input.maxFiles ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES
     const maxBytes = input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES
+    const queue: Array<{ readonly itemId?: string; readonly path?: string; readonly prefix: string }> = [{ prefix: "" }]
+    let maxFilesReached = false
 
-    for (const item of page.items.slice(0, maxFiles)) {
-      if (!["markdown", "html-source", "text"].includes(item.previewKind)) {
-        skipped.push({ path: item.path, reason: "not-text" })
-        continue
-      }
-      const text = await this.readDriveLinkText({
-        url: input.url,
-        password: input.password,
-        itemId: item.itemId ?? undefined,
-        path: item.path,
-      })
-      const relativePath = safeDriveLinkOutputPath(item.path)
-      const outputPath = path.join(root.contentPath, relativePath)
-      const bytes = Buffer.byteLength(text.text, "utf8")
-      if (totalBytes + bytes > maxBytes) {
-        skipped.push({ path: item.path, reason: "max-bytes" })
-        continue
-      }
-      await mkdir(path.dirname(outputPath), { recursive: true })
-      await writeFile(outputPath, text.text, "utf8")
-      totalBytes += bytes
-      files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+    while (queue.length > 0 && !maxFilesReached) {
+      const current = queue.shift()!
+      let offset: number | undefined
+      do {
+        const page = await this.listDriveLink({
+          ...baseInput,
+          itemId: current.itemId,
+          path: current.path,
+          offset,
+        })
+        for (const item of page.items) {
+          const relativePath = safeDriveLinkOutputPath(joinDriveLinkRelativePath(current.prefix, item.path || item.name))
+          if (item.type === "folder") {
+            queue.push({ itemId: item.itemId ?? undefined, prefix: relativePath })
+            continue
+          }
+          if (files.length >= maxFiles) {
+            skipped.push({ path: relativePath, reason: "max-files" })
+            maxFilesReached = true
+            continue
+          }
+          const outputPath = path.join(root.contentPath, relativePath)
+          if (isDriveLinkTextPreview(item.previewKind)) {
+            const text = await this.readDriveLinkText({
+              ...baseInput,
+              itemId: item.itemId ?? undefined,
+              path: relativePath,
+            })
+            const bytes = Buffer.byteLength(text.text, "utf8")
+            if (totalBytes + bytes > maxBytes) {
+              skipped.push({ path: relativePath, reason: "max-bytes" })
+              continue
+            }
+            await mkdir(path.dirname(outputPath), { recursive: true })
+            await writeFile(outputPath, text.text, "utf8")
+            totalBytes += bytes
+            files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+            continue
+          }
+          if (scope !== "all") {
+            skipped.push({ path: relativePath, reason: "not-text" })
+            continue
+          }
+          const declaredSize = parseDriveLinkSize(item.size)
+          if (declaredSize !== null && totalBytes + declaredSize > maxBytes) {
+            skipped.push({ path: relativePath, reason: "max-bytes" })
+            continue
+          }
+          await mkdir(path.dirname(outputPath), { recursive: true })
+          const downloaded = await this.downloadDriveLinkFile({
+            ...baseInput,
+            itemId: item.itemId ?? undefined,
+            path: relativePath,
+            outputPath,
+          })
+          const actualSize = Number(downloaded.size)
+          if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
+            await rm(outputPath, { force: true })
+            skipped.push({ path: relativePath, reason: "max-bytes" })
+            continue
+          }
+          totalBytes += Number.isFinite(actualSize) ? actualSize : 0
+          files.push({ relativePath, kind: driveLinkFileKind(item.previewKind, downloaded.mimeType ?? item.mimeType), size: downloaded.size })
+        }
+        offset = page.page.hasMore ? page.page.nextOffset ?? undefined : undefined
+        if (page.page.hasMore && offset === undefined) warnings.push("目录还有更多文件，本次只处理了可定位的页面。")
+      } while (offset !== undefined && !maxFilesReached)
     }
 
-    if (page.page.hasMore) warnings.push("目录还有更多文件，本次只处理第一页。")
-    const entryPath = files[0] ? path.join(root.contentPath, files[0].relativePath) : null
-    const manifest = { sourceUrl: input.url, fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
+    if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
+    const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
+    const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
+    const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
     await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
     return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
   }
 
   async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
     const targetPath = input.outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
-    const response = await this.fetchAuthenticated(driveLinkUrlWithPassword(input.url, input.password), {}, "云盘链接下载失败。")
+    const { outputPath: _outputPath, ...request } = input
+    const response = await this.fetchAuthenticated(`${apiBaseUrl()}/drive/link-intake/download-file`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }, "云盘链接下载失败。")
     await writeResponseBodyToFile(response, targetPath)
     const fileStat = await safeLocalFileStat(targetPath)
-    return { localPath: targetPath, mimeType: null, size: String(fileStat?.size ?? 0) }
+    return {
+      localPath: targetPath,
+      mimeType: response.headers.get("Content-Type"),
+      size: response.headers.get("Content-Length") ?? String(fileStat?.size ?? 0),
+    }
   }
 
   async downloadDriveFolderZip(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
@@ -2017,17 +2078,36 @@ function safeDriveLinkOutputPath(value: string): string {
   return normalized
 }
 
-function driveLinkUrlWithPassword(url: string, password: string | undefined): string {
-  if (!password) return url
-  const parsed = new URL(url)
-  parsed.searchParams.set("password", password)
-  return parsed.toString()
-}
-
 function driveLinkFileKind(previewKind: string, mimeType: string | null): "markdown" | "html" | "text" | "image" | "binary" | "folder" {
   if (previewKind === "markdown") return "markdown"
   if (previewKind === "html-source" || mimeType === "text/html") return "html"
+  if (previewKind === "image" || mimeType?.startsWith("image/")) return "image"
+  if (previewKind === "download-only") return "binary"
   return "text"
+}
+
+function isDriveLinkTextPreview(previewKind: string): boolean {
+  return previewKind === "markdown" || previewKind === "html-source" || previewKind === "text"
+}
+
+function joinDriveLinkRelativePath(prefix: string, childPath: string): string {
+  return [prefix, childPath].filter(Boolean).join("/")
+}
+
+function parseDriveLinkSize(value: string): number | null {
+  if (!/^\d+$/u.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+function driveLinkManifestSourceUrl(value: string): string {
+  try {
+    const parsed = new URL(value)
+    parsed.searchParams.delete("password")
+    return parsed.toString()
+  } catch {
+    return value
+  }
 }
 
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {

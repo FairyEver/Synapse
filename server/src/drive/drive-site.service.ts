@@ -111,6 +111,14 @@ export type DriveResolvedSiteAccess =
     readonly asset: DriveSiteAssetRecord
   }
 
+export type DrivePublicSiteAssetListResult =
+  | { readonly status: "not_found" | "disabled" | "expired" | "password_required" }
+  | {
+    readonly status: "ok"
+    readonly assets: readonly DriveSiteAssetRecord[]
+    readonly page: { readonly hasMore: boolean; readonly nextOffset: number | null }
+  }
+
 @Injectable()
 export class DriveSiteService {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
@@ -249,17 +257,10 @@ export class DriveSiteService {
     return this.getSiteDto(userId, siteId, publicAppUrl)
   }
 
-  async resolvePublicSite(siteId: string, input: { readonly cookie: string | null; readonly relativePath?: string }): Promise<DriveResolvedSiteAccess> {
-    const site = await this.prisma.driveSite.findUnique({ where: { siteId } })
-    if (!site || site.deletedAt) return { status: "not_found" }
-    if (site.status !== DRIVE_SITE_STATUS.active) return { status: "disabled" }
-    if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return { status: "expired" }
-    if (site.accessMode === DRIVE_SITE_ACCESS_MODE.password && input.cookie !== driveSiteAccessCookieValue(site.siteId)) {
-      return { status: "password_required" }
-    }
-    if (!site.currentDeploymentId) return { status: "not_found" }
-    const deployment = await this.prisma.driveSiteDeployment.findUnique({ where: { id: site.currentDeploymentId } })
-    if (!deployment || deployment.status !== DRIVE_SITE_DEPLOYMENT_STATUS.active) return { status: "not_found" }
+  async resolvePublicSite(siteId: string, input: { readonly cookie: string | null; readonly password?: string; readonly relativePath?: string }): Promise<DriveResolvedSiteAccess> {
+    const context = await this.resolvePublicDeployment(siteId, input)
+    if (context.status !== "ok") return context
+    const { deployment, site } = context
     const requestPath = resolveDriveSiteRequestPath(input.relativePath ?? "")
     const relativePath = requestPath.kind === "entry" ? deployment.entryPath : requestPath.relativePath
     const asset = await this.prisma.driveSiteAsset.findUnique({
@@ -267,6 +268,58 @@ export class DriveSiteService {
     })
     if (!asset) return { status: "not_found" }
     return { status: "ok", site, deployment, asset }
+  }
+
+  async listPublicSiteAssets(siteId: string, input: {
+    readonly cookie: string | null
+    readonly password?: string
+    readonly path?: string
+    readonly offset?: number
+    readonly limit?: number
+  }): Promise<DrivePublicSiteAssetListResult> {
+    const context = await this.resolvePublicDeployment(siteId, input)
+    if (context.status !== "ok") return context
+    const page = normalizeSiteListPage(input)
+    const prefix = input.path ? normalizeDriveSiteRelativePath(input.path) : ""
+    const pathFilter = prefix ? `${prefix.replace(/\/$/u, "")}/` : ""
+    const assets = await this.prisma.driveSiteAsset.findMany({
+      where: {
+        deploymentId: context.deployment.id,
+        ...(pathFilter ? { relativePath: { startsWith: pathFilter } } : {}),
+      },
+      orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      skip: page.offset,
+      take: page.limit + 1,
+    })
+    return {
+      status: "ok",
+      assets: assets.slice(0, page.limit),
+      page: {
+        hasMore: assets.length > page.limit,
+        nextOffset: assets.length > page.limit ? page.offset + page.limit : null,
+      },
+    }
+  }
+
+  private async resolvePublicDeployment(siteId: string, input: { readonly cookie: string | null; readonly password?: string }): Promise<
+    | { readonly status: "not_found" | "disabled" | "expired" | "password_required" }
+    | { readonly status: "ok"; readonly site: DriveSiteRecord; readonly deployment: DriveSiteDeploymentRecord }
+  > {
+    const site = await this.prisma.driveSite.findUnique({ where: { siteId } })
+    if (!site || site.deletedAt) return { status: "not_found" }
+    if (site.status !== DRIVE_SITE_STATUS.active) return { status: "disabled" }
+    if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return { status: "expired" }
+    const passwordAccepted = site.accessMode === DRIVE_SITE_ACCESS_MODE.password
+      && Boolean(input.password)
+      && Boolean(site.passwordHash)
+      && await bcrypt.compare(input.password!, site.passwordHash!)
+    if (site.accessMode === DRIVE_SITE_ACCESS_MODE.password && input.cookie !== driveSiteAccessCookieValue(site.siteId) && !passwordAccepted) {
+      return { status: "password_required" }
+    }
+    if (!site.currentDeploymentId) return { status: "not_found" }
+    const deployment = await this.prisma.driveSiteDeployment.findUnique({ where: { id: site.currentDeploymentId } })
+    if (!deployment || deployment.status !== DRIVE_SITE_DEPLOYMENT_STATUS.active) return { status: "not_found" }
+    return { status: "ok", site, deployment }
   }
 
   async verifySitePassword(siteId: string, password: string): Promise<boolean> {

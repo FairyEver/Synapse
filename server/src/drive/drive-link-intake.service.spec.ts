@@ -68,6 +68,16 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
       status: "ok",
       asset: { relativePath: "index.html", storageKey: "site/index.html", contentType: "text/html" },
     })),
+    listPublicSiteAssets: vi.fn(async () => ({
+      status: "ok",
+      assets: [
+        { relativePath: "index.html", storageKey: "site/index.html", contentType: "text/html", size: 15n },
+        { relativePath: "pages/create-task.html", storageKey: "site/pages/create-task.html", contentType: "text/html", size: 20n },
+        { relativePath: "assets/styles.css", storageKey: "site/assets/styles.css", contentType: "text/css", size: 8n },
+        { relativePath: "assets/logo.png", storageKey: "site/assets/logo.png", contentType: "image/png", size: 12n },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })),
   }
   const publicAssets = {
     resolvePublicAsset: vi.fn(async () => ({
@@ -144,6 +154,27 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("lists published site assets for Drive link intake", async () => {
+    const { service, sites } = createService()
+
+    await expect(service.list({ url: `${publicAppUrl}/sites/site_public/` })).resolves.toEqual({
+      items: [
+        { path: "index.html", name: "index.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "15" },
+        { path: "pages/create-task.html", name: "create-task.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "20" },
+        { path: "assets/styles.css", name: "styles.css", type: "file", mimeType: "text/css", previewKind: "text", size: "8" },
+        { path: "assets/logo.png", name: "logo.png", type: "file", mimeType: "image/png", previewKind: "image", size: "12" },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+    expect(sites.listPublicSiteAssets).toHaveBeenCalledWith("site_public", {
+      cookie: null,
+      password: undefined,
+      path: "",
+      offset: undefined,
+      limit: undefined,
+    })
+  })
+
   it("reads markdown text from a share link", async () => {
     const { service } = createService()
 
@@ -154,6 +185,77 @@ describe("DriveLinkIntakeService", () => {
       text: "# 需求\n正文",
       truncated: false,
       source: { linkType: "share" },
+    })
+  })
+
+  it("resolves share-relative paths before reading text", async () => {
+    const { service, drive } = createService()
+    drive.getShareBrowserSnapshot
+      .mockResolvedValueOnce({
+        context: "share",
+        surface: "standalone",
+        current: { id: "folder-1", name: "交付包", type: "folder", size: "0", mimeType: null, updatedAt: "2026-06-28T00:00:00.000Z", previewKind: "download-only", browserUrl: "/share/shr_123", downloadUrl: "/share/shr_123/download" },
+        breadcrumbs: [],
+        children: [{ id: "item-prd", name: "PRD.md", type: "file", size: "8", mimeType: "text/markdown", updatedAt: "2026-06-28T00:00:00.000Z", previewKind: "markdown", browserUrl: "/share/shr_123/items/item-prd", downloadUrl: "/share/shr_123/items/item-prd/download" }],
+        childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+        preview: null,
+        edit: null,
+        annotation: null,
+        canDownload: true,
+        canZip: true,
+      } as never)
+      .mockResolvedValueOnce({
+        context: "share",
+        surface: "standalone",
+        current: { id: "item-prd", name: "PRD.md", type: "file", size: "8", mimeType: "text/markdown", updatedAt: "2026-06-28T00:00:00.000Z", previewKind: "markdown", browserUrl: "/share/shr_123/items/item-prd", downloadUrl: "/share/shr_123/items/item-prd/download" },
+        breadcrumbs: [],
+        children: [],
+        childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+        preview: { kind: "markdown", text: "# PRD", html: "<h1>PRD</h1>", outline: [], truncated: false, imageUrl: null, visitUrl: null },
+        edit: null,
+        annotation: null,
+        canDownload: true,
+        canZip: false,
+      } as never)
+
+    await expect(service.readText({ url: `${publicAppUrl}/share/shr_123`, path: "PRD.md" })).resolves.toMatchObject({
+      path: "PRD.md",
+      text: "# PRD",
+      previewKind: "markdown",
+    })
+    expect(drive.getShareBrowserSnapshot).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: "item-prd" }))
+  })
+
+  it("opens a concrete file stream for Drive link downloads", async () => {
+    const { service, drive } = createService()
+    drive.getShareBrowserSnapshot
+      .mockResolvedValueOnce({
+        context: "share",
+        surface: "standalone",
+        current: { id: "folder-1", name: "交付包", type: "folder", size: "0", mimeType: null, updatedAt: "2026-06-28T00:00:00.000Z", previewKind: "download-only", browserUrl: "/share/shr_123", downloadUrl: "/share/shr_123/download" },
+        breadcrumbs: [],
+        children: [{ id: "item-json", name: "sample-data.json", type: "file", size: "13", mimeType: "application/json", updatedAt: "2026-06-28T00:00:00.000Z", previewKind: "text", browserUrl: "/share/shr_123/items/item-json", downloadUrl: "/share/shr_123/items/item-json/download" }],
+        childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+        preview: null,
+        edit: null,
+        annotation: null,
+        canDownload: true,
+        canZip: true,
+      } as never)
+    drive.openShareBrowserItemDownload.mockResolvedValueOnce({
+      kind: "file",
+      stream: Readable.from("{\"ok\":true}"),
+      fileName: "sample-data.json",
+      size: 11n,
+      contentType: "application/json",
+    })
+
+    await expect((service as unknown as {
+      openDownload: (input: { readonly url: string; readonly path?: string }) => Promise<unknown>
+    }).openDownload({ url: `${publicAppUrl}/share/shr_123`, path: "sample-data.json" })).resolves.toMatchObject({
+      fileName: "sample-data.json",
+      size: 11n,
+      contentType: "application/json",
     })
   })
 

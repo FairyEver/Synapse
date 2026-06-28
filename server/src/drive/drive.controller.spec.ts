@@ -1692,6 +1692,39 @@ describe("DrivePublicController link intake", () => {
       root: { name: "需求说明.md" },
     })
   })
+
+  it("streams Drive link download content through the link-intake endpoint", async () => {
+    const chunks: Buffer[] = []
+    const response = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(Buffer.from(chunk))
+        callback()
+      },
+    }) as Writable & {
+      attachment: ReturnType<typeof vi.fn>
+      setHeader: ReturnType<typeof vi.fn>
+    }
+    response.attachment = vi.fn(() => response)
+    response.setHeader = vi.fn(() => response)
+    const links = {
+      openDownload: vi.fn(async () => ({
+        stream: Readable.from("{\"ok\":true}"),
+        fileName: "sample-data.json",
+        size: 11n,
+        contentType: "application/json",
+      })),
+    }
+    const controller = new DrivePublicController({} as never, {} as never, undefined, undefined, undefined, undefined, undefined, links as never)
+
+    await (controller as unknown as {
+      downloadDriveLinkFile: (body: unknown, response: Writable) => Promise<void>
+    }).downloadDriveLinkFile({ url: "https://synapse.test/share/shr_123", path: "sample-data.json" }, response)
+
+    expect(Buffer.concat(chunks).toString("utf8")).toBe("{\"ok\":true}")
+    expect(response.attachment).toHaveBeenCalledWith("sample-data.json")
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "application/json")
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Length", "11")
+  })
 })
 
 function createBrowserSnapshot(): DriveBrowserSnapshotDto {

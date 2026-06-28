@@ -8,6 +8,7 @@ import {
   type DriveBrowserPreviewKind,
   type DriveBrowserSnapshotDto,
   type DriveLinkEntryDto,
+  type DriveLinkDownloadFileInput,
   type DriveLinkListDto,
   type DriveLinkListInput,
   type DriveLinkPreviewKind,
@@ -48,13 +49,43 @@ export type DriveLinkIntakeDeps = {
       readonly cookie?: string
       readonly childrenPage?: { readonly offset?: number; readonly limit?: number }
     }) => Promise<DriveBrowserSnapshotDto>
+    readonly openShareBrowserItemDownload: (input: {
+      readonly shareId: string
+      readonly itemId?: string | null
+      readonly password?: string
+      readonly cookie?: string
+    }) => Promise<
+      | {
+        readonly kind: "file"
+        readonly stream: NodeJS.ReadableStream
+        readonly fileName: string
+        readonly size?: bigint
+        readonly contentType?: string | null
+      }
+      | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> }
+    >
   }
   readonly sites: {
     readonly resolvePublicSite: (siteId: string, input: {
       readonly cookie: string | null
+      readonly password?: string
       readonly relativePath?: string
     }) => Promise<
       | { readonly status: "ok"; readonly asset: { readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null } }
+      | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
+    >
+    readonly listPublicSiteAssets: (siteId: string, input: {
+      readonly cookie: string | null
+      readonly password?: string
+      readonly path?: string
+      readonly offset?: number
+      readonly limit?: number
+    }) => Promise<
+      | {
+        readonly status: "ok"
+        readonly assets: ReadonlyArray<{ readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null; readonly size: bigint }>
+        readonly page: { readonly hasMore: boolean; readonly nextOffset: number | null }
+      }
       | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
     >
   }
@@ -96,12 +127,25 @@ export class DriveLinkIntakeService {
       throw new BadRequestException("公开素材链接没有目录。")
     }
     if (parsed.linkType === "site") {
-      return { items: [], page: { hasMore: false, nextOffset: null } }
+      const access = await this.deps.sites.listPublicSiteAssets(parsed.siteId, {
+        cookie: null,
+        password: input.password,
+        path: input.path ?? parsed.path,
+        offset: input.offset,
+        limit: input.limit,
+      })
+      if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
+      if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
+      return {
+        items: access.assets.map(toDriveLinkSiteEntry),
+        page: access.page,
+      }
     }
 
+    const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
-      itemId: input.itemId ?? parsed.itemId ?? undefined,
+      itemId,
       password: input.password,
       cookie: undefined,
       childrenPage: { offset: input.offset, limit: input.limit },
@@ -123,6 +167,52 @@ export class DriveLinkIntakeService {
     }
     if (parsed.linkType === "site") return this.readSiteText(parsed, input)
     return this.readShareText(parsed, input)
+  }
+
+  async openDownload(input: DriveLinkDownloadFileInput): Promise<{
+    readonly stream: NodeJS.ReadableStream
+    readonly fileName: string
+    readonly size?: bigint
+    readonly contentType?: string | null
+  }> {
+    const parsed = parseDriveLinkUrl(input.url)
+    if (parsed.linkType === "public_asset") {
+      const access = await this.deps.publicAssets.resolvePublicAsset(parsed.assetId, {})
+      if (access.status !== "ok") throw new NotFoundException("公开素材不存在。")
+      const object = await this.deps.storage.getObjectStream({ key: access.storageKey })
+      return {
+        stream: object.stream,
+        fileName: access.name,
+        size: object.size ?? access.size,
+        contentType: object.contentType ?? access.mimeType,
+      }
+    }
+    if (parsed.linkType === "site") {
+      const access = await this.deps.sites.resolvePublicSite(parsed.siteId, {
+        cookie: null,
+        password: input.password,
+        relativePath: input.path ?? parsed.path,
+      })
+      if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
+      if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
+      const object = await this.deps.storage.getObjectStream({ key: access.asset.storageKey })
+      return {
+        stream: object.stream,
+        fileName: basenameFromRelativePath(access.asset.relativePath),
+        size: object.size,
+        contentType: object.contentType ?? access.asset.contentType,
+      }
+    }
+
+    const itemId = await this.resolveShareItemIdByPath(parsed, input)
+    const transfer = await this.deps.drive.openShareBrowserItemDownload({
+      shareId: parsed.shareId,
+      itemId,
+      password: input.password,
+      cookie: undefined,
+    })
+    if (transfer.kind === "zip") throw new BadRequestException("请选择具体文件下载。")
+    return transfer
   }
 
   private async resolveShare(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
@@ -176,9 +266,10 @@ export class DriveLinkIntakeService {
   }
 
   private async readShareText(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
+    const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
-      itemId: input.itemId ?? parsed.itemId ?? undefined,
+      itemId,
       password: input.password,
       cookie: undefined,
     })
@@ -197,7 +288,7 @@ export class DriveLinkIntakeService {
   }
 
   private async readSiteText(parsed: Extract<ParsedDriveLink, { readonly linkType: "site" }>, input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
-    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, relativePath: input.path ?? parsed.path })
+    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, password: input.password, relativePath: input.path ?? parsed.path })
     if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
     if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
 
@@ -215,6 +306,35 @@ export class DriveLinkIntakeService {
       truncated: raw.truncated,
       source: { linkType: parsed.path ? "site_path" : "site" },
     }
+  }
+
+  private async resolveShareItemIdByPath(
+    parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>,
+    input: { readonly itemId?: string; readonly path?: string; readonly password?: string },
+  ): Promise<string | undefined> {
+    if (input.itemId) return input.itemId
+    if (!input.path) return parsed.itemId ?? undefined
+    const segments = parseSafeRelativePathSegments(input.path)
+    let currentItemId = parsed.itemId ?? undefined
+    for (const segment of segments) {
+      let offset = 0
+      let matched: DriveBrowserItemDto | undefined
+      do {
+        const snapshot = await this.deps.drive.getShareBrowserSnapshot({
+          shareId: parsed.shareId,
+          itemId: currentItemId,
+          password: input.password,
+          cookie: undefined,
+          childrenPage: { offset, limit: 200 },
+        })
+        matched = snapshot.children.find((item) => item.name === segment)
+        if (matched || !snapshot.childrenPage?.hasMore || snapshot.childrenPage.nextOffset === null) break
+        offset = snapshot.childrenPage.nextOffset
+      } while (!matched)
+      if (!matched) throw new NotFoundException("分享文件不存在。")
+      currentItemId = matched.id
+    }
+    return currentItemId
   }
 }
 
@@ -258,6 +378,17 @@ function toDriveLinkEntry(item: DriveBrowserItemDto): DriveLinkEntryDto {
   }
 }
 
+function toDriveLinkSiteEntry(item: { readonly relativePath: string; readonly contentType: string | null; readonly size: bigint }): DriveLinkEntryDto {
+  return {
+    path: item.relativePath,
+    name: basenameFromRelativePath(item.relativePath),
+    type: "file",
+    mimeType: item.contentType,
+    previewKind: previewKindFromMime(item.contentType, item.relativePath),
+    size: item.size.toString(),
+  }
+}
+
 function toShareRef(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>): DriveLinkRefDto {
   return { kind: "share", shareId: parsed.shareId, itemId: parsed.itemId, siteId: null, path: null, assetId: null }
 }
@@ -290,6 +421,20 @@ function previewKindFromMime(mimeType: string | null | undefined, name: string):
   if (lowerMime === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) return "html-source"
   if (lowerMime.startsWith("text/") || lowerMime === "application/json" || lowerName.endsWith(".json")) return "text"
   return "download-only"
+}
+
+function basenameFromRelativePath(value: string): string {
+  const segments = value.split("/").filter(Boolean)
+  return segments.at(-1) ?? value
+}
+
+function parseSafeRelativePathSegments(value: string): string[] {
+  if (value.includes("\\")) throw new BadRequestException("云盘链接路径无效。")
+  const segments = value.split("/").filter(Boolean)
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    throw new BadRequestException("云盘链接路径无效。")
+  }
+  return segments
 }
 
 function truncateUtf8(value: string, maxBytes: number): { readonly text: string; readonly truncated: boolean } {
