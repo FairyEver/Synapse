@@ -225,7 +225,7 @@ function errorSummary(error: unknown): string {
     .replace(/'[^']*'/g, "'[path redacted]'")
     .replace(/"[^"]*"/g, "\"[path redacted]\"")
     .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
-    .replace(/\/[^\s'"`]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 function isMissingPathError(error: unknown): boolean {

@@ -105,6 +105,27 @@ describe("SkillRegistry", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/example")
   })
 
+  it("keeps slash command names while redacting absolute paths in skill diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const brokenDir = path.join(workspace, ".agents", "skills", "broken")
+    const brokenSkillPath = path.join(brokenDir, "SKILL.md")
+    await fs.mkdir(brokenDir, { recursive: true })
+    await fs.writeFile(brokenSkillPath, "This file cannot be read.")
+
+    vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("Failed while resolving /wiki-ingest from /Users/example/.codex/skills/broken/SKILL.md"),
+    )
+    const logger = { warn: vi.fn() }
+    const registry = new SkillRegistry({ projectId: "project-1", workspacePath: workspace, logger })
+
+    await registry.list()
+
+    expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      skillName: "broken",
+      error: "Failed while resolving /wiki-ingest from [path redacted]",
+    }))
+  })
+
   it("redacts secret-like values in skill file diagnostics", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const brokenDir = path.join(workspace, ".agents", "skills", "broken")
