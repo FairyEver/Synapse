@@ -14,6 +14,7 @@ import {
   type DriveSiteDto,
   type DriveSiteListPageDto,
   type DriveShareListItemDto,
+  type DriveSyncSnapshotDto,
   type DriveTrashListPageDto,
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   filePathForDroppedFile: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
   getDriveShare: vi.fn(),
+  getDriveSyncSnapshot: vi.fn(),
   getDriveUsage: vi.fn(),
   listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
@@ -55,6 +57,7 @@ const mocks = vi.hoisted(() => ({
   uploadDriveLocalItems: vi.fn(),
   toast: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
+  onDriveSyncChanged: vi.fn(),
   writeClipboardText: vi.fn(),
 }))
 
@@ -122,6 +125,10 @@ vi.mock("@/lib/electron-bridge", () => ({
       uploadDriveLocalItems: mocks.uploadDriveLocalItems,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
+    driveSync: {
+      getSnapshot: mocks.getDriveSyncSnapshot,
+      onChanged: mocks.onDriveSyncChanged,
+    },
     shell: {
       openExternal: mocks.openExternal,
     },
@@ -146,6 +153,7 @@ beforeEach(() => {
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveShare.mockResolvedValue(createDriveShare())
+  mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
@@ -195,6 +203,7 @@ beforeEach(() => {
   })
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
+  mocks.onDriveSyncChanged.mockReturnValue(() => undefined)
   mocks.writeClipboardText.mockResolvedValue(undefined)
 })
 
@@ -380,8 +389,19 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionTexts()).toEqual(["上传", "新建文件夹", "我的分享", "站点", "刷新"])
+    expect(driveToolbarActionTexts()).toEqual(["同步", "上传", "新建文件夹", "我的分享", "站点", "刷新"])
     expect(getButton("站点").querySelector("svg")).toBeNull()
+  })
+
+  it("shows drive sync conflicts in the top toolbar", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({ conflictCount: 2 }))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
+    expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("同步")
+    expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("2")
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -2244,6 +2264,12 @@ function queryButtonByLabel(label: string): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
 }
 
+function getButtonByLabel(label: string): HTMLButtonElement {
+  const button = queryButtonByLabel(label)
+  if (!button) throw new Error(`Button not found: ${label}`)
+  return button
+}
+
 function getShareUrlInput(): HTMLInputElement {
   const input = document.querySelector<HTMLInputElement>("#drive-share-success-url")
   if (!input) throw new Error("Share URL input not found")
@@ -2428,6 +2454,22 @@ function createDriveTrashPage(
       nextOffset: null,
       ...page,
     },
+  }
+}
+
+function createDriveSyncSnapshot(summary: Partial<DriveSyncSnapshotDto["summary"]> = {}): DriveSyncSnapshotDto {
+  const nextSummary = {
+    activeBindingCount: 0,
+    runningOperationCount: 0,
+    conflictCount: 0,
+    errorCount: 0,
+    ...summary,
+  }
+  return {
+    bindings: [],
+    conflicts: [],
+    operations: [],
+    summary: nextSummary,
   }
 }
 
