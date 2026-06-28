@@ -405,7 +405,16 @@ const IPC_CHANNELS = {
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
     "createBinding": "synapse:drive-sync:bindings:create",
+    "previewBinding": "synapse:drive-sync:bindings:preview",
+    "createSafeBinding": "synapse:drive-sync:bindings:safe-create",
     "removeBinding": "synapse:drive-sync:bindings:remove",
+    "pauseBinding": "synapse:drive-sync:bindings:pause",
+    "resumeBinding": "synapse:drive-sync:bindings:resume",
+    "updateExcludeRules": "synapse:drive-sync:bindings:exclude-rules:update",
+    "rescanBinding": "synapse:drive-sync:bindings:rescan",
+    "pollRemoteChanges": "synapse:drive-sync:remote:poll",
+    "resolveConflict": "synapse:drive-sync:conflicts:resolve",
+    "chooseLocalPath": "synapse:drive-sync:local-path:choose",
     "changed": "synapse:drive-sync:changed",
   },
   "soundNotifier": {
@@ -859,7 +868,16 @@ const synapseBridge: SynapseBridge = {
   driveSync: {
     getSnapshot: () => invoke(IPC_CHANNELS.driveSync.getSnapshot)(),
     createBinding: (input) => invoke(IPC_CHANNELS.driveSync.createBinding)(input),
+    previewBinding: (input) => invoke(IPC_CHANNELS.driveSync.previewBinding)(input),
+    createSafeBinding: (input) => invoke(IPC_CHANNELS.driveSync.createSafeBinding)(input),
     removeBinding: (input) => invoke(IPC_CHANNELS.driveSync.removeBinding)(input),
+    pauseBinding: (input) => invoke(IPC_CHANNELS.driveSync.pauseBinding)(input),
+    resumeBinding: (input) => invoke(IPC_CHANNELS.driveSync.resumeBinding)(input),
+    updateExcludeRules: (input) => invoke(IPC_CHANNELS.driveSync.updateExcludeRules)(input),
+    rescanBinding: (input) => invoke(IPC_CHANNELS.driveSync.rescanBinding)(input),
+    pollRemoteChanges: (input = {}) => invoke(IPC_CHANNELS.driveSync.pollRemoteChanges)(input),
+    resolveConflict: (input) => invoke(IPC_CHANNELS.driveSync.resolveConflict)(input),
+    chooseLocalPath: (input) => invoke(IPC_CHANNELS.driveSync.chooseLocalPath)(input),
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.driveSync.changed,

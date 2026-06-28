@@ -116,7 +116,10 @@ import type {
   DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
+  DriveSyncBindingPreviewDto,
   DriveSyncBindingDto,
+  DriveSyncConflictResolutionInput,
+  DriveSyncCreateSafeBindingInput,
   DriveSyncSnapshotDto,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -904,7 +907,24 @@ export type SynapseBridge = {
       remoteCursor?: string | null
       excludeRules?: readonly string[]
     }) => Promise<DriveSyncBindingDto>
+    previewBinding: (input: {
+      driveItemId: string
+      driveItemName: string
+      kind: "file" | "folder"
+      drivePathHint?: string | null
+      localPath: string
+      remoteExists: boolean
+      importGitignore?: boolean
+    }) => Promise<DriveSyncBindingPreviewDto>
+    createSafeBinding: (input: DriveSyncCreateSafeBindingInput) => Promise<DriveSyncBindingDto>
     removeBinding: (input: { id: string }) => Promise<void>
+    pauseBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
+    resumeBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
+    updateExcludeRules: (input: { id: string; user: readonly string[] }) => Promise<DriveSyncBindingDto>
+    rescanBinding: (input: { id: string }) => Promise<void>
+    pollRemoteChanges: (input?: { id?: string }) => Promise<void>
+    resolveConflict: (input: DriveSyncConflictResolutionInput) => Promise<void>
+    chooseLocalPath: (input: { kind: "file" | "folder" }) => Promise<string | null>
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   soundNotifier: {

@@ -278,7 +278,16 @@ export const IPC_CHANNELS = {
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
     "createBinding": "synapse:drive-sync:bindings:create",
+    "previewBinding": "synapse:drive-sync:bindings:preview",
+    "createSafeBinding": "synapse:drive-sync:bindings:safe-create",
     "removeBinding": "synapse:drive-sync:bindings:remove",
+    "pauseBinding": "synapse:drive-sync:bindings:pause",
+    "resumeBinding": "synapse:drive-sync:bindings:resume",
+    "updateExcludeRules": "synapse:drive-sync:bindings:exclude-rules:update",
+    "rescanBinding": "synapse:drive-sync:bindings:rescan",
+    "pollRemoteChanges": "synapse:drive-sync:remote:poll",
+    "resolveConflict": "synapse:drive-sync:conflicts:resolve",
+    "chooseLocalPath": "synapse:drive-sync:local-path:choose",
     "changed": "synapse:drive-sync:changed",
   },
   "soundNotifier": {

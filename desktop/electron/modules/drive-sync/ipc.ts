@@ -1,9 +1,13 @@
+import { dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
+const driveSyncInitialDirectionSchema = z.enum(["remote_to_local", "local_to_remote"])
+const driveSyncBindingPreviewStatusSchema = z.enum(["ready", "blocked", "warning"])
+const driveSyncConflictResolutionSchema = z.enum(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
 const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "removed"] as const
 const driveSyncOperationStatuses = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"] as const
 const bindingStatusSchema = z.enum(driveSyncBindingStatuses)
@@ -51,6 +55,18 @@ const driveSyncSnapshotSchema = z.object({
   }),
 })
 
+const driveSyncBindingPreviewSchema = z.object({
+  status: driveSyncBindingPreviewStatusSchema,
+  direction: driveSyncInitialDirectionSchema.nullable(),
+  reason: z.string().nullable(),
+  localPath: z.string(),
+  localKind: z.enum(["missing", "file", "folder", "other"]),
+  localEmpty: z.boolean().nullable(),
+  forcedExcludeRules: z.array(z.string()),
+  defaultExcludeRules: z.array(z.string()),
+  importedGitignoreRules: z.array(z.string()),
+})
+
 const driveSyncCreateBindingInputSchema = z.object({
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
@@ -61,8 +77,44 @@ const driveSyncCreateBindingInputSchema = z.object({
   excludeRules: z.array(z.string()).optional(),
 })
 
+const driveSyncPreviewBindingInputSchema = z.object({
+  driveItemId: z.string().min(1),
+  driveItemName: z.string().min(1),
+  kind: driveItemKindSchema,
+  drivePathHint: z.string().nullable().optional(),
+  localPath: z.string().min(1),
+  remoteExists: z.boolean(),
+  importGitignore: z.boolean().optional(),
+})
+
+const driveSyncCreateSafeBindingInputSchema = z.object({
+  driveItemId: z.string().min(1),
+  driveItemName: z.string().min(1),
+  kind: driveItemKindSchema,
+  drivePathHint: z.string().nullable().optional(),
+  localPath: z.string().min(1),
+  direction: driveSyncInitialDirectionSchema,
+  excludeRules: z.array(z.string()).optional(),
+  importGitignore: z.boolean().optional(),
+})
+
 const driveSyncBindingIdInputSchema = z.object({
   id: z.string().min(1),
+})
+const driveSyncOptionalBindingIdInputSchema = driveSyncBindingIdInputSchema.partial().optional()
+
+const driveSyncUpdateExcludeRulesInputSchema = z.object({
+  id: z.string().min(1),
+  user: z.array(z.string()),
+})
+
+const driveSyncResolveConflictInputSchema = z.object({
+  conflictId: z.string().min(1),
+  action: driveSyncConflictResolutionSchema,
+})
+
+const driveSyncChooseLocalPathInputSchema = z.object({
+  kind: driveItemKindSchema,
 })
 
 const driveSyncEventWiredServices = new WeakSet<DriveSyncService>()
@@ -104,6 +156,22 @@ export const driveSyncIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof driveSyncCreateBindingInputSchema>) =>
         resolveDriveSyncService(ctx).createBinding(request),
     },
+    previewBinding: {
+      channel: "synapse:drive-sync:bindings:preview",
+      kind: "invoke",
+      request: driveSyncPreviewBindingInputSchema,
+      response: driveSyncBindingPreviewSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncPreviewBindingInputSchema>) =>
+        resolveDriveSyncService(ctx).previewBinding(request),
+    },
+    createSafeBinding: {
+      channel: "synapse:drive-sync:bindings:safe-create",
+      kind: "invoke",
+      request: driveSyncCreateSafeBindingInputSchema,
+      response: driveSyncBindingSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncCreateSafeBindingInputSchema>) =>
+        resolveDriveSyncService(ctx).createSafeBinding(request),
+    },
     removeBinding: {
       channel: "synapse:drive-sync:bindings:remove",
       kind: "invoke",
@@ -111,6 +179,66 @@ export const driveSyncIpcModule: IpcModule = {
       response: z.void(),
       handler: (ctx, request: z.infer<typeof driveSyncBindingIdInputSchema>) =>
         resolveDriveSyncService(ctx).removeBinding(request.id),
+    },
+    pauseBinding: {
+      channel: "synapse:drive-sync:bindings:pause",
+      kind: "invoke",
+      request: driveSyncBindingIdInputSchema,
+      response: driveSyncBindingSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncBindingIdInputSchema>) =>
+        resolveDriveSyncService(ctx).pauseBinding(request.id),
+    },
+    resumeBinding: {
+      channel: "synapse:drive-sync:bindings:resume",
+      kind: "invoke",
+      request: driveSyncBindingIdInputSchema,
+      response: driveSyncBindingSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncBindingIdInputSchema>) =>
+        resolveDriveSyncService(ctx).resumeBinding(request.id),
+    },
+    updateExcludeRules: {
+      channel: "synapse:drive-sync:bindings:exclude-rules:update",
+      kind: "invoke",
+      request: driveSyncUpdateExcludeRulesInputSchema,
+      response: driveSyncBindingSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncUpdateExcludeRulesInputSchema>) =>
+        resolveDriveSyncService(ctx).updateExcludeRules(request),
+    },
+    rescanBinding: {
+      channel: "synapse:drive-sync:bindings:rescan",
+      kind: "invoke",
+      request: driveSyncBindingIdInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof driveSyncBindingIdInputSchema>) =>
+        resolveDriveSyncService(ctx).rescanBinding(request.id),
+    },
+    pollRemoteChanges: {
+      channel: "synapse:drive-sync:remote:poll",
+      kind: "invoke",
+      request: driveSyncOptionalBindingIdInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof driveSyncOptionalBindingIdInputSchema>) =>
+        resolveDriveSyncService(ctx).pollRemoteChanges(request?.id),
+    },
+    resolveConflict: {
+      channel: "synapse:drive-sync:conflicts:resolve",
+      kind: "invoke",
+      request: driveSyncResolveConflictInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof driveSyncResolveConflictInputSchema>) =>
+        resolveDriveSyncService(ctx).resolveConflict(request),
+    },
+    chooseLocalPath: {
+      channel: "synapse:drive-sync:local-path:choose",
+      kind: "invoke",
+      request: driveSyncChooseLocalPathInputSchema,
+      response: z.string().nullable(),
+      handler: async (_ctx, request: z.infer<typeof driveSyncChooseLocalPathInputSchema>) => {
+        const result = await dialog.showOpenDialog({
+          properties: [request.kind === "folder" ? "openDirectory" : "openFile"],
+        })
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
     },
   },
   events: {

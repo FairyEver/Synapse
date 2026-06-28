@@ -604,6 +604,52 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps drive sync methods to drive sync IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.driveSync.getSnapshot()
+    await bridge.driveSync.previewBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "spec.md",
+      kind: "file",
+      localPath: "/tmp/spec.md",
+      remoteExists: true,
+    })
+    await bridge.driveSync.createSafeBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "spec.md",
+      kind: "file",
+      localPath: "/tmp/spec.md",
+      direction: "remote_to_local",
+    })
+    await bridge.driveSync.pauseBinding({ id: "binding-1" })
+    await bridge.driveSync.resumeBinding({ id: "binding-1" })
+    await bridge.driveSync.updateExcludeRules({ id: "binding-1", user: ["dist/**"] })
+    await bridge.driveSync.rescanBinding({ id: "binding-1" })
+    await bridge.driveSync.pollRemoteChanges({ id: "binding-1" })
+    await bridge.driveSync.resolveConflict({ conflictId: "conflict-1", action: "keep_local" })
+    await bridge.driveSync.chooseLocalPath({ kind: "folder" })
+    await bridge.driveSync.removeBinding({ id: "binding-1" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:snapshot:get", undefined)
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:drive-sync:bindings:preview",
+      expect.objectContaining({ driveItemId: "drive-item-1" }),
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:drive-sync:bindings:safe-create",
+      expect.objectContaining({ direction: "remote_to_local" }),
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:pause", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:resume", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:exclude-rules:update", { id: "binding-1", user: ["dist/**"] })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:rescan", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:remote:poll", { id: "binding-1" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:conflicts:resolve", { conflictId: "conflict-1", action: "keep_local" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:local-path:choose", { kind: "folder" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:drive-sync:bindings:remove", { id: "binding-1" })
+  })
+
   it("subscribes content change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

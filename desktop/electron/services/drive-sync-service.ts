@@ -4,6 +4,7 @@ import { mkdir, rename } from "node:fs/promises"
 import path from "node:path"
 import type {
   DriveSyncBindingPreviewDto,
+  DriveSyncConflictResolutionInput,
   DriveSyncCreateSafeBindingInput,
   DriveChangeListInput,
   DriveChangeListPageDto,
@@ -214,6 +215,33 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await updateBindingStatus(id, "removed")
   }
 
+  async function pauseBinding(id: string): Promise<DriveSyncBindingDto> {
+    return updateBindingStatus(id, "paused")
+  }
+
+  async function resumeBinding(id: string): Promise<DriveSyncBindingDto> {
+    return updateBindingStatus(id, "active")
+  }
+
+  async function updateExcludeRules(input: {
+    readonly id: string
+    readonly user: readonly string[]
+  }): Promise<DriveSyncBindingDto> {
+    const binding = await requireBinding(input.id)
+    const entry: DriveSyncBindingEntryV1 = {
+      ...binding,
+      excludeRules: {
+        ...binding.excludeRules,
+        user: [...input.user],
+      },
+      updatedAt: timestamp(),
+    }
+    await deps.bindings.upsert(entry)
+    await reconcileLocalWatcher()
+    await emitChanged()
+    return toBindingDto(entry)
+  }
+
   async function rescanBinding(id: string): Promise<void> {
     const binding = await requireBinding(id)
     const baseline = await baselineStore.listByBinding(id)
@@ -241,6 +269,20 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function stopLocalWatcher(): Promise<void> {
     localWatcher.stop()
+  }
+
+  async function resolveConflict(input: DriveSyncConflictResolutionInput): Promise<void> {
+    const conflict = await deps.conflicts.get(input.conflictId)
+    if (!conflict || conflict.status !== "open") throw new Error("同步冲突不存在。")
+    const resolved: DriveSyncConflictEntryV1 = {
+      ...conflict,
+      status: input.action === "skip" ? "ignored" : "resolved",
+      resolution: input.action,
+      resolvedAt: timestamp(),
+    }
+    await deps.conflicts.upsert(resolved)
+    await updateBindingStatusAfterConflictResolution(conflict.bindingId)
+    await emitChanged()
   }
 
   async function previewBinding(input: Omit<DriveSyncCreateSafeBindingInput, "direction"> & {
@@ -430,6 +472,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await emitChanged()
   }
 
+  async function updateBindingStatusAfterConflictResolution(bindingId: string): Promise<void> {
+    const open = (await deps.conflicts.list({ bindingId }))
+      .some((conflict) => conflict.status === "open")
+    if (!open) {
+      await updateBindingStatus(bindingId, "active")
+    }
+  }
+
   async function reconcileLocalWatcher(): Promise<void> {
     localWatcher.reconcile(await deps.bindings.list())
   }
@@ -532,6 +582,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     rescanBinding,
     pollRemoteChanges,
     stopLocalWatcher,
+    pauseBinding,
+    resumeBinding,
+    updateExcludeRules,
+    resolveConflict,
     updateBindingStatus,
     removeBinding,
     recordOperation,

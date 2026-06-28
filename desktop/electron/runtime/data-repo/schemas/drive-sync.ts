@@ -1,4 +1,9 @@
-import type { DriveSyncBindingStatus, DriveSyncExcludeRulesDto, DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
+import type {
+  DriveSyncBindingStatus,
+  DriveSyncConflictResolutionAction,
+  DriveSyncExcludeRulesDto,
+  DriveSyncOperationStatus,
+} from "@synapse/shared" with { "resolution-mode": "import" }
 import type { Migration, NamespaceSchema } from "../types"
 
 export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
@@ -63,7 +68,7 @@ export interface DriveSyncConflictEntryV1 extends Record<string, unknown> {
   status: DriveSyncConflictStatus
   localSnapshot: Record<string, unknown> | null
   remoteSnapshot: Record<string, unknown> | null
-  resolution: DriveSyncConflictResolution | null
+  resolution: DriveSyncConflictResolutionAction | null
   createdAt: string
   resolvedAt: string | null
 }
@@ -96,7 +101,6 @@ type DriveSyncConflictType =
   | "path_conflict"
 
 type DriveSyncConflictStatus = "open" | "resolved" | "ignored"
-type DriveSyncConflictResolution = "use_local" | "use_remote" | "keep_both" | "skip"
 type DriveSyncHealth = "idle" | "syncing" | "paused" | "error"
 
 const noMigrations: readonly Migration[] = []
@@ -106,7 +110,7 @@ const itemKinds = new Set<string>(["file", "folder"])
 const operationKinds = new Set<string>(["download", "upload", "delete_local", "delete_remote", "move_local", "move_remote", "scan", "resync"])
 const conflictTypes = new Set<string>(["both_modified", "delete_vs_modify", "type_mismatch", "metadata_mismatch", "path_conflict"])
 const conflictStatuses = new Set<string>(["open", "resolved", "ignored"])
-const conflictResolutions = new Set<string>(["use_local", "use_remote", "keep_both", "skip"])
+const conflictResolutions = new Set<string>(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
 const healthValues = new Set<string>(["idle", "syncing", "paused", "error"])
 
 export const driveSyncBindingsSchema: NamespaceSchema<DriveSyncBindingEntryV1> = {
