@@ -140,6 +140,34 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("records a content change when an upload is completed", async () => {
+    const prisma = createPrismaMemory()
+    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const completed = await service.completeUpload("user-1", prepared.sessionId)
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
+
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: completed.id,
+      parentId: null,
+      type: "content_updated",
+      versionId: expect.any(String),
+      etag: "etag",
+      name: "handoff.txt",
+      actor: "user-1",
+    })]))
+  })
+
   it("cleans up copied version objects when upload completion transaction fails", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)
@@ -340,6 +368,38 @@ describe("DriveService", () => {
     expect(versions.items[0]).toMatchObject({ source: "restore", restoredFromVersionId: v1.id, isCurrent: true })
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(27n)
+  })
+
+  it("records a content change when a historical version is restored", async () => {
+    const prisma = createPrismaMemory()
+    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject: vi.fn(async () => undefined),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, changes as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const v1 = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/markdown", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    changes.append.mockClear()
+
+    const restored = await service.restoreFileVersion("user-1", first.id, v1.id)
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
+
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: first.id,
+      parentId: null,
+      type: "content_updated",
+      versionId: expect.any(String),
+      etag: "etag",
+      name: restored.name,
+      actor: "user-1",
+    })]))
   })
 
   it("rejects restoring the current file version", async () => {
@@ -2299,6 +2359,65 @@ describe("DriveService", () => {
       enabled: false,
       disabledAt: expect.any(Date),
     })
+  })
+
+  it("records item changes for folder create, rename, move, delete, and restore", async () => {
+    const prisma = createPrismaMemory()
+    const changes = { append: vi.fn(async () => ({ id: "change-1", sequence: "1" })) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const target = await service.createFolder("user-1", { parentId: null, name: "目标" })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+
+    const renamed = await service.renameItem("user-1", folder.id, "归档")
+    const moved = await service.moveItem("user-1", folder.id, target.id)
+    await service.deleteItem("user-1", folder.id)
+    const restored = await service.restoreItem("user-1", folder.id)
+
+    expect(renamed.name).toBe("归档")
+    expect(moved.parentId).toBe(target.id)
+    expect(restored.parentId).toBe(target.id)
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: folder.id,
+      parentId: null,
+      type: "created",
+      name: "资料",
+      actor: "user-1",
+    })]))
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: folder.id,
+      parentId: null,
+      type: "renamed",
+      name: "归档",
+      actor: "user-1",
+    })]))
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: folder.id,
+      parentId: target.id,
+      type: "moved",
+      name: "归档",
+      actor: "user-1",
+    })]))
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: folder.id,
+      parentId: target.id,
+      type: "trashed",
+      name: "归档",
+      actor: "user-1",
+    })]))
+    expect(changeInputs).toEqual(expect.arrayContaining([expect.objectContaining({
+      userId: "user-1",
+      itemId: folder.id,
+      parentId: target.id,
+      type: "restored",
+      name: "归档",
+      actor: "user-1",
+    })]))
   })
 
   it("deleting a folder disables shares for the folder subtree", async () => {

@@ -4,6 +4,7 @@ import type { DriveItemDto, DriveTrashItemDto, DriveTrashListPageDto } from "@sy
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
 import { PrismaService } from "../prisma/prisma.service"
+import { DriveChangeLogService } from "./drive-change-log"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_ITEM_TYPE, DRIVE_STORAGE_STATUS, DRIVE_UPLOAD_STATUS } from "./drive.constants"
 import type { DriveStoragePort } from "./drive-storage"
 import { isValidDriveItemName } from "./drive-token"
@@ -65,6 +66,7 @@ export class DriveLifecycleService {
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly changes?: DriveChangeLogService,
   ) {}
 
   registerUploadSessionCleanup(sessionId: string, cleanup: () => void): void {
@@ -121,6 +123,16 @@ export class DriveLifecycleService {
         hiddenAt: null,
         hiddenBy: null,
       }, DRIVE_ITEM_LIFECYCLE_STATUS.active)
+      for (const item of items) {
+        await this.changes?.append({
+          userId: item.userId,
+          itemId: item.id,
+          parentId: item.parentId,
+          type: "trashed",
+          name: item.name,
+          actor: input.actorId,
+        }, tx)
+      }
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,
@@ -291,11 +303,22 @@ export class DriveLifecycleService {
         hiddenAt: null,
         hiddenBy: null,
       }, root.lifecycleStatus)
-      return tx.driveItem.update({
+      const restoredRoot = await tx.driveItem.update({
         where: { id: root.id },
         data: { parentId, name, updatedAt: restoredAt },
         include: { shares: { where: { enabled: true }, select: { id: true, enabled: true } } },
       })
+      for (const item of items) {
+        await this.changes?.append({
+          userId: item.userId,
+          itemId: item.id,
+          parentId: item.id === restoredRoot.id ? restoredRoot.parentId : item.parentId,
+          type: "restored",
+          name: item.id === restoredRoot.id ? restoredRoot.name : item.name,
+          actor: input.actorId,
+        }, tx)
+      }
+      return restoredRoot
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,
