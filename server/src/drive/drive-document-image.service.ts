@@ -10,7 +10,6 @@ import {
   type DriveDocumentImageSourcesDto,
 } from "@synapse/shared"
 import { extractDriveMarkdownImages, normalizeDriveMarkdownImageSrc, replaceDriveMarkdownImageSources } from "./drive-document-image-parser"
-import { buildDriveDocumentImageInventoryRows, type DriveDocumentImageInventoryRow } from "./drive-document-image-inventory"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveService } from "./drive.service"
@@ -51,7 +50,6 @@ export class DriveDocumentImageService {
   private readonly drive: DriveDocumentImageDrivePort
   private readonly publicAssets: DrivePublicAssetService
   private readonly fetcher: DriveRemoteImageFetcher
-  private readonly imageInventoryDebugRows = new Map<string, readonly DriveDocumentImageInventoryRow[]>()
 
   constructor(
     drive: DriveService,
@@ -142,12 +140,6 @@ export class DriveDocumentImageService {
         actorUserId: input.actorUserId,
       }))
     }
-
-    this.refreshInventory({
-      itemId: input.document.itemId,
-      versionId: input.document.versionId,
-      sources,
-    })
 
     return {
       itemId: input.document.itemId,
@@ -317,14 +309,6 @@ export class DriveDocumentImageService {
       })
     }
     throw new BadRequestException("图片无法转存。")
-  }
-
-  private refreshInventory(input: {
-    readonly itemId: string
-    readonly versionId: string | null
-    readonly sources: readonly DriveDocumentImageSource[]
-  }): void {
-    this.imageInventoryDebugRows.set(input.itemId, buildDriveDocumentImageInventoryRows(input))
   }
 
   private async classifyPublicAssetSource(input: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatAuditError } from "./audit-error"
+import { formatAuditError, redactSensitiveLogText } from "./audit-error"
 
 describe("formatAuditError", () => {
   it("redacts token key variants in assignments and JSON fields", () => {
@@ -50,5 +50,30 @@ describe("formatAuditError", () => {
     expect(output).not.toContain("env-api-secret")
     expect(output).not.toContain("env-token-secret")
     expect(output).not.toContain("json-env-api-secret")
+  })
+})
+
+describe("redactSensitiveLogText", () => {
+  it("redacts URLs, user paths, and sensitive values from log text", () => {
+    const output = redactSensitiveLogText([
+      "Authorization: Bearer authorization-secret",
+      "https://example.com/invite?token=invite-secret",
+      "/Users/alice/.claude/settings.json",
+      "/home/bob/project/.env",
+      "C:\\Users\\Bob\\AppData\\Roaming\\Synapse\\config.json",
+      "{\"apiKey\":\"json-api-secret\"}",
+    ].join(" "))
+
+    expect(output).toContain("Authorization: [REDACTED]")
+    expect(output).toContain("[URL]")
+    expect(output).toContain("[PATH]")
+    expect(output).toContain('"apiKey":"[REDACTED]"')
+    expect(output).not.toContain("authorization-secret")
+    expect(output).not.toContain("example.com")
+    expect(output).not.toContain("invite-secret")
+    expect(output).not.toContain("/Users/alice")
+    expect(output).not.toContain("/home/bob")
+    expect(output).not.toContain("C:\\Users\\Bob")
+    expect(output).not.toContain("json-api-secret")
   })
 })

@@ -1,12 +1,13 @@
 import { Inject, Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream, statSync } from "node:fs"
-import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
+import { attachmentContentDisposition } from "../common/content-disposition"
 import { isDriveCosConfigured, loadEnv } from "../config/env"
 import { driveDownloadUrlTtlSeconds, driveUploadUrlTtlSeconds } from "./drive.constants"
 
@@ -49,6 +50,11 @@ type PersistedLocalStorageToken = {
   readonly expiresAt: string
 }
 
+type PersistedLocalContentTypes = {
+  readonly version: 1
+  readonly entries: Record<string, string | null>
+}
+
 export class DriveUploadTooLargeError extends Error {
   readonly code = "DRIVE_UPLOAD_TOO_LARGE"
 
@@ -70,6 +76,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   private readonly uploadTokens = new Map<string, LocalStorageToken>()
   private readonly downloadTokens = new Map<string, LocalStorageToken>()
   private readonly contentTypes = new Map<string, string | null>()
+  private contentTypesLoadPromise: Promise<void> | null = null
   private readonly publicAppUrl: string
   private readonly root: string
 
@@ -122,24 +129,26 @@ export class LocalDriveStorage implements DriveStoragePort {
   async deleteObject(key: string): Promise<void> {
     await rm(this.objectPathForKey(key), { force: true })
     await this.deleteLegacyObjectFile(key)
-    this.contentTypes.delete(key)
+    await this.deleteContentType(key)
   }
 
   async putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void> {
     const objectPath = this.objectPathForKey(input.key)
     await mkdir(path.dirname(objectPath), { recursive: true })
     await writeFile(objectPath, input.body)
-    this.contentTypes.set(input.key, input.contentType ?? null)
+    await this.setContentType(input.key, input.contentType ?? null)
   }
 
   async copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void> {
+    await this.ensureContentTypesLoaded()
     const targetPath = this.objectPathForKey(input.toKey)
     await mkdir(path.dirname(targetPath), { recursive: true })
     await copyFile(await this.requirePathForKey(input.fromKey), targetPath)
-    this.contentTypes.set(input.toKey, input.contentType ?? this.contentTypes.get(input.fromKey) ?? null)
+    await this.setContentType(input.toKey, input.contentType ?? this.contentTypes.get(input.fromKey) ?? null)
   }
 
   async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
+    await this.ensureContentTypesLoaded()
     const objectPath = await this.requirePathForKey(input.key)
     const info = await stat(objectPath)
     return {
@@ -169,7 +178,7 @@ export class LocalDriveStorage implements DriveStoragePort {
     }
     this.uploadTokens.delete(token)
     await this.deletePersistedUploadToken(token)
-    this.contentTypes.set(entry.key, entry.contentType ?? null)
+    await this.setContentType(entry.key, entry.contentType ?? null)
   }
 
   resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string; readonly key: string } {
@@ -266,6 +275,68 @@ export class LocalDriveStorage implements DriveStoragePort {
   private uploadTokenPath(token: string): string {
     const encodedToken = Buffer.from(token, "utf8").toString("base64url")
     return this.resolveUnderRoot(path.join(".tokens", "uploads", `${encodedToken}.json`))
+  }
+
+  private async ensureContentTypesLoaded(): Promise<void> {
+    if (!this.contentTypesLoadPromise) {
+      this.contentTypesLoadPromise = this.loadContentTypes().catch((error: unknown) => {
+        this.contentTypesLoadPromise = null
+        throw error
+      })
+    }
+    await this.contentTypesLoadPromise
+  }
+
+  private async loadContentTypes(): Promise<void> {
+    let raw: string
+    try {
+      raw = await readFile(this.contentTypesPath(), "utf8")
+    } catch (error) {
+      if (isMissingLocalDriveObjectError(error)) return
+      throw error
+    }
+    try {
+      const parsed = JSON.parse(raw) as PersistedLocalContentTypes
+      if (parsed.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
+        await rm(this.contentTypesPath(), { force: true })
+        return
+      }
+      this.contentTypes.clear()
+      for (const [key, contentType] of Object.entries(parsed.entries)) {
+        if (typeof contentType === "string" || contentType === null) this.contentTypes.set(key, contentType)
+      }
+    } catch {
+      this.contentTypes.clear()
+      await rm(this.contentTypesPath(), { force: true })
+    }
+  }
+
+  private async setContentType(key: string, contentType: string | null): Promise<void> {
+    await this.ensureContentTypesLoaded()
+    this.contentTypes.set(key, contentType)
+    await this.persistContentTypes()
+  }
+
+  private async deleteContentType(key: string): Promise<void> {
+    await this.ensureContentTypesLoaded()
+    this.contentTypes.delete(key)
+    await this.persistContentTypes()
+  }
+
+  private async persistContentTypes(): Promise<void> {
+    const metadataPath = this.contentTypesPath()
+    await mkdir(path.dirname(metadataPath), { recursive: true })
+    const tempPath = `${metadataPath}.${process.pid}.${Date.now()}.tmp`
+    const payload: PersistedLocalContentTypes = {
+      version: 1,
+      entries: Object.fromEntries(this.contentTypes.entries()),
+    }
+    await writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
+    await rename(tempPath, metadataPath)
+  }
+
+  private contentTypesPath(): string {
+    return this.resolveUnderRoot(path.join(".metadata", "content-types.json"))
   }
 
   private objectPathForKey(key: string): string {
@@ -391,7 +462,7 @@ export class CosDriveStorage implements DriveStoragePort {
       key: input.key,
       method: "get",
       expires: driveDownloadUrlTtlSeconds,
-      responseContentDisposition: driveContentDisposition(input.filename),
+      responseContentDisposition: attachmentContentDisposition(input.filename),
     })
     return { url, expiresAt }
   }
@@ -542,14 +613,4 @@ function encodeCosCopySourceKey(key: string): string {
 function parseContentLength(value: string | undefined): bigint | undefined {
   if (!value) return undefined
   return BigInt(value)
-}
-
-export function driveContentDisposition(filename: string): string {
-  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
-  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
-}
-
-function encodeRFC5987ValueChars(value: string): string {
-  return encodeURIComponent(value)
-    .replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }

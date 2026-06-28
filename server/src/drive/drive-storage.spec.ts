@@ -69,6 +69,20 @@ describe("LocalDriveStorage", () => {
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
   })
 
+  it("keeps putObject content types after storage restart", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const firstStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    await firstStorage.putObject({ key: "drive/item-1", body: Buffer.from("hello"), contentType: "text/plain" })
+
+    const restartedStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const object = await restartedStorage.getObjectStream({ key: "drive/item-1" })
+
+    expect(object.contentType).toBe("text/plain")
+    await expect(streamToText(object.stream)).resolves.toBe("hello")
+  })
+
   it("recovers local upload tokens from disk after storage restart", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
@@ -83,6 +97,23 @@ describe("LocalDriveStorage", () => {
 
     await expect(streamToText((await restartedStorage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
     await expect(restartedStorage.acceptUpload(token, Readable.from(["again"]))).rejects.toThrow("Drive storage token expired.")
+  })
+
+  it("keeps accepted upload content types after storage restart", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const firstStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const upload = await firstStorage.createUploadInstruction({ key: "drive/item-1", contentType: "image/png", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+
+    await firstStorage.acceptUpload(token, Readable.from(["hello"]))
+
+    const restartedStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const object = await restartedStorage.getObjectStream({ key: "drive/item-1" })
+
+    expect(object.contentType).toBe("image/png")
+    await expect(streamToText(object.stream)).resolves.toBe("hello")
   })
 
   it("rejects local uploads when content length exceeds the expected size", async () => {
@@ -160,6 +191,23 @@ describe("LocalDriveStorage", () => {
     await expect(streamToText(object.stream)).resolves.toBe("<h1>Hello</h1>")
   })
 
+  it("keeps copied object content types after storage restart", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const firstStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    await firstStorage.putObject({ key: "drive/source", body: Buffer.from("hello"), contentType: "text/plain" })
+    await firstStorage.copyObject({ fromKey: "drive/source", toKey: "drive/inherited" })
+    await firstStorage.copyObject({ fromKey: "drive/source", toKey: "drive/overridden", contentType: "text/markdown" })
+
+    const restartedStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    await expect(restartedStorage.getObjectStream({ key: "drive/inherited" }))
+      .resolves.toMatchObject({ contentType: "text/plain" })
+    await expect(restartedStorage.getObjectStream({ key: "drive/overridden" }))
+      .resolves.toMatchObject({ contentType: "text/markdown" })
+  })
+
   it("copies item objects into nested version keys without filesystem path collisions", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
@@ -188,6 +236,21 @@ describe("LocalDriveStorage", () => {
       .resolves.toBe("legacy-version")
   })
 
+  it("removes persisted content types when deleting local objects", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const firstStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await firstStorage.putObject({ key: "drive/item-1", body: Buffer.from("hello"), contentType: "text/plain" })
+    await firstStorage.deleteObject("drive/item-1")
+
+    const restartedStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await restartedStorage.putObject({ key: "drive/item-1", body: Buffer.from("again"), contentType: null })
+
+    const object = await restartedStorage.getObjectStream({ key: "drive/item-1" })
+    expect(object.contentType).toBeNull()
+    await expect(streamToText(object.stream)).resolves.toBe("again")
+  })
+
   it("continues reading legacy local objects stored directly by key path", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
@@ -196,7 +259,9 @@ describe("LocalDriveStorage", () => {
     await writeFile(path.join(root, "drive/item-legacy"), "legacy")
 
     await expect(storage.headObject("drive/item-legacy")).resolves.toMatchObject({ key: "drive/item-legacy", size: 6n })
-    await expect(streamToText((await storage.getObjectStream({ key: "drive/item-legacy" })).stream)).resolves.toBe("legacy")
+    const object = await storage.getObjectStream({ key: "drive/item-legacy" })
+    expect(object.contentType).toBeNull()
+    await expect(streamToText(object.stream)).resolves.toBe("legacy")
   })
 
   it("allows local download tokens to be resolved multiple times before expiry", async () => {
