@@ -223,6 +223,7 @@ function createAccountService(overrides: Record<string, unknown> = {}) {
     renameDriveItem: vi.fn(),
     moveDriveItem: vi.fn(),
     deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
+    listDriveChanges: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false, resyncRequired: false })),
     listDriveItemTree: vi.fn(async () => ({ items: [] })),
     ensureDriveFolderPath: vi.fn(),
     ...overrides,

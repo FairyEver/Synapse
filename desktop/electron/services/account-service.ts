@@ -28,6 +28,8 @@ import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
+  DriveChangeListInput,
+  DriveChangeListPageDto,
   DriveDocumentImageImportResult,
   DriveDocumentImageSourcesDto,
   DriveFileVersionDto,
@@ -777,6 +779,17 @@ export class AccountService {
 
   async getDriveStats(): Promise<DriveStatsDto> {
     return this.getAuthenticatedJson<DriveStatsDto>(`${apiBaseUrl()}/drive/stats`, "云盘统计加载失败。")
+  }
+
+  async listDriveChanges(input: DriveChangeListInput = {}): Promise<DriveChangeListPageDto> {
+    const params = new URLSearchParams()
+    if (input.cursor) params.set("cursor", input.cursor)
+    if (input.limit !== undefined) params.set("limit", String(input.limit))
+    const query = params.toString()
+    return this.getAuthenticatedJson<DriveChangeListPageDto>(
+      `${apiBaseUrl()}/drive/changes${query ? `?${query}` : ""}`,
+      "云盘变更加载失败。",
+    )
   }
 
   async listDriveItemTree(input: DriveItemTreeListInput): Promise<DriveItemTreeListPageDto> {

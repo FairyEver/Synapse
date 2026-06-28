@@ -5,6 +5,8 @@ import path from "node:path"
 import type {
   DriveSyncBindingPreviewDto,
   DriveSyncCreateSafeBindingInput,
+  DriveChangeListInput,
+  DriveChangeListPageDto,
   DriveSyncBindingDto,
   DriveSyncBindingStatus,
   DriveSyncOperationDto,
@@ -46,6 +48,7 @@ export interface DriveSyncAccountService {
   readonly renameDriveItem: (itemId: string, name: string) => Promise<unknown>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<unknown>
   readonly deleteDriveItem: (itemId: string) => Promise<{ readonly ok: true }>
+  readonly listDriveChanges: (input: DriveChangeListInput) => Promise<DriveChangeListPageDto>
   readonly listDriveItemTree: (input: { readonly parentId?: string | null }) => Promise<{ readonly items: ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: string }> }>
   readonly ensureDriveFolderPath: (input: unknown) => Promise<unknown>
 }
