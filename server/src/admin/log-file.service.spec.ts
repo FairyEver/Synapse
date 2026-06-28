@@ -142,11 +142,11 @@ describe("LogFileService", () => {
     expect(handle.read).toHaveBeenCalledTimes(1);
   });
 
-  it("redacts sensitive values from recent log entries without removing normal paths", async () => {
+  it("redacts sensitive values, URLs, and user paths from recent log entries", async () => {
     const entry = JSON.stringify({
       time: "2026-05-23T01:00:00.000Z",
       level: 50,
-      msg: "request failed Authorization: Bearer raw-bearer ANTHROPIC_API_KEY=env-secret",
+      msg: "request failed Authorization: Bearer raw-bearer ANTHROPIC_API_KEY=env-secret https://example.com/invite?token=invite-secret",
       req: {
         method: "GET",
         url: "/share/share-1?password=plain-password&apiKey=plain-api-key&file=/Users/liyang/project/readme.md",
@@ -171,14 +171,14 @@ describe("LogFileService", () => {
     expect(result[0]).toEqual({
       time: "2026-05-23T01:00:00.000Z",
       level: "error",
-      msg: "request failed Authorization: [REDACTED] ANTHROPIC_API_KEY=[REDACTED]",
+      msg: "request failed Authorization: [REDACTED] ANTHROPIC_API_KEY=[REDACTED] [URL]",
       req: {
         method: "GET",
-        url: "/share/share-1?password=[REDACTED]&apiKey=[REDACTED]&file=/Users/liyang/project/readme.md",
+        url: "/share/share-1?password=[REDACTED]&apiKey=[REDACTED]&file=[PATH]",
       },
       err: {
         message: "{\"token\":\"[REDACTED]\",\"apiKey\":\"[REDACTED]\"}",
-        stack: "Error: Cookie: [REDACTED]\n    at run (/Users/liyang/project/app.ts:1:1)",
+        stack: "Error: Cookie: [REDACTED]\n    at run ([PATH])",
       },
     });
     expect(serialized).not.toContain("raw-bearer");
@@ -188,8 +188,12 @@ describe("LogFileService", () => {
     expect(serialized).not.toContain("json-token");
     expect(serialized).not.toContain("json-api-key");
     expect(serialized).not.toContain("cookie-secret");
-    expect(serialized).toContain("/Users/liyang/project/readme.md");
-    expect(serialized).toContain("/Users/liyang/project/app.ts");
+    expect(serialized).not.toContain("example.com");
+    expect(serialized).not.toContain("invite-secret");
+    expect(serialized).not.toContain("/Users/liyang/project/readme.md");
+    expect(serialized).not.toContain("/Users/liyang/project/app.ts");
+    expect(serialized).toContain("[URL]");
+    expect(serialized).toContain("[PATH]");
   });
 
   it("filters recent entries by date range", async () => {
@@ -319,17 +323,21 @@ describe("LogFileService", () => {
     const [entryStream] = archiverMock.archive.append.mock.calls[0];
     source.end(
       "request failed Authorization: Bearer raw-bearer "
-        + "ANTHROPIC_API_KEY=env-secret file=/Users/liyang/project/readme.md\n"
+        + "ANTHROPIC_API_KEY=env-secret https://example.com/reset?token=reset-secret file=/Users/liyang/project/readme.md\n"
         + "{\"token\":\"json-token\",\"apiKey\":\"json-api-key\"}",
     );
     const content = await readStreamToString(entryStream as Readable);
     expect(content).toContain("Authorization: [REDACTED]");
     expect(content).toContain("ANTHROPIC_API_KEY=[REDACTED]");
+    expect(content).toContain("[URL]");
+    expect(content).toContain("file=[PATH]");
     expect(content).toContain("\"token\":\"[REDACTED]\"");
     expect(content).toContain("\"apiKey\":\"[REDACTED]\"");
-    expect(content).toContain("/Users/liyang/project/readme.md");
     expect(content).not.toContain("raw-bearer");
     expect(content).not.toContain("env-secret");
+    expect(content).not.toContain("example.com");
+    expect(content).not.toContain("reset-secret");
+    expect(content).not.toContain("/Users/liyang/project/readme.md");
     expect(content).not.toContain("json-token");
     expect(content).not.toContain("json-api-key");
   });
