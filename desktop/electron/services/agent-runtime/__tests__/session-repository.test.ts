@@ -173,6 +173,24 @@ describe("AgentSessionRepository", () => {
     expect(await repository.getActive("s1", "local")).toBeNull()
   })
 
+  it("restores previously active sessions when setActiveSession cannot deactivate all others", async () => {
+    const conversations = new FailingUpsertNamespace<ConversationEntryV1>("conversations", new Set([6]))
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    await conversations.upsert(sessionEntry({ id: "previous-1", active: true }))
+    await conversations.upsert(sessionEntry({ id: "previous-2", active: true }))
+    await conversations.upsert(sessionEntry({ id: "target", active: false }))
+
+    await expect(repository.setActiveSession("s1", "target", "local")).rejects.toThrow("upsert failed on call 6")
+
+    await expect(conversations.get("previous-1")).resolves.toMatchObject({ active: true })
+    await expect(conversations.get("previous-2")).resolves.toMatchObject({ active: true })
+    await expect(conversations.get("target")).resolves.toMatchObject({ active: false })
+  })
+
   it("stores agentType when provided at creation", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
@@ -397,6 +415,22 @@ class FailingUpsertNamespace<T extends { id: string }> extends MemoryNamespace<T
 
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
+}
+
+function sessionEntry(patch: Partial<ConversationEntryV1>): ConversationEntryV1 {
+  return {
+    id: "conversation",
+    schemaVersion: 1,
+    projectId: "project-1",
+    sessionKey: "s1",
+    platform: "local",
+    name: "session",
+    active: false,
+    history: [],
+    createdAt: fixedNow().toISOString(),
+    updatedAt: fixedNow().toISOString(),
+    ...patch,
+  }
 }
 
 function fixedIdFactory(ids: readonly string[]): () => string {

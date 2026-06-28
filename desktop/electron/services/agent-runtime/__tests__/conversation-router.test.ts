@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+
 import { describe, expect, it, vi } from "vitest"
 
 import type {
@@ -42,6 +44,12 @@ type RecordedAgentEmit = {
 type AgentResultEvent = Extract<AgentEvent, { type: "result" }>
 
 describe("ConversationRouter", () => {
+  it("does not use empty catch handlers that hide persistence failures", async () => {
+    const source = await readFile(new URL("../conversation-router.ts", import.meta.url), "utf8")
+
+    expect(source).not.toContain(".catch(() => {})")
+  })
+
   it("binds new conversations to the active provider and passes ProviderService env to the SDK session", async () => {
     const { conversations, router, providerService, factoryCalls } = createRouter({
       activeProviderId: "anthropic",

@@ -250,6 +250,10 @@ export class ConversationRouter {
     state.cancelState = undefined
   }
 
+  forgetSavedSdkSession(conversationId: string): void {
+    this.savedSdkSessions.delete(conversationId)
+  }
+
   buildCancelledResult(
     message: AgentMessage,
     conversationId: string,
@@ -297,8 +301,8 @@ export class ConversationRouter {
     } else if (commandResult) {
       for (const [index, event] of commandResult.events.entries()) {
         this.emitEvent(message, commandResult.conversationId, event)
-        await this.persistAgentEvent(commandResult.conversationId, turnId, index + 1, event).catch(() => {})
-        await this.saveEventHistory(commandResult.conversationId, event).catch(() => {})
+        await this.persistAgentEvent(commandResult.conversationId, turnId, index + 1, event)
+        await this.saveEventHistory(commandResult.conversationId, event)
       }
       return commandResult
     }

@@ -25,13 +25,22 @@ export interface SkillRegistryDeps {
 
 export class SkillRegistry {
   private readonly deps: SkillRegistryDeps
+  private cache: {
+    readonly signature: string
+    readonly skills: readonly AgentSkill[]
+  } | undefined
 
   constructor(deps: SkillRegistryDeps) {
     this.deps = deps
   }
 
   async list(): Promise<readonly AgentSkill[]> {
-    const files = await listSkillFiles(skillDirs(this.deps.workspacePath), (dir, error) => {
+    const roots = skillDirs(this.deps.workspacePath)
+    const signature = await skillDirsCacheSignature(roots)
+    if (this.cache?.signature === signature) {
+      return this.cache.skills
+    }
+    const files = await listSkillFiles(roots, (dir, error) => {
       this.deps.logger?.warn("Agent skill directory skipped.", {
         boundary: "agent.skill.directory-discovery",
         projectId: this.deps.projectId,
@@ -81,7 +90,9 @@ export class SkillRegistry {
         source: filePath,
       })
     }
-    return skills.sort((a, b) => a.name.localeCompare(b.name))
+    const sorted = skills.sort((a, b) => a.name.localeCompare(b.name))
+    this.cache = { signature, skills: sorted }
+    return sorted
   }
 
   async listPublished(): Promise<readonly PublishedAgentCommand[]> {
@@ -184,6 +195,18 @@ async function listSkillFiles(
   return result
 }
 
+async function skillDirsCacheSignature(roots: readonly string[]): Promise<string> {
+  const parts = await Promise.all(roots.map(async (root) => {
+    try {
+      const stat = await fs.stat(root)
+      return `${root}:${stat.mtimeMs}:${stat.size}`
+    } catch {
+      return `${root}:missing`
+    }
+  }))
+  return parts.join("|")
+}
+
 function parseSkillFile(content: string): {
   readonly frontmatter: Record<string, string>
   readonly prompt: string
@@ -225,7 +248,7 @@ function errorSummary(error: unknown): string {
     .replace(/'[^']*'/g, "'[path redacted]'")
     .replace(/"[^"]*"/g, "\"[path redacted]\"")
     .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
-    .replace(/\/[^\s'"`]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 function isMissingPathError(error: unknown): boolean {

@@ -944,7 +944,11 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    return this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey)
+    const reset = await this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey)
+    if (reset) {
+      this.conversationRouter.forgetSavedSdkSession(reset.id)
+    }
+    return reset
   }
 
   async createSession(
@@ -984,7 +988,11 @@ export class AgentRuntimeService {
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {
-    return this.sessionLifecycle.deleteSession(conversationIdValue)
+    const deleted = await this.sessionLifecycle.deleteSession(conversationIdValue)
+    if (deleted) {
+      this.conversationRouter.forgetSavedSdkSession(conversationIdValue)
+    }
+    return deleted
   }
 
   private recordPermissionAudit(

@@ -38,6 +38,32 @@ describe("SkillRegistry", () => {
       .toContain("## User Arguments:\nsrc/app.ts")
   })
 
+  it("reuses cached skill metadata for repeated resolves", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const skillDir = path.join(workspace, ".agents", "skills", "reviewer")
+    const skillPath = path.join(skillDir, "SKILL.md")
+    await fs.mkdir(skillDir, { recursive: true })
+    await fs.writeFile(skillPath, [
+      "---",
+      "name: Reviewer",
+      "description: Review code",
+      "---",
+      "Inspect the diff.",
+    ].join("\n"))
+
+    const originalReadFile = fs.readFile.bind(fs)
+    const readFile = vi.spyOn(fs, "readFile").mockImplementation((filePath, options) =>
+      originalReadFile(filePath, options))
+    const registry = new SkillRegistry({ workspacePath: workspace })
+
+    await expect(registry.resolve("reviewer")).resolves.toEqual(expect.objectContaining({ name: "reviewer" }))
+    await expect(registry.resolve("reviewer")).resolves.toEqual(expect.objectContaining({ name: "reviewer" }))
+
+    expect(readFile.mock.calls.filter(([filePath]) =>
+      path.basename(String(filePath)) === "SKILL.md"
+      && path.basename(path.dirname(String(filePath))) === "reviewer").length).toBe(1)
+  })
+
   it("skips unreadable skill files with diagnostics", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const goodDir = path.join(workspace, ".agents", "skills", "reviewer")
@@ -103,6 +129,27 @@ describe("SkillRegistry", () => {
       error: "EACCES: permission denied, open [path redacted]",
     }))
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("keeps slash command names while redacting absolute paths in skill diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const brokenDir = path.join(workspace, ".agents", "skills", "broken")
+    const brokenSkillPath = path.join(brokenDir, "SKILL.md")
+    await fs.mkdir(brokenDir, { recursive: true })
+    await fs.writeFile(brokenSkillPath, "This file cannot be read.")
+
+    vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("Failed while resolving /wiki-ingest from /Users/example/.codex/skills/broken/SKILL.md"),
+    )
+    const logger = { warn: vi.fn() }
+    const registry = new SkillRegistry({ projectId: "project-1", workspacePath: workspace, logger })
+
+    await registry.list()
+
+    expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      skillName: "broken",
+      error: "Failed while resolving /wiki-ingest from [path redacted]",
+    }))
   })
 
   it("redacts secret-like values in skill file diagnostics", async () => {

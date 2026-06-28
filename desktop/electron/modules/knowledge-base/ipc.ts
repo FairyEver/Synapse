@@ -158,6 +158,7 @@ const rawMutationResultSchema = z.object({
       "not-directory",
       "read-error",
       "invalid-path",
+      "invalid-name",
       "collision",
       "trash-error",
       "symlink",
