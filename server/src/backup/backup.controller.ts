@@ -5,6 +5,7 @@ import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
+import { attachmentContentDisposition } from "../common/content-disposition"
 import { BackupService } from "./backup.service"
 
 @Controller("/api/admin/backup")
@@ -42,7 +43,7 @@ export class BackupController {
       const stream = this.backupService.downloadBackup(filename)
       response.set({
         "Content-Type": contentType(filename),
-        "Content-Disposition": contentDisposition(filename),
+        "Content-Disposition": attachmentContentDisposition(filename),
       })
       await pipeline(stream, response)
       await this.recordDownloadAudit(filename, request)
@@ -60,7 +61,7 @@ export class BackupController {
   ) {
     response.set({
       "Content-Type": contentType(filename),
-      "Content-Disposition": contentDisposition(filename),
+      "Content-Disposition": attachmentContentDisposition(filename),
     })
     response.end()
   }
@@ -90,14 +91,4 @@ function contentType(filename: string): string {
   if (filename.endsWith(".tar")) return "application/x-tar"
   if (filename.endsWith(".gz")) return "application/gzip"
   return "application/octet-stream"
-}
-
-function contentDisposition(filename: string): string {
-  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
-  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
-}
-
-function encodeRFC5987ValueChars(value: string): string {
-  return encodeURIComponent(value)
-    .replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }

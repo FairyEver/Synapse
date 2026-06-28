@@ -10,6 +10,7 @@ import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
+import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
@@ -32,7 +33,7 @@ import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPage } from "./drive-site-public"
 import { driveSiteAccessCookieValue, DriveSiteService } from "./drive-site.service"
 import { isDriveSiteHtmlPath } from "./drive-site-path"
-import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
+import { DriveUploadTooLargeError, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
@@ -901,7 +902,7 @@ export class DrivePublicController {
 
     response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
     response.setHeader("Content-Type", resolved.mimeType)
-    response.setHeader("Content-Disposition", driveInlineContentDisposition(resolved.name))
+    response.setHeader("Content-Disposition", inlineContentDisposition(resolved.name))
     response.setHeader("Content-Length", resolved.size.toString())
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (resolved.etag) response.setHeader("ETag", resolved.etag)
@@ -1867,7 +1868,7 @@ async function sendDriveZip(
   storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
-  response.setHeader("Content-Disposition", driveContentDisposition(filename))
+  response.setHeader("Content-Disposition", attachmentContentDisposition(filename))
   const archive = archiver("zip", { zlib: { level: 6 } })
   const archiveError = new Promise<never>((_, reject) => {
     archive.once("error", reject)
@@ -1899,16 +1900,6 @@ async function sendDriveFileDownload(response: Response, download: {
   response.setHeader("Content-Type", download.contentType || "application/octet-stream")
   if (download.size !== undefined) response.setHeader("Content-Length", download.size.toString())
   await pipeline(download.stream, response)
-}
-
-function driveInlineContentDisposition(filename: string): string {
-  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
-  return `inline; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
-}
-
-function encodeRFC5987ValueChars(value: string): string {
-  return encodeURIComponent(value)
-    .replace(/['()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
 
 async function sendDriveTransfer(

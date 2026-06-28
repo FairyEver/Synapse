@@ -7,6 +7,7 @@ import path from "node:path"
 import { Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
+import { attachmentContentDisposition } from "../common/content-disposition"
 import { isDriveCosConfigured, loadEnv } from "../config/env"
 import { driveDownloadUrlTtlSeconds, driveUploadUrlTtlSeconds } from "./drive.constants"
 
@@ -391,7 +392,7 @@ export class CosDriveStorage implements DriveStoragePort {
       key: input.key,
       method: "get",
       expires: driveDownloadUrlTtlSeconds,
-      responseContentDisposition: driveContentDisposition(input.filename),
+      responseContentDisposition: attachmentContentDisposition(input.filename),
     })
     return { url, expiresAt }
   }
@@ -542,14 +543,4 @@ function encodeCosCopySourceKey(key: string): string {
 function parseContentLength(value: string | undefined): bigint | undefined {
   if (!value) return undefined
   return BigInt(value)
-}
-
-export function driveContentDisposition(filename: string): string {
-  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
-  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
-}
-
-function encodeRFC5987ValueChars(value: string): string {
-  return encodeURIComponent(value)
-    .replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
