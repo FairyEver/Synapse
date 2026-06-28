@@ -17,6 +17,8 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
+  DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
   type DriveAccessSettingsInput,
   type DriveBrowserPasswordRequiredDto,
   type DriveBrowserSnapshotDto,
@@ -24,6 +26,7 @@ import {
 import { DriveService } from "./drive.service"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveDocumentImageService } from "./drive-document-image.service"
+import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
@@ -95,6 +98,30 @@ const driveFileTextUpdateSchema = z.object({
 const driveDocumentImageImportSchema = z.object({
   baseVersionId: z.string().min(1),
   sources: z.array(z.object({ src: z.string().min(1) }).strict()).max(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES),
+}).strict()
+const driveLinkResolveSchema = z.object({
+  url: z.string().url(),
+  password: z.string().min(1).max(256).optional(),
+}).strict()
+const driveLinkListSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+}).strict()
+const driveLinkReadTextSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
+  maxBytes: z.number().int().positive().max(DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES).optional(),
+}).strict()
+const driveLinkMaterializeSchema = driveLinkResolveSchema.extend({
+  scope: z.enum(["entry", "text", "all"]).optional(),
+  maxFiles: z.number().int().positive().max(DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES).optional(),
+  maxBytes: z.number().int().positive().max(DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES).optional(),
+}).strict()
+const driveLinkDownloadFileSchema = driveLinkResolveSchema.extend({
+  path: z.string().min(1).max(1024).optional(),
+  itemId: z.string().min(1).optional(),
 }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
@@ -865,7 +892,33 @@ export class DrivePublicController {
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly documentImages?: DriveDocumentImageService,
+    @Optional() private readonly linkIntake?: DriveLinkIntakeService,
   ) {}
+
+  @Post("/api/drive/link-intake/resolve")
+  resolveDriveLink(@Body() body: unknown) {
+    return requireDriveLinkIntakeService(this.linkIntake).resolve(parseBody(driveLinkResolveSchema, body, "云盘链接无效。"))
+  }
+
+  @Post("/api/drive/link-intake/list")
+  listDriveLink(@Body() body: unknown) {
+    return requireDriveLinkIntakeService(this.linkIntake).list(parseBody(driveLinkListSchema, body, "云盘链接目录请求无效。"))
+  }
+
+  @Post("/api/drive/link-intake/read-text")
+  readDriveLinkText(@Body() body: unknown) {
+    return requireDriveLinkIntakeService(this.linkIntake).readText(parseBody(driveLinkReadTextSchema, body, "云盘链接正文请求无效。"))
+  }
+
+  @Post("/api/drive/link-intake/materialize-plan")
+  planDriveLinkMaterialize(@Body() body: unknown) {
+    return requireDriveLinkIntakeService(this.linkIntake).list(parseBody(driveLinkMaterializeSchema, body, "云盘链接落盘请求无效。"))
+  }
+
+  @Post("/api/drive/link-intake/download-file-plan")
+  planDriveLinkDownloadFile(@Body() body: unknown) {
+    return requireDriveLinkIntakeService(this.linkIntake).resolve(parseBody(driveLinkDownloadFileSchema, body, "云盘链接下载请求无效。"))
+  }
 
   @Get("/files/:assetId")
   @Head("/files/:assetId")
@@ -1685,6 +1738,11 @@ function requireDriveAnnotationService(annotations: DriveAnnotationService | und
 function requireDriveSiteService(sites: DriveSiteService | undefined): DriveSiteService {
   if (!sites) throw new Error("DriveSiteService is not available.")
   return sites
+}
+
+function requireDriveLinkIntakeService(linkIntake: DriveLinkIntakeService | undefined): DriveLinkIntakeService {
+  if (!linkIntake) throw new Error("DriveLinkIntakeService is not available.")
+  return linkIntake
 }
 
 function requireDriveDocumentImageService(documentImages: DriveDocumentImageService | undefined): DriveDocumentImageService {

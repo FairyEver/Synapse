@@ -61,6 +61,11 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_file_version_restore",
       "drive_file_version_delete",
       "drive_file_version_pin_update",
+      "drive_link_resolve",
+      "drive_link_list",
+      "drive_link_read_text",
+      "drive_link_materialize",
+      "drive_link_download_file",
       "drive_folder_zip_create",
       "drive_share_list",
       "drive_share_create",
@@ -206,6 +211,37 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).rejects.toThrow("targetParentId is required")
 
     expect(accountService.previewDriveReorganization).not.toHaveBeenCalled()
+  })
+
+  it("dispatches Drive link read tools without exposing passwords in audit metadata", async () => {
+    const accountService = createAccountService({
+      resolveDriveLink: vi.fn(async () => ({
+        ok: true,
+        linkType: "share",
+        access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+        root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
+        ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+      } as const)),
+    })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.link.resolve", { url: "https://synapse.test/share/shr_123", password: "secret" }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { linkType: "share" } })
+
+    expect(accountService.resolveDriveLink).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
+  })
+
+  it("authorizes Drive link materialize as a local write", async () => {
+    const materialized = { localRootPath: "/tmp/intake", manifestPath: "/tmp/intake/manifest.json", entryPath: "/tmp/intake/content/req.md", files: [], skipped: [], warnings: [] }
+    const accountService = createAccountService({
+      materializeDriveLink: vi.fn(async () => materialized),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.link.materialize", { url: "https://synapse.test/share/shr_123", scope: "text" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: materialized })
   })
 
   it("authorizes and audits Drive item reads", async () => {
@@ -1579,6 +1615,11 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     restoreDriveFileVersion: vi.fn(),
     deleteDriveFileVersion: vi.fn(),
     updateDriveFileVersionPin: vi.fn(),
+    resolveDriveLink: vi.fn(),
+    listDriveLink: vi.fn(),
+    readDriveLinkText: vi.fn(),
+    materializeDriveLink: vi.fn(),
+    downloadDriveLinkFile: vi.fn(),
     downloadDriveFolderZip: vi.fn(),
     listDrivePublicAssets: vi.fn(),
     getDrivePublicAsset: vi.fn(),

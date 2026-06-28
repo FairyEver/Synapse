@@ -116,6 +116,68 @@ Input:
 - `itemId` required: Drive folder item id.
 - `outputPath` required: absolute local `.zip` output path.
 
+## Drive Link Intake Tools
+
+Use these tools for Synapse `/share/...`, `/sites/...`, and `/files/...` URLs sent by another person. They do not modify remote Drive content.
+
+### `app_drive_link_resolve`
+
+Input:
+
+- `url` required.
+- `password` optional.
+
+Output includes `linkType`, `access`, `root`, and `ref`.
+
+### `app_drive_link_list`
+
+Input:
+
+- `url` required.
+- `password` optional.
+- `path` optional.
+- `itemId` optional.
+- `offset` optional.
+- `limit` optional.
+
+Output includes `items` and `page`.
+
+### `app_drive_link_read_text`
+
+Input:
+
+- `url` required.
+- `password` optional.
+- `path` optional.
+- `itemId` optional.
+- `maxBytes` optional.
+
+Use for Markdown, HTML source, JSON, and text. Binary files should use `app_drive_link_download_file`.
+
+### `app_drive_link_materialize`
+
+Input:
+
+- `url` required.
+- `password` optional.
+- `scope` optional: `entry`, `text`, or `all`.
+- `maxFiles` optional.
+- `maxBytes` optional.
+
+Writes a local cache directory and returns `localRootPath`, `manifestPath`, `entryPath`, `files`, `skipped`, and `warnings`.
+
+### `app_drive_link_download_file`
+
+Input:
+
+- `url` required.
+- `password` optional.
+- `path` optional.
+- `itemId` optional.
+- `outputPath` optional.
+
+Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache.
+
 ## Share Tools
 
 Use share tools for `/share/...` links to existing Drive files or folders. Shares can be read-only or editable depending on access settings. Deleted or trashed source items invalidate their share links; restore does not reactivate old links.

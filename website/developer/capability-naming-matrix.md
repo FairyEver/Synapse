@@ -90,6 +90,11 @@
 | `drive.item_preview.get` | `drive_item_preview_get` | `drive.item_preview.get` | `driveItemPreviewGet` |
 | `drive.file_content.read` | `drive_file_content_read` | `drive.file_content.read` | `driveFileContentRead` |
 | `drive.file_download.create` | `drive_file_download_create` | `drive.file_download.create` | `driveFileDownloadCreate` |
+| `drive.link.resolve` | `drive_link_resolve` | `drive.link.resolve` | `driveLinkResolve` |
+| `drive.link.list` | `drive_link_list` | `drive.link.list` | `driveLinkList` |
+| `drive.link.read_text` | `drive_link_read_text` | `drive.link.read_text` | `driveLinkReadText` |
+| `drive.link.materialize` | `drive_link_materialize` | `drive.link.materialize` | `driveLinkMaterialize` |
+| `drive.link.download_file` | `drive_link_download_file` | `drive.link.download_file` | `driveLinkDownloadFile` |
 | `drive.folder_zip.create` | `drive_folder_zip_create` | `drive.folder_zip.create` | `driveFolderZipCreate` |
 | `drive.share.list` | `drive_share_list` | `drive.share.list` | `driveShareList` |
 | `drive.share.create` | `drive_share_create` | `drive.share.create` | `driveShareCreate` |

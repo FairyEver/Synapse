@@ -6,6 +6,7 @@ import { PrismaModule } from "../prisma/prisma.module"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveDocumentImageService } from "./drive-document-image.service"
+import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
@@ -24,6 +25,22 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
     DriveRemoteImageFetcher,
     DriveSiteService,
     DriveService,
+    {
+      provide: DriveLinkIntakeService,
+      useFactory: (
+        drive: DriveService,
+        sites: DriveSiteService,
+        publicAssets: DrivePublicAssetService,
+        storage: LocalDriveStorage | CosDriveStorage,
+      ) => new DriveLinkIntakeService({
+        drive,
+        sites,
+        publicAssets,
+        storage,
+        publicAppUrl: process.env.APP_PUBLIC_URL ?? "http://localhost:3000",
+      }),
+      inject: [DriveService, DriveSiteService, DrivePublicAssetService, "DriveStoragePort"],
+    },
     AuditLogService,
     CosDriveStorage,
     LocalDriveStorage,
@@ -33,6 +50,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: [DriveService, DriveLifecycleService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveDocumentImageService],
+  exports: [DriveService, DriveLifecycleService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveDocumentImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}

@@ -91,6 +91,16 @@ import type {
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DriveLinkDownloadFileDto,
+  DriveLinkDownloadFileInput,
+  DriveLinkListDto,
+  DriveLinkListInput,
+  DriveLinkMaterializeDto,
+  DriveLinkMaterializeInput,
+  DriveLinkReadTextDto,
+  DriveLinkReadTextInput,
+  DriveLinkResolveDto,
+  DriveLinkResolveInput,
   DrivePublicAssetDto,
   DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
@@ -994,6 +1004,11 @@ export type SynapseBridge = {
     restoreDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveItemDto>
     deleteDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<{ ok: true }>
     updateDriveFileVersionPin: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto>
+    resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
+    listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>
+    readDriveLinkText: (input: DriveLinkReadTextInput) => Promise<DriveLinkReadTextDto>
+    materializeDriveLink: (input: DriveLinkMaterializeInput) => Promise<DriveLinkMaterializeDto>
+    downloadDriveLinkFile: (input: DriveLinkDownloadFileInput) => Promise<DriveLinkDownloadFileDto>
     shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>

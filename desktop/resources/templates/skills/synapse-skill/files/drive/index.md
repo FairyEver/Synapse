@@ -22,6 +22,11 @@ Use these tools only for Synapse Drive:
 - `app_drive_file_version_restore`
 - `app_drive_file_version_delete`
 - `app_drive_file_version_pin_update`
+- `app_drive_link_resolve`
+- `app_drive_link_list`
+- `app_drive_link_read_text`
+- `app_drive_link_materialize`
+- `app_drive_link_download_file`
 - `app_drive_folder_zip_create`
 - `app_drive_share_list`
 - `app_drive_share_create`
@@ -50,6 +55,19 @@ Use these tools only for Synapse Drive:
 - `app_drive_item_restore`
 
 Do not use this skill for database records, Resource Repository resources, scheduler tasks, workflow definitions, provider settings, or general local file editing.
+
+## Drive Link Intake Flow
+
+When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL, use Drive Link tools instead of owner Drive item tools.
+
+1. Call `app_drive_link_resolve` with `url` and optional `password`.
+2. If the result is a folder or site, call `app_drive_link_list` before reading content.
+3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`.
+4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`.
+5. For one specific linked file or public asset, call `app_drive_link_download_file`.
+
+Do not use these tools to edit shared files, create comments, import shared content into the user's Drive, or crawl arbitrary websites.
+Do not repeat passwords in the final answer.
 
 ## Default Flow
 
@@ -139,3 +157,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "公开链接列表": call `app_drive_share_list`.
 - "看看云盘空间": call `app_drive_usage_get`.
 - "整理我的云盘": call `app_drive_stats_get`, `app_drive_item_tree_list`, optional small per-file `app_drive_file_content_read`, `app_drive_folder_path_ensure`, `app_drive_reorganization_preview`, then `app_drive_reorganization_apply` with the returned `planId`.
+- "分析这个云盘分享链接": call `app_drive_link_resolve`, then `app_drive_link_list` or `app_drive_link_read_text`.
+- "读取这个需求链接": call `app_drive_link_read_text`.
+- "分析这个 HTML 原型站点": call `app_drive_link_resolve`, `app_drive_link_list`, then `app_drive_link_materialize` when local files are useful.
+- "下载这个公开素材": call `app_drive_link_download_file`.
