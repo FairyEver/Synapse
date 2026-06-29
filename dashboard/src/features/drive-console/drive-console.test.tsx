@@ -31,6 +31,9 @@ vi.mock('@/lib/api', async (importOriginal) => {
       renameItem: vi.fn(),
       moveItem: vi.fn(),
       deleteItem: vi.fn(),
+      createShare: vi.fn(),
+      listShares: vi.fn(),
+      disableShare: vi.fn(),
     },
   }
 })
@@ -188,6 +191,66 @@ describe('DriveConsolePage', () => {
     })
 
     expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: 'root', files: [file] })
+  })
+
+  it('shares a row with default web settings and refreshes', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.createShare).mockResolvedValue({} as never)
+    await render(<DriveConsolePage />)
+
+    await click(button('分享'))
+    await click(button('确定'))
+
+    expect(driveApi.createShare).toHaveBeenCalledWith('folder-1', {
+      passwordEnabled: true,
+      expiresIn: '3d',
+      accessMode: 'link_read',
+      editorEmails: [],
+    })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('opens my shares from the toolbar', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listShares).mockResolvedValue({
+      items: [{
+        id: 'share-db-id',
+        shareId: 'shr_1',
+        itemId: 'item-1',
+        itemName: 'notes.md',
+        itemType: 'file',
+        sourceDeleted: false,
+        url: 'https://example.com/share/shr_1',
+        urlWithPassword: 'https://example.com/share/shr_1?p=abc',
+        passwordEnabled: true,
+        password: 'abc',
+        expiresAt: null,
+        accessMode: 'link_read',
+        editorEmails: [],
+        createdAt: '2026-06-29T00:00:00.000Z',
+      }],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
+    await render(<DriveConsolePage />)
+
+    await click(button('我的分享'))
+    await act(async () => undefined)
+
+    expect(driveApi.listShares).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+    expect(document.body.textContent).toContain('notes.md')
   })
 })
 

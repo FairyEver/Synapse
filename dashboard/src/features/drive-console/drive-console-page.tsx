@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
+import type { DriveAccessSettingsInput, DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
 import { Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
@@ -17,6 +17,7 @@ import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-f
 import { driveApi } from '@/lib/api'
 import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
+import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
 import { uploadDriveFiles, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
 
@@ -77,6 +78,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [activeView, setActiveView] = useState<DriveConsoleSystemView>('files')
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
+  const [shareTarget, setShareTarget] = useState<DriveBrowserItemDto | null>(null)
+  const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -126,6 +129,18 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
     }
   }
 
+  const createShare = async (settings: DriveAccessSettingsInput) => {
+    if (!shareTarget) return
+    setSubmitting(true)
+    try {
+      await driveApi.createShare(shareTarget.id, settings)
+      setShareTarget(null)
+      await refreshAfterMutation()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const runUpload = async (files: readonly File[]) => {
     const parentId = currentFolderId(state)
     if (!parentId || files.length === 0) return
@@ -167,7 +182,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
             新建文件夹
           </Button>
-          <Button type='button' variant='outline' size='sm'>我的分享</Button>
+          <Button type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>我的分享</Button>
           <Button type='button' variant='outline' size='sm'>站点</Button>
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
@@ -182,7 +197,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           onDelete={(item) => { void deleteItem(item) }}
           onMove={setMoveTarget}
           onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
-          onShare={() => undefined}
+          onShare={setShareTarget}
           onDropFiles={(files) => { void runUpload(files) }}
         />
       ) : null}
@@ -221,6 +236,20 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           if (!open) setMoveTarget(null)
         }}
         onSubmit={(parentId) => { void moveItem(parentId) }}
+      />
+      <DriveShareSettingsDialog
+        itemName={shareTarget?.name ?? ''}
+        open={shareTarget !== null}
+        submitting={submitting}
+        onOpenChange={(open) => {
+          if (!open) setShareTarget(null)
+        }}
+        onConfirm={createShare}
+      />
+      <DriveSharesDialog
+        open={sharesOpen}
+        onOpenChange={setSharesOpen}
+        onChanged={refreshAfterMutation}
       />
     </div>
   )
