@@ -1,17 +1,26 @@
 import { useState } from 'react'
-import type { DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
+import type { DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
 import { Upload } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   DriveBrowserPage,
   DriveSingleFileReaderView,
 } from '@/features/drive-browser/drive-browser-page'
 import { shouldRenderDriveSingleFileReader } from '@/features/drive-browser/shared/drive-view-model'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
+import { driveApi } from '@/lib/api'
 import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
+import { DriveMoveDialog } from './drive-move-dialog'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
+
+type NameDialogState =
+  | { readonly mode: 'create'; readonly item: null; readonly value: string }
+  | { readonly mode: 'rename'; readonly item: DriveBrowserItemDto; readonly value: string }
 
 export function DriveConsolePage() {
   return (
@@ -64,6 +73,55 @@ function DriveConsoleItem({ itemId, surface }: { readonly itemId: string; readon
 
 function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [activeView, setActiveView] = useState<DriveConsoleSystemView>('files')
+  const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
+  const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const nameInputId = 'drive-console-name-input'
+
+  const refreshAfterMutation = async () => {
+    await state.refresh()
+  }
+
+  const submitNameDialog = async () => {
+    if (!nameDialog) return
+    const name = nameDialog.value.trim()
+    if (!name) return
+    setSubmitting(true)
+    try {
+      if (nameDialog.mode === 'create') {
+        await driveApi.createFolder({ parentId: currentFolderId(state), name })
+      } else {
+        await driveApi.renameItem(nameDialog.item.id, name)
+      }
+      setNameDialog(null)
+      await refreshAfterMutation()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const deleteItem = async (item: DriveBrowserItemDto) => {
+    setSubmitting(true)
+    try {
+      await driveApi.deleteItem(item.id)
+      await refreshAfterMutation()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const moveItem = async (parentId: string | null) => {
+    if (!moveTarget) return
+    setSubmitting(true)
+    try {
+      await driveApi.moveItem(moveTarget.id, parentId)
+      setMoveTarget(null)
+      await refreshAfterMutation()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className='flex h-full min-h-0 flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -76,7 +134,9 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
             <Upload className='size-4' />
             上传文件
           </Button>
-          <Button type='button' variant='outline' size='sm'>新建文件夹</Button>
+          <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
+            新建文件夹
+          </Button>
           <Button type='button' variant='outline' size='sm'>我的分享</Button>
           <Button type='button' variant='outline' size='sm'>站点</Button>
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
@@ -85,10 +145,60 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       {state.browser.status === 'loading' ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {state.browser.status === 'error' ? <div className='text-sm text-destructive'>{state.browser.message}</div> : null}
       {state.browser.status === 'ready' ? (
-        <DriveFileTable snapshot={state.browser.snapshot} activeView={activeView} onOpenSystemView={setActiveView} />
+        <DriveFileTable
+          snapshot={state.browser.snapshot}
+          activeView={activeView}
+          onOpenSystemView={setActiveView}
+          onDelete={(item) => { void deleteItem(item) }}
+          onMove={setMoveTarget}
+          onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
+          onShare={() => undefined}
+        />
       ) : null}
+      <Dialog open={nameDialog !== null} onOpenChange={(open) => {
+        if (!open) setNameDialog(null)
+      }}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{nameDialog?.mode === 'rename' ? '重命名' : '新建文件夹'}</DialogTitle>
+          </DialogHeader>
+          <div className='grid gap-2'>
+            <Label htmlFor={nameInputId}>{nameDialog?.mode === 'rename' ? '名称' : '文件夹名称'}</Label>
+            <Input
+              id={nameInputId}
+              value={nameDialog?.value ?? ''}
+              onChange={(event) => {
+                const value = event.target.value
+                setNameDialog((current) => current ? { ...current, value } : current)
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button type='button' variant='outline' disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
+            <Button type='button' disabled={submitting || !nameDialog?.value.trim()} onClick={() => { void submitNameDialog() }}>
+              {nameDialog?.mode === 'rename' ? '保存' : '新建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <DriveMoveDialog
+        item={moveTarget}
+        open={moveTarget !== null}
+        submitting={submitting}
+        onOpenChange={(open) => {
+          if (!open) setMoveTarget(null)
+        }}
+        onSubmit={(parentId) => { void moveItem(parentId) }}
+      />
     </div>
   )
+}
+
+function currentFolderId(state: DriveConsoleState): string | null {
+  if (state.browser.status !== 'ready') return null
+  if (state.browser.snapshot.current.type !== 'folder') return null
+  return state.browser.snapshot.current.id
 }
 
 function DriveUsage({ usage, loading }: { readonly usage: DriveUsageDto | null; readonly loading: boolean }) {

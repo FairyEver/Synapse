@@ -26,6 +26,10 @@ vi.mock('@/lib/api', async (importOriginal) => {
     driveApi: {
       ...actual.driveApi,
       getUsage: vi.fn(),
+      createFolder: vi.fn(),
+      renameItem: vi.fn(),
+      moveItem: vi.fn(),
+      deleteItem: vi.fn(),
     },
   }
 })
@@ -96,6 +100,41 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).toContain('notes.md')
     expect(document.body.textContent).not.toContain('公开素材')
   })
+
+  it('creates folders in the current folder and refreshes', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.createFolder).mockResolvedValue({} as never)
+    await render(<DriveConsolePage />)
+
+    await click(button('新建文件夹'))
+    await input('文件夹名称', '资料')
+    await click(button('新建'))
+
+    expect(driveApi.createFolder).toHaveBeenCalledWith({ parentId: 'root', name: '资料' })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('does not render sync in row actions', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsolePage />)
+
+    expect(document.body.textContent).toContain('更多')
+    expect(document.body.textContent).not.toContain('同步')
+  })
 })
 
 function mockReadySnapshot(snapshot: DriveBrowserSnapshotDto) {
@@ -131,6 +170,32 @@ async function render(element: ReactElement) {
         </DirectionProvider>
       </QueryClientProvider>
     )
+  })
+}
+
+async function click(element: HTMLElement | null) {
+  if (!element) throw new Error('missing element')
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function button(text: string) {
+  const buttons = Array.from(document.querySelectorAll('button'))
+  return buttons.find((item) => item.textContent?.trim() === text)
+    ?? buttons.find((item) => item.textContent?.includes(text))
+    ?? null
+}
+
+async function input(labelText: string, value: string) {
+  const label = Array.from(document.querySelectorAll('label')).find((item) => item.textContent?.includes(labelText))
+  const id = label?.getAttribute('for')
+  const field = id ? document.getElementById(id) : null
+  if (!(field instanceof HTMLInputElement)) throw new Error(`missing input ${labelText}`)
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  await act(async () => {
+    valueSetter?.call(field, value)
+    field.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
 

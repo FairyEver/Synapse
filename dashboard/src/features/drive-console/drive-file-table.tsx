@@ -20,10 +20,18 @@ export function DriveFileTable({
   snapshot,
   activeView,
   onOpenSystemView,
+  onDelete,
+  onMove,
+  onRename,
+  onShare,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly activeView: DriveConsoleSystemView
   readonly onOpenSystemView: (view: DriveConsoleSystemView) => void
+  readonly onDelete: (item: DriveBrowserItemDto) => void
+  readonly onMove: (item: DriveBrowserItemDto) => void
+  readonly onRename: (item: DriveBrowserItemDto) => void
+  readonly onShare: (item: DriveBrowserItemDto) => void
 }) {
   if (activeView !== 'files') return null
 
@@ -47,7 +55,14 @@ export function DriveFileTable({
             </>
           ) : null}
           {snapshot.children.map((item) => (
-            <DriveFileRow key={item.id} item={item} />
+            <DriveFileRow
+              key={item.id}
+              item={item}
+              onDelete={onDelete}
+              onMove={onMove}
+              onRename={onRename}
+              onShare={onShare}
+            />
           ))}
         </TableBody>
       </Table>
@@ -71,7 +86,19 @@ function SystemRow({ icon, name, onOpen }: { readonly icon: ReactNode; readonly 
   )
 }
 
-function DriveFileRow({ item }: { readonly item: DriveBrowserItemDto }) {
+function DriveFileRow({
+  item,
+  onDelete,
+  onMove,
+  onRename,
+  onShare,
+}: {
+  readonly item: DriveBrowserItemDto
+  readonly onDelete: (item: DriveBrowserItemDto) => void
+  readonly onMove: (item: DriveBrowserItemDto) => void
+  readonly onRename: (item: DriveBrowserItemDto) => void
+  readonly onShare: (item: DriveBrowserItemDto) => void
+}) {
   return (
     <TableRow
       role='link'
@@ -93,9 +120,33 @@ function DriveFileRow({ item }: { readonly item: DriveBrowserItemDto }) {
       <TableCell className='text-right'>
         <Button type='button' variant='ghost' size='sm' onClick={(event) => {
           event.stopPropagation()
+          onShare(item)
+        }}>
+          分享
+        </Button>
+        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          event.stopPropagation()
           window.location.assign(item.browserUrl)
         }}>
           预览
+        </Button>
+        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          event.stopPropagation()
+          onDelete(item)
+        }}>
+          删除
+        </Button>
+        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          event.stopPropagation()
+          onMove(item)
+        }}>
+          移动
+        </Button>
+        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          event.stopPropagation()
+          onRename(item)
+        }}>
+          更多
         </Button>
       </TableCell>
     </TableRow>
