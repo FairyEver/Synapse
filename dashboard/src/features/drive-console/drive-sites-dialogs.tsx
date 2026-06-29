@@ -169,11 +169,11 @@ export function DriveSitesDialog({
             {sites.length === 0 ? <div className='text-sm text-muted-foreground'>暂无站点</div> : null}
             {sites.map((site) => (
               <div key={site.siteId} className='flex items-center justify-between gap-3 border-b py-2'>
-                <div className='min-w-0'>
+                <div className='min-w-0 flex-1'>
                   <div className='truncate text-sm font-medium'>{site.name}</div>
                   <div className='truncate text-xs text-muted-foreground'>{site.url}</div>
                 </div>
-                <div className='flex items-center gap-1'>
+                <div className='flex shrink-0 items-center gap-1'>
                   <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '重发失败') }}>
                     重发
                   </Button>

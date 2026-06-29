@@ -38,7 +38,7 @@ describe('DriveShareSettingsDialog', () => {
     const onConfirm = vi.fn(async () => undefined)
     render(<DriveShareSettingsDialog open itemName='notes.md' submitting={false} onOpenChange={() => undefined} onConfirm={onConfirm} />)
 
-    await click(textButton('确定'))
+    await click(textButton('创建分享'))
 
     expect(onConfirm).toHaveBeenCalledWith({
       passwordEnabled: true,

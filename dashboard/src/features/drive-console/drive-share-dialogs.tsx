@@ -106,7 +106,7 @@ export function DriveShareSettingsDialog({
               void onConfirm({ ...settings, editorEmails: settings.editorEmails ?? [] })
             }}
           >
-            确定
+            创建分享
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -126,6 +126,7 @@ export function DriveSharesDialog({
   const [items, setItems] = useState<DriveShareListItemDto[]>([])
   const [filter, setFilter] = useState<ShareFilter>('file')
   const [loading, setLoading] = useState(false)
+  const [actionShareId, setActionShareId] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -144,12 +145,15 @@ export function DriveSharesDialog({
   }, [open])
 
   const disableShare = async (item: DriveShareListItemDto) => {
+    setActionShareId(item.id)
     try {
       await driveApi.disableShare(item.id)
       await load()
       await onChanged()
     } catch (error) {
       toast(errorMessage(error, '取消分享失败'))
+    } finally {
+      setActionShareId(null)
     }
   }
 
@@ -171,7 +175,7 @@ export function DriveSharesDialog({
           {!loading && visible.length === 0 ? <div className='text-sm text-muted-foreground'>暂无分享</div> : null}
           {visible.map((item) => (
             <div key={item.id} className='flex items-center justify-between gap-3 border-b py-2'>
-              <div className='min-w-0'>
+              <div className='min-w-0 flex-1'>
                 <div className='truncate text-sm font-medium'>{item.itemName}</div>
                 <Input value={item.password ? item.urlWithPassword : item.url} readOnly className='mt-1 font-mono text-xs' />
               </div>
@@ -179,6 +183,7 @@ export function DriveSharesDialog({
                 type='button'
                 variant='ghost'
                 size='sm'
+                disabled={actionShareId === item.id}
                 onClick={() => {
                   void disableShare(item)
                 }}

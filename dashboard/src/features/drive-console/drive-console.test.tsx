@@ -208,7 +208,7 @@ describe('DriveConsolePage', () => {
 
     await render(<DriveConsolePage />)
 
-    expect(document.body.textContent).toContain('更多')
+    expect(document.body.textContent).toContain('重命名')
     expect(document.body.textContent).not.toContain('同步')
   })
 
@@ -279,7 +279,7 @@ describe('DriveConsolePage', () => {
     await render(<DriveConsolePage />)
 
     await click(button('分享'))
-    await click(button('确定'))
+    await click(button('创建分享'))
 
     expect(driveApi.createShare).toHaveBeenCalledWith('folder-1', {
       passwordEnabled: true,

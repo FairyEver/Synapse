@@ -65,7 +65,7 @@ export function DriveFileTable({
             <TableHead>名称</TableHead>
             <TableHead className='w-28 text-right'>大小</TableHead>
             <TableHead className='w-40 text-right'>更新时间</TableHead>
-            <TableHead className='w-52 text-right' aria-label='操作' />
+            <TableHead className='w-80 text-right' aria-label='操作' />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -178,7 +178,7 @@ function DriveFileRow({
           event.stopPropagation()
           onRename(item)
         }}>
-          更多
+          重命名
         </Button>
       </TableCell>
     </TableRow>
