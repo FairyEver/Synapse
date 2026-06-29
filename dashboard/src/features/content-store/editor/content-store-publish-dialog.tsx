@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ContentStoreType, ContentStoreVisibility } from '@synapse/shared'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -37,11 +38,29 @@ export function ContentStorePublishDialog({
   onPublish,
 }: ContentStorePublishDialogProps) {
   const [publishPublic, setPublishPublic] = useState(visibility === 'public')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   useEffect(() => {
-    if (open) setPublishPublic(visibility === 'public')
+    if (open) {
+      setPublishPublic(visibility === 'public')
+      setIsSubmitting(false)
+    }
   }, [open, visibility])
 
   const needsDescription = publishPublic && !description.trim()
+  const isPublishDisabled = isPublishing || isSubmitting || needsDescription
+
+  async function handlePublish() {
+    if (isPublishDisabled) return
+    setIsSubmitting(true)
+    try {
+      await onPublish(publishPublic)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '发布失败')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,12 +106,8 @@ export function ContentStorePublishDialog({
           </Button>
           <Button
             type='button'
-            disabled={isPublishing || needsDescription}
-            onClick={() => {
-              void onPublish(publishPublic)
-                .then(() => onOpenChange(false))
-                .catch(() => undefined)
-            }}
+            disabled={isPublishDisabled}
+            onClick={() => { void handlePublish() }}
           >
             发布
           </Button>
