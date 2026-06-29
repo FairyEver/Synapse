@@ -302,7 +302,6 @@ Input:
 - `itemId` required: Drive file item id.
 - `offset` optional.
 - `limit` optional.
-- `search` optional: match item name, original path, or public asset id.
 
 ### `app_drive_file_version_download_create`
 
