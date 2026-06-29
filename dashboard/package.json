@@ -11,6 +11,8 @@
     "tsc": "pnpm --filter @synapse/shared run build && tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/manrope": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@mdxeditor/editor": "4.0.4",
     "@monaco-editor/react": "^4.7.0",
