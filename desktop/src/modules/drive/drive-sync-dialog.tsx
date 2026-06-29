@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { FolderSync, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import type {
   DriveItemDto,
   DriveSyncBindingDto,
@@ -49,6 +49,10 @@ export function DriveSyncDialog({
   const [excludeText, setExcludeText] = useState("")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
+  const pathFieldCopy = item ? getDriveSyncBindingPathFieldCopy(item.type, bindingMode) : null
+  const trimmedLocalPath = localPath.trim()
+  const currentPreview = preview?.localPath === trimmedLocalPath ? preview : null
+  const canSubmitBinding = trimmedLocalPath.length > 0 && !busy && currentPreview?.status !== "blocked"
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +65,13 @@ export function DriveSyncDialog({
 
   const refreshSnapshot = async () => {
     onSnapshotChange(await requireSynapseBridge().driveSync.getSnapshot())
+  }
+
+  const selectBindingMode = (nextMode: DriveSyncBindingMode) => {
+    if (nextMode === bindingMode) return
+    setBindingMode(nextMode)
+    setLocalPath("")
+    setPreview(null)
   }
 
   const chooseLocalPath = async () => {
@@ -145,44 +156,30 @@ export function DriveSyncDialog({
             <div className="px-5 py-4">
               {item ? (
                 <div className="grid gap-4">
-                  <div className="inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
-                    <Button
-                      type="button"
-                      variant={bindingMode === "bind_existing" ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => {
-                        setBindingMode("bind_existing")
-                        setLocalPath("")
-                        setPreview(null)
-                      }}
-                    >
-                      绑定已有本地项
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={bindingMode === "remote_to_local" ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => {
-                        setBindingMode("remote_to_local")
-                        setLocalPath("")
-                        setPreview(null)
-                      }}
-                    >
-                      下载到本地
-                    </Button>
-                  </div>
+                  <Tabs
+                    value={bindingMode}
+                    onValueChange={(value) => {
+                      selectBindingMode(value as DriveSyncBindingMode)
+                    }}
+                  >
+                    <TabsList>
+                      <TabsTrigger value="bind_existing" onClick={() => selectBindingMode("bind_existing")}>绑定已有本地项</TabsTrigger>
+                      <TabsTrigger value="remote_to_local" onClick={() => selectBindingMode("remote_to_local")}>下载到本地</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                   <div className="grid gap-2">
-                    <Label htmlFor="drive-sync-local-path">本地路径</Label>
+                    <Label htmlFor="drive-sync-local-path">{pathFieldCopy?.label}</Label>
                     <InputGroup>
                       <InputGroupInput
                         id="drive-sync-local-path"
+                        placeholder={pathFieldCopy?.placeholder}
                         value={localPath}
                         onChange={(event) => {
                           setLocalPath(event.target.value)
                           setPreview(null)
                         }}
                       />
-                      <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>选择</InputGroupButton>
+                      <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
                     </InputGroup>
                   </div>
                   {item.type === "folder" ? (
@@ -204,8 +201,8 @@ export function DriveSyncDialog({
           <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
             {item ? (
               <>
-                <Button type="button" variant="outline" disabled={busy || localPath.trim().length === 0} onClick={() => { void previewBinding() }}>校验</Button>
-                <Button type="button" disabled={busy || localPath.trim().length === 0} onClick={() => { void createBinding() }}>创建绑定</Button>
+                <Button type="button" variant="outline" disabled={busy || trimmedLocalPath.length === 0} onClick={() => { void previewBinding() }}>校验</Button>
+                <Button type="button" disabled={!canSubmitBinding} onClick={() => { void createBinding() }}>{pathFieldCopy?.submitLabel}</Button>
               </>
             ) : (
               <Button type="button" variant="outline" disabled={busy} onClick={() => { void refreshSnapshot() }}>
@@ -218,6 +215,25 @@ export function DriveSyncDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function getDriveSyncBindingPathFieldCopy(
+  kind: DriveItemDto["type"],
+  mode: DriveSyncBindingMode,
+): {
+  readonly label: string
+  readonly placeholder: string
+  readonly chooseLabel: string
+  readonly submitLabel: string
+} {
+  if (mode === "bind_existing") {
+    return kind === "folder"
+      ? { label: "本地文件夹", placeholder: "选择已有本地文件夹", chooseLabel: "选择文件夹", submitLabel: "创建绑定" }
+      : { label: "本地文件", placeholder: "选择已有本地文件", chooseLabel: "选择文件", submitLabel: "创建绑定" }
+  }
+  return kind === "folder"
+    ? { label: "保存位置", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并绑定" }
+    : { label: "保存为", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并绑定" }
 }
 
 function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPreviewDto }) {
@@ -343,12 +359,12 @@ function DriveSyncBindingActions({
   readonly binding: DriveSyncBindingDto
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
-  const paused = binding.status === "paused"
+  const resumable = binding.status === "paused" || binding.status === "error"
   return (
     <div className="flex flex-wrap justify-end gap-1">
       <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
-      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => paused ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), paused ? "已恢复" : "已暂停") }}>
-        {paused ? "恢复" : "暂停"}
+      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => resumable ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), resumable ? "已恢复" : "已暂停") }}>
+        {resumable ? "恢复" : "暂停"}
       </Button>
       <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已重新扫描") }}>扫描</Button>
       <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已拉取变更") }}>拉取</Button>
@@ -442,8 +458,7 @@ export function DriveSyncStatusButton({
         : null
   const message = badge?.message ?? "暂无同步绑定"
   return (
-    <Button type="button" variant={conflictCount > 0 || errorCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={onOpen}>
-      <FolderSync data-icon="inline-start" />
+    <Button type="button" variant={conflictCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={onOpen}>
       同步
       {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
     </Button>

@@ -160,7 +160,14 @@ async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: strin
 
 async function parentRemoteId(deps: DriveSyncExecutorDeps): Promise<string | null> {
   const parentPath = parentRelativePath(deps.operation.relativePath)
-  if (parentPath === null) return deps.binding.driveItemId
+  if (parentPath === null) {
+    if (deps.binding.kind === "file") {
+      const remoteFileId = deps.operation.driveItemId ?? deps.binding.driveItemId
+      const remoteFile = deps.accountService.getDriveItem ? await deps.accountService.getDriveItem(remoteFileId) : null
+      return remoteFile?.parentId ?? null
+    }
+    return deps.binding.driveItemId
+  }
   const parentBaseline = (await deps.baselineStore.listByBinding(deps.binding.id))
     .find((entry) => entry.relativePath === parentPath && entry.deletedAt === null)
   return parentBaseline?.remoteItemId ?? deps.binding.driveItemId

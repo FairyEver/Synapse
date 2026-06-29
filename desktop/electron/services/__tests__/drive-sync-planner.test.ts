@@ -109,6 +109,75 @@ describe("drive sync planner", () => {
     expect(result.operations).toEqual([])
     expect(result.conflicts).toEqual([])
   })
+
+  it("ignores unrelated account-wide changes for file bindings", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({
+        driveItemId: "remote-file",
+        driveItemName: "bb-file-alpha.md",
+        kind: "file",
+        drivePathHint: "/bb-file-alpha.md",
+        localPath: "/Users/me/bb-file-alpha.md",
+      }),
+      baseline: [baseline({ relativePath: "", remoteItemId: "remote-file" })],
+      changes: [
+        remoteChange({ itemId: "remote-created", type: "created", pathHint: "/bb-file-alpha.md/root.md" }),
+        remoteChange({ itemId: "remote-trashed", type: "trashed", pathHint: "/bb-file-alpha.md/nested.md" }),
+        remoteChange({ itemId: "remote-updated", type: "content_updated", pathHint: "/Other/root.md" }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([])
+  })
+
+  it("plans file binding remote deletes against the bound local file", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        drivePathHint: "/spec.md",
+        localPath: "/Users/me/spec.md",
+      }),
+      baseline: [baseline({ relativePath: "", remoteItemId: "remote-file" })],
+      changes: [remoteChange({ itemId: "remote-file", type: "trashed", pathHint: "/spec.md" })],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "delete_local",
+        relativePath: "",
+        localPath: "/Users/me/spec.md",
+        driveItemId: "remote-file",
+      }),
+    ])
+  })
+
+  it("plans file binding remote content updates as root downloads", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        drivePathHint: "/spec.md",
+        localPath: "/Users/me/spec.md",
+      }),
+      baseline: [baseline({ relativePath: "", remoteItemId: "remote-file" })],
+      changes: [remoteChange({ itemId: "remote-file", type: "content_updated", pathHint: "/spec.md" })],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "download",
+        relativePath: "",
+        localPath: "/Users/me/spec.md",
+        driveItemId: "remote-file",
+      }),
+    ])
+  })
 })
 
 function binding(input: Partial<DriveSyncBindingEntryV1> = {}): DriveSyncBindingEntryV1 {

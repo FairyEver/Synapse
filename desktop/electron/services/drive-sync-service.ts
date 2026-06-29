@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { copyFile, lstat, mkdir, rename } from "node:fs/promises"
 import path from "node:path"
 import type {
+  DriveChangeDto,
   DriveItemDto,
   DriveItemTreeListPageDto,
   DriveSyncBindingPreviewDto,
@@ -30,7 +31,12 @@ import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
-import { planDriveSyncLocalChanges, type DriveSyncPlannedConflict, type DriveSyncPlannedOperation } from "./drive-sync-planner"
+import {
+  planDriveSyncLocalChanges,
+  planDriveSyncRemoteChanges,
+  type DriveSyncPlannedConflict,
+  type DriveSyncPlannedOperation,
+} from "./drive-sync-planner"
 import { pollDriveSyncRemoteChanges } from "./drive-sync-remote-poller"
 import { createDriveSyncWatcher, type DriveSyncLocalChange } from "./drive-sync-watcher"
 
@@ -88,6 +94,7 @@ export interface DriveSyncCreateBindingInput {
   readonly localPath: string
   readonly remoteCursor?: string | null
   readonly excludeRules?: readonly string[]
+  readonly deferWatcher?: boolean
 }
 
 export interface DriveSyncRecordOperationInput {
@@ -169,8 +176,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         activeBindingCount: bindings.filter((binding) => binding.status === "active").length,
         runningOperationCount: operations.filter((operation) => isRunningOperationStatus(operation.status)).length,
         conflictCount: conflicts.length,
-        errorCount: bindings.filter((binding) => binding.status === "error").length
-          + operations.filter((operation) => operation.status === "error").length,
+        errorCount: bindings.filter((binding) => binding.status === "error").length,
       },
     }
   }
@@ -208,7 +214,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
 
     await deps.bindings.upsert(entry)
-    await reconcileLocalWatcher()
+    if (!input.deferWatcher) await reconcileLocalWatcher()
     await emitChanged()
     return toBindingDto(entry)
   }
@@ -276,6 +282,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     for (const binding of bindings) {
       const baseline = await baselineStore.listByBinding(binding.id)
       const localChanges = await localWatcher.scanBinding({ binding, baseline }).catch(() => [])
+      const localChangedPaths = new Set(localChanges.map((change) => change.relativePath))
+      if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths })) continue
       await pollDriveSyncRemoteChanges({
         binding,
         baseline,
@@ -283,7 +291,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         onOperations: executePlannedOperations,
         onConflicts: recordPlannedConflicts,
         updateBindingCursor,
-        localChangedPaths: new Set(localChanges.map((change) => change.relativePath)),
+        localChangedPaths,
       })
     }
   }
@@ -314,11 +322,34 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly directionHint?: DriveSyncCreateSafeBindingInput["direction"] | null
   }): Promise<DriveSyncBindingPreviewDto> {
     const remoteItem = input.remoteExists ? await getDriveItemFromAccountService(deps.accountService, input.driveItemId) : null
-    return previewDriveSyncBinding({
+    const preview = await previewDriveSyncBinding({
       ...input,
       remoteSize: remoteItem?.size ?? null,
       activeBindings: await deps.bindings.list(),
     })
+    if (
+      preview.status === "ready"
+      && preview.direction === "bind_existing"
+      && input.kind === "folder"
+      && remoteItem?.type === "folder"
+    ) {
+      const { differences } = await compareExistingFolderTree({
+        driveItemId: input.driveItemId,
+        driveItemName: remoteItem.name,
+        localPath: input.localPath,
+        excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+        hashFiles: false,
+      })
+      if (differences.length > 0) {
+        return {
+          ...preview,
+          status: "blocked",
+          direction: null,
+          reason: formatFolderDifferenceReason(differences),
+        }
+      }
+    }
+    return preview
   }
 
   async function createSafeBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
@@ -333,6 +364,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       drivePathHint: input.drivePathHint ?? null,
       localPath: input.localPath,
       excludeRules: input.excludeRules ?? [],
+      deferWatcher: true,
     })
 
     try {
@@ -391,6 +423,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       drivePathHint: input.drivePathHint ?? null,
       localPath: input.localPath,
       excludeRules: input.excludeRules ?? [],
+      deferWatcher: true,
     })
     for (const entry of prepared) {
       await baselineStore.upsert({ ...entry, bindingId: binding.id })
@@ -422,35 +455,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly localPath: string
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
   }): Promise<Array<Omit<Parameters<typeof baselineStore.upsert>[0], "bindingId">>> {
-    const localEntries = await scanDriveSyncLocalTree({
-      rootPath: input.localPath,
-      rules: input.excludeRules,
+    const { differences, localEntries, remoteByPath } = await compareExistingFolderTree({
+      ...input,
       hashFiles: true,
     })
-    const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
-    const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName), entry]))
-    const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
-
-    const differences: string[] = []
-    for (const local of localEntries) {
-      const remote = remoteByPath.get(local.relativePath)
-      if (!remote) {
-        differences.push(`${local.relativePath} 仅在本地存在`)
-        continue
-      }
-      if (remote.type !== local.kind) {
-        differences.push(`${local.relativePath} 类型不一致`)
-        continue
-      }
-      if (local.kind === "file" && String(local.size ?? 0) !== remote.size) {
-        differences.push(`${local.relativePath} 大小不一致`)
-      }
-    }
-    for (const [relativePath] of remoteByPath) {
-      if (!localByPath.has(relativePath)) differences.push(`${relativePath} 仅在云盘存在`)
-    }
     if (differences.length > 0) {
-      throw new Error(`本地文件夹与云盘文件夹内容不一致：${differences.slice(0, 3).join("；")}`)
+      throw new Error(formatFolderDifferenceReason(differences))
     }
 
     return [
@@ -483,6 +493,44 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     ]
   }
 
+  async function compareExistingFolderTree(input: {
+    readonly driveItemId: string
+    readonly driveItemName: string
+    readonly localPath: string
+    readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
+    readonly hashFiles: boolean
+  }) {
+    const localEntries = await scanDriveSyncLocalTree({
+      rootPath: input.localPath,
+      rules: input.excludeRules,
+      hashFiles: input.hashFiles,
+    })
+    const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
+    const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName), entry]))
+    const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
+
+    const differences: string[] = []
+    for (const local of localEntries) {
+      const remote = remoteByPath.get(local.relativePath)
+      if (!remote) {
+        differences.push(`${local.relativePath} 仅在本地存在`)
+        continue
+      }
+      if (remote.type !== local.kind) {
+        differences.push(`${local.relativePath} 类型不一致`)
+        continue
+      }
+      if (local.kind === "file" && String(local.size ?? 0) !== remote.size) {
+        differences.push(`${local.relativePath} 大小不一致`)
+      }
+    }
+    for (const [relativePath] of remoteByPath) {
+      if (!localByPath.has(relativePath)) differences.push(`${relativePath} 仅在云盘存在`)
+    }
+
+    return { differences, localEntries, remoteByPath }
+  }
+
   async function listAllRemoteTreeEntries(parentId: string): Promise<readonly DriveSyncRemoteTreeEntry[]> {
     const entries: DriveSyncRemoteTreeEntry[] = []
     let offset: number | null = 0
@@ -498,6 +546,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await mkdir(path.dirname(binding.localPath), { recursive: true })
     await deps.accountService.downloadDriveFile({ itemId: binding.driveItemId, outputPath: binding.localPath })
     const local = await inspectDriveSyncLocalPath(binding.localPath)
+    const stats = local.kind === "file" ? await lstat(binding.localPath) : null
+    if (local.kind === "file") {
+      localWatcher.markSelfWrite({
+        bindingId: binding.id,
+        relativePath: "",
+      })
+    }
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -505,8 +560,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       remoteItemId: binding.driveItemId,
       remoteVersionId: null,
       remoteEtag: null,
-      localSize: null,
-      localMtimeMs: null,
+      localSize: stats?.size ?? null,
+      localMtimeMs: stats?.mtimeMs ?? null,
       localHash: local.kind === "file" ? await hashDriveSyncFile(binding.localPath) : null,
       deletedAt: null,
     })
@@ -586,11 +641,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       localHash: null,
       deletedAt: null,
     })
-    await downloadRemoteFolderTree({
-      binding,
-      parentId: binding.driveItemId,
-      relativeRoot: "",
-    })
+    await downloadRemoteFolderTree(binding)
     await recordOperation({
       bindingId: binding.id,
       kind: "download",
@@ -603,20 +654,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     })
   }
 
-  async function downloadRemoteFolderTree(input: {
-    readonly binding: DriveSyncBindingDto
-    readonly parentId: string
-    readonly relativeRoot: string
-  }): Promise<void> {
-    const tree = await deps.accountService.listDriveItemTree({ parentId: input.parentId })
-    for (const item of tree.items) {
-      const relativePath = joinRelativePath(input.relativeRoot, item.name)
-      if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
-      const localPath = path.join(input.binding.localPath, relativePath)
+  async function downloadRemoteFolderTree(binding: DriveSyncBindingDto): Promise<void> {
+    const remoteEntries = await listAllRemoteTreeEntries(binding.driveItemId)
+    for (const item of remoteEntries) {
+      const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName)
+      if (!relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
+      const localPath = path.join(binding.localPath, relativePath)
       if (item.type === "folder") {
         await mkdir(localPath, { recursive: true })
         await baselineStore.upsert({
-          bindingId: input.binding.id,
+          bindingId: binding.id,
           relativePath,
           kind: "folder",
           remoteItemId: item.id,
@@ -627,13 +674,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           localHash: null,
           deletedAt: null,
         })
-        await downloadRemoteFolderTree({ binding: input.binding, parentId: item.id, relativeRoot: relativePath })
       } else {
         await mkdir(path.dirname(localPath), { recursive: true })
         await deps.accountService.downloadDriveFile({ itemId: item.id, outputPath: localPath })
         const stats = await lstat(localPath)
         await baselineStore.upsert({
-          bindingId: input.binding.id,
+          bindingId: binding.id,
           relativePath,
           kind: "file",
           remoteItemId: item.id,
@@ -883,6 +929,34 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
   }
 
+  async function handleMissingFileBindingRoot(input: {
+    readonly binding: DriveSyncBindingEntryV1
+    readonly baseline: readonly DriveSyncBaselineEntryV1[]
+    readonly localChangedPaths: ReadonlySet<string>
+  }): Promise<boolean> {
+    if (input.binding.kind !== "file" || !deps.accountService.getDriveItem) return false
+    const activeRootBaseline = input.baseline.find((entry) => entry.relativePath === "" && entry.deletedAt === null)
+    if (!activeRootBaseline) return false
+
+    try {
+      await deps.accountService.getDriveItem(input.binding.driveItemId)
+      return false
+    } catch (error) {
+      if (!isRemoteNotFoundError(error)) throw error
+    }
+
+    const change = deletedFileRootChange(input.binding)
+    const plan = planDriveSyncRemoteChanges({
+      binding: input.binding,
+      baseline: input.baseline,
+      changes: [change],
+      localChangedPaths: input.localChangedPaths,
+    })
+    await recordPlannedConflicts(plan.conflicts)
+    await executePlannedOperations(plan.operations)
+    return true
+  }
+
   async function executePlannedOperations(operations: readonly DriveSyncPlannedOperation[]): Promise<void> {
     for (const operation of operations) {
       const binding = await requireBinding(operation.bindingId)
@@ -900,14 +974,18 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         continue
       }
       markSelfWriteForOperation(operation)
-      await executeDriveSyncOperation({
-        binding,
-        operation,
-        baselineStore,
-        accountService: deps.accountService,
-        recordOperation,
-        trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
-      })
+      try {
+        await executeDriveSyncOperation({
+          binding,
+          operation,
+          baselineStore,
+          accountService: deps.accountService,
+          recordOperation,
+          trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
+        })
+      } catch (error) {
+        await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
+      }
     }
   }
 
@@ -1068,6 +1146,36 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
 export type DriveSyncService = ReturnType<typeof createDriveSyncService>
 
+function deletedFileRootChange(binding: DriveSyncBindingEntryV1): DriveChangeDto {
+  const now = new Date().toISOString()
+  return {
+    id: `drive-sync-root-deleted:${binding.id}:${binding.driveItemId}`,
+    sequence: binding.remoteCursor ?? "root-deleted",
+    itemId: binding.driveItemId,
+    parentId: null,
+    type: "deleted",
+    versionId: null,
+    etag: null,
+    name: binding.driveItemName,
+    pathHint: binding.drivePathHint ?? binding.driveItemName,
+    actor: "system",
+    occurredAt: now,
+  }
+}
+
+function isRemoteNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const details = error as Error & {
+    readonly status?: unknown
+    readonly statusCode?: unknown
+    readonly code?: unknown
+  }
+  if (details.status === 404 || details.statusCode === 404) return true
+  if (typeof details.code === "string" && details.code.toUpperCase().includes("NOT_FOUND")) return true
+  const message = error.message.toUpperCase()
+  return message.includes("NOT_FOUND") || message.includes("HTTP 404")
+}
+
 function toBindingDto(entry: DriveSyncBindingEntryV1): DriveSyncBindingDto {
   return {
     id: entry.id,
@@ -1163,6 +1271,10 @@ function compareCreatedAsc(left: { readonly createdAt: string }, right: { readon
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "同步操作失败。"
+}
+
+function formatFolderDifferenceReason(differences: readonly string[]): string {
+  return `本地文件夹与云盘文件夹内容不一致：${differences.slice(0, 3).join("；")}`
 }
 
 function joinRelativePath(parent: string, name: string): string {

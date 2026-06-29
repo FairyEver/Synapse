@@ -87,6 +87,51 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("uploads modified single-file bindings to the remote file parent folder", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const localPath = path.join(tempDir, "bound.md")
+    await writeFile(localPath, "local", "utf8")
+    const accountService = createAccountService({
+      getDriveItem: vi.fn(async () => ({
+        id: "remote-bound",
+        parentId: "remote-parent",
+        type: "file",
+        name: "bound.md",
+        size: "5",
+        mimeType: "text/markdown",
+        storageStatus: "active",
+        shared: false,
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      })),
+      uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ kind: "file", driveItemId: "remote-bound", localPath }),
+      operation: operation({
+        kind: "upload",
+        relativePath: "",
+        driveItemId: "remote-bound",
+        localPath,
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.getDriveItem).toHaveBeenCalledWith("remote-bound")
+    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-parent" }))
+    await expect(namespace.list()).resolves.toContainEqual(
+      expect.objectContaining({ relativePath: "", remoteItemId: "remote-bound", kind: "file" }),
+    )
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "upload", status: "succeeded", relativePath: "" }),
+    ])
+  })
+
   it("creates remote folders for local folder uploads", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     await mkdir(path.join(tempDir, "Folder"))
@@ -298,6 +343,7 @@ function operation(input: Partial<DriveSyncPlannedOperation> & {
 
 function createAccountService(overrides: Record<string, unknown> = {}) {
   return {
+    getDriveItem: vi.fn(),
     downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "" })),
     downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "" })),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),

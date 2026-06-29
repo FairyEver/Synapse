@@ -444,6 +444,26 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("2")
   })
 
+  it("shows drive sync errors as a recoverable badge", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { errorCount: 11 },
+      { bindings: [createDriveSyncBinding({ status: "error" })] },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = getButtonByLabel("同步状态：11 个错误")
+    expect(button.dataset.variant).toBe("outline")
+    expect(button.querySelector("svg")).toBeNull()
+    expect(button.textContent).toContain("同步")
+    expect(button.textContent).toContain("11")
+
+    await clickButtonByLabel("同步状态：11 个错误")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("错误")
+    expect(getButton("恢复")).toBeTruthy()
+  })
+
   it("opens the drive sync status dialog from the toolbar", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 1, conflictCount: 1 },
@@ -497,7 +517,15 @@ describe("DriveModule", () => {
     expect(dialog.textContent).toContain("绑定同步")
     expect(dialog.textContent).toContain("绑定已有本地项")
     expect(dialog.textContent).toContain("下载到本地")
-    expect(dialog.textContent).toContain("本地路径")
+    const modeTabs = Array.from(dialog.querySelectorAll('[role="tab"]'))
+    expect(modeTabs.map((tab) => tab.textContent)).toEqual(["绑定已有本地项", "下载到本地"])
+    expect(modeTabs[0]?.getAttribute("aria-selected")).toBe("true")
+    expect(modeTabs[1]?.getAttribute("aria-selected")).toBe("false")
+    expect(dialog.textContent).toContain("本地文件")
+    expect(dialog.querySelector("input")?.getAttribute("placeholder")).toBe("选择已有本地文件")
+    expect(dialog.textContent).toContain("选择文件")
+    expect(dialog.textContent).toContain("创建绑定")
+    expect(dialog.textContent).not.toContain("本地路径")
     expect(dialog.textContent).not.toContain("排除规则")
   })
 
@@ -522,7 +550,7 @@ describe("DriveModule", () => {
     await flushAct()
     await openRowMenu("report.txt")
     await clickMenuItemText("同步")
-    await clickText("选择")
+    await clickText("选择文件")
 
     expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
       kind: "file",
@@ -535,14 +563,55 @@ describe("DriveModule", () => {
       localPath: "/Users/me/Desktop/report.txt",
     }))
 
-    await clickText("下载到本地")
-    await clickText("选择")
+    await clickTabText("下载到本地")
+    const modeTabs = Array.from(document.body.querySelectorAll('[role="tab"]'))
+    expect(modeTabs[0]?.getAttribute("aria-selected")).toBe("false")
+    expect(modeTabs[1]?.getAttribute("aria-selected")).toBe("true")
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Drive sync binding dialog not found")
+    expect(dialog.textContent).toContain("保存为")
+    expect(dialog.querySelector("input")?.getAttribute("placeholder")).toBe("选择保存位置")
+    expect(dialog.textContent).toContain("选择位置")
+    expect(dialog.textContent).toContain("下载并绑定")
+    await clickText("选择位置")
 
     expect(mocks.chooseDriveSyncLocalPath).toHaveBeenLastCalledWith({
       kind: "file",
       mode: "remote_to_local",
       defaultName: "report.txt",
     })
+  })
+
+  it("disables binding submit when the current preview is blocked", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
+    ])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop/mismatch.txt")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "blocked",
+      direction: null,
+      reason: "本地文件与云盘文件大小不一致，不能直接建立绑定。",
+      localPath: "/Users/me/Desktop/mismatch.txt",
+      localKind: "file",
+      localEmpty: null,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await openRowMenu("report.txt")
+    await clickMenuItemText("同步")
+    await clickText("选择文件")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Drive sync binding dialog not found")
+    const submitButton = Array.from(dialog.querySelectorAll("button"))
+      .find((button) => button.textContent === "创建绑定")
+    expect(dialog.textContent).toContain("不可绑定")
+    expect(dialog.textContent).toContain("本地文件与云盘文件大小不一致")
+    expect((submitButton as HTMLButtonElement | undefined)?.disabled).toBe(true)
   })
 
   it("shows drive capacity usage next to the title", async () => {
