@@ -21,6 +21,8 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded(".git", rules)).toBe(true)
     expect(isDriveSyncExcluded(".synapse-sync/download.tmp", rules)).toBe(true)
     expect(isDriveSyncExcluded("notes.synapse-sync-tmp", rules)).toBe(true)
+    expect(isDriveSyncExcluded(".synapse-sync-trash", rules)).toBe(true)
+    expect(isDriveSyncExcluded(".synapse-sync-trash/removed.md", rules)).toBe(true)
   })
 
   it("excludes default build and log paths", () => {

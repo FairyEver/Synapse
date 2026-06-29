@@ -129,6 +129,10 @@ type DriveSyncServiceEvents = {
   changed: [snapshot: DriveSyncSnapshotDto]
 }
 
+const LOCAL_ROOT_MISSING_ERROR = "本地路径不存在。"
+const LOCAL_ROOT_INACCESSIBLE_ERROR = "本地路径无法访问。"
+const REMOTE_ROOT_MISSING_ERROR = "云端同步根目录不存在。"
+
 class TypedDriveSyncEventEmitter extends EventEmitter {
   override on<K extends keyof DriveSyncServiceEvents>(
     eventName: K,
@@ -190,13 +194,21 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       return toBindingDto(entry, { status: "error", lastError: "同步根对象已删除。" })
     }
 
-    try {
-      const local = await inspectDriveSyncLocalPath(entry.localPath)
-      if (local.kind === "missing") {
-        return toBindingDto(entry, { status: "error", lastError: "本地路径不存在。" })
+    if (entry.kind === "folder") {
+      const localIssue = await inspectLocalFolderRootIssue(entry)
+      if (localIssue) {
+        await markBindingError(entry.id, localIssue, { emitChanged: false })
+        return toBindingDto(entry, { status: "error", lastError: localIssue })
       }
-    } catch {
-      return toBindingDto(entry, { status: "error", lastError: "本地路径无法访问。" })
+    } else {
+      try {
+        const local = await inspectDriveSyncLocalPath(entry.localPath)
+        if (local.kind === "missing") {
+          return toBindingDto(entry, { status: "error", lastError: LOCAL_ROOT_MISSING_ERROR })
+        }
+      } catch {
+        return toBindingDto(entry, { status: "error", lastError: LOCAL_ROOT_INACCESSIBLE_ERROR })
+      }
     }
 
     return toBindingDto(entry)
@@ -268,6 +280,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function resumeBinding(id: string): Promise<DriveSyncBindingDto> {
+    const binding = await requireBinding(id)
+    await assertBindingRootReady(binding, { checkRemote: true })
     return updateBindingStatus(id, "active")
   }
 
@@ -292,29 +306,46 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function rescanBinding(id: string): Promise<void> {
     const binding = await requireBinding(id)
+    await assertBindingRootReady(binding, { checkRemote: true })
     const baseline = await baselineStore.listByBinding(id)
     const changes = await localWatcher.scanBinding({ binding, baseline })
     await handleLocalChanges(changes)
   }
 
   async function pollRemoteChanges(id?: string): Promise<void> {
-    const bindings = (id ? [await requireBinding(id)] : await deps.bindings.list())
-      .filter((binding) => binding.status === "active")
-    for (const binding of bindings) {
-      const baseline = await baselineStore.listByBinding(binding.id)
-      const localChanges = await localWatcher.scanBinding({ binding, baseline }).catch(() => [])
-      const localChangedPaths = new Set(localChanges.map((change) => change.relativePath))
-      if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths })) continue
-      await pollDriveSyncRemoteChanges({
-        binding,
-        baseline,
-        accountService: deps.accountService,
-        onOperations: executePlannedOperations,
-        onConflicts: recordPlannedConflicts,
-        updateBindingCursor,
-        localChangedPaths,
-      })
+    if (id) {
+      const binding = await requireBinding(id)
+      await assertBindingRootReady(binding, { checkRemote: true })
+      if (binding.status !== "active") return
+      await pollActiveBindingRemoteChanges(binding, true)
+      return
     }
+
+    const bindings = (await deps.bindings.list()).filter((binding) => binding.status === "active")
+    for (const binding of bindings) {
+      await pollActiveBindingRemoteChanges(binding, false)
+    }
+  }
+
+  async function pollActiveBindingRemoteChanges(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean): Promise<void> {
+    const rootReady = await ensureBindingRootReady(binding, {
+      checkRemote: true,
+      throwOnIssue: throwOnRootIssue,
+    })
+    if (!rootReady) return
+    const baseline = await baselineStore.listByBinding(binding.id)
+    const localChanges = await localWatcher.scanBinding({ binding, baseline }).catch(() => [])
+    const localChangedPaths = new Set(localChanges.map((change) => change.relativePath))
+    if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths })) return
+    await pollDriveSyncRemoteChanges({
+      binding,
+      baseline,
+      accountService: deps.accountService,
+      onOperations: executePlannedOperations,
+      onConflicts: recordPlannedConflicts,
+      updateBindingCursor,
+      localChangedPaths,
+    })
   }
 
   async function stopLocalWatcher(): Promise<void> {
@@ -940,6 +971,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     for (const [bindingId, bindingChanges] of changesByBinding) {
       const binding = await requireBinding(bindingId)
       if (binding.status !== "active") continue
+      const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
+      if (!rootReady) continue
       const plan = planDriveSyncLocalChanges({
         binding,
         baseline: await baselineStore.listByBinding(bindingId),
@@ -981,6 +1014,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function executePlannedOperations(operations: readonly DriveSyncPlannedOperation[]): Promise<void> {
     for (const operation of operations) {
       const binding = await requireBinding(operation.bindingId)
+      const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
+      if (!rootReady) continue
       if (operation.kind === "resync") {
         await recordOperation({
           bindingId: operation.bindingId,
@@ -1053,6 +1088,83 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function reconcileLocalWatcher(): Promise<void> {
     localWatcher.reconcile(await deps.bindings.list())
+  }
+
+  async function assertBindingRootReady(
+    binding: DriveSyncBindingEntryV1,
+    input: { readonly checkRemote: boolean },
+  ): Promise<void> {
+    await ensureBindingRootReady(binding, {
+      checkRemote: input.checkRemote,
+      throwOnIssue: true,
+    })
+  }
+
+  async function ensureBindingRootReady(
+    binding: DriveSyncBindingEntryV1,
+    input: { readonly checkRemote: boolean; readonly throwOnIssue: boolean },
+  ): Promise<boolean> {
+    if (binding.kind !== "folder") return true
+    const rootBaseline = await activeRootBaseline(binding.id)
+    if (!rootBaseline) return true
+
+    const localIssue = await inspectLocalFolderRootIssue(binding)
+    if (localIssue) return handleBindingRootIssue(binding, localIssue, input.throwOnIssue)
+
+    if (input.checkRemote && deps.accountService.getDriveItem) {
+      try {
+        await deps.accountService.getDriveItem(rootBaseline.remoteItemId)
+      } catch (error) {
+        if (!isRemoteNotFoundError(error)) throw error
+        return handleBindingRootIssue(binding, REMOTE_ROOT_MISSING_ERROR, input.throwOnIssue)
+      }
+    }
+
+    return true
+  }
+
+  async function activeRootBaseline(bindingId: string): Promise<DriveSyncBaselineEntryV1 | null> {
+    return (await baselineStore.listByBinding(bindingId))
+      .find((entry) => entry.relativePath === "" && entry.deletedAt === null) ?? null
+  }
+
+  async function inspectLocalFolderRootIssue(binding: DriveSyncBindingEntryV1): Promise<string | null> {
+    try {
+      const local = await inspectDriveSyncLocalPath(binding.localPath)
+      if (local.kind === "missing") return LOCAL_ROOT_MISSING_ERROR
+      if (local.kind !== "folder") return LOCAL_ROOT_INACCESSIBLE_ERROR
+      return null
+    } catch {
+      return LOCAL_ROOT_INACCESSIBLE_ERROR
+    }
+  }
+
+  async function handleBindingRootIssue(
+    binding: DriveSyncBindingEntryV1,
+    issue: string,
+    throwOnIssue: boolean,
+  ): Promise<false> {
+    await markBindingError(binding.id, issue, { emitChanged: true })
+    if (throwOnIssue) throw new Error(issue)
+    return false
+  }
+
+  async function markBindingError(
+    id: string,
+    lastError: string,
+    options: { readonly emitChanged: boolean },
+  ): Promise<DriveSyncBindingEntryV1> {
+    const existing = await requireBinding(id)
+    const entry: DriveSyncBindingEntryV1 = {
+      ...existing,
+      status: "error",
+      lastError,
+      updatedAt: timestamp(),
+    }
+    await deps.bindings.upsert(entry)
+    await reconcileLocalWatcher()
+    if (options.emitChanged) await emitChanged()
+    return entry
   }
 
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
