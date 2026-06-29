@@ -223,6 +223,10 @@ describe("Drive capability domain", () => {
       limit: { type: "number" },
       search: { type: "string" },
     })
+    expect(tools.get("drive_share_list")?.inputSchema.properties.search.description).toContain("share id")
+    expect(tools.get("drive_share_list")?.inputSchema.properties.search.description).toContain("item name")
+    expect(tools.get("drive_direct_link_list")?.inputSchema.properties.search.description).toContain("Public assets")
+    expect(tools.get("drive_trash_list")?.inputSchema.properties.search.description.toLowerCase()).toContain("trash")
     expect(tools.get("drive_trash_delete")?.inputSchema).toMatchObject({
       properties: { itemId: { type: "string" } },
       required: ["itemId"],

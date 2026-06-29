@@ -198,7 +198,7 @@ Input:
 
 - `offset` optional.
 - `limit` optional.
-- `search` optional: match public asset name or asset id.
+- `search` optional: match share id, share record id, or item name.
 
 ### `app_drive_share_create`
 
