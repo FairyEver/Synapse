@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
 
 describe('adminApi.users', () => {
   afterEach(() => {
@@ -546,6 +546,138 @@ describe('driveBrowserApi', () => {
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/access', 401)).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401)).toBe(true)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/content', 401)).toBe(true)
+    } finally {
+      unsubscribe()
+    }
+  })
+})
+
+describe('driveApi', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses user Drive management endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveApi.getUsage()
+    await driveApi.prepareUpload({ parentId: 'folder/id', name: 'a.md', size: '12', mimeType: 'text/markdown' })
+    await driveApi.completeUpload('session/id')
+    await driveApi.cancelUpload('session/id')
+    await driveApi.createFolder({ parentId: 'folder/id', name: 'Docs' })
+    await driveApi.renameItem('item/id', 'Next.md')
+    await driveApi.moveItem('item/id', null)
+    await driveApi.listTree({ parentId: 'folder/id', offset: 2, limit: 30 })
+    await driveApi.deleteItem('item/id')
+    await driveApi.listTrash({ offset: 10, limit: 20, search: 'old' })
+    await driveApi.restoreItem('item/id')
+    await driveApi.deleteTrashItem('item/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/drive/usage', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/drive/uploads/prepare', expect.objectContaining({
+      body: JSON.stringify({ parentId: 'folder/id', name: 'a.md', size: '12', mimeType: 'text/markdown' }),
+      credentials: 'include',
+      method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/drive/uploads/session%2Fid/complete', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/drive/uploads/session%2Fid/cancel', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/drive/folders', expect.objectContaining({
+      body: JSON.stringify({ parentId: 'folder/id', name: 'Docs' }),
+      credentials: 'include',
+      method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(6, '/api/drive/items/item%2Fid', expect.objectContaining({
+      body: JSON.stringify({ name: 'Next.md' }),
+      credentials: 'include',
+      method: 'PATCH',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/drive/items/item%2Fid', expect.objectContaining({
+      body: JSON.stringify({ parentId: null }),
+      credentials: 'include',
+      method: 'PATCH',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/drive/items/tree?parentId=folder%2Fid&offset=2&limit=30', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/drive/items/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/drive/trash?offset=10&limit=20&search=old', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/drive/items/item%2Fid/restore', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(12, '/api/drive/trash/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+  })
+
+  it('uses share, site, and public asset endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveApi.createShare('item/id', { passwordEnabled: true, expiresIn: '3d', accessMode: 'link_edit', editorEmails: [] })
+    await driveApi.disableShare('share/id')
+    await driveApi.getShare('share/id')
+    await driveApi.listShares({ offset: 20, limit: 10 })
+    await driveApi.preflightSite('folder/id')
+    await driveApi.createSite({ sourceFolderItemId: 'folder/id', name: 'Docs', entryPath: 'index.html', accessMode: 'public', expiresIn: 'forever' })
+    await driveApi.listSites({ offset: 5, limit: 10, search: 'docs', status: 'active' })
+    await driveApi.updateSiteAccess('site/id', { accessMode: 'password', password: 'pw', expiresIn: '7d' })
+    await driveApi.disableSite('site/id')
+    await driveApi.enableSite('site/id')
+    await driveApi.republishSite('site/id', { entryPath: 'index.html' })
+    await driveApi.deleteSite('site/id')
+    await driveApi.listPublicAssets({ offset: 0, limit: 20 })
+    await driveApi.preparePublicAssetUpload({ name: 'logo.png', size: '10', mimeType: 'image/png' })
+    await driveApi.completePublicAssetUpload('session/id')
+    await driveApi.cancelPublicAssetUpload('session/id')
+    await driveApi.preparePublicAssetReplace('asset/id', { name: 'logo.png', size: '10', mimeType: 'image/png' })
+    await driveApi.completePublicAssetReplace('asset/id', 'session/id')
+    await driveApi.cancelPublicAssetReplace('asset/id', 'session/id')
+    await driveApi.renamePublicAsset('asset/id', 'logo.png')
+    await driveApi.trashPublicAsset('asset/id')
+    await driveApi.restorePublicAsset('asset/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/drive/items/item%2Fid/share', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/drive/shares/share%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/drive/shares/share%2Fid', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/drive/shares?offset=20&limit=10', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/drive/sites/preflight?sourceFolderItemId=folder%2Fid', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(6, '/api/drive/sites', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/drive/sites?offset=5&limit=10&search=docs&status=active', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/drive/sites/site%2Fid/access', expect.objectContaining({ credentials: 'include', method: 'PATCH' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/drive/sites/site%2Fid/disable', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/drive/sites/site%2Fid/enable', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/drive/sites/site%2Fid/republish', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(12, '/api/drive/sites/site%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(13, '/api/drive/public-assets?offset=0&limit=20', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(14, '/api/drive/public-assets/uploads/prepare', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(15, '/api/drive/public-assets/uploads/session%2Fid/complete', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(16, '/api/drive/public-assets/uploads/session%2Fid/cancel', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(17, '/api/drive/public-assets/asset%2Fid/replace/prepare', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(18, '/api/drive/public-assets/asset%2Fid/replace/session%2Fid/complete', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(19, '/api/drive/public-assets/asset%2Fid/replace/session%2Fid/cancel', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(20, '/api/drive/public-assets/asset%2Fid', expect.objectContaining({ credentials: 'include', method: 'PATCH' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(21, '/api/drive/public-assets/asset%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(22, '/api/drive/public-assets/asset%2Fid/restore', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+  })
+
+  it('notifies auth expiration for protected user Drive requests', async () => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(authExpired)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+
+    try {
+      await expect(driveApi.getUsage()).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
     } finally {
       unsubscribe()
     }

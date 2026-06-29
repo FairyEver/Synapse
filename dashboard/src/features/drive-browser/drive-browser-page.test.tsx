@@ -135,6 +135,30 @@ describe('DriveBrowserPage', () => {
 
     expect(buttonWithText('添加评论')).not.toBeNull()
   })
+
+  it('keeps standalone owner file reader behavior outside the console shell', () => {
+    mockDriveBrowserState({
+      status: 'ready',
+      snapshot: createSnapshot({
+        surface: 'standalone',
+        current: {
+          ...baseCurrent(),
+          name: 'notes.md',
+          previewKind: 'markdown',
+        },
+      }),
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload: vi.fn(async () => createSnapshot()),
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+
+    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='file' />)
+
+    expect(document.body.textContent).toContain('notes.md')
+  })
 })
 
 function mockDriveBrowserState(state: DriveBrowserState) {

@@ -1,0 +1,119 @@
+import { useEffect, useState } from 'react'
+import type { DriveTrashItemDto } from '@synapse/shared'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { driveApi } from '@/lib/api'
+
+export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promise<void> }) {
+  const [items, setItems] = useState<DriveTrashItemDto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<DriveTrashItemDto | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const page = await driveApi.listTrash({ offset: 0, limit: 50 })
+      setItems([...page.items])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const restoreItem = async (item: DriveTrashItemDto) => {
+    try {
+      await driveApi.restoreItem(item.id)
+      await load()
+      await onChanged()
+    } catch (error) {
+      toast(errorMessage(error, '恢复失败'))
+    }
+  }
+
+  const deleteItem = async () => {
+    if (!deleteTarget) return
+    setSubmitting(true)
+    try {
+      await driveApi.deleteTrashItem(deleteTarget.id)
+      setDeleteTarget(null)
+      await load()
+      await onChanged()
+    } catch (error) {
+      toast(errorMessage(error, '删除失败'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) return <div className='text-sm text-muted-foreground'>加载中</div>
+  if (items.length === 0) return <div className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>回收站为空</div>
+  return (
+    <>
+      <div className='rounded-lg border bg-background'>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>原路径</TableHead>
+              <TableHead className='text-right'>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>{item.name}</TableCell>
+                <TableCell className='text-muted-foreground'>{item.originalPath ?? '-'}</TableCell>
+                <TableCell className='text-right'>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    onClick={() => {
+                      void restoreItem(item)
+                    }}
+                  >
+                    恢复
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    onClick={() => setDeleteTarget(item)}
+                  >
+                    删除
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title={deleteTarget ? `删除${deleteTarget.name}` : '删除'}
+        desc='将永久删除，无法恢复。'
+        cancelBtnText='取消'
+        confirmText='删除'
+        destructive
+        isLoading={submitting}
+        handleConfirm={() => {
+          void deleteItem()
+        }}
+      />
+    </>
+  )
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
+}
