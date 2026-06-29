@@ -2,10 +2,10 @@ import type { FormEventHandler, ReactNode } from "react"
 
 import {
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -35,25 +35,27 @@ function FormDialog({
     <DialogContent
       {...contentAccessibilityProps}
       className={cn("max-h-[calc(100vh-2rem)] overflow-hidden p-0", contentClassName)}
+      showCloseButton={false}
     >
       <form
-        className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
+        className="h-full min-h-0"
         onSubmit={onSubmit}
       >
-        <DialogHeader className="px-5 pt-5">
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
-        </DialogHeader>
+        <DialogFrame className="max-h-[calc(100vh-2rem)]">
+          <DialogFrameHeader title={title} description={description} />
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className={cn("px-5 py-4", bodyClassName)}>
-            {children}
-          </div>
-        </ScrollArea>
+          <DialogFrameBody>
+            <ScrollArea className="h-full min-h-0">
+              <div className={cn("px-5 py-4", bodyClassName)}>
+                {children}
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
 
-        <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
-          {footer}
-        </DialogFooter>
+          <DialogFrameFooter>
+            {footer}
+          </DialogFrameFooter>
+        </DialogFrame>
       </form>
     </DialogContent>
   )

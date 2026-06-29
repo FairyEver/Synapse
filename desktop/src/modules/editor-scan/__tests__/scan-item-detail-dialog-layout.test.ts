@@ -7,8 +7,8 @@ describe("scan item detail dialog layout", () => {
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",
     )
-    const headerStart = source.indexOf("<DialogHeader")
-    const headerEnd = source.indexOf("</DialogHeader>", headerStart)
+    const headerStart = source.indexOf("<DialogFrameHeader")
+    const headerEnd = source.indexOf("</DialogFrameHeader>", headerStart)
     const headerContent = source.slice(headerStart, headerEnd)
 
     expect(headerContent).not.toContain("<Tabs")
@@ -23,8 +23,9 @@ describe("scan item detail dialog layout", () => {
     const dialogEnd = source.indexOf(">", dialogStart)
     const dialogOpeningTag = source.slice(dialogStart, dialogEnd)
 
-    expect(dialogOpeningTag).toMatch(/(?:^|\s)h-\[calc\(100vh-2rem\)\](?:\s|")/)
+    expect(dialogOpeningTag).toContain("h-[calc(100vh-2rem)]")
     expect(dialogOpeningTag).toContain("overflow-hidden")
+    expect(source).toContain("<DialogFrame>")
     expect(source).toContain('<ScrollArea className="mt-4 min-h-0 flex-1">')
   })
 

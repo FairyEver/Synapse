@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -111,22 +112,22 @@ export function TriggerVariablesDialog({
           变量
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="max-h-[calc(100vh-4rem)] overflow-hidden sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>{triggerTitle} 变量</DialogTitle>
-        </DialogHeader>
-        <div className="grid min-h-0 gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col gap-2">
-            <Button
-              type="button"
-              variant={groupFilter === "all" ? "secondary" : "ghost"}
-              className="justify-between"
-              onClick={() => setGroupFilter("all")}
-            >
-              全部
-              <Badge variant="secondary">{variables.length}</Badge>
-            </Button>
-            {groups.map((group) => (
+      <DialogContent aria-describedby={undefined} className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-4xl" showCloseButton={false}>
+        <DialogFrame className="max-h-[calc(100vh-4rem)]">
+          <DialogFrameHeader title={`${triggerTitle} 变量`} />
+          <DialogFrameBody className="px-5 py-4">
+            <div className="grid min-h-0 gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+              <div className="flex min-h-0 flex-col gap-2">
+                <Button
+                  type="button"
+                  variant={groupFilter === "all" ? "secondary" : "ghost"}
+                  className="justify-between"
+                  onClick={() => setGroupFilter("all")}
+                >
+                  全部
+                  <Badge variant="secondary">{variables.length}</Badge>
+                </Button>
+                {groups.map((group) => (
               <Button
                 key={group.id}
                 type="button"
@@ -137,55 +138,57 @@ export function TriggerVariablesDialog({
                 {group.label}
                 <Badge variant="secondary">{group.variables.length}</Badge>
               </Button>
-            ))}
-          </div>
-
-          <div className="flex min-h-0 min-w-0 flex-col gap-3">
-            <Input
-              aria-label="搜索变量"
-              placeholder="搜索变量"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <ScrollArea className="min-h-0 flex-1 rounded-lg border border-border">
-              <div className="flex max-h-[60vh] min-w-0 flex-col gap-4 p-3">
-                {filteredGroups.length > 0 ? filteredGroups.map((group, groupIndex) => (
-                  <section key={group.id} className="min-w-0">
-                    {groupIndex > 0 ? <Separator className="mb-3" /> : null}
-                    <div className="mb-2 flex items-center gap-2">
-                      <h3 className="text-sm font-medium">{group.label}</h3>
-                    </div>
-                    <div className="grid min-w-0 divide-y divide-border">
-                      {group.variables.map((variable) => (
-                        variable.dynamic ? (
-                          <DynamicVariableRow
-                            key={variable.key}
-                            variable={variable}
-                            path={dynamicPaths[variable.key] ?? ""}
-                            statusLabel={statusLabel}
-                            onPathChange={(path) => {
-                              setDynamicPaths((current) => ({ ...current, [variable.key]: path }))
-                            }}
-                            onCopy={copyTemplate}
-                          />
-                        ) : (
-                          <StaticVariableRow
-                            key={variable.key}
-                            variable={variable}
-                            statusLabel={statusLabel(templateFor(variable.key))}
-                            onCopy={() => void copyTemplate(templateFor(variable.key))}
-                          />
-                        )
-                      ))}
-                    </div>
-                  </section>
-                )) : (
-                  <p className="py-8 text-center text-sm text-muted-foreground">没有匹配变量</p>
-                )}
+                ))}
               </div>
-            </ScrollArea>
-          </div>
-        </div>
+
+              <div className="flex min-h-0 min-w-0 flex-col gap-3">
+                <Input
+                  aria-label="搜索变量"
+                  placeholder="搜索变量"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <ScrollArea className="min-h-0 flex-1 rounded-lg border border-border">
+                  <div className="flex max-h-[60vh] min-w-0 flex-col gap-4 p-3">
+                    {filteredGroups.length > 0 ? filteredGroups.map((group, groupIndex) => (
+                      <section key={group.id} className="min-w-0">
+                        {groupIndex > 0 ? <Separator className="mb-3" /> : null}
+                        <div className="mb-2 flex items-center gap-2">
+                          <h3 className="text-sm font-medium">{group.label}</h3>
+                        </div>
+                        <div className="grid min-w-0 divide-y divide-border">
+                          {group.variables.map((variable) => (
+                            variable.dynamic ? (
+                              <DynamicVariableRow
+                                key={variable.key}
+                                variable={variable}
+                                path={dynamicPaths[variable.key] ?? ""}
+                                statusLabel={statusLabel}
+                                onPathChange={(path) => {
+                                  setDynamicPaths((current) => ({ ...current, [variable.key]: path }))
+                                }}
+                                onCopy={copyTemplate}
+                              />
+                            ) : (
+                              <StaticVariableRow
+                                key={variable.key}
+                                variable={variable}
+                                statusLabel={statusLabel(templateFor(variable.key))}
+                                onCopy={() => void copyTemplate(templateFor(variable.key))}
+                              />
+                            )
+                          ))}
+                        </div>
+                      </section>
+                    )) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">没有匹配变量</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+          </DialogFrameBody>
+        </DialogFrame>
       </DialogContent>
     </Dialog>
   )

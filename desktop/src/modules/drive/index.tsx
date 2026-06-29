@@ -16,12 +16,10 @@ import {
   type DriveAccessSettingsInput,
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
-  type DrivePublicLinksPageInput,
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
   type DriveSyncSnapshotDto,
-  type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
@@ -72,11 +70,11 @@ import {
 } from "@/components/ui/context-menu"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import type { DriveLocalUploadFolderItem, DriveLocalUploadItem, DriveLocalUploadRequest, DriveLocalUploadResult } from "@/types/bridge"
 import {
@@ -174,7 +172,6 @@ type DriveStatusBadge = {
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 const DRIVE_PUBLIC_LINKS_PAGE_SIZE = 20
-const DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE = 100
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveAccessExpiresInOption }> = [
@@ -268,8 +265,9 @@ function DriveModuleContent() {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
     } finally {
-      if (driveItemsLoadRequestIdRef.current !== requestId) return
-      setLoading(false)
+      if (driveItemsLoadRequestIdRef.current === requestId) {
+        setLoading(false)
+      }
     }
   }, [accountAuthenticated, parentId])
 
@@ -354,8 +352,9 @@ function DriveModuleContent() {
       if (driveItemsLoadRequestIdRef.current !== requestId) return
       setError(driveLoadError(rawError))
     } finally {
-      if (driveItemsLoadRequestIdRef.current !== requestId) return
-      setOpeningFolderId(null)
+      if (driveItemsLoadRequestIdRef.current === requestId) {
+        setOpeningFolderId(null)
+      }
     }
   }, [openingFolderId])
 
@@ -2173,51 +2172,47 @@ function DrivePublicLinksDialog({
         showCloseButton={false}
       >
         <form
-          className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
+          className="h-full min-h-0"
           onSubmit={(event) => event.preventDefault()}
         >
-          <DialogHeader
-            className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-5 py-4"
-            data-testid="drive-public-links-dialog-header"
-          >
-            <DialogTitle>公开链接</DialogTitle>
-            <Tabs value={shareFilter} onValueChange={(value) => setShareFilter(value as DrivePublicLinkFilter)} className="min-w-0">
-              <TabsList>
-                {DRIVE_PUBLIC_LINK_FILTERS.map((filter) => (
-                  <TabsTrigger key={filter.value} value={filter.value} onClick={() => setShareFilter(filter.value)}>{filter.label}</TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <div className="flex justify-end">
-              <DialogClose asChild>
-                <Button type="button" variant="ghost" size="icon-sm">
-                  <X />
-                  <span className="sr-only">关闭</span>
-                </Button>
-              </DialogClose>
-            </div>
-          </DialogHeader>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="px-5 py-4">
-              <DrivePublicLinkList
-                emptyTitle="暂无分享"
-                error={shareState.error}
-                loading={shareState.loading}
-                loadingMore={shareState.loadingMore}
-                page={shareState.page}
-                shares={visibleShares}
-                onLoadMore={async () => {
-                  if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
-                  await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
-                }}
-                onRetry={loadShares}
-                onReload={reloadAfterPublicLinkChange}
-              />
-            </div>
-          </ScrollArea>
-          <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-          </DialogFooter>
+          <DialogFrame className="max-h-[calc(100vh-2rem)]">
+            <DialogFrameHeader
+              title="公开链接"
+              data-testid="drive-public-links-dialog-header"
+              center={(
+                <Tabs value={shareFilter} onValueChange={(value) => setShareFilter(value as DrivePublicLinkFilter)} className="min-w-0">
+                  <TabsList>
+                    {DRIVE_PUBLIC_LINK_FILTERS.map((filter) => (
+                      <TabsTrigger key={filter.value} value={filter.value} onClick={() => setShareFilter(filter.value)}>{filter.label}</TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              )}
+            />
+            <DialogFrameBody>
+              <ScrollArea className="h-full min-h-0">
+                <div className="px-5 py-4">
+                  <DrivePublicLinkList
+                    emptyTitle="暂无分享"
+                    error={shareState.error}
+                    loading={shareState.loading}
+                    loadingMore={shareState.loadingMore}
+                    page={shareState.page}
+                    shares={visibleShares}
+                    onLoadMore={async () => {
+                      if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
+                      await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
+                    }}
+                    onRetry={loadShares}
+                    onReload={reloadAfterPublicLinkChange}
+                  />
+                </div>
+              </ScrollArea>
+            </DialogFrameBody>
+            <DialogFrameFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+            </DialogFrameFooter>
+          </DialogFrame>
         </form>
       </DialogContent>
     </Dialog>
@@ -2559,12 +2554,6 @@ function DriveShareList({
   )
 }
 
-type UploadResult = {
-  readonly completed: number
-  readonly failed: number
-  readonly error?: string
-}
-
 type DriveLocalUploadFilesMode = "files" | "folders"
 
 type DriveFileSystemEntry = {
@@ -2902,7 +2891,7 @@ async function copySharedUrlAfterShare(url: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url)
     toast("链接已复制")
-  } catch (_rawError) {
+  } catch {
     toast("分享成功，复制失败")
   }
 }
@@ -2965,11 +2954,6 @@ async function disableDriveShare(shareId: string, onReload: () => Promise<void>)
 function readRelativeFilePath(file: File): string {
   const withDirectory = file as File & { webkitRelativePath?: string }
   return withDirectory.webkitRelativePath || file.name
-}
-
-function isHtmlDriveItem(item: DriveItemDto): boolean {
-  const name = item.name.toLowerCase()
-  return item.type === "file" && (name.endsWith(".html") || name.endsWith(".htm") || item.mimeType === "text/html")
 }
 
 function formatBytes(value: string): string {

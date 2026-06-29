@@ -8,8 +8,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -287,10 +288,11 @@ function EditorInstallStatusPanel({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-[420px]">
-        <DialogHeader className="pr-8">
-          <div className="flex items-center justify-between gap-2">
-            <DialogTitle>安装状态</DialogTitle>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-[420px]" showCloseButton={false}>
+        <DialogFrame className="max-h-[calc(100vh-2rem)]">
+          <DialogFrameHeader
+            title="安装状态"
+            actions={(
             <Button
               type="button"
               variant="outline"
@@ -301,22 +303,28 @@ function EditorInstallStatusPanel({
               {isLoading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
               {error ? "重试" : "刷新"}
             </Button>
-          </div>
-          <DialogDescription className="sr-only">
-            编辑器安装状态
-          </DialogDescription>
-        </DialogHeader>
+            )}
+          >
+            <DialogDescription className="sr-only">
+              编辑器安装状态
+            </DialogDescription>
+          </DialogFrameHeader>
 
-        <ScrollArea className="min-h-0">
-          {error ? (
-            <p className="text-sm text-destructive">{error}</p>
-          ) : (
-            <EditorInstallStatusDetailList
-              entries={entries}
-              onOpenInstallTarget={onOpenInstallTarget}
-            />
-          )}
-        </ScrollArea>
+          <DialogFrameBody>
+            <ScrollArea className="h-full min-h-0">
+              <div className="px-5 py-4">
+                {error ? (
+                  <p className="text-sm text-destructive">{error}</p>
+                ) : (
+                  <EditorInstallStatusDetailList
+                    entries={entries}
+                    onOpenInstallTarget={onOpenInstallTarget}
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
+        </DialogFrame>
       </DialogContent>
     </Dialog>
   )

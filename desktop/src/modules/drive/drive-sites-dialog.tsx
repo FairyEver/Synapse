@@ -19,9 +19,10 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -160,36 +161,36 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-h-[85vh] w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-5xl">
-        <div className="flex max-h-[85vh] min-h-0 flex-col overflow-hidden">
-          <DialogHeader className="px-5 pt-5">
-            <DialogTitle>站点</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="px-5 py-4">
-              <DriveSiteTableContent
-                busySiteId={busySiteId}
-                error={state.error}
-                loading={state.loading}
-                loadingMore={state.loadingMore}
-                page={state.page}
-                sites={state.items}
-                onAccess={setAccessState}
-                onConfirm={setConfirmState}
-                onEnable={(site) => { void mutateSite(site, "enable") }}
-                onLoadMore={() => {
-                  if (!state.page?.hasMore || state.page.nextOffset === null) return
-                  void loadSites({ offset: state.page.nextOffset, append: true, generation: loadGenerationRef.current })
-                }}
-                onReload={reloadSites}
-                onRepublish={(site) => { void mutateSite(site, "republish") }}
-              />
-            </div>
-          </ScrollArea>
-          <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+      <DialogContent aria-describedby={undefined} className="max-h-[85vh] w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-5xl" showCloseButton={false}>
+        <DialogFrame className="max-h-[85vh]">
+          <DialogFrameHeader title="站点" />
+          <DialogFrameBody>
+            <ScrollArea className="h-full min-h-0">
+              <div className="px-5 py-4">
+                <DriveSiteTableContent
+                  busySiteId={busySiteId}
+                  error={state.error}
+                  loading={state.loading}
+                  loadingMore={state.loadingMore}
+                  page={state.page}
+                  sites={state.items}
+                  onAccess={setAccessState}
+                  onConfirm={setConfirmState}
+                  onEnable={(site) => { void mutateSite(site, "enable") }}
+                  onLoadMore={() => {
+                    if (!state.page?.hasMore || state.page.nextOffset === null) return
+                    void loadSites({ offset: state.page.nextOffset, append: true, generation: loadGenerationRef.current })
+                  }}
+                  onReload={reloadSites}
+                  onRepublish={(site) => { void mutateSite(site, "republish") }}
+                />
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
+          <DialogFrameFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-          </DialogFooter>
-        </div>
+          </DialogFrameFooter>
+        </DialogFrame>
       </DialogContent>
       <DriveSiteAccessDialog
         accessState={accessState}

@@ -112,6 +112,9 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 禁止自定义颜色、hex/rgb/hsl 字面色、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和营销式内部工具界面。
 - 禁止普通场景下的内联 `style={{...}}`；动态运行时值除外。
 - UI 文案只保留必要标题、label、操作、空/错/加载状态；不要写功能介绍、实现解释、重复状态或 AI 自称。
+- 模态弹窗必须按用途选择统一结构：普通小表单、确认、导入类弹窗继续使用默认 shadcn `DialogContent` 关闭按钮；固定高度、`p-0`、主体滚动、右侧 header actions、或标题栏中间有 tabs 的大弹窗必须使用 `desktop/src/components/ui/dialog.tsx` 导出的 `DialogFrame`、`DialogFrameHeader`、`DialogFrameBody`、`DialogFrameFooter`，并在 `DialogContent` 上显式 `showCloseButton={false}`，由 `DialogFrameHeader` 放置关闭按钮。
+- 带 tabs 的大弹窗必须用 `DialogFrameHeader center`：左侧放标题/描述，中间放 tabs，右侧放 actions 和关闭按钮；tabs 的视觉居中不得受右侧按钮数量影响。禁止业务文件继续用 `pr-8`、`pr-12` 给默认绝对定位关闭按钮让位，禁止同一类弹窗混用默认绝对 close 和 header 内 close。
+- 真正不可关闭的阻塞弹窗可以 `showCloseButton={false}` 且不显示 header close，例如知识库存储迁移未安全完成阶段或强制 onboarding；这类例外必须由流程状态支撑，不得用于普通信息查看或表单弹窗。
 - 系统 App 独立窗口如需顶栏 tab，必须使用居中顶栏模式：左侧保留等宽占位，中间放 tab，右侧放操作区；tab 的视觉居中不得受右侧按钮、筛选器或左侧是否有内容影响，不要在左侧添加冗余窗口标题。
 - 系统 App 如果是单任务表单工具，例如“选择输入 -> 设置选项 -> 执行生成/导出”，默认参考 `desktop/app-capabilities/document-template/renderer/index.tsx` 的布局：内容区使用一个收窄的居中工作卡片，宽度跟任务复杂度匹配，不要铺满大屏；字段采用稳定 label 列 + 控件列对齐；文件选择使用 InputGroup + 右侧 outline 按钮；底部只保留必要选项、主操作和状态摘要。不要在卡片内部再放贴边段落标题、营销介绍、功能说明、卡片套卡片、重复边框或大段帮助文案。主按钮文案应是明确动作，例如“生成文档”，状态只展示是否就绪、缺什么、成功或失败。
 

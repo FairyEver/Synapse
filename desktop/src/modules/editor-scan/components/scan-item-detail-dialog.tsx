@@ -27,12 +27,12 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { Menubar } from "@/components/ui/menubar"
-import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -681,114 +681,100 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       </AlertDialog>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
-          <DialogHeader className="px-5 pt-5">
-          <DialogTitle className="sr-only">{item.name}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {item.type === "skill" ? "Skill" : "Rule"} 详情
-          </DialogDescription>
-
-          <div className="flex min-w-0 flex-col gap-2 pr-8">
-            <div className="flex min-w-0 flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium">{item.name}</span>
-                <Badge
-                  variant={item.source === "synapse" ? "default" : "secondary"}
-                  className="shrink-0 text-xs px-1.5 py-0"
-                >
-                  {item.source === "synapse" ? "Synapse" : "外部"}
-                </Badge>
-                <Badge variant="outline" className="shrink-0 text-xs px-1.5 py-0">
-                  {item.type === "skill" ? "Skill" : "Rule"}
-                </Badge>
-              </div>
-
-              {metaEntries.length > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                </p>
-              ) : null}
-
-              {item.type === "skill" && item.fileCount != null ? (
-                <p className="text-xs text-muted-foreground">
-                  {item.fileCount} 个文件
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Menubar className="w-fit">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-sm px-1.5"
-                  disabled={!content}
-                  onClick={() => void handleCopy()}
-                >
-                  复制内容
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-sm px-1.5"
-                  onClick={handleOpenInFinder}
-                >
-                  在 Finder 中显示
-                </Button>
-              </Menubar>
-            </div>
-            {quickPublishError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{quickPublishError}</AlertDescription>
-              </Alert>
-            ) : null}
-            {trashError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{trashError}</AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-          </DialogHeader>
-
-          <Separator className="mt-5" />
-
-          <div className={cn(
-            "flex min-h-0 flex-1 flex-col px-5 py-4 transition-opacity duration-200",
-            contentReady ? "opacity-100" : "opacity-0",
-          )}>
-            {contentReady ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex items-center">
-                  <Tabs
-                    value={viewMode}
-                    onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
-                    className="ml-auto shrink-0 gap-0"
+        <DialogContent className="h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-[600px]" showCloseButton={false}>
+          <DialogFrame>
+            <DialogFrameHeader
+              bordered
+              title={(
+                <>
+                  <span className="truncate text-sm font-medium">{item.name}</span>
+                  <Badge
+                    variant={item.source === "synapse" ? "default" : "secondary"}
+                    className="shrink-0 text-xs px-1.5 py-0"
                   >
-                    <TabsList>
-                      <TabsTrigger value="rendered">预览</TabsTrigger>
-                      <TabsTrigger value="source">源码</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-
-                <ScrollArea className="mt-4 min-h-0 flex-1">
-                  <ScanItemContentArea
-                    content={content}
-                    error={error}
-                    loading={loading}
-                    viewMode={viewMode}
-                    skillFiles={skillFiles}
-                    skillFilesLoading={skillFilesLoading}
-                    skillFilesError={skillFilesError}
-                  />
-                </ScrollArea>
+                    {item.source === "synapse" ? "Synapse" : "外部"}
+                  </Badge>
+                  <Badge variant="outline" className="shrink-0 text-xs px-1.5 py-0">
+                    {item.type === "skill" ? "Skill" : "Rule"}
+                  </Badge>
+                </>
+              )}
+              titleClassName="flex min-w-0 items-center gap-2"
+              description={[
+                metaEntries.length > 0 ? metaEntries.map(([k, v]) => `${k}: ${v}`).join(" · ") : null,
+                item.type === "skill" && item.fileCount != null ? `${item.fileCount} 个文件` : null,
+              ].filter(Boolean).join(" · ")}
+            >
+              <div className="flex items-center gap-2">
+                <Menubar className="w-fit">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-sm px-1.5"
+                    disabled={!content}
+                    onClick={() => void handleCopy()}
+                  >
+                    复制内容
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-sm px-1.5"
+                    onClick={handleOpenInFinder}
+                  >
+                    在 Finder 中显示
+                  </Button>
+                </Menubar>
               </div>
-            ) : null}
-          </div>
+              {quickPublishError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{quickPublishError}</AlertDescription>
+                </Alert>
+              ) : null}
+              {trashError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{trashError}</AlertDescription>
+                </Alert>
+              ) : null}
+            </DialogFrameHeader>
 
-          <div className="flex items-center gap-2 border-t px-5 py-3">
+            <DialogFrameBody className={cn(
+              "flex flex-col px-5 py-4 transition-opacity duration-200",
+              contentReady ? "opacity-100" : "opacity-0",
+            )}>
+              {contentReady ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="flex items-center">
+                    <Tabs
+                      value={viewMode}
+                      onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
+                      className="ml-auto shrink-0 gap-0"
+                    >
+                      <TabsList>
+                        <TabsTrigger value="rendered">预览</TabsTrigger>
+                        <TabsTrigger value="source">源码</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+
+                  <ScrollArea className="mt-4 min-h-0 flex-1">
+                    <ScanItemContentArea
+                      content={content}
+                      error={error}
+                      loading={loading}
+                      viewMode={viewMode}
+                      skillFiles={skillFiles}
+                      skillFilesLoading={skillFilesLoading}
+                      skillFilesError={skillFilesError}
+                    />
+                  </ScrollArea>
+                </div>
+              ) : null}
+            </DialogFrameBody>
+
+            <DialogFrameFooter className="flex-row items-center justify-between py-3">
             <button
               type="button"
               className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
@@ -870,7 +856,8 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+            </DialogFrameFooter>
+          </DialogFrame>
         </DialogContent>
       </Dialog>
 

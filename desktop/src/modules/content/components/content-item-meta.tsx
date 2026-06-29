@@ -5,8 +5,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -85,22 +86,25 @@ function ContentItemText({
       </div>
       {descriptionWrap && (
         <Dialog open={showFull} onOpenChange={setShowFull}>
-          <DialogContent className="flex max-h-[70vh] flex-col overflow-hidden sm:max-w-[500px]">
-            <DialogHeader className="shrink-0">
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription className="sr-only">完整介绍</DialogDescription>
-            </DialogHeader>
-            <ScrollArea
-              className="min-h-0 max-h-[calc(70vh-4rem)] max-w-full"
-              viewportClassName="max-h-[calc(70vh-4rem)]"
-            >
-              <div
-                data-content-full-description="true"
-                className="min-w-0 max-w-full"
-              >
-                <MarkdownViewer content={description} showTabs={false} surface="plain" />
-              </div>
-            </ScrollArea>
+          <DialogContent className="max-h-[70vh] overflow-hidden p-0 sm:max-w-[500px]" showCloseButton={false}>
+            <DialogFrame className="max-h-[70vh]">
+              <DialogFrameHeader title={title}>
+                <DialogDescription className="sr-only">完整介绍</DialogDescription>
+              </DialogFrameHeader>
+              <DialogFrameBody>
+                <ScrollArea
+                  className="h-full min-h-0 max-h-[calc(70vh-4rem)] max-w-full"
+                  viewportClassName="max-h-[calc(70vh-4rem)]"
+                >
+                  <div
+                    data-content-full-description="true"
+                    className="min-w-0 max-w-full px-5 py-4"
+                  >
+                    <MarkdownViewer content={description} showTabs={false} surface="plain" />
+                  </div>
+                </ScrollArea>
+              </DialogFrameBody>
+            </DialogFrame>
           </DialogContent>
         </Dialog>
       )}

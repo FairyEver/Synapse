@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -105,40 +105,41 @@ function AutomationRunsDialog({
 
   return (
     <Dialog data-track="automation-runs-dialog" open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{item?.name ?? "运行历史"}</DialogTitle>
-          <DialogDescription>最近 100 次运行记录</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
+        <DialogFrame className="max-h-[calc(100vh-4rem)]">
+          <DialogFrameHeader title={item?.name ?? "运行历史"} description="最近 100 次运行记录" />
 
-        <ScrollArea className="min-h-0">
-          <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-2 pr-3">
-            {error ? (
-              <div className="flex items-center gap-2 text-sm">
-                <p className="text-destructive">{error}</p>
-                <Button size="sm" variant="outline" onClick={handleRetry}>
-                  <RefreshCw />
-                  重试
-                </Button>
+          <DialogFrameBody>
+            <ScrollArea className="h-full min-h-0">
+              <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-2 px-5 py-4">
+                {error ? (
+                  <div className="flex items-center gap-2 text-sm">
+                    <p className="text-destructive">{error}</p>
+                    <Button size="sm" variant="outline" onClick={handleRetry}>
+                      <RefreshCw />
+                      重试
+                    </Button>
+                  </div>
+                ) : null}
+                {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
+                {!loading && !error && runs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">暂无运行记录</p>
+                ) : null}
+                {!loading && runs.map((run) => (
+                  <RunItem
+                    key={run.id}
+                    run={run}
+                    item={item}
+                    busy={busy}
+                    onStop={(targetRun) => { void handleStop(targetRun) }}
+                  />
+                ))}
               </div>
-            ) : null}
-            {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
-            {!loading && !error && runs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">暂无运行记录</p>
-            ) : null}
-            {!loading && runs.map((run) => (
-              <RunItem
-                key={run.id}
-                run={run}
-                item={item}
-                busy={busy}
-                onStop={(targetRun) => { void handleStop(targetRun) }}
-              />
-            ))}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </DialogFrameBody>
 
-        <DialogFooter showCloseButton />
+          <DialogFrameFooter showCloseButton />
+        </DialogFrame>
       </DialogContent>
     </Dialog>
   )

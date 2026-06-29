@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { MoreHorizontal, RefreshCw, XIcon } from "lucide-react"
+import { MoreHorizontal, RefreshCw } from "lucide-react"
 import type {
   DriveItemDto,
   DriveSyncBindingDto,
@@ -21,12 +21,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -185,81 +184,75 @@ export function DriveSyncDialog({
           "max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl",
           isStatusDialog ? "h-[36rem]" : null,
         )}
-        showCloseButton={!isStatusDialog}
+        showCloseButton={false}
         aria-describedby={undefined}
       >
-        <div className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden">
+        <DialogFrame className="max-h-[calc(100vh-2rem)]">
           {isStatusDialog ? (
-            <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-5 py-4">
-              <DialogTitle>同步状态</DialogTitle>
-              <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as DriveSyncObjectFilter)} className="min-w-0">
+            <DialogFrameHeader
+              title="同步状态"
+              center={(
+                <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as DriveSyncObjectFilter)} className="min-w-0">
                 <TabsList>
                   {DRIVE_SYNC_OBJECT_FILTERS.map((filter) => (
                     <TabsTrigger key={filter.value} value={filter.value} onClick={() => setStatusFilter(filter.value)}>{filter.label}</TabsTrigger>
                   ))}
                 </TabsList>
               </Tabs>
-              <div className="flex justify-end">
-                <DialogClose asChild>
-                  <Button type="button" variant="ghost" size="icon-sm">
-                    <XIcon />
-                    <span className="sr-only">关闭</span>
-                  </Button>
-                </DialogClose>
-              </div>
-            </DialogHeader>
-          ) : (
-            <DialogHeader className="shrink-0 px-5 pt-5">
-              <DialogTitle>绑定同步</DialogTitle>
-            </DialogHeader>
-          )}
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="px-5 py-4">
-              {item ? (
-                <div className="grid gap-4">
-                  <Tabs
-                    value={bindingMode}
-                    onValueChange={(value) => {
-                      selectBindingMode(value as DriveSyncBindingMode)
-                    }}
-                  >
-                    <TabsList>
-                      <TabsTrigger value="bind_existing" onClick={() => selectBindingMode("bind_existing")}>绑定已有本地项</TabsTrigger>
-                      <TabsTrigger value="remote_to_local" onClick={() => selectBindingMode("remote_to_local")}>下载到本地</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <div className="grid gap-2">
-                    <Label htmlFor="drive-sync-local-path">{pathFieldCopy?.label}</Label>
-                    <InputGroup>
-                      <InputGroupInput
-                        id="drive-sync-local-path"
-                        placeholder={pathFieldCopy?.placeholder}
-                        value={localPath}
-                        onChange={(event) => {
-                          setLocalPath(event.target.value)
-                          setPreview(null)
-                        }}
-                      />
-                      <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
-                    </InputGroup>
-                  </div>
-                  {item.type === "folder" ? (
-                    <details className="grid gap-2">
-                      <summary className="cursor-default text-sm font-medium">高级设置</summary>
-                      <div className="mt-2 grid gap-2">
-                        <Label htmlFor="drive-sync-excludes">排除规则（可选）</Label>
-                        <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => setExcludeText(event.target.value)} />
-                      </div>
-                    </details>
-                  ) : null}
-                  {preview ? <DriveSyncPreview preview={preview} /> : null}
-                </div>
-              ) : (
-                <DriveSyncStatusPanel filter={statusFilter} snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
               )}
-            </div>
-          </ScrollArea>
-          <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+            />
+          ) : (
+            <DialogFrameHeader title="绑定同步" />
+          )}
+          <DialogFrameBody>
+            <ScrollArea className="h-full min-h-0">
+              <div className="px-5 py-4">
+                {item ? (
+                  <div className="grid gap-4">
+                    <Tabs
+                      value={bindingMode}
+                      onValueChange={(value) => {
+                        selectBindingMode(value as DriveSyncBindingMode)
+                      }}
+                    >
+                      <TabsList>
+                        <TabsTrigger value="bind_existing" onClick={() => selectBindingMode("bind_existing")}>绑定已有本地项</TabsTrigger>
+                        <TabsTrigger value="remote_to_local" onClick={() => selectBindingMode("remote_to_local")}>下载到本地</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <div className="grid gap-2">
+                      <Label htmlFor="drive-sync-local-path">{pathFieldCopy?.label}</Label>
+                      <InputGroup>
+                        <InputGroupInput
+                          id="drive-sync-local-path"
+                          placeholder={pathFieldCopy?.placeholder}
+                          value={localPath}
+                          onChange={(event) => {
+                            setLocalPath(event.target.value)
+                            setPreview(null)
+                          }}
+                        />
+                        <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
+                      </InputGroup>
+                    </div>
+                    {item.type === "folder" ? (
+                      <details className="grid gap-2">
+                        <summary className="cursor-default text-sm font-medium">高级设置</summary>
+                        <div className="mt-2 grid gap-2">
+                          <Label htmlFor="drive-sync-excludes">排除规则（可选）</Label>
+                          <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => setExcludeText(event.target.value)} />
+                        </div>
+                      </details>
+                    ) : null}
+                    {preview ? <DriveSyncPreview preview={preview} /> : null}
+                  </div>
+                ) : (
+                  <DriveSyncStatusPanel filter={statusFilter} snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
+                )}
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
+          <DialogFrameFooter>
             {item ? (
               <>
                 <Button type="button" variant="outline" disabled={busy || trimmedLocalPath.length === 0} onClick={() => { void previewBinding() }}>校验</Button>
@@ -271,8 +264,8 @@ export function DriveSyncDialog({
                 刷新
               </Button>
             )}
-          </DialogFooter>
-        </div>
+          </DialogFrameFooter>
+        </DialogFrame>
       </DialogContent>
     </Dialog>
   )
@@ -490,17 +483,17 @@ function DriveSyncBindingDetailDialog({
     <Dialog open={binding !== null} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-3xl"
+        showCloseButton={false}
         aria-describedby={undefined}
       >
         {binding ? (
-          <div className="flex h-full min-h-0 max-h-[calc(100vh-4rem)] flex-col overflow-hidden">
-            <DialogHeader className="border-b px-5 py-4 pr-12">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                <div className="min-w-0">
-                  <DialogTitle className="truncate">{binding.driveItemName}</DialogTitle>
-                  <DialogDescription className="mt-2 truncate">{binding.localPath}</DialogDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <DialogFrame className="max-h-[calc(100vh-4rem)]">
+            <DialogFrameHeader
+              bordered
+              title={binding.driveItemName}
+              description={binding.localPath}
+              actions={(
+                <>
                   <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
                     {formatBindingStatus(binding.status)}
                   </Badge>
@@ -513,51 +506,54 @@ function DriveSyncBindingDetailDialog({
                     showPrimary={false}
                     showStatus={false}
                   />
-                </div>
-              </div>
+                </>
+              )}
+            >
               <div className="mt-3 text-sm">{getBindingIssueSummary(binding, conflicts.length, operations)}</div>
-            </DialogHeader>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="grid gap-4 px-5 py-4">
-                {binding.kind === "folder" ? (
-                  <div className="grid gap-2">
-                    <Label htmlFor={`drive-sync-detail-excludes-${binding.id}`}>排除规则</Label>
-                    <Textarea
-                      id={`drive-sync-detail-excludes-${binding.id}`}
-                      value={excludeDraft}
-                      onChange={(event) => setExcludeDraft(event.target.value)}
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          void runBindingAction(
-                            () => requireSynapseBridge().driveSync.updateExcludeRules({
-                              id: binding.id,
-                              user: parseExcludeText(excludeDraft),
-                            }),
-                            "已更新排除规则",
-                          )
-                        }}
-                      >
-                        保存规则
-                      </Button>
+            </DialogFrameHeader>
+            <DialogFrameBody>
+              <ScrollArea className="h-full min-h-0">
+                <div className="grid gap-4 px-5 py-4">
+                  {binding.kind === "folder" ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor={`drive-sync-detail-excludes-${binding.id}`}>排除规则</Label>
+                      <Textarea
+                        id={`drive-sync-detail-excludes-${binding.id}`}
+                        value={excludeDraft}
+                        onChange={(event) => setExcludeDraft(event.target.value)}
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void runBindingAction(
+                              () => requireSynapseBridge().driveSync.updateExcludeRules({
+                                id: binding.id,
+                                user: parseExcludeText(excludeDraft),
+                              }),
+                              "已更新排除规则",
+                            )
+                          }}
+                        >
+                          保存规则
+                        </Button>
+                      </div>
                     </div>
+                  ) : null}
+                  <div className="grid gap-2">
+                    <div className="text-sm font-medium">处理冲突</div>
+                    <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
                   </div>
-                ) : null}
-                <div className="grid gap-2">
-                  <div className="text-sm font-medium">处理冲突</div>
-                  <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
+                  <div className="grid gap-2">
+                    <div className="text-sm font-medium">同步记录</div>
+                    <DriveSyncOperationTable operations={operations} />
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <div className="text-sm font-medium">同步记录</div>
-                  <DriveSyncOperationTable operations={operations} />
-                </div>
-              </div>
-            </ScrollArea>
-          </div>
+              </ScrollArea>
+            </DialogFrameBody>
+          </DialogFrame>
         ) : null}
       </DialogContent>
     </Dialog>

@@ -34,9 +34,10 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ColumnKind, DatabaseTableSchema } from "@/types/database"
@@ -169,196 +170,200 @@ function TableSchemaSheet({
     <Dialog open={open} onOpenChange={onOpenChange} data-track="database-schema-dialog">
       <DialogContent
         className="gap-0 overflow-hidden p-0 sm:max-w-[600px]"
+        showCloseButton={false}
         onEscapeKeyDown={(event) => {
           if (document.activeElement?.id === "table-description") {
             event.preventDefault()
           }
         }}
       >
-        <DialogHeader className="px-5 pt-5">
-          <DialogTitle>{schema.name} 表结构</DialogTitle>
-        </DialogHeader>
+        <DialogFrame>
+          <DialogFrameHeader title={`${schema.name} 表结构`} />
 
-        <ScrollArea className="max-h-[calc(100vh-12rem)] min-h-0 px-5 py-4">
-          <div className="flex min-h-0 flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="table-description">表备注</Label>
-            <Input
-              id="table-description"
-              data-track="database-table-description"
-              value={tableDescription}
-              disabled={isTableDescriptionSaving}
-              onChange={(event) => setTableDescription(event.target.value)}
-              onBlur={() => {
-                void commitTableDescription()
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur()
-                }
-                if (event.key === "Escape") {
-                  skipTableDescriptionCommitRef.current = true
-                  setTableDescription(schema.description)
-                  event.currentTarget.blur()
-                }
-              }}
+          <DialogFrameBody>
+            <ScrollArea className="h-full max-h-[calc(100vh-12rem)] min-h-0">
+              <div className="flex min-h-0 flex-col gap-5 px-5 py-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="table-description">表备注</Label>
+                  <Input
+                    id="table-description"
+                    data-track="database-table-description"
+                    value={tableDescription}
+                    disabled={isTableDescriptionSaving}
+                    onChange={(event) => setTableDescription(event.target.value)}
+                    onBlur={() => {
+                      void commitTableDescription()
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.currentTarget.blur()
+                      }
+                      if (event.key === "Escape") {
+                        skipTableDescriptionCommitRef.current = true
+                        setTableDescription(schema.description)
+                        event.currentTarget.blur()
+                      }
+                    }}
+                  />
+                </div>
+
+                <ScrollArea className="min-h-0 rounded-md border" scrollbars="both">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>列名</TableHead>
+                        <TableHead>类型</TableHead>
+                        <TableHead>说明</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {schema.columns.map((col) => (
+                        <TableRow key={col.name}>
+                          <TableCell className="font-mono text-sm">{col.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <span>{getColumnKindDisplayName(col.kind)}</span>
+                              {(col.kind === "single_choice" || col.kind === "multi_choice") && col.choices && col.choices.length > 0 ? (
+                                <>
+                                  <span className="text-xs text-muted-foreground">· {formatChoicesSummary(col.choices)}</span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="size-6 text-muted-foreground hover:text-foreground"
+                                    data-track="database-column-choices-open"
+                                    onClick={() => {
+                                      logger.info("Column choices editor opened.", {
+                                        table: schema.name,
+                                        column: col.name,
+                                      })
+                                      setEditingChoicesCol(col.name)
+                                    }}
+                                    title="编辑选项"
+                                  >
+                                    <Pencil className="size-3" />
+                                  </Button>
+                                </>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {col.system ? (
+                              col.primaryKey ? "自增主键" : col.name === "created_at" ? "创建时间，自动生成" : "更新时间，自动更新"
+                            ) : editingCol === col.name ? (
+                              <Input
+                                ref={editInputRef}
+                                className="h-7 text-xs"
+                                data-track="database-column-description"
+                                value={editingDesc}
+                                onChange={(e) => setEditingDesc(e.target.value)}
+                                onBlur={commitEditDescription}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") commitEditDescription()
+                                  if (e.key === "Escape") setEditingCol(null)
+                                }}
+                                placeholder="列说明"
+                              />
+                            ) : (
+                              <span
+                                className="cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
+                                onClick={() => startEditDescription(col.name, col.description ?? "")}
+                              >
+                                {col.description || "点击添加说明"}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+
+                <div className="flex flex-col gap-2">
+                  <Label>添加列</Label>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1.25fr)_auto]">
+                    <Input
+                      data-track="database-add-column-name"
+                      value={newColName}
+                      onChange={(e) => setNewColName(e.target.value)}
+                      placeholder="列名"
+                    />
+                    <Select data-track="database-add-column-kind" value={newColKind} onValueChange={(v) => setNewColKind(v as ColumnKind)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue>{getColumnKindLabel(newColKind)}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COLUMN_KINDS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {getColumnKindLabel(t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      data-track="database-add-column-description"
+                      value={newColDesc}
+                      onChange={(e) => setNewColDesc(e.target.value)}
+                      placeholder="用途说明，帮助 AI 理解此列"
+                      className="text-xs"
+                    />
+                    <Button
+                      className="w-full sm:w-auto"
+                      data-track="database-add-column-submit"
+                      onClick={handleAddColumn}
+                      disabled={!newColName.trim()}
+                    >
+                      添加
+                    </Button>
+                  </div>
+                  {newColKind === "single_choice" || newColKind === "multi_choice" ? (
+                    <TagInput
+                      value={newColChoices}
+                      data-track="database-add-column-choices"
+                      onChange={setNewColChoices}
+                      placeholder="输入后按回车添加"
+                      className="text-xs"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
+
+          {editingChoicesColumn ? (
+            <ChoicesEditorDialog
+              open={!!editingChoicesCol}
+              onOpenChange={(next) => { if (!next) setEditingChoicesCol(null) }}
+              table={schema.name}
+              column={editingChoicesColumn.name}
+              kind={editingChoicesColumn.kind === "multi_choice" ? "multi_choice" : "single_choice"}
+              initialChoices={editingChoicesColumn.choices ?? []}
+              onSave={(choices) => onUpdateColumnChoices(editingChoicesColumn.name, choices)}
             />
-          </div>
+          ) : null}
 
-          <ScrollArea className="min-h-0 rounded-md border" scrollbars="both">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>列名</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>说明</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {schema.columns.map((col) => (
-                  <TableRow key={col.name}>
-                    <TableCell className="font-mono text-sm">{col.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <span>{getColumnKindDisplayName(col.kind)}</span>
-                        {(col.kind === "single_choice" || col.kind === "multi_choice") && col.choices && col.choices.length > 0 ? (
-                          <>
-                            <span className="text-xs text-muted-foreground">· {formatChoicesSummary(col.choices)}</span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-6 text-muted-foreground hover:text-foreground"
-                              data-track="database-column-choices-open"
-                              onClick={() => {
-                                logger.info("Column choices editor opened.", {
-                                  table: schema.name,
-                                  column: col.name,
-                                })
-                                setEditingChoicesCol(col.name)
-                              }}
-                              title="编辑选项"
-                            >
-                              <Pencil className="size-3" />
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {col.system ? (
-                        col.primaryKey ? "自增主键" : col.name === "created_at" ? "创建时间，自动生成" : "更新时间，自动更新"
-                      ) : editingCol === col.name ? (
-                        <Input
-                          ref={editInputRef}
-                          className="h-7 text-xs"
-                          data-track="database-column-description"
-                          value={editingDesc}
-                          onChange={(e) => setEditingDesc(e.target.value)}
-                          onBlur={commitEditDescription}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEditDescription()
-                            if (e.key === "Escape") setEditingCol(null)
-                          }}
-                          placeholder="列说明"
-                        />
-                      ) : (
-                        <span
-                          className="cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
-                          onClick={() => startEditDescription(col.name, col.description ?? "")}
-                        >
-                          {col.description || "点击添加说明"}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-          <div className="flex flex-col gap-2">
-            <Label>添加列</Label>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1.25fr)_auto]">
-              <Input
-                data-track="database-add-column-name"
-                value={newColName}
-                onChange={(e) => setNewColName(e.target.value)}
-                placeholder="列名"
-              />
-              <Select data-track="database-add-column-kind" value={newColKind} onValueChange={(v) => setNewColKind(v as ColumnKind)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>{getColumnKindLabel(newColKind)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {COLUMN_KINDS.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {getColumnKindLabel(t)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                data-track="database-add-column-description"
-                value={newColDesc}
-                onChange={(e) => setNewColDesc(e.target.value)}
-                placeholder="用途说明，帮助 AI 理解此列"
-                className="text-xs"
-              />
-              <Button
-                className="w-full sm:w-auto"
-                data-track="database-add-column-submit"
-                onClick={handleAddColumn}
-                disabled={!newColName.trim()}
-              >
-                添加
-              </Button>
-            </div>
-            {newColKind === "single_choice" || newColKind === "multi_choice" ? (
-              <TagInput
-                value={newColChoices}
-                data-track="database-add-column-choices"
-                onChange={setNewColChoices}
-                placeholder="输入后按回车添加"
-                className="text-xs"
-              />
-            ) : null}
-          </div>
-          </div>
-        </ScrollArea>
-
-        {editingChoicesColumn ? (
-          <ChoicesEditorDialog
-            open={!!editingChoicesCol}
-            onOpenChange={(next) => { if (!next) setEditingChoicesCol(null) }}
-            table={schema.name}
-            column={editingChoicesColumn.name}
-            kind={editingChoicesColumn.kind === "multi_choice" ? "multi_choice" : "single_choice"}
-            initialChoices={editingChoicesColumn.choices ?? []}
-            onSave={(choices) => onUpdateColumnChoices(editingChoicesColumn.name, choices)}
-          />
-        ) : null}
-
-        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none rounded-b-xl px-5 py-4 sm:items-center sm:justify-between">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" data-track="database-drop-table-open">删除此表</Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>确认删除</AlertDialogTitle>
-                <AlertDialogDescription>
-                  确定要删除表 "{schema.name}" 吗？此操作不可撤销，所有数据将被永久删除。
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction data-track="database-drop-table-confirm" onClick={onDropTable}>删除</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <DialogClose asChild>
-            <Button variant="outline" data-track="database-schema-close">关闭</Button>
-          </DialogClose>
-        </DialogFooter>
+          <DialogFrameFooter className="sm:items-center sm:justify-between">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" data-track="database-drop-table-open">删除此表</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    确定要删除表 "{schema.name}" 吗？此操作不可撤销，所有数据将被永久删除。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction data-track="database-drop-table-confirm" onClick={onDropTable}>删除</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <DialogClose asChild>
+              <Button variant="outline" data-track="database-schema-close">关闭</Button>
+            </DialogClose>
+          </DialogFrameFooter>
+        </DialogFrame>
       </DialogContent>
     </Dialog>
   )

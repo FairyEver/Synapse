@@ -110,6 +110,14 @@ Tailwind 主要用于：
 - `ScrollArea`
 - `Separator`
 
+### Dialog 布局补充
+
+- 普通小表单、确认、导入类弹窗继续使用默认 shadcn `DialogContent` 关闭按钮。
+- 固定高度、`p-0`、主体滚动、右侧 header actions、或标题栏中间有 tabs 的大弹窗，必须使用共享 `DialogFrame`、`DialogFrameHeader`、`DialogFrameBody`、`DialogFrameFooter`，并让 `DialogContent` 显式 `showCloseButton={false}`。
+- 带 tabs 的大弹窗必须通过 `DialogFrameHeader center` 放置中间 tabs，左侧标题/描述、右侧 actions 和关闭按钮保持三列对齐，禁止业务文件手写三列标题栏。
+- 禁止用 `DialogHeader className="pr-8"` / `pr-12` 给默认绝对定位 close 让位；同一类大弹窗不得混用默认绝对 close 和 header 内 close。
+- 真正阻塞且不可关闭的流程弹窗可以不渲染 close，但必须是迁移、强制 onboarding 等由流程状态明确支撑的例外。
+
 ## 6. 页面结构顺序
 
 实现页面时优先顺序：

@@ -7,6 +7,27 @@ vi.mock("@/components/ui/dialog", () => ({
     <div data-slot="dialog-content" className={className}>{children}</div>
   ),
   DialogDescription: ({ children }: { readonly children: ReactNode }) => <p>{children}</p>,
+  DialogFrame: ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
+    <div data-slot="dialog-frame" className={className}>{children}</div>
+  ),
+  DialogFrameBody: ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
+    <div data-slot="dialog-frame-body" className={className}>{children}</div>
+  ),
+  DialogFrameFooter: ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
+    <div data-slot="dialog-frame-footer" className={className}>{children}</div>
+  ),
+  DialogFrameHeader: ({
+    description,
+    title,
+  }: {
+    readonly description?: ReactNode
+    readonly title: ReactNode
+  }) => (
+    <header>
+      <h2>{title}</h2>
+      {description ? <p>{description}</p> : null}
+    </header>
+  ),
   DialogFooter: ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
     <div className={className}>{children}</div>
   ),

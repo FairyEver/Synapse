@@ -17,10 +17,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -324,70 +324,72 @@ function LogExportPanel() {
           if (!open) setLogFilePickerState(null)
         }}
       >
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>选择要复制的日志文件</DialogTitle>
-            <DialogDescription>
-              共 {logFilePickerState?.files.length ?? 0} 个日志文件，已选 {formatFileSize(selectedLogSize)}，复制上限 {formatFileSize(LOG_CLIPBOARD_MAX_BYTES)}。
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-64">
-            <div className="flex flex-col gap-1">
-              {logFilePickerState?.files.map((file, index) => {
-                const isChecked = logFilePickerState.selected.has(file.name)
-                return (
-                  <label
-                    key={file.name}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-                  >
-                    <Checkbox
-                      data-track="log-file-picker-checkbox"
-                      aria-label={`选择日志文件 ${file.name}`}
-                      checked={isChecked}
-                      onCheckedChange={(checked) => {
-                        setLogFilePickerState((prev) => {
-                          if (!prev) return prev
-                          const next = new Set(prev.selected)
-                          if (checked) {
-                            next.add(file.name)
-                          } else {
-                            next.delete(file.name)
-                          }
-                          return { ...prev, selected: next }
-                        })
-                      }}
-                    />
-                    <span className="flex-1 truncate text-sm">{file.name}</span>
-                    {index === 0 && (
-                      <Badge variant="secondary" className="shrink-0">最新</Badge>
-                    )}
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatFileSize(file.sizeBytes)}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          </ScrollArea>
-          {isSelectedLogSizeOverLimit ? (
-            <p className="text-sm text-destructive">{formatLogCopyLimitMessage(selectedLogSize)}</p>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLogFilePickerState(null)}>
-              取消
-            </Button>
-            <Button
-              disabled={isCopying || !logFilePickerState?.selected.size || isSelectedLogSizeOverLimit}
-              onClick={() => void handleCopySelectedFiles()}
-            >
-              {isCopying ? (
-                <LoaderCircle className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <ClipboardCopy data-icon="inline-start" />
-              )}
-              {isCopying ? "复制中..." : `复制选中的 ${logFilePickerState?.selected.size ?? 0} 个文件`}
-            </Button>
-          </DialogFooter>
+        <DialogContent showCloseButton={false} className="overflow-hidden p-0 sm:max-w-md">
+          <DialogFrame>
+            <DialogFrameHeader
+              title="选择要复制的日志文件"
+              description={`共 ${logFilePickerState?.files.length ?? 0} 个日志文件，已选 ${formatFileSize(selectedLogSize)}，复制上限 ${formatFileSize(LOG_CLIPBOARD_MAX_BYTES)}。`}
+            />
+            <DialogFrameBody className="px-5 py-4">
+              <ScrollArea className="max-h-64">
+                <div className="flex flex-col gap-1">
+                  {logFilePickerState?.files.map((file, index) => {
+                    const isChecked = logFilePickerState.selected.has(file.name)
+                    return (
+                      <label
+                        key={file.name}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                      >
+                        <Checkbox
+                          data-track="log-file-picker-checkbox"
+                          aria-label={`选择日志文件 ${file.name}`}
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            setLogFilePickerState((prev) => {
+                              if (!prev) return prev
+                              const next = new Set(prev.selected)
+                              if (checked) {
+                                next.add(file.name)
+                              } else {
+                                next.delete(file.name)
+                              }
+                              return { ...prev, selected: next }
+                            })
+                          }}
+                        />
+                        <span className="flex-1 truncate text-sm">{file.name}</span>
+                        {index === 0 && (
+                          <Badge variant="secondary" className="shrink-0">最新</Badge>
+                        )}
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatFileSize(file.sizeBytes)}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+              {isSelectedLogSizeOverLimit ? (
+                <p className="mt-2 text-sm text-destructive">{formatLogCopyLimitMessage(selectedLogSize)}</p>
+              ) : null}
+            </DialogFrameBody>
+            <DialogFrameFooter>
+              <Button variant="outline" onClick={() => setLogFilePickerState(null)}>
+                取消
+              </Button>
+              <Button
+                disabled={isCopying || !logFilePickerState?.selected.size || isSelectedLogSizeOverLimit}
+                onClick={() => void handleCopySelectedFiles()}
+              >
+                {isCopying ? (
+                  <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <ClipboardCopy data-icon="inline-start" />
+                )}
+                {isCopying ? "复制中..." : `复制选中的 ${logFilePickerState?.selected.size ?? 0} 个文件`}
+              </Button>
+            </DialogFrameFooter>
+          </DialogFrame>
         </DialogContent>
       </Dialog>
     </>

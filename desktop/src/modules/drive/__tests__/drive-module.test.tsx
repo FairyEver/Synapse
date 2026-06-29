@@ -328,7 +328,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("公开链接")
-    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-header"]')
+    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-frame-header"]')
     if (!dialogHeader) throw new Error("Public links dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "文件",
@@ -580,7 +580,7 @@ describe("DriveModule", () => {
     expect(dialogContent?.className).toContain("sm:max-w-4xl")
     expect(dialogContent?.className).toContain("h-[36rem]")
     expect(dialog.textContent).toContain("同步状态")
-    const dialogHeader = dialog.querySelector('[data-slot="dialog-header"]')
+    const dialogHeader = dialog.querySelector('[data-slot="dialog-frame-header"]')
     if (!dialogHeader) throw new Error("Drive sync dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "全部",
@@ -657,6 +657,29 @@ describe("DriveModule", () => {
     expect(detailDialog.textContent).toContain("docs-operation.md")
     expect(detailDialog.textContent).not.toContain("notes-conflict.md")
     expect(detailDialog.textContent).not.toContain("notes-operation.md")
+  })
+
+  it("keeps the drive sync detail close button inside the dialog header", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      { bindings: [createDriveSyncBinding()] },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("查看同步详情 Docs")
+
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'))
+    const detailDialog = dialogs.find((candidate) => candidate.textContent?.includes("排除规则"))
+    if (!detailDialog) throw new Error("Drive sync detail dialog not found")
+    const detailHeader = detailDialog.querySelector('[data-slot="dialog-frame-header"]')
+    if (!detailHeader) throw new Error("Drive sync detail header not found")
+    const closeButton = Array.from(detailHeader.querySelectorAll<HTMLButtonElement>('button[data-slot="dialog-close"]'))
+      .find((button) => button.textContent?.includes("关闭"))
+
+    expect(closeButton).toBeTruthy()
+    expect(closeButton?.className).not.toContain("absolute")
   })
 
   it("groups secondary drive sync actions behind a menu and confirms stopping sync", async () => {
@@ -2194,7 +2217,7 @@ describe("DriveModule", () => {
     if (!dialogContent) throw new Error("Public links dialog not found")
     expect(dialogContent?.className).toContain("sm:max-w-4xl")
     expect(dialogContent?.className).toContain("h-[36rem]")
-    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-header"]')
+    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-frame-header"]')
     if (!dialogHeader) throw new Error("Public links dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "文件",
@@ -2865,22 +2888,10 @@ function getDialogContent(): HTMLElement {
 }
 
 function getDialogFooterButtonTexts(): string[] {
-  const footer = document.querySelector<HTMLElement>('[data-slot="dialog-footer"]')
+  const footer = document.querySelector<HTMLElement>('[data-slot="dialog-footer"], [data-slot="dialog-frame-footer"]')
   if (!footer) throw new Error("Dialog footer not found")
   return Array.from(footer.querySelectorAll<HTMLButtonElement>("button"))
     .map((button) => button.textContent?.trim() ?? "")
-}
-
-async function clickSwitchByLabel(label: string): Promise<void> {
-  const labelElement = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
-    .find((candidate) => candidate.textContent?.trim() === label)
-  const switchElement = labelElement?.querySelector<HTMLButtonElement>("[role='switch']")
-    ?? (labelElement?.htmlFor ? document.getElementById(labelElement.htmlFor) as HTMLButtonElement | null : null)
-  if (!switchElement) throw new Error(`Switch not found: ${label}`)
-  await act(async () => {
-    switchElement.click()
-    await flushPromises()
-  })
 }
 
 function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {

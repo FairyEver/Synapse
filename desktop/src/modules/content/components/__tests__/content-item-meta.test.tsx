@@ -84,9 +84,13 @@ describe("ContentItemText", () => {
       moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
 
-    const dialogContent = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("flex")
-    expect(dialogContent?.className).toContain("flex-col")
+    const dialogFrame = document.querySelector<HTMLElement>('[data-slot="dialog-frame"]')
+    expect(dialogFrame?.className).toContain("flex")
+    expect(dialogFrame?.className).toContain("flex-col")
+
+    const dialogBody = document.querySelector<HTMLElement>('[data-slot="dialog-frame-body"]')
+    expect(dialogBody?.className).toContain("min-h-0")
+    expect(dialogBody?.className).toContain("flex-1")
 
     const scrollArea = document.querySelector<HTMLElement>('[data-slot="scroll-area"]')
     expect(scrollArea?.className).toContain("max-h-[calc(70vh-4rem)]")

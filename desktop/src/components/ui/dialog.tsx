@@ -111,6 +111,126 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+function DialogFrame({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-frame"
+      className={cn("flex h-full min-h-0 flex-col overflow-hidden", className)}
+      {...props}
+    />
+  )
+}
+
+function DialogFrameHeader({
+  actions,
+  bordered = false,
+  center,
+  children,
+  className,
+  description,
+  descriptionClassName,
+  showCloseButton = true,
+  title,
+  titleClassName,
+  ...props
+}: Omit<React.ComponentProps<"div">, "title"> & {
+  readonly actions?: React.ReactNode
+  readonly bordered?: boolean
+  readonly center?: React.ReactNode
+  readonly description?: React.ReactNode
+  readonly descriptionClassName?: string
+  readonly showCloseButton?: boolean
+  readonly title?: React.ReactNode
+  readonly titleClassName?: string
+}) {
+  const titleBlock = title || description ? (
+    <div className="min-w-0">
+      {title ? <DialogTitle className={cn("truncate", titleClassName)}>{title}</DialogTitle> : null}
+      {description ? <DialogDescription className={cn("mt-2 truncate", descriptionClassName)}>{description}</DialogDescription> : null}
+    </div>
+  ) : null
+  const rightBlock = actions || showCloseButton ? (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+      {actions}
+      {showCloseButton ? (
+        <DialogClose asChild>
+          <Button type="button" variant="ghost" size="icon-sm">
+            <XIcon />
+            <span className="sr-only">关闭</span>
+          </Button>
+        </DialogClose>
+      ) : null}
+    </div>
+  ) : null
+
+  return (
+    <div
+      data-slot="dialog-frame-header"
+      className={cn(
+        "shrink-0 px-5 py-4",
+        bordered && "border-b",
+        center && "grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3",
+        className
+      )}
+      {...props}
+    >
+      {center ? (
+        <>
+          {titleBlock ?? <div />}
+          <div className="min-w-0">{center}</div>
+          {rightBlock ?? <div />}
+          {children ? <div className="col-span-full">{children}</div> : null}
+        </>
+      ) : (
+        <>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            {titleBlock}
+            {rightBlock}
+          </div>
+          {children}
+        </>
+      )}
+    </div>
+  )
+}
+
+function DialogFrameBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-frame-body"
+      className={cn("min-h-0 flex-1", className)}
+      {...props}
+    />
+  )
+}
+
+function DialogFrameFooter({
+  children,
+  className,
+  showCloseButton = false,
+  ...props
+}: React.ComponentProps<"div"> & {
+  readonly showCloseButton?: boolean
+}) {
+  return (
+    <div
+      data-slot="dialog-frame-footer"
+      className={cn(
+        "mx-0 mb-0 shrink-0 flex flex-col-reverse gap-2 rounded-none rounded-b-xl border-t bg-muted/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {showCloseButton ? (
+        <DialogClose asChild>
+          <Button type="button" variant="outline">关闭</Button>
+        </DialogClose>
+      ) : null}
+    </div>
+  )
+}
+
 function DialogFooter({
   className,
   showCloseButton = false,
@@ -182,6 +302,10 @@ export {
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameFooter,
+  DialogFrameHeader,
   DialogFooter,
   DialogHeader,
   DialogOverlay,
