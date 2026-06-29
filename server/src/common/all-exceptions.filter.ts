@@ -120,7 +120,9 @@ function readHttpLikeError(exception: unknown): {
     return {
       statusCode,
       error: "Internal Server Error",
-      message: process.env.NODE_ENV === "production" ? "服务器内部错误。" : "服务器内部错误。",
+      message: process.env.NODE_ENV === "production"
+        ? "服务器内部错误。"
+        : typeof record.message === "string" ? record.message : "服务器内部错误。",
     }
   }
   if (record.expose !== true) return null

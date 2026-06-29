@@ -142,6 +142,28 @@ describe("AllExceptionsFilter", () => {
     expect(JSON.stringify(jsonFn.mock.calls)).not.toContain("secret")
   })
 
+  it("exposes http-like 500 object messages outside production", () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "development"
+    const filter = new AllExceptionsFilter(mockLogger as never)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+
+    try {
+      filter.catch({ statusCode: 500, message: "database is unavailable" }, host)
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+    }
+
+    expect(statusFn).toHaveBeenCalledWith(500)
+    expect(jsonFn).toHaveBeenCalledWith({
+      statusCode: 500,
+      error: "Internal Server Error",
+      message: "database is unavailable",
+    })
+  })
+
   it("redacts 500 exception logs without passing the raw exception object", () => {
     const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()

@@ -799,4 +799,20 @@ describe("automation capability dispatcher", () => {
     }))
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("private prompt")
   })
+
+  it("logs public summary fallback when trigger or executor definitions are missing", () => {
+    const logger = { warn: vi.fn() }
+    const summary = toPublicAutomationItemSummary(baseItem, new AutomationTriggerRegistry(), new MainActionRegistry(), logger)
+
+    expect(summary.trigger).toEqual({ type: baseItem.trigger.type })
+    expect(summary.executor).toEqual({ type: baseItem.executor.type })
+    expect(logger.warn).toHaveBeenCalledWith("Automation trigger summary fallback.", expect.objectContaining({
+      triggerType: baseItem.trigger.type,
+      boundary: "automation-dispatcher.triggerSummary",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("Automation executor summary fallback.", expect.objectContaining({
+      executorType: baseItem.executor.type,
+      boundary: "automation-dispatcher.executorSummary",
+    }))
+  })
 })

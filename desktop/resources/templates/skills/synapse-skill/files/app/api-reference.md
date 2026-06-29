@@ -58,18 +58,74 @@ Output:
 
 `app_terminal_group_updateSettings`
 
-Update a terminal group's name, default working directory, and startup command for future sessions.
+Update a terminal group's name and default working directory.
 
 Input:
 
 - `groupId` required: terminal group id.
 - `name` required: group name. Leading and trailing whitespace is trimmed.
 - `settings.defaultCwd` optional: absolute working directory for future sessions in this group.
-- `settings.startupCommand` optional: multi-line command text to run automatically in future sessions.
 
 Output:
 
 - Terminal group.
+
+`app_terminal_groupCommand_create`
+
+Create a named command under a terminal group.
+
+Input:
+
+- `groupId` required: terminal group id.
+- `name` required: command display name.
+- `command` required: multi-line command text.
+
+Output:
+
+- Terminal group command.
+
+`app_terminal_groupCommand_update`
+
+Update a named command under a terminal group.
+
+Input:
+
+- `groupId` required: terminal group id.
+- `commandId` required: terminal group command id.
+- `name` required: command display name.
+- `command` required: multi-line command text.
+
+Output:
+
+- Terminal group command.
+
+`app_terminal_groupCommand_delete`
+
+Delete a named command from a terminal group.
+
+Input:
+
+- `groupId` required: terminal group id.
+- `commandId` required: terminal group command id.
+
+Output:
+
+- `{ "ok": true }`
+
+`app_terminal_groupCommand_launch`
+
+Create a new terminal session from a named command and run it in the group default directory.
+
+Input:
+
+- `groupId` required: terminal group id.
+- `commandId` required: terminal group command id.
+- `cols` optional: terminal columns. Defaults to `80`.
+- `rows` optional: terminal rows. Defaults to `24`.
+
+Output:
+
+- Terminal session.
 
 `app_terminal_group_delete`
 

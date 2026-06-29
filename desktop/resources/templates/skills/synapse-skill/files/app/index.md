@@ -22,7 +22,9 @@ Rules:
 
 - Create a session with `app_terminal_session_create`, then read retained output with `app_terminal_session_read`.
 - Use `app_terminal_group_create`, `app_terminal_group_updateSettings`, `app_terminal_group_rename`, and `app_terminal_group_delete` to organize sessions.
-- Use `app_terminal_group_updateSettings` when future sessions in a group should start from a default directory or run startup commands.
+- Use `app_terminal_group_updateSettings` when future sessions in a group should start from a default directory.
+- Use `app_terminal_groupCommand_create`, `app_terminal_groupCommand_update`, and `app_terminal_groupCommand_delete` to manage saved commands in a group.
+- Use `app_terminal_groupCommand_launch` when the user asks to run a saved terminal command.
 - Use `afterSeq` from prior reads to avoid rereading the same output.
 - `app_terminal_session_write` writes raw terminal input; include `\n` when the shell should submit a command.
 - Use `app_terminal_session_rename` for display names and `app_terminal_session_delete` to remove a session plus retained output.

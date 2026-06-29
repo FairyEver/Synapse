@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ContentStoreType } from '@synapse/shared'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Save } from 'lucide-react'
+import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +19,7 @@ import {
   canSetContentPublic,
 } from '../content-store-actions'
 import { getContentStoreTypeLabel } from '../content-store-display'
+import { confirmContentVisibilityChange } from './content-store-editor-actions'
 import { ContentStorePublishDialog } from './content-store-publish-dialog'
 import { RulePromptEditor } from './rule-prompt-editor'
 import { SkillFileEditor } from './skill-file-editor'
@@ -263,10 +265,12 @@ export function ContentStoreEditorPage({
         destructive={visibilityTarget === 'private'}
         isLoading={isSettingVisibility}
         handleConfirm={() => {
-          if (!visibilityTarget) return
-          void actions.setVisibility(visibilityTarget)
-            .then(() => setVisibilityTarget(null))
-            .catch(() => undefined)
+          void confirmContentVisibilityChange({
+            visibilityTarget,
+            setVisibility: actions.setVisibility,
+            clearVisibilityTarget: () => setVisibilityTarget(null),
+            notifyError: toast.error,
+          })
         }}
       />
     </>
