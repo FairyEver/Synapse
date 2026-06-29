@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { DriveAccessSettingsInput, DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
 import { Upload } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
@@ -81,6 +82,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [activeView, setActiveView] = useState<DriveConsoleSystemView>('files')
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DriveBrowserItemDto | null>(null)
   const [shareTarget, setShareTarget] = useState<DriveBrowserItemDto | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
   const [siteFolder, setSiteFolder] = useState<DriveBrowserItemDto | null>(null)
@@ -112,10 +114,12 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
     }
   }
 
-  const deleteItem = async (item: DriveBrowserItemDto) => {
+  const deleteItem = async () => {
+    if (!deleteTarget) return
     setSubmitting(true)
     try {
-      await driveApi.deleteItem(item.id)
+      await driveApi.deleteItem(deleteTarget.id)
+      setDeleteTarget(null)
       await refreshAfterMutation()
     } finally {
       setSubmitting(false)
@@ -192,6 +196,11 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
       </div>
+      <div className='flex flex-wrap items-center gap-2'>
+        <Button type='button' variant={activeView === 'files' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('files')}>文件</Button>
+        <Button type='button' variant={activeView === 'public-assets' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('public-assets')}>公开素材</Button>
+        <Button type='button' variant={activeView === 'trash' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('trash')}>回收站</Button>
+      </div>
       {state.browser.status === 'loading' ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {state.browser.status === 'error' ? <div className='text-sm text-destructive'>{state.browser.message}</div> : null}
       {state.browser.status === 'ready' && activeView === 'public-assets' ? (
@@ -205,7 +214,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           snapshot={state.browser.snapshot}
           activeView={activeView}
           onOpenSystemView={setActiveView}
-          onDelete={(item) => { void deleteItem(item) }}
+          onDelete={setDeleteTarget}
           onMove={setMoveTarget}
           onPublishSite={setSiteFolder}
           onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
@@ -248,6 +257,19 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           if (!open) setMoveTarget(null)
         }}
         onSubmit={(parentId) => { void moveItem(parentId) }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title={deleteTarget ? `删除${deleteTarget.name}` : '删除'}
+        desc='文件会进入回收站。'
+        cancelBtnText='取消'
+        confirmText='删除'
+        destructive
+        isLoading={submitting}
+        handleConfirm={() => { void deleteItem() }}
       />
       <DriveShareSettingsDialog
         itemName={shareTarget?.name ?? ''}

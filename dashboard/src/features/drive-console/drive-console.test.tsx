@@ -278,6 +278,25 @@ describe('DriveConsolePage', () => {
     expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
 
+  it('returns from root system subviews to files', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    await render(<DriveConsolePage />)
+
+    await click(elementWithText('公开素材'))
+    await act(async () => undefined)
+    expect(document.body.textContent).toContain('暂无公开素材')
+
+    await click(button('文件'))
+
+    expect(document.body.textContent).toContain('文档')
+  })
+
   it('opens the root trash subview', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -349,6 +368,34 @@ describe('DriveConsolePage', () => {
     })
     expect(reload).toHaveBeenCalled()
   })
+
+  it('confirms before deleting a row', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.deleteItem).mockResolvedValue({ ok: true })
+    await render(<DriveConsolePage />)
+
+    await click(button('删除'))
+
+    expect(driveApi.deleteItem).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('删除文档')
+
+    await click(lastButton('删除'))
+
+    expect(driveApi.deleteItem).toHaveBeenCalledWith('folder-1')
+    expect(reload).toHaveBeenCalled()
+  })
 })
 
 function mockReadySnapshot(snapshot: DriveBrowserSnapshotDto) {
@@ -399,6 +446,11 @@ function button(text: string) {
   return buttons.find((item) => item.textContent?.trim() === text)
     ?? buttons.find((item) => item.textContent?.includes(text))
     ?? null
+}
+
+function lastButton(text: string) {
+  const buttons = Array.from(document.querySelectorAll('button')).filter((item) => item.textContent?.trim() === text)
+  return buttons.at(-1) ?? null
 }
 
 function elementWithText(text: string) {

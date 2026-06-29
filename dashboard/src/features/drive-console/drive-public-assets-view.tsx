@@ -55,8 +55,6 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
     }
   }
 
-  if (loading) return <div className='text-sm text-muted-foreground'>加载中</div>
-  if (items.length === 0) return <div className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>暂无公开素材</div>
   return (
     <div className='grid gap-3'>
       <div className='flex justify-end'>
@@ -88,6 +86,9 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
         />
         <Button type='button' variant='outline' size='sm' onClick={() => uploadInputRef.current?.click()}>上传公开素材</Button>
       </div>
+      {loading ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
+      {!loading && items.length === 0 ? <div className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>暂无公开素材</div> : null}
+      {!loading && items.length > 0 ? (
       <div className='rounded-lg border bg-background'>
         <Table>
           <TableHeader>
@@ -132,6 +133,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
           </TableBody>
         </Table>
       </div>
+      ) : null}
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
         if (!open) setRenameTarget(null)
       }}>

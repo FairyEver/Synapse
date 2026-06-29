@@ -86,6 +86,32 @@ describe('DrivePublicAssetsView', () => {
     expect(driveApi.trashPublicAsset).toHaveBeenCalledWith('asset-1')
   })
 
+  it('uploads the first public asset from the empty state', async () => {
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.preparePublicAssetUpload).mockResolvedValue({
+      sessionId: 'upload-1',
+      item: {} as never,
+      upload: { method: 'PUT', url: 'https://upload.example/new', expiresAt: '', headers: {} },
+    })
+    vi.mocked(driveApi.completePublicAssetUpload).mockResolvedValue({} as never)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    render(<DrivePublicAssetsView onChanged={async () => undefined} />)
+    await flush()
+
+    const uploadInput = document.querySelector('input[aria-label="上传公开素材"]')
+    if (!(uploadInput instanceof HTMLInputElement)) throw new Error('missing upload input')
+    const file = new File(['new'], 'first.png', { type: 'image/png' })
+    Object.defineProperty(uploadInput, 'files', { value: [file], configurable: true })
+    await act(async () => uploadInput.dispatchEvent(new Event('change', { bubbles: true })))
+
+    expect(driveApi.preparePublicAssetUpload).toHaveBeenCalledWith({ name: 'first.png', size: String(file.size), mimeType: 'image/png' })
+    expect(driveApi.completePublicAssetUpload).toHaveBeenCalledWith('upload-1')
+  })
+
   it('uploads, renames, and replaces public assets', async () => {
     vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
       items: [{ assetId: 'asset-1', itemId: 'item-1', name: 'logo.png', size: '10', mimeType: 'image/png', url: '/files/asset-1', lifecycleStatus: 'active', accessCount: '0', responseBytes: '0', lastAccessedAt: null, createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z' }],
@@ -170,12 +196,38 @@ describe('Drive site dialogs', () => {
       expiresIn: 'forever',
     })
   })
+
+  it('does not reuse stale preflight when the target folder changes', async () => {
+    const pendingPreflight = new Promise<never>(() => undefined)
+    vi.mocked(driveApi.preflightSite)
+      .mockResolvedValueOnce({
+        sourceFolderItemId: 'folder-1',
+        sourceFolderName: '旧站点',
+        htmlFiles: ['index.html'],
+        defaultEntryPath: 'index.html',
+        fileCount: 1,
+        totalBytes: '10',
+        includesJavaScript: false,
+      })
+      .mockReturnValueOnce(pendingPreflight)
+    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '旧站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
+    await flush()
+
+    rerender(<DriveSiteCreateDialog folder={{ id: 'folder-2', name: '新站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
+    await click(textButton('发布'))
+
+    expect(driveApi.createSite).not.toHaveBeenCalled()
+  })
 })
 
 function render(element: ReactElement) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
+  act(() => root?.render(element))
+}
+
+function rerender(element: ReactElement) {
   act(() => root?.render(element))
 }
 

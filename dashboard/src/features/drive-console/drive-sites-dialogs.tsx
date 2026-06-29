@@ -25,9 +25,18 @@ export function DriveSiteCreateDialog({
   const [preflight, setPreflight] = useState<DriveSitePreflightDto | null>(null)
 
   useEffect(() => {
+    setPreflight(null)
     if (!open || !folder) return
-    void driveApi.preflightSite(folder.id).then(setPreflight)
+    let cancelled = false
+    void driveApi.preflightSite(folder.id).then((result) => {
+      if (!cancelled) setPreflight(result)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [folder, open])
+
+  const canPublish = Boolean(folder && preflight && preflight.sourceFolderItemId === folder.id)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,9 +49,9 @@ export function DriveSiteCreateDialog({
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>取消</Button>
           <Button
             type='button'
-            disabled={!folder || !preflight}
+            disabled={!canPublish}
             onClick={() => {
-              if (!folder || !preflight) return
+              if (!folder || !preflight || preflight.sourceFolderItemId !== folder.id) return
               void driveApi.createSite({
                 sourceFolderItemId: folder.id,
                 name: folder.name,
