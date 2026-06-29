@@ -12,6 +12,7 @@ import { LayoutProvider } from '@/context/layout-provider'
 import { useDriveBrowser } from '@/features/drive-browser/use-drive-browser'
 import { driveApi } from '@/lib/api'
 import { DriveConsoleItemPage, DriveConsolePage } from './drive-console-page'
+import { uploadDriveFiles } from './drive-upload'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -33,6 +34,10 @@ vi.mock('@/lib/api', async (importOriginal) => {
     },
   }
 })
+
+vi.mock('./drive-upload', () => ({
+  uploadDriveFiles: vi.fn(),
+}))
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -134,6 +139,55 @@ describe('DriveConsolePage', () => {
 
     expect(document.body.textContent).toContain('更多')
     expect(document.body.textContent).not.toContain('同步')
+  })
+
+  it('uploads selected files to the current folder and refreshes', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(uploadDriveFiles).mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
+    await render(<DriveConsolePage />)
+
+    const fileInput = document.querySelector('input[type="file"]')
+    if (!(fileInput instanceof HTMLInputElement)) throw new Error('missing file input')
+    const file = new File(['hello'], 'notes.md', { type: 'text/markdown' })
+    Object.defineProperty(fileInput, 'files', { value: [file], configurable: true })
+    await act(async () => {
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: 'root', files: [file] })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('passes dropped loose files to upload helper', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(uploadDriveFiles).mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
+    await render(<DriveConsolePage />)
+
+    const dropzone = document.querySelector('[data-testid="drive-console-dropzone"]')
+    if (!(dropzone instanceof HTMLElement)) throw new Error('missing dropzone')
+    const file = new File(['hello'], 'drop.md')
+    const event = new Event('drop', { bubbles: true }) as DragEvent
+    Object.defineProperty(event, 'dataTransfer', {
+      value: { files: [file], items: [], types: ['Files'], dropEffect: 'copy' },
+    })
+    await act(async () => {
+      dropzone.dispatchEvent(event)
+    })
+
+    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: 'root', files: [file] })
   })
 })
 

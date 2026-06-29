@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
 import { Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-f
 import { driveApi } from '@/lib/api'
 import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
+import { uploadDriveFiles, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
 
 type NameDialogState =
@@ -76,6 +78,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const nameInputId = 'drive-console-name-input'
 
   const refreshAfterMutation = async () => {
@@ -122,6 +126,21 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
     }
   }
 
+  const runUpload = async (files: readonly File[]) => {
+    const parentId = currentFolderId(state)
+    if (!parentId || files.length === 0) return
+    setUploading(true)
+    try {
+      const result = await uploadDriveFiles({ parentId, files })
+      toast(uploadResultMessage(result))
+      await refreshAfterMutation()
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '上传失败')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className='flex h-full min-h-0 flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -130,7 +149,18 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           <DriveUsage usage={state.usage} loading={state.usageLoading} />
         </div>
         <div className='flex flex-wrap items-center justify-end gap-2'>
-          <Button type='button' variant='outline' size='sm'>
+          <input
+            ref={fileInputRef}
+            type='file'
+            multiple
+            className='hidden'
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? [])
+              event.currentTarget.value = ''
+              void runUpload(files)
+            }}
+          />
+          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             <Upload className='size-4' />
             上传文件
           </Button>
@@ -153,6 +183,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           onMove={setMoveTarget}
           onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
           onShare={() => undefined}
+          onDropFiles={(files) => { void runUpload(files) }}
         />
       ) : null}
       <Dialog open={nameDialog !== null} onOpenChange={(open) => {
@@ -199,6 +230,13 @@ function currentFolderId(state: DriveConsoleState): string | null {
   if (state.browser.status !== 'ready') return null
   if (state.browser.snapshot.current.type !== 'folder') return null
   return state.browser.snapshot.current.id
+}
+
+function uploadResultMessage(result: DriveWebUploadResult) {
+  if (result.completed > 0 && result.failed === 0 && result.skipped === 0) return `已上传 ${result.completed} 个文件`
+  if (result.completed > 0) return `已上传 ${result.completed} 个文件，失败 ${result.failed} 个，跳过 ${result.skipped} 个`
+  if (result.skipped > 0 && result.failed === 0) return result.message ?? `已跳过 ${result.skipped} 个文件`
+  return result.message ?? '上传失败'
 }
 
 function DriveUsage({ usage, loading }: { readonly usage: DriveUsageDto | null; readonly loading: boolean }) {

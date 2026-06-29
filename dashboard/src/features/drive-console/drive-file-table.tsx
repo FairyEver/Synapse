@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { DragEvent, ReactNode } from 'react'
 import type { DriveBrowserItemDto, DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Image, Trash2 } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
@@ -24,6 +24,7 @@ export function DriveFileTable({
   onMove,
   onRename,
   onShare,
+  onDropFiles,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly activeView: DriveConsoleSystemView
@@ -32,12 +33,30 @@ export function DriveFileTable({
   readonly onMove: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
+  readonly onDropFiles: (files: readonly File[]) => void
 }) {
   if (activeView !== 'files') return null
 
   const rootSystemRows = snapshot.breadcrumbs.length <= 1
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    const files = Array.from(event.dataTransfer.files ?? [])
+    onDropFiles(files)
+  }
+
   return (
-    <div className='rounded-lg border bg-background'>
+    <div
+      data-testid='drive-console-dropzone'
+      className='rounded-lg border bg-background'
+      onDragOver={(event) => {
+        if (Array.from(event.dataTransfer.types).includes('Files')) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'copy'
+        }
+      }}
+      onDrop={handleDrop}
+    >
       <Table>
         <TableHeader>
           <TableRow>
