@@ -24,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { cn } from "@/lib/utils"
 
 type DriveSyncBindingMode = "bind_existing" | "remote_to_local"
 type DriveSyncObjectFilter = "all" | "active" | "conflict" | "paused" | "error"
@@ -345,39 +346,40 @@ function DriveSyncBindingList({
     return <DriveSyncEmptyState title="暂无同步对象" />
   }
   return (
-    <div className="grid gap-2">
+    <div className="overflow-hidden rounded-lg border">
       {bindings.map((binding) => {
         const conflictCount = conflicts.filter((conflict) => conflict.bindingId === binding.id).length
         const operationCount = operations.filter((operation) => operation.bindingId === binding.id).length
         return (
-          <div key={binding.id} className="rounded-lg border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
-                  <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
-                    {formatBindingStatus(binding.status)}
-                  </Badge>
-                </div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">{binding.localPath}</div>
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span>{formatBindingTime(binding)}</span>
-                  <span>{conflictCount} 个冲突</span>
-                  <span>{operationCount} 条记录</span>
-                </div>
+          <div
+            key={binding.id}
+            className="grid gap-3 border-b p-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
+                <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
+                  {formatBindingStatus(binding.status)}
+                </Badge>
               </div>
-              <div className="flex flex-wrap justify-end gap-1">
-                <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  aria-label={`查看同步对象 ${binding.driveItemName}`}
-                  onClick={() => onSelectBinding(binding)}
-                >
-                  查看
-                </Button>
+              <div className="mt-1 truncate text-xs text-muted-foreground">{binding.localPath}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                <span>{formatBindingTime(binding)}</span>
+                <span>{conflictCount} 个冲突</span>
+                <span>{operationCount} 条记录</span>
               </div>
+            </div>
+            <div className="flex flex-wrap justify-start gap-1 sm:justify-end">
+              <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`查看同步对象 ${binding.driveItemName}`}
+                onClick={() => onSelectBinding(binding)}
+              >
+                查看
+              </Button>
             </div>
           </div>
         )
@@ -413,16 +415,20 @@ function DriveSyncBindingDetailDialog({
       >
         {binding ? (
           <div className="flex h-full min-h-0 max-h-[calc(100vh-4rem)] flex-col overflow-hidden">
-            <DialogHeader className="px-5 pt-5">
-              <DialogTitle>{binding.driveItemName}</DialogTitle>
-              <DialogDescription className="truncate">{binding.localPath}</DialogDescription>
+            <DialogHeader className="border-b px-5 py-4 pr-12">
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <div className="min-w-0">
+                  <DialogTitle className="truncate">{binding.driveItemName}</DialogTitle>
+                  <DialogDescription className="mt-2 truncate">{binding.localPath}</DialogDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
+                    {formatBindingStatus(binding.status)}
+                  </Badge>
+                  <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
+                </div>
+              </div>
             </DialogHeader>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
-              <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
-                {formatBindingStatus(binding.status)}
-              </Badge>
-              <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
-            </div>
             <ScrollArea className="min-h-0 flex-1">
               <div className="grid gap-4 px-5 py-4">
                 {binding.kind === "folder" ? (
@@ -470,9 +476,15 @@ function DriveSyncBindingDetailDialog({
   )
 }
 
-function DriveSyncEmptyState({ title }: { readonly title: string }) {
+function DriveSyncEmptyState({
+  compact = false,
+  title,
+}: {
+  readonly compact?: boolean
+  readonly title: string
+}) {
   return (
-    <div className="flex min-h-48 items-center justify-center rounded-lg border text-sm text-muted-foreground">
+    <div className={cn("flex items-center justify-center rounded-lg border text-sm text-muted-foreground", compact ? "min-h-28" : "min-h-48")}>
       {title}
     </div>
   )
@@ -493,12 +505,12 @@ function DriveSyncBindingActions({
       {showStatus ? (
         <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
       ) : null}
-      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => resumable ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), resumable ? "已恢复" : "已暂停") }}>
+      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => resumable ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), resumable ? "已恢复" : "已暂停") }}>
         {resumable ? "恢复" : "暂停"}
       </Button>
-      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已重新扫描") }}>扫描</Button>
-      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已拉取变更") }}>拉取</Button>
-      <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.removeBinding({ id: binding.id }), "已解除绑定") }}>解除</Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已重新扫描") }}>扫描</Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已拉取变更") }}>拉取</Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.removeBinding({ id: binding.id }), "已解除绑定") }}>解除</Button>
     </div>
   )
 }
@@ -511,15 +523,15 @@ function DriveSyncConflictTable({
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (conflicts.length === 0) {
-    return <DriveSyncEmptyState title="暂无冲突" />
+    return <DriveSyncEmptyState compact title="暂无冲突" />
   }
   return (
-    <Table>
+    <Table className="table-fixed" containerClassName="rounded-lg border">
       <TableHeader>
         <TableRow>
           <TableHead>路径</TableHead>
-          <TableHead>类型</TableHead>
-          <TableHead className="text-right">处理</TableHead>
+          <TableHead className="w-28">类型</TableHead>
+          <TableHead className="w-64 text-right">处理</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -544,15 +556,15 @@ function DriveSyncConflictTable({
 
 function DriveSyncOperationTable({ operations }: { readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]> }) {
   if (operations.length === 0) {
-    return <DriveSyncEmptyState title="暂无记录" />
+    return <DriveSyncEmptyState compact title="暂无记录" />
   }
   return (
-    <Table>
+    <Table className="table-fixed" containerClassName="rounded-lg border">
       <TableHeader>
         <TableRow>
           <TableHead>路径</TableHead>
-          <TableHead>状态</TableHead>
-          <TableHead>时间</TableHead>
+          <TableHead className="w-28">状态</TableHead>
+          <TableHead className="w-48 text-right">时间</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -560,7 +572,7 @@ function DriveSyncOperationTable({ operations }: { readonly operations: NonNulla
           <TableRow key={operation.id}>
             <TableCell className="truncate">{operation.relativePath || "/"}</TableCell>
             <TableCell>{operation.status}</TableCell>
-            <TableCell>{new Date(operation.updatedAt).toLocaleString()}</TableCell>
+            <TableCell className="text-right tabular-nums">{new Date(operation.updatedAt).toLocaleString()}</TableCell>
           </TableRow>
         ))}
       </TableBody>
