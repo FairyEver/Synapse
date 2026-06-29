@@ -422,6 +422,7 @@ Input:
 
 - `offset` optional.
 - `limit` optional.
+- `search` optional: match public asset name or asset id.
 
 ### `app_drive_direct_link_get`
 
@@ -477,6 +478,7 @@ Input:
 
 - `offset` optional.
 - `limit` optional.
+- `search` optional: match item name, original path, or public asset id.
 
 ### `app_drive_trash_delete`
 
