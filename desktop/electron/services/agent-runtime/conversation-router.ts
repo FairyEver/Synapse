@@ -601,17 +601,20 @@ export class ConversationRouter {
     let resultCostCurrency: "CNY" | undefined
     let assistantHistoryPersisted = false
     let streamedThinking = ""
+    let streamedThinkingStartedAt: string | undefined
     let error: string | undefined
 
     const flushStreamedThinkingHistory = async (): Promise<void> => {
       const content = streamedThinking.trim()
+      const startedAt = streamedThinkingStartedAt
       streamedThinking = ""
+      streamedThinkingStartedAt = undefined
       if (!content) return
       await this.saveEventHistory(conversation.id, {
         type: "thinking",
         content,
         sdkSessionId: liveSession.currentSessionId(),
-        timestamp: this.isoNow(),
+        timestamp: startedAt ?? this.isoNow(),
       })
     }
 
@@ -642,6 +645,7 @@ export class ConversationRouter {
       else streamedText = appendStreamedText(streamedText, event)
       const thinkingDelta = streamedThinkingDelta(event)
       if (thinkingDelta) {
+        streamedThinkingStartedAt ??= event.timestamp ?? this.isoNow()
         streamedThinking = `${streamedThinking}${thinkingDelta}`
       } else {
         await flushStreamedThinkingHistory()
@@ -1696,6 +1700,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
+          startedAt: event.timestamp,
         }),
       }
     case "permissionRequest":

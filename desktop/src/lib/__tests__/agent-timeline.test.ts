@@ -101,6 +101,23 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("restores stored thinking start time for process duration", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "Inspect carefully.",
+      timestamp: "2026-06-29T00:00:08.000Z",
+      metadata: {
+        agentEventType: "thinking",
+        startedAt: "2026-06-29T00:00:00.000Z",
+      },
+    }, 1, "claude")).toEqual(expect.objectContaining({
+      kind: "thinking",
+      content: "Inspect carefully.",
+      startedAt: "2026-06-29T00:00:00.000Z",
+      timestamp: "2026-06-29T00:00:08.000Z",
+    }))
+  })
+
   it("rebuilds visible assistant messages around stored tool history", () => {
     const history = [
       {

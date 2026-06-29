@@ -181,8 +181,10 @@ export function historyRecordToTimelineItem(
         exitCode: numberMetadata(metadata, "exitCode"),
         success: booleanMetadata(metadata, "success"),
       }
-    case "thinking":
-      return { ...base, kind: "thinking", content: entry.content }
+    case "thinking": {
+      const startedAt = stringMetadata(metadata, "startedAt")
+      return { ...base, kind: "thinking", content: entry.content, ...(startedAt ? { startedAt } : {}) }
+    }
     case "permissionRequest":
       return {
         ...base,
