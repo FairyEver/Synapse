@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, XIcon } from "lucide-react"
 import type {
   DriveItemDto,
   DriveSyncBindingDto,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -21,7 +22,7 @@ import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/i
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
@@ -61,8 +62,10 @@ export function DriveSyncDialog({
   const [bindingMode, setBindingMode] = useState<DriveSyncBindingMode>("bind_existing")
   const [preview, setPreview] = useState<DriveSyncBindingPreviewDto | null>(null)
   const [excludeText, setExcludeText] = useState("")
+  const [statusFilter, setStatusFilter] = useState<DriveSyncObjectFilter>("all")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
+  const isStatusDialog = state?.mode !== "bind"
   const pathFieldCopy = item ? getDriveSyncBindingPathFieldCopy(item.type, bindingMode) : null
   const trimmedLocalPath = localPath.trim()
   const currentPreview = preview?.localPath === trimmedLocalPath ? preview : null
@@ -74,6 +77,7 @@ export function DriveSyncDialog({
       setBindingMode("bind_existing")
       setPreview(null)
       setExcludeText("")
+      setStatusFilter("all")
     }
   }, [open])
 
@@ -159,13 +163,38 @@ export function DriveSyncDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
+        className={cn(
+          "max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl",
+          isStatusDialog ? "h-[36rem]" : null,
+        )}
+        showCloseButton={!isStatusDialog}
         aria-describedby={undefined}
       >
         <div className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden">
-          <DialogHeader className="px-5 pt-5">
-            <DialogTitle>{item ? "绑定同步" : "同步状态"}</DialogTitle>
-          </DialogHeader>
+          {isStatusDialog ? (
+            <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-5 py-4">
+              <DialogTitle>同步状态</DialogTitle>
+              <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as DriveSyncObjectFilter)} className="min-w-0">
+                <TabsList>
+                  {DRIVE_SYNC_OBJECT_FILTERS.map((filter) => (
+                    <TabsTrigger key={filter.value} value={filter.value} onClick={() => setStatusFilter(filter.value)}>{filter.label}</TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              <div className="flex justify-end">
+                <DialogClose asChild>
+                  <Button type="button" variant="ghost" size="icon-sm">
+                    <XIcon />
+                    <span className="sr-only">关闭</span>
+                  </Button>
+                </DialogClose>
+              </div>
+            </DialogHeader>
+          ) : (
+            <DialogHeader className="shrink-0 px-5 pt-5">
+              <DialogTitle>绑定同步</DialogTitle>
+            </DialogHeader>
+          )}
           <ScrollArea className="min-h-0 flex-1">
             <div className="px-5 py-4">
               {item ? (
@@ -208,7 +237,7 @@ export function DriveSyncDialog({
                   {preview ? <DriveSyncPreview preview={preview} /> : null}
                 </div>
               ) : (
-                <DriveSyncStatusPanel snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
+                <DriveSyncStatusPanel filter={statusFilter} snapshot={snapshot} onSnapshotChange={onSnapshotChange} />
               )}
             </div>
           </ScrollArea>
@@ -264,16 +293,17 @@ function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPrevi
 }
 
 function DriveSyncStatusPanel({
+  filter,
   onSnapshotChange,
   snapshot,
 }: {
+  readonly filter: DriveSyncObjectFilter
   readonly onSnapshotChange: (snapshot: DriveSyncSnapshotDto) => void
   readonly snapshot: DriveSyncSnapshotDto | null
 }) {
   const bindings = snapshot?.bindings ?? []
   const operations = snapshot?.operations ?? []
   const conflicts = snapshot?.conflicts ?? []
-  const [filter, setFilter] = useState<DriveSyncObjectFilter>("all")
   const [selectedBindingId, setSelectedBindingId] = useState<string | null>(null)
   const selectedBinding = bindings.find((binding) => binding.id === selectedBindingId) ?? null
   const visibleBindings = filter === "all"
@@ -300,22 +330,13 @@ function DriveSyncStatusPanel({
 
   return (
     <>
-      <Tabs value={filter} onValueChange={(value) => setFilter(value as DriveSyncObjectFilter)} className="grid gap-3">
-        <TabsList>
-          {DRIVE_SYNC_OBJECT_FILTERS.map((item) => (
-            <TabsTrigger key={item.value} value={item.value} onClick={() => setFilter(item.value)}>{item.label}</TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value={filter} className="mt-0">
-          <DriveSyncBindingList
-            bindings={visibleBindings}
-            conflicts={conflicts}
-            operations={operations}
-            onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
-            runBindingAction={runBindingAction}
-          />
-        </TabsContent>
-      </Tabs>
+      <DriveSyncBindingList
+        bindings={visibleBindings}
+        conflicts={conflicts}
+        operations={operations}
+        onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
+        runBindingAction={runBindingAction}
+      />
       <DriveSyncBindingDetailDialog
         binding={selectedBinding}
         conflicts={selectedBinding ? conflicts.filter((conflict) => conflict.bindingId === selectedBinding.id) : []}

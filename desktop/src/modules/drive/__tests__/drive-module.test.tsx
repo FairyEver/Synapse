@@ -328,6 +328,12 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("公开链接")
+    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-header"]')
+    if (!dialogHeader) throw new Error("Public links dialog header not found")
+    expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
+      "文件",
+      "文件夹",
+    ])
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).not.toContain("发布")
@@ -493,9 +499,13 @@ describe("DriveModule", () => {
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync dialog not found")
-    expect(document.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-4xl")
+    const dialogContent = document.querySelector('[data-slot="dialog-content"]')
+    expect(dialogContent?.className).toContain("sm:max-w-4xl")
+    expect(dialogContent?.className).toContain("h-[36rem]")
     expect(dialog.textContent).toContain("同步状态")
-    expect(Array.from(dialog.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
+    const dialogHeader = dialog.querySelector('[data-slot="dialog-header"]')
+    if (!dialogHeader) throw new Error("Drive sync dialog header not found")
+    expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "全部",
       "同步中",
       "有冲突",
@@ -1976,6 +1986,7 @@ describe("DriveModule", () => {
   it("defaults public link management to the share list without publication tabs", async () => {
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+      createDriveShare({ id: "share-row-2", shareId: "shr_folder", itemName: "folder", itemType: "folder" }),
     ]))
     await render(<DriveModule />)
     await flushAct()
@@ -1986,16 +1997,48 @@ describe("DriveModule", () => {
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
     if (!dialogContent) throw new Error("Public links dialog not found")
     expect(dialogContent?.className).toContain("sm:max-w-4xl")
+    expect(dialogContent?.className).toContain("h-[36rem]")
+    const dialogHeader = document.querySelector('[role="dialog"] [data-slot="dialog-header"]')
+    if (!dialogHeader) throw new Error("Public links dialog header not found")
+    expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
+      "文件",
+      "文件夹",
+    ])
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("report.txt")
-    expect(document.body.textContent).not.toContain("index.html")
+    expect(document.body.textContent).not.toContain("folder")
     expect(document.body.textContent).not.toContain("发布")
-    const dialogHeader = document.querySelector('[data-testid="drive-public-links-dialog-header"]')
-    expect(dialogHeader?.className).toContain("px-5")
+    const testHeader = document.querySelector('[data-testid="drive-public-links-dialog-header"]')
+    expect(testHeader?.className).toContain("px-5")
     const tabsHeader = document.querySelector('[data-testid="drive-public-links-tabs-header"]')
     expect(tabsHeader).toBeNull()
     expect(tableContainer()?.className).not.toContain("overflow-x-hidden")
     expect(tableColumnClasses(dialogContent)).toEqual(["w-72", "w-auto", "w-44"])
+  })
+
+  it("filters public links by file and folder tabs", async () => {
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
+      createDriveShare({ id: "share-file", shareId: "shr_file", itemName: "notes.md", itemType: "file" }),
+      createDriveShare({ id: "share-folder", shareId: "shr_folder", itemName: "docs", itemType: "folder" }),
+    ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonText("我的分享")
+    await flushAct()
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Public links dialog not found")
+    expect(dialog.textContent).toContain("notes.md")
+    expect(dialog.textContent).not.toContain("docs")
+
+    await clickTabText("文件夹")
+    expect(dialog.textContent).not.toContain("notes.md")
+    expect(dialog.textContent).toContain("docs")
+
+    await clickTabText("文件")
+    expect(dialog.textContent).toContain("notes.md")
+    expect(dialog.textContent).not.toContain("docs")
   })
 
   it("loads share data in the public links dialog", async () => {
@@ -2033,6 +2076,9 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("文件")
     expect(document.body.textContent).toContain("天前")
     expect(document.body.textContent).toContain("来源正常")
+    expect(document.body.textContent).not.toContain("folder")
+
+    await clickTabText("文件夹")
     expect(document.body.textContent).toContain("folder")
     expect(document.body.textContent).toContain("文件夹")
     expect(document.body.textContent).toContain("来源已删除")
@@ -2041,6 +2087,7 @@ describe("DriveModule", () => {
     expect(queryButtonByLabel("打开 folder")).toBeNull()
     expect(queryButtonByLabel("取消分享 folder")).not.toBeNull()
 
+    await clickTabText("文件")
     await clickButtonByLabel("复制 report.txt")
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")

@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/context-menu"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -100,6 +101,7 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -160,6 +162,7 @@ type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
 
 type DriveAccessExpiresInOption = DriveAccessSettingsInput["expiresIn"]
 type DriveShareAccessModeOption = DriveShareAccessMode
+type DrivePublicLinkFilter = DriveShareListItemDto["itemType"]
 type DriveActiveView = "files" | "public-assets" | "trash"
 
 type DriveStatusBadge = {
@@ -185,6 +188,10 @@ const DRIVE_SHARE_ACCESS_MODE_OPTIONS: ReadonlyArray<{ readonly label: string; r
   { label: "可阅读", value: "link_read" },
   { label: "登录用户可编辑", value: "link_edit" },
   { label: "指定用户可编辑", value: "specified_users_edit" },
+]
+const DRIVE_PUBLIC_LINK_FILTERS: ReadonlyArray<{ readonly label: string; readonly value: DrivePublicLinkFilter }> = [
+  { label: "文件", value: "file" },
+  { label: "文件夹", value: "folder" },
 ]
 
 function createDefaultDriveAccessSettings(): DriveAccessSettingsInput {
@@ -2106,7 +2113,9 @@ function DrivePublicLinksDialog({
   readonly onDriveItemsChanged: () => Promise<void>
 }) {
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
+  const [shareFilter, setShareFilter] = useState<DrivePublicLinkFilter>("file")
   const shareLoadGenerationRef = useRef(0)
+  const visibleShares = shareState.items.filter((item) => item.itemType === shareFilter)
 
   const loadShares = useCallback(async (input: { readonly offset?: number; readonly append?: boolean; readonly generation?: number } = {}) => {
     const append = input.append ?? false
@@ -2146,6 +2155,7 @@ function DrivePublicLinksDialog({
     if (!open) {
       return
     }
+    setShareFilter("file")
     setShareState(createEmptyDrivePublicLinksPageState<DriveShareListItemDto>())
     void loadShares({ generation })
   }, [loadShares, open])
@@ -2159,17 +2169,33 @@ function DrivePublicLinksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         aria-describedby={undefined}
-        className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
+        className="h-[36rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
+        showCloseButton={false}
       >
         <form
           className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
           onSubmit={(event) => event.preventDefault()}
         >
           <DialogHeader
-            className="px-5 pt-5"
+            className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-5 py-4"
             data-testid="drive-public-links-dialog-header"
           >
-            <DialogTitle className="pr-10 sm:pr-0">公开链接</DialogTitle>
+            <DialogTitle>公开链接</DialogTitle>
+            <Tabs value={shareFilter} onValueChange={(value) => setShareFilter(value as DrivePublicLinkFilter)} className="min-w-0">
+              <TabsList>
+                {DRIVE_PUBLIC_LINK_FILTERS.map((filter) => (
+                  <TabsTrigger key={filter.value} value={filter.value} onClick={() => setShareFilter(filter.value)}>{filter.label}</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            <div className="flex justify-end">
+              <DialogClose asChild>
+                <Button type="button" variant="ghost" size="icon-sm">
+                  <X />
+                  <span className="sr-only">关闭</span>
+                </Button>
+              </DialogClose>
+            </div>
           </DialogHeader>
           <ScrollArea className="min-h-0 flex-1">
             <div className="px-5 py-4">
@@ -2179,7 +2205,7 @@ function DrivePublicLinksDialog({
                 loading={shareState.loading}
                 loadingMore={shareState.loadingMore}
                 page={shareState.page}
-                shares={shareState.items}
+                shares={visibleShares}
                 onLoadMore={async () => {
                   if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
                   await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
