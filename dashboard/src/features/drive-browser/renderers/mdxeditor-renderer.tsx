@@ -62,6 +62,10 @@ type PendingPublicImageUpload = {
   readonly reject?: (error: Error) => void
 }
 
+type DrivePublicAssetImageMimeType = typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION]
+
+const DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES = Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION) as readonly DrivePublicAssetImageMimeType[]
+
 export function DriveMDXeditorRenderer({
   current,
   preview,
@@ -525,11 +529,15 @@ function imageAltText(name: string): string {
   return trimmed.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, '') || fallback
 }
 
-function resolvePublicImageUploadInput(file: File): { readonly name: string; readonly mimeType: string } | null {
+function resolvePublicImageUploadInput(file: File): { readonly name: string; readonly mimeType: DrivePublicAssetImageMimeType } | null {
   const name = file.name || 'image.png'
   const mimeType = file.type || inferDrivePublicAssetMimeType(name)
-  if (!mimeType || !Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION).includes(mimeType)) return null
+  if (!isDrivePublicAssetImageMimeType(mimeType)) return null
   return { name, mimeType }
+}
+
+function isDrivePublicAssetImageMimeType(value: string | null): value is DrivePublicAssetImageMimeType {
+  return Boolean(value && DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES.includes(value as DrivePublicAssetImageMimeType))
 }
 
 function hasPublicImageUploadConsent(): boolean {
@@ -562,7 +570,8 @@ function parseImageTag(tag: string): { readonly src: string; readonly alt?: stri
   if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') return null
   const document = new window.DOMParser().parseFromString(tag, 'text/html')
   const image = document.querySelector('img')
-  const src = image?.getAttribute('src')?.trim()
+  if (!image) return null
+  const src = image.getAttribute('src')?.trim()
   if (!src) return null
   return {
     src,

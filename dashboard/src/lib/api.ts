@@ -26,6 +26,8 @@ import type {
   DriveFileVersionListPageDto,
   DriveItemDto,
   DriveItemLifecycleStatus,
+  DriveItemTreeListInput,
+  DriveItemTreeListPageDto,
   DrivePublicAssetDto,
   DrivePublicAssetListPageDto,
   DrivePublicLinksPageInput,
@@ -870,6 +872,14 @@ function driveOffsetQuerySuffix(options: DriveChildrenPageOptions = {}) {
   })
 }
 
+function driveTreeQuerySuffix(options: DriveItemTreeListInput = {}) {
+  return querySuffix({
+    parentId: options.parentId ?? undefined,
+    offset: options.offset,
+    limit: options.limit,
+  })
+}
+
 function driveSiteQuerySuffix(options: DriveSiteListInput = {}) {
   return querySuffix({
     offset: options.offset,
@@ -911,6 +921,8 @@ export const driveApi = {
       method: 'PATCH',
       body: JSON.stringify({ parentId }),
     }),
+  listTree: (options: DriveItemTreeListInput = {}) =>
+    request<DriveItemTreeListPageDto>(`${driveApiBasePath}/items/tree${driveTreeQuerySuffix(options)}`),
   deleteItem: (itemId: string) =>
     request<{ ok: true }>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
   listTrash: (options: DriveChildrenPageOptions = {}) =>

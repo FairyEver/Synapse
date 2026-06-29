@@ -4,6 +4,7 @@ import { act } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { driveApi } from '@/lib/api'
 import { DriveShareSettingsDialog, DriveSharesDialog } from './drive-share-dialogs'
 
@@ -14,6 +15,10 @@ vi.mock('@/lib/api', () => ({
     listShares: vi.fn(),
     disableShare: vi.fn(),
   },
+}))
+
+vi.mock('sonner', () => ({
+  toast: vi.fn(),
 }))
 
 let root: Root | null = null
@@ -72,6 +77,36 @@ describe('DriveSharesDialog', () => {
     expect(document.body.textContent).toContain('notes.md')
     await click(textButton('取消分享'))
     expect(driveApi.disableShare).toHaveBeenCalledWith('share-db-id')
+  })
+
+  it('shows feedback when canceling a share fails', async () => {
+    vi.mocked(driveApi.listShares).mockResolvedValue({
+      items: [{
+        id: 'share-db-id',
+        shareId: 'shr_1',
+        itemId: 'item-1',
+        itemName: 'notes.md',
+        itemType: 'file',
+        sourceDeleted: false,
+        url: 'https://example.com/share/shr_1',
+        urlWithPassword: 'https://example.com/share/shr_1?p=abc',
+        passwordEnabled: true,
+        password: 'abc',
+        expiresAt: null,
+        accessMode: 'link_read',
+        editorEmails: [],
+        createdAt: '2026-06-29T00:00:00.000Z',
+      }],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.disableShare).mockRejectedValue(new Error('取消失败'))
+    render(<DriveSharesDialog open onOpenChange={() => undefined} onChanged={async () => undefined} />)
+    await flush()
+
+    await click(textButton('取消分享'))
+    await flush()
+
+    expect(toast).toHaveBeenCalledWith('取消失败')
   })
 })
 

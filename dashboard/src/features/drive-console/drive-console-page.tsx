@@ -116,6 +116,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       }
       setNameDialog(null)
       await refreshAfterMutation()
+    } catch (error) {
+      toast(errorMessage(error, nameDialog.mode === 'create' ? '新建文件夹失败' : '重命名失败'))
     } finally {
       setSubmitting(false)
     }
@@ -128,6 +130,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       await driveApi.deleteItem(deleteTarget.id)
       setDeleteTarget(null)
       await refreshAfterMutation()
+    } catch (error) {
+      toast(errorMessage(error, '删除失败'))
     } finally {
       setSubmitting(false)
     }
@@ -140,6 +144,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       await driveApi.moveItem(moveTarget.id, parentId)
       setMoveTarget(null)
       await refreshAfterMutation()
+    } catch (error) {
+      toast(errorMessage(error, '移动失败'))
     } finally {
       setSubmitting(false)
     }
@@ -152,6 +158,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       await driveApi.createShare(shareTarget.id, settings)
       setShareTarget(null)
       await refreshAfterMutation()
+    } catch (error) {
+      toast(errorMessage(error, '分享失败'))
     } finally {
       setSubmitting(false)
     }
@@ -321,6 +329,11 @@ function uploadResultMessage(result: DriveWebUploadResult) {
   if (result.completed > 0) return `已上传 ${result.completed} 个文件，失败 ${result.failed} 个，跳过 ${result.skipped} 个`
   if (result.skipped > 0 && result.failed === 0) return result.message ?? `已跳过 ${result.skipped} 个文件`
   return result.message ?? '上传失败'
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
 }
 
 function DriveUsage({ usage, loading }: { readonly usage: DriveUsageDto | null; readonly loading: boolean }) {

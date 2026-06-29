@@ -579,6 +579,7 @@ describe('driveApi', () => {
     await driveApi.createFolder({ parentId: 'folder/id', name: 'Docs' })
     await driveApi.renameItem('item/id', 'Next.md')
     await driveApi.moveItem('item/id', null)
+    await driveApi.listTree({ parentId: 'folder/id', offset: 2, limit: 30 })
     await driveApi.deleteItem('item/id')
     await driveApi.listTrash({ offset: 10, limit: 20, search: 'old' })
     await driveApi.restoreItem('item/id')
@@ -607,10 +608,11 @@ describe('driveApi', () => {
       credentials: 'include',
       method: 'PATCH',
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/drive/items/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
-    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/drive/trash?offset=10&limit=20&search=old', expect.objectContaining({ credentials: 'include' }))
-    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/drive/items/item%2Fid/restore', expect.objectContaining({ credentials: 'include', method: 'POST' }))
-    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/drive/trash/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(8, '/api/drive/items/tree?parentId=folder%2Fid&offset=2&limit=30', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(9, '/api/drive/items/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(10, '/api/drive/trash?offset=10&limit=20&search=old', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(11, '/api/drive/items/item%2Fid/restore', expect.objectContaining({ credentials: 'include', method: 'POST' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(12, '/api/drive/trash/item%2Fid', expect.objectContaining({ credentials: 'include', method: 'DELETE' }))
   })
 
   it('uses share, site, and public asset endpoints', async () => {

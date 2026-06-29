@@ -34,7 +34,6 @@ const IMAGE_SOURCE_KIND_LABELS: Record<DriveDocumentImageSource['kind'], string>
   external: '外部图片',
   relative: '相对路径',
   data: '内嵌图片',
-  fallback: '无法转存',
   invalid: '无法转存',
   unsupported: '无法转存',
 }

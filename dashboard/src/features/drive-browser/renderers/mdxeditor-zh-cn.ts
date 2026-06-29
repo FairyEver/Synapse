@@ -102,7 +102,7 @@ export const mdxEditorZhCnTranslation: Translation = (key, defaultValue, interpo
 
 function interpolateMdxEditorTranslation(value: string, interpolations: Record<string, unknown>): string {
   return Object.entries(interpolations).reduce(
-    (current, [key, interpolation]) => current.replaceAll(`{{${key}}}`, String(interpolation)),
+    (current, [key, interpolation]) => current.split(`{{${key}}}`).join(String(interpolation)),
     value
   )
 }

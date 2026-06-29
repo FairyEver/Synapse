@@ -5,6 +5,7 @@ import {
   type DriveShareAccessMode,
   type DriveShareListItemDto,
 } from '@synapse/shared'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -131,6 +132,8 @@ export function DriveSharesDialog({
     try {
       const page = await driveApi.listShares({ offset: 0, limit: 50 })
       setItems([...page.items])
+    } catch (error) {
+      toast(errorMessage(error, '分享列表加载失败'))
     } finally {
       setLoading(false)
     }
@@ -139,6 +142,16 @@ export function DriveSharesDialog({
   useEffect(() => {
     if (open) void load()
   }, [open])
+
+  const disableShare = async (item: DriveShareListItemDto) => {
+    try {
+      await driveApi.disableShare(item.id)
+      await load()
+      await onChanged()
+    } catch (error) {
+      toast(errorMessage(error, '取消分享失败'))
+    }
+  }
 
   const visible = items.filter((item) => item.itemType === filter)
   return (
@@ -167,10 +180,7 @@ export function DriveSharesDialog({
                 variant='ghost'
                 size='sm'
                 onClick={() => {
-                  void driveApi.disableShare(item.id).then(async () => {
-                    await load()
-                    await onChanged()
-                  })
+                  void disableShare(item)
                 }}
               >
                 取消分享
@@ -184,4 +194,9 @@ export function DriveSharesDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
 }

@@ -5,6 +5,7 @@ import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import type { DriveBrowserSnapshotDto, DriveUsageDto } from '@synapse/shared'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { DirectionProvider } from '@/context/direction-provider'
@@ -30,6 +31,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
       createFolder: vi.fn(),
       renameItem: vi.fn(),
       moveItem: vi.fn(),
+      listTree: vi.fn(),
       deleteItem: vi.fn(),
       createShare: vi.fn(),
       listShares: vi.fn(),
@@ -50,6 +52,10 @@ vi.mock('@/lib/api', async (importOriginal) => {
 
 vi.mock('./drive-upload', () => ({
   uploadDriveFiles: vi.fn(),
+}))
+
+vi.mock('sonner', () => ({
+  toast: vi.fn(),
 }))
 
 let root: Root | null = null
@@ -142,6 +148,33 @@ describe('DriveConsolePage', () => {
 
     expect(driveApi.createFolder).toHaveBeenCalledWith({ parentId: null, name: '资料' })
     expect(reload).toHaveBeenCalled()
+  })
+
+  it('keeps the folder dialog open and shows feedback when creating a folder fails', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.createFolder).mockRejectedValue(new Error('创建失败'))
+    await render(<DriveConsolePage />)
+
+    await click(button('新建文件夹'))
+    await input('文件夹名称', '资料')
+    await click(button('新建'))
+    await act(async () => undefined)
+
+    expect(toast).toHaveBeenCalledWith('创建失败')
+    expect(reload).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('新建文件夹')
   })
 
   it('creates folders in the current non-root folder and refreshes', async () => {
@@ -254,6 +287,41 @@ describe('DriveConsolePage', () => {
       accessMode: 'link_read',
       editorEmails: [],
     })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('moves a row into a selected folder target', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listTree).mockResolvedValue({
+      items: [treeFolder({ id: 'target-1', name: '目标', path: '目标' })],
+      total: 1,
+      fileCount: 0,
+      folderCount: 1,
+      hasMore: false,
+      nextOffset: null,
+    })
+    vi.mocked(driveApi.moveItem).mockResolvedValue({} as never)
+    await render(<DriveConsolePage />)
+
+    await click(button('移动'))
+    await act(async () => undefined)
+    await click(button('目标'))
+    await click(lastButton('移动'))
+
+    expect(driveApi.listTree).toHaveBeenCalledWith({ parentId: null, offset: 0, limit: 200 })
+    expect(driveApi.moveItem).toHaveBeenCalledWith('folder-1', 'target-1')
     expect(reload).toHaveBeenCalled()
   })
 
@@ -502,6 +570,23 @@ function usage(): DriveUsageDto {
     reservedBytes: '0',
     quotaBytes: '5368709120',
   }
+}
+
+function treeFolder(input: { readonly id: string; readonly name: string; readonly path: string }) {
+  return {
+    id: input.id,
+    parentId: null,
+    type: 'folder',
+    name: input.name,
+    size: '0',
+    mimeType: null,
+    storageStatus: 'active',
+    shared: false,
+    createdAt: '2026-06-29T00:00:00.000Z',
+    updatedAt: '2026-06-29T00:00:00.000Z',
+    path: input.path,
+    depth: 0,
+  } as const
 }
 
 function folderSnapshot(): DriveBrowserSnapshotDto {

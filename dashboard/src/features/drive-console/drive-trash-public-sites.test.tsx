@@ -4,6 +4,7 @@ import { act } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { driveApi } from '@/lib/api'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
@@ -36,6 +37,10 @@ vi.mock('@/lib/api', () => ({
     republishSite: vi.fn(),
     deleteSite: vi.fn(),
   },
+}))
+
+vi.mock('sonner', () => ({
+  toast: vi.fn(),
 }))
 
 let root: Root | null = null
@@ -86,7 +91,37 @@ describe('DrivePublicAssetsView', () => {
 
     expect(document.body.textContent).toContain('logo.png')
     await click(textButton('删除'))
+    expect(driveApi.trashPublicAsset).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('删除logo.png')
+    await click(lastTextButton('删除'))
     expect(driveApi.trashPublicAsset).toHaveBeenCalledWith('asset-1')
+  })
+
+  it('cancels a public asset upload and shows feedback when transfer fails', async () => {
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.preparePublicAssetUpload).mockResolvedValue({
+      sessionId: 'upload-1',
+      item: {} as never,
+      upload: { method: 'PUT', url: 'https://upload.example/new', expiresAt: '', headers: {} },
+    })
+    vi.mocked(driveApi.cancelPublicAssetUpload).mockResolvedValue({ ok: true })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500, statusText: 'Bad Gateway' }))
+    render(<DrivePublicAssetsView onChanged={async () => undefined} />)
+    await flush()
+
+    const uploadInput = document.querySelector('input[aria-label="上传公开素材"]')
+    if (!(uploadInput instanceof HTMLInputElement)) throw new Error('missing upload input')
+    const file = new File(['new'], 'first.png', { type: 'image/png' })
+    Object.defineProperty(uploadInput, 'files', { value: [file], configurable: true })
+    await act(async () => uploadInput.dispatchEvent(new Event('change', { bubbles: true })))
+    await flush()
+
+    expect(driveApi.cancelPublicAssetUpload).toHaveBeenCalledWith('upload-1')
+    expect(toast).toHaveBeenCalledWith('Bad Gateway')
   })
 
   it('uploads the first public asset from the empty state', async () => {
@@ -113,6 +148,34 @@ describe('DrivePublicAssetsView', () => {
 
     expect(driveApi.preparePublicAssetUpload).toHaveBeenCalledWith({ name: 'first.png', size: String(file.size), mimeType: 'image/png' })
     expect(driveApi.completePublicAssetUpload).toHaveBeenCalledWith('upload-1')
+  })
+
+  it('does not cancel a completed public asset upload when refresh fails', async () => {
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.preparePublicAssetUpload).mockResolvedValue({
+      sessionId: 'upload-1',
+      item: {} as never,
+      upload: { method: 'PUT', url: 'https://upload.example/new', expiresAt: '', headers: {} },
+    })
+    vi.mocked(driveApi.completePublicAssetUpload).mockResolvedValue({} as never)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    render(<DrivePublicAssetsView onChanged={async () => { throw new Error('刷新失败') }} />)
+    await flush()
+
+    const uploadInput = document.querySelector('input[aria-label="上传公开素材"]')
+    if (!(uploadInput instanceof HTMLInputElement)) throw new Error('missing upload input')
+    const file = new File(['new'], 'first.png', { type: 'image/png' })
+    Object.defineProperty(uploadInput, 'files', { value: [file], configurable: true })
+    await act(async () => uploadInput.dispatchEvent(new Event('change', { bubbles: true })))
+    await flush()
+
+    expect(driveApi.completePublicAssetUpload).toHaveBeenCalledWith('upload-1')
+    expect(driveApi.cancelPublicAssetUpload).not.toHaveBeenCalled()
+    expect(toast).toHaveBeenCalledWith('刷新失败')
   })
 
   it('uploads, renames, and replaces public assets', async () => {
@@ -198,6 +261,11 @@ describe('Drive site dialogs', () => {
       accessMode: 'public',
       expiresIn: 'forever',
     })
+    await click(textButton('删除'))
+    expect(driveApi.deleteSite).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('删除Docs')
+    await click(lastTextButton('删除'))
+    expect(driveApi.deleteSite).toHaveBeenCalledWith('site-1')
   })
 
   it('does not reuse stale preflight when the target folder changes', async () => {

@@ -14,46 +14,46 @@
 
 Create these dashboard files:
 
-- `dashboard/src/features/drive-console/drive-console-page.tsx`  
+- `dashboard/src/features/drive-console/drive-console-page.tsx`
   Page shell for root and folder console routes. Owns active subview, toolbar, dialogs, and integration with existing file reader for file targets.
-- `dashboard/src/features/drive-console/use-drive-console.ts`  
+- `dashboard/src/features/drive-console/use-drive-console.ts`
   Hook for current Drive browser snapshot, usage, refresh, and shared mutation helpers.
-- `dashboard/src/features/drive-console/drive-file-table.tsx`  
+- `dashboard/src/features/drive-console/drive-file-table.tsx`
   File/folder table, root system rows, row actions, and drag-drop target.
-- `dashboard/src/features/drive-console/drive-upload.ts`  
+- `dashboard/src/features/drive-console/drive-upload.ts`
   Web `File` upload sequencing through prepare -> PUT -> complete.
-- `dashboard/src/features/drive-console/drive-move-dialog.tsx`  
+- `dashboard/src/features/drive-console/drive-move-dialog.tsx`
   Folder tree selector and move submit.
-- `dashboard/src/features/drive-console/drive-share-dialogs.tsx`  
+- `dashboard/src/features/drive-console/drive-share-dialogs.tsx`
   Share settings, share success, and My Shares dialog.
-- `dashboard/src/features/drive-console/drive-trash-view.tsx`  
+- `dashboard/src/features/drive-console/drive-trash-view.tsx`
   Web trash list, restore, remove, pagination, and refresh.
-- `dashboard/src/features/drive-console/drive-public-assets-view.tsx`  
+- `dashboard/src/features/drive-console/drive-public-assets-view.tsx`
   Web public asset list, upload, replace, rename, copy/open, trash, pagination, and refresh.
-- `dashboard/src/features/drive-console/drive-sites-dialogs.tsx`  
+- `dashboard/src/features/drive-console/drive-sites-dialogs.tsx`
   Publish site and site management dialogs.
-- `dashboard/src/features/drive-console/drive-console.test.tsx`  
+- `dashboard/src/features/drive-console/drive-console.test.tsx`
   Console shell, toolbar, root entries, file actions, and upload behavior tests.
-- `dashboard/src/features/drive-console/drive-upload.test.ts`  
+- `dashboard/src/features/drive-console/drive-upload.test.ts`
   Upload sequencing and folder rejection tests.
-- `dashboard/src/features/drive-console/drive-share-dialogs.test.tsx`  
+- `dashboard/src/features/drive-console/drive-share-dialogs.test.tsx`
   Share settings and My Shares behavior tests.
-- `dashboard/src/features/drive-console/drive-trash-public-sites.test.tsx`  
+- `dashboard/src/features/drive-console/drive-trash-public-sites.test.tsx`
   Trash, public assets, and site behavior tests.
 
 Modify these existing files:
 
-- `dashboard/src/lib/api.ts`  
+- `dashboard/src/lib/api.ts`
   Add `driveApi` for user Drive management endpoints.
-- `dashboard/src/lib/api.test.ts`  
+- `dashboard/src/lib/api.test.ts`
   Add API serialization, upload, and auth-expired tests.
-- `dashboard/src/routes/_authenticated/drive/index.tsx`  
+- `dashboard/src/routes/_authenticated/drive/index.tsx`
   Import Drive console page from `@/features/drive-console/drive-console-page`.
-- `dashboard/src/routes/_authenticated/drive/folders/$folderId.tsx`  
+- `dashboard/src/routes/_authenticated/drive/folders/$folderId.tsx`
   Import Drive console item page from `@/features/drive-console/drive-console-page`.
-- `dashboard/src/routes/_authenticated/drive/items/$browserItemId.tsx`  
+- `dashboard/src/routes/_authenticated/drive/items/$browserItemId.tsx`
   Import Drive console item page from `@/features/drive-console/drive-console-page`.
-- `RELEASE_NOTES_PENDING.md`  
+- `RELEASE_NOTES_PENDING.md`
   Add a user-facing note for the web Drive console alignment.
 
 Do not modify `desktop/src/modules/drive/*` for this feature.
