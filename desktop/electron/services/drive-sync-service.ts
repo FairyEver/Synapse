@@ -1189,6 +1189,7 @@ function toBindingDto(entry: DriveSyncBindingEntryV1): DriveSyncBindingDto {
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     lastSyncedAt: entry.lastSyncedAt,
+    lastError: entry.lastError,
   }
 }
 

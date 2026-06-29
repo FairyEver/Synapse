@@ -37,6 +37,7 @@ describe("DriveSyncService", () => {
       localPath: "/Users/me/docs",
       status: "active",
       remoteCursor: "42",
+      lastError: null,
     })
     await expect(service.getSnapshot()).resolves.toMatchObject({
       bindings: [binding],
@@ -47,6 +48,30 @@ describe("DriveSyncService", () => {
         runningOperationCount: 0,
         conflictCount: 0,
         errorCount: 0,
+      },
+    })
+  })
+
+  it("exposes binding last errors in snapshots", async () => {
+    const service = createDriveSyncService(createHarness().deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+    })
+
+    await service.updateBindingStatus(binding.id, "error", "本地文件不存在")
+
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [expect.objectContaining({
+        id: binding.id,
+        status: "error",
+        lastError: "本地文件不存在",
+      })],
+      summary: {
+        errorCount: 1,
       },
     })
   })

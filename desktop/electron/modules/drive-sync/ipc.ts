@@ -32,6 +32,7 @@ const driveSyncBindingSchema = z.object({
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   lastSyncedAt: z.string().min(1).nullable(),
+  lastError: z.string().nullable(),
 })
 
 const driveSyncConflictSchema = z.object({

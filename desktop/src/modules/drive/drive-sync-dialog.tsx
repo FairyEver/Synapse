@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { RefreshCw, XIcon } from "lucide-react"
+import { MoreHorizontal, RefreshCw, XIcon } from "lucide-react"
 import type {
   DriveItemDto,
   DriveSyncBindingDto,
@@ -10,6 +10,16 @@ import type {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -18,6 +28,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -29,6 +46,7 @@ import { cn } from "@/lib/utils"
 
 type DriveSyncBindingMode = "bind_existing" | "remote_to_local"
 type DriveSyncObjectFilter = "all" | "active" | "conflict" | "paused" | "error"
+type DriveSyncStopTarget = Pick<DriveSyncBindingDto, "id" | "driveItemName"> | null
 
 const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
   readonly value: DriveSyncObjectFilter
@@ -271,12 +289,12 @@ function getDriveSyncBindingPathFieldCopy(
 } {
   if (mode === "bind_existing") {
     return kind === "folder"
-      ? { label: "本地文件夹", placeholder: "选择已有本地文件夹", chooseLabel: "选择文件夹", submitLabel: "创建绑定" }
-      : { label: "本地文件", placeholder: "选择已有本地文件", chooseLabel: "选择文件", submitLabel: "创建绑定" }
+      ? { label: "本地文件夹", placeholder: "选择已有本地文件夹", chooseLabel: "选择文件夹", submitLabel: "创建同步" }
+      : { label: "本地文件", placeholder: "选择已有本地文件", chooseLabel: "选择文件", submitLabel: "创建同步" }
   }
   return kind === "folder"
-    ? { label: "保存位置", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并绑定" }
-    : { label: "保存为", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并绑定" }
+    ? { label: "保存位置", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并同步" }
+    : { label: "保存为", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并同步" }
 }
 
 function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPreviewDto }) {
@@ -287,7 +305,7 @@ function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPrevi
         <Badge variant={preview.status === "ready" ? "secondary" : "destructive"}>{preview.status === "ready" ? "可绑定" : "不可绑定"}</Badge>
       </div>
       {preview.reason ? <p className="mt-2 text-muted-foreground">{preview.reason}</p> : null}
-      <div className="mt-2 text-muted-foreground">方向：{formatDirection(preview.direction)}</div>
+      <div className="mt-2 text-muted-foreground">同步方向：{formatDirection(preview.direction)}</div>
     </div>
   )
 }
@@ -305,6 +323,7 @@ function DriveSyncStatusPanel({
   const operations = snapshot?.operations ?? []
   const conflicts = snapshot?.conflicts ?? []
   const [selectedBindingId, setSelectedBindingId] = useState<string | null>(null)
+  const [stopTarget, setStopTarget] = useState<DriveSyncStopTarget>(null)
   const selectedBinding = bindings.find((binding) => binding.id === selectedBindingId) ?? null
   const visibleBindings = filter === "all"
     ? bindings
@@ -333,6 +352,7 @@ function DriveSyncStatusPanel({
       <DriveSyncBindingList
         bindings={visibleBindings}
         conflicts={conflicts}
+        onRequestStop={(binding) => setStopTarget({ id: binding.id, driveItemName: binding.driveItemName })}
         operations={operations}
         onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
         runBindingAction={runBindingAction}
@@ -340,12 +360,41 @@ function DriveSyncStatusPanel({
       <DriveSyncBindingDetailDialog
         binding={selectedBinding}
         conflicts={selectedBinding ? conflicts.filter((conflict) => conflict.bindingId === selectedBinding.id) : []}
+        onRequestStop={(binding) => setStopTarget({ id: binding.id, driveItemName: binding.driveItemName })}
         onOpenChange={(open) => {
           if (!open) setSelectedBindingId(null)
         }}
         operations={selectedBinding ? operations.filter((operation) => operation.bindingId === selectedBinding.id) : []}
         runBindingAction={runBindingAction}
       />
+      <AlertDialog open={stopTarget !== null} onOpenChange={(open) => {
+        if (!open) setStopTarget(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>停止同步 {stopTarget?.driveItemName}</AlertDialogTitle>
+            <AlertDialogDescription>
+              不会删除本地或云端文件，只会取消这条同步关系。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!stopTarget) return
+                const targetId = stopTarget.id
+                void runBindingAction(
+                  () => requireSynapseBridge().driveSync.removeBinding({ id: targetId }),
+                  "已停止同步",
+                ).finally(() => setStopTarget(null))
+              }}
+            >
+              停止同步
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
@@ -353,12 +402,14 @@ function DriveSyncStatusPanel({
 function DriveSyncBindingList({
   bindings,
   conflicts,
+  onRequestStop,
   onSelectBinding,
   operations,
   runBindingAction,
 }: {
   readonly bindings: readonly DriveSyncBindingDto[]
   readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
+  readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onSelectBinding: (binding: DriveSyncBindingDto) => void
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
@@ -370,7 +421,9 @@ function DriveSyncBindingList({
     <div className="overflow-hidden rounded-lg border">
       {bindings.map((binding) => {
         const conflictCount = conflicts.filter((conflict) => conflict.bindingId === binding.id).length
-        const operationCount = operations.filter((operation) => operation.bindingId === binding.id).length
+        const bindingOperations = operations.filter((operation) => operation.bindingId === binding.id)
+        const operationCount = bindingOperations.length
+        const issueSummary = getBindingIssueSummary(binding, conflictCount, bindingOperations)
         return (
           <div
             key={binding.id}
@@ -384,23 +437,22 @@ function DriveSyncBindingList({
                 </Badge>
               </div>
               <div className="mt-1 truncate text-xs text-muted-foreground">{binding.localPath}</div>
+              <div className="mt-2 truncate text-sm">{issueSummary}</div>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
                 <span>{formatBindingTime(binding)}</span>
                 <span>{conflictCount} 个冲突</span>
-                <span>{operationCount} 条记录</span>
+                <span>{operationCount} 条同步记录</span>
               </div>
             </div>
             <div className="flex flex-wrap justify-start gap-1 sm:justify-end">
-              <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                aria-label={`查看同步对象 ${binding.driveItemName}`}
-                onClick={() => onSelectBinding(binding)}
-              >
-                查看
-              </Button>
+              <DriveSyncBindingActions
+                binding={binding}
+                conflictCount={conflictCount}
+                onOpenDetails={() => onSelectBinding(binding)}
+                onRequestStop={() => onRequestStop(binding)}
+                runBindingAction={runBindingAction}
+                showStatus={false}
+              />
             </div>
           </div>
         )
@@ -412,12 +464,14 @@ function DriveSyncBindingList({
 function DriveSyncBindingDetailDialog({
   binding,
   conflicts,
+  onRequestStop,
   onOpenChange,
   operations,
   runBindingAction,
 }: {
   readonly binding: DriveSyncBindingDto | null
   readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
+  readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onOpenChange: (open: boolean) => void
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
@@ -446,9 +500,18 @@ function DriveSyncBindingDetailDialog({
                   <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
                     {formatBindingStatus(binding.status)}
                   </Badge>
-                  <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
+                  <DriveSyncBindingActions
+                    binding={binding}
+                    conflictCount={conflicts.length}
+                    onOpenDetails={() => undefined}
+                    onRequestStop={() => onRequestStop(binding)}
+                    runBindingAction={runBindingAction}
+                    showPrimary={false}
+                    showStatus={false}
+                  />
                 </div>
               </div>
+              <div className="mt-3 text-sm">{getBindingIssueSummary(binding, conflicts.length, operations)}</div>
             </DialogHeader>
             <ScrollArea className="min-h-0 flex-1">
               <div className="grid gap-4 px-5 py-4">
@@ -481,11 +544,11 @@ function DriveSyncBindingDetailDialog({
                   </div>
                 ) : null}
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium">冲突</div>
+                  <div className="text-sm font-medium">处理冲突</div>
                   <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium">记录</div>
+                  <div className="text-sm font-medium">同步记录</div>
                   <DriveSyncOperationTable operations={operations} />
                 </div>
               </div>
@@ -513,25 +576,78 @@ function DriveSyncEmptyState({
 
 function DriveSyncBindingActions({
   binding,
+  conflictCount,
+  onOpenDetails,
+  onRequestStop,
   runBindingAction,
+  showPrimary = true,
   showStatus = true,
 }: {
   readonly binding: DriveSyncBindingDto
+  readonly conflictCount: number
+  readonly onOpenDetails: () => void
+  readonly onRequestStop: () => void
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly showPrimary?: boolean
   readonly showStatus?: boolean
 }) {
-  const resumable = binding.status === "paused" || binding.status === "error"
+  const canPause = binding.status === "active" || binding.status === "conflict"
+  const primaryAction = getBindingPrimaryAction(binding, conflictCount)
+  const runResume = () => runBindingAction(
+    () => requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }),
+    binding.status === "error" ? "已重试同步" : "已继续同步",
+  )
   return (
     <div className="flex flex-wrap justify-end gap-1">
       {showStatus ? (
         <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
       ) : null}
-      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => resumable ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), resumable ? "已恢复" : "已暂停") }}>
-        {resumable ? "恢复" : "暂停"}
-      </Button>
-      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已重新扫描") }}>扫描</Button>
-      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已拉取变更") }}>拉取</Button>
-      <Button type="button" variant="ghost" size="sm" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.removeBinding({ id: binding.id }), "已解除绑定") }}>解除</Button>
+      {showPrimary ? (
+        <Button
+          type="button"
+          variant={primaryAction.kind === "details" ? "outline" : "default"}
+          size="sm"
+          aria-label={`${primaryAction.ariaPrefix} ${binding.driveItemName}`}
+          onClick={() => {
+            if (primaryAction.kind === "details" || primaryAction.kind === "conflicts") {
+              onOpenDetails()
+              return
+            }
+            void runResume()
+          }}
+        >
+          {primaryAction.label}
+        </Button>
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`更多同步操作 ${binding.driveItemName}`}>
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
+            检查本地变更
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
+            同步云端变更
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {canPause ? (
+            <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), "已暂停同步") }}>
+              暂停同步
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => { void runResume() }}>
+              继续同步
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={onRequestStop}>
+            停止同步
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
@@ -592,7 +708,10 @@ function DriveSyncOperationTable({ operations }: { readonly operations: NonNulla
         {operations.map((operation) => (
           <TableRow key={operation.id}>
             <TableCell className="truncate">{operation.relativePath || "/"}</TableCell>
-            <TableCell>{operation.status}</TableCell>
+            <TableCell>
+              <div className="truncate">{operation.message ?? formatOperationStatus(operation.status)}</div>
+              {operation.message ? <div className="truncate text-xs text-muted-foreground">{formatOperationStatus(operation.status)}</div> : null}
+            </TableCell>
             <TableCell className="text-right tabular-nums">{new Date(operation.updatedAt).toLocaleString()}</TableCell>
           </TableRow>
         ))}
@@ -647,9 +766,50 @@ function formatBindingStatus(status: DriveSyncBindingDto["status"]): string {
   return status
 }
 
+function getBindingPrimaryAction(
+  binding: DriveSyncBindingDto,
+  conflictCount: number,
+): { readonly ariaPrefix: string; readonly kind: "conflicts" | "details" | "resume"; readonly label: string } {
+  if (binding.status === "error") {
+    return { ariaPrefix: "重试同步", kind: "resume", label: "重试同步" }
+  }
+  if (binding.status === "conflict" || conflictCount > 0) {
+    return { ariaPrefix: "处理同步冲突", kind: "conflicts", label: "处理冲突" }
+  }
+  if (binding.status === "paused") {
+    return { ariaPrefix: "继续同步", kind: "resume", label: "继续同步" }
+  }
+  return { ariaPrefix: "查看同步详情", kind: "details", label: "详情" }
+}
+
+function getBindingIssueSummary(
+  binding: DriveSyncBindingDto,
+  conflictCount: number,
+  operations: readonly DriveSyncSnapshotDto["operations"][number][],
+): string {
+  if (binding.status === "error") {
+    return binding.lastError ?? operations.find((operation) => operation.status === "error" && operation.message)?.message ?? "同步失败，请查看同步记录"
+  }
+  if (binding.status === "conflict" || conflictCount > 0) {
+    return conflictCount > 0 ? `${conflictCount} 个冲突需要处理` : "存在同步冲突"
+  }
+  if (binding.status === "paused") return "已暂停自动同步"
+  return "同步关系正常"
+}
+
 function formatBindingTime(binding: DriveSyncBindingDto): string {
   const value = binding.lastSyncedAt ?? binding.updatedAt
   return `${binding.lastSyncedAt ? "最近同步" : "更新"}：${new Date(value).toLocaleString()}`
+}
+
+function formatOperationStatus(status: DriveSyncSnapshotDto["operations"][number]["status"]): string {
+  if (status === "pending") return "等待中"
+  if (status === "running") return "同步中"
+  if (status === "succeeded") return "已完成"
+  if (status === "retry_wait") return "等待重试"
+  if (status === "conflict") return "有冲突"
+  if (status === "error") return "失败"
+  return status
 }
 
 function formatConflictType(type: string): string {
