@@ -29,14 +29,32 @@ describe("driveSyncIpcModule", () => {
 
   it("dispatches snapshot through the core service", async () => {
     const snapshot = {
-      bindings: [],
+      bindings: [{
+        id: "binding-1",
+        driveItemId: "drive-item-1",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath: "/tmp/spec.md",
+        status: "error",
+        remoteCursor: null,
+        excludeRules: {
+          forced: [],
+          defaults: [],
+          importedGitignore: [],
+          user: [],
+        },
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        lastSyncedAt: null,
+        lastError: "本地文件不存在",
+      }],
       conflicts: [],
       operations: [],
       summary: {
         activeBindingCount: 0,
         runningOperationCount: 0,
         conflictCount: 0,
-        errorCount: 0,
+        errorCount: 1,
       },
     }
     const service = {
@@ -52,6 +70,7 @@ describe("driveSyncIpcModule", () => {
     }
 
     await expect(driveSyncIpcModule.methods.getSnapshot.handler(ctx as never, undefined)).resolves.toEqual(snapshot)
+    expect(driveSyncIpcModule.methods.getSnapshot.response?.parse(snapshot)).toEqual(snapshot)
     expect(service.getSnapshot).toHaveBeenCalled()
   })
 

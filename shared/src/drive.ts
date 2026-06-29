@@ -180,6 +180,7 @@ export interface DriveSyncBindingDto {
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastSyncedAt: string | null
+  readonly lastError: string | null
 }
 
 export interface DriveSyncConflictDto {
