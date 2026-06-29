@@ -673,6 +673,10 @@ export function buildDriveTools(): McpToolDefinition[] {
           assetId: stringField("Public asset id from drive_trash_list. Required when kind is public_asset."),
         },
         required: ["itemId"],
+        allOf: [{
+          if: { properties: { kind: { const: "public_asset" } }, required: ["kind"] },
+          then: { required: ["assetId"] },
+        }],
       },
     },
   ], { legacyPrefix: "drive", primaryPrefix: "app_drive" })

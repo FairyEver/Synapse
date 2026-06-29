@@ -238,6 +238,10 @@ describe("Drive capability domain", () => {
         assetId: { type: "string" },
       },
       required: ["itemId"],
+      allOf: [{
+        if: { properties: { kind: { const: "public_asset" } }, required: ["kind"] },
+        then: { required: ["assetId"] },
+      }],
     })
   })
 
