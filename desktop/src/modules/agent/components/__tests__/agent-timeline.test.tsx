@@ -793,6 +793,31 @@ describe("AgentTimeline", () => {
     }))
   })
 
+  it("uses the thinking start time for completed thinking-only process duration", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "thinking-stream",
+        kind: "thinking",
+        content: "Inspect carefully.",
+        startedAt: "2026-06-29T00:00:00.000Z",
+        timestamp: "2026-06-29T00:00:08.000Z",
+      } as SynapseAgentTimelineItem,
+    ]), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-29T00:00:30.000Z"),
+    })
+
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "已处理",
+      durationLabel: "8s",
+      summary: "已处理 8s",
+      state: expect.objectContaining({ active: false }),
+    }))
+  })
+
   it("keeps the progress start time after a tool call completes", () => {
     const progress = appendAgentTimelineEvent([], {
       type: "stream",

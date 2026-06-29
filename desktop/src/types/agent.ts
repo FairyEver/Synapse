@@ -256,6 +256,7 @@ export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBas
 export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "thinking"
   readonly content: string
+  readonly startedAt?: string
 }
 
 export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBase {

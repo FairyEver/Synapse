@@ -264,12 +264,12 @@ export function appendAgentTimelineEvent(
         if (thinking.kind === "thinking") {
           return [
             ...current.slice(0, thinkingIndex),
-            { ...thinking, content: `${thinking.content}${item.content}`, timestamp },
+            { ...thinking, content: `${thinking.content}${item.content}`, startedAt: thinking.startedAt ?? thinking.timestamp, timestamp },
             ...current.slice(thinkingIndex + 1),
           ]
         }
       }
-      return [...current, item]
+      return [...current, { ...item, startedAt: timestamp }]
     }
 
     return [...current]

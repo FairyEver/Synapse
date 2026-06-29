@@ -128,6 +128,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     ...timelineBaseSchema,
     kind: z.literal("thinking"),
     content: z.string(),
+    startedAt: z.string().optional(),
   }),
   z.object({
     ...timelineBaseSchema,

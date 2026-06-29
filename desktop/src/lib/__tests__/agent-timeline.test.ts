@@ -381,6 +381,28 @@ describe("agent timeline conversion", () => {
     expect(afterTool[2]).toEqual(expect.objectContaining({ content: "Summarize result." }))
   })
 
+  it("keeps the first thinking delta timestamp as the thinking start time", () => {
+    const first = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Inspect",
+    }, "2026-06-29T00:00:00.000Z", "claude")
+    const second = appendAgentTimelineEvent(first, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: " carefully.",
+    }, "2026-06-29T00:00:08.000Z", "claude")
+
+    expect(second).toEqual([
+      expect.objectContaining({
+        kind: "thinking",
+        content: "Inspect carefully.",
+        startedAt: "2026-06-29T00:00:00.000Z",
+        timestamp: "2026-06-29T00:00:08.000Z",
+      }),
+    ])
+  })
+
   it("ignores empty stream deltas", () => {
     const afterEmptyText = appendAgentTimelineEvent([], {
       type: "stream",
