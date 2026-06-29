@@ -19,6 +19,7 @@ import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
+import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
 import { DriveTrashView } from './drive-trash-view'
 import { uploadDriveFiles, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
@@ -82,6 +83,8 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
   const [shareTarget, setShareTarget] = useState<DriveBrowserItemDto | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
+  const [siteFolder, setSiteFolder] = useState<DriveBrowserItemDto | null>(null)
+  const [sitesOpen, setSitesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -185,7 +188,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
             新建文件夹
           </Button>
           <Button type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>我的分享</Button>
-          <Button type='button' variant='outline' size='sm'>站点</Button>
+          <Button type='button' variant='outline' size='sm' onClick={() => setSitesOpen(true)}>站点</Button>
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
       </div>
@@ -204,6 +207,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           onOpenSystemView={setActiveView}
           onDelete={(item) => { void deleteItem(item) }}
           onMove={setMoveTarget}
+          onPublishSite={setSiteFolder}
           onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
           onShare={setShareTarget}
           onDropFiles={(files) => { void runUpload(files) }}
@@ -259,6 +263,15 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
         onOpenChange={setSharesOpen}
         onChanged={refreshAfterMutation}
       />
+      <DriveSiteCreateDialog
+        folder={siteFolder}
+        open={siteFolder !== null}
+        onOpenChange={(open) => {
+          if (!open) setSiteFolder(null)
+        }}
+        onCreated={refreshAfterMutation}
+      />
+      <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
     </div>
   )
 }

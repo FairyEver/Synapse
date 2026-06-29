@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { driveApi } from '@/lib/api'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
+import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
 import { DriveTrashView } from './drive-trash-view'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -26,6 +27,14 @@ vi.mock('@/lib/api', () => ({
     trashPublicAsset: vi.fn(),
     restorePublicAsset: vi.fn(),
     publicAssetDownloadUrl: vi.fn((assetId: string) => `/api/drive/public-assets/${assetId}/download`),
+    preflightSite: vi.fn(),
+    createSite: vi.fn(),
+    listSites: vi.fn(),
+    updateSiteAccess: vi.fn(),
+    disableSite: vi.fn(),
+    enableSite: vi.fn(),
+    republishSite: vi.fn(),
+    deleteSite: vi.fn(),
   },
 }))
 
@@ -113,6 +122,53 @@ describe('DrivePublicAssetsView', () => {
     await act(async () => replaceInput.dispatchEvent(new Event('change', { bubbles: true })))
     expect(driveApi.preparePublicAssetReplace).toHaveBeenCalledWith('asset-1', { name: 'replace.png', size: String(replaceFile.size), mimeType: 'image/png' })
     expect(driveApi.completePublicAssetReplace).toHaveBeenCalledWith('asset-1', 'replace-1')
+  })
+})
+
+describe('Drive site dialogs', () => {
+  it('creates a site from a folder', async () => {
+    vi.mocked(driveApi.preflightSite).mockResolvedValue({
+      sourceFolderItemId: 'folder-1',
+      sourceFolderName: '站点',
+      htmlFiles: ['index.html'],
+      defaultEntryPath: 'index.html',
+      fileCount: 1,
+      totalBytes: '10',
+      includesJavaScript: false,
+    })
+    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
+    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
+    await flush()
+
+    await click(textButton('发布'))
+    expect(driveApi.createSite).toHaveBeenCalledWith({
+      sourceFolderItemId: 'folder-1',
+      name: '站点',
+      entryPath: 'index.html',
+      accessMode: 'public',
+      expiresIn: 'forever',
+    })
+  })
+
+  it('lists sites and disables one', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue({
+      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.disableSite).mockResolvedValue({} as never)
+    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+    await flush()
+
+    expect(document.body.textContent).toContain('Docs')
+    await click(textButton('停用'))
+    expect(driveApi.disableSite).toHaveBeenCalledWith('site-1')
+    await click(textButton('访问设置'))
+    await click(textButton('保存访问'))
+    expect(driveApi.updateSiteAccess).toHaveBeenCalledWith('site-1', {
+      accessMode: 'public',
+      expiresIn: 'forever',
+    })
   })
 })
 

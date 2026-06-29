@@ -36,6 +36,14 @@ vi.mock('@/lib/api', async (importOriginal) => {
       disableShare: vi.fn(),
       listPublicAssets: vi.fn(),
       listTrash: vi.fn(),
+      preflightSite: vi.fn(),
+      createSite: vi.fn(),
+      listSites: vi.fn(),
+      updateSiteAccess: vi.fn(),
+      disableSite: vi.fn(),
+      enableSite: vi.fn(),
+      republishSite: vi.fn(),
+      deleteSite: vi.fn(),
     },
   }
 })
@@ -283,6 +291,63 @@ describe('DriveConsolePage', () => {
     await click(elementWithText('回收站'))
     await act(async () => undefined)
     expect(driveApi.listTrash).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+  })
+
+  it('opens site management from the toolbar', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listSites).mockResolvedValue({
+      items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '文档', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    await render(<DriveConsolePage />)
+
+    await click(button('站点'))
+    await act(async () => undefined)
+
+    expect(driveApi.listSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+    expect(document.body.textContent).toContain('Docs')
+  })
+
+  it('publishes a folder row as a site', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.preflightSite).mockResolvedValue({
+      sourceFolderItemId: 'folder-1',
+      sourceFolderName: '文档',
+      htmlFiles: ['index.html'],
+      defaultEntryPath: 'index.html',
+      fileCount: 1,
+      totalBytes: '10',
+      includesJavaScript: false,
+    })
+    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
+    await render(<DriveConsolePage />)
+
+    await click(button('发布站点'))
+    await act(async () => undefined)
+    await click(button('发布'))
+
+    expect(driveApi.createSite).toHaveBeenCalledWith({
+      sourceFolderItemId: 'folder-1',
+      name: '文档',
+      entryPath: 'index.html',
+      accessMode: 'public',
+      expiresIn: 'forever',
+    })
+    expect(reload).toHaveBeenCalled()
   })
 })
 

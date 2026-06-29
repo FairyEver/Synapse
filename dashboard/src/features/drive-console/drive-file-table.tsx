@@ -22,6 +22,7 @@ export function DriveFileTable({
   onOpenSystemView,
   onDelete,
   onMove,
+  onPublishSite,
   onRename,
   onShare,
   onDropFiles,
@@ -31,6 +32,7 @@ export function DriveFileTable({
   readonly onOpenSystemView: (view: DriveConsoleSystemView) => void
   readonly onDelete: (item: DriveBrowserItemDto) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
+  readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
   readonly onDropFiles: (files: readonly File[]) => void
@@ -79,6 +81,7 @@ export function DriveFileTable({
               item={item}
               onDelete={onDelete}
               onMove={onMove}
+              onPublishSite={onPublishSite}
               onRename={onRename}
               onShare={onShare}
             />
@@ -109,12 +112,14 @@ function DriveFileRow({
   item,
   onDelete,
   onMove,
+  onPublishSite,
   onRename,
   onShare,
 }: {
   readonly item: DriveBrowserItemDto
   readonly onDelete: (item: DriveBrowserItemDto) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
+  readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
 }) {
@@ -161,6 +166,14 @@ function DriveFileRow({
         }}>
           移动
         </Button>
+        {item.type === 'folder' ? (
+          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+            event.stopPropagation()
+            onPublishSite(item)
+          }}>
+            发布站点
+          </Button>
+        ) : null}
         <Button type='button' variant='ghost' size='sm' onClick={(event) => {
           event.stopPropagation()
           onRename(item)
