@@ -1432,11 +1432,14 @@ describe("DriveModule", () => {
 
     const breadcrumbNav = document.querySelector<HTMLElement>('nav[aria-label="当前位置"]')
     expect(breadcrumbNav).not.toBeNull()
-    expect(breadcrumbNav?.className).toContain("h-7")
-    expect(breadcrumbNav?.className).toContain("rounded-md")
-    expect(breadcrumbNav?.className).toContain("border")
+    expect(breadcrumbNav?.className).toContain("flex-1")
+    expect(breadcrumbNav?.className).toContain("overflow-x-auto")
+    expect(breadcrumbNav?.parentElement?.className).toContain("min-h-10")
+    expect(breadcrumbNav?.parentElement?.className).toContain("rounded-lg")
+    expect(breadcrumbNav?.parentElement?.className).toContain("border")
     expect(breadcrumbNav?.querySelector(".lucide-chevron-right")).not.toBeNull()
     expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
+    expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.className).toContain("bg-muted")
   })
 
   it("keeps the drive file table fixed, compact, and truncates long names", async () => {

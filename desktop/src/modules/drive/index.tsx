@@ -1521,9 +1521,9 @@ function DriveViewNavigation({
   readonly onJumpToPath: (index: number) => void
 }) {
   return (
-    <div className="flex min-h-7 flex-wrap items-center justify-between gap-2">
+    <div className="flex min-h-10 items-center gap-2 rounded-lg border bg-background px-2 py-1">
       <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
-      <div className="flex h-7 items-center justify-end">
+      <div className="flex shrink-0 items-center justify-end">
         {statusBadge ? <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge> : null}
       </div>
     </div>
@@ -1539,18 +1539,18 @@ function DriveBreadcrumbs({
 }) {
   return (
     <nav
-      className="h-7 min-w-0 max-w-full overflow-x-auto rounded-md border bg-background px-1"
+      className="min-w-0 flex-1 overflow-x-auto"
       aria-label="当前位置"
     >
-      <ol className="flex h-full min-w-max items-center gap-0.5 text-sm text-muted-foreground">
+      <ol className="flex min-w-max items-center gap-1 text-sm text-muted-foreground">
         {path.map((entry, index) => {
           const isCurrent = index === path.length - 1
           return (
-            <li key={`${entry.id ?? "root"}-${index}`} className="flex items-center gap-0.5">
-              {index > 0 ? <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" /> : null}
+            <li key={`${entry.id ?? "root"}-${index}`} className="flex items-center gap-1">
+              {index > 0 ? <ChevronRight className="size-4 shrink-0" aria-hidden="true" /> : null}
               {isCurrent ? (
                 <span
-                  className="flex h-5 max-w-40 items-center truncate rounded-sm px-1.5 font-medium text-foreground"
+                  className="flex h-8 max-w-56 items-center truncate rounded-md bg-muted px-2 font-medium text-foreground"
                   aria-current="page"
                 >
                   {entry.name}
@@ -1559,8 +1559,8 @@ function DriveBreadcrumbs({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="xs"
-                  className="h-5 max-w-40 rounded-sm px-1.5 text-sm"
+                  size="sm"
+                  className="h-8 max-w-56 px-2 text-sm text-muted-foreground hover:text-foreground"
                   onClick={() => onJumpToPath(index)}
                 >
                   <span className="truncate">{entry.name}</span>
