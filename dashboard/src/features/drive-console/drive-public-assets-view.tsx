@@ -154,7 +154,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
               {items.map((item) => (
                 <TableRow key={item.assetId}>
                   <TableCell>{item.name}</TableCell>
-                  <TableCell className='text-right text-muted-foreground'>{formatDriveBrowserBytes(item.size)}</TableCell>
+                  <TableCell className='text-right tabular-nums text-muted-foreground'>{formatDriveBrowserBytes(item.size)}</TableCell>
                   <TableCell className='text-right'>
                     <Button type='button' variant='ghost' size='sm' asChild>
                       <a href={item.url} target='_blank' rel='noreferrer'>打开</a>

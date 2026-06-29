@@ -139,8 +139,8 @@ function DriveFileRow({
           <span className='min-w-0 truncate font-medium'>{item.name}</span>
         </div>
       </TableCell>
-      <TableCell className='text-right text-muted-foreground'>{formatDriveBrowserSize(item)}</TableCell>
-      <TableCell className='text-right text-muted-foreground'><RelativeTime value={item.updatedAt} /></TableCell>
+      <TableCell className='text-right tabular-nums text-muted-foreground'>{formatDriveBrowserSize(item)}</TableCell>
+      <TableCell className='text-right tabular-nums text-muted-foreground'><RelativeTime value={item.updatedAt} className='tabular-nums' /></TableCell>
       <TableCell className='text-right'>
         <Button type='button' variant='ghost' size='sm' onClick={(event) => {
           event.stopPropagation()

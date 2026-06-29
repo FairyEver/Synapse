@@ -60,7 +60,7 @@ export function DriveMoveDialog({
         </DialogHeader>
         <div className='grid gap-3'>
           <div className='text-sm text-muted-foreground'>{item?.name}</div>
-          <div className='max-h-72 overflow-y-auto rounded-md border p-1'>
+          <div className='max-h-72 overflow-y-auto rounded-lg border p-1'>
             <Button
               type='button'
               variant={selectedParentId === null ? 'secondary' : 'ghost'}

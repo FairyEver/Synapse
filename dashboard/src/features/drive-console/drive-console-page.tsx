@@ -40,7 +40,7 @@ export function DriveConsolePage() {
   return (
     <>
       <Header fixed>
-        <h1 className='text-lg font-semibold'>网盘</h1>
+        <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
         <DriveConsoleRoot />
@@ -63,7 +63,7 @@ export function DriveConsoleItemPage({
   return (
     <>
       <Header fixed>
-        <h1 className='text-lg font-semibold'>网盘</h1>
+        <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
         <DriveConsoleItem itemId={itemId} surface={surface} />
@@ -184,7 +184,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
     <div className='flex h-full min-h-0 flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-3'>
-          <h2 className='text-base font-semibold'>我的空间</h2>
+          <h2 className='text-balance text-base font-semibold'>我的空间</h2>
           <DriveUsage usage={state.usage} loading={state.usageLoading} />
         </div>
         <div className='flex flex-wrap items-center justify-end gap-2'>
@@ -339,7 +339,7 @@ function errorMessage(error: unknown, fallback: string): string {
 function DriveUsage({ usage, loading }: { readonly usage: DriveUsageDto | null; readonly loading: boolean }) {
   if (!usage) return loading ? <span className='text-xs text-muted-foreground'>用量加载中</span> : null
   return (
-    <span className='text-xs text-muted-foreground'>
+    <span className='text-xs tabular-nums text-muted-foreground'>
       {formatDriveBrowserBytes(usage.usedBytes)} / {formatDriveBrowserBytes(usage.quotaBytes)}
     </span>
   )
