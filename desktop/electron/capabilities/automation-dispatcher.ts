@@ -5,7 +5,7 @@ import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
-import { sanitizeError } from "../services/error-sanitize"
+import { errorLogMeta, sanitizeError } from "../services/error-sanitize"
 import { createPlatformActionDefaultConfig } from "../../action-packages/builtin/shell-defaults"
 import type {
   AutomationCreateInput,
@@ -36,6 +36,18 @@ type AutomationAccountServicePort = {
   readonly listWebhooks: () => Promise<DashboardWebhookDto[]>
 }
 
+type AutomationSummaryLogger = {
+  readonly warn: (message: string, metadata?: Record<string, unknown>) => void
+}
+
+const noopSummaryLogger: AutomationSummaryLogger = {
+  warn: () => undefined,
+}
+
+function automationSummaryLogger(deps: AutomationCapabilityDispatcherDeps): AutomationSummaryLogger {
+  return deps.logger ?? noopSummaryLogger
+}
+
 export type AutomationCapabilityDispatcherDeps = {
   readonly service: AutomationServicePort
   readonly accountService: AutomationAccountServicePort
@@ -44,6 +56,7 @@ export type AutomationCapabilityDispatcherDeps = {
   readonly platform?: string
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly logger?: AutomationSummaryLogger
 }
 
 type AutomationItemListParams = AutomationListOptions
@@ -119,7 +132,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           case "automation.item.list": {
             const input = parseListParams(params)
             const items = await deps.service.automationList(input)
-            const summaries = items.map((item) => toPublicAutomationItemSummary(item, deps.triggers, deps.actions))
+            const summaries = items.map((item) => toPublicAutomationItemSummary(item, deps.triggers, deps.actions, automationSummaryLogger(deps)))
             result = { ok: true, data: summaries, total: summaries.length }
             break
           }
@@ -127,7 +140,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           case "automation.item.get": {
             const { automationId } = parseAutomationIdParams(params)
             const item = await deps.service.automationGet(automationId)
-            result = { ok: true, data: item ? toPublicAutomationItemSummary(item, deps.triggers, deps.actions) : null }
+            result = { ok: true, data: item ? toPublicAutomationItemSummary(item, deps.triggers, deps.actions, automationSummaryLogger(deps)) : null }
             break
           }
 
@@ -284,6 +297,7 @@ export function toPublicAutomationItemSummary(
   item: AutomationItem,
   triggers: AutomationTriggerRegistry,
   actions: MainActionRegistry,
+  summaryLogger: AutomationSummaryLogger = noopSummaryLogger,
 ) {
   const validation = toPublicValidation(item.validation)
   return {
@@ -293,8 +307,8 @@ export function toPublicAutomationItemSummary(
     enabled: item.enabled,
     scope: item.scope,
     cwd: item.cwd,
-    trigger: triggerSummary(item, triggers),
-    executor: executorSummary(item, actions),
+    trigger: triggerSummary(item, triggers, summaryLogger),
+    executor: executorSummary(item, actions, summaryLogger),
     policy: item.policy,
     nextRunAt: item.nextRunAt,
     lastRunAt: item.lastRunAt,
@@ -307,7 +321,7 @@ export function toPublicAutomationItemSummary(
   }
 }
 
-function triggerSummary(item: AutomationItem, triggers: AutomationTriggerRegistry) {
+function triggerSummary(item: AutomationItem, triggers: AutomationTriggerRegistry, summaryLogger: AutomationSummaryLogger) {
   try {
     const definition = triggers.get(item.trigger.type)
     return {
@@ -315,16 +329,26 @@ function triggerSummary(item: AutomationItem, triggers: AutomationTriggerRegistr
       kind: definition.manifest.kind,
       summary: definition.summarize(definition.manifest.configSchema.parse(item.trigger.config)),
     }
-  } catch {
+  } catch (error) {
+    summaryLogger.warn("Automation trigger summary fallback.", {
+      triggerType: item.trigger.type,
+      boundary: "automation-dispatcher.triggerSummary",
+      ...errorLogMeta(error, { includeMessage: true, messageLimit: 240 }),
+    })
     return { type: item.trigger.type }
   }
 }
 
-function executorSummary(item: AutomationItem, actions: MainActionRegistry) {
+function executorSummary(item: AutomationItem, actions: MainActionRegistry, summaryLogger: AutomationSummaryLogger) {
   try {
     const definition = actions.get(item.executor.type)
     return { type: item.executor.type, title: definition.manifest.title }
-  } catch {
+  } catch (error) {
+    summaryLogger.warn("Automation executor summary fallback.", {
+      executorType: item.executor.type,
+      boundary: "automation-dispatcher.executorSummary",
+      ...errorLogMeta(error, { includeMessage: true, messageLimit: 240 }),
+    })
     return { type: item.executor.type }
   }
 }

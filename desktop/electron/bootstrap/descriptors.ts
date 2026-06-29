@@ -896,6 +896,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       actions: actionRuntime,
       permissionGuard,
       auditSink,
+      logger: createMainLogger("capability.automation"),
     })
     const driveDispatcher = createDriveCapabilityDispatcher({
       accountService,
