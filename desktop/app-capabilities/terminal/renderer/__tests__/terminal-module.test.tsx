@@ -1169,6 +1169,42 @@ describe("TerminalModule", () => {
     expect(webglState.instances[0]?.onContextLoss).toHaveBeenCalled()
   })
 
+  it("fits and resizes the terminal before retained output is written", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.chunks = [createChunk({ sessionId: "session-1", seq: 1, data: "ready\r\n" })]
+
+    await renderModule()
+
+    const fitCallOrder = xtermState.fitInstances[0]?.fit.mock.invocationCallOrder[0]
+    const resizeCallOrder = terminalBridge.resizeSession.mock.invocationCallOrder[0]
+    const writeCallOrder = xtermState.instances[0]?.write.mock.invocationCallOrder[0]
+    expect(fitCallOrder).toBeLessThan(writeCallOrder ?? 0)
+    expect(resizeCallOrder).toBeLessThan(writeCallOrder ?? 0)
+    expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cols: 100,
+      rows: 30,
+    })
+  })
+
+  it("refreshes terminal geometry and WebGL atlas after local clear", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    xtermState.fitInstances[0]?.fit.mockClear()
+    webglState.instances[0]?.clearTextureAtlas.mockClear()
+    terminalBridge.resizeSession.mockClear()
+
+    await clickButton("Clear")
+
+    expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
+    expect(xtermState.fitInstances[0]?.fit).toHaveBeenCalledTimes(1)
+    expect(webglState.instances[0]?.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
+  })
+
   it("opens terminal web links through the system shell", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]

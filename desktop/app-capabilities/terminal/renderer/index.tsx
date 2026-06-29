@@ -111,6 +111,7 @@ export function TerminalModule() {
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
   const terminalContainerRef = useRef<HTMLDivElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
+  const terminalGeometrySyncRef = useRef<(() => void) | null>(null)
 
   const activeSession = useMemo(() => {
     if (!activeSessionId) return sessions[0] ?? null
@@ -518,6 +519,7 @@ export function TerminalModule() {
     if (action.kind === "xterm-local") {
       if (action.operation === "clear") {
         xtermRef.current?.clear()
+        terminalGeometrySyncRef.current?.()
       }
       return
     }
@@ -560,11 +562,12 @@ export function TerminalModule() {
     xterm.loadAddon(fitAddon)
     xterm.loadAddon(webLinksAddon)
     xterm.open(container)
-    const webglContextLossDisposable = loadWebglRenderer(xterm)
+    const webglRenderer = loadWebglRenderer(xterm)
 
-    const resizeSession = () => {
+    const syncTerminalGeometry = () => {
       if (disposed) return
       fitAddon.fit()
+      webglRenderer?.refresh()
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
       const rows = proposed?.rows ?? xterm.rows
@@ -579,8 +582,10 @@ export function TerminalModule() {
         logger.warn("Failed to resize terminal session.", error)
       })
     }
+    terminalGeometrySyncRef.current = syncTerminalGeometry
+    syncTerminalGeometry()
 
-    const resizeObserver = new ResizeObserver(resizeSession)
+    const resizeObserver = new ResizeObserver(syncTerminalGeometry)
     resizeObserver.observe(container)
 
     const inputDisposable = xterm.onData((data) => {
@@ -652,8 +657,11 @@ export function TerminalModule() {
       unsubscribeSessionChanged()
       unsubscribeSessionDeleted()
       inputDisposable.dispose()
-      webglContextLossDisposable?.dispose()
+      webglRenderer?.dispose()
       resizeObserver.disconnect()
+      if (terminalGeometrySyncRef.current === syncTerminalGeometry) {
+        terminalGeometrySyncRef.current = null
+      }
       if (xtermRef.current === xterm) {
         xtermRef.current = null
       }
@@ -1309,7 +1317,7 @@ function mergeGroup(
   return nextGroups.sort((left, right) => left.sortOrder - right.sortOrder)
 }
 
-function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
+function loadWebglRenderer(xterm: Terminal): { dispose(): void; refresh(): void } | undefined {
   try {
     const webglAddon = new WebglAddon()
     const contextLossDisposable = webglAddon.onContextLoss(() => {
@@ -1317,7 +1325,10 @@ function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
       webglAddon.dispose()
     })
     xterm.loadAddon(webglAddon)
-    return contextLossDisposable
+    return {
+      dispose: () => contextLossDisposable.dispose(),
+      refresh: () => webglAddon.clearTextureAtlas(),
+    }
   } catch (error) {
     logger.warn("Terminal WebGL renderer unavailable; falling back to DOM renderer.", { error })
     return undefined
