@@ -884,7 +884,7 @@ function DriveModuleContent() {
         )}
       >
         {accountAuthenticated ? (
-          <div className="flex min-h-full flex-col gap-3">
+          <div className="flex min-h-full flex-col gap-2">
             <DriveViewNavigation path={activePath} statusBadge={activeStatusBadge} onJumpToPath={jumpToPath} />
             {content}
           </div>
@@ -1521,7 +1521,7 @@ function DriveViewNavigation({
   readonly onJumpToPath: (index: number) => void
 }) {
   return (
-    <div className="flex min-h-10 items-center gap-2 rounded-lg border bg-background px-2 py-1">
+    <div className="flex min-h-8 items-center gap-2 px-1">
       <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
       <div className="flex shrink-0 items-center justify-end">
         {statusBadge ? <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge> : null}
@@ -1542,15 +1542,15 @@ function DriveBreadcrumbs({
       className="min-w-0 flex-1 overflow-x-auto"
       aria-label="当前位置"
     >
-      <ol className="flex min-w-max items-center gap-1 text-sm text-muted-foreground">
+      <ol className="flex min-w-max items-center gap-0.5 text-sm text-muted-foreground">
         {path.map((entry, index) => {
           const isCurrent = index === path.length - 1
           return (
-            <li key={`${entry.id ?? "root"}-${index}`} className="flex items-center gap-1">
+            <li key={`${entry.id ?? "root"}-${index}`} className="flex items-center gap-0.5">
               {index > 0 ? <ChevronRight className="size-4 shrink-0" aria-hidden="true" /> : null}
               {isCurrent ? (
                 <span
-                  className="flex h-8 max-w-56 items-center truncate rounded-md bg-muted px-2 font-medium text-foreground"
+                  className="flex h-8 max-w-56 items-center truncate px-1.5 font-medium text-foreground"
                   aria-current="page"
                 >
                   {entry.name}
@@ -1560,7 +1560,7 @@ function DriveBreadcrumbs({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 max-w-56 px-2 text-sm text-muted-foreground hover:text-foreground"
+                  className="h-8 max-w-56 px-1.5 text-sm text-muted-foreground hover:text-foreground"
                   onClick={() => onJumpToPath(index)}
                 >
                   <span className="truncate">{entry.name}</span>

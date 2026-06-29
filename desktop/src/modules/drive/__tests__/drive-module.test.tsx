@@ -1403,7 +1403,7 @@ describe("DriveModule", () => {
     expect(document.querySelector<HTMLInputElement>("#drive-item-name")?.value).toBe("cui.md")
   })
 
-  it("uses distinct drive item icons, table columns, and a grouped breadcrumb trail", async () => {
+  it("uses distinct drive item icons, table columns, and a compact breadcrumb trail", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
         createDriveItem({ id: "file-1", name: "2.png", type: "file" }),
@@ -1434,12 +1434,12 @@ describe("DriveModule", () => {
     expect(breadcrumbNav).not.toBeNull()
     expect(breadcrumbNav?.className).toContain("flex-1")
     expect(breadcrumbNav?.className).toContain("overflow-x-auto")
-    expect(breadcrumbNav?.parentElement?.className).toContain("min-h-10")
-    expect(breadcrumbNav?.parentElement?.className).toContain("rounded-lg")
-    expect(breadcrumbNav?.parentElement?.className).toContain("border")
+    expect(breadcrumbNav?.parentElement?.className).toContain("min-h-8")
+    expect(breadcrumbNav?.parentElement?.className).not.toContain("rounded-lg")
+    expect(breadcrumbNav?.parentElement?.className).not.toContain("border")
     expect(breadcrumbNav?.querySelector(".lucide-chevron-right")).not.toBeNull()
     expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
-    expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.className).toContain("bg-muted")
+    expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.className).not.toContain("bg-muted")
   })
 
   it("keeps the drive file table fixed, compact, and truncates long names", async () => {
