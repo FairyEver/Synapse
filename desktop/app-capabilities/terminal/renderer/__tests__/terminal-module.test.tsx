@@ -638,10 +638,15 @@ describe("TerminalModule", () => {
 
     const main = document.body.querySelector("main")
     const terminalRegion = document.querySelector("[aria-label='终端输出与输入']")
+    const xtermMount = terminalRegion?.querySelector("[data-terminal-xterm-mount]")
     expect(main?.classList.contains("h-full")).toBe(true)
     expect(main?.classList.contains("min-h-0")).toBe(true)
     expect(terminalRegion?.parentElement?.classList.contains("h-full")).toBe(true)
     expect(terminalRegion?.classList.contains("flex-1")).toBe(true)
+    expect(terminalRegion?.classList.contains("min-h-0")).toBe(true)
+    expect(xtermMount).toBeTruthy()
+    expect(xtermMount?.classList.contains("h-full")).toBe(true)
+    expect(xtermState.instances[0]?.open).toHaveBeenCalledWith(xtermMount)
   })
 
   it("does not render session-level Agent control", async () => {

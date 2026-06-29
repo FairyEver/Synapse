@@ -829,14 +829,19 @@ export function TerminalModule() {
                 </div>
               ) : null}
               <div
-                ref={terminalContainerRef}
                 role="region"
                 aria-label="终端输出与输入"
                 tabIndex={0}
                 onDragOver={handleTerminalDragOver}
                 onDrop={handleTerminalDrop}
-                className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+                className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div
+                  ref={terminalContainerRef}
+                  data-terminal-xterm-mount
+                  className="h-full min-h-0 min-w-0 overflow-hidden"
+                />
+              </div>
             </div>
           ) : (
             <div className="flex h-full min-h-0 items-center justify-center">
