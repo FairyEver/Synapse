@@ -495,10 +495,114 @@ describe("DriveModule", () => {
     if (!dialog) throw new Error("Drive sync dialog not found")
     expect(document.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-4xl")
     expect(dialog.textContent).toContain("同步状态")
-    expect(dialog.textContent).toContain("绑定")
-    expect(dialog.textContent).toContain("冲突")
-    expect(dialog.textContent).toContain("记录")
+    expect(Array.from(dialog.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
+      "全部",
+      "同步中",
+      "有冲突",
+      "已暂停",
+      "错误",
+    ])
     expect(dialog.textContent).toContain("Docs")
+    expect(dialog.textContent).toContain("/Users/me/Docs")
+    expect(dialog.textContent).toContain("1 个冲突")
+    expect(dialog.textContent).toContain("1 条记录")
+    expect(dialog.textContent).not.toContain("排除规则")
+    expect(dialog.textContent).not.toContain("spec.md")
+  })
+
+  it("opens drive sync binding details with scoped conflicts and operations", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 2, conflictCount: 2 },
+      {
+        bindings: [
+          createDriveSyncBinding({ id: "binding-1", driveItemName: "Docs", localPath: "/Users/me/Docs" }),
+          createDriveSyncBinding({ id: "binding-2", driveItemName: "Notes", localPath: "/Users/me/Notes" }),
+        ],
+        conflicts: [
+          {
+            id: "conflict-1",
+            bindingId: "binding-1",
+            relativePath: "docs-conflict.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+          {
+            id: "conflict-2",
+            bindingId: "binding-2",
+            relativePath: "notes-conflict.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+        ],
+        operations: [
+          {
+            id: "operation-1",
+            bindingId: "binding-1",
+            relativePath: "docs-operation.md",
+            status: "succeeded",
+            message: null,
+            updatedAt: "2026-06-28T00:00:00.000Z",
+          },
+          {
+            id: "operation-2",
+            bindingId: "binding-2",
+            relativePath: "notes-operation.md",
+            status: "succeeded",
+            message: null,
+            updatedAt: "2026-06-28T00:00:00.000Z",
+          },
+        ],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：2 个冲突")
+    await clickButtonByLabel("查看同步对象 Docs")
+
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'))
+    const detailDialog = dialogs.find((candidate) => candidate.textContent?.includes("排除规则"))
+    if (!detailDialog) throw new Error("Drive sync detail dialog not found")
+    expect(detailDialog.textContent).toContain("排除规则")
+    expect(detailDialog.textContent).toContain("docs-conflict.md")
+    expect(detailDialog.textContent).toContain("docs-operation.md")
+    expect(detailDialog.textContent).not.toContain("notes-conflict.md")
+    expect(detailDialog.textContent).not.toContain("notes-operation.md")
+  })
+
+  it("filters drive sync objects by status tabs", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 1, errorCount: 1 },
+      {
+        bindings: [
+          createDriveSyncBinding({ id: "binding-active", driveItemName: "Active", status: "active" }),
+          createDriveSyncBinding({ id: "binding-conflict", driveItemName: "Conflict", status: "conflict" }),
+          createDriveSyncBinding({ id: "binding-paused", driveItemName: "Paused", status: "paused" }),
+          createDriveSyncBinding({ id: "binding-error", driveItemName: "Error", status: "error" }),
+        ],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个冲突")
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Active")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Conflict")
+
+    await clickTabText("有冲突")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Active")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Conflict")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Paused")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Error")
+
+    await clickTabText("已暂停")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Conflict")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Paused")
+
+    await clickTabText("错误")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Paused")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Error")
   })
 
   it("opens the drive sync binding wizard from a row menu", async () => {

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,6 +26,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 
 type DriveSyncBindingMode = "bind_existing" | "remote_to_local"
+type DriveSyncObjectFilter = "all" | "active" | "conflict" | "paused" | "error"
+
+const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
+  readonly value: DriveSyncObjectFilter
+  readonly label: string
+}> = [
+  { value: "all", label: "全部" },
+  { value: "active", label: "同步中" },
+  { value: "conflict", label: "有冲突" },
+  { value: "paused", label: "已暂停" },
+  { value: "error", label: "错误" },
+]
 
 export type DriveSyncDialogState =
   | { readonly mode: "status"; readonly item: null }
@@ -259,14 +272,12 @@ function DriveSyncStatusPanel({
   const bindings = snapshot?.bindings ?? []
   const operations = snapshot?.operations ?? []
   const conflicts = snapshot?.conflicts ?? []
-  const [excludeDrafts, setExcludeDrafts] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    setExcludeDrafts(Object.fromEntries(bindings.map((binding) => [
-      binding.id,
-      binding.excludeRules.user.join("\n"),
-    ])))
-  }, [bindings])
+  const [filter, setFilter] = useState<DriveSyncObjectFilter>("all")
+  const [selectedBindingId, setSelectedBindingId] = useState<string | null>(null)
+  const selectedBinding = bindings.find((binding) => binding.id === selectedBindingId) ?? null
+  const visibleBindings = filter === "all"
+    ? bindings
+    : bindings.filter((binding) => binding.status === filter)
 
   const refreshSnapshot = async () => {
     onSnapshotChange(await requireSynapseBridge().driveSync.getSnapshot())
@@ -282,65 +293,180 @@ function DriveSyncStatusPanel({
     }
   }
 
+  useEffect(() => {
+    if (selectedBindingId && !selectedBinding) setSelectedBindingId(null)
+  }, [selectedBinding, selectedBindingId])
+
   return (
-    <Tabs defaultValue="bindings" className="grid gap-3">
-      <TabsList>
-        <TabsTrigger value="bindings">绑定</TabsTrigger>
-        <TabsTrigger value="conflicts">冲突</TabsTrigger>
-        <TabsTrigger value="operations">记录</TabsTrigger>
-      </TabsList>
-      <TabsContent value="bindings" className="mt-0">
-        <div className="grid gap-3">
-          {bindings.length === 0 ? (
-            <DriveSyncEmptyState title="暂无绑定" />
-          ) : bindings.map((binding) => (
-            <div key={binding.id} className="rounded-lg border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
-                  <div className="truncate text-xs text-muted-foreground">{binding.localPath}</div>
-                </div>
-                <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} />
-              </div>
-              {binding.kind === "folder" ? (
-                <div className="mt-3 grid gap-2">
-                  <Label htmlFor={`drive-sync-excludes-${binding.id}`}>排除规则</Label>
-                  <Textarea
-                    id={`drive-sync-excludes-${binding.id}`}
-                    value={excludeDrafts[binding.id] ?? ""}
-                    onChange={(event) => setExcludeDrafts((current) => ({ ...current, [binding.id]: event.target.value }))}
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        void runBindingAction(
-                          () => requireSynapseBridge().driveSync.updateExcludeRules({
-                            id: binding.id,
-                            user: parseExcludeText(excludeDrafts[binding.id] ?? ""),
-                          }),
-                          "已更新排除规则",
-                        )
-                      }}
-                    >
-                      保存规则
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+    <>
+      <Tabs value={filter} onValueChange={(value) => setFilter(value as DriveSyncObjectFilter)} className="grid gap-3">
+        <TabsList>
+          {DRIVE_SYNC_OBJECT_FILTERS.map((item) => (
+            <TabsTrigger key={item.value} value={item.value} onClick={() => setFilter(item.value)}>{item.label}</TabsTrigger>
           ))}
-        </div>
-      </TabsContent>
-      <TabsContent value="conflicts" className="mt-0">
-        <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
-      </TabsContent>
-      <TabsContent value="operations" className="mt-0">
-        <DriveSyncOperationTable operations={operations} />
-      </TabsContent>
-    </Tabs>
+        </TabsList>
+        <TabsContent value={filter} className="mt-0">
+          <DriveSyncBindingList
+            bindings={visibleBindings}
+            conflicts={conflicts}
+            operations={operations}
+            onSelectBinding={(binding) => setSelectedBindingId(binding.id)}
+            runBindingAction={runBindingAction}
+          />
+        </TabsContent>
+      </Tabs>
+      <DriveSyncBindingDetailDialog
+        binding={selectedBinding}
+        conflicts={selectedBinding ? conflicts.filter((conflict) => conflict.bindingId === selectedBinding.id) : []}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBindingId(null)
+        }}
+        operations={selectedBinding ? operations.filter((operation) => operation.bindingId === selectedBinding.id) : []}
+        runBindingAction={runBindingAction}
+      />
+    </>
+  )
+}
+
+function DriveSyncBindingList({
+  bindings,
+  conflicts,
+  onSelectBinding,
+  operations,
+  runBindingAction,
+}: {
+  readonly bindings: readonly DriveSyncBindingDto[]
+  readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
+  readonly onSelectBinding: (binding: DriveSyncBindingDto) => void
+  readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
+  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+}) {
+  if (bindings.length === 0) {
+    return <DriveSyncEmptyState title="暂无同步对象" />
+  }
+  return (
+    <div className="grid gap-2">
+      {bindings.map((binding) => {
+        const conflictCount = conflicts.filter((conflict) => conflict.bindingId === binding.id).length
+        const operationCount = operations.filter((operation) => operation.bindingId === binding.id).length
+        return (
+          <div key={binding.id} className="rounded-lg border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="truncate text-sm font-medium">{binding.driveItemName}</div>
+                  <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
+                    {formatBindingStatus(binding.status)}
+                  </Badge>
+                </div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">{binding.localPath}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>{formatBindingTime(binding)}</span>
+                  <span>{conflictCount} 个冲突</span>
+                  <span>{operationCount} 条记录</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-1">
+                <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  aria-label={`查看同步对象 ${binding.driveItemName}`}
+                  onClick={() => onSelectBinding(binding)}
+                >
+                  查看
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function DriveSyncBindingDetailDialog({
+  binding,
+  conflicts,
+  onOpenChange,
+  operations,
+  runBindingAction,
+}: {
+  readonly binding: DriveSyncBindingDto | null
+  readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
+  readonly onOpenChange: (open: boolean) => void
+  readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
+  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+}) {
+  const [excludeDraft, setExcludeDraft] = useState("")
+
+  useEffect(() => {
+    setExcludeDraft(binding?.excludeRules.user.join("\n") ?? "")
+  }, [binding])
+
+  return (
+    <Dialog open={binding !== null} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-3xl"
+        aria-describedby={undefined}
+      >
+        {binding ? (
+          <div className="flex h-full min-h-0 max-h-[calc(100vh-4rem)] flex-col overflow-hidden">
+            <DialogHeader className="px-5 pt-5">
+              <DialogTitle>{binding.driveItemName}</DialogTitle>
+              <DialogDescription className="truncate">{binding.localPath}</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
+              <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
+                {formatBindingStatus(binding.status)}
+              </Badge>
+              <DriveSyncBindingActions binding={binding} runBindingAction={runBindingAction} showStatus={false} />
+            </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="grid gap-4 px-5 py-4">
+                {binding.kind === "folder" ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor={`drive-sync-detail-excludes-${binding.id}`}>排除规则</Label>
+                    <Textarea
+                      id={`drive-sync-detail-excludes-${binding.id}`}
+                      value={excludeDraft}
+                      onChange={(event) => setExcludeDraft(event.target.value)}
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void runBindingAction(
+                            () => requireSynapseBridge().driveSync.updateExcludeRules({
+                              id: binding.id,
+                              user: parseExcludeText(excludeDraft),
+                            }),
+                            "已更新排除规则",
+                          )
+                        }}
+                      >
+                        保存规则
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium">冲突</div>
+                  <DriveSyncConflictTable conflicts={conflicts} runBindingAction={runBindingAction} />
+                </div>
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium">记录</div>
+                  <DriveSyncOperationTable operations={operations} />
+                </div>
+              </div>
+            </ScrollArea>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -355,14 +481,18 @@ function DriveSyncEmptyState({ title }: { readonly title: string }) {
 function DriveSyncBindingActions({
   binding,
   runBindingAction,
+  showStatus = true,
 }: {
   readonly binding: DriveSyncBindingDto
   readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly showStatus?: boolean
 }) {
   const resumable = binding.status === "paused" || binding.status === "error"
   return (
     <div className="flex flex-wrap justify-end gap-1">
-      <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
+      {showStatus ? (
+        <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>{formatBindingStatus(binding.status)}</Badge>
+      ) : null}
       <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => resumable ? requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }) : requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), resumable ? "已恢复" : "已暂停") }}>
         {resumable ? "恢复" : "暂停"}
       </Button>
@@ -482,6 +612,11 @@ function formatBindingStatus(status: DriveSyncBindingDto["status"]): string {
   if (status === "conflict") return "有冲突"
   if (status === "error") return "错误"
   return status
+}
+
+function formatBindingTime(binding: DriveSyncBindingDto): string {
+  const value = binding.lastSyncedAt ?? binding.updatedAt
+  return `${binding.lastSyncedAt ? "最近同步" : "更新"}：${new Date(value).toLocaleString()}`
 }
 
 function formatConflictType(type: string): string {
