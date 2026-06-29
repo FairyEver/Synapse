@@ -14,6 +14,7 @@ import type {
   DriveAnnotationCreateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
+  DriveAccessSettingsInput,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
   DriveDocumentImageImportRequest,
@@ -26,7 +27,19 @@ import type {
   DriveItemDto,
   DriveItemLifecycleStatus,
   DrivePublicAssetDto,
+  DrivePublicAssetListPageDto,
+  DrivePublicLinksPageInput,
+  DriveShareDto,
+  DriveShareListPageDto,
+  DriveSiteAccessUpdateInput,
+  DriveSiteCreateInput,
+  DriveSiteDto,
+  DriveSiteListInput,
+  DriveSiteListPageDto,
+  DriveSitePreflightDto,
+  DriveTrashListPageDto,
   DriveUploadPrepareResult,
+  DriveUsageDto,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -821,6 +834,12 @@ type DriveBrowserChildrenOptions = {
   childrenLimit?: number
 }
 
+type DriveChildrenPageOptions = {
+  offset?: number
+  limit?: number
+  search?: string
+}
+
 type DriveBrowserShareOptions = DriveBrowserChildrenOptions | string
 
 function normalizeDriveBrowserShareOptions(options: DriveBrowserShareOptions = {}) {
@@ -841,6 +860,129 @@ function driveBrowserQuerySuffix(
   }
   const query = params.toString()
   return query ? `?${query}` : ''
+}
+
+function driveOffsetQuerySuffix(options: DriveChildrenPageOptions = {}) {
+  return querySuffix({
+    offset: options.offset,
+    limit: options.limit,
+    search: options.search,
+  })
+}
+
+function driveSiteQuerySuffix(options: DriveSiteListInput = {}) {
+  return querySuffix({
+    offset: options.offset,
+    limit: options.limit,
+    search: options.search,
+    status: options.status,
+  })
+}
+
+export const driveApi = {
+  getUsage: () =>
+    request<DriveUsageDto>(`${driveApiBasePath}/usage`),
+  prepareUpload: (input: { readonly parentId?: string | null; readonly name: string; readonly size: string; readonly mimeType?: string | null }) =>
+    request<DriveUploadPrepareResult>(`${driveApiBasePath}/uploads/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({
+        parentId: input.parentId ?? null,
+        name: input.name,
+        size: input.size,
+        mimeType: input.mimeType ?? null,
+      }),
+    }),
+  completeUpload: (sessionId: string) =>
+    request<DriveItemDto>(`${driveApiBasePath}/uploads/${encodeURIComponent(sessionId)}/complete`, { method: 'POST' }),
+  cancelUpload: (sessionId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/uploads/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
+  createFolder: (input: { readonly parentId?: string | null; readonly name: string }) =>
+    request<DriveItemDto>(`${driveApiBasePath}/folders`, {
+      method: 'POST',
+      body: JSON.stringify({ parentId: input.parentId ?? null, name: input.name }),
+    }),
+  renameItem: (itemId: string, name: string) =>
+    request<DriveItemDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+  moveItem: (itemId: string, parentId: string | null) =>
+    request<DriveItemDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parentId }),
+    }),
+  deleteItem: (itemId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  listTrash: (options: DriveChildrenPageOptions = {}) =>
+    request<DriveTrashListPageDto>(`${driveApiBasePath}/trash${driveOffsetQuerySuffix(options)}`),
+  restoreItem: (itemId: string) =>
+    request<DriveItemDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}/restore`, { method: 'POST' }),
+  deleteTrashItem: (itemId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/trash/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  createShare: (itemId: string, settings: DriveAccessSettingsInput) =>
+    request<DriveShareDto>(`${driveApiBasePath}/items/${encodeURIComponent(itemId)}/share`, {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+  disableShare: (shareId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/shares/${encodeURIComponent(shareId)}`, { method: 'DELETE' }),
+  getShare: (shareId: string) =>
+    request<DriveShareDto>(`${driveApiBasePath}/shares/${encodeURIComponent(shareId)}`),
+  listShares: (options: DrivePublicLinksPageInput = {}) =>
+    request<DriveShareListPageDto>(`${driveApiBasePath}/shares${driveOffsetQuerySuffix(options)}`),
+  preflightSite: (sourceFolderItemId: string) =>
+    request<DriveSitePreflightDto>(`${driveApiBasePath}/sites/preflight?${new URLSearchParams({ sourceFolderItemId }).toString()}`),
+  createSite: (input: DriveSiteCreateInput) =>
+    request<DriveSiteDto>(`${driveApiBasePath}/sites`, { method: 'POST', body: JSON.stringify(input) }),
+  listSites: (options: DriveSiteListInput = {}) =>
+    request<DriveSiteListPageDto>(`${driveApiBasePath}/sites${driveSiteQuerySuffix(options)}`),
+  updateSiteAccess: (siteId: string, input: DriveSiteAccessUpdateInput) =>
+    request<DriveSiteDto>(`${driveApiBasePath}/sites/${encodeURIComponent(siteId)}/access`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  disableSite: (siteId: string) =>
+    request<DriveSiteDto>(`${driveApiBasePath}/sites/${encodeURIComponent(siteId)}/disable`, { method: 'POST' }),
+  enableSite: (siteId: string) =>
+    request<DriveSiteDto>(`${driveApiBasePath}/sites/${encodeURIComponent(siteId)}/enable`, { method: 'POST' }),
+  republishSite: (siteId: string, input: { readonly entryPath?: string | null }) =>
+    request<DriveSiteDto>(`${driveApiBasePath}/sites/${encodeURIComponent(siteId)}/republish`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteSite: (siteId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' }),
+  listPublicAssets: (options: DriveChildrenPageOptions = {}) =>
+    request<DrivePublicAssetListPageDto>(`${driveApiBasePath}/public-assets${driveOffsetQuerySuffix(options)}`),
+  preparePublicAssetUpload: (input: { readonly name: string; readonly size: string; readonly mimeType?: string | null }) =>
+    request<DriveUploadPrepareResult>(`${driveApiBasePath}/public-assets/uploads/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({ name: input.name, size: input.size, mimeType: input.mimeType ?? null }),
+    }),
+  completePublicAssetUpload: (sessionId: string) =>
+    request<DrivePublicAssetDto>(`${driveApiBasePath}/public-assets/uploads/${encodeURIComponent(sessionId)}/complete`, { method: 'POST' }),
+  cancelPublicAssetUpload: (sessionId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/public-assets/uploads/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
+  preparePublicAssetReplace: (assetId: string, input: { readonly name: string; readonly size: string; readonly mimeType?: string | null }) =>
+    request<DriveUploadPrepareResult>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}/replace/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({ name: input.name, size: input.size, mimeType: input.mimeType ?? null }),
+    }),
+  completePublicAssetReplace: (assetId: string, sessionId: string) =>
+    request<DrivePublicAssetDto>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}/replace/${encodeURIComponent(sessionId)}/complete`, { method: 'POST' }),
+  cancelPublicAssetReplace: (assetId: string, sessionId: string) =>
+    request<{ ok: true }>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}/replace/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
+  renamePublicAsset: (assetId: string, name: string) =>
+    request<DrivePublicAssetDto>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+  trashPublicAsset: (assetId: string) =>
+    request<DrivePublicAssetDto>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' }),
+  restorePublicAsset: (assetId: string) =>
+    request<DrivePublicAssetDto>(`${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}/restore`, { method: 'POST' }),
+  publicAssetDownloadUrl: (assetId: string) =>
+    `${driveApiBasePath}/public-assets/${encodeURIComponent(assetId)}/download`,
 }
 
 export const driveBrowserApi = {
