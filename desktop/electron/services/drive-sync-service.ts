@@ -155,10 +155,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   })
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
-    const bindings = (await deps.bindings.list())
+    const bindingEntries = (await deps.bindings.list())
       .filter((binding) => binding.status !== "removed")
       .sort(compareUpdatedDesc)
-      .map(toBindingDto)
+    const bindings = await Promise.all(bindingEntries.map(toSnapshotBindingDto))
     const conflicts = (await deps.conflicts.list())
       .filter((conflict) => conflict.status === "open")
       .sort(compareCreatedAsc)
@@ -179,6 +179,27 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         errorCount: bindings.filter((binding) => binding.status === "error").length,
       },
     }
+  }
+
+  async function toSnapshotBindingDto(entry: DriveSyncBindingEntryV1): Promise<DriveSyncBindingDto> {
+    if (entry.status !== "active") return toBindingDto(entry)
+    const rootBaseline = (await baselineStore.listByBinding(entry.id))
+      .find((baseline) => baseline.relativePath === "")
+    if (!rootBaseline) return toBindingDto(entry)
+    if (rootBaseline.deletedAt !== null) {
+      return toBindingDto(entry, { status: "error", lastError: "同步根对象已删除。" })
+    }
+
+    try {
+      const local = await inspectDriveSyncLocalPath(entry.localPath)
+      if (local.kind === "missing") {
+        return toBindingDto(entry, { status: "error", lastError: "本地路径不存在。" })
+      }
+    } catch {
+      return toBindingDto(entry, { status: "error", lastError: "本地路径无法访问。" })
+    }
+
+    return toBindingDto(entry)
   }
 
   async function createBinding(input: DriveSyncCreateBindingInput): Promise<DriveSyncBindingDto> {
@@ -1176,20 +1197,23 @@ function isRemoteNotFoundError(error: unknown): boolean {
   return message.includes("NOT_FOUND") || message.includes("HTTP 404")
 }
 
-function toBindingDto(entry: DriveSyncBindingEntryV1): DriveSyncBindingDto {
+function toBindingDto(
+  entry: DriveSyncBindingEntryV1,
+  override?: { readonly status: DriveSyncBindingStatus; readonly lastError: string },
+): DriveSyncBindingDto {
   return {
     id: entry.id,
     driveItemId: entry.driveItemId,
     driveItemName: entry.driveItemName,
     kind: entry.kind,
     localPath: entry.localPath,
-    status: entry.status,
+    status: override?.status ?? entry.status,
     remoteCursor: entry.remoteCursor,
     excludeRules: entry.excludeRules,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     lastSyncedAt: entry.lastSyncedAt,
-    lastError: entry.lastError,
+    lastError: override?.lastError ?? entry.lastError,
   }
 }
 

@@ -440,14 +440,64 @@ describe("DriveModule", () => {
   })
 
   it("shows drive sync conflicts in the top toolbar", async () => {
-    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({ conflictCount: 2 }))
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { conflictCount: 2 },
+      {
+        bindings: [
+          createDriveSyncBinding({ id: "binding-1" }),
+          createDriveSyncBinding({ id: "binding-2" }),
+        ],
+        conflicts: [
+          {
+            id: "conflict-1",
+            bindingId: "binding-1",
+            relativePath: "spec.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+          {
+            id: "conflict-2",
+            bindingId: "binding-2",
+            relativePath: "notes.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+        ],
+      },
+    ))
 
     await render(<DriveModule />)
     await flushAct()
 
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
-    expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("同步")
-    expect(getButtonByLabel("同步状态：2 个冲突").textContent).toContain("2")
+    const button = getButtonByLabel("同步状态：2 个冲突")
+    expect(button.dataset.variant).toBe("destructive")
+    expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("destructive")
+    expect(button.textContent).toContain("同步")
+    expect(button.textContent).toContain("2")
+  })
+
+  it("ignores orphan drive sync conflicts in the top toolbar", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { conflictCount: 1 },
+      {
+        conflicts: [{
+          id: "orphan-conflict",
+          bindingId: "removed-binding",
+          relativePath: "spec.md",
+          type: "both_modified",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = getButtonByLabel("同步状态：暂无同步绑定")
+    expect(button.dataset.variant).toBe("outline")
+    expect(button.querySelector<HTMLElement>("[data-slot='badge']")).toBeNull()
+    expect(queryButtonByLabel("同步状态：1 个冲突")).toBeNull()
   })
 
   it("shows drive sync errors as a recoverable badge", async () => {
@@ -461,6 +511,7 @@ describe("DriveModule", () => {
 
     const button = getButtonByLabel("同步状态：11 个错误")
     expect(button.dataset.variant).toBe("outline")
+    expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("outline")
     expect(button.querySelector("svg")).toBeNull()
     expect(button.textContent).toContain("同步")
     expect(button.textContent).toContain("11")
@@ -470,6 +521,30 @@ describe("DriveModule", () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地文件不存在")
     expect(getButton("重试同步")).toBeTruthy()
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("恢复")
+  })
+
+  it("shows active bindings with open conflicts in the conflict tab", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 1 },
+      {
+        bindings: [createDriveSyncBinding({ id: "binding-active", driveItemName: "Active", status: "active" })],
+        conflicts: [{
+          id: "conflict-1",
+          bindingId: "binding-active",
+          relativePath: "spec.md",
+          type: "both_modified",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个冲突")
+    await clickTabText("有冲突")
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Active")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("1 个冲突")
   })
 
   it("opens the drive sync status dialog from the toolbar", async () => {
@@ -653,6 +728,13 @@ describe("DriveModule", () => {
           createDriveSyncBinding({ id: "binding-paused", driveItemName: "Paused", status: "paused" }),
           createDriveSyncBinding({ id: "binding-error", driveItemName: "Error", status: "error" }),
         ],
+        conflicts: [{
+          id: "conflict-1",
+          bindingId: "binding-conflict",
+          relativePath: "spec.md",
+          type: "both_modified",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }],
       },
     ))
 

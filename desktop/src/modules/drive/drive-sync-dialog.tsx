@@ -325,9 +325,12 @@ function DriveSyncStatusPanel({
   const [selectedBindingId, setSelectedBindingId] = useState<string | null>(null)
   const [stopTarget, setStopTarget] = useState<DriveSyncStopTarget>(null)
   const selectedBinding = bindings.find((binding) => binding.id === selectedBindingId) ?? null
+  const conflictBindingIds = new Set(conflicts.map((conflict) => conflict.bindingId))
   const visibleBindings = filter === "all"
     ? bindings
-    : bindings.filter((binding) => binding.status === filter)
+    : bindings.filter((binding) => filter === "conflict"
+      ? binding.status === "conflict" || conflictBindingIds.has(binding.id)
+      : binding.status === filter)
 
   const refreshSnapshot = async () => {
     onSnapshotChange(await requireSynapseBridge().driveSync.getSnapshot())
@@ -728,13 +731,13 @@ export function DriveSyncStatusButton({
   readonly snapshot: DriveSyncSnapshotDto | null
 }) {
   const summary = snapshot?.summary
-  const conflictCount = summary?.conflictCount ?? 0
+  const conflictCount = countVisibleDriveSyncConflicts(snapshot)
   const errorCount = summary?.errorCount ?? 0
   const activeCount = summary?.activeBindingCount ?? 0
   const badge = conflictCount > 0
     ? { label: String(conflictCount), variant: "destructive" as const, message: `${conflictCount} 个冲突` }
     : errorCount > 0
-      ? { label: String(errorCount), variant: "destructive" as const, message: `${errorCount} 个错误` }
+      ? { label: String(errorCount), variant: "outline" as const, message: `${errorCount} 个错误` }
       : activeCount > 0
         ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
         : null
@@ -745,6 +748,12 @@ export function DriveSyncStatusButton({
       {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
     </Button>
   )
+}
+
+function countVisibleDriveSyncConflicts(snapshot: DriveSyncSnapshotDto | null): number {
+  if (!snapshot) return 0
+  const bindingIds = new Set(snapshot.bindings.map((binding) => binding.id))
+  return snapshot.conflicts.filter((conflict) => bindingIds.has(conflict.bindingId)).length
 }
 
 function parseExcludeText(value: string): string[] {

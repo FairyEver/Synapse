@@ -273,6 +273,91 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("treats missing remote items as successful remote deletes", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "gone.md",
+      kind: "file",
+      remoteItemId: "remote-gone",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+    const accountService = createAccountService({
+      deleteDriveItem: vi.fn(async () => {
+        throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 })
+      }),
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "delete_remote",
+        relativePath: "gone.md",
+        driveItemId: "remote-gone",
+        localPath: path.join(tempDir, "gone.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "gone.md", deletedAt: "2026-06-28T00:00:00.000Z" },
+    ])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "delete_remote", status: "succeeded", message: null }),
+    ])
+  })
+
+  it("treats missing local paths as successful local deletes", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "gone.md",
+      kind: "file",
+      remoteItemId: "remote-gone",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "delete_local",
+        relativePath: "gone.md",
+        driveItemId: "remote-gone",
+        localPath: path.join(tempDir, "gone.md"),
+      }),
+      baselineStore: store,
+      accountService: createAccountService(),
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(async () => {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" })
+      }),
+    })
+
+    await expect(namespace.list()).resolves.toMatchObject([
+      { relativePath: "gone.md", deletedAt: "2026-06-28T00:00:00.000Z" },
+    ])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "delete_local", status: "succeeded", message: null }),
+    ])
+  })
+
   it("records failed operations without updating baseline", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const records: unknown[] = []

@@ -113,12 +113,20 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
 }
 
 async function deleteRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
-  await deps.accountService.deleteDriveItem(requireDriveItemId(deps.operation))
+  try {
+    await deps.accountService.deleteDriveItem(requireDriveItemId(deps.operation))
+  } catch (error) {
+    if (!isRemoteNotFoundError(error)) throw error
+  }
   await deps.baselineStore.markDeleted(deps.binding.id, deps.operation.relativePath)
 }
 
 async function deleteLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
-  await deps.trashLocalPath(requireLocalPath(deps.operation))
+  try {
+    await deps.trashLocalPath(requireLocalPath(deps.operation))
+  } catch (error) {
+    if (!isLocalNotFoundError(error)) throw error
+  }
   await deps.baselineStore.markDeleted(deps.binding.id, deps.operation.relativePath)
 }
 
@@ -207,4 +215,23 @@ function requireDriveItemId(operation: DriveSyncPlannedOperation): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "同步操作失败。"
+}
+
+function isRemoteNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const details = error as Error & {
+    readonly status?: unknown
+    readonly statusCode?: unknown
+    readonly code?: unknown
+  }
+  if (details.status === 404 || details.statusCode === 404) return true
+  if (typeof details.code === "string" && details.code.toUpperCase().includes("NOT_FOUND")) return true
+  const message = error.message.toUpperCase()
+  return message.includes("NOT_FOUND") || message.includes("HTTP 404")
+}
+
+function isLocalNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const details = error as NodeJS.ErrnoException
+  return details.code === "ENOENT"
 }

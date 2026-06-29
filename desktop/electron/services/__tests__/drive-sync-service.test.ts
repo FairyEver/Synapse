@@ -76,6 +76,89 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("marks active bindings with missing local roots as snapshot errors", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "missing.md")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "missing.md",
+        kind: "file",
+        localPath,
+      })
+      await harness.baseline.upsert({
+        id: `${binding.id}:`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "",
+        kind: "file",
+        remoteItemId: "drive-item-1",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: 1,
+        localMtimeMs: 1,
+        localHash: "sha256:old",
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        bindings: [expect.objectContaining({
+          id: binding.id,
+          status: "error",
+          lastError: "本地路径不存在。",
+        })],
+        summary: {
+          activeBindingCount: 0,
+          errorCount: 1,
+        },
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("marks bindings with deleted root baselines as snapshot errors", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "spec.md",
+      kind: "file",
+      localPath: "/Users/me/spec.md",
+    })
+    await harness.baseline.upsert({
+      id: `${binding.id}:`,
+      schemaVersion: 1,
+      bindingId: binding.id,
+      relativePath: "",
+      kind: "file",
+      remoteItemId: "drive-item-1",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 1,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      lastSyncedAt: "2026-06-28T00:00:00.000Z",
+      deletedAt: "2026-06-29T00:00:00.000Z",
+    })
+
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [expect.objectContaining({
+        id: binding.id,
+        status: "error",
+        lastError: "同步根对象已删除。",
+      })],
+      summary: {
+        activeBindingCount: 0,
+        errorCount: 1,
+      },
+    })
+  })
+
   it("keeps historical operation errors out of the summary error count", async () => {
     const service = createDriveSyncService(createHarness().deps)
     const binding = await service.createBinding({
