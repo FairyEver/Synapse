@@ -1,6 +1,6 @@
 import type { DriveSyncExcludeRulesDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
-export const DRIVE_SYNC_FORCED_EXCLUDES = [".git/**", ".git", ".synapse-sync/**", "*.synapse-sync-tmp"] as const
+export const DRIVE_SYNC_FORCED_EXCLUDES = [".git/**", ".git", ".synapse-sync/**", ".synapse-sync-trash/**", ".synapse-sync-trash", "*.synapse-sync-tmp"] as const
 export const DRIVE_SYNC_DEFAULT_EXCLUDES = [
   "node_modules/**",
   "vendor/**",

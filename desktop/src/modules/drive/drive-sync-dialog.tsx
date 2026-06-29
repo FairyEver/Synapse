@@ -342,6 +342,7 @@ function DriveSyncStatusPanel({
       await refreshSnapshot()
       toast(success)
     } catch (error) {
+      await refreshSnapshot().catch(() => undefined)
       toast(errorMessage(error, "操作失败"))
     }
   }
