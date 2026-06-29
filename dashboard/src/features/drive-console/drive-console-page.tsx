@@ -17,7 +17,9 @@ import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-f
 import { driveApi } from '@/lib/api'
 import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
+import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
+import { DriveTrashView } from './drive-trash-view'
 import { uploadDriveFiles, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
 
@@ -189,7 +191,13 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
       </div>
       {state.browser.status === 'loading' ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {state.browser.status === 'error' ? <div className='text-sm text-destructive'>{state.browser.message}</div> : null}
-      {state.browser.status === 'ready' ? (
+      {state.browser.status === 'ready' && activeView === 'public-assets' ? (
+        <DrivePublicAssetsView onChanged={state.refresh} />
+      ) : null}
+      {state.browser.status === 'ready' && activeView === 'trash' ? (
+        <DriveTrashView onChanged={state.refresh} />
+      ) : null}
+      {state.browser.status === 'ready' && activeView === 'files' ? (
         <DriveFileTable
           snapshot={state.browser.snapshot}
           activeView={activeView}

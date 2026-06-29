@@ -34,6 +34,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
       createShare: vi.fn(),
       listShares: vi.fn(),
       disableShare: vi.fn(),
+      listPublicAssets: vi.fn(),
+      listTrash: vi.fn(),
     },
   }
 })
@@ -252,6 +254,36 @@ describe('DriveConsolePage', () => {
     expect(driveApi.listShares).toHaveBeenCalledWith({ offset: 0, limit: 50 })
     expect(document.body.textContent).toContain('notes.md')
   })
+
+  it('opens the root public assets subview', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    await render(<DriveConsolePage />)
+
+    await click(elementWithText('公开素材'))
+    await act(async () => undefined)
+    expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+  })
+
+  it('opens the root trash subview', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listTrash).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    await render(<DriveConsolePage />)
+
+    await click(elementWithText('回收站'))
+    await act(async () => undefined)
+    expect(driveApi.listTrash).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+  })
 })
 
 function mockReadySnapshot(snapshot: DriveBrowserSnapshotDto) {
@@ -301,6 +333,12 @@ function button(text: string) {
   const buttons = Array.from(document.querySelectorAll('button'))
   return buttons.find((item) => item.textContent?.trim() === text)
     ?? buttons.find((item) => item.textContent?.includes(text))
+    ?? null
+}
+
+function elementWithText(text: string) {
+  return Array.from(document.querySelectorAll<HTMLElement>('button, span, td, div'))
+    .find((item) => item.textContent?.trim() === text)
     ?? null
 }
 
