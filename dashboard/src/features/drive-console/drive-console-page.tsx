@@ -1,5 +1,12 @@
 import { useRef, useState } from 'react'
-import type { DriveAccessSettingsInput, DriveBrowserItemDto, DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
+import {
+  buildConsoleDriveRootUrl,
+  type DriveAccessSettingsInput,
+  type DriveBrowserItemDto,
+  type DriveBrowserSnapshotDto,
+  type DriveBrowserSurface,
+  type DriveUsageDto,
+} from '@synapse/shared'
 import { Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -152,7 +159,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
 
   const runUpload = async (files: readonly File[]) => {
     const parentId = currentFolderId(state)
-    if (!parentId || files.length === 0) return
+    if (files.length === 0) return
     setUploading(true)
     try {
       const result = await uploadDriveFiles({ parentId, files })
@@ -301,7 +308,12 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
 function currentFolderId(state: DriveConsoleState): string | null {
   if (state.browser.status !== 'ready') return null
   if (state.browser.snapshot.current.type !== 'folder') return null
+  if (isConsoleRootSnapshot(state.browser.snapshot)) return null
   return state.browser.snapshot.current.id
+}
+
+function isConsoleRootSnapshot(snapshot: DriveBrowserSnapshotDto): boolean {
+  return snapshot.breadcrumbs.length === 1 && snapshot.current.browserUrl === buildConsoleDriveRootUrl()
 }
 
 function uploadResultMessage(result: DriveWebUploadResult) {

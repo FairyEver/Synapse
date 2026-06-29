@@ -119,7 +119,7 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).not.toContain('公开素材')
   })
 
-  it('creates folders in the current folder and refreshes', async () => {
+  it('creates folders in the root folder and refreshes', async () => {
     const snapshot = folderSnapshot()
     const reload = vi.fn(async () => snapshot)
     vi.mocked(useDriveBrowser).mockReturnValue({
@@ -140,7 +140,32 @@ describe('DriveConsolePage', () => {
     await input('文件夹名称', '资料')
     await click(button('新建'))
 
-    expect(driveApi.createFolder).toHaveBeenCalledWith({ parentId: 'root', name: '资料' })
+    expect(driveApi.createFolder).toHaveBeenCalledWith({ parentId: null, name: '资料' })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('creates folders in the current non-root folder and refreshes', async () => {
+    const snapshot = nestedFolderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.createFolder).mockResolvedValue({} as never)
+    await render(<DriveConsoleItemPage itemId='folder-1' surface='console' />)
+
+    await click(button('新建文件夹'))
+    await input('文件夹名称', '资料')
+    await click(button('新建'))
+
+    expect(driveApi.createFolder).toHaveBeenCalledWith({ parentId: 'folder-1', name: '资料' })
     expect(reload).toHaveBeenCalled()
   })
 
@@ -179,7 +204,7 @@ describe('DriveConsolePage', () => {
       fileInput.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: 'root', files: [file] })
+    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
     expect(reload).toHaveBeenCalled()
   })
 
@@ -200,7 +225,7 @@ describe('DriveConsolePage', () => {
       dropzone.dispatchEvent(event)
     })
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: 'root', files: [file] })
+    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
   })
 
   it('shares a row with default web settings and refreshes', async () => {
@@ -513,6 +538,28 @@ function folderSnapshot(): DriveBrowserSnapshotDto {
     annotation: null,
     canDownload: true,
     canZip: true,
+  }
+}
+
+function nestedFolderSnapshot(): DriveBrowserSnapshotDto {
+  return {
+    ...folderSnapshot(),
+    current: {
+      id: 'folder-1',
+      name: '文档',
+      type: 'folder',
+      size: '0',
+      mimeType: null,
+      updatedAt: '2026-06-29T00:00:00.000Z',
+      previewKind: 'download-only',
+      browserUrl: '/console/drive/folders/folder-1',
+      downloadUrl: '/drive/items/folder-1/download',
+    },
+    breadcrumbs: [
+      { id: 'root', name: '我的空间', browserUrl: '/console/drive' },
+      { id: 'folder-1', name: '文档', browserUrl: '/console/drive/folders/folder-1' },
+    ],
+    children: [],
   }
 }
 

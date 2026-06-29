@@ -66,6 +66,9 @@ describe('DriveTrashView', () => {
     await click(textButton('恢复'))
     expect(driveApi.restoreItem).toHaveBeenCalledWith('item-1')
     await click(textButton('删除'))
+    expect(driveApi.deleteTrashItem).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('删除old.md')
+    await click(lastTextButton('删除'))
     expect(driveApi.deleteTrashItem).toHaveBeenCalledWith('item-1')
   })
 })
@@ -237,6 +240,12 @@ async function flush() {
 
 function textButton(text: string) {
   const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
+  if (!button) throw new Error(`missing button ${text}`)
+  return button
+}
+
+function lastTextButton(text: string) {
+  const button = Array.from(document.querySelectorAll('button')).filter((item) => item.textContent?.includes(text)).at(-1)
   if (!button) throw new Error(`missing button ${text}`)
   return button
 }
