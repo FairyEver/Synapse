@@ -5,6 +5,18 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+type ModelInput = {
+  readonly providerId: string
+  readonly modelTier: "default" | "haiku" | "sonnet" | "opus"
+}
+
+type PersonaInput = {
+  readonly name: string
+  readonly description: string
+  readonly systemPrompt: string
+  readonly providerModel?: ModelInput | null
+}
+
 const fixtures = vi.hoisted(() => ({
   items: [
     {
@@ -34,20 +46,20 @@ const fixtures = vi.hoisted(() => ({
 
 const bridge = vi.hoisted(() => ({
   list: vi.fn(async () => fixtures.items),
-  create: vi.fn(async (input: { name: string; description: string; systemPrompt: string }) => ({
+  create: vi.fn(async (input: PersonaInput) => ({
     id: "persona-2",
     schemaVersion: 1,
     ...input,
-    providerModel: null,
+    providerModel: input.providerModel ?? null,
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
     updatedAt: "2026-06-30T00:00:00.000Z",
   })),
-  update: vi.fn(async (input: { id: string; name: string; description: string; systemPrompt: string }) => ({
+  update: vi.fn(async (input: PersonaInput & { id: string }) => ({
     schemaVersion: 1,
     ...input,
-    providerModel: null,
+    providerModel: input.providerModel ?? null,
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -75,6 +87,38 @@ vi.mock("@/app-shell/logging", () => ({
 
 vi.mock("@/lib/provider-model", () => ({
   useProviderModelLabel: () => "",
+}))
+
+vi.mock("../../../../src/components/provider-model-select-dialog", () => ({
+  ProviderModelSelectDialog: ({
+    onOpenChange,
+    onSelect,
+    open,
+  }: {
+    readonly open: boolean
+    readonly onOpenChange: (open: boolean) => void
+    readonly onSelect: (selection: {
+      readonly providerId: string
+      readonly modelTier: "sonnet"
+      readonly providerName: string
+      readonly modelName: string
+    }) => void
+  }) => open ? (
+    <button
+      type="button"
+      onClick={() => {
+        onSelect({
+          providerId: "claude",
+          modelTier: "sonnet",
+          providerName: "Claude",
+          modelName: "Claude Sonnet",
+        })
+        onOpenChange(false)
+      }}
+    >
+      选择 Sonnet 模型
+    </button>
+  ) : null,
 }))
 
 vi.mock("sonner", () => ({ toast }))
@@ -138,6 +182,53 @@ describe("AgentPersonasModule", () => {
     expect(document.body.textContent).toContain("名称不能为空")
     expect(bridge.create).not.toHaveBeenCalled()
   })
+
+  it("creates a user persona with a selected model", async () => {
+    await renderModule()
+
+    await clickButton("新增")
+    await setFieldValue("#agent-persona-name", "翻译助手")
+    await setFieldValue("#agent-persona-description", "处理中英文本。")
+    await setFieldValue("#agent-persona-system-prompt", "你是翻译助手。")
+    await clickButton("未指定")
+    await clickButton("选择 Sonnet 模型")
+    await clickButton("保存智能体")
+
+    expect(bridge.create).toHaveBeenCalledWith({
+      name: "翻译助手",
+      description: "处理中英文本。",
+      systemPrompt: "你是翻译助手。",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    })
+    expect(toast.success).toHaveBeenCalledWith("已保存")
+  })
+
+  it("updates a user persona", async () => {
+    await renderModule()
+
+    await clickButtonByLabel("编辑智能体：产品顾问")
+    await setFieldValue("#agent-persona-name", "产品教练")
+    await setFieldValue("#agent-persona-description", "整理产品策略。")
+    await setFieldValue("#agent-persona-system-prompt", "你是产品教练。")
+    await clickButton("保存智能体")
+
+    expect(bridge.update).toHaveBeenCalledWith({
+      id: "persona-1",
+      name: "产品教练",
+      description: "整理产品策略。",
+      systemPrompt: "你是产品教练。",
+      providerModel: null,
+    })
+  })
+
+  it("deletes a user persona after confirmation", async () => {
+    await renderModule()
+
+    await clickButtonByLabel("删除智能体：产品顾问")
+    await clickButton("删除")
+
+    expect(bridge.delete).toHaveBeenCalledWith({ id: "persona-1" })
+  })
 })
 
 async function renderModule() {
@@ -159,6 +250,31 @@ async function clickButton(text: string) {
   if (!button) throw new Error(`Button not found: ${text}`)
   await act(async () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+async function clickButtonByLabel(label: string) {
+  const button = buttonByLabel(label)
+  if (!button) throw new Error(`Button not found: ${label}`)
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+async function setFieldValue(selector: string, value: string) {
+  const field = document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)
+  if (!field) throw new Error(`Field not found: ${selector}`)
+  await act(async () => {
+    const prototype = field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
+    const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
+    if (valueSetter) {
+      valueSetter.call(field, value)
+    } else {
+      field.value = value
+    }
+    field.dispatchEvent(new Event("input", { bubbles: true }))
   })
 }
 
