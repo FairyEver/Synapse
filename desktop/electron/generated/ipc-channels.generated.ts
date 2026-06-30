@@ -275,6 +275,13 @@ export const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "agentPersonas": {
+    "list": "synapse:agent-personas:list",
+    "create": "synapse:agent-personas:create",
+    "update": "synapse:agent-personas:update",
+    "delete": "synapse:agent-personas:delete",
+    "changed": "synapse:agent-personas:changed",
+  },
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
     "createBinding": "synapse:drive-sync:bindings:create",

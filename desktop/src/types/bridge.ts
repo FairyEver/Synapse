@@ -28,6 +28,13 @@ import type {
   SynapseQuickInputItem,
 } from "./quick-input"
 import type {
+  SynapseAgentPersona,
+  SynapseAgentPersonaChangedEvent,
+  SynapseAgentPersonaCreateInput,
+  SynapseAgentPersonaIdInput,
+  SynapseAgentPersonaUpdateInput,
+} from "./agent-persona"
+import type {
   SynapseSoundNotifierChangedEvent,
   SynapseSoundNotifierPlayInput,
   SynapseSoundNotifierPlayRequestedEvent,
@@ -895,6 +902,13 @@ export type SynapseBridge = {
     update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
     delete: (input: { id: string }) => Promise<void>
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+  }
+  agentPersonas: {
+    list: () => Promise<SynapseAgentPersona[]>
+    create: (input: SynapseAgentPersonaCreateInput) => Promise<SynapseAgentPersona>
+    update: (input: SynapseAgentPersonaUpdateInput) => Promise<SynapseAgentPersona>
+    delete: (input: SynapseAgentPersonaIdInput) => Promise<void>
+    onChanged: (listener: (event: SynapseAgentPersonaChangedEvent) => void) => () => void
   }
   driveSync: {
     getSnapshot: () => Promise<DriveSyncSnapshotDto>

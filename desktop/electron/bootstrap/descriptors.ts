@@ -49,6 +49,8 @@ import {
   QUICK_INPUT_ITEMS_NAMESPACE,
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
+import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
+import { AGENT_PERSONAS_ITEMS_NAMESPACE } from "../../app-capabilities/agent-personas/shared/capability"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -99,6 +101,7 @@ import {
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
+  AgentPersonaItemEntryV1,
   ConversationEntryV1,
   DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
@@ -350,6 +353,19 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
   },
   async start(instance) {
     await instance.initialize()
+  },
+}
+
+export const coreAgentPersonasDescriptor: ServiceDescriptor<AgentPersonaService> = {
+  id: "core.agent-personas",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createAgentPersonaService({
+      items: dataRepository.namespace<AgentPersonaItemEntryV1>(AGENT_PERSONAS_ITEMS_NAMESPACE),
+      logger: ctx.logger.child("agent-personas"),
+    })
   },
 }
 

@@ -402,6 +402,13 @@ const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "agentPersonas": {
+    "list": "synapse:agent-personas:list",
+    "create": "synapse:agent-personas:create",
+    "update": "synapse:agent-personas:update",
+    "delete": "synapse:agent-personas:delete",
+    "changed": "synapse:agent-personas:changed",
+  },
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
     "createBinding": "synapse:drive-sync:bindings:create",
@@ -863,6 +870,16 @@ const synapseBridge: SynapseBridge = {
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.quickInput.changed,
+    ),
+  },
+  agentPersonas: {
+    list: () => invoke(IPC_CHANNELS.agentPersonas.list)(),
+    create: (input) => invoke(IPC_CHANNELS.agentPersonas.create)(input),
+    update: (input) => invoke(IPC_CHANNELS.agentPersonas.update)(input),
+    delete: (input) => invoke(IPC_CHANNELS.agentPersonas.delete)(input),
+    onChanged: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.agentPersonas.changed,
     ),
   },
   driveSync: {
