@@ -346,7 +346,7 @@ export class DriveUserController {
     return this.drive.getItem(request.user!.id, id)
   }
 
-  @Get("/items/:itemId/image-sources")
+  @Get(["/items/:itemId/image-sources", "/browser/owner/items/:itemId/image-sources"])
   scanOwnerItemImages(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
     return requireDriveDocumentImageService(this.documentImages).scanOwnerItemImages({
       actorUserId: request.user!.id,
@@ -354,7 +354,7 @@ export class DriveUserController {
     })
   }
 
-  @Post("/items/:itemId/image-sources/import")
+  @Post(["/items/:itemId/image-sources/import", "/browser/owner/items/:itemId/image-sources/import"])
   importOwnerItemImages(
     @Param("itemId") itemId: string,
     @Body() body: unknown,

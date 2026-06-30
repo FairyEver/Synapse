@@ -11,6 +11,7 @@ import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
+import { DriveDocumentImageService } from "./drive-document-image.service"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveSiteService } from "./drive-site.service"
@@ -82,6 +83,10 @@ describe("DriveController", () => {
     deleteShareComment: vi.fn(),
     deleteShareThread: vi.fn(),
   }
+  const documentImages = {
+    scanOwnerItemImages: vi.fn(),
+    importOwnerItemImages: vi.fn(),
+  }
   const sites = {
     preflightSite: vi.fn(),
     createSite: vi.fn(),
@@ -145,6 +150,8 @@ describe("DriveController", () => {
     annotations.updateShareComment.mockReset()
     annotations.deleteShareComment.mockReset()
     annotations.deleteShareThread.mockReset()
+    documentImages.scanOwnerItemImages.mockReset()
+    documentImages.importOwnerItemImages.mockReset()
     sites.preflightSite.mockReset()
     sites.createSite.mockReset()
     sites.listSites.mockReset()
@@ -477,6 +484,49 @@ describe("DriveController", () => {
       expect(annotations.updateOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", { body: "Updated body" })
       expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1")
       expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1")
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("routes owner browser image source requests through the document image service", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DriveDocumentImageService, useValue: documentImages },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      vi.stubEnv("APP_PUBLIC_URL", "https://app.example.test")
+      documentImages.scanOwnerItemImages.mockResolvedValue({ sources: [] })
+      documentImages.importOwnerItemImages.mockResolvedValue({ sources: [], imported: [] })
+
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/item-1/image-sources").expect(200)
+      await request(userApp.getHttpServer())
+        .post("/api/drive/browser/owner/items/item-1/image-sources/import")
+        .send({ baseVersionId: "version-1", sources: [{ src: "https://example.com/a.png" }] })
+        .expect(201)
+
+      expect(documentImages.scanOwnerItemImages).toHaveBeenCalledWith({
+        actorUserId: "user-1",
+        itemId: "item-1",
+      })
+      expect(documentImages.importOwnerItemImages).toHaveBeenCalledWith(expect.objectContaining({
+        actorUserId: "user-1",
+        itemId: "item-1",
+        body: { baseVersionId: "version-1", sources: [{ src: "https://example.com/a.png" }] },
+      }))
     } finally {
       await userApp.close()
     }
