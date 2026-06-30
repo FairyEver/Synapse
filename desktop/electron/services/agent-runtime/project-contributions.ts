@@ -19,9 +19,15 @@ export type AgentSdkAgentDefinition = {
   readonly tools?: string[]
   readonly disallowedTools?: string[]
   readonly model?: string
+  readonly mcpServers?: unknown[]
   readonly skills?: string[]
+  readonly initialPrompt?: string
   readonly maxTurns?: number
   readonly background?: boolean
+  readonly memory?: "user" | "project" | "local"
+  readonly effort?: "low" | "medium" | "high" | "xhigh" | "max" | number
+  readonly permissionMode?: string
+  readonly criticalSystemReminder_EXPERIMENTAL?: string
 }
 
 export type AgentSdkAgentDefinitions = Record<string, AgentSdkAgentDefinition>
