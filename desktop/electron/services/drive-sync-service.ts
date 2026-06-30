@@ -194,21 +194,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       return toBindingDto(entry, { status: "error", lastError: "同步根对象已删除。" })
     }
 
-    if (entry.kind === "folder") {
-      const localIssue = await inspectLocalFolderRootIssue(entry)
-      if (localIssue) {
-        await markBindingError(entry.id, localIssue, { emitChanged: false })
-        return toBindingDto(entry, { status: "error", lastError: localIssue })
-      }
-    } else {
-      try {
-        const local = await inspectDriveSyncLocalPath(entry.localPath)
-        if (local.kind === "missing") {
-          return toBindingDto(entry, { status: "error", lastError: LOCAL_ROOT_MISSING_ERROR })
-        }
-      } catch {
-        return toBindingDto(entry, { status: "error", lastError: LOCAL_ROOT_INACCESSIBLE_ERROR })
-      }
+    const localIssue = await inspectLocalRootIssue(entry)
+    if (localIssue) {
+      await markBindingError(entry.id, localIssue, { emitChanged: false })
+      return toBindingDto(entry, { status: "error", lastError: localIssue })
     }
 
     return toBindingDto(entry)
@@ -1106,14 +1095,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     binding: DriveSyncBindingEntryV1,
     input: { readonly checkRemote: boolean; readonly throwOnIssue: boolean },
   ): Promise<boolean> {
-    if (binding.kind !== "folder") return true
     const rootBaseline = await activeRootBaseline(binding.id)
     if (!rootBaseline) return true
 
-    const localIssue = await inspectLocalFolderRootIssue(binding)
+    const localIssue = await inspectLocalRootIssue(binding)
     if (localIssue) return handleBindingRootIssue(binding, localIssue, input.throwOnIssue)
 
-    if (input.checkRemote && deps.accountService.getDriveItem) {
+    if (binding.kind === "folder" && input.checkRemote && deps.accountService.getDriveItem) {
       try {
         await deps.accountService.getDriveItem(rootBaseline.remoteItemId)
       } catch (error) {
@@ -1128,6 +1116,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function activeRootBaseline(bindingId: string): Promise<DriveSyncBaselineEntryV1 | null> {
     return (await baselineStore.listByBinding(bindingId))
       .find((entry) => entry.relativePath === "" && entry.deletedAt === null) ?? null
+  }
+
+  async function inspectLocalRootIssue(binding: DriveSyncBindingEntryV1): Promise<string | null> {
+    return binding.kind === "folder"
+      ? inspectLocalFolderRootIssue(binding)
+      : inspectLocalFileRootIssue(binding)
+  }
+
+  async function inspectLocalFileRootIssue(binding: DriveSyncBindingEntryV1): Promise<string | null> {
+    try {
+      const local = await inspectDriveSyncLocalPath(binding.localPath)
+      if (local.kind === "missing") return LOCAL_ROOT_MISSING_ERROR
+      if (local.kind !== "file") return LOCAL_ROOT_INACCESSIBLE_ERROR
+      return null
+    } catch {
+      return LOCAL_ROOT_INACCESSIBLE_ERROR
+    }
   }
 
   async function inspectLocalFolderRootIssue(binding: DriveSyncBindingEntryV1): Promise<string | null> {

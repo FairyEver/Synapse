@@ -916,6 +916,34 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps missing file roots in error when checking local changes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "missing.md")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "missing.md",
+        kind: "file",
+        localPath,
+        deferWatcher: true,
+      })
+      await seedFileRootBaseline(harness, binding.id, "remote-file")
+
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: "本地路径不存在。",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("polls remote changes, downloads files, and advances the binding cursor", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -1023,6 +1051,44 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps missing file roots in error when syncing remote changes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "missing.md")
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "missing.md",
+        kind: "file",
+        localPath,
+        remoteCursor: "41",
+        deferWatcher: true,
+      })
+      await seedFileRootBaseline(harness, binding.id, "remote-file")
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("本地路径不存在。")
+
+      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: "本地路径不存在。",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps missing folder roots in error when retrying sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -1038,6 +1104,33 @@ describe("DriveSyncService", () => {
         deferWatcher: true,
       })
       await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      await service.updateBindingStatus(binding.id, "error", "旧错误")
+
+      await expect(service.resumeBinding(binding.id)).rejects.toThrow("本地路径不存在。")
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: "本地路径不存在。",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps missing file roots in error when retrying sync", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "missing.md")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "missing.md",
+        kind: "file",
+        localPath,
+        deferWatcher: true,
+      })
+      await seedFileRootBaseline(harness, binding.id, "remote-file")
       await service.updateBindingStatus(binding.id, "error", "旧错误")
 
       await expect(service.resumeBinding(binding.id)).rejects.toThrow("本地路径不存在。")
@@ -1371,6 +1464,28 @@ async function seedFileBaseline(
     localSize: stats.size,
     localMtimeMs: stats.mtimeMs,
     localHash: await hashDriveSyncFile(localPath),
+    lastSyncedAt: "2026-06-28T00:00:00.000Z",
+    deletedAt: null,
+  })
+}
+
+async function seedFileRootBaseline(
+  harness: ReturnType<typeof createHarness>,
+  bindingId: string,
+  remoteItemId: string,
+): Promise<void> {
+  await harness.baseline.upsert({
+    id: `${bindingId}:`,
+    schemaVersion: 1,
+    bindingId,
+    relativePath: "",
+    kind: "file",
+    remoteItemId,
+    remoteVersionId: null,
+    remoteEtag: null,
+    localSize: 1,
+    localMtimeMs: 1,
+    localHash: "sha256:old",
     lastSyncedAt: "2026-06-28T00:00:00.000Z",
     deletedAt: null,
   })
