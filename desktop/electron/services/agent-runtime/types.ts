@@ -270,6 +270,8 @@ export interface AgentPendingPermission {
 export interface AgentLiveSession {
   readonly agentType: string
   readonly finished?: boolean
+  readonly mainThreadAgentName?: string
+  readonly agentDefinitionsHash?: string
   send(message: AgentMessage): Promise<boolean>
   respondPermission(
     requestId: string,
@@ -282,6 +284,7 @@ export interface AgentLiveSession {
   close(): Promise<void>
   cancelCurrentTurn?(): Promise<boolean>
   setPermissionMode?(mode: string): Promise<void>
+  setMainThreadAgent?(agentName: string | null): Promise<void>
 }
 
 export interface AgentUsageCostBreakdownCny {
