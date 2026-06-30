@@ -229,6 +229,64 @@ describe("AgentSessionRepository", () => {
     expect(session.agentType).toBeUndefined()
   })
 
+  it("saves active main-thread persona on an existing conversation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    const conversation = await repository.createSession({
+      sessionKey: "local:renderer",
+      agentType: "claude-code",
+    })
+
+    const updated = await repository.saveMainThreadPersona(conversation.id, {
+      id: "builtin-zh-en-translator",
+      name: "中英翻译",
+      source: "builtin",
+      definitionHash: "hash-translator",
+    })
+
+    expect(updated.agentConfig?.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
+    expect(updated.agentConfig?.activeMainThreadPersonaSnapshot).toEqual({
+      id: "builtin-zh-en-translator",
+      name: "中英翻译",
+      source: "builtin",
+      definitionHash: "hash-translator",
+    })
+  })
+
+  it("clears active main-thread persona without dropping mode or model tier", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    const conversation = await repository.createSession({
+      sessionKey: "local:renderer",
+      agentType: "claude-code",
+      mode: "plan",
+      modelTier: "sonnet",
+    })
+    await repository.saveMainThreadPersona(conversation.id, {
+      id: "builtin-zh-en-translator",
+      name: "中英翻译",
+      source: "builtin",
+      definitionHash: "hash-translator",
+    })
+
+    const updated = await repository.saveMainThreadPersona(conversation.id, null)
+
+    expect(updated.agentConfig).toMatchObject({
+      mode: "plan",
+      modelTier: "sonnet",
+    })
+    expect(updated.agentConfig?.activeMainThreadPersonaId).toBeNull()
+    expect(updated.agentConfig?.activeMainThreadPersonaSnapshot).toBeUndefined()
+  })
+
   it("keeps active conversations isolated by workspace key", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({

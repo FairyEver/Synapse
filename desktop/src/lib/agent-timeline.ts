@@ -1,6 +1,7 @@
 import type {
   SynapseAgentEvent,
   SynapseAgentErrorKind,
+  SynapseAgentMainThreadPersonaMetadata,
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
@@ -625,6 +626,7 @@ function questionId(record: Record<string, unknown> | undefined): string | undef
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
   const result: SynapseAgentResultMetadata = {
+    mainThreadPersona: mainThreadPersonaMetadata(metadata),
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),
     contextRemainingPercent: numberMetadata(metadata, "contextRemainingPercent"),
@@ -645,6 +647,27 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     estimatedCost: booleanMetadata(metadata, "estimatedCost"),
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
+}
+
+function mainThreadPersonaMetadata(
+  metadata: Record<string, unknown> | undefined,
+): SynapseAgentMainThreadPersonaMetadata | undefined {
+  const value = metadata?.mainThreadPersona
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (
+    typeof record.id !== "string"
+    || typeof record.name !== "string"
+    || (record.source !== "builtin" && record.source !== "user")
+  ) {
+    return undefined
+  }
+  return {
+    id: record.id,
+    name: record.name,
+    source: record.source,
+    ...(typeof record.definitionHash === "string" ? { definitionHash: record.definitionHash } : {}),
+  }
 }
 
 function turnOutcomeMetadata(metadata: Record<string, unknown> | undefined, key: string): SynapseAgentTurnOutcome | undefined {

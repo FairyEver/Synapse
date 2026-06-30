@@ -298,6 +298,8 @@ function createController(
     cancelTurn: vi.fn(async () => undefined),
     forceKillTurn: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined),
+    personas: [],
+    updateSessionPersona: vi.fn(async () => undefined),
     ...overrides,
   }
 }

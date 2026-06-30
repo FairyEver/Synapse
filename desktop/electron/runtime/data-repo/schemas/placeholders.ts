@@ -194,6 +194,13 @@ export interface ConversationUsageV1 extends Record<string, unknown> {
   totalTokens?: number
 }
 
+export interface ConversationMainThreadPersonaSnapshotV1 extends Record<string, unknown> {
+  id: string
+  name: string
+  source: "builtin" | "user"
+  definitionHash: string
+}
+
 export interface ConversationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -217,6 +224,8 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     mode?: string
     modelTier?: string
     env?: Record<string, string>
+    activeMainThreadPersonaId?: string | null
+    activeMainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }
   resumePolicy?: ConversationResumePolicyV1
   history: ConversationHistoryEntryV1[]
@@ -252,6 +261,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).active === "boolean"
     && isOptionalString((v as ConversationEntryV1).agentSessionId)
     && ((v as ConversationEntryV1).pastAgentSessionIds === undefined || isStringArray((v as ConversationEntryV1).pastAgentSessionIds))
+    && ((v as ConversationEntryV1).agentConfig === undefined || isConversationAgentConfig((v as ConversationEntryV1).agentConfig))
     && ((v as ConversationEntryV1).resumePolicy === undefined || isConversationResumePolicy((v as ConversationEntryV1).resumePolicy))
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
     && typeof (v as ConversationEntryV1).createdAt === "string"
@@ -1298,6 +1308,32 @@ function isConversationUsage(value: unknown): value is ConversationUsageV1 {
     && isOptionalNonNegativeInteger(value.cacheReadInputTokens)
     && isOptionalNonNegativeInteger(value.cacheCreationInputTokens)
     && isOptionalNonNegativeInteger(value.totalTokens)
+}
+
+function isConversationMainThreadPersonaSnapshot(
+  value: unknown,
+): value is ConversationMainThreadPersonaSnapshotV1 {
+  if (!isAnyRecord<ConversationMainThreadPersonaSnapshotV1>(value)) return false
+  return typeof value.id === "string"
+    && value.id.trim().length > 0
+    && typeof value.name === "string"
+    && value.name.trim().length > 0
+    && (value.source === "builtin" || value.source === "user")
+    && typeof value.definitionHash === "string"
+    && value.definitionHash.trim().length > 0
+}
+
+function isConversationAgentConfig(value: unknown): value is NonNullable<ConversationEntryV1["agentConfig"]> {
+  if (!isAnyRecord<NonNullable<ConversationEntryV1["agentConfig"]>>(value)) return false
+  return isOptionalString(value.model)
+    && isOptionalString(value.mode)
+    && isOptionalString(value.modelTier)
+    && (value.env === undefined || isStringRecord(value.env))
+    && (value.activeMainThreadPersonaId === undefined
+      || value.activeMainThreadPersonaId === null
+      || typeof value.activeMainThreadPersonaId === "string")
+    && (value.activeMainThreadPersonaSnapshot === undefined
+      || isConversationMainThreadPersonaSnapshot(value.activeMainThreadPersonaSnapshot))
 }
 
 function isAgentUsageSummary(value: unknown): value is AgentUsageSummaryV1 {

@@ -98,6 +98,12 @@ export const agentUserQuestionSchema = z.object({
   multiSelect: z.boolean().optional(),
 })
 const resultMetadataSchema = z.object({
+  mainThreadPersona: z.object({
+    id: z.string(),
+    name: z.string(),
+    source: z.enum(["builtin", "user"]),
+    definitionHash: z.string().optional(),
+  }).optional(),
   model: z.string().optional(),
   effort: z.string().optional(),
   contextRemainingPercent: z.number().optional(),
@@ -225,6 +231,9 @@ export const sessionSummarySchema = z.object({
   agentSessionId: z.string().optional(),
   providerId: z.string().optional(),
   modelTier: z.string().optional(),
+  activeMainThreadPersonaId: z.string().nullable().optional(),
+  activeMainThreadPersonaName: z.string().optional(),
+  activeMainThreadPersonaSource: z.enum(["builtin", "user"]).optional(),
   active: z.boolean(),
   historyCount: z.number(),
   createdAt: z.string(),
@@ -329,6 +338,7 @@ function nodeErrorCode(error: unknown): string | undefined {
 
 export function sessionSummary(session: ConversationEntryV1) {
   const last = session.history.at(-1)
+  const personaSnapshot = session.agentConfig?.activeMainThreadPersonaSnapshot
   return {
     projectId: session.projectId,
     id: session.id,
@@ -341,6 +351,9 @@ export function sessionSummary(session: ConversationEntryV1) {
     agentSessionId: session.agentSessionId,
     providerId: session.providerId,
     modelTier: session.agentConfig?.modelTier,
+    activeMainThreadPersonaId: session.agentConfig?.activeMainThreadPersonaId,
+    activeMainThreadPersonaName: personaSnapshot?.name,
+    activeMainThreadPersonaSource: personaSnapshot?.source,
     active: session.active,
     historyCount: session.history.length,
     createdAt: session.createdAt,

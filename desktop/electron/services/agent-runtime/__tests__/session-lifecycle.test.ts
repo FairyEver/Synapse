@@ -149,6 +149,37 @@ describe("SessionLifecycleManager", () => {
       hadConversation: true,
     })
   })
+
+  it("persists active main-thread persona through the repository", async () => {
+    const updated = {
+      id: "conversation-1",
+      sessionKey: "session-1",
+      agentConfig: {
+        activeMainThreadPersonaId: "builtin-zh-en-translator",
+      },
+    }
+    const repository = {
+      saveMainThreadPersona: vi.fn(async () => updated),
+    } as unknown as AgentSessionRepository
+    const manager = new SessionLifecycleManager({
+      projectId: "project-1",
+      repository,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      sessionManager: {} as SessionManager,
+      getActiveAgentType: async () => "claude-sdk",
+    })
+    const snapshot = {
+      id: "builtin-zh-en-translator",
+      name: "中英翻译",
+      source: "builtin" as const,
+      definitionHash: "hash-translator",
+    }
+
+    await expect(manager.saveMainThreadPersona("conversation-1", snapshot)).resolves.toBe(updated)
+
+    expect(repository.saveMainThreadPersona).toHaveBeenCalledWith("conversation-1", snapshot)
+  })
 })
 
 function structuredLogger(): StructuredLogger & {

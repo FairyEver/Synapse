@@ -1412,6 +1412,9 @@ export type SynapseBridge = {
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
     ) => Promise<SynapseAgentSessionSummary>
+    updateSessionPersona: (
+      args: { projectId: string; conversationId: string; personaId: string | null },
+    ) => Promise<SynapseAgentSessionSummary>
     deleteSession: (
       args: { projectId: string; conversationId: string },
     ) => Promise<{ ok: boolean }>

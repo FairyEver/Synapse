@@ -62,6 +62,7 @@ import type {
   AgentSdkPluginSpec,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
+import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
 import {
   AgentSessionRepository,
   conversationId,
@@ -141,6 +142,8 @@ export interface AgentRuntimeServiceDeps {
     boolean | Promise<boolean>
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly prepareMessage?: (
@@ -210,6 +213,7 @@ export class AgentRuntimeService {
       sdkPlugins: deps.sdkPlugins,
       allowPluginHooks: deps.allowPluginHooks,
       sdkAgents: deps.sdkAgents,
+      sdkPersonaConfig: deps.sdkPersonaConfig,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
     })
     this.sessionLifecycle = new SessionLifecycleManager({
@@ -928,6 +932,34 @@ export class AgentRuntimeService {
       actorId: input.actor.id,
       mode: input.mode,
     })
+    return updated
+  }
+
+  async updateSessionPersona(input: {
+    readonly conversationId: string
+    readonly personaId: string | null
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.sessionLifecycle.getSession(input.conversationId)
+    if (!conversation) throw new Error("找不到 Agent 会话。")
+    const candidateConversation = {
+      ...conversation,
+      agentConfig: {
+        ...(conversation.agentConfig ?? {}),
+        activeMainThreadPersonaId: input.personaId,
+      },
+    }
+    const resolved = await this.deps.sdkPersonaConfig?.({
+      projectId: this.deps.projectId,
+      sessionKey: conversation.sessionKey,
+      platform: conversation.platform ?? "local",
+      workspaceKey: conversation.workspaceKey,
+      workspacePath: conversation.workspacePath,
+      content: "",
+    }, candidateConversation)
+    const snapshot = input.personaId ? resolved?.snapshot : null
+    if (input.personaId && !snapshot) throw new Error("智能体不可用")
+    const updated = await this.sessionLifecycle.saveMainThreadPersona(input.conversationId, snapshot ?? null)
+    this.emitConversationUpdated(updated)
     return updated
   }
 

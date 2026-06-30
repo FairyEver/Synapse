@@ -266,6 +266,30 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("passes main-thread agent to Claude Agent SDK options", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      agent: "synapse-persona__builtin-zh-en-translator",
+      agents: {
+        "synapse-persona__builtin-zh-en-translator": {
+          description: "Translates between Chinese and English.",
+          prompt: "Translate only.",
+          disallowedTools: ["Agent"],
+        },
+      },
+      agentDefinitionsHash: "hash-1",
+    })
+
+    expect(getOptions()).toMatchObject({
+      agent: "synapse-persona__builtin-zh-en-translator",
+      agents: {
+        "synapse-persona__builtin-zh-en-translator": {
+          prompt: "Translate only.",
+        },
+      },
+    })
+  })
+
   it("denies repeated identical TodoWrite calls twice before stopping the turn", async () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory)
@@ -638,6 +662,34 @@ describe("ClaudeSDKSession", () => {
     await session.setPermissionMode("acceptEdits")
 
     expect(query.setPermissionMode).toHaveBeenCalledWith("acceptEdits")
+  })
+
+  it("switches main-thread agent through applyFlagSettings", async () => {
+    const applyFlagSettings = vi.fn()
+    const { factory } = createQueryFactory({ applyFlagSettings })
+    const session = createSession(factory, {
+      agent: "synapse-persona__old",
+      agentDefinitionsHash: "hash-1",
+    })
+
+    await session.setMainThreadAgent?.("synapse-persona__new")
+
+    expect(applyFlagSettings).toHaveBeenCalledWith({ agent: "synapse-persona__new" })
+    expect(session.mainThreadAgentName).toBe("synapse-persona__new")
+  })
+
+  it("clears main-thread agent through applyFlagSettings", async () => {
+    const applyFlagSettings = vi.fn()
+    const { factory } = createQueryFactory({ applyFlagSettings })
+    const session = createSession(factory, {
+      agent: "synapse-persona__old",
+      agentDefinitionsHash: "hash-1",
+    })
+
+    await session.setMainThreadAgent?.(null)
+
+    expect(applyFlagSettings).toHaveBeenCalledWith({ agent: null })
+    expect(session.mainThreadAgentName).toBeUndefined()
   })
 
   it("rejects invalid runtime permission modes", async () => {
@@ -1344,13 +1396,13 @@ async function waitFor(condition: () => boolean): Promise<void> {
   throw new Error("condition was not met")
 }
 
-function createQueryFactory(): {
+function createQueryFactory(overrides: Partial<QueryLike> = {}): {
   readonly factory: QueryFactory
   readonly query: FakeQuery
   getPrompt(): AsyncIterable<SDKUserMessage>
   getOptions(): Record<string, unknown>
 } {
-  const query = new FakeQuery()
+  const query = Object.assign(new FakeQuery(), overrides)
   let prompt: AsyncIterable<SDKUserMessage> | undefined
   let options: Record<string, unknown> | undefined
   const factory: QueryFactory = (input) => {

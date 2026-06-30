@@ -209,6 +209,7 @@ export const IPC_CHANNELS = {
     "listDetachedConversationWindows": "synapse:agent:list-detached-conversation-windows",
     "createSession": "synapse:agent:create-session",
     "switchSession": "synapse:agent:switch-session",
+    "updateSessionPersona": "synapse:agent:session-persona:update",
     "deleteSession": "synapse:agent:delete-session",
     "renameSession": "synapse:agent:rename-session",
     "getTimeline": "synapse:agent:get-timeline",

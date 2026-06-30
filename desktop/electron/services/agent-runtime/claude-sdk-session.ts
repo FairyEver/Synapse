@@ -59,6 +59,7 @@ export interface QueryLike {
   close(): void | Promise<void>
   streamInput?(stream: AsyncIterable<SDKUserMessage>): Promise<void>
   setPermissionMode?(mode: PermissionMode): Promise<void>
+  applyFlagSettings?(settings: Record<string, unknown>): Promise<void>
 }
 
 export type QueryFactory = (input: {
@@ -82,6 +83,8 @@ export interface ClaudeSDKSessionOptions {
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
+  readonly agent?: string
+  readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly toolPolicy?: ClaudeSDKToolPolicy
@@ -157,6 +160,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private repeatedTodoWriteCount = 0
   private closed = false
   private queryFinished = false
+  mainThreadAgentName: string | undefined
+  readonly agentDefinitionsHash: string | undefined
   get finished(): boolean {
     return this.queryFinished
   }
@@ -173,6 +178,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.subagentToolPolicies = options.subagentToolPolicies ?? {}
     this.toolPolicy = options.toolPolicy
     this.now = options.now ?? (() => new Date())
+    this.mainThreadAgentName = options.agent
+    this.agentDefinitionsHash = options.agentDefinitionsHash
     const forwardedAbort = createForwardedAbortController(options.abortSignal)
     this.abortController = forwardedAbort?.controller
     this.abortCleanup = forwardedAbort?.cleanup
@@ -272,6 +279,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
     await this.query.setPermissionMode(permissionMode)
   }
 
+  async setMainThreadAgent(agentName: string | null): Promise<void> {
+    if (this.closed) throw new Error(AGENT_SESSION_CLOSED_MESSAGE)
+    if (!this.query.applyFlagSettings) {
+      throw new Error("当前会话不支持切换智能体")
+    }
+    await this.query.applyFlagSettings({ agent: agentName })
+    this.mainThreadAgentName = agentName ?? undefined
+  }
+
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
@@ -334,6 +350,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (options.model) queryOptions.model = options.model
     queryOptions.maxTurns = options.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS
     if (options.plugins?.length) queryOptions.plugins = [...options.plugins]
+    if (options.agent) {
+      ;(queryOptions as Record<string, unknown>).agent = options.agent
+    }
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
     if (options.additionalDirectories?.length) {
       queryOptions.additionalDirectories = [...options.additionalDirectories]

@@ -48,6 +48,11 @@ const switchSessionRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
 })
 
+const updateSessionPersonaRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  personaId: z.string().min(1).nullable(),
+})
+
 const deleteSessionRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
 })
@@ -128,6 +133,7 @@ type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SessionsRequest = z.infer<typeof sessionsRequestSchema>
 type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
+type UpdateSessionPersonaRequest = z.infer<typeof updateSessionPersonaRequestSchema>
 type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
 type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
 type OpenConversationRequest = z.infer<typeof openConversationRequestSchema>
@@ -335,6 +341,31 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
           new Error("切换 Agent 会话失败。", { cause: rawError }),
           { code: isNotFound ? "AGENT_SESSION_NOT_FOUND" : undefined },
         )
+      }
+    },
+  },
+  updateSessionPersona: {
+    kind: "invoke",
+    channel: "synapse:agent:session-persona:update",
+    request: updateSessionPersonaRequestSchema,
+    response: sessionSummarySchema,
+    handler: async (ctx, request: UpdateSessionPersonaRequest) => {
+      try {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const updated = await agent.updateSessionPersona({
+          conversationId: request.conversationId,
+          personaId: request.personaId,
+        })
+        return sessionSummary(updated)
+      } catch (rawError) {
+        logger.warn("Agent session persona update failed.", {
+          projectId: request.projectId,
+          conversationId: request.conversationId,
+          personaSelected: Boolean(request.personaId),
+          boundary: "agent.ipc.session-persona",
+          ...errorDiagnostic(rawError),
+        })
+        throw new Error("切换智能体失败。", { cause: rawError })
       }
     },
   },

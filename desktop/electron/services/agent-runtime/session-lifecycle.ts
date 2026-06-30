@@ -1,4 +1,4 @@
-import type { ConversationEntryV1 } from "../../runtime/data-repo"
+import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
@@ -22,6 +22,8 @@ export interface RuntimeSessionState {
   sdkSettings?: ClaudeSDKRuntimeSettings
   additionalDirectories?: readonly string[]
   modeOverride?: string
+  mainThreadAgentName?: string
+  agentDefinitionsHash?: string
   closing?: boolean
   activeLifecycle?: TurnLifecycle
   cancelState?: {
@@ -114,6 +116,13 @@ export class SessionLifecycleManager {
   async renameSession(conversationIdValue: string, name: string): Promise<boolean> {
     await this.deps.repository.renameSession(conversationIdValue, name)
     return true
+  }
+
+  async saveMainThreadPersona(
+    conversationIdValue: string,
+    snapshot: ConversationMainThreadPersonaSnapshotV1 | null,
+  ): Promise<ConversationEntryV1> {
+    return this.deps.repository.saveMainThreadPersona(conversationIdValue, snapshot)
   }
 
   async deleteSession(conversationIdValue: string): Promise<boolean> {

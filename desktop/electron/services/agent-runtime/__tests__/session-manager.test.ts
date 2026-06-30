@@ -270,6 +270,159 @@ describe("SessionManager", () => {
     }))
   })
 
+  it("passes active main-thread persona into new live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "builtin-zh-en-translator",
+        activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        agents: {
+          "synapse-persona__builtin-zh-en-translator": {
+            description: "Translates between Chinese and English.",
+            prompt: "Translate only.",
+            disallowedTools: ["Agent"],
+          },
+        },
+        definitionsHash: "hash-translator",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "synapse-persona__builtin-zh-en-translator",
+      agentDefinitionsHash: "hash-translator",
+      agents: {
+        "synapse-persona__builtin-zh-en-translator": expect.objectContaining({
+          prompt: "Translate only.",
+        }),
+      },
+    }))
+    expect(state.mainThreadAgentName).toBe("synapse-persona__builtin-zh-en-translator")
+    expect(state.agentDefinitionsHash).toBe("hash-translator")
+  })
+
+  it("switches the reusable live session when only the active persona changes", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn(() => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    let activeAgentName: string | undefined = "synapse-persona__old"
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: activeAgentName ? "persona-id" : null,
+        activeAgentName,
+        agents: {
+          "synapse-persona__old": { description: "Old", prompt: "Old" },
+          "synapse-persona__new": { description: "New", prompt: "New" },
+        },
+        definitionsHash: "hash-personas",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+    activeAgentName = "synapse-persona__new"
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(false)
+    expect(second.liveSession).toBe(first.liveSession)
+    expect(createSession).toHaveBeenCalledOnce()
+    expect(sessions[0]?.setMainThreadAgent).toHaveBeenCalledWith("synapse-persona__new")
+    expect(state.mainThreadAgentName).toBe("synapse-persona__new")
+  })
+
+  it("recreates the live session when persona definitions change", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn(() => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    let definitionsHash = "hash-1"
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "builtin-zh-en-translator",
+        activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        agents: {
+          "synapse-persona__builtin-zh-en-translator": {
+            description: "Translates.",
+            prompt: definitionsHash,
+          },
+        },
+        definitionsHash,
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+    definitionsHash = "hash-2"
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
+
   it("passes the default SDK turn cap into new live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())
@@ -862,7 +1015,11 @@ class FakeLiveSession implements AgentLiveSession {
     if (this.closeError) throw this.closeError
     this.closed = true
   })
+  readonly setMainThreadAgent = vi.fn(async (agentName: string | null) => {
+    this.mainThreadAgentName = agentName ?? undefined
+  })
   readonly cancelCurrentTurn?: () => Promise<boolean>
+  mainThreadAgentName: string | undefined
   protected closed = false
   private closeError: Error | undefined
 

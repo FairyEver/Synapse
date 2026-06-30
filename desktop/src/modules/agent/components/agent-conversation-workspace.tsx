@@ -17,6 +17,7 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { AgentConversationTarget as ImportedAgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
@@ -96,6 +97,11 @@ export type AgentConversationWorkspaceController = {
   readonly cancelTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
   readonly refresh: () => Promise<void>
+  readonly personas: readonly SynapseAgentPersona[]
+  readonly updateSessionPersona: (
+    session: SynapseAgentSessionSummary,
+    personaId: string | null,
+  ) => Promise<SynapseAgentSessionSummary | undefined>
 }
 
 type AgentConversationWorkspaceProps = {
@@ -659,6 +665,11 @@ function AgentConversationWorkspace({
         cancelPhase={chat.cancelPhase}
         permissionMode={selectedPermissionMode}
         quickInputs={quickInputItems}
+        personaItems={chat.personas}
+        activePersonaId={session.activeMainThreadPersonaId ?? null}
+        onPersonaChange={(personaId) => {
+          void chat.updateSessionPersona(session, personaId)
+        }}
         onPermissionModeChange={(nextMode) => chat.setPermissionMode(nextMode, target)}
         onCreatePermissionModeSession={(nextMode) => {
           void createConversationFromCurrent(nextMode)
