@@ -176,7 +176,7 @@ beforeEach(() => {
   mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/Docs")
-  mocks.createDriveSyncSafeBinding.mockResolvedValue(undefined)
+  mocks.createDriveSyncSafeBinding.mockResolvedValue(createDriveSyncBinding())
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
   mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
@@ -1002,6 +1002,35 @@ describe("DriveModule", () => {
       direction: "local_to_remote",
       importGitignore: true,
     }))
+  })
+
+  it("keeps the sync dialog open when initial safe create returns an error binding", async () => {
+    mocks.createDriveSyncSafeBinding.mockResolvedValueOnce(createDriveSyncBinding({
+      status: "error",
+      lastError: "初始下载失败",
+    }))
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "local_to_remote",
+      reason: null,
+      localPath: "/Users/me/LocalDocs",
+      localKind: "folder",
+      localEmpty: false,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonText("本地同步")
+    await clickText("选择文件夹")
+    await clickButtonText("上传并同步")
+
+    expect(mocks.toast).toHaveBeenCalledWith("初始下载失败")
+    expect(mocks.toast).not.toHaveBeenCalledWith("已创建同步绑定")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地同步")
   })
 
   it("disables binding submit when the current preview is blocked", async () => {

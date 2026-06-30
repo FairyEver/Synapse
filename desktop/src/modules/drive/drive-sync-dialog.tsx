@@ -175,7 +175,7 @@ export function DriveSyncDialog({
     if (!currentPreview?.direction || currentPreview.status !== "ready") return
     setBusy(true)
     try {
-      await requireSynapseBridge().driveSync.createSafeBinding({
+      const binding = await requireSynapseBridge().driveSync.createSafeBinding({
         driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
         driveItemName,
         kind: bindingKind,
@@ -186,6 +186,10 @@ export function DriveSyncDialog({
         importGitignore: bindingKind === "folder",
       })
       await refreshSnapshot()
+      if (binding.status === "error") {
+        toast(binding.lastError ?? "同步失败")
+        return
+      }
       toast("已创建同步绑定")
       onOpenChange(false)
     } catch (error) {
