@@ -90,7 +90,7 @@ function labelForRole(role: SynapseAgentMessageTimelineItem["role"]): string {
 function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
   switch (entry.kind) {
     case "message":
-      return labelForRole(entry.role)
+      return messageLabel(entry)
     case "thinking":
       return "Thinking"
     case "toolCall":
@@ -113,6 +113,12 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return exhaustive
     }
   }
+}
+
+function messageLabel(entry: SynapseAgentMessageTimelineItem): string {
+  const roleLabel = labelForRole(entry.role)
+  const personaName = entry.role === "assistant" ? entry.metadata?.mainThreadPersona?.name : undefined
+  return personaName ? `${roleLabel} [${personaName}]` : roleLabel
 }
 
 function timelineItemText(entry: SynapseAgentTimelineItem): string {

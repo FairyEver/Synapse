@@ -377,6 +377,75 @@ describe("AgentConversationExportService", () => {
     expect(createZipArchive).toHaveBeenCalledTimes(1)
   })
 
+  it("includes main-thread persona labels in exported transcript", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-persona-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      history: [
+        {
+          role: "user",
+          content: "Translate this",
+          timestamp: "2026-06-30T00:00:00.000Z",
+          metadata: {
+            mainThreadPersona: {
+              id: "builtin-zh-en-translator",
+              name: "中英翻译",
+              source: "builtin",
+              definitionHash: "hash-translator",
+            },
+          },
+        },
+        {
+          role: "assistant",
+          content: "Hello",
+          timestamp: "2026-06-30T00:00:01.000Z",
+          metadata: {
+            agentEventType: "assistant",
+            mainThreadPersona: {
+              id: "builtin-zh-en-translator",
+              name: "中英翻译",
+              source: "builtin",
+              definitionHash: "hash-translator",
+            },
+          },
+        },
+      ],
+    })
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
+      const transcript = await readFile(path.join(sourceDirectoryPath, "transcript.md"), "utf8")
+      expect(transcript).toContain("[中英翻译]")
+      expect(transcript).toContain("Hello")
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      createZipArchive,
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      now: () => new Date("2026-06-30T00:01:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: TEST_SESSION_KEY,
+    })).resolves.toMatchObject({
+      success: true,
+      filePath: outputPath,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
+
   it("bounds default bundle and staging directory names for long conversation names", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-long-name-test-"))
     tempRoots.push(tempRoot)

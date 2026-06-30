@@ -196,6 +196,7 @@ const IPC_CHANNELS = {
     "switchSession": "synapse:agent:switch-session",
     "deleteSession": "synapse:agent:delete-session",
     "renameSession": "synapse:agent:rename-session",
+    "updateSessionPersona": "synapse:agent:session-persona:update",
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",

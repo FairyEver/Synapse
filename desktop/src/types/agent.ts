@@ -69,6 +69,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       content: string
       done: true
       metadata?: {
+        mainThreadPersona?: SynapseAgentMainThreadPersonaMetadata
         model?: string
         effort?: string
         contextRemainingPercent?: number
@@ -224,6 +225,7 @@ interface SynapseAgentTimelineBase {
 }
 
 export interface SynapseAgentResultMetadata {
+  readonly mainThreadPersona?: SynapseAgentMainThreadPersonaMetadata
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
@@ -242,6 +244,13 @@ export interface SynapseAgentResultMetadata {
   readonly totalCostBreakdownCny?: Record<string, number>
   readonly costCurrency?: "CNY"
   readonly estimatedCost?: boolean
+}
+
+export interface SynapseAgentMainThreadPersonaMetadata {
+  readonly id: string
+  readonly name: string
+  readonly source: "builtin" | "user"
+  readonly definitionHash?: string
 }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {

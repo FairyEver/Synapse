@@ -434,7 +434,10 @@ export class ConversationRouter {
         conversation.id,
         "user",
         message.content,
-        attachmentHistoryMetadata(message.attachments),
+        mergeHistoryMetadata(
+          attachmentHistoryMetadata(message.attachments),
+          mainThreadPersonaHistoryMetadata(conversation),
+        ),
       )
       this.emitConversationUpdated(conversation)
 
@@ -849,7 +852,10 @@ export class ConversationRouter {
         conversation.id,
         "user",
         message.content,
-        attachmentHistoryMetadata(message.attachments),
+        mergeHistoryMetadata(
+          attachmentHistoryMetadata(message.attachments),
+          mainThreadPersonaHistoryMetadata(conversation),
+        ),
       )
       const sessionHandle = await this.sessionManager.getOrCreateSession({
         state,
@@ -1271,6 +1277,7 @@ export class ConversationRouter {
     const usage = resultUsageFromEvent(input.event)
     const costUsd = resultCostFromEvent(input.event)
     let metadata = resultHistoryMetadata(input.event)
+    metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadata(input.conversation))
     metadata = this.withLocalCostMetadata(input.state, usage, metadata)
     const costCny = metadataNumber(metadata, "costCny")
     const costCurrency = costCny === undefined ? undefined : "CNY"
@@ -1841,6 +1848,28 @@ function compactMetadata(input: Record<string, unknown>): Record<string, unknown
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined),
   )
+}
+
+function mergeHistoryMetadata(
+  ...items: Array<ConversationEntryV1["history"][number]["metadata"] | undefined>
+): ConversationEntryV1["history"][number]["metadata"] | undefined {
+  const metadata = compactMetadata(Object.assign({}, ...items.filter(Boolean)))
+  return Object.keys(metadata).length > 0 ? metadata : undefined
+}
+
+function mainThreadPersonaHistoryMetadata(
+  conversation: ConversationEntryV1,
+): ConversationEntryV1["history"][number]["metadata"] | undefined {
+  const snapshot = conversation.agentConfig?.activeMainThreadPersonaSnapshot
+  if (!snapshot) return undefined
+  return {
+    mainThreadPersona: {
+      id: snapshot.id,
+      name: snapshot.name,
+      source: snapshot.source,
+      definitionHash: snapshot.definitionHash,
+    },
+  }
 }
 
 function metadataWithoutLocalCost(

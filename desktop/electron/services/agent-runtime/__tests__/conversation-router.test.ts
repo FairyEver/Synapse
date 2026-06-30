@@ -1361,6 +1361,49 @@ describe("ConversationRouter", () => {
     ).not.toHaveProperty("data")
   })
 
+  it("persists active main-thread persona metadata with user and assistant history", async () => {
+    const session = new ScriptedSession([
+      { type: "result", content: "Hello", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({
+      agentType: "claude-sdk",
+      agentConfig: {
+        activeMainThreadPersonaId: "builtin-zh-en-translator",
+        activeMainThreadPersonaSnapshot: {
+          id: "builtin-zh-en-translator",
+          name: "中英翻译",
+          source: "builtin",
+          definitionHash: "hash-translator",
+        },
+      },
+    })
+    await conversations.upsert(existing)
+    const { router } = createRouter({ conversations, session })
+
+    const result = await router.sendToConversation(baseMessage("Translate this"), existing.id)
+    const savedConversation = await conversations.get(result.conversationId)
+    const userEntry = savedConversation?.history.find((entry) => entry.role === "user")
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+
+    expect(userEntry?.metadata).toEqual(expect.objectContaining({
+      mainThreadPersona: {
+        id: "builtin-zh-en-translator",
+        name: "中英翻译",
+        source: "builtin",
+        definitionHash: "hash-translator",
+      },
+    }))
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      mainThreadPersona: {
+        id: "builtin-zh-en-translator",
+        name: "中英翻译",
+        source: "builtin",
+        definitionHash: "hash-translator",
+      },
+    }))
+  })
+
   it("calls afterTurn after a live turn completes", async () => {
     const afterTurn = vi.fn()
     const session = new ScriptedSession([

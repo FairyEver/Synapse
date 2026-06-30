@@ -98,6 +98,12 @@ export const agentUserQuestionSchema = z.object({
   multiSelect: z.boolean().optional(),
 })
 const resultMetadataSchema = z.object({
+  mainThreadPersona: z.object({
+    id: z.string(),
+    name: z.string(),
+    source: z.enum(["builtin", "user"]),
+    definitionHash: z.string().optional(),
+  }).optional(),
   model: z.string().optional(),
   effort: z.string().optional(),
   contextRemainingPercent: z.number().optional(),

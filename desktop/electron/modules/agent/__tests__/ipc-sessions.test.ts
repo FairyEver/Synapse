@@ -294,7 +294,7 @@ describe("agent session IPC methods", () => {
       projectId: "project-1",
       conversationId: "conv-1",
       personaId: "builtin-zh-en-translator",
-    })
+    }) as { activeMainThreadPersonaId?: string; activeMainThreadPersonaName?: string }
 
     expect(updateSessionPersona).toHaveBeenCalledWith({
       conversationId: "conv-1",
@@ -317,7 +317,7 @@ describe("agent session IPC methods", () => {
       projectId: "project-1",
       conversationId: "conv-1",
       personaId: null,
-    })
+    }) as { activeMainThreadPersonaId?: string }
 
     expect(updateSessionPersona).toHaveBeenCalledWith({
       conversationId: "conv-1",

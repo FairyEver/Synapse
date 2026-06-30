@@ -1,3 +1,5 @@
+import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+
 import type { PublishedAgentCommand } from "./command-registry"
 import type { RegisteredPromptCommand } from "./command-router"
 import type { AgentEvent, AgentMessage, AgentRuntimeTurnResult } from "./types"
@@ -13,22 +15,7 @@ export type AgentSdkPluginSpec = {
   readonly path: string
 }
 
-export type AgentSdkAgentDefinition = {
-  readonly description: string
-  readonly prompt: string
-  readonly tools?: string[]
-  readonly disallowedTools?: string[]
-  readonly model?: string
-  readonly mcpServers?: unknown[]
-  readonly skills?: string[]
-  readonly initialPrompt?: string
-  readonly maxTurns?: number
-  readonly background?: boolean
-  readonly memory?: "user" | "project" | "local"
-  readonly effort?: "low" | "medium" | "high" | "xhigh" | "max" | number
-  readonly permissionMode?: string
-  readonly criticalSystemReminder_EXPERIMENTAL?: string
-}
+export type AgentSdkAgentDefinition = AgentDefinition
 
 export type AgentSdkAgentDefinitions = Record<string, AgentSdkAgentDefinition>
 

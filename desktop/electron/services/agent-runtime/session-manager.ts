@@ -224,7 +224,8 @@ export class SessionManager {
       && modeMatches
       && modelMatches
       && sdkSettingsMatch
-    if (canReuseBaseSession && personaDefinitionsMatch) {
+    const reusableLiveSession = input.state.liveSession
+    if (canReuseBaseSession && personaDefinitionsMatch && reusableLiveSession) {
       if (hasUnconfiguredAttachmentDirectories({
         cwd,
         attachments,
@@ -233,7 +234,7 @@ export class SessionManager {
         throw new Error(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE)
       }
       if (activeAgentMatches || await this.trySwitchMainThreadAgent(input.state, activeAgentName, input.conversation.id)) {
-        return { liveSession: input.state.liveSession, created: false }
+        return { liveSession: reusableLiveSession, created: false }
       }
     }
 
