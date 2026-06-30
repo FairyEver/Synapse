@@ -1,6 +1,7 @@
 import type {
   AgentUsageEntryV1,
   ConversationEntryV1,
+  ConversationMainThreadPersonaSnapshotV1,
   ConversationResumePolicyV1,
   DataNamespace,
 } from "../../runtime/data-repo"
@@ -456,6 +457,28 @@ export class AgentSessionRepository {
         ...(conversation.agentConfig ?? {}),
         mode,
       },
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async saveMainThreadPersona(
+    conversationIdValue: string,
+    snapshot: ConversationMainThreadPersonaSnapshotV1 | null,
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const nextAgentConfig = {
+      ...(conversation.agentConfig ?? {}),
+      activeMainThreadPersonaId: snapshot?.id ?? null,
+      ...(snapshot ? { activeMainThreadPersonaSnapshot: snapshot } : {}),
+    }
+    if (!snapshot) {
+      delete nextAgentConfig.activeMainThreadPersonaSnapshot
+    }
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      agentConfig: nextAgentConfig,
       updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)

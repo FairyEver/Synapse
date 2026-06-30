@@ -102,6 +102,7 @@ export {
   type AutomationRunTriggerV1,
   type AutomationScopeV1,
   type ConversationEntryV1,
+  type ConversationMainThreadPersonaSnapshotV1,
   type ConversationResumePolicyV1,
   type ConversationUsageV1,
   type OpsDiagnosticsEntryV1,
