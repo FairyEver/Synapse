@@ -941,7 +941,7 @@ export type SynapseBridge = {
     rescanBinding: (input: { id: string }) => Promise<void>
     pollRemoteChanges: (input?: { id?: string }) => Promise<void>
     resolveConflict: (input: DriveSyncConflictResolutionInput) => Promise<void>
-    chooseLocalPath: (input: { kind: "file" | "folder"; mode?: "bind_existing" | "remote_to_local"; defaultName?: string }) => Promise<string | null>
+    chooseLocalPath: (input: { kind: "file" | "folder"; mode?: "bind_existing" | "remote_to_local" | "local_to_remote"; defaultName?: string }) => Promise<string | null>
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   soundNotifier: {

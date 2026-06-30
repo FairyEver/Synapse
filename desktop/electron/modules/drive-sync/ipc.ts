@@ -125,7 +125,7 @@ const driveSyncResolveConflictInputSchema = z.object({
 
 const driveSyncChooseLocalPathInputSchema = z.object({
   kind: driveItemKindSchema,
-  mode: z.enum(["bind_existing", "remote_to_local"]).optional(),
+  mode: driveSyncInitialDirectionSchema.optional(),
   defaultName: z.string().optional(),
 })
 

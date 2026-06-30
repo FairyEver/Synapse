@@ -645,6 +645,7 @@ function DriveModuleContent() {
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
         onOpenSites={() => setSitesOpen(true)}
+        onOpenLocalSync={() => setSyncDialog({ mode: "local", item: null })}
         onOpenSyncStatus={() => setSyncDialog({ mode: "status", item: null })}
         onRefresh={() => { void refreshDriveView() }}
       >
@@ -1414,6 +1415,7 @@ function DriveToolbarActions({
   children,
   createDisabled,
   onCreateFolder,
+  onOpenLocalSync,
   onOpenPublicLinks,
   onOpenSites,
   onOpenSyncStatus,
@@ -1434,6 +1436,7 @@ function DriveToolbarActions({
   readonly syncSnapshot: DriveSyncSnapshotDto | null
   readonly uploadDisabled: boolean
   readonly onCreateFolder: () => void
+  readonly onOpenLocalSync: () => void
   readonly onOpenPublicLinks: () => void
   readonly onOpenSites: () => void
   readonly onOpenSyncStatus: () => void
@@ -1450,6 +1453,9 @@ function DriveToolbarActions({
         </Button>
       ))}
       <DriveSyncStatusButton snapshot={syncSnapshot} onOpen={onOpenSyncStatus} />
+      <Button variant="outline" size="sm" disabled={uploadDisabled} onClick={onOpenLocalSync}>
+        本地同步
+      </Button>
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}

@@ -202,5 +202,18 @@ describe("driveSyncIpcModule", () => {
       mode: "remote_to_local",
       defaultName: "Docs",
     })).resolves.toBe("/Users/me/Desktop/Docs")
+
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: ["/Users/me/Desktop/local.md"] })
+    await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {
+      kind: "file",
+      mode: "local_to_remote",
+    })).resolves.toBe("/Users/me/Desktop/local.md")
+
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: ["/Users/me/Desktop/LocalDocs"] })
+    await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {
+      kind: "folder",
+      mode: "local_to_remote",
+      defaultName: "Docs",
+    })).resolves.toBe("/Users/me/Desktop/LocalDocs")
   })
 })

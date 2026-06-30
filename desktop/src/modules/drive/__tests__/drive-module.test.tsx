@@ -435,7 +435,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionTexts()).toEqual(["同步", "上传", "新建文件夹", "我的分享", "站点", "刷新"])
+    expect(driveToolbarActionTexts()).toEqual(["同步", "本地同步", "上传", "新建文件夹", "我的分享", "站点", "刷新"])
     expect(getButton("站点").querySelector("svg")).toBeNull()
   })
 
@@ -912,6 +912,59 @@ describe("DriveModule", () => {
     })
   })
 
+  it("creates local-to-cloud drive sync bindings from the toolbar", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "local_to_remote",
+      reason: null,
+      localPath: "/Users/me/LocalDocs",
+      localKind: "folder",
+      localEmpty: false,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonText("本地同步")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Local drive sync dialog not found")
+    expect(dialog.textContent).toContain("本地同步")
+    expect(Array.from(dialog.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual(["文件", "文件夹"])
+
+    await clickText("选择文件夹")
+
+    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
+      kind: "folder",
+      mode: "local_to_remote",
+      defaultName: undefined,
+    })
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "local:/Users/me/LocalDocs",
+      driveItemName: "LocalDocs",
+      kind: "folder",
+      localPath: "/Users/me/LocalDocs",
+      remoteExists: false,
+      directionHint: "local_to_remote",
+      importGitignore: true,
+    }))
+    expect(dialog.textContent).toContain("上传并同步")
+
+    await clickButtonText("上传并同步")
+
+    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "local:/Users/me/LocalDocs",
+      driveItemName: "LocalDocs",
+      kind: "folder",
+      localPath: "/Users/me/LocalDocs",
+      direction: "local_to_remote",
+      importGitignore: true,
+    }))
+  })
+
   it("disables binding submit when the current preview is blocked", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
@@ -987,6 +1040,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
+    expect(getButton("本地同步").disabled).toBe(true)
     expect(getButton("上传").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(true)
     expect(getButton("我的分享").disabled).toBe(true)
@@ -1011,6 +1065,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("在浏览器完成登录后会自动刷新。")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
+    expect(getButton("本地同步").disabled).toBe(true)
     expect(getButton("上传").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(true)
     expect(getButton("我的分享").disabled).toBe(true)
@@ -1604,6 +1659,7 @@ describe("DriveModule", () => {
     })
 
     expect(document.body.textContent).toContain("正在上传 1 项")
+    expect(getButton("本地同步").disabled).toBe(true)
     expect(getButton("上传").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(false)
 

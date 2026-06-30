@@ -43,7 +43,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
 
-type DriveSyncBindingMode = "bind_existing" | "remote_to_local"
+type DriveSyncBindingMode = "bind_existing" | "remote_to_local" | "local_to_remote"
+type DriveSyncLocalKind = "file" | "folder"
 type DriveSyncObjectFilter = "all" | "active" | "conflict" | "paused" | "error"
 type DriveSyncStopTarget = Pick<DriveSyncBindingDto, "id" | "driveItemName"> | null
 
@@ -61,6 +62,7 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
 export type DriveSyncDialogState =
   | { readonly mode: "status"; readonly item: null }
   | { readonly mode: "bind"; readonly item: DriveItemDto }
+  | { readonly mode: "local"; readonly item: null }
 
 export function DriveSyncDialog({
   onOpenChange,
@@ -77,13 +79,18 @@ export function DriveSyncDialog({
 }) {
   const [localPath, setLocalPath] = useState("")
   const [bindingMode, setBindingMode] = useState<DriveSyncBindingMode>("bind_existing")
+  const [localKind, setLocalKind] = useState<DriveSyncLocalKind>("folder")
   const [preview, setPreview] = useState<DriveSyncBindingPreviewDto | null>(null)
   const [excludeText, setExcludeText] = useState("")
   const [statusFilter, setStatusFilter] = useState<DriveSyncObjectFilter>("all")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
-  const isStatusDialog = state?.mode !== "bind"
-  const pathFieldCopy = item ? getDriveSyncBindingPathFieldCopy(item.type, bindingMode) : null
+  const isLocalBinding = state?.mode === "local"
+  const isBindingDialog = state?.mode === "bind" || isLocalBinding
+  const isStatusDialog = !isBindingDialog
+  const effectiveBindingMode = isLocalBinding ? "local_to_remote" : bindingMode
+  const bindingKind = item?.type ?? localKind
+  const pathFieldCopy = isBindingDialog ? getDriveSyncBindingPathFieldCopy(bindingKind, effectiveBindingMode) : null
   const trimmedLocalPath = localPath.trim()
   const currentPreview = preview?.localPath === trimmedLocalPath ? preview : null
   const canSubmitBinding = trimmedLocalPath.length > 0 && !busy && currentPreview?.status !== "blocked"
@@ -92,6 +99,7 @@ export function DriveSyncDialog({
     if (!open) {
       setLocalPath("")
       setBindingMode("bind_existing")
+      setLocalKind("folder")
       setPreview(null)
       setExcludeText("")
       setStatusFilter("all")
@@ -109,34 +117,42 @@ export function DriveSyncDialog({
     setPreview(null)
   }
 
+  const selectLocalKind = (nextKind: DriveSyncLocalKind) => {
+    if (nextKind === localKind) return
+    setLocalKind(nextKind)
+    setLocalPath("")
+    setPreview(null)
+  }
+
   const chooseLocalPath = async () => {
-    if (!item) return
     const nextPath = await requireSynapseBridge().driveSync.chooseLocalPath({
-      kind: item.type,
-      mode: bindingMode,
-      defaultName: item.name,
+      kind: bindingKind,
+      mode: effectiveBindingMode,
+      defaultName: item?.name,
     })
     if (!nextPath) return
     setLocalPath(nextPath)
-    await previewBinding(nextPath, bindingMode)
+    await previewBinding(nextPath, effectiveBindingMode)
   }
 
   const previewBinding = async (
     nextLocalPath = localPath,
-    nextMode: DriveSyncBindingMode = bindingMode,
+    nextMode: DriveSyncBindingMode = effectiveBindingMode,
   ): Promise<DriveSyncBindingPreviewDto | null> => {
-    if (!item || nextLocalPath.trim().length === 0) return null
+    if (!isBindingDialog || nextLocalPath.trim().length === 0) return null
+    const currentPath = nextLocalPath.trim()
+    const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
     setBusy(true)
     try {
       const nextPreview = await requireSynapseBridge().driveSync.previewBinding({
-        driveItemId: item.id,
-        driveItemName: item.name,
-        kind: item.type,
-        drivePathHint: item.name,
-        localPath: nextLocalPath.trim(),
-        remoteExists: true,
+        driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
+        driveItemName,
+        kind: bindingKind,
+        drivePathHint: item?.name ?? driveItemName,
+        localPath: currentPath,
+        remoteExists: nextMode !== "local_to_remote",
         directionHint: nextMode,
-        importGitignore: item.type === "folder",
+        importGitignore: bindingKind === "folder",
       })
       setPreview(nextPreview)
       return nextPreview
@@ -149,23 +165,24 @@ export function DriveSyncDialog({
   }
 
   const createBinding = async () => {
-    if (!item) return
+    if (!isBindingDialog) return
     const currentPath = localPath.trim()
-    const currentPreview = preview?.localPath === currentPath && preview.direction === bindingMode
+    const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
+    const currentPreview = preview?.localPath === currentPath && preview.direction === effectiveBindingMode
       ? preview
-      : await previewBinding(currentPath, bindingMode)
+      : await previewBinding(currentPath, effectiveBindingMode)
     if (!currentPreview?.direction || currentPreview.status !== "ready") return
     setBusy(true)
     try {
       await requireSynapseBridge().driveSync.createSafeBinding({
-        driveItemId: item.id,
-        driveItemName: item.name,
-        kind: item.type,
-        drivePathHint: item.name,
+        driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
+        driveItemName,
+        kind: bindingKind,
+        drivePathHint: item?.name ?? driveItemName,
         localPath: currentPath,
         direction: currentPreview.direction,
-        excludeRules: item.type === "folder" ? parseExcludeText(excludeText) : [],
-        importGitignore: item.type === "folder",
+        excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],
+        importGitignore: bindingKind === "folder",
       })
       await refreshSnapshot()
       toast("已创建同步绑定")
@@ -202,24 +219,33 @@ export function DriveSyncDialog({
               )}
             />
           ) : (
-            <DialogFrameHeader title="绑定同步" />
+            <DialogFrameHeader title={isLocalBinding ? "本地同步" : "绑定同步"} />
           )}
           <DialogFrameBody>
             <ScrollArea className="h-full min-h-0">
               <div className="px-5 py-4">
-                {item ? (
+                {isBindingDialog ? (
                   <div className="grid gap-4">
-                    <Tabs
-                      value={bindingMode}
-                      onValueChange={(value) => {
-                        selectBindingMode(value as DriveSyncBindingMode)
-                      }}
-                    >
-                      <TabsList>
-                        <TabsTrigger value="bind_existing" onClick={() => selectBindingMode("bind_existing")}>绑定已有本地项</TabsTrigger>
-                        <TabsTrigger value="remote_to_local" onClick={() => selectBindingMode("remote_to_local")}>下载到本地</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                    {isLocalBinding ? (
+                      <Tabs value={localKind} onValueChange={(value) => selectLocalKind(value as DriveSyncLocalKind)}>
+                        <TabsList>
+                          <TabsTrigger value="file" onClick={() => selectLocalKind("file")}>文件</TabsTrigger>
+                          <TabsTrigger value="folder" onClick={() => selectLocalKind("folder")}>文件夹</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    ) : (
+                      <Tabs
+                        value={bindingMode}
+                        onValueChange={(value) => {
+                          selectBindingMode(value as DriveSyncBindingMode)
+                        }}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="bind_existing" onClick={() => selectBindingMode("bind_existing")}>绑定已有本地项</TabsTrigger>
+                          <TabsTrigger value="remote_to_local" onClick={() => selectBindingMode("remote_to_local")}>下载到本地</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    )}
                     <div className="grid gap-2">
                       <Label htmlFor="drive-sync-local-path">{pathFieldCopy?.label}</Label>
                       <InputGroup>
@@ -235,7 +261,7 @@ export function DriveSyncDialog({
                         <InputGroupButton type="button" variant="outline" onClick={() => { void chooseLocalPath() }}>{pathFieldCopy?.chooseLabel}</InputGroupButton>
                       </InputGroup>
                     </div>
-                    {item.type === "folder" ? (
+                    {bindingKind === "folder" ? (
                       <details className="grid gap-2">
                         <summary className="cursor-default text-sm font-medium">高级设置</summary>
                         <div className="mt-2 grid gap-2">
@@ -253,7 +279,7 @@ export function DriveSyncDialog({
             </ScrollArea>
           </DialogFrameBody>
           <DialogFrameFooter>
-            {item ? (
+            {isBindingDialog ? (
               <>
                 <Button type="button" variant="outline" disabled={busy || trimmedLocalPath.length === 0} onClick={() => { void previewBinding() }}>校验</Button>
                 <Button type="button" disabled={!canSubmitBinding} onClick={() => { void createBinding() }}>{pathFieldCopy?.submitLabel}</Button>
@@ -285,9 +311,24 @@ function getDriveSyncBindingPathFieldCopy(
       ? { label: "本地文件夹", placeholder: "选择已有本地文件夹", chooseLabel: "选择文件夹", submitLabel: "创建同步" }
       : { label: "本地文件", placeholder: "选择已有本地文件", chooseLabel: "选择文件", submitLabel: "创建同步" }
   }
+  if (mode === "local_to_remote") {
+    return kind === "folder"
+      ? { label: "本地文件夹", placeholder: "选择要同步的本地文件夹", chooseLabel: "选择文件夹", submitLabel: "上传并同步" }
+      : { label: "本地文件", placeholder: "选择要同步的本地文件", chooseLabel: "选择文件", submitLabel: "上传并同步" }
+  }
   return kind === "folder"
     ? { label: "保存位置", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并同步" }
     : { label: "保存为", placeholder: "选择保存位置", chooseLabel: "选择位置", submitLabel: "下载并同步" }
+}
+
+function getDriveSyncLocalName(localPath: string, kind: DriveSyncLocalKind): string {
+  const name = localPath.split(/[\\/]/u).filter(Boolean).at(-1)?.trim()
+  if (name) return name
+  return kind === "folder" ? "同步文件夹" : "同步文件"
+}
+
+function getDriveSyncLocalPlaceholderId(localPath: string): string {
+  return `local:${localPath}`
 }
 
 function DriveSyncPreview({ preview }: { readonly preview: DriveSyncBindingPreviewDto }) {
