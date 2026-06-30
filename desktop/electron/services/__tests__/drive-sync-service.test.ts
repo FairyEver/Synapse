@@ -435,6 +435,40 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects remote file downloads when the local target appears after preview", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const downloadDriveFile = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote spec", "utf8")
+        return { ok: true as const, path: outputPath }
+      })
+      const harness = createHarness({ accountService: { downloadDriveFile } })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.previewBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        remoteExists: true,
+      })).resolves.toMatchObject({ status: "ready", direction: "remote_to_local" })
+      await writeFile(localPath, "local after preview", "utf8")
+
+      await expect(service.createSafeBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "remote_to_local",
+      })).rejects.toThrow("本地文件已存在")
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      await expect(harness.bindings.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("records local upload failures without rejecting watcher-driven sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -833,6 +867,41 @@ describe("DriveSyncService", () => {
         expect.objectContaining({ relativePath: "notes", remoteItemId: "remote-notes", kind: "folder" }),
         expect.objectContaining({ relativePath: "notes/spec.md", remoteItemId: "remote-spec", kind: "file" }),
       ]))
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects remote folder downloads when the local target becomes non-empty after preview", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "Docs")
+      await mkdir(localPath)
+      const downloadDriveFile = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote spec", "utf8")
+        return { ok: true as const, path: outputPath }
+      })
+      const harness = createHarness({ accountService: { downloadDriveFile } })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.previewBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath,
+        remoteExists: true,
+      })).resolves.toMatchObject({ status: "ready", direction: "remote_to_local" })
+      await writeFile(path.join(localPath, "local.md"), "local after preview", "utf8")
+
+      await expect(service.createSafeBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath,
+        direction: "remote_to_local",
+      })).rejects.toThrow("本地文件夹已有内容")
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      await expect(harness.bindings.list()).resolves.toEqual([])
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -1672,7 +1741,7 @@ function createHarness(overrides: {
   const conflicts = createMemoryNamespace<DriveSyncConflictEntryV1>()
   const state = createMemoryNamespace<DriveSyncStateEntryV1>()
   const accountService = {
-    getDriveItem: vi.fn(),
+    getDriveItem: vi.fn(async (itemId: string) => mockDriveItem(itemId)),
     downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "" })),
     downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "" })),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
@@ -1736,4 +1805,23 @@ function createMemoryNamespace<T extends Record<string, unknown>>() {
     },
   }
   return namespace
+}
+
+function mockDriveItem(itemId: string) {
+  const lower = itemId.toLowerCase()
+  const type: "file" | "folder" = lower.includes("folder") || lower.includes("docs") ? "folder" : "file"
+  return {
+    id: itemId,
+    parentId: null,
+    type,
+    name: type === "folder" ? "Docs" : "spec.md",
+    size: type === "folder" ? "0" : "11",
+    mimeType: type === "folder" ? null : "text/markdown",
+    storageStatus: "active" as const,
+    shared: false,
+    activeShareId: null,
+    activeShare: null,
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
+  }
 }

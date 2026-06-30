@@ -439,6 +439,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (input.direction === "bind_existing") {
       return createBindExistingBinding(input)
     }
+    if (input.direction === "remote_to_local") {
+      await assertRemoteToLocalTargetStillSafe(input)
+    }
 
     let binding = await createBinding({
       driveItemId: input.driveItemId,
@@ -473,6 +476,21 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         message: errorMessage(error),
       })
       return await updateBindingStatus(binding.id, "error", errorMessage(error))
+    }
+  }
+
+  async function assertRemoteToLocalTargetStillSafe(input: DriveSyncCreateSafeBindingInput): Promise<void> {
+    const remoteItem = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
+    if (remoteItem.type !== input.kind) throw new Error("云盘条目类型与绑定类型不一致。")
+    const preview = await previewDriveSyncBinding({
+      ...input,
+      remoteExists: true,
+      remoteSize: remoteItem.size,
+      directionHint: "remote_to_local",
+      activeBindings: await deps.bindings.list(),
+    })
+    if (preview.status !== "ready" || preview.direction !== "remote_to_local") {
+      throw new Error(preview.reason ?? "本地路径已变化，请重新校验后再同步。")
     }
   }
 
