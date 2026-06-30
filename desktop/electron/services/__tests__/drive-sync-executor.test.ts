@@ -53,6 +53,36 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("creates local folders for remote folder downloads", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const bindingEntry = binding({ localPath: tempDir })
+    const accountService = createAccountService()
+
+    await executeDriveSyncOperation({
+      binding: bindingEntry,
+      operation: operation({
+        kind: "download",
+        relativePath: "notes",
+        driveItemId: "remote-notes",
+        localPath: path.join(tempDir, "notes"),
+        remoteItemKind: "folder",
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
+    await expect(namespace.list()).resolves.toMatchObject([
+      { bindingId: "binding-1", relativePath: "notes", remoteItemId: "remote-notes", kind: "folder" },
+    ])
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "download", status: "succeeded", relativePath: "notes" }),
+    ])
+  })
+
   it("uploads local files and updates baseline with the remote item id", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const records: unknown[] = []
@@ -423,6 +453,7 @@ function operation(input: Partial<DriveSyncPlannedOperation> & {
     relativePath: input.relativePath,
     localPath: input.localPath ?? path.join("/Users/me/Docs", input.relativePath),
     remotePathHint: null,
+    remoteItemKind: input.remoteItemKind ?? null,
   }
 }
 

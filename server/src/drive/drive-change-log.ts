@@ -5,6 +5,7 @@ import type {
   DriveChangeListInput,
   DriveChangeListPageDto,
   DriveChangeType,
+  DriveItemType,
 } from "@synapse/shared"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -19,6 +20,7 @@ export type DriveChangeAppendInput = {
   readonly etag?: string | null
   readonly name?: string | null
   readonly pathHint?: string | null
+  readonly itemKind?: DriveItemType | null
   readonly actor?: string | null
 }
 
@@ -26,8 +28,10 @@ export type DriveChangeAppendInput = {
 export class DriveChangeLogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  append(input: DriveChangeAppendInput, client: DriveChangePrisma = this.prisma): Promise<DriveChangeDto> {
-    return client.driveChange.create({
+  async append(input: DriveChangeAppendInput, client: DriveChangePrisma = this.prisma): Promise<DriveChangeDto> {
+    const metadata = await resolveItemMetadata(client, input.userId, [input.itemId])
+    const itemMetadata = metadata.get(input.itemId)
+    const change = await client.driveChange.create({
       data: {
         userId: input.userId,
         itemId: input.itemId,
@@ -36,10 +40,14 @@ export class DriveChangeLogService {
         versionId: input.versionId ?? null,
         etag: input.etag ?? null,
         name: input.name ?? null,
-        pathHint: input.pathHint ?? null,
+        pathHint: input.pathHint ?? itemMetadata?.pathHint ?? null,
         actor: input.actor ?? null,
       },
-    }).then(toDriveChangeDto)
+    })
+    return toDriveChangeDto(change, {
+      itemKind: input.itemKind ?? itemMetadata?.itemKind ?? null,
+      pathHint: change.pathHint ?? itemMetadata?.pathHint ?? null,
+    })
   }
 
   async list(userId: string, input: DriveChangeListInput = {}): Promise<DriveChangeListPageDto> {
@@ -51,8 +59,13 @@ export class DriveChangeLogService {
       take: limit + 1,
     })
     const pageRows = rows.slice(0, limit)
+    const metadata = await resolveItemMetadata(
+      this.prisma,
+      userId,
+      pageRows.map((row) => row.itemId),
+    )
     return {
-      items: pageRows.map(toDriveChangeDto),
+      items: pageRows.map((row) => toDriveChangeDto(row, metadata.get(row.itemId))),
       nextCursor: pageRows.at(-1)?.sequence.toString() ?? input.cursor ?? null,
       hasMore: rows.length > limit,
       resyncRequired: false,
@@ -64,6 +77,64 @@ function parseCursor(cursor: string | null | undefined): bigint {
   if (!cursor) return 0n
   if (!/^\d+$/u.test(cursor)) return 0n
   return BigInt(cursor)
+}
+
+type DriveChangeItemMetadata = {
+  readonly itemKind: DriveItemType | null
+  readonly pathHint: string | null
+}
+
+type DriveItemPathRow = {
+  readonly id: string
+  readonly parentId: string | null
+  readonly type: string
+  readonly name: string
+}
+
+async function resolveItemMetadata(
+  client: DriveChangePrisma,
+  userId: string,
+  itemIds: readonly string[],
+): Promise<Map<string, DriveChangeItemMetadata>> {
+  const pending = new Set(itemIds.filter(Boolean))
+  const items = new Map<string, DriveItemPathRow>()
+
+  while (pending.size > 0) {
+    const ids = [...pending]
+    pending.clear()
+    const rows = await client.driveItem.findMany({
+      where: { userId, id: { in: ids } },
+      select: { id: true, parentId: true, type: true, name: true },
+    })
+    for (const row of rows) {
+      items.set(row.id, row)
+      if (row.parentId && !items.has(row.parentId)) pending.add(row.parentId)
+    }
+  }
+
+  return new Map(itemIds.map((itemId) => {
+    const item = items.get(itemId)
+    return [itemId, {
+      itemKind: toDriveItemKind(item?.type),
+      pathHint: item ? buildPathHint(item, items) : null,
+    }]
+  }))
+}
+
+function buildPathHint(item: DriveItemPathRow, items: ReadonlyMap<string, DriveItemPathRow>): string {
+  const parts = [item.name]
+  let parentId = item.parentId
+  while (parentId) {
+    const parent = items.get(parentId)
+    if (!parent) break
+    parts.unshift(parent.name)
+    parentId = parent.parentId
+  }
+  return `/${parts.join("/")}`
+}
+
+function toDriveItemKind(value: string | null | undefined): DriveItemType | null {
+  return value === "file" || value === "folder" ? value : null
 }
 
 function toDriveChangeDto(change: {
@@ -78,7 +149,7 @@ function toDriveChangeDto(change: {
   readonly pathHint: string | null
   readonly actor: string | null
   readonly occurredAt: Date
-}): DriveChangeDto {
+}, metadata?: DriveChangeItemMetadata): DriveChangeDto {
   return {
     id: change.id,
     sequence: change.sequence.toString(),
@@ -88,7 +159,8 @@ function toDriveChangeDto(change: {
     versionId: change.versionId,
     etag: change.etag,
     name: change.name,
-    pathHint: change.pathHint,
+    pathHint: change.pathHint ?? metadata?.pathHint ?? null,
+    itemKind: metadata?.itemKind ?? null,
     actor: change.actor,
     occurredAt: change.occurredAt.toISOString(),
   }

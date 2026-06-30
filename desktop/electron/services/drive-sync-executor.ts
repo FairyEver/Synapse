@@ -29,7 +29,7 @@ export async function executeDriveSyncOperation(deps: DriveSyncExecutorDeps): Pr
 async function executeOperationBody(deps: DriveSyncExecutorDeps): Promise<void> {
   switch (deps.operation.kind) {
     case "download":
-      await downloadFile(deps)
+      await downloadRemoteItem(deps)
       return
     case "upload":
       await uploadLocalItem(deps)
@@ -48,6 +48,14 @@ async function executeOperationBody(deps: DriveSyncExecutorDeps): Promise<void> 
   }
 }
 
+async function downloadRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
+  if (deps.operation.remoteItemKind === "folder") {
+    await downloadFolder(deps)
+    return
+  }
+  await downloadFile(deps)
+}
+
 async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
   const localPath = requireLocalPath(deps.operation)
   const driveItemId = requireDriveItemId(deps.operation)
@@ -64,6 +72,25 @@ async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
     localSize: stats.size,
     localMtimeMs: stats.mtimeMs,
     localHash: await hashDriveSyncFile(localPath),
+    deletedAt: null,
+  })
+}
+
+async function downloadFolder(deps: DriveSyncExecutorDeps): Promise<void> {
+  const localPath = requireLocalPath(deps.operation)
+  const driveItemId = requireDriveItemId(deps.operation)
+  await mkdir(localPath, { recursive: true })
+  const stats = await lstat(localPath)
+  await deps.baselineStore.upsert({
+    bindingId: deps.binding.id,
+    relativePath: deps.operation.relativePath,
+    kind: "folder",
+    remoteItemId: driveItemId,
+    remoteVersionId: null,
+    remoteEtag: null,
+    localSize: null,
+    localMtimeMs: stats.mtimeMs,
+    localHash: null,
     deletedAt: null,
   })
 }
@@ -136,7 +163,7 @@ async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
   const existing = (await deps.baselineStore.listByBinding(deps.binding.id))
     .find((entry) => entry.remoteItemId === driveItemId && entry.deletedAt === null)
   if (!existing) {
-    await downloadFile(deps)
+    await downloadRemoteItem(deps)
     return
   }
 

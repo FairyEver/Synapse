@@ -1,5 +1,5 @@
 import path from "node:path"
-import type { DriveChangeDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { DriveChangeDto, DriveItemType } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
@@ -23,6 +23,7 @@ export interface DriveSyncPlannedOperation {
   readonly relativePath: string
   readonly localPath: string | null
   readonly remotePathHint: string | null
+  readonly remoteItemKind: DriveItemType | null
 }
 
 export interface DriveSyncPlannedConflict {
@@ -139,6 +140,7 @@ export function planDriveSyncRemoteChanges(input: {
         localPath,
         driveItemId: change.itemId,
         remotePathHint: change.pathHint ?? null,
+        remoteItemKind: change.itemKind ?? null,
       }))
       continue
     }
@@ -150,6 +152,7 @@ export function planDriveSyncRemoteChanges(input: {
         localPath,
         driveItemId: change.itemId,
         remotePathHint: change.pathHint ?? null,
+        remoteItemKind: change.itemKind ?? null,
       }))
       continue
     }
@@ -161,6 +164,7 @@ export function planDriveSyncRemoteChanges(input: {
       localPath,
       driveItemId: change.itemId,
       remotePathHint: change.pathHint ?? null,
+      remoteItemKind: change.itemKind ?? null,
     }))
   }
 
@@ -182,6 +186,7 @@ function plannedOperation(input: {
   readonly relativePath: string
   readonly localPath: string | null
   readonly remotePathHint: string | null
+  readonly remoteItemKind?: DriveItemType | null
 }): DriveSyncPlannedOperation {
   return {
     bindingId: input.binding.id,
@@ -190,6 +195,7 @@ function plannedOperation(input: {
     relativePath: input.relativePath,
     localPath: input.localPath,
     remotePathHint: input.remotePathHint,
+    remoteItemKind: input.remoteItemKind ?? null,
   }
 }
 

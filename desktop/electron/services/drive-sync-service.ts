@@ -935,6 +935,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         relativePath: copyRelativePath,
         localPath: copyLocalPath,
         remotePathHint: conflict.remotePathHint,
+        remoteItemKind: null,
       },
       plannedConflictOperation(binding, conflict, "download", localPath),
     ])
@@ -953,6 +954,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       relativePath: conflict.relativePath,
       localPath,
       remotePathHint: conflict.remotePathHint,
+      remoteItemKind: null,
     }
   }
 
@@ -1291,6 +1293,7 @@ function deletedFileRootChange(binding: DriveSyncBindingEntryV1): DriveChangeDto
     etag: null,
     name: binding.driveItemName,
     pathHint: binding.drivePathHint ?? binding.driveItemName,
+    itemKind: binding.kind,
     actor: "system",
     occurredAt: now,
   }

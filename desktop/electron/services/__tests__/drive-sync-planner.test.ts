@@ -96,6 +96,33 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("keeps nested remote paths and item kinds from change metadata", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [],
+      changes: [
+        remoteChange({ itemId: "remote-folder", type: "created", pathHint: "/Docs/notes", itemKind: "folder" }),
+        remoteChange({ itemId: "remote-file", type: "created", pathHint: "/Docs/notes/spec.md", itemKind: "file" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "download",
+        relativePath: "notes",
+        driveItemId: "remote-folder",
+        remoteItemKind: "folder",
+      }),
+      expect.objectContaining({
+        kind: "download",
+        relativePath: "notes/spec.md",
+        driveItemId: "remote-file",
+        remoteItemKind: "file",
+      }),
+    ])
+  })
+
   it("ignores remote changes outside the binding path and excluded paths", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),
@@ -234,7 +261,10 @@ function localChange(input: Partial<DriveSyncLocalChange> & {
   }
 }
 
-function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & { readonly pathHint: string }): DriveChangeDto {
+function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
+  readonly pathHint: string
+  readonly itemKind?: DriveChangeDto["itemKind"]
+}): DriveChangeDto {
   return {
     id: `change:${input.itemId}`,
     sequence: "42",
@@ -245,6 +275,7 @@ function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & { readonl
     etag: null,
     name: input.pathHint.split("/").at(-1) ?? null,
     pathHint: input.pathHint,
+    itemKind: input.itemKind ?? null,
     actor: "user",
     occurredAt: "2026-06-28T00:00:00.000Z",
   }
