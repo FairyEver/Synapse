@@ -406,7 +406,7 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
 export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
   id: "core.drive-sync",
   criticality: "degraded",
-  dependsOn: ["core.data-repository"],
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createDriveSyncService({
@@ -416,6 +416,8 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
       conflicts: dataRepository.namespace<DriveSyncConflictEntryV1>("drive.sync.conflicts"),
       state: dataRepository.namespace<DriveSyncStateEntryV1>("drive.sync.state"),
       accountService,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
     })
   },
 }

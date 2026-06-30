@@ -26,6 +26,7 @@ import type {
   DriveSyncOperationEntryV1,
   DriveSyncStateEntryV1,
 } from "../runtime/data-repo"
+import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
 import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
@@ -48,6 +49,8 @@ export interface DriveSyncServiceDeps {
   readonly state: DataNamespace<DriveSyncStateEntryV1>
   readonly accountService: DriveSyncAccountService
   readonly trashLocalPath?: (localPath: string) => Promise<void>
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
   readonly now?: () => Date
   readonly createId?: (prefix: string) => string
 }
@@ -96,6 +99,12 @@ export interface DriveSyncCreateBindingInput {
   readonly excludeRules?: readonly string[]
   readonly deferWatcher?: boolean
 }
+
+type DriveSyncLocalPermissionSource =
+  | "driveSync.previewBinding"
+  | "driveSync.createBinding"
+  | "driveSync.createSafeBinding"
+  | "driveSync.executeOperation"
 
 export interface DriveSyncRecordOperationInput {
   readonly bindingId: string
@@ -208,6 +217,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const driveItemId = normalizeRequiredString(input.driveItemId, "云盘条目不能为空。")
     const driveItemName = normalizeRequiredString(input.driveItemName, "云盘条目名称不能为空。")
     if (input.kind !== "file" && input.kind !== "folder") throw new Error("云盘条目类型无效。")
+    await authorizeLocalPath({
+      action: "fs.read.outside-userdata",
+      localPath,
+      source: "driveSync.createBinding",
+      metadata: {
+        driveItemId,
+        driveItemName,
+        direction: "bind_existing",
+        kind: input.kind,
+      },
+    })
 
     const activeBindings = (await deps.bindings.list()).filter((binding) => binding.status !== "removed")
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
@@ -362,6 +382,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly remoteExists: boolean
     readonly directionHint?: DriveSyncCreateSafeBindingInput["direction"] | null
   }): Promise<DriveSyncBindingPreviewDto> {
+    await authorizeLocalPath({
+      action: "fs.read.outside-userdata",
+      localPath: input.localPath,
+      source: "driveSync.previewBinding",
+      metadata: {
+        direction: input.directionHint ?? null,
+        driveItemId: input.driveItemId,
+        driveItemName: input.driveItemName,
+        kind: input.kind,
+      },
+    })
     const remoteItem = input.remoteExists ? await getDriveItemFromAccountService(deps.accountService, input.driveItemId) : null
     const preview = await previewDriveSyncBinding({
       ...input,
@@ -394,6 +425,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function createSafeBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
+    await authorizeLocalPath({
+      action: input.direction === "remote_to_local" ? "fs.write.outside-userdata" : "fs.read.outside-userdata",
+      localPath: input.localPath,
+      source: "driveSync.createSafeBinding",
+      metadata: {
+        direction: input.direction,
+        driveItemId: input.driveItemId,
+        driveItemName: input.driveItemName,
+        kind: input.kind,
+      },
+    })
     if (input.direction === "bind_existing") {
       return createBindExistingBinding(input)
     }
@@ -1022,6 +1064,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       }
       markSelfWriteForOperation(operation)
       try {
+        await authorizeOperationLocalPath(binding, operation)
         await executeDriveSyncOperation({
           binding,
           operation,
@@ -1034,6 +1077,65 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
       }
     }
+  }
+
+  async function authorizeOperationLocalPath(
+    binding: DriveSyncBindingEntryV1,
+    operation: DriveSyncPlannedOperation,
+  ): Promise<void> {
+    const action = operationLocalPermissionAction(operation.kind)
+    if (!action || !operation.localPath) return
+    await authorizeLocalPath({
+      action,
+      localPath: operation.localPath,
+      source: "driveSync.executeOperation",
+      metadata: {
+        bindingId: binding.id,
+        driveItemId: operation.driveItemId,
+        driveItemName: binding.driveItemName,
+        kind: binding.kind,
+        operationKind: operation.kind,
+        relativePath: operation.relativePath,
+      },
+    })
+  }
+
+  async function authorizeLocalPath(input: {
+    readonly action: PermissionAction
+    readonly localPath: string
+    readonly source: DriveSyncLocalPermissionSource
+    readonly metadata: Record<string, unknown>
+  }): Promise<void> {
+    if (!deps.permissionGuard) return
+    const actor: ActorIdentity = { kind: "user" }
+    const context = { source: input.source, ...input.metadata }
+    const permission = await deps.permissionGuard.check({
+      action: input.action,
+      actor,
+      resource: input.localPath,
+      context,
+    })
+    if (!permission.allowed) {
+      deps.auditSink?.record({
+        action: input.action,
+        actor,
+        resource: input.localPath,
+        outcome: "denied",
+        metadata: {
+          ...context,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+    deps.auditSink?.record({
+      action: input.action,
+      actor,
+      resource: input.localPath,
+      outcome: "allowed",
+      metadata: context,
+    })
   }
 
   async function recordPlannedConflicts(conflicts: readonly DriveSyncPlannedConflict[]): Promise<void> {
@@ -1416,6 +1518,22 @@ function compareCreatedAsc(left: { readonly createdAt: string }, right: { readon
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "同步操作失败。"
+}
+
+function operationLocalPermissionAction(kind: DriveSyncOperationEntryV1["kind"]): PermissionAction | null {
+  switch (kind) {
+    case "download":
+    case "delete_local":
+    case "move_local":
+      return "fs.write.outside-userdata"
+    case "upload":
+      return "fs.read.outside-userdata"
+    case "delete_remote":
+    case "move_remote":
+    case "scan":
+    case "resync":
+      return null
+  }
 }
 
 function formatFolderDifferenceReason(differences: readonly string[]): string {

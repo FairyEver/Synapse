@@ -12,6 +12,7 @@ import type {
   DriveSyncOperationEntryV1,
   DriveSyncStateEntryV1,
 } from "../../runtime/data-repo"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { hashDriveSyncFile } from "../drive-sync-local-snapshot"
 import { createDriveSyncService } from "../drive-sync-service"
 
@@ -50,6 +51,42 @@ describe("DriveSyncService", () => {
         errorCount: 0,
       },
     })
+  })
+
+  it("denies local sync creation through PermissionGuard and records audit", async () => {
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false as const, reason: "denied by test" })),
+    }
+    const auditSink: AuditSink = {
+      record: vi.fn(),
+      list: vi.fn(() => []),
+      clearForTests: vi.fn(),
+    }
+    const harness = createHarness({ permissionGuard, auditSink })
+    const service = createDriveSyncService(harness.deps)
+
+    await expect(service.createSafeBinding({
+      driveItemId: "remote-file",
+      driveItemName: "report.md",
+      kind: "file",
+      localPath: "/Users/me/report.md",
+      direction: "remote_to_local",
+    })).rejects.toThrow("denied by test")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/Users/me/report.md",
+      context: expect.objectContaining({ source: "driveSync.createSafeBinding" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      outcome: "denied",
+      resource: "/Users/me/report.md",
+      metadata: expect.objectContaining({ reason: "denied by test" }),
+    }))
+    await expect(harness.bindings.list()).resolves.toEqual([])
   })
 
   it("exposes binding last errors in snapshots", async () => {
@@ -1406,6 +1443,70 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("checks and audits local writes before applying remote conflict resolution", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      const permissionGuard: PermissionGuard = {
+        registerPolicy: vi.fn(),
+        check: vi.fn(async () => ({ allowed: true as const })),
+      }
+      const auditSink: AuditSink = {
+        record: vi.fn(),
+        list: vi.fn(() => []),
+        clearForTests: vi.fn(),
+      }
+      const harness = createHarness({
+        auditSink,
+        permissionGuard,
+        accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath,
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" })
+
+      expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write.outside-userdata",
+        actor: { kind: "user" },
+        resource: localPath,
+        context: expect.objectContaining({
+          source: "driveSync.executeOperation",
+          operationKind: "download",
+        }),
+      }))
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write.outside-userdata",
+        outcome: "allowed",
+        resource: localPath,
+        metadata: expect.objectContaining({ source: "driveSync.executeOperation" }),
+      }))
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves a conflict by keeping the local file", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -1513,7 +1614,11 @@ async function seedFolderRootBaseline(
   })
 }
 
-function createHarness(overrides: { readonly accountService?: Record<string, unknown> } = {}) {
+function createHarness(overrides: {
+  readonly accountService?: Record<string, unknown>
+  readonly auditSink?: AuditSink
+  readonly permissionGuard?: PermissionGuard
+} = {}) {
   const bindings = createMemoryNamespace<DriveSyncBindingEntryV1>()
   const baseline = createMemoryNamespace<DriveSyncBaselineEntryV1>()
   const operations = createMemoryNamespace<DriveSyncOperationEntryV1>()
@@ -1547,6 +1652,8 @@ function createHarness(overrides: { readonly accountService?: Record<string, unk
       conflicts,
       state,
       accountService,
+      auditSink: overrides.auditSink,
+      permissionGuard: overrides.permissionGuard,
       now: () => new Date("2026-06-28T00:00:00.000Z"),
       createId: (prefix: string) => `${prefix}-${++idCounter}`,
     },
