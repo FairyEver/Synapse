@@ -199,7 +199,7 @@ describe("WorkflowWindowManager", () => {
     expect(editor.options).toMatchObject({
       width: 1350,
       height: 900,
-      minWidth: 1000,
+      minWidth: 880,
       minHeight: 600,
       title: "Workflow Editor",
     })

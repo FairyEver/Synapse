@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
   agentPersonaItemsSchema,
+  agentPersonaSettingsSchema,
   type AgentPersonaItemEntryV1,
+  type AgentPersonaSettingsEntryV1,
 } from "../schemas/agent-personas"
 import { allSchemas } from "../schemas"
 import { sqliteIndexesFor } from "../factory"
@@ -51,8 +53,41 @@ describe("agent persona DataRepository schema", () => {
 
   it("registers the namespace and sqlite index", () => {
     expect(allSchemas.some((schema) => schema.name === "app.agent-personas.items")).toBe(true)
+    expect(allSchemas.some((schema) => schema.name === "app.agent-personas.settings")).toBe(true)
     expect(sqliteIndexesFor("app.agent-personas.items")).toEqual([
       "json_extract(value, '$.createdAt'), id",
     ])
+  })
+
+  it("accepts built-in model settings", () => {
+    const entry: AgentPersonaSettingsEntryV1 = {
+      schemaVersion: 1,
+      builtinProviderModels: {
+        "builtin-zh-en-translator": { providerId: "claude", modelTier: "sonnet" },
+        "builtin-no-model": null,
+      },
+    }
+
+    expect(agentPersonaSettingsSchema.validate(entry)).toBe(true)
+    expect(agentPersonaSettingsSchema.defaults?.()).toEqual({
+      schemaVersion: 1,
+      builtinProviderModels: {},
+    })
+  })
+
+  it("rejects invalid built-in model settings", () => {
+    expect(agentPersonaSettingsSchema.validate({
+      schemaVersion: 1,
+      builtinProviderModels: {
+        "builtin-zh-en-translator": { providerId: " ", modelTier: "sonnet" },
+      },
+    })).toBe(false)
+
+    expect(agentPersonaSettingsSchema.validate({
+      schemaVersion: 1,
+      builtinProviderModels: {
+        "builtin-zh-en-translator": { providerId: "claude", modelTier: "invalid" },
+      },
+    })).toBe(false)
   })
 })

@@ -2,13 +2,17 @@ import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
-import type { AgentPersonaItemEntryV1 } from "../../../electron/runtime/data-repo/schemas/agent-personas"
+import type {
+  AgentPersonaItemEntryV1,
+  AgentPersonaSettingsEntryV1,
+} from "../../../electron/runtime/data-repo/schemas/agent-personas"
 import {
   BUILTIN_AGENT_PERSONAS,
   isBuiltinAgentPersonaId,
 } from "../shared/defaults"
 import type {
   AgentPersona,
+  AgentPersonaBuiltinModelUpdateInput,
   AgentPersonaCreateInput,
   AgentPersonaIdInput,
   AgentPersonaProviderModel,
@@ -24,6 +28,7 @@ type AgentPersonaLogger = {
 
 export type AgentPersonaServiceDeps = {
   readonly items: DataNamespace<AgentPersonaItemEntryV1>
+  readonly settings: DataNamespace<AgentPersonaSettingsEntryV1>
   readonly now?: () => Date
   readonly createId?: () => string
   readonly logger: AgentPersonaLogger
@@ -55,10 +60,12 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
   const createId = () => deps.createId?.() ?? randomUUID()
 
   async function list(): Promise<AgentPersona[]> {
+    const settings = await loadSettings()
+    const builtinItems = BUILTIN_AGENT_PERSONAS.map((item) => toPublicBuiltinItem(item, settings))
     const userItems = (await deps.items.list())
       .sort(compareUserItems)
       .map(toPublicUserItem)
-    return [...BUILTIN_AGENT_PERSONAS, ...userItems]
+    return [...builtinItems, ...userItems]
   }
 
   async function create(input: AgentPersonaCreateInput): Promise<AgentPersona> {
@@ -100,6 +107,29 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
     return toPublicUserItem(item)
   }
 
+  async function updateBuiltinModel(input: AgentPersonaBuiltinModelUpdateInput): Promise<AgentPersona> {
+    if (!isBuiltinAgentPersonaId(input.id)) {
+      throw new Error("内置智能体不存在。")
+    }
+
+    const providerModel = normalizeProviderModel(input.providerModel)
+    const settings = await loadSettings()
+    const nextSettings: AgentPersonaSettingsEntryV1 = {
+      ...settings,
+      builtinProviderModels: {
+        ...settings.builtinProviderModels,
+        [input.id]: providerModel,
+      },
+    }
+
+    await deps.settings.setSingleton(nextSettings)
+    await emitChanged()
+
+    const updated = (await list()).find((item) => item.id === input.id)
+    if (!updated) throw new Error("内置智能体不存在。")
+    return updated
+  }
+
   async function deleteItem(input: AgentPersonaIdInput): Promise<void> {
     if (isBuiltinAgentPersonaId(input.id)) {
       throw new Error("内置智能体不可删除。")
@@ -115,6 +145,13 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
     return item
   }
 
+  async function loadSettings(): Promise<AgentPersonaSettingsEntryV1> {
+    return await deps.settings.getSingleton() ?? {
+      schemaVersion: 1,
+      builtinProviderModels: {},
+    }
+  }
+
   async function emitChanged(): Promise<void> {
     events.emit("changed", { items: await list() })
   }
@@ -124,6 +161,7 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
     list,
     create,
     update,
+    updateBuiltinModel,
     delete: deleteItem,
   }
 }
@@ -160,5 +198,19 @@ function toPublicUserItem(item: AgentPersonaItemEntryV1): AgentPersona {
     readonly: false,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+  }
+}
+
+function toPublicBuiltinItem(
+  item: (typeof BUILTIN_AGENT_PERSONAS)[number],
+  settings: AgentPersonaSettingsEntryV1,
+): AgentPersona {
+  const providerModel = Object.hasOwn(settings.builtinProviderModels, item.id)
+    ? settings.builtinProviderModels[item.id]
+    : item.providerModel
+
+  return {
+    ...item,
+    providerModel,
   }
 }

@@ -1,5 +1,8 @@
 import type { Migration, NamespaceSchema } from "../types"
-import { AGENT_PERSONAS_ITEMS_NAMESPACE } from "../../../../app-capabilities/agent-personas/shared/capability"
+import {
+  AGENT_PERSONAS_ITEMS_NAMESPACE,
+  AGENT_PERSONAS_SETTINGS_NAMESPACE,
+} from "../../../../app-capabilities/agent-personas/shared/capability"
 import type { AgentPersonaModelTier } from "../../../../app-capabilities/agent-personas/shared/schema"
 
 export interface AgentPersonaProviderModelEntryV1 extends Record<string, unknown> {
@@ -19,6 +22,11 @@ export interface AgentPersonaItemEntryV1 extends Record<string, unknown> {
   updatedAt: string
 }
 
+export interface AgentPersonaSettingsEntryV1 extends Record<string, unknown> {
+  schemaVersion: 1
+  builtinProviderModels: Record<string, AgentPersonaProviderModelEntryV1 | null>
+}
+
 const noMigrations: readonly Migration[] = []
 const modelTiers = new Set(["default", "haiku", "sonnet", "opus"])
 
@@ -29,6 +37,19 @@ export const agentPersonaItemsSchema: NamespaceSchema<AgentPersonaItemEntryV1> =
   migrations: noMigrations,
   validate: isAgentPersonaItemEntryV1,
   encrypted: false,
+}
+
+export const agentPersonaSettingsSchema: NamespaceSchema<AgentPersonaSettingsEntryV1> = {
+  name: AGENT_PERSONAS_SETTINGS_NAMESPACE,
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: isAgentPersonaSettingsEntryV1,
+  encrypted: false,
+  defaults: () => ({
+    schemaVersion: 1,
+    builtinProviderModels: {},
+  }),
 }
 
 function isAgentPersonaItemEntryV1(value: unknown): value is AgentPersonaItemEntryV1 {
@@ -46,6 +67,15 @@ function isAgentPersonaItemEntryV1(value: unknown): value is AgentPersonaItemEnt
     && value.source === "user"
     && isIsoDateString(value.createdAt)
     && isIsoDateString(value.updatedAt)
+}
+
+function isAgentPersonaSettingsEntryV1(value: unknown): value is AgentPersonaSettingsEntryV1 {
+  if (!isRecord(value)) return false
+  if (value.schemaVersion !== 1) return false
+  if (!isRecord(value.builtinProviderModels)) return false
+
+  return Object.values(value.builtinProviderModels)
+    .every((entry) => entry === null || isNullableProviderModel(entry))
 }
 
 function isNullableProviderModel(value: unknown): value is AgentPersonaProviderModelEntryV1 | null {

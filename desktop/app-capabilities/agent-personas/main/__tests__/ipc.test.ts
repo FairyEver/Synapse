@@ -6,6 +6,8 @@ describe("agentPersonasIpcModule", () => {
     expect(agentPersonasIpcModule.methods.list.channel).toBe("synapse:agent-personas:list")
     expect(agentPersonasIpcModule.methods.create.channel).toBe("synapse:agent-personas:create")
     expect(agentPersonasIpcModule.methods.update.channel).toBe("synapse:agent-personas:update")
+    expect(agentPersonasIpcModule.methods.updateBuiltinModel.channel)
+      .toBe("synapse:agent-personas:builtin-model:update")
     expect(agentPersonasIpcModule.methods.delete.channel).toBe("synapse:agent-personas:delete")
     expect(agentPersonasIpcModule.events.changed.channel).toBe("synapse:agent-personas:changed")
   })
@@ -39,6 +41,23 @@ describe("agentPersonasIpcModule", () => {
     expect(agentPersonasIpcModule.methods.create.request.safeParse({
       name: "产品顾问",
       description: "整理产品判断。",
+      providerModel: { providerId: "claude", modelTier: "invalid" },
+    }).success).toBe(false)
+  })
+
+  it("validates built-in model update request shape", () => {
+    expect(agentPersonasIpcModule.methods.updateBuiltinModel.request.safeParse({
+      id: "builtin-zh-en-translator",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    }).success).toBe(true)
+
+    expect(agentPersonasIpcModule.methods.updateBuiltinModel.request.safeParse({
+      id: "builtin-zh-en-translator",
+      providerModel: null,
+    }).success).toBe(true)
+
+    expect(agentPersonasIpcModule.methods.updateBuiltinModel.request.safeParse({
+      id: "builtin-zh-en-translator",
       providerModel: { providerId: "claude", modelTier: "invalid" },
     }).success).toBe(false)
   })
@@ -77,6 +96,38 @@ describe("agentPersonasIpcModule", () => {
     await expect(agentPersonasIpcModule.methods.create.handler(ctx as never, input))
       .resolves.toEqual(created)
     expect(service.create).toHaveBeenCalledWith(input)
+  })
+
+  it("dispatches built-in model update through the core service", async () => {
+    const updated = {
+      id: "builtin-zh-en-translator",
+      schemaVersion: 1,
+      name: "中英翻译",
+      description: "在中文和英文之间互译，保留原意、语气和格式。",
+      systemPrompt: "你是中英翻译智能体。",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+      source: "builtin",
+      readonly: true,
+    }
+    const service = {
+      events: { on: vi.fn() },
+      updateBuiltinModel: vi.fn(async () => updated),
+    }
+    const ctx = {
+      resolve: vi.fn((id: string) => {
+        if (id === "core.agent-personas") return service
+        if (id === "core.window-manager") return { broadcast: vi.fn() }
+        throw new Error(id)
+      }),
+    }
+    const input = {
+      id: "builtin-zh-en-translator",
+      providerModel: { providerId: "claude", modelTier: "sonnet" as const },
+    }
+
+    await expect(agentPersonasIpcModule.methods.updateBuiltinModel.handler(ctx as never, input))
+      .resolves.toEqual(updated)
+    expect(service.updateBuiltinModel).toHaveBeenCalledWith(input)
   })
 
   it("broadcasts changed events after wiring the service once", async () => {

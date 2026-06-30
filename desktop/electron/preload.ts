@@ -406,6 +406,7 @@ const IPC_CHANNELS = {
     "list": "synapse:agent-personas:list",
     "create": "synapse:agent-personas:create",
     "update": "synapse:agent-personas:update",
+    "updateBuiltinModel": "synapse:agent-personas:builtin-model:update",
     "delete": "synapse:agent-personas:delete",
     "changed": "synapse:agent-personas:changed",
   },
@@ -876,6 +877,7 @@ const synapseBridge: SynapseBridge = {
     list: () => invoke(IPC_CHANNELS.agentPersonas.list)(),
     create: (input) => invoke(IPC_CHANNELS.agentPersonas.create)(input),
     update: (input) => invoke(IPC_CHANNELS.agentPersonas.update)(input),
+    updateBuiltinModel: (input) => invoke(IPC_CHANNELS.agentPersonas.updateBuiltinModel)(input),
     delete: (input) => invoke(IPC_CHANNELS.agentPersonas.delete)(input),
     onChanged: createRawPayloadSubscription(
       subscribe,

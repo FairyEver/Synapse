@@ -29,6 +29,7 @@ import type {
 } from "./quick-input"
 import type {
   SynapseAgentPersona,
+  SynapseAgentPersonaBuiltinModelUpdateInput,
   SynapseAgentPersonaChangedEvent,
   SynapseAgentPersonaCreateInput,
   SynapseAgentPersonaIdInput,
@@ -907,6 +908,7 @@ export type SynapseBridge = {
     list: () => Promise<SynapseAgentPersona[]>
     create: (input: SynapseAgentPersonaCreateInput) => Promise<SynapseAgentPersona>
     update: (input: SynapseAgentPersonaUpdateInput) => Promise<SynapseAgentPersona>
+    updateBuiltinModel: (input: SynapseAgentPersonaBuiltinModelUpdateInput) => Promise<SynapseAgentPersona>
     delete: (input: SynapseAgentPersonaIdInput) => Promise<void>
     onChanged: (listener: (event: SynapseAgentPersonaChangedEvent) => void) => () => void
   }
