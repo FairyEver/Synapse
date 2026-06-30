@@ -123,6 +123,38 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("agent-screenshot-capture")
   })
 
+  it("renders the persona selector in ordinary mode", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        personaItems={[{
+          id: "builtin-zh-en-translator",
+          schemaVersion: 1,
+          name: "中英翻译",
+          description: "在中文和英文之间互译。",
+          systemPrompt: "你是中英翻译智能体。",
+          providerModel: null,
+          source: "builtin",
+          readonly: true,
+        }]}
+        activePersonaId={null}
+        onPersonaChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain('aria-label="智能体"')
+    expect(html).toContain("普通")
+  })
+
   it("does not render the jump-to-bottom pill unless there are unread messages", () => {
     const html = renderToStaticMarkup(
       <AgentComposer

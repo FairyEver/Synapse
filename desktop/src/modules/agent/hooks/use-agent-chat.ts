@@ -8,6 +8,7 @@ import type {
   SynapseAgentStatus,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { AgentProjectScope } from "../project-resolution"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { UnreadState } from "../live-sync"
@@ -25,6 +26,7 @@ type UseAgentChatState = {
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
+  personas: SynapseAgentPersona[]
   unreadByConversationId: UnreadState
   selectedProjectId?: string
   selectedConversationId?: string
@@ -47,6 +49,11 @@ type UseAgentChatState = {
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
+  refreshPersonas: () => Promise<void>
+  updateSessionPersona: (
+    session: SynapseAgentSessionSummary,
+    personaId: string | null,
+  ) => Promise<SynapseAgentSessionSummary | undefined>
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   respondPermission: (
@@ -72,6 +79,7 @@ function useAgentChat(
     status,
     providers,
     commands,
+    personas,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,
@@ -140,6 +148,7 @@ function useAgentChat(
     status,
     providers,
     commands,
+    personas,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,
@@ -156,6 +165,8 @@ function useAgentChat(
     deleteSession: connection.deleteSession,
     renameSession: connection.renameSession,
     refresh: connection.refresh,
+    refreshPersonas: connection.refreshPersonas,
+    updateSessionPersona: connection.updateSessionPersona,
     sendMessage: connection.sendMessage,
     setPermissionMode: connection.setPermissionMode,
     respondPermission: connection.respondPermission,

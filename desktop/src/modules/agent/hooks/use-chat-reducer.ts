@@ -6,6 +6,7 @@ import type {
   SynapseAgentStatus,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { UnreadState } from "../live-sync"
 import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
 
@@ -17,6 +18,7 @@ type ChatState = {
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
+  personas: SynapseAgentPersona[]
   unreadByConversationId: UnreadState
   selectedProjectId: string | undefined
   selectedConversationId: string | undefined
@@ -40,6 +42,7 @@ type ChatAction =
   | { type: "SET_STATUS"; status: SynapseAgentStatus | null }
   | { type: "SET_PROVIDERS"; providers: SynapseAgentProviderState | null }
   | { type: "SET_COMMANDS"; commands: SynapseAgentPublishedCommand[] }
+  | { type: "SET_PERSONAS"; personas: SynapseAgentPersona[] }
   | { type: "SET_UNREAD"; unreadByConversationId: UnreadState }
   | { type: "UPDATE_UNREAD"; updater: (current: UnreadState) => UnreadState }
   | { type: "SET_SELECTED_PROJECT_ID"; selectedProjectId: string | undefined }
@@ -63,6 +66,7 @@ const initialChatState: ChatState = {
   status: null,
   providers: null,
   commands: [],
+  personas: [],
   unreadByConversationId: {},
   selectedProjectId: undefined,
   selectedConversationId: undefined,
@@ -108,6 +112,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, providers: action.providers }
     case "SET_COMMANDS":
       return { ...state, commands: action.commands }
+    case "SET_PERSONAS":
+      return { ...state, personas: action.personas }
     case "SET_UNREAD":
       return { ...state, unreadByConversationId: action.unreadByConversationId }
     case "UPDATE_UNREAD":

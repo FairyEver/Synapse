@@ -91,6 +91,12 @@ beforeEach(() => {
       onEvent: vi.fn(() => () => {}),
       respondPermission: vi.fn(async () => undefined),
       setPermissionMode: vi.fn(async () => ({ ...session, mode: "plan" })),
+      updateSessionPersona: vi.fn(async () => ({
+        ...session,
+        activeMainThreadPersonaId: "builtin-zh-en-translator",
+        activeMainThreadPersonaName: "中英翻译",
+        activeMainThreadPersonaSource: "builtin",
+      })),
       send: vi.fn(async () => {
         throw new Error("enqueue failed with prompt=secret")
       }),
@@ -104,6 +110,19 @@ beforeEach(() => {
         pendingPermissions: 0,
       })),
       switchSession: vi.fn(async () => session),
+    },
+    agentPersonas: {
+      list: vi.fn(async () => [{
+        id: "builtin-zh-en-translator",
+        schemaVersion: 1,
+        name: "中英翻译",
+        description: "在中文和英文之间互译。",
+        systemPrompt: "你是中英翻译智能体。",
+        providerModel: null,
+        source: "builtin",
+        readonly: true,
+      }]),
+      onChanged: vi.fn(() => () => {}),
     },
   }
 })
@@ -120,6 +139,43 @@ afterEach(() => {
 })
 
 describe("useAgentChat", () => {
+  it("updates the active session persona through the bridge", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          updateSessionPersona: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.updateSessionPersona(session, "builtin-zh-en-translator")
+    })
+
+    expect(bridge.updateSessionPersona).toHaveBeenCalledWith({
+      projectId: session.projectId,
+      conversationId: session.id,
+      personaId: "builtin-zh-en-translator",
+    })
+    expect(chat?.sessions[0]?.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
+    expect(chat?.personas[0]?.name).toBe("中英翻译")
+  })
+
   it("removes the optimistic local user message when send enqueue fails", async () => {
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
@@ -8,6 +8,7 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
@@ -56,6 +57,7 @@ type ChatConnectionResult = {
   readonly refreshProjectMeta: (projectId: string | undefined) => Promise<void>
   readonly refreshConversationSnapshot: (target: TimelineTarget) => Promise<void>
   readonly refresh: () => Promise<void>
+  readonly refreshPersonas: () => Promise<void>
   readonly createSession: (
     projectId: string,
     providerId?: string,
@@ -64,6 +66,10 @@ type ChatConnectionResult = {
     name?: string,
   ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
+  readonly updateSessionPersona: (
+    session: SynapseAgentSessionSummary,
+    personaId: string | null,
+  ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
@@ -193,6 +199,29 @@ function useChatConnection(
     return sortSessions(groups.flat())
   }, [projectIdsRef])
 
+  const refreshPersonas = useCallback(async () => {
+    const bridge = requireSynapseBridge()
+    const personas = await bridge.agentPersonas.list()
+    dispatch({ type: "SET_PERSONAS", personas })
+  }, [dispatch])
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge) return undefined
+    void bridge.agentPersonas.list()
+      .then((personas: SynapseAgentPersona[]) => dispatch({ type: "SET_PERSONAS", personas }))
+      .catch((rawError: unknown) => {
+        logger.warn("Agent personas load failed.", {
+          boundary: "renderer.agent.personas.load",
+          errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+          errorLength: errorMessage(rawError).length,
+        })
+      })
+    return bridge.agentPersonas.onChanged((event) => {
+      dispatch({ type: "SET_PERSONAS", personas: event.items })
+    })
+  }, [dispatch])
+
   const loadArchivedSessions = useCallback(async () => {
     const bridge = getSynapseBridge()
     if (!bridge) return
@@ -317,6 +346,7 @@ function useChatConnection(
       await Promise.all([
         refreshPendingPermissionsForPageLoad(nextProjectId),
         refreshProjectMeta(nextProjectId),
+        refreshPersonas(),
         loadArchivedSessions(),
       ])
       logger.info("Agent refresh loaded sessions.", {
@@ -366,6 +396,7 @@ function useChatConnection(
     projectIdsRef,
     refreshPendingPermissionsForPageLoad,
     refreshProjectMeta,
+    refreshPersonas,
     selectRequestIdRef,
     selectedConversationIdRef,
     selectedProjectIdRef,
@@ -515,6 +546,41 @@ function useChatConnection(
     setSelectedSession,
     state.sessions,
   ])
+
+  const updateSessionPersona = useCallback(async (
+    session: SynapseAgentSessionSummary,
+    personaId: string | null,
+  ) => {
+    const bridge = requireSynapseBridge()
+    dispatch({ type: "SET_ERROR", error: null })
+    try {
+      const updated = await bridge.agent.updateSessionPersona({
+        projectId: session.projectId,
+        conversationId: session.id,
+        personaId,
+      })
+      const normalized = normalizeSessionProject(updated, session.projectId)
+      dispatch({ type: "UPDATE_SESSIONS", updater: (current) => sortSessions(current.map((item) =>
+        isSameSession(item, normalized) ? normalized : item)) })
+      dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.map((item) =>
+        isSameSession(item, normalized) ? normalized : item) })
+      if (selectedConversationIdRef.current === normalized.id) {
+        setSelectedSession(normalized)
+      }
+      return normalized
+    } catch (rawError) {
+      logger.error("Agent persona update failed.", {
+        projectId: session.projectId,
+        conversationId: session.id,
+        personaSelected: Boolean(personaId),
+        boundary: "renderer.agent.persona-update",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "切换失败" })
+      return undefined
+    }
+  }, [dispatch, selectedConversationIdRef, setSelectedSession])
 
   const sendMessage = useCallback(async (
     content: string,
@@ -895,8 +961,10 @@ function useChatConnection(
     refreshProjectMeta,
     refreshConversationSnapshot,
     refresh,
+    refreshPersonas,
     createSession,
     selectSession,
+    updateSessionPersona,
     sendMessage,
     deleteSession,
     renameSession,
