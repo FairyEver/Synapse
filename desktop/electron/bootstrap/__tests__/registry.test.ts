@@ -75,6 +75,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "agent.conversation-window-service",
         "core.audit-sink",
         "core.app-icon",
+        "core.agent-personas",
         "core.automation",
         "core.automation-ingress",
         "core.bridge-adapter",
@@ -136,6 +137,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
+    expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("provider")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
