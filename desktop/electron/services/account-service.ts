@@ -26,7 +26,7 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
-  DriveAccessSettingsInput,
+  DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
   DriveChangeListInput,
   DriveChangeListPageDto,
@@ -764,7 +764,7 @@ export class AccountService {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
   }
 
-  async shareDriveItem(itemId: string, settings?: DriveAccessSettingsInput): Promise<DriveShareDto> {
+  async shareDriveItem(itemId: string, settings?: DriveAccessSettingsUpdateInput): Promise<DriveShareDto> {
     const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, settings, "分享失败。")
     return withCurrentDriveShareUrl(share)
   }

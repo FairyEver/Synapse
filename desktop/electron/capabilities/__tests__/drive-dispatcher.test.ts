@@ -1447,12 +1447,10 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: false,
       expiresIn: "forever",
-      accessMode: "link_read",
-      editorEmails: [],
     })
   })
 
-  it("creates shares with a non-default expiry", async () => {
+  it("passes only explicit share access settings", async () => {
     const accountService = createAccountService({
       shareDriveItem: vi.fn(async () => driveShare({ id: "share-1" })),
     })
@@ -1464,10 +1462,7 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
-      passwordEnabled: true,
       expiresIn: "30d",
-      accessMode: "link_read",
-      editorEmails: [],
     })
   })
 
@@ -1488,8 +1483,6 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
 
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
-      passwordEnabled: true,
-      expiresIn: "3d",
       accessMode: "specified_users_edit",
       editorEmails: ["writer@example.com"],
     })

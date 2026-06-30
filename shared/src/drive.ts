@@ -120,6 +120,8 @@ export interface DriveAccessSettingsInput {
   readonly editorEmails?: readonly string[]
 }
 
+export type DriveAccessSettingsUpdateInput = Partial<DriveAccessSettingsInput>
+
 export const DRIVE_DEFAULT_ACCESS_SETTINGS: DriveAccessSettingsInput = {
   passwordEnabled: true,
   expiresIn: "3d",

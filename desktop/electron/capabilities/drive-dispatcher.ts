@@ -4,7 +4,7 @@ import { lstat, readdir, stat } from "node:fs/promises"
 
 import type {
   DriveAccessExpiresIn,
-  DriveAccessSettingsInput,
+  DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
   DriveFileVersionDto,
   DriveFileVersionListInput,
@@ -77,7 +77,7 @@ type DriveAccountServicePort = {
   readonly renameDriveItem: (itemId: string, name: string) => Promise<DriveItemDto>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<DriveItemDto>
   readonly deleteDriveItem: (itemId: string) => Promise<{ ok: true }>
-  readonly shareDriveItem: (itemId: string, settings?: DriveAccessSettingsInput) => Promise<DriveShareDto>
+  readonly shareDriveItem: (itemId: string, settings?: DriveAccessSettingsUpdateInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
   readonly getDriveStats: () => Promise<DriveStatsDto>
@@ -357,9 +357,8 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           }))
         case "drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
-            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
             const settings = hasDriveAccessSettingsInput(params)
-              ? parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
+              ? parseDriveAccessSettings(params)
               : undefined
             return {
               ok: true,
@@ -1291,21 +1290,28 @@ function optionalDriveSiteStatus(value: unknown): DriveSiteListInput["status"] |
 
 function parseDriveAccessSettings(
   params: Record<string, unknown>,
-  defaults: DriveAccessSettingsInput,
-): DriveAccessSettingsInput {
-  const accessMode = optionalDriveShareAccessMode(params.accessMode) ?? defaults.accessMode ?? "link_read"
-  const editorEmails = accessMode === "specified_users_edit"
-    ? optionalStringArray(params.editorEmails, "editorEmails") ?? []
-    : []
-  if (accessMode === "specified_users_edit" && editorEmails.length === 0) {
-    throw new Error("editorEmails is required when accessMode is specified_users_edit.")
+): DriveAccessSettingsUpdateInput {
+  const accessMode = optionalDriveShareAccessMode(params.accessMode)
+  const editorEmails = params.editorEmails === undefined || params.editorEmails === null
+    ? undefined
+    : normalizeEmailArray(params.editorEmails, "editorEmails")
+  if (accessMode === undefined && editorEmails !== undefined && editorEmails.length === 0) {
+    throw new Error("editorEmails must contain at least one email when supplied.")
   }
   return {
-    passwordEnabled: optionalBoolean(params.passwordEnabled) ?? defaults.passwordEnabled,
-    expiresIn: optionalDriveAccessExpiresIn(params.expiresIn) ?? defaults.expiresIn,
-    accessMode,
-    editorEmails,
+    ...(params.passwordEnabled === undefined || params.passwordEnabled === null
+      ? {}
+      : { passwordEnabled: optionalBoolean(params.passwordEnabled) }),
+    ...(params.expiresIn === undefined || params.expiresIn === null
+      ? {}
+      : { expiresIn: optionalDriveAccessExpiresIn(params.expiresIn) }),
+    ...(accessMode === undefined ? {} : { accessMode }),
+    ...(editorEmails === undefined ? {} : { editorEmails }),
   }
+}
+
+function normalizeEmailArray(value: unknown, key: string): string[] {
+  return optionalStringArray(value, key)?.map((email) => email.trim().toLowerCase()) ?? []
 }
 
 function hasDriveAccessSettingsInput(params: Record<string, unknown>): boolean {

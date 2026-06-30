@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
+  type DriveAccessSettingsUpdateInput,
   type DriveShareAccessMode,
 } from "@synapse/shared"
 
@@ -16,7 +17,7 @@ export type NormalizedDriveAccessSettings = Required<Pick<DriveAccessSettingsInp
   readonly editorEmails: readonly string[]
 }
 
-export function normalizeDriveAccessSettings(input: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS): NormalizedDriveAccessSettings {
+export function normalizeDriveAccessSettings(input: DriveAccessSettingsUpdateInput = DRIVE_DEFAULT_ACCESS_SETTINGS): NormalizedDriveAccessSettings {
   const accessMode = normalizeDriveShareAccessMode(input.accessMode)
   const editorEmails = accessMode === DRIVE_SHARE_ACCESS_MODE.specifiedUsersEdit
     ? normalizeDriveShareEditorEmails(input.editorEmails ?? [])

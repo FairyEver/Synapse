@@ -12,6 +12,7 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_MAX_FILE_SIZE_LABEL,
   type DriveAccessSettingsInput,
+  type DriveAccessSettingsUpdateInput,
   type DriveFolderPathEnsureInput,
   type DriveFolderPathEnsureResultDto,
   type DriveFolderUploadPrepareResult,
@@ -45,6 +46,7 @@ import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../c
 import { PrismaService } from "../prisma/prisma.service"
 import {
   buildDriveAccessCookie,
+  computeDriveAccessExpiresAt,
   createDrivePasswordMaterial,
   decryptDrivePassword,
   verifyDriveAccessCookie,
@@ -101,6 +103,7 @@ import {
   normalizeDriveAccessSettings,
   normalizeDriveShareAccessMode,
   normalizeDriveShareEditorEmail,
+  type NormalizedDriveAccessSettings,
 } from "./drive-share-access"
 import {
   toDriveItemDto,
@@ -225,6 +228,27 @@ const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
 const DRIVE_REORGANIZATION_AUDIT_MOVE_LIMIT = 100
+
+function resolveShareAccessSettingsBase(
+  existing: {
+    readonly passwordEnabled: boolean
+    readonly accessMode: string
+    readonly editors?: readonly { readonly email: string }[]
+  } | null,
+  settings: DriveAccessSettingsUpdateInput | undefined,
+): DriveAccessSettingsUpdateInput {
+  const base = existing
+    ? {
+        passwordEnabled: existing.passwordEnabled,
+        accessMode: normalizeDriveShareAccessMode(existing.accessMode),
+        editorEmails: existing.editors?.map((editor) => editor.email) ?? [],
+      }
+    : DRIVE_DEFAULT_ACCESS_SETTINGS
+  return {
+    ...base,
+    ...settings,
+  }
+}
 
 type DriveItemTreeQueryRow = {
   readonly id: string | null
@@ -1134,7 +1158,7 @@ export class DriveService implements OnApplicationBootstrap {
     userId: string,
     itemId: string,
     publicAppUrl: string,
-    settings?: DriveAccessSettingsInput,
+    settings?: DriveAccessSettingsUpdateInput,
     auditContext: DriveAuditContext = {},
   ): Promise<DriveShareDto> {
     const item = await this.requireOwnedItem(userId, itemId)
@@ -1149,8 +1173,10 @@ export class DriveService implements OnApplicationBootstrap {
     let share = existing
     let password = existing?.passwordEnabled ? this.decryptStoredPassword(existing.passwordEncrypted) : null
     if (!share || settings !== undefined) {
-      const normalizedSettings = normalizeDriveAccessSettings(settings ?? DRIVE_DEFAULT_ACCESS_SETTINGS)
-      const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
+      const normalizedSettings = normalizeDriveAccessSettings(resolveShareAccessSettingsBase(existing, settings))
+      const material = existing
+        ? await this.buildExistingSharePasswordMaterial(existing, normalizedSettings, settings ?? {})
+        : await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
       share = existing
         ? await this.updateShareAccessSettings(existing.id, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
         : await this.createUniqueShare(item.id, userId, item.type, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
@@ -2042,7 +2068,7 @@ export class DriveService implements OnApplicationBootstrap {
 
     let shares = 0
     for (const share of legacyShares) {
-      const material = await createDrivePasswordMaterial(DRIVE_DEFAULT_ACCESS_SETTINGS, this.accessSecret, now)
+      const material = await createDrivePasswordMaterial(normalizeDriveAccessSettings(DRIVE_DEFAULT_ACCESS_SETTINGS), this.accessSecret, now)
       const result = await this.prisma.driveShare.updateMany({
         where: { id: share.id, enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
         data: toDrivePasswordUpdateData(material, now),
@@ -2707,6 +2733,41 @@ export class DriveService implements OnApplicationBootstrap {
         include: driveShareWithEditors,
       })
     })
+  }
+
+  private async buildExistingSharePasswordMaterial(
+    share: {
+      readonly passwordEnabled: boolean
+      readonly passwordHash: string | null
+      readonly passwordEncrypted: string | null
+      readonly expiresAt: Date | null
+    },
+    normalizedSettings: NormalizedDriveAccessSettings,
+    explicitSettings: DriveAccessSettingsUpdateInput,
+  ): Promise<DrivePasswordMaterial> {
+    const expiresAt = explicitSettings.expiresIn === undefined
+      ? share.expiresAt
+      : computeDriveAccessExpiresAt(normalizedSettings.expiresIn)
+    if (!normalizedSettings.passwordEnabled) {
+      return {
+        passwordEnabled: false,
+        password: null,
+        passwordHash: null,
+        passwordEncrypted: null,
+        expiresAt,
+      }
+    }
+    if (explicitSettings.passwordEnabled === true || !share.passwordEnabled || !share.passwordHash || !share.passwordEncrypted) {
+      const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
+      return { ...material, expiresAt }
+    }
+    return {
+      passwordEnabled: true,
+      password: this.decryptStoredPassword(share.passwordEncrypted),
+      passwordHash: share.passwordHash,
+      passwordEncrypted: share.passwordEncrypted,
+      expiresAt,
+    }
   }
 
   private async createUniqueShare(

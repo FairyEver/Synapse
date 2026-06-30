@@ -16,10 +16,9 @@ import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
-  DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
-  type DriveAccessSettingsInput,
+  type DriveAccessSettingsUpdateInput,
   type DriveBrowserPasswordRequiredDto,
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
@@ -1778,16 +1777,16 @@ function requireDriveDocumentImageService(documentImages: DriveDocumentImageServ
   return documentImages
 }
 
-function parseAccessSettings(body: unknown): DriveAccessSettingsInput | undefined {
+function parseAccessSettings(body: unknown): DriveAccessSettingsUpdateInput | undefined {
   if (body === undefined || body === null || (isRecord(body) && Object.keys(body).length === 0)) {
     return undefined
   }
   const parsed = parseBody(driveAccessSettingsSchema, body, "访问设置无效。")
   return {
-    passwordEnabled: parsed.passwordEnabled ?? DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
-    expiresIn: parsed.expiresIn ?? DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
-    accessMode: parsed.accessMode ?? DRIVE_DEFAULT_ACCESS_SETTINGS.accessMode,
-    editorEmails: parsed.editorEmails ?? DRIVE_DEFAULT_ACCESS_SETTINGS.editorEmails,
+    ...(parsed.passwordEnabled === undefined ? {} : { passwordEnabled: parsed.passwordEnabled }),
+    ...(parsed.expiresIn === undefined ? {} : { expiresIn: parsed.expiresIn }),
+    ...(parsed.accessMode === undefined ? {} : { accessMode: parsed.accessMode }),
+    ...(parsed.editorEmails === undefined ? {} : { editorEmails: parsed.editorEmails }),
   }
 }
 

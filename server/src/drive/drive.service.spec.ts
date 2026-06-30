@@ -1289,6 +1289,41 @@ describe("DriveService", () => {
     expect(activeShares[0]?.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
+  it("preserves omitted active share settings when partially updating access", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      mimeType: "text/plain",
+    })
+    const first = await service.createShare("user-1", file.id, "https://synapse.test", {
+      passwordEnabled: false,
+      expiresIn: "30d",
+      accessMode: "specified_users_edit",
+      editorEmails: ["writer@example.com"],
+    })
+
+    const second = await service.createShare("user-1", file.id, "https://synapse.test", { expiresIn: "forever" })
+
+    expect(second.id).toBe(first.id)
+    expect(second.shareId).toBe(first.shareId)
+    expect(second.passwordEnabled).toBe(false)
+    expect(second.password).toBeNull()
+    expect(second.expiresAt).toBeNull()
+    expect(second.accessMode).toBe("specified_users_edit")
+    expect(second.editorEmails).toEqual(["writer@example.com"])
+    const activeShares = await prisma.driveShare.findMany({
+      where: { itemId: file.id, userId: "user-1", enabled: true },
+      include: { editors: { select: { email: true }, orderBy: { email: "asc" } } },
+    })
+    expect(activeShares).toHaveLength(1)
+    expect(activeShares[0]?.passwordEnabled).toBe(false)
+    expect(activeShares[0]?.accessMode).toBe("specified_users_edit")
+    expect(activeShares[0]?.editors.map((editor: { readonly email: string }) => editor.email)).toEqual(["writer@example.com"])
+  })
+
   it("audits completed uploads and item metadata changes", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async () => undefined) }
