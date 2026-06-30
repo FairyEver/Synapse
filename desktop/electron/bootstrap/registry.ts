@@ -40,6 +40,7 @@ import {
   corePermissionGuardDescriptor,
   coreProcessRuntimeDescriptor,
   coreProjectContainerRegistryDescriptor,
+  coreAgentPersonasDescriptor,
   coreQuickInputDescriptor,
   coreRelayDescriptor,
   coreSideChannelDescriptor,
@@ -109,6 +110,7 @@ export function buildServiceRegistry(
   registry.register(coreSideChannelDescriptor)
   registry.register(coreTerminalDescriptor)
   registry.register(coreQuickInputDescriptor)
+  registry.register(coreAgentPersonasDescriptor)
   registry.register(coreSoundNotifierDescriptor)
   registry.register(coreDriveSyncDescriptor)
   registry.register(coreRelayDescriptor)

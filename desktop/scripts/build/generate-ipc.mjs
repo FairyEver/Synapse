@@ -64,6 +64,7 @@ const MODULE_SOURCES = [
   { id: "apps", importPath: "electron/modules/apps/ipc.ts" },
   { id: "documentTemplate", importPath: "app-capabilities/document-template/main/ipc.ts" },
   { id: "quick-input", outputId: "quickInput", importPath: "app-capabilities/quick-input/main/ipc.ts" },
+  { id: "agentPersonas", importPath: "app-capabilities/agent-personas/main/ipc.ts" },
   { id: "driveSync", importPath: "electron/modules/drive-sync/ipc.ts" },
   { id: "soundNotifier", importPath: "app-capabilities/sound-notifier/main/ipc.ts" },
   { id: "terminal", importPath: "app-capabilities/terminal/main/ipc.ts" },

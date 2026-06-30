@@ -14,6 +14,7 @@ describe("system app registry", () => {
   it("lists all system apps in launcher order", () => {
     expect(listSystemApps().map((app) => app.id)).toEqual([
       "agent",
+      "agent-personas",
       "workflow",
       "drive",
       "automation",
@@ -54,6 +55,16 @@ describe("system app registry", () => {
       capabilities: {
         primaryMcpPrefix: "app_resource_repository",
         legacyMcpPrefixes: ["content"],
+      },
+    })
+    expect(getSystemAppManifest("agent-personas")).toMatchObject({
+      id: "agent-personas",
+      namespace: "agent_personas",
+      name: "智能体",
+      windowTitle: "智能体",
+      dock: { pinnedByDefault: false, order: 15 },
+      capabilities: {
+        primaryMcpPrefix: "app_agent_personas",
       },
     })
   })

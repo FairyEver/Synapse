@@ -6,6 +6,7 @@ import {
   agentCommandSettingsSchema,
   agentCommandsSchema,
   agentEventsSchema,
+  agentPersonaItemsSchema,
   agentUsageSchema,
   automationItemsSchema,
   automationRunsSchema,
@@ -47,6 +48,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.compress_state",
         "agent.events",
         "agent.usage",
+        "app.agent-personas.items",
         "app.quick-input.items",
         "app.quick-input.settings",
         "app.sound-notifier.settings",
@@ -112,6 +114,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(agentCompressStateSchema.backend).toBe("json")
     expect(agentEventsSchema.backend).toBe("sqlite")
     expect(agentUsageSchema.backend).toBe("sqlite")
+    expect(agentPersonaItemsSchema.backend).toBe("sqlite")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
     expect(quickInputItemsSchema.backend).toBe("sqlite")
     expect(quickInputSettingsSchema.backend).toBe("json")
@@ -205,6 +208,19 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         sortOrder: 10,
         createdAt: "2026-06-25T00:00:00.000Z",
         updatedAt: "2026-06-25T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      agentPersonaItemsSchema.validate({
+        id: "persona-1",
+        schemaVersion: 1,
+        name: "产品顾问",
+        description: "整理产品判断和下一步。",
+        systemPrompt: "你是产品顾问，先给结论，再列原因。",
+        providerModel: null,
+        source: "user",
+        createdAt: "2026-06-30T00:00:00.000Z",
+        updatedAt: "2026-06-30T00:00:00.000Z",
       }),
     ).toBe(true)
     expect(

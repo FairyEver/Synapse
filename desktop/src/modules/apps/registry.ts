@@ -1,4 +1,5 @@
 import { agentAppManifest } from "@/modules/agent/app-manifest"
+import { agentPersonasAppManifest } from "../../../app-capabilities/agent-personas/renderer/app-manifest"
 import { automationAppManifest } from "@/modules/automation/app-manifest"
 import { databaseAppManifest } from "@/modules/database/app-manifest"
 import { driveAppManifest } from "@/modules/drive/app-manifest"
@@ -22,6 +23,7 @@ import { isSystemAppId } from "./types"
 
 const systemApps = [
   agentAppManifest,
+  agentPersonasAppManifest,
   workflowAppManifest,
   driveAppManifest,
   automationAppManifest,

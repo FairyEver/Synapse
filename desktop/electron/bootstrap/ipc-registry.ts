@@ -37,6 +37,7 @@ import { documentTemplateIpcModule } from "../../app-capabilities/document-templ
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { screenshotIpcModule } from "../../app-capabilities/screenshot/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
+import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 
 /**
@@ -76,6 +77,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(documentTemplateIpcModule, ctx)
   registry.register(terminalIpcModule, ctx)
   registry.register(quickInputIpcModule, ctx)
+  registry.register(agentPersonasIpcModule, ctx)
   registry.register(soundNotifierIpcModule, ctx)
   registry.register(screenshotIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
@@ -115,6 +117,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   documentTemplateIpcModule,
   terminalIpcModule,
   quickInputIpcModule,
+  agentPersonasIpcModule,
   soundNotifierIpcModule,
   screenshotIpcModule,
   opsIpcModule,

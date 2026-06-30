@@ -1,5 +1,6 @@
 export const SYSTEM_APP_IDS = [
   "agent",
+  "agent-personas",
   "workflow",
   "drive",
   "automation",
@@ -24,6 +25,7 @@ export type SynapseSystemAppId = (typeof SYSTEM_APP_IDS)[number]
 export type SynapseAppType = "system"
 export type SynapseSystemAppNamespace =
   | "agent"
+  | "agent_personas"
   | "workflow"
   | "drive"
   | "automation"

@@ -19,6 +19,7 @@ import { UsageMonitorModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
+import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
@@ -69,6 +70,7 @@ function SystemAppContent({
       />
     )
   }
+  if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return workflowEntryVisible ? <WorkflowModule /> : null
   if (appId === "drive") return <DriveModule />
   if (appId === "automation") return <AutomationModule />
