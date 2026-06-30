@@ -154,6 +154,20 @@ describe("AgentPersonasModule black-box behavior", () => {
     expect(document.body.textContent).toContain("中英翻译")
     expect(buttonWithText("保存智能体")).toBeNull()
     expect(document.body.textContent).toContain("关闭")
+
+    const nameInput = document.body.querySelector<HTMLInputElement>("#agent-persona-name")
+    const descriptionInput = document.body.querySelector<HTMLInputElement>("#agent-persona-description")
+    const promptTextarea = document.body.querySelector<HTMLTextAreaElement>("#agent-persona-system-prompt")
+    const modelInput = document.body.querySelector<HTMLInputElement>("#agent-persona-model")
+
+    expect(nameInput?.readOnly).toBe(true)
+    expect(nameInput?.disabled).toBe(false)
+    expect(descriptionInput?.readOnly).toBe(true)
+    expect(descriptionInput?.disabled).toBe(false)
+    expect(promptTextarea?.readOnly).toBe(true)
+    expect(promptTextarea?.disabled).toBe(false)
+    expect(modelInput?.readOnly).toBe(true)
+    expect(modelInput?.disabled).toBe(false)
   })
 })
 

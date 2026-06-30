@@ -168,7 +168,10 @@ describe("AgentPersonasModule", () => {
   it("does not show edit or delete actions for built-in personas", async () => {
     await renderModule()
 
-    expect(buttonByLabel("查看智能体：中英翻译")).toBeTruthy()
+    const viewButton = buttonByLabel("查看智能体：中英翻译")
+    expect(viewButton).toBeTruthy()
+    expect(viewButton?.className).toContain("size-10")
+    expect(viewButton?.className).toContain("active:scale-[0.96]")
     expect(buttonByLabel("编辑智能体：中英翻译")).toBeFalsy()
     expect(buttonByLabel("删除智能体：中英翻译")).toBeFalsy()
   })
@@ -225,6 +228,7 @@ describe("AgentPersonasModule", () => {
     await renderModule()
 
     await clickButtonByLabel("删除智能体：产品顾问")
+    expect(document.body.textContent).toContain("删除“产品顾问”后不可恢复。")
     await clickButton("删除")
 
     expect(bridge.delete).toHaveBeenCalledWith({ id: "persona-1" })
