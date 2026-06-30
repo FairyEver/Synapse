@@ -59,6 +59,50 @@ describe("DriveSiteService", () => {
     await expect(verifyPassword(result.password, stored.passwordHash)).resolves.toBe(true)
   })
 
+  it("rejects forgeable legacy cookies for protected sites", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "password",
+      password: "secret-123",
+      expiresIn: "30d",
+    })
+
+    await expect(service.resolvePublicSite(result.siteId, { cookie: `site:${result.siteId}` }))
+      .resolves.toMatchObject({ status: "password_required" })
+  })
+
+  it("accepts signed cookies created from the current protected site password", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "password",
+      password: "secret-123",
+      expiresIn: "30d",
+    })
+
+    await expect(service.createSiteAccessCookie(result.siteId, "wrong-password")).resolves.toBeNull()
+    const cookie = await service.createSiteAccessCookie(result.siteId, "secret-123")
+
+    expect(cookie).toEqual(expect.any(String))
+    expect(cookie).not.toBe(`site:${result.siteId}`)
+    await expect(service.resolvePublicSite(result.siteId, { cookie }))
+      .resolves.toMatchObject({
+        status: "ok",
+        asset: { relativePath: "index.html" },
+      })
+  })
+
   it("does not return password material for public sites", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()

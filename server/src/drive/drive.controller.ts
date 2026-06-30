@@ -35,7 +35,7 @@ import {
 } from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPage } from "./drive-site-public"
-import { driveSiteAccessCookieValue, DriveSiteService } from "./drive-site.service"
+import { DriveSiteService } from "./drive-site.service"
 import { isDriveSiteHtmlPath } from "./drive-site-path"
 import { DriveUploadTooLargeError, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
@@ -1054,11 +1054,12 @@ export class DrivePublicController {
   private async unlockSiteToPath(siteId: string, request: Request, response: Response): Promise<void> {
     const password = readBodyPassword(request)
     const sites = requireDriveSiteService(this.sites)
-    if (!password || !await sites.verifySitePassword(siteId, password)) {
+    const cookie = password ? await sites.createSiteAccessCookie(siteId, password) : null
+    if (!cookie) {
       response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
       return
     }
-    setDriveAccessCookie(response, driveSiteAccessCookieValue(siteId), { kind: "site", publicId: siteId })
+    setDriveAccessCookie(response, cookie, { kind: "site", publicId: siteId })
     response.redirect(302, request.path)
   }
 
@@ -1066,8 +1067,9 @@ export class DrivePublicController {
     const sites = requireDriveSiteService(this.sites)
     const password = readPasswordQuery(request)
     if (password) {
-      if (await sites.verifySitePassword(siteId, password)) {
-        setDriveAccessCookie(response, driveSiteAccessCookieValue(siteId), { kind: "site", publicId: siteId })
+      const cookie = await sites.createSiteAccessCookie(siteId, password)
+      if (cookie) {
+        setDriveAccessCookie(response, cookie, { kind: "site", publicId: siteId })
         response.redirect(302, cleanPasswordUrl(request))
         return
       }

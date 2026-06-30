@@ -25,7 +25,14 @@ import {
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
 } from "./drive.constants"
-import { createDrivePasswordMaterial, decryptDrivePassword, encryptDrivePassword } from "./drive-access-protection"
+import {
+  buildDriveAccessCookie,
+  createDrivePasswordMaterial,
+  decryptDrivePassword,
+  encryptDrivePassword,
+  verifyDriveAccessCookie,
+  verifyDrivePasswordInput,
+} from "./drive-access-protection"
 import { normalizeDriveSiteRelativePath, resolveDriveSiteRequestPath } from "./drive-site-path"
 import type { DriveStoragePort } from "./drive-storage"
 import { createDriveSiteId } from "./drive-token"
@@ -309,11 +316,18 @@ export class DriveSiteService {
     if (!site || site.deletedAt) return { status: "not_found" }
     if (site.status !== DRIVE_SITE_STATUS.active) return { status: "disabled" }
     if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return { status: "expired" }
+    const cookieAccepted = site.accessMode === DRIVE_SITE_ACCESS_MODE.password
+      && verifyDriveAccessCookie(input.cookie, {
+        kind: "site",
+        publicId: site.siteId,
+        now: new Date(),
+        passwordHash: site.passwordHash,
+        resourceExpiresAt: site.expiresAt,
+        secret: this.accessSecret,
+      })
     const passwordAccepted = site.accessMode === DRIVE_SITE_ACCESS_MODE.password
-      && Boolean(input.password)
-      && Boolean(site.passwordHash)
-      && await bcrypt.compare(input.password!, site.passwordHash!)
-    if (site.accessMode === DRIVE_SITE_ACCESS_MODE.password && input.cookie !== driveSiteAccessCookieValue(site.siteId) && !passwordAccepted) {
+      && await verifyDrivePasswordInput(input.password, site.passwordHash)
+    if (site.accessMode === DRIVE_SITE_ACCESS_MODE.password && !cookieAccepted && !passwordAccepted) {
       return { status: "password_required" }
     }
     if (!site.currentDeploymentId) return { status: "not_found" }
@@ -327,6 +341,21 @@ export class DriveSiteService {
     if (!site || !site.passwordHash || site.deletedAt || site.status !== DRIVE_SITE_STATUS.active) return false
     if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return false
     return bcrypt.compare(password, site.passwordHash)
+  }
+
+  async createSiteAccessCookie(siteId: string, password: string): Promise<string | null> {
+    const site = await this.prisma.driveSite.findUnique({ where: { siteId } })
+    if (!site || !site.passwordHash || site.deletedAt || site.status !== DRIVE_SITE_STATUS.active) return null
+    if (site.accessMode !== DRIVE_SITE_ACCESS_MODE.password) return null
+    if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return null
+    if (!await verifyDrivePasswordInput(password, site.passwordHash)) return null
+    return buildDriveAccessCookie({
+      kind: "site",
+      publicId: site.siteId,
+      expiresAt: site.expiresAt,
+      passwordHash: site.passwordHash,
+      secret: this.accessSecret,
+    })
   }
 
   private async getSiteDto(userId: string, siteId: string, publicAppUrl: string, passwordOverride?: string | null): Promise<DriveSiteDto> {
@@ -514,10 +543,6 @@ export class DriveSiteService {
 
 export function driveSiteStorageKey(siteId: string, deploymentId: string, relativePath: string): string {
   return `drive-sites/${siteId}/${deploymentId}/${relativePath}`
-}
-
-export function driveSiteAccessCookieValue(siteId: string): string {
-  return `site:${siteId}`
 }
 
 function normalizeSiteListPage(input: DriveSiteListInput): { readonly offset: number; readonly limit: number } {

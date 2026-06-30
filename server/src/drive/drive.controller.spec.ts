@@ -93,6 +93,7 @@ describe("DriveController", () => {
     republishSite: vi.fn(),
     resolvePublicSite: vi.fn(),
     verifySitePassword: vi.fn(),
+    createSiteAccessCookie: vi.fn(),
   }
   const changes = {
     list: vi.fn(),
@@ -154,6 +155,7 @@ describe("DriveController", () => {
     sites.republishSite.mockReset()
     sites.resolvePublicSite.mockReset()
     sites.verifySitePassword.mockReset()
+    sites.createSiteAccessCookie.mockReset()
     changes.list.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
@@ -364,16 +366,18 @@ describe("DriveController", () => {
   })
 
   it("accepts password query links for protected static sites", async () => {
-    sites.verifySitePassword.mockResolvedValue(true)
+    sites.createSiteAccessCookie.mockResolvedValue("signed-site-cookie")
 
     const response = await request(app!.getHttpServer())
       .get("/sites/site_secret/?password=AbC234xy")
       .expect(302)
 
-    expect(sites.verifySitePassword).toHaveBeenCalledWith("site_secret", "AbC234xy")
+    expect(sites.createSiteAccessCookie).toHaveBeenCalledWith("site_secret", "AbC234xy")
     expect(response.headers.location).toBe("/sites/site_secret/")
     const setCookie = response.headers["set-cookie"]
-    expect(Array.isArray(setCookie) ? setCookie.join("\n") : setCookie).toContain("drive_access_site_")
+    const serializedCookie = Array.isArray(setCookie) ? setCookie.join("\n") : setCookie
+    expect(serializedCookie).toContain("drive_access_site_")
+    expect(serializedCookie).toContain("signed-site-cookie")
   })
 
   it("does not leak protected static assets without a site cookie", async () => {
