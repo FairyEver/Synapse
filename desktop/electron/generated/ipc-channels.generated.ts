@@ -279,6 +279,7 @@ export const IPC_CHANNELS = {
     "list": "synapse:agent-personas:list",
     "create": "synapse:agent-personas:create",
     "update": "synapse:agent-personas:update",
+    "updateBuiltinModel": "synapse:agent-personas:builtin-model:update",
     "delete": "synapse:agent-personas:delete",
     "changed": "synapse:agent-personas:changed",
   },

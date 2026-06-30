@@ -33,6 +33,11 @@ export const agentPersonaUpdateInputSchema = agentPersonaCreateInputSchema.exten
   id: z.string().min(1),
 })
 
+export const agentPersonaBuiltinModelUpdateInputSchema = z.object({
+  id: z.string().min(1),
+  providerModel: agentPersonaProviderModelSchema.nullable(),
+})
+
 export const agentPersonaIdInputSchema = z.object({
   id: z.string().min(1),
 })
@@ -44,6 +49,7 @@ export const agentPersonaChangedEventSchema = z.object({
 export type AgentPersonaModelTier = z.infer<typeof agentPersonaModelTierSchema>
 export type AgentPersonaProviderModel = z.infer<typeof agentPersonaProviderModelSchema>
 export type AgentPersona = z.infer<typeof agentPersonaSchema>
+export type AgentPersonaBuiltinModelUpdateInput = z.infer<typeof agentPersonaBuiltinModelUpdateInputSchema>
 export type AgentPersonaCreateInput = z.infer<typeof agentPersonaCreateInputSchema>
 export type AgentPersonaUpdateInput = z.infer<typeof agentPersonaUpdateInputSchema>
 export type AgentPersonaIdInput = z.infer<typeof agentPersonaIdInputSchema>

@@ -23,6 +23,7 @@ const bridge = vi.hoisted(() => ({
     updatedAt: "2026-06-30T00:00:00.000Z",
   })),
   update: vi.fn(async () => undefined),
+  updateBuiltinModel: vi.fn(async () => undefined),
   delete: vi.fn(async () => undefined),
   onChanged: vi.fn(() => vi.fn()),
 }))
@@ -69,6 +70,7 @@ beforeEach(() => {
   bridge.list.mockResolvedValue([])
   bridge.create.mockClear()
   bridge.update.mockClear()
+  bridge.updateBuiltinModel.mockClear()
   bridge.delete.mockClear()
   bridge.onChanged.mockClear()
   toast.error.mockClear()
@@ -116,9 +118,10 @@ describe("AgentPersonasModule black-box behavior", () => {
   it("creates a persona from the empty state form", async () => {
     await renderModule()
 
+    await clickButton("我的")
     expect(document.body.textContent).toContain("暂无智能体")
 
-    await clickButton("新增智能体")
+    await clickButton("新增")
     await setFieldValue("#agent-persona-name", "翻译助手")
     await setFieldValue("#agent-persona-description", "处理中英文本。")
     await setFieldValue("#agent-persona-system-prompt", "你是翻译助手。")
@@ -133,7 +136,7 @@ describe("AgentPersonasModule black-box behavior", () => {
     expect(toast.success).toHaveBeenCalledWith("已保存")
   })
 
-  it("opens a built-in persona in read-only mode", async () => {
+  it("opens a built-in persona in model configuration mode", async () => {
     bridge.list.mockResolvedValue([
       {
         id: "builtin-zh-en-translator",
@@ -148,17 +151,16 @@ describe("AgentPersonasModule black-box behavior", () => {
     ])
 
     await renderModule()
-    await clickButtonByLabel("查看智能体：中英翻译")
+    await clickButtonByLabel("配置模型：中英翻译")
 
-    expect(document.body.textContent).toContain("查看智能体")
+    expect(document.body.textContent).toContain("配置模型")
     expect(document.body.textContent).toContain("中英翻译")
-    expect(buttonWithText("保存智能体")).toBeNull()
-    expect(document.body.textContent).toContain("关闭")
+    expect(buttonWithText("保存模型")).toBeTruthy()
+    expect(document.body.textContent).toContain("取消")
 
     const nameInput = document.body.querySelector<HTMLInputElement>("#agent-persona-name")
     const descriptionInput = document.body.querySelector<HTMLInputElement>("#agent-persona-description")
     const promptTextarea = document.body.querySelector<HTMLTextAreaElement>("#agent-persona-system-prompt")
-    const modelInput = document.body.querySelector<HTMLInputElement>("#agent-persona-model")
 
     expect(nameInput?.readOnly).toBe(true)
     expect(nameInput?.disabled).toBe(false)
@@ -166,8 +168,7 @@ describe("AgentPersonasModule black-box behavior", () => {
     expect(descriptionInput?.disabled).toBe(false)
     expect(promptTextarea?.readOnly).toBe(true)
     expect(promptTextarea?.disabled).toBe(false)
-    expect(modelInput?.readOnly).toBe(true)
-    expect(modelInput?.disabled).toBe(false)
+    expect(buttonWithText("未指定")).toBeTruthy()
   })
 })
 
@@ -188,7 +189,9 @@ async function clickButton(text: string) {
   const button = buttonWithText(text)
   if (!button) throw new Error(`Button not found: ${text}`)
   await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    button.click()
+    await Promise.resolve()
   })
 }
 
@@ -197,7 +200,9 @@ async function clickButtonByLabel(label: string) {
     .find((item) => item.getAttribute("aria-label") === label)
   if (!button) throw new Error(`Button not found: ${label}`)
   await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    button.click()
+    await Promise.resolve()
   })
 }
 

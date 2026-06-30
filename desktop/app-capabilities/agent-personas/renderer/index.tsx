@@ -5,10 +5,9 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
-  type ReactNode,
   type SetStateAction,
 } from "react"
-import { ChevronDown, CircleAlert, Eye, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
+import { ChevronDown, CircleAlert, Pencil, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
@@ -33,7 +32,6 @@ import {
 } from "../../../src/components/ui/dialog"
 import {
   Empty,
-  EmptyContent,
   EmptyHeader,
   EmptyTitle,
 } from "../../../src/components/ui/empty"
@@ -65,15 +63,16 @@ import type { SynapseAgentPersona } from "../../../src/types/agent-persona"
 import type { ProviderModelSelection } from "../../../src/types/provider-model"
 
 const logger = createRendererLogger("agent-personas.app")
-const tactileButtonClassName = [
-  "transition-[scale,translate,background-color,color,border-color,box-shadow]",
-  "duration-150 ease-out active:scale-[0.96]",
-  "motion-reduce:transition-none motion-reduce:active:scale-100",
-].join(" ")
-const iconActionButtonClassName = ["size-10", tactileButtonClassName].join(" ")
+
+type AgentPersonaTab = "builtin" | "user"
+
+const agentPersonaTabs = [
+  { id: "builtin", label: "系统内置" },
+  { id: "user", label: "我的" },
+] as const
 
 type AgentPersonaFormState = {
-  readonly mode: "create" | "edit" | "view"
+  readonly mode: "create" | "edit" | "configureBuiltinModel"
   readonly item: SynapseAgentPersona | null
   readonly name: string
   readonly description: string
@@ -97,6 +96,7 @@ export function AgentPersonasModule() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState<AgentPersonaTab>("builtin")
   const [formOpen, setFormOpen] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [form, setForm] = useState<AgentPersonaFormState>(emptyFormState)
@@ -128,6 +128,7 @@ export function AgentPersonasModule() {
 
   const builtinItems = items.filter((item) => item.source === "builtin")
   const userItems = items.filter((item) => item.source === "user")
+  const visibleItems = activeTab === "builtin" ? builtinItems : userItems
 
   const openCreateForm = () => {
     setForm(emptyFormState)
@@ -156,7 +157,7 @@ export function AgentPersonasModule() {
 
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (saving || form.mode === "view") return
+    if (saving) return
 
     const errors = validateForm(form)
     if (Object.keys(errors).length > 0) {
@@ -174,7 +175,12 @@ export function AgentPersonasModule() {
           ? { providerId: form.providerModel.providerId, modelTier: form.providerModel.modelTier }
           : null,
       }
-      const saved = form.mode === "edit" && form.item
+      const saved = form.mode === "configureBuiltinModel" && form.item
+        ? await agentPersonasBridge.updateBuiltinModel({
+          id: form.item.id,
+          providerModel: input.providerModel,
+        })
+        : form.mode === "edit" && form.item
         ? await agentPersonasBridge.update({ id: form.item.id, ...input })
         : await agentPersonasBridge.create(input)
 
@@ -205,15 +211,18 @@ export function AgentPersonasModule() {
 
   return (
     <SystemAppWindowShell
-      actions={(
-        <Button type="button" className={tactileButtonClassName} onClick={openCreateForm}>
+      tabs={agentPersonaTabs}
+      value={activeTab}
+      onValueChange={setActiveTab}
+      actions={activeTab === "user" ? (
+        <Button type="button" onClick={openCreateForm}>
           <Plus data-icon="inline-start" />
           新增
         </Button>
-      )}
+      ) : null}
     >
       <ScrollArea className="h-full min-h-0">
-        <div className="mx-auto grid w-full max-w-5xl gap-5 p-3 sm:p-5">
+        <div className="mx-auto grid w-full max-w-5xl gap-3 p-3 sm:p-5">
           {loading ? (
             <AgentPersonaSkeleton />
           ) : items.length === 0 && loadError ? (
@@ -221,41 +230,25 @@ export function AgentPersonasModule() {
               <CircleAlert />
               <AlertTitle className="text-balance">加载失败</AlertTitle>
               <AlertDescription className="break-words">{loadError}</AlertDescription>
-              <Button type="button" variant="outline" size="sm" className={`mt-2 w-fit ${tactileButtonClassName}`} onClick={() => void reload()}>
+              <Button type="button" variant="outline" size="sm" className="mt-2 w-fit" onClick={() => void reload()}>
                 <RefreshCw data-icon="inline-start" />
                 重试
               </Button>
             </Alert>
+          ) : activeTab === "user" && userItems.length === 0 ? (
+            <Empty className="min-h-40 border bg-background">
+              <EmptyHeader>
+                <EmptyTitle>暂无智能体</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            <>
-              <AgentPersonaSection title="系统内置">
-                <AgentPersonaTable
-                  items={builtinItems}
-                  onView={(item) => openItem(item, "view")}
-                  onEdit={(item) => openItem(item, "edit")}
-                  onDelete={setDeleteTarget}
-                />
-              </AgentPersonaSection>
-              <AgentPersonaSection title="我创建的">
-                {userItems.length === 0 ? (
-                  <Empty className="min-h-40 rounded-md border bg-background">
-                    <EmptyHeader>
-                      <EmptyTitle className="text-balance">暂无智能体</EmptyTitle>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button type="button" variant="outline" className={tactileButtonClassName} onClick={openCreateForm}>新增智能体</Button>
-                    </EmptyContent>
-                  </Empty>
-                ) : (
-                  <AgentPersonaTable
-                    items={userItems}
-                    onView={(item) => openItem(item, "view")}
-                    onEdit={(item) => openItem(item, "edit")}
-                    onDelete={setDeleteTarget}
-                  />
-                )}
-              </AgentPersonaSection>
-            </>
+            <AgentPersonaTable
+              items={visibleItems}
+              tab={activeTab}
+              onConfigureModel={(item) => openItem(item, "configureBuiltinModel")}
+              onEdit={(item) => openItem(item, "edit")}
+              onDelete={setDeleteTarget}
+            />
           )}
         </div>
       </ScrollArea>
@@ -283,8 +276,8 @@ export function AgentPersonasModule() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={tactileButtonClassName}>取消</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" className={tactileButtonClassName} onClick={() => void deleteItem()}>删除</AlertDialogAction>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void deleteItem()}>删除</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -292,50 +285,42 @@ export function AgentPersonasModule() {
   )
 }
 
-function AgentPersonaSection({ children, title }: { readonly children: ReactNode; readonly title: string }) {
-  return (
-    <section className="grid gap-2">
-      <h2 className="text-balance text-sm font-medium">{title}</h2>
-      {children}
-    </section>
-  )
-}
-
 function AgentPersonaSkeleton() {
   return (
-    <div className="grid gap-5">
-      {Array.from({ length: 2 }).map((_, sectionIndex) => (
-        <div key={sectionIndex} className="grid gap-2">
-          <Skeleton className="h-4 w-20" />
-          <div className="rounded-md border bg-background p-3">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="mt-3 h-4 w-full max-w-xl" />
-          </div>
-        </div>
-      ))}
+    <div className="rounded-md border bg-background p-3">
+      <Skeleton className="h-4 w-40" />
+      <Skeleton className="mt-3 h-4 w-full max-w-xl" />
     </div>
   )
 }
 
 function AgentPersonaTable({
   items,
+  onConfigureModel,
   onDelete,
   onEdit,
-  onView,
+  tab,
 }: {
   readonly items: SynapseAgentPersona[]
+  readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
-  readonly onView: (item: SynapseAgentPersona) => void
+  readonly tab: AgentPersonaTab
 }) {
   return (
     <Table containerClassName="rounded-md border bg-background" className="min-w-[48rem] table-fixed">
+      <colgroup>
+        <col data-column="name" className="w-44" />
+        <col data-column="description" />
+        <col data-column="model" className="w-40" />
+        <col data-column="actions" className="w-28" />
+      </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="w-44">名称</TableHead>
+          <TableHead>名称</TableHead>
           <TableHead>简介</TableHead>
-          <TableHead className="w-40">模型</TableHead>
-          <TableHead className="w-40 text-right">操作</TableHead>
+          <TableHead>模型</TableHead>
+          <TableHead className="text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -343,9 +328,10 @@ function AgentPersonaTable({
           <AgentPersonaRow
             key={item.id}
             item={item}
+            tab={tab}
+            onConfigureModel={onConfigureModel}
             onDelete={onDelete}
             onEdit={onEdit}
-            onView={onView}
           />
         ))}
       </TableBody>
@@ -355,41 +341,44 @@ function AgentPersonaTable({
 
 function AgentPersonaRow({
   item,
+  onConfigureModel,
   onDelete,
   onEdit,
-  onView,
+  tab,
 }: {
   readonly item: SynapseAgentPersona
+  readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
-  readonly onView: (item: SynapseAgentPersona) => void
+  readonly tab: AgentPersonaTab
 }) {
   const modelLabel = useProviderModelLabel(item.providerModel)
   return (
     <TableRow>
-      <TableCell className="min-w-0 align-top font-medium">
+      <TableCell className="min-w-0 align-middle font-medium">
         <span className="block truncate">{item.name}</span>
       </TableCell>
-      <TableCell className="min-w-0 align-top">
+      <TableCell className="min-w-0 align-middle">
         <span className="block truncate text-muted-foreground">{item.description}</span>
       </TableCell>
-      <TableCell className="min-w-0 align-top">
+      <TableCell className="min-w-0 align-middle">
         <span className="block truncate text-muted-foreground">
           {item.providerModel ? modelLabel || item.providerModel.providerId : "未指定"}
         </span>
       </TableCell>
-      <TableCell className="align-top text-right">
-        <div className="flex justify-end gap-1">
-          <Button type="button" variant="ghost" size="icon" className={iconActionButtonClassName} aria-label={`查看智能体：${item.name}`} onClick={() => onView(item)}>
-            <Eye className="size-3.5" />
-          </Button>
-          {item.source === "user" ? (
+      <TableCell className="align-middle text-center">
+        <div className="flex justify-center gap-1">
+          {tab === "builtin" ? (
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`配置模型：${item.name}`} onClick={() => onConfigureModel(item)}>
+              <Settings2 />
+            </Button>
+          ) : item.source === "user" ? (
             <>
-              <Button type="button" variant="ghost" size="icon" className={iconActionButtonClassName} aria-label={`编辑智能体：${item.name}`} onClick={() => onEdit(item)}>
-                <Pencil className="size-3.5" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑智能体：${item.name}`} onClick={() => onEdit(item)}>
+                <Pencil />
               </Button>
-              <Button type="button" variant="ghost" size="icon" className={iconActionButtonClassName} aria-label={`删除智能体：${item.name}`} onClick={() => onDelete(item)}>
-                <Trash2 className="size-3.5" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除智能体：${item.name}`} onClick={() => onDelete(item)}>
+                <Trash2 />
               </Button>
             </>
           ) : null}
@@ -418,8 +407,13 @@ function AgentPersonaDialog({
   readonly open: boolean
   readonly saving: boolean
 }) {
-  const isReadonly = form.mode === "view"
-  const title = form.mode === "edit" ? "编辑智能体" : form.mode === "view" ? "查看智能体" : "新增智能体"
+  const isTextReadonly = form.mode === "configureBuiltinModel"
+  const title = form.mode === "edit"
+    ? "编辑智能体"
+    : form.mode === "configureBuiltinModel"
+      ? "配置模型"
+      : "新增智能体"
+  const saveLabel = form.mode === "configureBuiltinModel" ? "保存模型" : "保存智能体"
   const modelLabel = useProviderModelLabel(form.providerModel)
   const modelDisplay = form.providerModel ? modelLabel || form.providerModel.providerId : "未指定"
 
@@ -439,14 +433,14 @@ function AgentPersonaDialog({
                   id="agent-persona-name"
                   value={form.name}
                   disabled={saving}
-                  readOnly={isReadonly}
+                  readOnly={isTextReadonly}
                   aria-invalid={Boolean(form.errors.name)}
                   onChange={(event) => onFormChange((current) => ({
                     ...current,
                     name: event.target.value,
                     errors: { ...current.errors, name: undefined, form: undefined },
                   }))}
-                  autoFocus={!isReadonly}
+                  autoFocus={!isTextReadonly}
                 />
                 {form.errors.name ? <FieldError>{form.errors.name}</FieldError> : null}
               </FieldContent>
@@ -458,7 +452,7 @@ function AgentPersonaDialog({
                   id="agent-persona-description"
                   value={form.description}
                   disabled={saving}
-                  readOnly={isReadonly}
+                  readOnly={isTextReadonly}
                   aria-invalid={Boolean(form.errors.description)}
                   onChange={(event) => onFormChange((current) => ({
                     ...current,
@@ -476,7 +470,7 @@ function AgentPersonaDialog({
                   id="agent-persona-system-prompt"
                   value={form.systemPrompt}
                   disabled={saving}
-                  readOnly={isReadonly}
+                  readOnly={isTextReadonly}
                   className="min-h-40 resize-y"
                   aria-invalid={Boolean(form.errors.systemPrompt)}
                   onChange={(event) => onFormChange((current) => ({
@@ -491,51 +485,44 @@ function AgentPersonaDialog({
             <Field>
               <FieldLabel>模型</FieldLabel>
               <FieldContent>
-                {isReadonly ? (
-                  <Input id="agent-persona-model" value={modelDisplay} readOnly />
-                ) : (
-                  <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-w-0 flex-1 justify-between"
+                    disabled={saving}
+                    onClick={() => onModelDialogOpenChange(true)}
+                  >
+                    <span className="truncate text-muted-foreground">
+                      {modelDisplay}
+                    </span>
+                    <ChevronDown data-icon="inline-end" />
+                  </Button>
+                  {form.providerModel ? (
                     <Button
                       type="button"
                       variant="outline"
-                      className={`min-w-0 flex-1 justify-between ${tactileButtonClassName}`}
+                      size="icon"
+                      aria-label="清除模型"
                       disabled={saving}
-                      onClick={() => onModelDialogOpenChange(true)}
+                      onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
                     >
-                      <span className="truncate text-muted-foreground">
-                        {modelDisplay}
-                      </span>
-                      <ChevronDown data-icon="inline-end" />
+                      <X className="size-4" />
                     </Button>
-                    {form.providerModel ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className={tactileButtonClassName}
-                        aria-label="清除模型"
-                        disabled={saving}
-                        onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                )}
+                  ) : null}
+                </div>
               </FieldContent>
             </Field>
             {form.errors.form ? <FieldError>{form.errors.form}</FieldError> : null}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" className={tactileButtonClassName} onClick={() => onOpenChange(false)} disabled={saving}>
-              {isReadonly ? "关闭" : "取消"}
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              取消
             </Button>
-            {!isReadonly ? (
-              <Button type="submit" className={tactileButtonClassName} disabled={saving}>
-                {saving ? <Spinner data-icon="inline-start" /> : null}
-                {saving ? "保存中" : "保存智能体"}
-              </Button>
-            ) : null}
+            <Button type="submit" disabled={saving}>
+              {saving ? <Spinner data-icon="inline-start" /> : null}
+              {saving ? "保存中" : saveLabel}
+            </Button>
           </DialogFooter>
         </form>
         <ProviderModelSelectDialog

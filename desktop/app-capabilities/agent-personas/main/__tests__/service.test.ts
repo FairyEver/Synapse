@@ -1,7 +1,10 @@
 import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
-import type { AgentPersonaItemEntryV1 } from "../../../../electron/runtime/data-repo/schemas/agent-personas"
+import type {
+  AgentPersonaItemEntryV1,
+  AgentPersonaSettingsEntryV1,
+} from "../../../../electron/runtime/data-repo/schemas/agent-personas"
 import { BUILTIN_ZH_EN_TRANSLATOR_ID } from "../../shared/defaults"
 import { createAgentPersonaService } from "../service"
 
@@ -138,6 +141,56 @@ describe("AgentPersonaService", () => {
     })).rejects.toThrow("模型供应商不能为空")
   })
 
+  it("applies and clears built-in model overrides", async () => {
+    const harness = createHarness()
+    harness.settings.singleton = {
+      schemaVersion: 1,
+      builtinProviderModels: {
+        [BUILTIN_ZH_EN_TRANSLATOR_ID]: { providerId: "claude", modelTier: "sonnet" },
+      },
+    }
+    const service = createAgentPersonaService(harness.deps)
+    const changed = vi.fn()
+    service.events.on("changed", changed)
+
+    await expect(service.list()).resolves.toMatchObject([
+      {
+        id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+        source: "builtin",
+        providerModel: { providerId: "claude", modelTier: "sonnet" },
+      },
+    ])
+
+    await expect(service.updateBuiltinModel({
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      providerModel: { providerId: "  openai  ", modelTier: "default" },
+    })).resolves.toMatchObject({
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      source: "builtin",
+      providerModel: { providerId: "openai", modelTier: "default" },
+    })
+
+    await expect(service.updateBuiltinModel({
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      providerModel: null,
+    })).resolves.toMatchObject({
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      providerModel: null,
+    })
+
+    expect(changed).toHaveBeenCalled()
+    expect(harness.settings.singleton?.builtinProviderModels[BUILTIN_ZH_EN_TRANSLATOR_ID]).toBeNull()
+  })
+
+  it("rejects built-in model updates for missing built-in personas", async () => {
+    const service = createAgentPersonaService(createHarness().deps)
+
+    await expect(service.updateBuiltinModel({
+      id: "missing",
+      providerModel: null,
+    })).rejects.toThrow("内置智能体不存在")
+  })
+
   it("rejects updates and deletes for built-in personas", async () => {
     const service = createAgentPersonaService(createHarness().deps)
 
@@ -171,15 +224,41 @@ describe("AgentPersonaService", () => {
 
 function createHarness() {
   const items = createMemoryNamespace<AgentPersonaItemEntryV1>()
+  const settings = createMemorySingletonNamespace<AgentPersonaSettingsEntryV1>()
   return {
     items,
+    settings,
     deps: {
       items,
+      settings,
       now: () => new Date("2026-06-30T00:00:00.000Z"),
       createId: () => `id-${items.records.size + 1}`,
       logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
     },
   }
+}
+
+function createMemorySingletonNamespace<T>(): DataNamespace<T> & { singleton: T | null } {
+  const events = new EventEmitter()
+  const namespace = {
+    name: "memory",
+    schemaVersion: 1,
+    backend: "json",
+    singleton: null as T | null,
+    async getSingleton() { return namespace.singleton },
+    async setSingleton(value: T) { namespace.singleton = value },
+    async clearSingleton() { namespace.singleton = null },
+    async list() { return [] },
+    async count() { return 0 },
+    async get() { return null },
+    async upsert() {},
+    async remove() {},
+    onChange(listener: (change: never) => void) {
+      events.on("change", listener)
+      return () => events.off("change", listener)
+    },
+  } satisfies DataNamespace<T> & { singleton: T | null }
+  return namespace
 }
 
 function createMemoryNamespace<T extends { id: string }>(): DataNamespace<T> & { records: Map<string, T> } {

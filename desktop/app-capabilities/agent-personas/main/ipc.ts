@@ -4,6 +4,7 @@ import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
 import type { AgentPersonaService } from "./service"
 import {
+  agentPersonaBuiltinModelUpdateInputSchema,
   agentPersonaChangedEventSchema,
   agentPersonaCreateInputSchema,
   agentPersonaIdInputSchema,
@@ -57,6 +58,14 @@ export const agentPersonasIpcModule: IpcModule = {
       response: agentPersonaSchema,
       handler: (ctx, request: z.infer<typeof agentPersonaUpdateInputSchema>) =>
         resolveAgentPersonaService(ctx).update(request),
+    },
+    updateBuiltinModel: {
+      channel: "synapse:agent-personas:builtin-model:update",
+      kind: "invoke",
+      request: agentPersonaBuiltinModelUpdateInputSchema,
+      response: agentPersonaSchema,
+      handler: (ctx, request: z.infer<typeof agentPersonaBuiltinModelUpdateInputSchema>) =>
+        resolveAgentPersonaService(ctx).updateBuiltinModel(request),
     },
     delete: {
       channel: "synapse:agent-personas:delete",

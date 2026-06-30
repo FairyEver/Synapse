@@ -2,7 +2,10 @@ import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
 
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
-import type { AgentPersonaItemEntryV1 } from "../../../../electron/runtime/data-repo/schemas/agent-personas"
+import type {
+  AgentPersonaItemEntryV1,
+  AgentPersonaSettingsEntryV1,
+} from "../../../../electron/runtime/data-repo/schemas/agent-personas"
 import {
   createInMemoryHarness,
   IpcValidationError,
@@ -95,6 +98,36 @@ describe("Agent personas public IPC contract", () => {
     })).rejects.toThrow("内置智能体不可删除")
   })
 
+  it("allows built-in model updates through the dedicated public channel", async () => {
+    const harness = createBlackBoxHarness()
+
+    await expect(harness.invoke("synapse:agent-personas:builtin-model:update", {
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    })).resolves.toMatchObject({
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      source: "builtin",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    })
+
+    await expect(harness.invoke("synapse:agent-personas:list", undefined))
+      .resolves.toMatchObject([
+        {
+          id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+          source: "builtin",
+          providerModel: { providerId: "claude", modelTier: "sonnet" },
+        },
+      ])
+
+    await expect(harness.invoke("synapse:agent-personas:update", {
+      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      name: "改名",
+      description: "修改描述。",
+      systemPrompt: "修改提示词。",
+      providerModel: null,
+    })).rejects.toThrow("内置智能体不可编辑")
+  })
+
   it("broadcasts changed events after public mutations", async () => {
     const harness = createBlackBoxHarness()
 
@@ -119,8 +152,10 @@ describe("Agent personas public IPC contract", () => {
 
 function createBlackBoxHarness() {
   const items = createMemoryNamespace<AgentPersonaItemEntryV1>()
+  const settings = createMemorySingletonNamespace<AgentPersonaSettingsEntryV1>()
   const service = createAgentPersonaService({
     items,
+    settings,
     now: () => new Date("2026-06-30T00:00:00.000Z"),
     createId: () => `persona-${items.records.size + 1}`,
     logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -142,6 +177,29 @@ function createBlackBoxHarness() {
     broadcast,
     invoke: ipc.invoke,
   }
+}
+
+function createMemorySingletonNamespace<T>(): DataNamespace<T> & { singleton: T | null } {
+  const events = new EventEmitter()
+  const namespace = {
+    name: "memory",
+    schemaVersion: 1,
+    backend: "json",
+    singleton: null as T | null,
+    async getSingleton() { return namespace.singleton },
+    async setSingleton(value: T) { namespace.singleton = value },
+    async clearSingleton() { namespace.singleton = null },
+    async list() { return [] },
+    async count() { return 0 },
+    async get() { return null },
+    async upsert() {},
+    async remove() {},
+    onChange(listener: (change: never) => void) {
+      events.on("change", listener)
+      return () => events.off("change", listener)
+    },
+  } satisfies DataNamespace<T> & { singleton: T | null }
+  return namespace
 }
 
 function createMemoryNamespace<T extends { id: string }>(): DataNamespace<T> & { records: Map<string, T> } {

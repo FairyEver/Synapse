@@ -47,8 +47,10 @@ export {
 } from "./quick-input"
 export {
   agentPersonaItemsSchema,
+  agentPersonaSettingsSchema,
   type AgentPersonaItemEntryV1,
   type AgentPersonaProviderModelEntryV1,
+  type AgentPersonaSettingsEntryV1,
 } from "./agent-personas"
 export {
   reviveSoundNotifierSettingsEnvelope,
@@ -131,7 +133,7 @@ import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSch
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
-import { agentPersonaItemsSchema } from "./agent-personas"
+import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
@@ -176,6 +178,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   quickInputItemsSchema,
   quickInputSettingsSchema,
   agentPersonaItemsSchema,
+  agentPersonaSettingsSchema,
   soundNotifierSettingsSchemaDefinition,
   secretsSchema,
   providersSchema,

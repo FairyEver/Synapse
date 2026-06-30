@@ -65,6 +65,10 @@ const bridge = vi.hoisted(() => ({
     createdAt: "2026-06-30T00:00:00.000Z",
     updatedAt: "2026-06-30T00:00:00.000Z",
   })),
+  updateBuiltinModel: vi.fn(async (input: { readonly id: string; readonly providerModel: ModelInput | null }) => ({
+    ...fixtures.items[0],
+    providerModel: input.providerModel,
+  })),
   delete: vi.fn(async () => undefined),
   onChanged: vi.fn(() => vi.fn()),
 }))
@@ -138,6 +142,7 @@ beforeEach(() => {
   bridge.list.mockClear()
   bridge.create.mockClear()
   bridge.update.mockClear()
+  bridge.updateBuiltinModel.mockClear()
   bridge.delete.mockClear()
   bridge.onChanged.mockClear()
   toast.error.mockClear()
@@ -155,30 +160,52 @@ afterEach(() => {
 })
 
 describe("AgentPersonasModule", () => {
-  it("loads built-in and user personas", async () => {
+  it("shows built-in and user personas in top tabs", async () => {
     await renderModule()
 
     expect(bridge.list).toHaveBeenCalled()
-    expect(document.body.textContent).toContain("系统内置")
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("系统内置")
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("我的")
     expect(document.body.textContent).toContain("中英翻译")
-    expect(document.body.textContent).toContain("我创建的")
+    expect(document.body.textContent).not.toContain("产品顾问")
+    expect(buttonWithText("新增")).toBeNull()
+
+    await clickButton("我的")
+
     expect(document.body.textContent).toContain("产品顾问")
+    expect(document.body.textContent).not.toContain("中英翻译")
+    expect(buttonWithText("新增")).toBeTruthy()
   })
 
-  it("does not show edit or delete actions for built-in personas", async () => {
+  it("shows only model configuration for built-in personas", async () => {
     await renderModule()
 
-    const viewButton = buttonByLabel("查看智能体：中英翻译")
-    expect(viewButton).toBeTruthy()
-    expect(viewButton?.className).toContain("size-10")
-    expect(viewButton?.className).toContain("active:scale-[0.96]")
+    expect(buttonByLabel("查看智能体：中英翻译")).toBeFalsy()
+    expect(buttonByLabel("配置模型：中英翻译")).toBeTruthy()
     expect(buttonByLabel("编辑智能体：中英翻译")).toBeFalsy()
     expect(buttonByLabel("删除智能体：中英翻译")).toBeFalsy()
+  })
+
+  it("keeps persona table columns and action controls aligned", async () => {
+    await renderModule()
+
+    const table = document.body.querySelector("table")
+    expect(table).toBeTruthy()
+    expect(Array.from(table?.querySelectorAll("col") ?? []).map((col) => col.getAttribute("data-column"))).toEqual([
+      "name",
+      "description",
+      "model",
+      "actions",
+    ])
+    expect(cellWithText("操作")?.className).toContain("text-center")
+    expect(buttonByLabel("配置模型：中英翻译")?.closest("td")?.className).toContain("text-center")
+    expect(buttonByLabel("配置模型：中英翻译")?.parentElement?.className).toContain("justify-center")
   })
 
   it("validates required fields before creating a user persona", async () => {
     await renderModule()
 
+    await clickButton("我的")
     await clickButton("新增")
     await clickButton("保存智能体")
 
@@ -189,6 +216,7 @@ describe("AgentPersonasModule", () => {
   it("creates a user persona with a selected model", async () => {
     await renderModule()
 
+    await clickButton("我的")
     await clickButton("新增")
     await setFieldValue("#agent-persona-name", "翻译助手")
     await setFieldValue("#agent-persona-description", "处理中英文本。")
@@ -209,6 +237,7 @@ describe("AgentPersonasModule", () => {
   it("updates a user persona", async () => {
     await renderModule()
 
+    await clickButton("我的")
     await clickButtonByLabel("编辑智能体：产品顾问")
     await setFieldValue("#agent-persona-name", "产品教练")
     await setFieldValue("#agent-persona-description", "整理产品策略。")
@@ -227,11 +256,33 @@ describe("AgentPersonasModule", () => {
   it("deletes a user persona after confirmation", async () => {
     await renderModule()
 
+    await clickButton("我的")
     await clickButtonByLabel("删除智能体：产品顾问")
     expect(document.body.textContent).toContain("删除“产品顾问”后不可恢复。")
     await clickButton("删除")
 
     expect(bridge.delete).toHaveBeenCalledWith({ id: "persona-1" })
+  })
+
+  it("updates the model for a built-in persona without unlocking its text fields", async () => {
+    await renderModule()
+
+    await clickButtonByLabel("配置模型：中英翻译")
+
+    expect(document.body.textContent).toContain("配置模型")
+    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-name")?.readOnly).toBe(true)
+    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-description")?.readOnly).toBe(true)
+    expect(document.body.querySelector<HTMLTextAreaElement>("#agent-persona-system-prompt")?.readOnly).toBe(true)
+
+    await clickButton("未指定")
+    await clickButton("选择 Sonnet 模型")
+    await clickButton("保存模型")
+
+    expect(bridge.updateBuiltinModel).toHaveBeenCalledWith({
+      id: "builtin-zh-en-translator",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    })
+    expect(bridge.update).not.toHaveBeenCalled()
   })
 })
 
@@ -253,7 +304,9 @@ async function clickButton(text: string) {
     .find((item) => item.textContent === text)
   if (!button) throw new Error(`Button not found: ${text}`)
   await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    button.click()
+    await Promise.resolve()
   })
 }
 
@@ -261,7 +314,9 @@ async function clickButtonByLabel(label: string) {
   const button = buttonByLabel(label)
   if (!button) throw new Error(`Button not found: ${label}`)
   await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    button.click()
+    await Promise.resolve()
   })
 }
 
@@ -285,4 +340,14 @@ async function setFieldValue(selector: string, value: string) {
 function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(document.body.querySelectorAll("button"))
     .find((button) => button.getAttribute("aria-label") === label) ?? null
+}
+
+function buttonWithText(text: string): HTMLButtonElement | null {
+  return Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.textContent === text) ?? null
+}
+
+function cellWithText(text: string): HTMLTableCellElement | null {
+  return Array.from(document.body.querySelectorAll<HTMLTableCellElement>("th,td"))
+    .find((item) => item.textContent === text) ?? null
 }

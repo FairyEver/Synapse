@@ -50,7 +50,10 @@ import {
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
-import { AGENT_PERSONAS_ITEMS_NAMESPACE } from "../../app-capabilities/agent-personas/shared/capability"
+import {
+  AGENT_PERSONAS_ITEMS_NAMESPACE,
+  AGENT_PERSONAS_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/agent-personas/shared/capability"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -102,6 +105,7 @@ import {
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
   AgentPersonaItemEntryV1,
+  AgentPersonaSettingsEntryV1,
   ConversationEntryV1,
   DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
@@ -364,6 +368,7 @@ export const coreAgentPersonasDescriptor: ServiceDescriptor<AgentPersonaService>
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createAgentPersonaService({
       items: dataRepository.namespace<AgentPersonaItemEntryV1>(AGENT_PERSONAS_ITEMS_NAMESPACE),
+      settings: dataRepository.namespace<AgentPersonaSettingsEntryV1>(AGENT_PERSONAS_SETTINGS_NAMESPACE),
       logger: ctx.logger.child("agent-personas"),
     })
   },
