@@ -61,7 +61,7 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
 
 export type DriveSyncDialogState =
   | { readonly mode: "status"; readonly item: null }
-  | { readonly mode: "bind"; readonly item: DriveItemDto }
+  | { readonly mode: "bind"; readonly item: DriveItemDto; readonly drivePathHint: string | null }
   | { readonly mode: "local"; readonly item: null }
 
 export function DriveSyncDialog({
@@ -85,6 +85,7 @@ export function DriveSyncDialog({
   const [statusFilter, setStatusFilter] = useState<DriveSyncObjectFilter>("all")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
+  const drivePathHint = state?.mode === "bind" ? state.drivePathHint : null
   const isLocalBinding = state?.mode === "local"
   const isBindingDialog = state?.mode === "bind" || isLocalBinding
   const isStatusDialog = !isBindingDialog
@@ -148,7 +149,7 @@ export function DriveSyncDialog({
         driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
         driveItemName,
         kind: bindingKind,
-        drivePathHint: item?.name ?? driveItemName,
+        drivePathHint: drivePathHint ?? item?.name ?? driveItemName,
         localPath: currentPath,
         remoteExists: nextMode !== "local_to_remote",
         directionHint: nextMode,
@@ -178,7 +179,7 @@ export function DriveSyncDialog({
         driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
         driveItemName,
         kind: bindingKind,
-        drivePathHint: item?.name ?? driveItemName,
+        drivePathHint: drivePathHint ?? item?.name ?? driveItemName,
         localPath: currentPath,
         direction: currentPreview.direction,
         excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],

@@ -749,7 +749,7 @@ function DriveModuleContent() {
         onOpenItem={handlePreview}
         onShare={handleShare}
         onPublishSite={setSiteCreateTarget}
-        onOpenSyncBinding={(item) => setSyncDialog({ mode: "bind", item })}
+        onOpenSyncBinding={(item, drivePathHint) => setSyncDialog({ mode: "bind", item, drivePathHint })}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
@@ -1241,7 +1241,7 @@ function DriveFileList({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onOpenSyncBinding: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
@@ -1677,7 +1677,7 @@ function DriveFileListRow({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onOpenSyncBinding: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
@@ -1805,7 +1805,7 @@ function DriveFileListRow({
             onRename={onRename}
             onMove={onMove}
             onPublishSite={onPublishSite}
-            onOpenSyncBinding={onOpenSyncBinding}
+            onOpenSyncBinding={() => onOpenSyncBinding(item, drivePath)}
           />
         </div>
       </TableCell>
@@ -1872,7 +1872,7 @@ function DriveItemMenu({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onOpenSyncBinding: (item: DriveItemDto) => void
+  readonly onOpenSyncBinding: () => void
 }) {
   return (
     <DropdownMenu>
@@ -1884,7 +1884,7 @@ function DriveItemMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {item.type === "folder" ? <DropdownMenuItem onClick={() => onPublishSite(item)}>发布站点</DropdownMenuItem> : null}
-          <DropdownMenuItem onClick={() => onOpenSyncBinding(item)}>同步</DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenSyncBinding}>同步</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
         </DropdownMenuGroup>

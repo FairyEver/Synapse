@@ -912,6 +912,45 @@ describe("DriveModule", () => {
     })
   })
 
+  it("passes full nested drive paths when creating sync bindings from row menus", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-projects", type: "folder", name: "Projects" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-docs", parentId: "folder-projects", type: "folder", name: "Docs" }),
+      ])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Docs")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "bind_existing",
+      reason: null,
+      localPath: "/Users/me/Docs",
+      localKind: "folder",
+      localEmpty: true,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await act(async () => {
+      getTableRow("Projects").click()
+      await flushPromises()
+    })
+    await openRowMenu("Docs")
+    await clickMenuItemText("同步")
+    await clickText("选择文件夹")
+
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "folder-docs",
+      drivePathHint: "/Projects/Docs",
+      kind: "folder",
+      localPath: "/Users/me/Docs",
+    }))
+  })
+
   it("creates local-to-cloud drive sync bindings from the toolbar", async () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
     mocks.previewDriveSyncBinding.mockResolvedValueOnce({
