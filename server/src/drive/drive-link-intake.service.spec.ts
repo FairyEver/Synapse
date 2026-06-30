@@ -144,6 +144,23 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("passes passwords when resolving protected site links", async () => {
+    const { service, sites } = createService()
+
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_public/`, password: "secret" })).resolves.toMatchObject({
+      linkType: "site",
+      access: { status: "ok" },
+      root: { name: "index.html", type: "site" },
+    })
+    expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", {
+      cookie: null,
+      password: "secret",
+      relativePath: "",
+    })
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_public/`, password: "secret" }))
+      .resolves.not.toHaveProperty("password")
+  })
+
   it("marks resolved site links as listable", async () => {
     const { service } = createService()
 

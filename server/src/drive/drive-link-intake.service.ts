@@ -116,7 +116,7 @@ export class DriveLinkIntakeService {
   async resolve(input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
     const parsed = parseDriveLinkUrl(input.url)
     if (parsed.linkType === "share") return this.resolveShare(parsed, input)
-    if (parsed.linkType === "site") return this.resolveSite(parsed)
+    if (parsed.linkType === "site") return this.resolveSite(parsed, input)
     return this.resolvePublicAsset(parsed)
   }
 
@@ -235,9 +235,9 @@ export class DriveLinkIntakeService {
     }
   }
 
-  private async resolveSite(parsed: Extract<ParsedDriveLink, { readonly linkType: "site" }>): Promise<DriveLinkResolveDto> {
+  private async resolveSite(parsed: Extract<ParsedDriveLink, { readonly linkType: "site" }>, input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
     const ref = toSiteRef(parsed)
-    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, relativePath: parsed.path })
+    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, password: input.password, relativePath: parsed.path })
     if (access.status === "password_required") return passwordRequiredResolve(parsed.path ? "site_path" : "site", ref)
     if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
 
