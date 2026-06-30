@@ -513,7 +513,7 @@ describe("DriveService", () => {
     await expect(Promise.all([
       service.deleteFileVersion("user-1", item.id, historical.id),
       service.deleteFileVersion("user-1", item.id, historical.id),
-    ])).resolves.toEqual([{ ok: true }, { ok: true }])
+    ])).resolves.toEqual([{ ok: true }, { ok: true, deletePending: true }])
 
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(5n)
@@ -562,7 +562,7 @@ describe("DriveService", () => {
     expect(versions.items[0]!.isCurrent).toBe(true)
   })
 
-  it("marks deletePending when historical object deletion fails", async () => {
+  it("keeps quota and visible state when historical object deletion fails", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -576,11 +576,16 @@ describe("DriveService", () => {
     await service.completeUpload("user-1", prepared.sessionId)
     const historical = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((version) => !version.isCurrent)!
 
-    await service.deleteFileVersion("user-1", item.id, historical.id)
+    await expect(service.deleteFileVersion("user-1", item.id, historical.id)).resolves.toEqual({ ok: true, deletePending: true })
 
     const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: historical.id } })
-    expect(row.deletedAt).not.toBeNull()
+    expect(row.deletedAt).toBeNull()
     expect(row.deletePending).toBe(true)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(16n)
+    const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
+    expect(versions.total).toBe(2)
+    expect(versions.items.find((version) => version.id === historical.id)?.deletePending).toBe(true)
   })
 
   it("retries pending historical version deletes", async () => {
@@ -588,21 +593,27 @@ describe("DriveService", () => {
     const storage: DriveStoragePort = {
       ...storageMock,
       deleteObject: vi.fn(async () => undefined),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const version = (await prisma.driveFileVersion.findMany({ where: { itemId: item.id } }))[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((candidate) => !candidate.isCurrent)!
     await prisma.driveFileVersion.update({
       where: { id: version.id },
-      data: { deletedAt: new Date(), deletePending: true },
+      data: { deletePending: true },
     })
 
     const result = await service.retryPendingFileVersionDeletes()
 
     expect(result).toEqual({ attempted: 1, deleted: 1, failed: 0 })
     const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: version.id } })
+    expect(row.deletedAt).not.toBeNull()
     expect(row.deletePending).toBe(false)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(5n)
   })
 
   it("overwrites same-name files while preserving item identity and shares", async () => {

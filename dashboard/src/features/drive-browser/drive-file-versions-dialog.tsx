@@ -76,10 +76,10 @@ export function DriveFileVersionsDialog({
   })
   const deleteMutation = useMutation({
     mutationFn: (versionId: string) => driveFileVersionsApi.delete(itemId, versionId),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setConfirmTarget(null)
       invalidateVersionState()
-      toast.success('已删除')
+      toast.success(result.deletePending ? '清理中' : '已删除')
     },
     onError: (error: Error) => toast.error(error.message),
   })

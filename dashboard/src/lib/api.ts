@@ -1180,7 +1180,7 @@ export const driveFileVersionsApi = {
       body: JSON.stringify({ isPinned }),
     }),
   delete: (itemId: string, versionId: string) =>
-    request<{ ok: true }>(driveFileVersionPath(itemId, versionId), {
+    request<{ ok: true; deletePending?: boolean }>(driveFileVersionPath(itemId, versionId), {
       method: 'DELETE',
     }),
   downloadUrl: (itemId: string, versionId: string) =>

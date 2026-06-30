@@ -527,30 +527,27 @@ export class DriveService implements OnApplicationBootstrap {
     return asset?.userId ?? null
   }
 
-  async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
+  async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true; readonly deletePending?: boolean }> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
-    const deleted = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.driveFileVersion.updateMany({
-        where: { id: version.id, itemId: item.id, userId, deletedAt: null },
-        data: { deletedAt: new Date(), deletePending: false },
-      })
-      if (updated.count === 0) return false
-      await tx.driveUsage.update({
-        where: { userId },
-        data: { usedBytes: { decrement: version.size } },
-      })
-      return true
+    const claimed = await this.prisma.driveFileVersion.updateMany({
+      where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
+      data: { deletePending: true },
     })
-    if (!deleted) return { ok: true }
+    if (claimed.count === 0) return { ok: true, deletePending: true }
+    let deletePending = false
     try {
       await this.storage.deleteObject(version.storageKey)
-    } catch (error) {
-      await this.prisma.driveFileVersion.update({
-        where: { id: version.id },
-        data: { deletePending: true },
+      const finalized = await this.finalizeFileVersionDelete({
+        userId,
+        itemId: item.id,
+        versionId: version.id,
+        size: version.size,
       })
+      if (!finalized) return { ok: true }
+    } catch (error) {
+      deletePending = true
       this.logger.warn({
         itemId: item.id,
         versionId: version.id,
@@ -564,10 +561,10 @@ export class DriveService implements OnApplicationBootstrap {
       action: "drive.file_version.delete",
       targetType: "drive.fileVersion",
       targetId: version.id,
-      detail: { userId, itemId: item.id, versionId: version.id, size: version.size.toString() },
+      detail: { userId, itemId: item.id, versionId: version.id, size: version.size.toString(), deletePending },
       ipAddress: auditContext.ipAddress,
     })
-    return { ok: true }
+    return deletePending ? { ok: true, deletePending: true } : { ok: true }
   }
 
   async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
@@ -602,7 +599,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   async retryPendingFileVersionDeletes(limit = 100): Promise<{ readonly attempted: number; readonly deleted: number; readonly failed: number }> {
     const versions = await this.prisma.driveFileVersion.findMany({
-      where: { deletePending: true, deletedAt: { not: null } },
+      where: { deletePending: true, deletedAt: null },
       orderBy: { createdAt: "asc" },
       take: Math.max(1, Math.min(Math.floor(limit), 500)),
     })
@@ -611,11 +608,13 @@ export class DriveService implements OnApplicationBootstrap {
     for (const version of versions) {
       try {
         await this.storage.deleteObject(version.storageKey)
-        await this.prisma.driveFileVersion.update({
-          where: { id: version.id },
-          data: { deletePending: false },
+        const finalized = await this.finalizeFileVersionDelete({
+          userId: version.userId,
+          itemId: version.itemId,
+          versionId: version.id,
+          size: version.size,
         })
-        deleted += 1
+        if (finalized) deleted += 1
       } catch (error) {
         failed += 1
         this.logger.warn({
@@ -3016,34 +3015,27 @@ export class DriveService implements OnApplicationBootstrap {
       select: { id: true, storageKey: true },
     })
     if (!item) return
-    const candidates = await this.prisma.$transaction(async (tx) => {
-      const rows = await listCleanupCandidateVersions(tx, {
+    const candidates = await this.prisma.$transaction((tx) =>
+      listCleanupCandidateVersions(tx, {
         itemId: item.id,
         currentStorageKey: item.storageKey,
         now: new Date(),
-      })
-      if (rows.length === 0) return rows
-      await tx.driveFileVersion.updateMany({
-        where: { id: { in: rows.map((version) => version.id) } },
-        data: { deletedAt: new Date(), deletePending: false },
-      })
-      const releasedBytes = rows.reduce((sum, version) => sum + version.size, 0n)
-      if (releasedBytes > 0n) {
-        await tx.driveUsage.update({
-          where: { userId },
-          data: { usedBytes: { decrement: releasedBytes } },
-        })
-      }
-      return rows
-    })
+      }))
     for (const version of candidates) {
+      const claimed = await this.prisma.driveFileVersion.updateMany({
+        where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
+        data: { deletePending: true },
+      })
+      if (claimed.count === 0) continue
       try {
         await this.storage.deleteObject(version.storageKey)
-      } catch (error) {
-        await this.prisma.driveFileVersion.update({
-          where: { id: version.id },
-          data: { deletePending: true },
+        await this.finalizeFileVersionDelete({
+          userId,
+          itemId: item.id,
+          versionId: version.id,
+          size: version.size,
         })
+      } catch (error) {
         this.logger.warn({
           itemId,
           versionId: version.id,
@@ -3053,6 +3045,32 @@ export class DriveService implements OnApplicationBootstrap {
         }, "Drive file version cleanup delete failed")
       }
     }
+  }
+
+  private async finalizeFileVersionDelete(input: {
+    readonly userId: string
+    readonly itemId: string
+    readonly versionId: string
+    readonly size: bigint
+  }): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.driveFileVersion.updateMany({
+        where: {
+          id: input.versionId,
+          itemId: input.itemId,
+          userId: input.userId,
+          deletedAt: null,
+          deletePending: true,
+        },
+        data: { deletedAt: new Date(), deletePending: false },
+      })
+      if (updated.count === 0) return false
+      await tx.driveUsage.update({
+        where: { userId: input.userId },
+        data: { usedBytes: { decrement: input.size } },
+      })
+      return true
+    })
   }
 
   private async recordDriveDeleteAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
