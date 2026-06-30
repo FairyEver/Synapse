@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -48,7 +48,6 @@ export function KnowledgeBaseActionMenu({
           data-track="agent-knowledge-base-actions"
           disabled={disabled}
         >
-          <BookOpen />
           <span>知识库</span>
           <ChevronDown data-icon="inline-end" />
         </Button>

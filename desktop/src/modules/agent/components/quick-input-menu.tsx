@@ -1,4 +1,4 @@
-import { ChevronDown, TextCursorInput } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -46,7 +46,6 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
           data-track="agent-quick-inputs"
           disabled={disabled}
         >
-          <TextCursorInput />
           <span>快捷输入</span>
           <ChevronDown data-icon="inline-end" />
         </Button>
