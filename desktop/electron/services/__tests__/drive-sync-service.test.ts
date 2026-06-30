@@ -336,6 +336,53 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("updates an existing open conflict for the same path and type", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+    })
+
+    const first = await service.recordConflict({
+      bindingId: binding.id,
+      driveItemId: "drive-item-1",
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: "/产品文档/spec.md",
+      type: "both_modified",
+      localSnapshot: { mtimeMs: 1000 },
+      remoteSnapshot: { sequence: "43" },
+    })
+    const second = await service.recordConflict({
+      bindingId: binding.id,
+      driveItemId: "drive-item-1",
+      relativePath: "./spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: "/产品文档/spec.md",
+      type: "both_modified",
+      localSnapshot: { mtimeMs: 2000 },
+      remoteSnapshot: { sequence: "44" },
+    })
+
+    expect(second.id).toBe(first.id)
+    await expect(harness.conflicts.list({ bindingId: binding.id })).resolves.toEqual([
+      expect.objectContaining({
+        id: first.id,
+        relativePath: "spec.md",
+        localSnapshot: { mtimeMs: 2000 },
+        remoteSnapshot: { sequence: "44" },
+        status: "open",
+      }),
+    ])
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      summary: { conflictCount: 1 },
+    })
+  })
+
   it("previews and creates a remote file to missing local file binding", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

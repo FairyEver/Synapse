@@ -1303,12 +1303,33 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function recordConflict(input: DriveSyncRecordConflictInput): Promise<DriveSyncConflictDto> {
     await requireBinding(input.bindingId)
     const now = timestamp()
+    const relativePath = normalizeConflictRelativePath(input.relativePath)
+    const existing = await findOpenConflict({
+      bindingId: input.bindingId,
+      driveItemId: input.driveItemId ?? null,
+      relativePath,
+      type: input.type,
+    })
+    if (existing) {
+      const entry: DriveSyncConflictEntryV1 = {
+        ...existing,
+        driveItemId: input.driveItemId ?? null,
+        relativePath,
+        localPath: input.localPath ?? existing.localPath,
+        remotePathHint: input.remotePathHint ?? existing.remotePathHint,
+        localSnapshot: input.localSnapshot ?? existing.localSnapshot,
+        remoteSnapshot: input.remoteSnapshot ?? existing.remoteSnapshot,
+      }
+      await deps.conflicts.upsert(entry)
+      await updateBindingStatus(input.bindingId, "conflict")
+      return toConflictDto(entry)
+    }
     const entry: DriveSyncConflictEntryV1 = {
       id: createId("drive-sync-conflict"),
       schemaVersion: 1,
       bindingId: input.bindingId,
       driveItemId: input.driveItemId ?? null,
-      relativePath: input.relativePath,
+      relativePath,
       localPath: input.localPath ?? null,
       remotePathHint: input.remotePathHint ?? null,
       type: input.type,
@@ -1322,6 +1343,21 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await deps.conflicts.upsert(entry)
     await updateBindingStatus(input.bindingId, "conflict")
     return toConflictDto(entry)
+  }
+
+  async function findOpenConflict(input: {
+    readonly bindingId: string
+    readonly driveItemId: string | null
+    readonly relativePath: string
+    readonly type: DriveSyncConflictEntryV1["type"]
+  }): Promise<DriveSyncConflictEntryV1 | null> {
+    const conflicts = await deps.conflicts.list({ bindingId: input.bindingId })
+    return conflicts.find((conflict) =>
+      conflict.status === "open"
+      && normalizeConflictRelativePath(conflict.relativePath) === input.relativePath
+      && conflict.type === input.type
+      && conflict.driveItemId === input.driveItemId,
+    ) ?? null
   }
 
   async function setHealth(input: DriveSyncSetHealthInput): Promise<DriveSyncStateEntryV1> {
@@ -1542,6 +1578,11 @@ function formatFolderDifferenceReason(differences: readonly string[]): string {
 
 function joinRelativePath(parent: string, name: string): string {
   return parent ? path.posix.join(parent, name) : name
+}
+
+function normalizeConflictRelativePath(relativePath: string): string {
+  const normalized = path.posix.normalize(relativePath.split(/[\\/]+/u).filter(Boolean).join("/"))
+  return normalized === "." ? "" : normalized
 }
 
 function normalizeRemoteTreePath(remotePath: string, rootName: string): string {
