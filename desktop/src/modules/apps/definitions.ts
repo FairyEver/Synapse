@@ -1,4 +1,5 @@
 import { agentAppDefinition } from "../agent/app-definition"
+import { agentPersonasAppDefinition } from "../../../app-capabilities/agent-personas/renderer/app-definition"
 import { automationAppDefinition } from "../automation/app-definition"
 import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
@@ -22,6 +23,7 @@ import { isSystemAppId } from "./types"
 
 const systemAppDefinitions = [
   agentAppDefinition,
+  agentPersonasAppDefinition,
   workflowAppDefinition,
   driveAppDefinition,
   automationAppDefinition,
