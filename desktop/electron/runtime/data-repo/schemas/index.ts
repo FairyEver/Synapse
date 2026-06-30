@@ -46,6 +46,11 @@ export {
   type QuickInputSettingsEntryV1,
 } from "./quick-input"
 export {
+  agentPersonaItemsSchema,
+  type AgentPersonaItemEntryV1,
+  type AgentPersonaProviderModelEntryV1,
+} from "./agent-personas"
+export {
   reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   type SoundNotifierSettingsEntryV1,
@@ -126,6 +131,7 @@ import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSch
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
+import { agentPersonaItemsSchema } from "./agent-personas"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
@@ -169,6 +175,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   cheatCodeStatesSchema,
   quickInputItemsSchema,
   quickInputSettingsSchema,
+  agentPersonaItemsSchema,
   soundNotifierSettingsSchemaDefinition,
   secretsSchema,
   providersSchema,

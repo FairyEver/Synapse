@@ -120,6 +120,8 @@ export function sqliteIndexesFor(namespace: string): readonly string[] {
       ]
     case "app.quick-input.items":
       return ["json_extract(value, '$.sortOrder'), id"]
+    case "app.agent-personas.items":
+      return ["json_extract(value, '$.createdAt'), id"]
     default:
       return []
   }
