@@ -22,6 +22,8 @@ export interface RuntimeSessionState {
   sdkSettings?: ClaudeSDKRuntimeSettings
   additionalDirectories?: readonly string[]
   modeOverride?: string
+  mainThreadAgentName?: string
+  agentDefinitionsHash?: string
   closing?: boolean
   activeLifecycle?: TurnLifecycle
   cancelState?: {

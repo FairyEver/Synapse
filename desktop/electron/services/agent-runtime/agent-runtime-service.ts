@@ -62,6 +62,7 @@ import type {
   AgentSdkPluginSpec,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
+import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
 import {
   AgentSessionRepository,
   conversationId,
@@ -141,6 +142,8 @@ export interface AgentRuntimeServiceDeps {
     boolean | Promise<boolean>
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly prepareMessage?: (
@@ -210,6 +213,7 @@ export class AgentRuntimeService {
       sdkPlugins: deps.sdkPlugins,
       allowPluginHooks: deps.allowPluginHooks,
       sdkAgents: deps.sdkAgents,
+      sdkPersonaConfig: deps.sdkPersonaConfig,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
     })
     this.sessionLifecycle = new SessionLifecycleManager({

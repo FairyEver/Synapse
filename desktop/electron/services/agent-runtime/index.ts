@@ -22,7 +22,9 @@ import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
 import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
+import type { AgentPersonaService } from "../../../app-capabilities/agent-personas/main/service"
 import { CustomCommandRegistry } from "./command-registry"
+import { createAgentPersonaRuntimeResolver } from "./persona-runtime"
 import { validateWorkspaceDirectory } from "./session-manager"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
@@ -105,6 +107,11 @@ export {
   type AgentProjectMessageContext,
 } from "./project-contributions"
 export {
+  createAgentPersonaRuntimeResolver,
+  sdkAgentNameForPersona,
+  type ResolvedPersonaSdkConfig,
+} from "./persona-runtime"
+export {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentAttachment,
   type AgentEvent,
@@ -150,6 +157,13 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         ctx.globalRegistry,
         "core.execution-isolation",
       )
+      const agentPersonas = optionalService<AgentPersonaService>(
+        ctx.globalRegistry,
+        "core.agent-personas",
+      )
+      const personaRuntimeResolver = agentPersonas
+        ? createAgentPersonaRuntimeResolver({ listPersonas: () => agentPersonas.list() })
+        : undefined
       const customCommands = new CustomCommandRegistry({
         projectId: ctx.projectId,
         commands: ctx.dataRepo.namespace<AgentCommandEntryV1>("agent.commands"),
@@ -216,6 +230,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           isManagedKnowledgeBaseRuntimeMessage(input.message) && knowledgeBaseIngest
             ? knowledgeBaseIngest.finalizeTurn(input)
             : undefined,
+        sdkPersonaConfig: personaRuntimeResolver
+          ? (_message, conversation) => personaRuntimeResolver.resolve(conversation)
+          : undefined,
         sdkAgents: async () => ({}),
         sdkSubagentToolPolicies: async () => ({}),
       })

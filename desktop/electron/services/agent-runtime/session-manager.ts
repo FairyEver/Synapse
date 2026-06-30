@@ -24,6 +24,7 @@ import type {
   AgentSdkPluginSpec,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
+import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
 import type { AgentSessionRepository } from "./session-repository"
 import type {
   PendingPermissionState,
@@ -48,6 +49,8 @@ export interface CreateAgentLiveSessionInput {
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
+  readonly agent?: string
+  readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly additionalDirectories?: readonly string[]
@@ -85,6 +88,8 @@ export interface SessionManagerDeps {
     boolean | Promise<boolean>
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
 }
@@ -112,6 +117,8 @@ export class SessionManager {
         maxTurns: input.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS,
         plugins: input.plugins,
         allowPluginHooks: input.allowPluginHooks,
+        agent: input.agent,
+        agentDefinitionsHash: input.agentDefinitionsHash,
         agents: input.agents,
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
@@ -199,7 +206,17 @@ export class SessionManager {
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
     const sdkSettings = await this.resolveSdkSettings(providerId, env)
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
-    if (
+    const personaConfig = await Promise.resolve(this.deps.sdkPersonaConfig?.(
+      input.message,
+      input.conversation,
+    ) ?? ordinaryPersonaSdkConfig())
+    const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
+    const agents = { ...contributionAgents, ...personaConfig.agents }
+    const activeAgentName = personaConfig.activeAgentName
+    const agentDefinitionsHash = personaConfig.definitionsHash
+    const personaDefinitionsMatch = (input.state.agentDefinitionsHash ?? "") === agentDefinitionsHash
+    const activeAgentMatches = input.state.mainThreadAgentName === activeAgentName
+    const canReuseBaseSession =
       input.state.liveSession
       && input.state.liveSession.alive()
       && !input.state.liveSession.finished
@@ -207,7 +224,7 @@ export class SessionManager {
       && modeMatches
       && modelMatches
       && sdkSettingsMatch
-    ) {
+    if (canReuseBaseSession && personaDefinitionsMatch) {
       if (hasUnconfiguredAttachmentDirectories({
         cwd,
         attachments,
@@ -215,23 +232,31 @@ export class SessionManager {
       })) {
         throw new Error(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE)
       }
-      return { liveSession: input.state.liveSession, created: false }
+      if (activeAgentMatches || await this.trySwitchMainThreadAgent(input.state, activeAgentName, input.conversation.id)) {
+        return { liveSession: input.state.liveSession, created: false }
+      }
     }
 
     if (input.state.liveSession) {
-      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches || !modelMatches || !sdkSettingsMatch)) {
+      if (
+        input.state.liveSession.alive()
+        && (!providerMatches || !modeMatches || !modelMatches || !sdkSettingsMatch || !personaDefinitionsMatch)
+      ) {
         this.deps.logger?.info("Recreating agent live session.", {
           conversationId: input.conversation.id,
           providerChanged: !providerMatches,
           modeChanged: !modeMatches,
           modelChanged: !modelMatches,
           sdkSettingsChanged: !sdkSettingsMatch,
+          agentDefinitionsChanged: !personaDefinitionsMatch,
           previousProviderId: input.state.providerId,
           nextProviderId: providerId,
           previousMode: input.state.modeOverride,
           nextMode: modeOverride,
           previousModel: input.state.effectiveModel,
           nextModel: env.ANTHROPIC_MODEL,
+          previousAgentDefinitionsHash: input.state.agentDefinitionsHash,
+          nextAgentDefinitionsHash: agentDefinitionsHash,
         })
       }
       await this.closeLiveSession(input.state, input.conversation.id)
@@ -254,7 +279,9 @@ export class SessionManager {
       allowPluginHooks: await Promise.resolve(
         this.deps.allowPluginHooks?.(input.message, input.conversation) ?? false,
       ),
-      agents: await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {}),
+      agent: activeAgentName,
+      agentDefinitionsHash,
+      agents,
       subagentToolPolicies: await Promise.resolve(
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
@@ -267,6 +294,8 @@ export class SessionManager {
     input.state.effectiveModel = env.ANTHROPIC_MODEL
     input.state.sdkSettings = sdkSettings
     input.state.modeOverride = modeOverride
+    input.state.mainThreadAgentName = activeAgentName
+    input.state.agentDefinitionsHash = agentDefinitionsHash
     input.state.additionalDirectories = additionalDirectories
     this.deps.logger?.info("Created agent live session.", {
       boundary: "agent-runtime.live-session.create",
@@ -310,6 +339,40 @@ export class SessionManager {
         ...errorDiagnostic(error),
       })
       return undefined
+    }
+  }
+
+  private async trySwitchMainThreadAgent(
+    state: RuntimeSessionState,
+    activeAgentName: string | undefined,
+    conversationId: string,
+  ): Promise<boolean> {
+    const liveSession = state.liveSession
+    if (!liveSession) return false
+    if (!liveSession.setMainThreadAgent) {
+      this.deps.logger?.warn("Agent live session cannot switch main-thread agent.", {
+        boundary: "agent-runtime.live-session.agent-switch",
+        conversationId,
+        providerId: state.providerId,
+        mode: state.modeOverride,
+        sdkSessionId: liveSession.currentSessionId(),
+      })
+      return false
+    }
+    try {
+      await liveSession.setMainThreadAgent(activeAgentName ?? null)
+      state.mainThreadAgentName = activeAgentName
+      return true
+    } catch (error) {
+      this.deps.logger?.warn("Agent live session agent switch failed.", {
+        boundary: "agent-runtime.live-session.agent-switch",
+        conversationId,
+        providerId: state.providerId,
+        mode: state.modeOverride,
+        sdkSessionId: liveSession.currentSessionId(),
+        ...errorDiagnostic(error),
+      })
+      return false
     }
   }
 
@@ -366,6 +429,8 @@ export class SessionManager {
     state.liveSession = undefined
     state.providerId = undefined
     state.modeOverride = undefined
+    state.mainThreadAgentName = undefined
+    state.agentDefinitionsHash = undefined
     state.additionalDirectories = undefined
   }
 
@@ -522,6 +587,14 @@ function sdkSettingsEqual(
   right: ClaudeSDKRuntimeSettings | undefined,
 ): boolean {
   return left?.skipWebFetchPreflight === right?.skipWebFetchPreflight
+}
+
+function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {
+  return {
+    activePersonaId: null,
+    agents: {},
+    definitionsHash: "",
+  }
 }
 
 function errorDiagnostic(error: unknown): {
