@@ -872,6 +872,43 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects remote folder downloads with case-insensitive local path collisions", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const downloadDriveFile = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote spec", "utf8")
+        return { ok: true as const, path: outputPath }
+      })
+      const harness = createHarness({
+        accountService: {
+          listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
+            if (parentId === "remote-docs") {
+              return { items: [
+                { id: "remote-readme-1", name: "Readme.md", type: "file", path: "Docs/Readme.md", size: "11" },
+                { id: "remote-readme-2", name: "README.md", type: "file", path: "Docs/README.md", size: "13" },
+              ] }
+            }
+            return { items: [] }
+          }),
+          downloadDriveFile,
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        direction: "remote_to_local",
+      })).rejects.toThrow("本地无法区分")
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      await expect(harness.bindings.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("rejects remote folder downloads when the local target becomes non-empty after preview", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

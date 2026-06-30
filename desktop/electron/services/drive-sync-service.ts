@@ -32,6 +32,7 @@ import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
+import { pathCollisionKey } from "./drive-sync-paths"
 import {
   planDriveSyncLocalChanges,
   planDriveSyncRemoteChanges,
@@ -441,6 +442,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
     if (input.direction === "remote_to_local") {
       await assertRemoteToLocalTargetStillSafe(input)
+      if (input.kind === "folder") {
+        await assertRemoteFolderTreeLocallyRepresentable({
+          driveItemId: input.driveItemId,
+          driveItemName: input.driveItemName,
+          excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+        })
+      }
     }
 
     let binding = await createBinding({
@@ -609,6 +617,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
     const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName), entry]))
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
+    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, input.excludeRules)
 
     const differences: string[] = []
     for (const local of localEntries) {
@@ -730,6 +739,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function downloadInitialFolder(binding: DriveSyncBindingDto): Promise<void> {
     await mkdir(binding.localPath, { recursive: true })
+    await assertRemoteFolderTreeLocallyRepresentable({
+      driveItemId: binding.driveItemId,
+      driveItemName: binding.driveItemName,
+      excludeRules: binding.excludeRules,
+    })
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -757,6 +771,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function downloadRemoteFolderTree(binding: DriveSyncBindingDto): Promise<void> {
     const remoteEntries = await listAllRemoteTreeEntries(binding.driveItemId)
+    assertNoRemoteFolderPathCollisions(remoteEntries, binding.driveItemName, binding.excludeRules)
     for (const item of remoteEntries) {
       const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName)
       if (!relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
@@ -793,6 +808,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         })
       }
     }
+  }
+
+  async function assertRemoteFolderTreeLocallyRepresentable(input: {
+    readonly driveItemId: string
+    readonly driveItemName: string
+    readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
+  }): Promise<void> {
+    assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemName, input.excludeRules)
   }
 
   async function uploadInitialFolder(binding: DriveSyncBindingDto): Promise<string> {
@@ -1608,6 +1631,24 @@ function normalizeRemoteTreePath(remotePath: string, rootName: string): string {
   if (normalized === rootName) return ""
   const rootPrefix = `${rootName}/`
   return normalized.startsWith(rootPrefix) ? normalized.slice(rootPrefix.length) : normalized
+}
+
+function assertNoRemoteFolderPathCollisions(
+  remoteEntries: readonly DriveSyncRemoteTreeEntry[],
+  rootName: string,
+  excludeRules: DriveSyncBindingEntryV1["excludeRules"],
+): void {
+  const seen = new Map<string, string>()
+  for (const item of remoteEntries) {
+    const relativePath = normalizeRemoteTreePath(item.path, rootName)
+    if (!relativePath || isDriveSyncExcluded(relativePath, excludeRules)) continue
+    const key = pathCollisionKey(relativePath)
+    const existing = seen.get(key)
+    if (existing) {
+      throw new Error(`云盘文件夹包含本地无法区分的路径：${existing} / ${relativePath}`)
+    }
+    seen.set(key, relativePath)
+  }
 }
 
 function conflictCopyLocalPath(localPath: string): string {
