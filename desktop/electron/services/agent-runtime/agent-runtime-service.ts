@@ -935,6 +935,34 @@ export class AgentRuntimeService {
     return updated
   }
 
+  async updateSessionPersona(input: {
+    readonly conversationId: string
+    readonly personaId: string | null
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.sessionLifecycle.getSession(input.conversationId)
+    if (!conversation) throw new Error("找不到 Agent 会话。")
+    const candidateConversation = {
+      ...conversation,
+      agentConfig: {
+        ...(conversation.agentConfig ?? {}),
+        activeMainThreadPersonaId: input.personaId,
+      },
+    }
+    const resolved = await this.deps.sdkPersonaConfig?.({
+      projectId: this.deps.projectId,
+      sessionKey: conversation.sessionKey,
+      platform: conversation.platform ?? "local",
+      workspaceKey: conversation.workspaceKey,
+      workspacePath: conversation.workspacePath,
+      content: "",
+    }, candidateConversation)
+    const snapshot = input.personaId ? resolved?.snapshot : null
+    if (input.personaId && !snapshot) throw new Error("智能体不可用")
+    const updated = await this.sessionLifecycle.saveMainThreadPersona(input.conversationId, snapshot ?? null)
+    this.emitConversationUpdated(updated)
+    return updated
+  }
+
   async clearCurrentAgentSessionId(
     sessionKey: string,
     platform = "local",

@@ -1418,6 +1418,7 @@ const synapseBridge: SynapseBridge = {
     exportConversationBundle: (args) => invoke(IPC_CHANNELS.agent.exportConversationBundle)(args),
     createSession: (args) => invoke(IPC_CHANNELS.agent.createSession)(args),
     switchSession: (args) => invoke(IPC_CHANNELS.agent.switchSession)(args),
+    updateSessionPersona: (args) => invoke(IPC_CHANNELS.agent.updateSessionPersona)(args),
     deleteSession: (args) => invoke(IPC_CHANNELS.agent.deleteSession)(args),
     renameSession: (args) => invoke(IPC_CHANNELS.agent.renameSession)(args),
     send: (args) => invoke(IPC_CHANNELS.agent.send)(args),

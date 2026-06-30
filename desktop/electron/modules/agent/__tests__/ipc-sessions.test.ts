@@ -271,6 +271,61 @@ describe("agent session IPC methods", () => {
     }))
   })
 
+  it("updates a conversation persona through IPC", async () => {
+    const updateSessionPersona = vi.fn().mockResolvedValue(storedConversation({
+      agentConfig: {
+        activeMainThreadPersonaId: "builtin-zh-en-translator",
+        activeMainThreadPersonaSnapshot: {
+          id: "builtin-zh-en-translator",
+          name: "中英翻译",
+          source: "builtin",
+          definitionHash: "hash-translator",
+        },
+      },
+    }))
+    const ctx = createContext({
+      agent: { updateSessionPersona },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+    })
+
+    const result = await sessionMethods.updateSessionPersona.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-1",
+      personaId: "builtin-zh-en-translator",
+    })
+
+    expect(updateSessionPersona).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      personaId: "builtin-zh-en-translator",
+    })
+    expect(result.activeMainThreadPersonaId).toBe("builtin-zh-en-translator")
+    expect(result.activeMainThreadPersonaName).toBe("中英翻译")
+  })
+
+  it("clears a conversation persona through IPC", async () => {
+    const updateSessionPersona = vi.fn().mockResolvedValue(storedConversation())
+    const ctx = createContext({
+      agent: { updateSessionPersona },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+    })
+
+    const result = await sessionMethods.updateSessionPersona.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-1",
+      personaId: null,
+    })
+
+    expect(updateSessionPersona).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      personaId: null,
+    })
+    expect(result.activeMainThreadPersonaId).toBeUndefined()
+  })
+
   it("logs session deletion failures with conversation context", async () => {
     const deleteSession = vi.fn().mockRejectedValue(new Error("repository unavailable for message body"))
     const ctx = createContext({

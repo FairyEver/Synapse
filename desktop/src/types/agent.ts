@@ -387,6 +387,9 @@ export interface SynapseAgentSessionSummary {
   readonly agentSessionId?: string
   readonly providerId?: string
   readonly modelTier?: string
+  readonly activeMainThreadPersonaId?: string | null
+  readonly activeMainThreadPersonaName?: string
+  readonly activeMainThreadPersonaSource?: "builtin" | "user"
   readonly active: boolean
   readonly historyCount: number
   readonly createdAt: string
