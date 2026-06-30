@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DriveBrowserPage,
   DriveSingleFileReaderView,
@@ -65,9 +66,7 @@ export function DriveConsoleItemPage({
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
-      <Main fixed fluid>
-        <DriveConsoleItem itemId={itemId} surface={surface} />
-      </Main>
+      <DriveConsoleItemMain itemId={itemId} surface={surface} />
     </>
   )
 }
@@ -77,12 +76,19 @@ function DriveConsoleRoot() {
   return <DriveConsoleContent state={state} />
 }
 
-function DriveConsoleItem({ itemId, surface }: { readonly itemId: string; readonly surface: DriveBrowserSurface }) {
+function DriveConsoleItemMain({ itemId, surface }: { readonly itemId: string; readonly surface: DriveBrowserSurface }) {
   const state = useDriveConsole({ context: 'item', itemId, surface })
-  if (state.browser.status === 'ready' && shouldRenderDriveSingleFileReader(state.browser.snapshot)) {
-    return <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} />
-  }
-  return <DriveConsoleContent state={state} />
+  const fileReader = state.browser.status === 'ready' && shouldRenderDriveSingleFileReader(state.browser.snapshot)
+
+  return (
+    <Main fixed fluid className={fileReader ? 'p-0' : undefined}>
+      {fileReader ? (
+        <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} embedded />
+      ) : (
+        <DriveConsoleContent state={state} />
+      )}
+    </Main>
+  )
 }
 
 function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
@@ -181,7 +187,11 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   }
 
   return (
-    <div className='flex h-full min-h-0 flex-col gap-3'>
+    <Tabs
+      value={activeView}
+      onValueChange={(value) => setActiveView(value as DriveConsoleSystemView)}
+      className='mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-3'
+    >
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-3'>
           <h2 className='text-balance text-base font-semibold'>我的空间</h2>
@@ -200,7 +210,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
             }}
           />
           <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-            <Upload className='size-4' />
+            <Upload data-icon='inline-start' />
             上传文件
           </Button>
           <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
@@ -211,32 +221,38 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
       </div>
-      <div className='flex flex-wrap items-center gap-2'>
-        <Button type='button' variant={activeView === 'files' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('files')}>文件</Button>
-        <Button type='button' variant={activeView === 'public-assets' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('public-assets')}>公开素材</Button>
-        <Button type='button' variant={activeView === 'trash' ? 'default' : 'outline'} size='sm' onClick={() => setActiveView('trash')}>回收站</Button>
-      </div>
+      <TabsList>
+        <TabsTrigger value='files'>文件</TabsTrigger>
+        <TabsTrigger value='public-assets'>公开素材</TabsTrigger>
+        <TabsTrigger value='trash'>回收站</TabsTrigger>
+      </TabsList>
       {state.browser.status === 'loading' ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {state.browser.status === 'error' ? <div className='text-sm text-destructive'>{state.browser.message}</div> : null}
-      {state.browser.status === 'ready' && activeView === 'public-assets' ? (
-        <DrivePublicAssetsView onChanged={state.refresh} />
-      ) : null}
-      {state.browser.status === 'ready' && activeView === 'trash' ? (
-        <DriveTrashView onChanged={state.refresh} />
-      ) : null}
-      {state.browser.status === 'ready' && activeView === 'files' ? (
-        <DriveFileTable
-          snapshot={state.browser.snapshot}
-          activeView={activeView}
-          onOpenSystemView={setActiveView}
-          onDelete={setDeleteTarget}
-          onMove={setMoveTarget}
-          onPublishSite={setSiteFolder}
-          onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
-          onShare={setShareTarget}
-          onDropFiles={(files) => { void runUpload(files) }}
-        />
-      ) : null}
+      <TabsContent value='public-assets' className='min-h-0'>
+        {state.browser.status === 'ready' ? (
+          <DrivePublicAssetsView onChanged={state.refresh} />
+        ) : null}
+      </TabsContent>
+      <TabsContent value='trash' className='min-h-0'>
+        {state.browser.status === 'ready' ? (
+          <DriveTrashView onChanged={state.refresh} />
+        ) : null}
+      </TabsContent>
+      <TabsContent value='files' className='min-h-0'>
+        {state.browser.status === 'ready' ? (
+          <DriveFileTable
+            snapshot={state.browser.snapshot}
+            activeView={activeView}
+            onOpenSystemView={setActiveView}
+            onDelete={setDeleteTarget}
+            onMove={setMoveTarget}
+            onPublishSite={setSiteFolder}
+            onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
+            onShare={setShareTarget}
+            onDropFiles={(files) => { void runUpload(files) }}
+          />
+        ) : null}
+      </TabsContent>
       <Dialog open={nameDialog !== null} onOpenChange={(open) => {
         if (!open) setNameDialog(null)
       }}>
@@ -309,7 +325,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
         onCreated={refreshAfterMutation}
       />
       <DriveSitesDialog open={sitesOpen} onOpenChange={setSitesOpen} />
-    </div>
+    </Tabs>
   )
 }
 

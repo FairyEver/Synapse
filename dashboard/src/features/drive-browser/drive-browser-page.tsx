@@ -176,9 +176,8 @@ export function DriveSingleFileReaderView({
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
 }) {
-  void embedded
   return (
-    <div className='h-svh min-h-0 overflow-hidden bg-background'>
+    <div className={embedded ? 'h-full min-h-0 overflow-hidden bg-background' : 'h-svh min-h-0 overflow-hidden bg-background'}>
       <DriveRendererShell
         snapshot={snapshot}
         body

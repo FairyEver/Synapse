@@ -125,6 +125,21 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).not.toContain('公开素材')
   })
 
+  it('renders console file readers as embedded full-bleed content', async () => {
+    mockReadySnapshot(fileSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsoleItemPage itemId='file-1' surface='console' />)
+
+    const main = document.querySelector('main')
+    const reader = main?.firstElementChild
+
+    expect(main?.className).toContain('p-0')
+    expect(main?.className).not.toContain('px-4')
+    expect(reader?.className).toContain('h-full')
+    expect(reader?.className).not.toContain('h-svh')
+  })
+
   it('creates folders in the root folder and refreshes', async () => {
     const snapshot = folderSnapshot()
     const reload = vi.fn(async () => snapshot)
@@ -208,6 +223,7 @@ describe('DriveConsolePage', () => {
 
     await render(<DriveConsolePage />)
 
+    await openMoreActions()
     expect(document.body.textContent).toContain('重命名')
     expect(document.body.textContent).not.toContain('同步')
   })
@@ -315,7 +331,8 @@ describe('DriveConsolePage', () => {
     vi.mocked(driveApi.moveItem).mockResolvedValue({} as never)
     await render(<DriveConsolePage />)
 
-    await click(button('移动'))
+    await openMoreActions()
+    await click(menuItem('移动'))
     await act(async () => undefined)
     await click(button('目标'))
     await click(lastButton('移动'))
@@ -366,7 +383,7 @@ describe('DriveConsolePage', () => {
     })
     await render(<DriveConsolePage />)
 
-    await click(elementWithText('公开素材'))
+    await click(tabTrigger('公开素材'))
     await act(async () => undefined)
     expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
@@ -381,7 +398,7 @@ describe('DriveConsolePage', () => {
     })
     await render(<DriveConsolePage />)
 
-    await click(elementWithText('公开素材'))
+    await click(tabTrigger('公开素材'))
     await act(async () => undefined)
     expect(document.body.textContent).toContain('暂无公开素材')
 
@@ -400,7 +417,7 @@ describe('DriveConsolePage', () => {
     })
     await render(<DriveConsolePage />)
 
-    await click(elementWithText('回收站'))
+    await click(tabTrigger('回收站'))
     await act(async () => undefined)
     expect(driveApi.listTrash).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
@@ -448,7 +465,8 @@ describe('DriveConsolePage', () => {
     vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
     await render(<DriveConsolePage />)
 
-    await click(button('发布站点'))
+    await openMoreActions()
+    await click(menuItem('发布站点'))
     await act(async () => undefined)
     await click(button('发布'))
 
@@ -530,7 +548,11 @@ async function render(element: ReactElement) {
 async function click(element: HTMLElement | null) {
   if (!element) throw new Error('missing element')
   await act(async () => {
-    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
+    element.click()
+    await Promise.resolve()
   })
 }
 
@@ -546,8 +568,19 @@ function lastButton(text: string) {
   return buttons.at(-1) ?? null
 }
 
-function elementWithText(text: string) {
-  return Array.from(document.querySelectorAll<HTMLElement>('button, span, td, div'))
+function tabTrigger(text: string) {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-slot="tabs-trigger"]'))
+    .find((item) => item.textContent?.trim() === text)
+    ?? null
+}
+
+async function openMoreActions() {
+  const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>('button[aria-label$="更多操作"]')).at(0) ?? null
+  await click(trigger)
+}
+
+function menuItem(text: string) {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
     .find((item) => item.textContent?.trim() === text)
     ?? null
 }

@@ -1,8 +1,15 @@
 import type { DragEvent, ReactNode } from 'react'
 import type { DriveBrowserItemDto, DriveBrowserSnapshotDto } from '@synapse/shared'
-import { Image, Trash2 } from 'lucide-react'
+import { Image, MoreHorizontal, Trash2 } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -65,7 +72,7 @@ export function DriveFileTable({
             <TableHead>名称</TableHead>
             <TableHead className='w-28 text-right'>大小</TableHead>
             <TableHead className='w-40 text-right'>更新时间</TableHead>
-            <TableHead className='w-80 text-right' aria-label='操作' />
+            <TableHead className='w-56 text-right' aria-label='操作' />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -141,45 +148,56 @@ function DriveFileRow({
       </TableCell>
       <TableCell className='text-right tabular-nums text-muted-foreground'>{formatDriveBrowserSize(item)}</TableCell>
       <TableCell className='text-right tabular-nums text-muted-foreground'><RelativeTime value={item.updatedAt} className='tabular-nums' /></TableCell>
-      <TableCell className='text-right'>
-        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
-          event.stopPropagation()
-          onShare(item)
-        }}>
-          分享
-        </Button>
-        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
-          event.stopPropagation()
-          window.location.assign(item.browserUrl)
-        }}>
-          预览
-        </Button>
-        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
-          event.stopPropagation()
-          onDelete(item)
-        }}>
-          删除
-        </Button>
-        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
-          event.stopPropagation()
-          onMove(item)
-        }}>
-          移动
-        </Button>
-        {item.type === 'folder' ? (
+      <TableCell>
+        <div className='flex justify-end gap-1'>
           <Button type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
-            onPublishSite(item)
+            onShare(item)
           }}>
-            发布站点
+            分享
           </Button>
-        ) : null}
-        <Button type='button' variant='ghost' size='sm' onClick={(event) => {
-          event.stopPropagation()
-          onRename(item)
-        }}>
-          重命名
-        </Button>
+          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+            event.stopPropagation()
+            window.location.assign(item.browserUrl)
+          }}>
+            预览
+          </Button>
+          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+            event.stopPropagation()
+            onDelete(item)
+          }}>
+            删除
+          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='size-8'
+                aria-label={`${item.name} 更多操作`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuGroup>
+                {item.type === 'folder' ? (
+                  <DropdownMenuItem onClick={() => onPublishSite(item)}>
+                    发布站点
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={() => onRename(item)}>
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onMove(item)}>
+                  移动
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </TableCell>
     </TableRow>
   )
