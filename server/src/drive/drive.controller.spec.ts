@@ -197,6 +197,12 @@ describe("DriveController", () => {
     await request(app!.getHttpServer()).get("/api/drive/items").expect(401)
   })
 
+  it("requires user auth for share root image source scans", async () => {
+    await request(app!.getHttpServer())
+      .get("/api/drive/browser/shares/share-1/image-sources")
+      .expect(401)
+  })
+
   it("lists Drive changes for the authenticated user", async () => {
     changes.list.mockResolvedValue({
       items: [],
