@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import { lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -1446,6 +1446,64 @@ describe("DriveSyncService", () => {
         expect.objectContaining({ bindingId: binding.id, kind: "download", status: "succeeded" }),
       )
     } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("marks bindings as error when local scan fails before remote polling", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const unreadablePath = path.join(tempDir, "blocked")
+    try {
+      await mkdir(unreadablePath)
+      await chmod(unreadablePath, 0o000)
+      const listDriveChanges = vi.fn(async (): Promise<DriveChangeListPageDto> => ({
+        items: [{
+          id: "change-1",
+          sequence: "43",
+          itemId: "remote-spec",
+          parentId: "drive-root",
+          type: "content_updated",
+          versionId: null,
+          etag: null,
+          name: "spec.md",
+          pathHint: "/Docs/spec.md",
+          actor: "user",
+          occurredAt: "2026-06-28T00:00:00.000Z",
+        }],
+        nextCursor: "43",
+        hasMore: false,
+        resyncRequired: false,
+      }))
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "42",
+        deferWatcher: true,
+      })
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("本地变更扫描失败")
+
+      expect(listDriveChanges).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: expect.stringContaining("本地变更扫描失败"),
+      })
+    } finally {
+      await chmod(unreadablePath, 0o700).catch(() => undefined)
       await rm(tempDir, { recursive: true, force: true })
     }
   })

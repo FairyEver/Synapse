@@ -360,7 +360,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     })
     if (!rootReady) return
     const baseline = await baselineStore.listByBinding(binding.id)
-    const localChanges = await localWatcher.scanBinding({ binding, baseline }).catch(() => [])
+    let localChanges: readonly DriveSyncLocalChange[]
+    try {
+      localChanges = await localWatcher.scanBinding({ binding, baseline })
+    } catch (error) {
+      const message = `本地变更扫描失败：${errorMessage(error)}`
+      await markBindingError(binding.id, message, { emitChanged: true })
+      if (throwOnRootIssue) throw new Error(message)
+      return
+    }
     const localChangedPaths = new Set(localChanges.map((change) => change.relativePath))
     if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths })) return
     await pollDriveSyncRemoteChanges({
