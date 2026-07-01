@@ -112,16 +112,21 @@ beforeEach(() => {
       switchSession: vi.fn(async () => session),
     },
     agentPersonas: {
-      list: vi.fn(async () => [{
-        id: "builtin-zh-en-translator",
-        schemaVersion: 1,
-        name: "中英翻译",
-        description: "在中文和英文之间互译。",
-        systemPrompt: "你是中英翻译智能体。",
-        providerModel: null,
-        source: "builtin",
-        readonly: true,
-      }]),
+      list: vi.fn(async () => ({
+        status: "online",
+        items: [{
+          id: "builtin-zh-en-translator",
+          schemaVersion: 1,
+          name: "中英翻译",
+          description: "在中文和英文之间互译。",
+          systemPrompt: "你是中英翻译智能体。",
+          providerModel: null,
+          toolPolicy: { mode: "disabled" },
+          source: "builtin",
+          readonly: true,
+          version: 1,
+        }],
+      })),
       onChanged: vi.fn(() => () => {}),
     },
   }
@@ -139,6 +144,38 @@ afterEach(() => {
 })
 
 describe("useAgentChat", () => {
+  it("loads persona menu from offline cache result", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agentPersonas: {
+          list: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agentPersonas
+    bridge.list.mockResolvedValue({
+      status: "offline-cache",
+      syncedAt: "2026-07-01T00:00:00.000Z",
+      items: [cachedPersona()],
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.personas[0]?.id === "persona-cache")
+
+    expect(chat?.personas.map((item) => item.id)).toEqual(["persona-cache"])
+  })
+
   it("updates the active session persona through the bridge", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -1682,6 +1719,23 @@ function HookProbe({ onChange }: { readonly onChange: (chat: ReturnType<typeof u
     onChange(chat)
   }, [chat, onChange])
   return null
+}
+
+function cachedPersona() {
+  return {
+    id: "persona-cache",
+    schemaVersion: 1,
+    name: "缓存智能体",
+    description: "来自离线缓存。",
+    systemPrompt: "你是缓存智能体。",
+    providerModel: null,
+    toolPolicy: { mode: "disabled" },
+    source: "user",
+    readonly: false,
+    version: 1,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  }
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {

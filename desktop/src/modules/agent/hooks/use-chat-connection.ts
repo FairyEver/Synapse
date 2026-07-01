@@ -8,7 +8,6 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
-import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
@@ -201,15 +200,15 @@ function useChatConnection(
 
   const refreshPersonas = useCallback(async () => {
     const bridge = requireSynapseBridge()
-    const personas = await bridge.agentPersonas.list()
-    dispatch({ type: "SET_PERSONAS", personas })
+    const result = await bridge.agentPersonas.list()
+    dispatch({ type: "SET_PERSONAS", personas: result.items })
   }, [dispatch])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
     if (!bridge) return undefined
     void bridge.agentPersonas.list()
-      .then((personas: SynapseAgentPersona[]) => dispatch({ type: "SET_PERSONAS", personas }))
+      .then((result) => dispatch({ type: "SET_PERSONAS", personas: result.items }))
       .catch((rawError: unknown) => {
         logger.warn("Agent personas load failed.", {
           boundary: "renderer.agent.personas.load",
@@ -218,7 +217,7 @@ function useChatConnection(
         })
       })
     return bridge.agentPersonas.onChanged((event) => {
-      dispatch({ type: "SET_PERSONAS", personas: event.items })
+      dispatch({ type: "SET_PERSONAS", personas: event.result?.items ?? event.items })
     })
   }, [dispatch])
 

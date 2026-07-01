@@ -4,7 +4,6 @@ import type { AgentPersona } from "../../../app-capabilities/agent-personas/shar
 import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } from "../../runtime/data-repo"
 import type { AgentSdkAgentDefinitions } from "./project-contributions"
 
-export const AGENT_PERSONA_UNAVAILABLE_MESSAGE = "智能体不可用"
 const SDK_AGENT_PREFIX = "synapse-persona__"
 
 export type AgentPersonaRuntimeResolverDeps = {
@@ -35,7 +34,9 @@ export function createAgentPersonaRuntimeResolver(deps: AgentPersonaRuntimeResol
       return { activePersonaId: null, agents, definitionsHash }
     }
     const persona = personas.find((item) => item.id === activePersonaId)
-    if (!persona) throw new Error(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
+    if (!persona) {
+      return { activePersonaId: null, agents, definitionsHash }
+    }
     const activeAgentName = sdkAgentNameForPersona(persona.id)
     const snapshot = snapshotForPersona(persona, agents[activeAgentName])
     return {

@@ -58,13 +58,17 @@ describe("agent persona runtime resolver", () => {
     expect(resolved.agents).toHaveProperty("synapse-persona__builtin-zh-en-translator")
   })
 
-  it("throws when the active persona no longer exists", async () => {
+  it("falls back to ordinary mode when the active persona no longer exists", async () => {
     const resolver = createAgentPersonaRuntimeResolver({
       listPersonas: async () => [],
     })
 
-    await expect(resolver.resolve({
+    const resolved = await resolver.resolve({
       agentConfig: { activeMainThreadPersonaId: translator.id },
-    })).rejects.toThrow("智能体不可用")
+    })
+
+    expect(resolved.activePersonaId).toBeNull()
+    expect(resolved.activeAgentName).toBeUndefined()
+    expect(resolved.agents).toEqual({})
   })
 })
