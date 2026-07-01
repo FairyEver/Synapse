@@ -4,7 +4,7 @@ import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@syn
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { createDefaultDriveSyncExcludeRules, parseGitignoreForDriveSync } from "./drive-sync-excludes"
 import { inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
-import { normalizeLocalPath } from "./drive-sync-paths"
+import { localPathsOverlap, normalizeLocalPath } from "./drive-sync-paths"
 
 export async function previewDriveSyncBinding(input: {
   readonly driveItemId: string
@@ -141,10 +141,8 @@ function findDuplicateBindingReason(
 ): string | null {
   const active = activeBindings.filter((binding) => binding.status !== "removed")
   if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
-  const local = normalizeLocalPath(localPath)
   for (const binding of active) {
-    const bound = normalizeLocalPath(binding.localPath)
-    if (local === bound || local.startsWith(`${bound}${path.sep}`) || bound.startsWith(`${local}${path.sep}`)) {
+    if (localPathsOverlap(binding.localPath, localPath)) {
       return "本地路径已绑定。"
     }
   }

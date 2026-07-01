@@ -33,6 +33,16 @@ export function pathCollisionKey(relativePath: string): string {
   return toPosixPath(relativePath).toLowerCase()
 }
 
+export function localPathCollisionKey(localPath: string): string {
+  return pathCollisionKey(normalizeLocalPath(localPath))
+}
+
+export function localPathsOverlap(leftPath: string, rightPath: string): boolean {
+  const left = localPathCollisionKey(leftPath)
+  const right = localPathCollisionKey(rightPath)
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`)
+}
+
 function assertSafeRelativePath(relativePath: string): void {
   if (relativePath === "") return
   if (path.isAbsolute(relativePath) || /^[A-Za-z]:[\\/]/u.test(relativePath)) {

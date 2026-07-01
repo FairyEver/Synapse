@@ -99,6 +99,7 @@ describe("DriveSyncService", () => {
       kind: "folder",
       drivePathHint: "/产品文档",
       localPath: "/Users/me/docs",
+      deferWatcher: true,
     })
 
     await service.updateBindingStatus(binding.id, "error", "本地文件不存在")
@@ -288,6 +289,15 @@ describe("DriveSyncService", () => {
       kind: "folder",
       drivePathHint: "/资料",
       localPath: "/Users/me/docs",
+      deferWatcher: true,
+    })).rejects.toThrow("本地路径已绑定。")
+    await expect(service.createBinding({
+      driveItemId: "drive-item-3",
+      driveItemName: "资料",
+      kind: "folder",
+      drivePathHint: "/资料",
+      localPath: "/users/me/DOCS",
+      deferWatcher: true,
     })).rejects.toThrow("本地路径已绑定。")
   })
 

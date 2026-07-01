@@ -32,7 +32,7 @@ import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
-import { pathCollisionKey } from "./drive-sync-paths"
+import { localPathsOverlap, normalizeLocalPath, pathCollisionKey } from "./drive-sync-paths"
 import {
   planDriveSyncLocalChanges,
   planDriveSyncRemoteChanges,
@@ -222,7 +222,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function createBinding(input: DriveSyncCreateBindingInput): Promise<DriveSyncBindingDto> {
-    const localPath = normalizeRequiredString(input.localPath, "本地路径不能为空。")
+    const localPath = normalizeLocalPath(normalizeRequiredString(input.localPath, "本地路径不能为空。"))
     const driveItemId = normalizeRequiredString(input.driveItemId, "云盘条目不能为空。")
     const driveItemName = normalizeRequiredString(input.driveItemName, "云盘条目名称不能为空。")
     if (input.kind !== "file" && input.kind !== "folder") throw new Error("云盘条目类型无效。")
@@ -242,7 +242,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
       throw new Error("云盘条目已绑定。")
     }
-    if (activeBindings.some((binding) => binding.localPath === localPath)) {
+    if (activeBindings.some((binding) => localPathsOverlap(binding.localPath, localPath))) {
       throw new Error("本地路径已绑定。")
     }
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   assertInsideBindingRoot,
+  localPathCollisionKey,
+  localPathsOverlap,
   normalizeLocalPath,
   pathCollisionKey,
   resolveBindingChildPath,
@@ -28,5 +30,12 @@ describe("drive sync path utilities", () => {
 
   it("creates stable case-insensitive collision keys", () => {
     expect(pathCollisionKey("Docs/Spec.md")).toBe("docs/spec.md")
+  })
+
+  it("detects local path collisions across case variants and descendants", () => {
+    expect(localPathCollisionKey("/Users/me/Docs")).toBe(pathCollisionKey(normalizeLocalPath("/Users/me/Docs")))
+    expect(localPathsOverlap("/Users/me/Docs", "/users/me/docs")).toBe(true)
+    expect(localPathsOverlap("/Users/me/Docs", "/USERS/me/docs/Nested")).toBe(true)
+    expect(localPathsOverlap("/Users/me/Docs", "/Users/me/Other")).toBe(false)
   })
 })
