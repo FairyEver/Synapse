@@ -350,6 +350,59 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("redacts drive sync error messages before storing and exposing them", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+    })
+
+    await service.recordOperation({
+      bindingId: binding.id,
+      kind: "download",
+      status: "error",
+      driveItemId: "drive-item-1",
+      relativePath: "secret.md",
+      localPath: "/Users/me/docs/secret.md",
+      remotePathHint: "/产品文档/secret.md",
+      message: "download failed Authorization: Bearer raw-bearer token=plain-secret /Users/me/private/secret.md",
+    })
+    await service.updateBindingStatus(
+      binding.id,
+      "error",
+      "sync failed api_key=sk-drive-secret-123456 /Users/me/private/secret.md",
+    )
+    await service.setHealth({
+      health: "error",
+      lastError: "poll failed Cookie: sid=raw-cookie token=plain-secret",
+    })
+
+    const snapshot = await service.getSnapshot()
+    const persisted = {
+      bindings: await harness.bindings.list(),
+      operations: await harness.operations.list(),
+      state: await harness.state.getSingleton(),
+      snapshot,
+    }
+    const serialized = JSON.stringify(persisted)
+
+    expect(serialized).not.toContain("raw-bearer")
+    expect(serialized).not.toContain("plain-secret")
+    expect(serialized).not.toContain("sk-drive-secret-123456")
+    expect(serialized).not.toContain("raw-cookie")
+    expect(serialized).not.toContain("/Users/me/private/secret.md")
+    expect(snapshot.bindings[0]?.lastError).toContain("[redacted]")
+    expect(snapshot.operations[0]?.message).toContain("[redacted]")
+    await expect(harness.state.getSingleton()).resolves.toMatchObject({
+      health: "error",
+      lastError: expect.stringContaining("[redacted]"),
+    })
+  })
+
   it("updates an existing open conflict for the same path and type", async () => {
     const harness = createHarness()
     const service = createDriveSyncService(harness.deps)
@@ -1054,10 +1107,14 @@ describe("DriveSyncService", () => {
         direction: "remote_to_local",
       })
 
-      expect(binding).toMatchObject({ status: "error" })
+      expect(binding).toMatchObject({ status: "error", lastError: "disk denied token=[redacted]" })
       await expect(harness.operations.list()).resolves.toMatchObject([
-        { bindingId: binding.id, kind: "download", status: "error" },
+        { bindingId: binding.id, kind: "download", status: "error", message: "disk denied token=[redacted]" },
       ])
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: "disk denied token=[redacted]",
+      })
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

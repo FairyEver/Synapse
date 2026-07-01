@@ -446,7 +446,7 @@ describe("drive sync executor", () => {
     const records: unknown[] = []
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => {
-        throw new Error("disk unavailable")
+        throw new Error("disk unavailable Authorization: Bearer raw-bearer token=plain-secret /Users/me/private/secret.md")
       }),
     })
 
@@ -466,8 +466,15 @@ describe("drive sync executor", () => {
 
     await expect(namespace.list()).resolves.toEqual([])
     expect(records).toEqual([
-      expect.objectContaining({ kind: "download", status: "error", message: "disk unavailable" }),
+      expect.objectContaining({
+        kind: "download",
+        status: "error",
+        message: expect.stringContaining("[redacted]"),
+      }),
     ])
+    expect(JSON.stringify(records)).not.toContain("raw-bearer")
+    expect(JSON.stringify(records)).not.toContain("plain-secret")
+    expect(JSON.stringify(records)).not.toContain("/Users/me/private/secret.md")
   })
 })
 

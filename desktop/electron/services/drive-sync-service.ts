@@ -31,6 +31,7 @@ import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
 import { previewDriveSyncBinding, readDriveSyncGitignoreRules } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
+import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
 import { localPathsOverlap, normalizeLocalPath, pathCollisionKey } from "./drive-sync-paths"
 import {
@@ -286,7 +287,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const entry: DriveSyncBindingEntryV1 = {
       ...existing,
       status,
-      lastError,
+      lastError: sanitizeNullableDriveSyncMessage(lastError),
       updatedAt: timestamp(),
     }
     await deps.bindings.upsert(entry)
@@ -1366,7 +1367,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const entry: DriveSyncBindingEntryV1 = {
       ...existing,
       status: "error",
-      lastError,
+      lastError: sanitizeRequiredDriveSyncMessage(lastError),
       updatedAt: timestamp(),
     }
     await deps.bindings.upsert(entry)
@@ -1388,7 +1389,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       relativePath: input.relativePath,
       localPath: input.localPath ?? null,
       remotePathHint: input.remotePathHint ?? null,
-      message: input.message ?? null,
+      message: sanitizeNullableDriveSyncMessage(input.message),
       createdAt: now,
       updatedAt: now,
       startedAt: input.status === "running" ? now : null,
@@ -1466,7 +1467,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       ...current,
       health: input.health,
       lastCursor: input.lastCursor ?? current.lastCursor,
-      lastError: input.lastError ?? null,
+      lastError: sanitizeNullableDriveSyncMessage(input.lastError),
       lastStartedAt: input.health === "syncing" ? now : current.lastStartedAt,
       lastStoppedAt: input.health === "idle" || input.health === "paused" || input.health === "error"
         ? now
@@ -1572,7 +1573,7 @@ function toBindingDto(
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     lastSyncedAt: entry.lastSyncedAt,
-    lastError: override?.lastError ?? entry.lastError,
+    lastError: sanitizeNullableDriveSyncMessage(override?.lastError ?? entry.lastError),
   }
 }
 
@@ -1582,7 +1583,7 @@ function toOperationDto(entry: DriveSyncOperationEntryV1): DriveSyncOperationDto
     bindingId: entry.bindingId,
     relativePath: entry.relativePath,
     status: entry.status,
-    message: entry.message,
+    message: sanitizeNullableDriveSyncMessage(entry.message),
     updatedAt: entry.updatedAt,
   }
 }
@@ -1662,7 +1663,17 @@ function compareCreatedAsc(left: { readonly createdAt: string }, right: { readon
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "同步操作失败。"
+  return sanitizeRequiredDriveSyncMessage(error instanceof Error ? error.message : "同步操作失败。", "同步操作失败。")
+}
+
+function sanitizeNullableDriveSyncMessage(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null
+  const sanitized = sanitizeError(value)
+  return sanitized ? sanitized : null
+}
+
+function sanitizeRequiredDriveSyncMessage(value: string, fallback = "同步失败。"): string {
+  return sanitizeNullableDriveSyncMessage(value) ?? fallback
 }
 
 function operationLocalPermissionAction(kind: DriveSyncOperationEntryV1["kind"]): PermissionAction | null {

@@ -5,6 +5,7 @@ import type { DriveSyncBaselineStore } from "./drive-sync-baseline"
 import type { DriveSyncAccountService, DriveSyncRecordOperationInput } from "./drive-sync-service"
 import type { DriveSyncPlannedOperation } from "./drive-sync-planner"
 import type { DriveSyncBindingEntryV1, DriveSyncOperationEntryV1 } from "../runtime/data-repo"
+import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile } from "./drive-sync-local-snapshot"
 
 export interface DriveSyncExecutorDeps {
@@ -274,7 +275,8 @@ function requireDriveItemId(operation: DriveSyncPlannedOperation): string {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "同步操作失败。"
+  const sanitized = sanitizeError(error instanceof Error ? error.message : "同步操作失败。")
+  return sanitized || "同步操作失败。"
 }
 
 function isRemoteNotFoundError(error: unknown): boolean {
