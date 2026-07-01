@@ -444,7 +444,13 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("routes Drive site management tools", async () => {
-    const site = driveSite({ siteId: "site_public" })
+    const site = driveSite({
+      siteId: "site_public",
+      accessMode: "password",
+      urlWithPassword: "https://synapse.test/sites/site_public/?password=secret",
+      passwordEnabled: true,
+      password: "secret",
+    })
     const listPage: DriveSiteListPageDto = { items: [site], total: 1, page: drivePage() }
     const listDriveSites = vi.fn(async () => listPage)
     const updateDriveSiteAccess = vi.fn(async () => driveSite({ siteId: "site_public", accessMode: "password" }))
@@ -465,7 +471,18 @@ describe("createDriveCapabilityDispatcher", () => {
       limit: 5,
       search: "原型",
       status: "active",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: listPage, total: 1 })
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        ...listPage,
+        items: [{
+          ...site,
+          urlWithPassword: site.url,
+          password: null,
+        }],
+      },
+      total: 1,
+    })
     await expect(dispatcher.dispatch("drive.site.update_access", {
       siteId: "site_public",
       accessMode: "password",

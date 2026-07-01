@@ -380,7 +380,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           }))
         case "drive.site.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
-            const sites = await deps.accountService.listDriveSites(parseDriveSiteListInput(params))
+            const sites = sanitizeDriveSiteList(await deps.accountService.listDriveSites(parseDriveSiteListInput(params)))
             return { ok: true, data: sites, total: sites.total }
           })
         case "drive.site.update_access":
@@ -934,6 +934,17 @@ function driveReorganizationMoveCorrelation(value: unknown): Array<{
 }
 
 function sanitizeDriveShareList(page: DriveShareListPageDto): DriveShareListPageDto {
+  return {
+    ...page,
+    items: page.items.map((item) => ({
+      ...item,
+      urlWithPassword: item.url,
+      password: null,
+    })),
+  }
+}
+
+function sanitizeDriveSiteList(page: DriveSiteListPageDto): DriveSiteListPageDto {
   return {
     ...page,
     items: page.items.map((item) => ({

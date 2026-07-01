@@ -97,6 +97,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Do not provide a password value; Synapse generates it and returns it in the result.
    - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.
+   - Use the `app_drive_site_create` or `app_drive_site_update_access` result when the user needs a newly generated site password. `app_drive_site_list` lists existing sites without returning passwords.
 12. If a folder needs to exist first, call `app_drive_folder_create`, then pass the returned folder id as `parentId`.
 13. To organize the user's Drive, call `app_drive_stats_get` and `app_drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
 14. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `app_drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
@@ -108,7 +109,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 
 ## Safety
 
-Never reveal COS AK, SK, Authorization headers, local secrets, share passwords from list results, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
+Never reveal COS AK, SK, Authorization headers, local secrets, share or site passwords from list results, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
 
 Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 

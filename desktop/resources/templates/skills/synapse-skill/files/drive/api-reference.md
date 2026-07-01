@@ -129,7 +129,7 @@ Input:
 
 Output includes `linkType`, `access`, `root`, and `ref`. When `access.status` is `password_required`, `root.type` may be `protected` and the real file/folder shape is intentionally hidden until a valid password is supplied.
 
-Raw MCP or Codex `--json` event streams may include tool arguments. Do not save or quote logs that contain share passwords.
+Raw MCP or Codex `--json` event streams may include tool arguments. Do not save or quote logs that contain share or site passwords.
 
 ### `app_drive_link_list`
 
@@ -253,6 +253,11 @@ Input:
 - `limit` optional.
 - `search` optional: match site name, site id, source folder, or entry path.
 - `status` optional: `active`, `disabled`, `expired`, `deleted`, `failed`, or `all`.
+
+Output:
+
+- Returns published site metadata. List results do not include historical passwords: `password` is `null`, and `urlWithPassword` is the same as `url`.
+- Use `app_drive_site_create` or `app_drive_site_update_access` when the user needs the newly generated password for a specific site.
 
 ### `app_drive_site_update_access`
 
@@ -501,6 +506,6 @@ Input:
 ## Safety Notes
 
 - Public asset access logs are admin-only and are not available through MCP.
-- Do not reveal COS AK, SK, Authorization headers, local secrets, share passwords from list results, or presigned upload URLs.
+- Do not reveal COS AK, SK, Authorization headers, local secrets, share or site passwords from list results, or presigned upload URLs.
 - Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 - Use `app_drive_reorganization_preview` before `app_drive_reorganization_apply`; apply only with the returned `planId`.
