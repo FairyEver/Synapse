@@ -1021,6 +1021,53 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("downloads a nested remote folder without writing cloud ancestors into the local root", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
+            if (parentId === "remote-docs") {
+              return { items: [
+                { id: "remote-assets", name: "assets", type: "folder", path: "Projects/Docs/assets", size: "0" },
+                { id: "remote-logo", name: "logo.txt", type: "file", path: "Projects/Docs/assets/logo.txt", size: "4" },
+                { id: "remote-spec", name: "spec.md", type: "file", path: "Projects/Docs/spec.md", size: "4" },
+              ] }
+            }
+            return { items: [] }
+          }),
+          downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+            await writeFile(outputPath, itemId, "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Projects/Docs",
+        localPath: tempDir,
+        direction: "remote_to_local",
+      })
+
+      expect(binding).toMatchObject({ status: "active" })
+      await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("remote-spec")
+      await expect(readFile(path.join(tempDir, "assets", "logo.txt"), "utf8")).resolves.toBe("remote-logo")
+      await expect(readFile(path.join(tempDir, "Projects", "Docs", "spec.md"), "utf8")).rejects.toThrow()
+      await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ relativePath: "", remoteItemId: "remote-docs", kind: "folder" }),
+        expect.objectContaining({ relativePath: "assets", remoteItemId: "remote-assets", kind: "folder" }),
+        expect.objectContaining({ relativePath: "assets/logo.txt", remoteItemId: "remote-logo", kind: "file" }),
+        expect.objectContaining({ relativePath: "spec.md", remoteItemId: "remote-spec", kind: "file" }),
+      ]))
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("rejects remote folder downloads with case-insensitive local path collisions", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

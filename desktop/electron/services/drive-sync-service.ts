@@ -476,6 +476,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       const { differences } = await compareExistingFolderTree({
         driveItemId: input.driveItemId,
         driveItemName: remoteItem.name,
+        drivePathHint: input.drivePathHint ?? null,
         localPath: input.localPath,
         excludeRules: createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules),
         hashFiles: false,
@@ -514,6 +515,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         await assertRemoteFolderTreeLocallyRepresentable({
           driveItemId: input.driveItemId,
           driveItemName: input.driveItemName,
+          drivePathHint: input.drivePathHint ?? null,
           excludeRules: createBindingExcludeRules(input.excludeRules ?? [], importedGitignoreRules),
         })
       }
@@ -536,7 +538,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       } else if (input.kind === "file" && input.direction === "local_to_remote") {
         binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding))
       } else if (input.kind === "folder" && input.direction === "remote_to_local") {
-        await downloadInitialFolder(binding)
+        await downloadInitialFolder(binding, input.drivePathHint ?? null)
       } else if (input.kind === "folder" && input.direction === "local_to_remote") {
         binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding))
       }
@@ -590,6 +592,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       : await prepareExistingFolderBaselines({
         driveItemId: input.driveItemId,
         driveItemName: remoteItem.name,
+        drivePathHint: input.drivePathHint ?? null,
         localPath: input.localPath,
         excludeRules: createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules),
       })
@@ -641,6 +644,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function prepareExistingFolderBaselines(input: {
     readonly driveItemId: string
     readonly driveItemName: string
+    readonly drivePathHint?: string | null
     readonly localPath: string
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
   }): Promise<Array<Omit<Parameters<typeof baselineStore.upsert>[0], "bindingId">>> {
@@ -685,6 +689,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function compareExistingFolderTree(input: {
     readonly driveItemId: string
     readonly driveItemName: string
+    readonly drivePathHint?: string | null
     readonly localPath: string
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
     readonly hashFiles: boolean
@@ -695,9 +700,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       hashFiles: input.hashFiles,
     })
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
-    const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName), entry]))
+    const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint), entry]))
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
-    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, input.excludeRules)
+    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, input.excludeRules, input.drivePathHint)
 
     const differences: string[] = []
     for (const local of localEntries) {
@@ -826,11 +831,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return name
   }
 
-  async function downloadInitialFolder(binding: DriveSyncBindingDto): Promise<void> {
+  async function downloadInitialFolder(binding: DriveSyncBindingDto, drivePathHint?: string | null): Promise<void> {
     await createDriveSyncDirectoryTarget(binding.localPath, binding.localPath)
     await assertRemoteFolderTreeLocallyRepresentable({
       driveItemId: binding.driveItemId,
       driveItemName: binding.driveItemName,
+      drivePathHint,
       excludeRules: binding.excludeRules,
     })
     await baselineStore.upsert({
@@ -845,7 +851,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       localHash: null,
       deletedAt: null,
     })
-    await downloadRemoteFolderTree(binding)
+    await downloadRemoteFolderTree(binding, drivePathHint)
     await recordOperation({
       bindingId: binding.id,
       kind: "download",
@@ -858,11 +864,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     })
   }
 
-  async function downloadRemoteFolderTree(binding: DriveSyncBindingDto): Promise<void> {
+  async function downloadRemoteFolderTree(binding: DriveSyncBindingDto, drivePathHint?: string | null): Promise<void> {
     const remoteEntries = await listAllRemoteTreeEntries(binding.driveItemId)
-    assertNoRemoteFolderPathCollisions(remoteEntries, binding.driveItemName, binding.excludeRules)
+    assertNoRemoteFolderPathCollisions(remoteEntries, binding.driveItemName, binding.excludeRules, drivePathHint)
     for (const item of remoteEntries) {
-      const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName)
+      const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName, drivePathHint)
       if (!relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
       const localPath = path.join(binding.localPath, relativePath)
       if (item.type === "folder") {
@@ -905,9 +911,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function assertRemoteFolderTreeLocallyRepresentable(input: {
     readonly driveItemId: string
     readonly driveItemName: string
+    readonly drivePathHint?: string | null
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
   }): Promise<void> {
-    assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemName, input.excludeRules)
+    assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemName, input.excludeRules, input.drivePathHint)
   }
 
   async function uploadInitialFolder(binding: DriveSyncBindingDto): Promise<string> {
@@ -1800,21 +1807,32 @@ function normalizeConflictRelativePath(relativePath: string): string {
   return normalized === "." ? "" : normalized
 }
 
-function normalizeRemoteTreePath(remotePath: string, rootName: string): string {
-  const normalized = remotePath.split(/[\\/]+/u).filter(Boolean).join("/")
-  if (normalized === rootName) return ""
-  const rootPrefix = `${rootName}/`
-  return normalized.startsWith(rootPrefix) ? normalized.slice(rootPrefix.length) : normalized
+function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?: string | null): string {
+  const normalized = normalizeRemoteTreePathSegments(remotePath)
+  const roots = [rootPath, rootName]
+    .map((candidate) => normalizeRemoteTreePathSegments(candidate ?? ""))
+    .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index)
+  for (const root of roots) {
+    if (normalized === root) return ""
+    const rootPrefix = `${root}/`
+    if (normalized.startsWith(rootPrefix)) return normalized.slice(rootPrefix.length)
+  }
+  return normalized
+}
+
+function normalizeRemoteTreePathSegments(value: string): string {
+  return value.split(/[\\/]+/u).filter(Boolean).join("/")
 }
 
 function assertNoRemoteFolderPathCollisions(
   remoteEntries: readonly DriveSyncRemoteTreeEntry[],
   rootName: string,
   excludeRules: DriveSyncBindingEntryV1["excludeRules"],
+  rootPath?: string | null,
 ): void {
   const seen = new Map<string, string>()
   for (const item of remoteEntries) {
-    const relativePath = normalizeRemoteTreePath(item.path, rootName)
+    const relativePath = normalizeRemoteTreePath(item.path, rootName, rootPath)
     if (!relativePath || isDriveSyncExcluded(relativePath, excludeRules)) continue
     const key = pathCollisionKey(relativePath)
     const existing = seen.get(key)
