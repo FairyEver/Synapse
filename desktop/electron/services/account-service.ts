@@ -73,6 +73,9 @@ import type {
   DriveUploadPrepareResult,
   DriveUsageDto,
   ContentStoreDraftDto,
+  SkillRepositoryDetailDto,
+  SkillRepositoryImportInput,
+  SkillRepositoryItemDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
@@ -450,6 +453,29 @@ export class AccountService {
         mimeType: file.mimeType ?? null,
       })),
     }, "商店草稿保存失败。")
+  }
+
+  async listSkillRepositories(): Promise<SkillRepositoryItemDto[]> {
+    return this.getAuthenticatedJson<SkillRepositoryItemDto[]>(
+      `${apiBaseUrl()}/skill-repositories/mine`,
+      "Skill 仓库列表加载失败。",
+    )
+  }
+
+  async getSkillRepository(repositoryId: string): Promise<SkillRepositoryDetailDto> {
+    return this.getAuthenticatedJson<SkillRepositoryDetailDto>(
+      `${apiBaseUrl()}/skill-repositories/${encodeURIComponent(repositoryId)}`,
+      "Skill 仓库加载失败。",
+    )
+  }
+
+  async importSkillRepository(input: SkillRepositoryImportInput): Promise<SkillRepositoryDetailDto> {
+    return this.requestAuthenticatedJson<SkillRepositoryDetailDto>(
+      "POST",
+      `${apiBaseUrl()}/skill-repositories/import`,
+      input,
+      "Skill 仓库上传失败。",
+    )
   }
 
   async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
