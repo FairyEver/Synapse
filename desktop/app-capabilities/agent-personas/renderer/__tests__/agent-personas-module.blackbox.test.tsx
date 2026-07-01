@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const bridge = vi.hoisted(() => ({
-  list: vi.fn(async () => [] as unknown[]),
+  list: vi.fn(async () => ({ status: "online" as const, items: [] as unknown[] })),
   create: vi.fn(async (input: {
     readonly name: string
     readonly description: string
@@ -67,7 +67,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   bridge.list.mockReset()
-  bridge.list.mockResolvedValue([])
+  bridge.list.mockResolvedValue({ status: "online", items: [] })
   bridge.create.mockClear()
   bridge.update.mockClear()
   bridge.updateBuiltinModel.mockClear()
@@ -91,18 +91,21 @@ describe("AgentPersonasModule black-box behavior", () => {
   it("shows a recoverable load error and retries from the visible action", async () => {
     bridge.list
       .mockRejectedValueOnce(new Error("读取失败"))
-      .mockResolvedValueOnce([
-        {
-          id: "builtin-zh-en-translator",
-          schemaVersion: 1,
-          name: "中英翻译",
-          description: "在中文和英文之间互译，保留原意、语气和格式。",
-          systemPrompt: "你是中英翻译智能体。",
-          providerModel: null,
-          source: "builtin",
-          readonly: true,
-        },
-      ])
+      .mockResolvedValueOnce({
+        status: "online",
+        items: [
+          {
+            id: "builtin-zh-en-translator",
+            schemaVersion: 1,
+            name: "中英翻译",
+            description: "在中文和英文之间互译，保留原意、语气和格式。",
+            systemPrompt: "你是中英翻译智能体。",
+            providerModel: null,
+            source: "builtin",
+            readonly: true,
+          },
+        ],
+      })
 
     await renderModule()
 
@@ -137,18 +140,21 @@ describe("AgentPersonasModule black-box behavior", () => {
   })
 
   it("opens a built-in persona in model configuration mode", async () => {
-    bridge.list.mockResolvedValue([
-      {
-        id: "builtin-zh-en-translator",
-        schemaVersion: 1,
-        name: "中英翻译",
-        description: "在中文和英文之间互译，保留原意、语气和格式。",
-        systemPrompt: "你是中英翻译智能体。",
-        providerModel: null,
-        source: "builtin",
-        readonly: true,
-      },
-    ])
+    bridge.list.mockResolvedValue({
+      status: "online",
+      items: [
+        {
+          id: "builtin-zh-en-translator",
+          schemaVersion: 1,
+          name: "中英翻译",
+          description: "在中文和英文之间互译，保留原意、语气和格式。",
+          systemPrompt: "你是中英翻译智能体。",
+          providerModel: null,
+          source: "builtin",
+          readonly: true,
+        },
+      ],
+    })
 
     await renderModule()
     await clickButtonByLabel("配置模型：中英翻译")
