@@ -98,6 +98,8 @@ export {
   type AgentUsageSummaryV1,
   type AgentPersonaItemEntryV1,
   type AgentPersonaProviderModelEntryV1,
+  type AgentPersonaRemoteCacheEntryV1,
+  type AgentPersonaRemoteCacheUserBucketV1,
   type AgentPersonaSettingsEntryV1,
   type AutomationActiveRunStatusV1,
   type AutomationItemEntryV1,

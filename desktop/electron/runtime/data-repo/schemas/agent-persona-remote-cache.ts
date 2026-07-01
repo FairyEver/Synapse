@@ -1,10 +1,10 @@
-import { agentPersonaDtoSchema, type AgentPersonaDto } from "@synapse/shared"
 import { AGENT_PERSONAS_REMOTE_CACHE_NAMESPACE } from "../../../../app-capabilities/agent-personas/shared/capability"
+import { agentPersonaSchema, type AgentPersona } from "../../../../app-capabilities/agent-personas/shared/schema"
 import type { NamespaceSchema } from "../types"
 
 export interface AgentPersonaRemoteCacheUserBucketV1 extends Record<string, unknown> {
   syncedAt: string
-  items: AgentPersonaDto[]
+  items: AgentPersona[]
 }
 
 export interface AgentPersonaRemoteCacheEntryV1 extends Record<string, unknown> {
@@ -32,7 +32,7 @@ function isAgentPersonaRemoteCacheEntryV1(value: unknown): value is AgentPersona
     && bucket.syncedAt.trim().length > 0
     && !Number.isNaN(Date.parse(bucket.syncedAt))
     && Array.isArray(bucket.items)
-    && bucket.items.every((item) => agentPersonaDtoSchema.safeParse(item).success),
+    && bucket.items.every((item) => agentPersonaSchema.safeParse(item).success),
   )
 }
 

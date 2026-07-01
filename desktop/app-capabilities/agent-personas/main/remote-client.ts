@@ -1,10 +1,10 @@
-import { agentPersonaDtoSchema, agentPersonaListResponseSchema } from "@synapse/shared"
 import type {
   AgentPersona,
   AgentPersonaBuiltinModelUpdateInput,
   AgentPersonaCreateInput,
   AgentPersonaUpdateInput,
 } from "../shared/schema"
+import { agentPersonaSchema } from "../shared/schema"
 
 export type AgentPersonaAccountPort = {
   fetchAuthenticated(pathOrUrl: string, init?: RequestInit, errorMessage?: string): Promise<Response>
@@ -15,7 +15,7 @@ export class RemoteAgentPersonaClient {
 
   async list(): Promise<AgentPersona[]> {
     const response = await this.account.fetchAuthenticated("/agent-personas", {}, "智能体加载失败。")
-    return [...agentPersonaListResponseSchema.parse(await readJson(response)).items] as AgentPersona[]
+    return parseListResponse(await readJson(response))
   }
 
   async create(input: AgentPersonaCreateInput): Promise<AgentPersona> {
@@ -46,11 +46,22 @@ export class RemoteAgentPersonaClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }, errorMessage)
-    return agentPersonaDtoSchema.parse(await readJson(response)) as AgentPersona
+    return agentPersonaSchema.parse(await readJson(response))
   }
 }
 
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text()
   return text ? JSON.parse(text) : undefined
+}
+
+function parseListResponse(value: unknown): AgentPersona[] {
+  if (!isRecord(value) || !Array.isArray(value.items)) {
+    throw new Error("Agent persona list response is invalid.")
+  }
+  return value.items.map((item) => agentPersonaSchema.parse(item))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
