@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -1450,6 +1450,66 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("blocks remote downloads through symlinked local folders during polling", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-outside-"))
+    try {
+      await symlink(outsideDir, path.join(tempDir, "linked"), "dir")
+      const downloadDriveFile = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote", "utf8")
+        return { ok: true as const, path: outputPath }
+      })
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/linked/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile,
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("同步路径包含符号链接，已停止写入。")
+
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      await expect(readFile(path.join(outsideDir, "spec.md"), "utf8")).rejects.toThrow()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        remoteCursor: "41",
+        lastError: "同步路径包含符号链接，已停止写入。",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "error", relativePath: "linked/spec.md" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+      await rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+
   it("marks bindings as error when local scan fails before remote polling", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     const unreadablePath = path.join(tempDir, "blocked")
@@ -1615,7 +1675,7 @@ describe("DriveSyncService", () => {
         expect.objectContaining({ bindingId: binding.id, kind: "download", status: "succeeded" }),
       )
     } finally {
-      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      if (typeof service?.stopRemotePolling === "function") await service.stopRemotePolling()
       await rm(tempDir, { recursive: true, force: true })
     }
   })
@@ -1623,10 +1683,10 @@ describe("DriveSyncService", () => {
   it("does not start overlapping background remote polls", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     let service: ReturnType<typeof createDriveSyncService> | null = null
+    let resolvePoll: (page: DriveChangeListPageDto) => void = () => undefined
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "same", "utf8")
-      let resolvePoll: (page: DriveChangeListPageDto) => void = () => undefined
       const harness = createHarness({
         accountService: {
           listDriveChanges: vi.fn(() => new Promise<DriveChangeListPageDto>((resolve) => {
@@ -1657,7 +1717,8 @@ describe("DriveSyncService", () => {
         expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(2)
       })
     } finally {
-      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      resolvePoll({ items: [], nextCursor: "44", hasMore: false, resyncRequired: false })
+      if (typeof service?.stopRemotePolling === "function") await service.stopRemotePolling()
       await rm(tempDir, { recursive: true, force: true })
     }
   })
@@ -1685,7 +1746,7 @@ describe("DriveSyncService", () => {
 
       expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
     } finally {
-      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      if (typeof service?.stopRemotePolling === "function") await service.stopRemotePolling()
       await rm(tempDir, { recursive: true, force: true })
     }
   })
@@ -1722,7 +1783,7 @@ describe("DriveSyncService", () => {
         await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
       })
     } finally {
-      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      if (typeof service?.stopRemotePolling === "function") await service.stopRemotePolling()
       await rm(tempDir, { recursive: true, force: true })
     }
   })

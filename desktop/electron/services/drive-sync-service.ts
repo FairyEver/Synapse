@@ -33,7 +33,14 @@ import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
-import { localPathsOverlap, normalizeLocalPath, pathCollisionKey } from "./drive-sync-paths"
+import {
+  createDriveSyncDirectoryTarget,
+  driveSyncLocalWriteRootPath,
+  localPathsOverlap,
+  normalizeLocalPath,
+  pathCollisionKey,
+  writeDriveSyncFileTarget,
+} from "./drive-sync-paths"
 import {
   planDriveSyncLocalChanges,
   planDriveSyncRemoteChanges,
@@ -183,6 +190,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   })
   let remotePollTimer: ReturnType<typeof setInterval> | null = null
   let remotePollRunning = false
+  let remotePollPromise: Promise<void> | null = null
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindingEntries = (await deps.bindings.list())
@@ -385,14 +393,24 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   function startRemotePolling(intervalMs: number = DEFAULT_REMOTE_POLL_INTERVAL_MS): void {
     if (remotePollTimer !== null) return
     remotePollTimer = setInterval(() => {
-      void runBackgroundRemotePoll()
+      queueBackgroundRemotePoll()
     }, intervalMs)
   }
 
-  function stopRemotePolling(): void {
-    if (remotePollTimer === null) return
-    clearInterval(remotePollTimer)
-    remotePollTimer = null
+  async function stopRemotePolling(): Promise<void> {
+    if (remotePollTimer !== null) {
+      clearInterval(remotePollTimer)
+      remotePollTimer = null
+    }
+    await remotePollPromise
+  }
+
+  function queueBackgroundRemotePoll(): void {
+    if (remotePollPromise) return
+    remotePollPromise = runBackgroundRemotePoll().finally(() => {
+      remotePollPromise = null
+    })
+    void remotePollPromise
   }
 
   async function runBackgroundRemotePoll(): Promise<void> {
@@ -715,10 +733,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function downloadInitialFile(binding: DriveSyncBindingDto): Promise<void> {
-    await mkdir(path.dirname(binding.localPath), { recursive: true })
-    await deps.accountService.downloadDriveFile({ itemId: binding.driveItemId, outputPath: binding.localPath })
-    const local = await inspectDriveSyncLocalPath(binding.localPath)
-    const stats = local.kind === "file" ? await lstat(binding.localPath) : null
+    const localPath = await writeDriveSyncFileTarget(
+      driveSyncLocalWriteRootPath(binding),
+      binding.localPath,
+      (outputPath) => deps.accountService.downloadDriveFile({ itemId: binding.driveItemId, outputPath }),
+    )
+    const local = await inspectDriveSyncLocalPath(localPath)
+    const stats = local.kind === "file" ? await lstat(localPath) : null
     if (local.kind === "file") {
       localWatcher.markSelfWrite({
         bindingId: binding.id,
@@ -734,7 +755,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       remoteEtag: null,
       localSize: stats?.size ?? null,
       localMtimeMs: stats?.mtimeMs ?? null,
-      localHash: local.kind === "file" ? await hashDriveSyncFile(binding.localPath) : null,
+      localHash: local.kind === "file" ? await hashDriveSyncFile(localPath) : null,
       deletedAt: null,
     })
     await recordOperation({
@@ -806,7 +827,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function downloadInitialFolder(binding: DriveSyncBindingDto): Promise<void> {
-    await mkdir(binding.localPath, { recursive: true })
+    await createDriveSyncDirectoryTarget(binding.localPath, binding.localPath)
     await assertRemoteFolderTreeLocallyRepresentable({
       driveItemId: binding.driveItemId,
       driveItemName: binding.driveItemName,
@@ -845,7 +866,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (!relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
       const localPath = path.join(binding.localPath, relativePath)
       if (item.type === "folder") {
-        await mkdir(localPath, { recursive: true })
+        await createDriveSyncDirectoryTarget(binding.localPath, localPath)
         await baselineStore.upsert({
           bindingId: binding.id,
           relativePath,
@@ -859,9 +880,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           deletedAt: null,
         })
       } else {
-        await mkdir(path.dirname(localPath), { recursive: true })
-        await deps.accountService.downloadDriveFile({ itemId: item.id, outputPath: localPath })
-        const stats = await lstat(localPath)
+        const writtenPath = await writeDriveSyncFileTarget(
+          binding.localPath,
+          localPath,
+          (outputPath) => deps.accountService.downloadDriveFile({ itemId: item.id, outputPath }),
+        )
+        const stats = await lstat(writtenPath)
         await baselineStore.upsert({
           bindingId: binding.id,
           relativePath,
@@ -871,7 +895,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           remoteEtag: null,
           localSize: stats.size,
           localMtimeMs: stats.mtimeMs,
-          localHash: await hashDriveSyncFile(localPath),
+          localHash: await hashDriveSyncFile(writtenPath),
           deletedAt: null,
         })
       }

@@ -1,9 +1,17 @@
+import { randomUUID } from "node:crypto"
+import { lstat, mkdir, realpath, rename, rm } from "node:fs/promises"
 import path from "node:path"
 
 const PATH_OUTSIDE_BINDING_MESSAGE = "同步路径超出绑定目录。"
+const PATH_CONTAINS_SYMLINK_MESSAGE = "同步路径包含符号链接，已停止写入。"
 
 export function normalizeLocalPath(input: string): string {
   return path.resolve(input)
+}
+
+export function driveSyncLocalWriteRootPath(input: { readonly kind: "file" | "folder"; readonly localPath: string }): string {
+  const localPath = normalizeLocalPath(input.localPath)
+  return input.kind === "folder" ? localPath : path.dirname(localPath)
 }
 
 export function assertInsideBindingRoot(rootPath: string, targetPath: string): string {
@@ -27,6 +35,50 @@ export function toDriveSyncRelativePath(rootPath: string, targetPath: string): s
 export function resolveBindingChildPath(rootPath: string, relativePath: string): string {
   assertSafeRelativePath(relativePath)
   return assertInsideBindingRoot(rootPath, path.join(rootPath, relativePath))
+}
+
+export async function prepareDriveSyncTargetPath(rootPath: string, targetPath: string): Promise<string> {
+  const target = assertInsideBindingRoot(rootPath, targetPath)
+  const parent = path.dirname(target)
+  await mkdir(parent, { recursive: true })
+  await assertNoSymlinkPathComponents(rootPath, parent)
+  await assertNotExistingSymlink(target)
+  return target
+}
+
+export async function createDriveSyncDirectoryTarget(rootPath: string, targetPath: string): Promise<string> {
+  const root = normalizeLocalPath(rootPath)
+  const target = assertInsideBindingRoot(root, targetPath)
+  const parent = path.dirname(target)
+  if (target !== root) {
+    await mkdir(parent, { recursive: true })
+    await assertNoSymlinkPathComponents(root, parent)
+  }
+  await assertNotExistingSymlink(target)
+  await mkdir(target, { recursive: true })
+  await assertNoSymlinkPathComponents(root, target)
+  return target
+}
+
+export async function writeDriveSyncFileTarget(
+  rootPath: string,
+  targetPath: string,
+  writeTempFile: (tempPath: string) => Promise<unknown>,
+): Promise<string> {
+  const target = await prepareDriveSyncTargetPath(rootPath, targetPath)
+  const parent = path.dirname(target)
+  const tempPath = path.join(parent, `.synapse-drive-sync-${randomUUID()}.tmp`)
+  try {
+    await assertNotExistingSymlink(tempPath)
+    await writeTempFile(tempPath)
+    await assertNoSymlinkPathComponents(rootPath, parent)
+    await assertNotExistingSymlink(target)
+    await rename(tempPath, target)
+    return target
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 export function pathCollisionKey(relativePath: string): string {
@@ -56,4 +108,51 @@ function assertSafeRelativePath(relativePath: string): void {
 
 function toPosixPath(value: string): string {
   return value.split(path.sep).join("/")
+}
+
+async function assertNoSymlinkPathComponents(rootPath: string, targetPath: string): Promise<void> {
+  const root = normalizeLocalPath(rootPath)
+  const target = assertInsideBindingRoot(root, targetPath)
+  await assertNotExistingSymlink(root)
+  const rootRealPath = await realpath(root)
+  const relative = path.relative(root, target)
+  if (relative === "") return
+  let current = root
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment)
+    await assertExistingPathInsideRealRoot(rootRealPath, current)
+  }
+}
+
+async function assertExistingPathInsideRealRoot(rootRealPath: string, targetPath: string): Promise<void> {
+  try {
+    const stats = await lstat(targetPath)
+    if (stats.isSymbolicLink()) throw new Error(PATH_CONTAINS_SYMLINK_MESSAGE)
+    assertInsideRealRoot(rootRealPath, await realpath(targetPath))
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) return
+    throw error
+  }
+}
+
+async function assertNotExistingSymlink(targetPath: string): Promise<void> {
+  try {
+    const stats = await lstat(targetPath)
+    if (stats.isSymbolicLink()) throw new Error(PATH_CONTAINS_SYMLINK_MESSAGE)
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) return
+    throw error
+  }
+}
+
+function assertInsideRealRoot(rootRealPath: string, targetRealPath: string): void {
+  const relative = path.relative(rootRealPath, targetRealPath)
+  if (relative === "") return
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(PATH_OUTSIDE_BINDING_MESSAGE)
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code
 }

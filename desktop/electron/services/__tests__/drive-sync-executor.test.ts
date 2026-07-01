@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -51,6 +51,43 @@ describe("drive sync executor", () => {
     expect(records).toEqual([
       expect.objectContaining({ kind: "download", status: "succeeded", relativePath: "spec.md" }),
     ])
+  })
+
+  it("rejects remote file downloads through symlinked local folders", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-outside-"))
+    try {
+      await symlink(outsideDir, path.join(tempDir, "linked"), "dir")
+      const downloadDriveFile = vi.fn(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "remote", "utf8")
+        return { ok: true as const, path: outputPath }
+      })
+      const accountService = createAccountService({ downloadDriveFile })
+
+      await expect(executeDriveSyncOperation({
+        binding: binding({ localPath: tempDir }),
+        operation: operation({
+          kind: "download",
+          relativePath: "linked/spec.md",
+          driveItemId: "remote-spec",
+          localPath: path.join(tempDir, "linked", "spec.md"),
+        }),
+        baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+        accountService,
+        recordOperation: async (record) => { records.push(record) },
+        trashLocalPath: vi.fn(),
+      })).rejects.toThrow("同步路径包含符号链接，已停止写入。")
+
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      await expect(readFile(path.join(outsideDir, "spec.md"), "utf8")).rejects.toThrow()
+      await expect(namespace.list()).resolves.toEqual([])
+      expect(records).toEqual([
+        expect.objectContaining({ kind: "download", status: "error", relativePath: "linked/spec.md", message: "同步路径包含符号链接，已停止写入。" }),
+      ])
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
   })
 
   it("creates local folders for remote folder downloads", async () => {

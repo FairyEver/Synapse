@@ -1,4 +1,4 @@
-import { mkdir, lstat, rename } from "node:fs/promises"
+import { lstat, rename } from "node:fs/promises"
 import path from "node:path"
 import type { DriveSyncOperationStatus } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBaselineStore } from "./drive-sync-baseline"
@@ -7,6 +7,12 @@ import type { DriveSyncPlannedOperation } from "./drive-sync-planner"
 import type { DriveSyncBindingEntryV1, DriveSyncOperationEntryV1 } from "../runtime/data-repo"
 import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile } from "./drive-sync-local-snapshot"
+import {
+  createDriveSyncDirectoryTarget,
+  driveSyncLocalWriteRootPath,
+  prepareDriveSyncTargetPath,
+  writeDriveSyncFileTarget,
+} from "./drive-sync-paths"
 
 export interface DriveSyncExecutorDeps {
   readonly binding: DriveSyncBindingEntryV1
@@ -61,10 +67,13 @@ async function downloadRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
 }
 
 async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
-  const localPath = requireLocalPath(deps.operation)
+  const requestedLocalPath = requireLocalPath(deps.operation)
   const driveItemId = requireDriveItemId(deps.operation)
-  await mkdir(path.dirname(localPath), { recursive: true })
-  await deps.accountService.downloadDriveFile({ itemId: driveItemId, outputPath: localPath })
+  const localPath = await writeDriveSyncFileTarget(
+    driveSyncLocalWriteRootPath(deps.binding),
+    requestedLocalPath,
+    (outputPath) => deps.accountService.downloadDriveFile({ itemId: driveItemId, outputPath }),
+  )
   const stats = await lstat(localPath)
   await deps.baselineStore.upsert({
     bindingId: deps.binding.id,
@@ -81,9 +90,9 @@ async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
 }
 
 async function downloadFolder(deps: DriveSyncExecutorDeps): Promise<void> {
-  const localPath = requireLocalPath(deps.operation)
+  const requestedLocalPath = requireLocalPath(deps.operation)
   const driveItemId = requireDriveItemId(deps.operation)
-  await mkdir(localPath, { recursive: true })
+  const localPath = await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), requestedLocalPath)
   const stats = await lstat(localPath)
   await deps.baselineStore.upsert({
     bindingId: deps.binding.id,
@@ -173,8 +182,8 @@ async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
 
   const previousLocalPath = path.join(deps.binding.localPath, existing.relativePath)
   if (previousLocalPath !== localPath) {
-    await mkdir(path.dirname(localPath), { recursive: true })
-    await rename(previousLocalPath, localPath)
+    const safeLocalPath = await prepareDriveSyncTargetPath(driveSyncLocalWriteRootPath(deps.binding), localPath)
+    await rename(previousLocalPath, safeLocalPath)
   }
   const stats = await lstat(localPath)
   if (existing.kind === "folder" && stats.isDirectory()) {
