@@ -1883,6 +1883,7 @@ describe("DriveModule", () => {
       items: [{
         kind: "folder",
         folderName: "项目A",
+        directories: [{ relativePath: "docs" }],
         files: [
           { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
           { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
@@ -1954,12 +1955,45 @@ describe("DriveModule", () => {
         {
           kind: "folder",
           folderName: "项目A",
+          directories: [{ relativePath: "docs" }],
           files: [
             { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
             { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
           ],
         },
       ],
+    })
+  })
+
+  it("preserves empty directories when dropping folders", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [
+        createDirectoryTransferItem("项目A", [
+          createDirectoryEntry("empty", []),
+          createDirectoryEntry("nested", [
+            createDirectoryEntry("leaf", []),
+          ]),
+        ]),
+      ],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
     })
   })
 

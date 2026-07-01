@@ -729,11 +729,13 @@ export class AccountService {
   async prepareDriveFolderUpload(input: {
     parentId?: string | null
     folderName: string
+    directories?: Array<{ relativePath: string }>
     files: Array<{ relativePath: string; size: string; mimeType?: string | null }>
   }): Promise<DriveFolderUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveFolderUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/folder/prepare`, {
       parentId: input.parentId ?? null,
       folderName: input.folderName,
+      ...(input.directories ? { directories: input.directories.map((directory) => ({ relativePath: directory.relativePath })) } : {}),
       files: input.files.map((file) => ({
         relativePath: file.relativePath,
         size: file.size,
@@ -920,6 +922,29 @@ export class AccountService {
     const seenRelativePaths = new Set<string>()
     let skipped = 0
 
+    const directories: Array<{ relativePath: string }> = []
+    const seenDirectoryPaths = new Set<string>()
+    for (const directory of item.directories ?? []) {
+      if (!isSafeDriveRelativePath(directory.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "invalid-directory-relative-path",
+        })
+        continue
+      }
+      if (seenDirectoryPaths.has(directory.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "duplicate-directory-relative-path",
+        })
+        continue
+      }
+      seenDirectoryPaths.add(directory.relativePath)
+      directories.push({ relativePath: directory.relativePath })
+    }
+
     for (const file of item.files) {
       if (!isSafeDriveRelativePath(file.relativePath)) {
         skipped += 1
@@ -956,7 +981,7 @@ export class AccountService {
       })
     }
 
-    if (files.length === 0) return { completed: 0, failed: 0, skipped }
+    if (files.length === 0 && item.files.length > 0 && directories.length === 0) return { completed: 0, failed: 0, skipped }
     const uploadLimits = await getDriveUploadLimits()
     if (files.some((file) => file.sizeBytes > uploadLimits.maxFileBytes)) {
       return { completed: 0, failed: files.length, skipped, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
@@ -967,6 +992,7 @@ export class AccountService {
       prepared = await this.prepareDriveFolderUpload({
         parentId,
         folderName: item.folderName,
+        ...(directories.length > 0 ? { directories } : {}),
         files: files.map((file) => ({
           relativePath: file.relativePath,
           size: file.size,

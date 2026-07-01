@@ -2669,7 +2669,7 @@ function buildDriveLocalFileItems(files: readonly File[]): { readonly items: Dri
 
 async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Promise<{ readonly items: DriveLocalUploadItem[]; readonly skipped: number }> {
   assertDriveLocalUploadFileCapacity(files.length)
-  const folders = new Map<string, DriveLocalUploadFolderItem["files"]>()
+  const folders = new Map<string, { readonly files: DriveLocalUploadFolderItem["files"]; readonly directories: Set<string> }>()
   let skipped = 0
 
   for (const file of files) {
@@ -2687,20 +2687,24 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
       continue
     }
     const fileRelativePath = rest.join("/") || file.name
-    const folderFiles = folders.get(folderName) ?? []
-    folderFiles.push({
+    const folder = folders.get(folderName) ?? { files: [], directories: new Set<string>() }
+    for (const directory of parentDirectoryPaths(fileRelativePath)) {
+      folder.directories.add(directory)
+    }
+    folder.files.push({
       path,
       relativePath: fileRelativePath,
       mimeType: file.type || null,
     })
-    folders.set(folderName, folderFiles)
+    folders.set(folderName, folder)
   }
 
   return {
-    items: Array.from(folders.entries()).map(([folderName, folderFiles]) => ({
+    items: Array.from(folders.entries()).map(([folderName, folder]) => ({
       kind: "folder",
       folderName,
-      files: folderFiles,
+      directories: Array.from(folder.directories).map((relativePath) => ({ relativePath })),
+      files: folder.files,
     })),
     skipped,
   }
@@ -2718,11 +2722,21 @@ function driveLocalFileItemFromFile(file: File): DriveLocalUploadItem | null {
 }
 
 async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles: number): Promise<{ readonly item: DriveLocalUploadItem | null; readonly skipped: number }> {
-  const files = await filesFromDirectoryEntry(entry, maxFiles)
+  const folder = await folderSnapshotFromDirectoryEntry(entry, maxFiles)
   const uploadFiles: DriveLocalUploadFolderItem["files"] = []
+  const uploadDirectories: NonNullable<DriveLocalUploadFolderItem["directories"]> = []
   let skipped = 0
 
-  for (const file of files) {
+  for (const directory of folder.directories) {
+    const relativePath = normalizeSlashRelativePath(directory)
+    if (!relativePath) {
+      skipped += 1
+      continue
+    }
+    uploadDirectories.push({ relativePath })
+  }
+
+  for (const file of folder.files) {
     const path = requireSynapseBridge().account.filePathForDroppedFile(file.file)
     const relativePath = normalizeSlashRelativePath(file.relativePath)
     if (!path || !relativePath) {
@@ -2736,36 +2750,40 @@ async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDire
     })
   }
 
-  if (uploadFiles.length === 0) return { item: null, skipped }
   return {
     item: {
       kind: "folder",
       folderName: entry.name,
+      directories: uploadDirectories,
       files: uploadFiles,
     },
     skipped,
   }
 }
 
-async function filesFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles = DRIVE_LOCAL_UPLOAD_MAX_FILES): Promise<DriveDirectoryFile[]> {
+async function folderSnapshotFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles = DRIVE_LOCAL_UPLOAD_MAX_FILES): Promise<{ readonly files: DriveDirectoryFile[]; readonly directories: string[] }> {
   const files: DriveDirectoryFile[] = []
+  const directories: string[] = []
   await collectFilesFromDirectoryEntry({
+    directories,
     entry,
     files,
     maxFiles,
     prefix: "",
     depth: 0,
   })
-  return files
+  return { files, directories }
 }
 
 async function collectFilesFromDirectoryEntry({
+  directories,
   entry,
   files,
   maxFiles,
   prefix,
   depth,
 }: {
+  readonly directories: string[]
   readonly entry: DriveFileSystemDirectoryEntry
   readonly files: DriveDirectoryFile[]
   readonly maxFiles: number
@@ -2789,11 +2807,14 @@ async function collectFilesFromDirectoryEntry({
         continue
       }
       if (isDriveDirectoryEntry(child)) {
+        const relativePath = `${prefix}${child.name}`
+        directories.push(relativePath)
         await collectFilesFromDirectoryEntry({
+          directories,
           entry: child,
           files,
           maxFiles,
-          prefix: `${prefix}${child.name}/`,
+          prefix: `${relativePath}/`,
           depth: depth + 1,
         })
       }
@@ -2845,6 +2866,11 @@ function normalizeSlashRelativePath(value: string): string | null {
   if (parts.length === 0) return null
   if (parts.some((part) => part === "." || part === "..")) return null
   return parts.join("/")
+}
+
+function parentDirectoryPaths(relativePath: string): string[] {
+  const parts = relativePath.split("/").filter(Boolean)
+  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/"))
 }
 
 function assertDriveLocalUploadFileCapacity(fileCount: number): void {
@@ -3081,7 +3107,11 @@ function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLoca
 }
 
 function countDriveLocalUploadItems(items: readonly DriveLocalUploadItem[]): number {
-  return items.reduce((count, item) => count + (item.kind === "folder" ? item.files.length : 1), 0)
+  return items.reduce((count, item) => {
+    if (item.kind !== "folder") return count + 1
+    const childCount = item.files.length + (item.directories?.length ?? 0)
+    return count + Math.max(1, childCount)
+  }, 0)
 }
 
 function driveLoadError(error: unknown): DriveLoadError {

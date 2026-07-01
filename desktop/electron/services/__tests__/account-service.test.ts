@@ -641,6 +641,40 @@ describe("AccountService", () => {
     })
   })
 
+  it("keeps empty directory entries in local folder uploads", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
+      entries: [],
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(driveItem())
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
+    })).resolves.toEqual({ completed: 0, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "项目A",
+      directories: [
+        { relativePath: "empty" },
+        { relativePath: "nested/leaf" },
+      ],
+      files: [],
+    })
+    expect(service.completeDriveUpload).not.toHaveBeenCalled()
+  })
+
   it("cleans up a newly prepared folder root when every local folder upload fails", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-failed-"))
     const firstPath = path.join(dir, "a.md")

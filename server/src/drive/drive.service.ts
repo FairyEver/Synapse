@@ -768,13 +768,21 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
-    if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
+    const plannedDirectories = (input.directories ?? []).map((directory) => {
+      const parts = normalizeRelativePath(directory.relativePath)
+      const relativePath = parts.join("/")
+      return { parts, relativePath }
+    })
     const plannedFiles = input.files.map((file) => {
       const parts = normalizeRelativePath(file.relativePath)
       const relativePath = parts.join("/")
       return { file, parts, relativePath }
     })
     const seenRelativePaths = new Set<string>()
+    for (const planned of plannedDirectories) {
+      if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件夹路径重复。")
+      seenRelativePaths.add(planned.relativePath)
+    }
     for (const planned of plannedFiles) {
       if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件路径重复。")
       seenRelativePaths.add(planned.relativePath)
@@ -792,11 +800,7 @@ export class DriveService implements OnApplicationBootstrap {
         : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, root.id))
       const folderIdsByPath = new Map<string, string>([["", root.id]])
 
-      for (const planned of plannedFiles) {
-        const { file, parts, relativePath } = planned
-        const fileName = parts.at(-1)
-        if (!fileName) throw new BadRequestException("文件路径无效。")
-        const folderParts = parts.slice(0, -1)
+      const ensureRelativeFolderPath = async (folderParts: readonly string[]): Promise<string> => {
         let parentId = root.id
         let currentPath = ""
         for (const folderName of folderParts) {
@@ -811,6 +815,18 @@ export class DriveService implements OnApplicationBootstrap {
           folderIdsByPath.set(currentPath, folder.id)
           parentId = folder.id
         }
+        return parentId
+      }
+
+      for (const planned of plannedDirectories) {
+        await ensureRelativeFolderPath(planned.parts)
+      }
+
+      for (const planned of plannedFiles) {
+        const { file, parts, relativePath } = planned
+        const fileName = parts.at(-1)
+        if (!fileName) throw new BadRequestException("文件路径无效。")
+        const parentId = await ensureRelativeFolderPath(parts.slice(0, -1))
         const prepared = await this.prepareUpload(userId, {
           parentId,
           name: fileName,

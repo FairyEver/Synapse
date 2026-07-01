@@ -1,5 +1,6 @@
 import {
   type DriveFolderUploadPrepareFileInput,
+  type DriveFolderUploadPrepareDirectoryInput,
   type DriveItemDto,
   type DriveItemLifecycleStatus,
   type DrivePublicAssetDto,
@@ -51,6 +52,7 @@ export type DrivePrepareFolderUploadInput = {
   readonly parentId: string | null
   readonly folderName: string
   readonly files: readonly DriveFolderUploadPrepareFileInput[]
+  readonly directories?: readonly DriveFolderUploadPrepareDirectoryInput[]
   readonly publicAppUrl: string
 }
 

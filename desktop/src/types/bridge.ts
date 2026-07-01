@@ -143,6 +143,9 @@ export type DriveLocalUploadFileItem = {
 export type DriveLocalUploadFolderItem = {
   readonly kind: "folder"
   readonly folderName: string
+  readonly directories?: Array<{
+    readonly relativePath: string
+  }>
   readonly files: Array<{
     readonly path: string
     readonly relativePath: string

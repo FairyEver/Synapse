@@ -54,11 +54,14 @@ const prepareUploadSchema = z.object({
 const prepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   folderName: z.string().min(1).max(255),
+  directories: z.array(z.object({
+    relativePath: z.string().min(1).max(1024),
+  }).strict()).max(1000).optional(),
   files: z.array(z.object({
     relativePath: z.string().min(1).max(1024),
     size: z.string().regex(/^\d+$/u),
     mimeType: z.string().trim().max(255).nullable().optional(),
-  }).strict()).min(1).max(1000),
+  }).strict()).max(1000),
 }).strict()
 
 const folderSchema = z.object({
@@ -427,6 +430,7 @@ export class DriveUserController {
     return this.drive.prepareFolderUpload(request.user!.id, {
       parentId: parsed.parentId ?? null,
       folderName: parsed.folderName,
+      directories: parsed.directories ?? [],
       files: parsed.files.map((file) => ({
         relativePath: file.relativePath,
         size: file.size,

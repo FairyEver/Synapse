@@ -437,6 +437,7 @@ const drivePrepareUploadSchema = z.object({
 const drivePrepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   folderName: z.string(),
+  directories: z.array(z.object({ relativePath: z.string() })).optional(),
   files: z.array(z.object({
     relativePath: z.string(),
     size: z.string(),
@@ -507,11 +508,14 @@ const driveLocalUploadFileItemSchema = z.object({
 const driveLocalUploadFolderItemSchema = z.object({
   kind: z.literal("folder"),
   folderName: z.string().min(1),
+  directories: z.array(z.object({
+    relativePath: driveLocalUploadRelativePathSchema,
+  })).max(DRIVE_LOCAL_UPLOAD_MAX_FILES).optional(),
   files: z.array(z.object({
     path: z.string().min(1),
     relativePath: driveLocalUploadRelativePathSchema,
     mimeType: z.string().nullable().optional(),
-  })).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
+  })).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
 })
 
 const driveLocalUploadRequestSchema = z.object({

@@ -275,6 +275,10 @@ export interface DriveFolderUploadPrepareFileInput {
   readonly mimeType?: string | null
 }
 
+export interface DriveFolderUploadPrepareDirectoryInput {
+  readonly relativePath: string
+}
+
 export interface DriveFolderUploadPrepareResult {
   readonly root: DriveItemDto
   readonly rootCreated: boolean

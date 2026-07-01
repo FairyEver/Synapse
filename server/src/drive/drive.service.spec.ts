@@ -1557,6 +1557,35 @@ describe("DriveService", () => {
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
   })
 
+  it("prepares folder uploads with empty directory entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      directories: [
+        { relativePath: "docs/empty" },
+        { relativePath: "assets/icons" },
+      ],
+      files: [],
+      publicAppUrl: "https://synapse.test",
+    })
+
+    expect(result.root.name).toBe("交接材料")
+    expect(result.rootCreated).toBe(true)
+    expect(result.entries).toEqual([])
+    const rootChildren = await service.listItems("user-1", result.root.id)
+    expect(rootChildren.map((item) => item.name).sort()).toEqual(["assets", "docs"])
+    const docs = rootChildren.find((item) => item.name === "docs")
+    const assets = rootChildren.find((item) => item.name === "assets")
+    expect(docs).toBeDefined()
+    expect(assets).toBeDefined()
+    expect((await service.listItems("user-1", docs!.id)).map((item) => item.name)).toEqual(["empty"])
+    expect((await service.listItems("user-1", assets!.id)).map((item) => item.name)).toEqual(["icons"])
+  })
+
   it("rejects duplicate normalized folder upload paths before creating artifacts", async () => {
     const prisma = createPrismaMemory()
     const createUploadInstruction = vi.fn(async () => ({
