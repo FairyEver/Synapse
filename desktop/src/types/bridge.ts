@@ -1430,6 +1430,9 @@ export type SynapseBridge = {
         attachments?: readonly SynapseAgentBridgeAttachment[]
         clientSubmittedAt?: string
         providerId?: string
+        mainThreadPersonaId?: string | null
+        mainThreadPersonaName?: string
+        mainThreadPersonaSource?: "builtin" | "user"
       },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>

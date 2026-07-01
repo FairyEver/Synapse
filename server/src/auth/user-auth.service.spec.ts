@@ -20,6 +20,13 @@ function createPrismaMock() {
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
+      update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    userSessionRefreshToken: {
+      create: vi.fn().mockResolvedValue({ id: "refresh-token-1" }),
+      findUnique: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     desktopLoginCode: {
@@ -47,6 +54,12 @@ function createPrismaMock() {
       findUnique: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+    },
+    userSessionRefreshToken: {
+      create: vi.fn().mockResolvedValue({ id: "refresh-token-1" }),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     desktopLoginCode: {
       create: vi.fn(),
@@ -518,12 +531,15 @@ describe("UserAuthService", () => {
 
   it("records logout audits with the request ip", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue({
-      id: "session-1",
-      revokedAt: null,
-      user: { id: "user-1", email: "u@example.com" },
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      session: {
+        id: "session-1",
+        revokedAt: null,
+        user: { id: "user-1", email: "u@example.com" },
+      },
     })
-    prisma.userSession.update.mockResolvedValue({})
+    prisma.__tx.userSession.update.mockResolvedValue({})
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
@@ -531,12 +547,16 @@ describe("UserAuthService", () => {
       .resolves
       .toEqual({ ok: true })
 
-    expect(prisma.userSession.findUnique).toHaveBeenCalledWith({
+    expect(prisma.userSessionRefreshToken.findUnique).toHaveBeenCalledWith({
       where: { refreshTokenHash: hashToken("refresh-token") },
-      include: { user: { select: { id: true, email: true } } },
+      include: { session: { include: { user: { select: { id: true, email: true } } } } },
     })
-    expect(prisma.userSession.update).toHaveBeenCalledWith({
+    expect(prisma.__tx.userSession.update).toHaveBeenCalledWith({
       where: { id: "session-1" },
+      data: { revokedAt: expect.any(Date) },
+    })
+    expect(prisma.__tx.userSessionRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: "session-1", revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -552,12 +572,15 @@ describe("UserAuthService", () => {
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     try {
       const prisma = createPrismaMock()
-      prisma.userSession.findUnique.mockResolvedValue({
-        id: "session-1",
-        revokedAt: null,
-        user: { id: "user-1", email: "u@example.com" },
+      prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+        id: "token-1",
+        session: {
+          id: "session-1",
+          revokedAt: null,
+          user: { id: "user-1", email: "u@example.com" },
+        },
       })
-      prisma.userSession.update.mockResolvedValue({})
+      prisma.__tx.userSession.update.mockResolvedValue({})
       const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit token=secret failed")) }
       const service = createService(prisma, auditLog)
 
@@ -565,7 +588,7 @@ describe("UserAuthService", () => {
         .resolves
         .toEqual({ ok: true })
 
-      expect(prisma.userSession.update).toHaveBeenCalledWith({
+      expect(prisma.__tx.userSession.update).toHaveBeenCalledWith({
         where: { id: "session-1" },
         data: { revokedAt: expect.any(Date) },
       })
@@ -1071,37 +1094,104 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("rejects refresh when another request already rotated the session token", async () => {
+  it("refreshes with a recently replaced token inside the grace window", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue({
-      id: "session-1",
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      sessionId: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
-      revokedAt: null,
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "active",
+      replacedAt: new Date("2026-06-30T10:00:00.000Z"),
+      graceExpiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      revokedAt: null,
+      session: {
+        id: "session-1",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "active",
+        },
       },
     })
-    prisma.userSession.updateMany.mockResolvedValue({ count: 0 })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    const result = await service.refresh({ refreshToken: "refresh-token" }, "203.0.113.27")
+
+    expect(result.accessToken).toEqual(expect.any(String))
+    expect(result.refreshToken).toEqual(expect.any(String))
+    expect(prisma.userSessionRefreshToken.findUnique).toHaveBeenCalledWith({
+      where: { refreshTokenHash: hashToken("refresh-token") },
+      include: { session: { include: { user: true } } },
+    })
+    expect(prisma.__tx.userSessionRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        sessionId: "session-1",
+        refreshTokenHash: hashToken("refresh-token"),
+        revokedAt: null,
+      },
+      data: {
+        replacedAt: expect.any(Date),
+        graceExpiresAt: expect.any(Date),
+      },
+    })
+    expect(prisma.__tx.userSessionRefreshToken.create).toHaveBeenCalledWith({
+      data: {
+        sessionId: "session-1",
+        refreshTokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    })
+    expect(prisma.__tx.userSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "session-1",
+        revokedAt: null,
+      },
+      data: expect.objectContaining({
+        expiresAt: expect.any(Date),
+        lastUsedAt: expect.any(Date),
+      }),
+    })
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("rejects replaced refresh tokens after the grace window with a stable code", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      sessionId: "session-1",
+      refreshTokenHash: hashToken("refresh-token"),
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      replacedAt: new Date("2000-01-01T00:00:00.000Z"),
+      graceExpiresAt: new Date("2000-01-02T00:00:00.000Z"),
+      revokedAt: null,
+      session: {
+        id: "session-1",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "active",
+        },
+      },
+    })
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.27"))
       .rejects
-      .toThrow("未登录或登录已过期。")
-
-    expect(prisma.userSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        id: "session-1",
-        refreshTokenHash: hashToken("refresh-token"),
-        revokedAt: null,
-      },
-    }))
+      .toMatchObject({
+        response: expect.objectContaining({ code: "refresh_invalid" }),
+      })
+    expect(prisma.userSessionRefreshToken.create).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "u@example.com",
-      action: "user.refresh.race_lost",
+      action: "user.refresh.invalid",
       targetType: "user",
       targetId: "user-1",
       ipAddress: "203.0.113.27",
@@ -1110,13 +1200,15 @@ describe("UserAuthService", () => {
 
   it("records invalid refresh token attempts with the request ip", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue(null)
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "invalid-token" }, "203.0.113.28"))
       .rejects
-      .toThrow("未登录或登录已过期。")
+      .toMatchObject({
+        response: expect.objectContaining({ code: "refresh_invalid" }),
+      })
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "unknown",
@@ -1130,15 +1222,24 @@ describe("UserAuthService", () => {
 
   it("records revoked refresh token attempts with the request ip", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue({
-      id: "session-1",
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      sessionId: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
       revokedAt: new Date("2026-05-24T00:00:00.000Z"),
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "active",
+      replacedAt: null,
+      graceExpiresAt: null,
+      session: {
+        id: "session-1",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "active",
+        },
       },
     })
     const auditLog = { record: vi.fn() }
@@ -1160,15 +1261,24 @@ describe("UserAuthService", () => {
 
   it("records expired refresh token attempts with the request ip", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue({
-      id: "session-1",
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      sessionId: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
       revokedAt: null,
       expiresAt: new Date("2000-01-01T00:00:00.000Z"),
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "active",
+      replacedAt: null,
+      graceExpiresAt: null,
+      session: {
+        id: "session-1",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "active",
+        },
       },
     })
     const auditLog = { record: vi.fn() }
@@ -1190,15 +1300,24 @@ describe("UserAuthService", () => {
 
   it("records disabled user refresh attempts with the request ip", async () => {
     const prisma = createPrismaMock()
-    prisma.userSession.findUnique.mockResolvedValue({
-      id: "session-1",
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      id: "token-1",
+      sessionId: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
       revokedAt: null,
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "disabled",
+      replacedAt: null,
+      graceExpiresAt: null,
+      session: {
+        id: "session-1",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "disabled",
+        },
       },
     })
     const auditLog = { record: vi.fn() }

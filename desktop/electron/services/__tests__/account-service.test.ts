@@ -2310,10 +2310,35 @@ describe("AccountService", () => {
     })
   })
 
-  it("clears stored credentials when refresh returns 401", async () => {
+  it("keeps stored credentials and enters offline when refresh returns an unknown 401", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: vi.fn(async (url) => {
         if (String(url).endsWith("/auth/refresh")) return jsonResponse({ message: "expired" }, 401)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+  })
+
+  it("clears stored credentials when refresh returns an explicit expired code", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) {
+          return jsonResponse({ code: "refresh_expired", message: "expired" }, 401)
+        }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
     })
@@ -2368,7 +2393,7 @@ describe("AccountService", () => {
           refreshCount += 1
           return refreshCount === 1
             ? jsonResponse({ error: "deploying" }, 503)
-            : jsonResponse({ message: "expired" }, 401)
+            : jsonResponse({ code: "refresh_expired", message: "expired" }, 401)
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2435,11 +2460,12 @@ describe("AccountService", () => {
     })
     await namespace.setSingleton({ refreshToken: "secret-refresh-old" })
 
-    await service.refreshFromStorage()
+    await service.refreshFromStorage({ reason: "startup" })
     await service.logout()
 
     expect(accountLogger.info).toHaveBeenCalledWith("Desktop account refreshed from storage.", {
       operation: "refreshFromStorage",
+      reason: "startup",
       status: "authenticated",
       userId: "u1",
       teamCount: 0,
@@ -2452,6 +2478,26 @@ describe("AccountService", () => {
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-access")
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh-old")
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh-new")
+  })
+
+  it("logs refresh failure reason and HTTP status without leaking tokens", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) return jsonResponse({ error: "deploying" }, 503)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "secret-refresh-old", lastProfile: storedProfile })
+
+    await service.refreshFromStorage({ reason: "startup" })
+
+    expect(accountLogger.warn).toHaveBeenCalledWith("Account refresh failed.", expect.objectContaining({
+      operation: "refreshFromStorage",
+      reason: "startup",
+      status: "failed",
+      httpStatus: 503,
+    }))
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-refresh-old")
   })
 
   it("does not report logged out when local credential cleanup fails", async () => {

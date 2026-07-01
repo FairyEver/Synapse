@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+import type { AgentDefinition, Options } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
 import type { PublishedAgentCommand } from "./command-registry"
 import type { RegisteredPromptCommand } from "./command-router"
@@ -18,6 +18,8 @@ export type AgentSdkPluginSpec = {
 export type AgentSdkAgentDefinition = AgentDefinition
 
 export type AgentSdkAgentDefinitions = Record<string, AgentSdkAgentDefinition>
+
+export type AgentSdkSystemPrompt = Options["systemPrompt"]
 
 export type AgentSdkSubagentToolPolicy = {
   readonly allowedWriteRoots?: readonly string[]

@@ -231,7 +231,14 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
             ? knowledgeBaseIngest.finalizeTurn(input)
             : undefined,
         sdkPersonaConfig: personaRuntimeResolver
-          ? (_message, conversation) => personaRuntimeResolver.resolve(conversation)
+          ? (message, conversation) => personaRuntimeResolver.resolve({
+            agentConfig: message.mainThreadPersonaId === undefined
+              ? conversation.agentConfig
+              : {
+                ...(conversation.agentConfig ?? {}),
+                activeMainThreadPersonaId: message.mainThreadPersonaId,
+              },
+          })
           : undefined,
         sdkAgents: async () => ({}),
         sdkSubagentToolPolicies: async () => ({}),

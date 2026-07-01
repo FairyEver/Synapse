@@ -52,6 +52,7 @@ export class LiveConnectionService {
   private reconnectAttempt = 0
   private connectionGeneration = 0
   private closedIntentionally = false
+  private authenticatedAccountUserId: string | null = null
   private state: SynapseLiveState = {
     status: "unauthenticated",
     clientInstanceId: null,
@@ -88,6 +89,7 @@ export class LiveConnectionService {
 
   handleAccountState(state: SynapseAccountState): void {
     if (state.status !== "authenticated") {
+      this.authenticatedAccountUserId = null
       this.closeSocket("unauthenticated")
       this.setState({
         status: "unauthenticated",
@@ -99,6 +101,13 @@ export class LiveConnectionService {
       return
     }
 
+    const nextUserId = state.profile.user.id
+    const isSameAccount = this.authenticatedAccountUserId === nextUserId
+    this.authenticatedAccountUserId = nextUserId
+    if (isSameAccount && (this.socket || this.reconnectTimer || this.state.status === "connected" || this.state.status === "reconnecting")) {
+      return
+    }
+
     this.startConnect()
   }
 
@@ -106,7 +115,7 @@ export class LiveConnectionService {
     const generation = this.nextConnectionGeneration()
     let token = this.accountService.getAccessTokenForLive()
     if (!token) {
-      await this.accountService.refreshFromStorage()
+      await this.accountService.refreshFromStorage({ reason: "live-auth-failure" })
       if (!this.isCurrentGeneration(generation)) return
       token = this.accountService.getAccessTokenForLive()
       if (!token) {
@@ -417,7 +426,7 @@ export class LiveConnectionService {
       lastError: "登录已过期，正在重新连接",
     })
 
-    void this.accountService.refreshFromStorage()
+    void this.accountService.refreshFromStorage({ reason: "live-auth-failure" })
       .then(() => {
         if (!this.isCurrentGeneration(generation)) return
         if (!this.accountService.getAccessTokenForLive()) {

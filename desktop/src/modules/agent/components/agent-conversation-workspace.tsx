@@ -132,6 +132,12 @@ type DirectSendTrackInput = {
   readonly commandName?: string
 }
 
+type MainThreadPersonaSendSnapshot = {
+  readonly mainThreadPersonaId: string | null
+  readonly mainThreadPersonaName: string
+  readonly mainThreadPersonaSource?: "builtin" | "user"
+}
+
 function AgentConversationWorkspace({
   session,
   project,
@@ -154,8 +160,12 @@ function AgentConversationWorkspace({
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [isExportingConversation, setIsExportingConversation] = useState(false)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
+  const [composerPersonaId, setComposerPersonaId] = useState<string | null>(
+    session.activeMainThreadPersonaId ?? null,
+  )
   const pendingMessageIdRef = useRef(0)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
+  const personaChangeSeqRef = useRef(0)
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
@@ -177,6 +187,12 @@ function AgentConversationWorkspace({
   const [conversationRolloverPromptNow, setConversationRolloverPromptNow] = useState(() => Date.now())
   const canManageKnowledgeSources = canUseManagedKnowledgeBase(project)
   const quickInputItems = useQuickInputItems(quickInputs)
+  const composerPersona = chat.personas.find((item) => item.id === composerPersonaId)
+  const composerPersonaName = composerPersona?.name ?? "普通"
+
+  useEffect(() => {
+    setComposerPersonaId(session.activeMainThreadPersonaId ?? null)
+  }, [session.activeMainThreadPersonaId, session.id])
 
   useEffect(() => {
     setConversationRolloverPromptNow(Date.now())
@@ -213,6 +229,9 @@ function AgentConversationWorkspace({
     setPendingMessages((current) => replacePendingMessage(current, sendingMessage))
     void chat.sendMessage(sendingMessage.content, sendingMessage.target, {
       attachments: sendingMessage.attachments,
+      mainThreadPersonaId: sendingMessage.mainThreadPersonaId,
+      mainThreadPersonaName: sendingMessage.mainThreadPersonaName,
+      mainThreadPersonaSource: sendingMessage.mainThreadPersonaSource,
     }).then((sent) => {
       setPendingMessages((current) => sent
         ? removePendingMessage(current, sendingMessage.id)
@@ -224,6 +243,7 @@ function AgentConversationWorkspace({
     content: string,
     messageTarget: PendingMessageTarget,
     attachments: readonly AgentDraftAttachment[] = [],
+    personaSnapshot: MainThreadPersonaSendSnapshot,
   ): boolean => {
     if (pendingMessages.length >= MAX_PENDING_QUEUE_SIZE) {
       toast("待发送队列已满，请等待当前消息发送完成")
@@ -238,10 +258,21 @@ function AgentConversationWorkspace({
         attachments,
         target: messageTarget,
         createdAt: new Date().toISOString(),
+        mainThreadPersonaId: personaSnapshot.mainThreadPersonaId,
+        mainThreadPersonaName: personaSnapshot.mainThreadPersonaName,
+        mainThreadPersonaSource: personaSnapshot.mainThreadPersonaSource,
       }),
     ])
     return true
   }
+
+  const currentPersonaSnapshot = (): MainThreadPersonaSendSnapshot => ({
+    mainThreadPersonaId: composerPersonaId,
+    mainThreadPersonaName: composerPersonaName,
+    mainThreadPersonaSource: composerPersonaId
+      ? (composerPersona?.source ?? session.activeMainThreadPersonaSource ?? "user")
+      : undefined,
+  })
 
   const submitContent = async (
     content: string,
@@ -268,12 +299,13 @@ function AgentConversationWorkspace({
       setDraft("")
     }
     stick.forcePin()
+    const personaSnapshot = currentPersonaSnapshot()
     if (chat.sending) {
-      return queueMessage(content, target, attachments)
+      return queueMessage(content, target, attachments, personaSnapshot)
     }
     const sent = attachments.length > 0
-      ? await chat.sendMessage(content, target, { attachments })
-      : await chat.sendMessage(content, target)
+      ? await chat.sendMessage(content, target, { attachments, ...personaSnapshot })
+      : await chat.sendMessage(content, target, personaSnapshot)
     if (!sent && preserveDraft) {
       toast.error("发送失败")
       return false
@@ -489,11 +521,12 @@ function AgentConversationWorkspace({
       sending: chat.sending,
     })
     stick.forcePin()
+    const personaSnapshot = currentPersonaSnapshot()
     if (chat.sending) {
-      queueMessage(content, target)
+      queueMessage(content, target, [], personaSnapshot)
       return
     }
-    const sent = await chat.sendMessage(content, target)
+    const sent = await chat.sendMessage(content, target, personaSnapshot)
     if (!sent) {
       toast.error("发送失败")
     }
@@ -666,9 +699,16 @@ function AgentConversationWorkspace({
         permissionMode={selectedPermissionMode}
         quickInputs={quickInputItems}
         personaItems={chat.personas}
-        activePersonaId={session.activeMainThreadPersonaId ?? null}
+        activePersonaId={composerPersonaId}
         onPersonaChange={(personaId) => {
-          void chat.updateSessionPersona(session, personaId)
+          const previousPersonaId = composerPersonaId
+          personaChangeSeqRef.current += 1
+          const changeSeq = personaChangeSeqRef.current
+          setComposerPersonaId(personaId)
+          void chat.updateSessionPersona(session, personaId).then((updated) => {
+            if (changeSeq !== personaChangeSeqRef.current) return
+            if (!updated) setComposerPersonaId(previousPersonaId)
+          })
         }}
         onPermissionModeChange={(nextMode) => chat.setPermissionMode(nextMode, target)}
         onCreatePermissionModeSession={(nextMode) => {

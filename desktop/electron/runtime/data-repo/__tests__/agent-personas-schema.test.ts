@@ -17,12 +17,47 @@ describe("agent persona DataRepository schema", () => {
       description: "整理产品判断和下一步。",
       systemPrompt: "你是产品顾问，先给结论，再列原因。",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
+      toolPolicy: {
+        mode: "allowlist",
+        allowedTools: ["Read", "mcp__synapse-mcp__database_query"],
+      },
       source: "user",
       createdAt: "2026-06-30T00:00:00.000Z",
       updatedAt: "2026-06-30T00:00:00.000Z",
     }
 
     expect(agentPersonaItemsSchema.validate(entry)).toBe(true)
+  })
+
+  it("accepts legacy user persona records without tool policy", () => {
+    const entry: AgentPersonaItemEntryV1 = {
+      id: "persona-legacy",
+      schemaVersion: 1,
+      name: "旧智能体",
+      description: "旧版本创建。",
+      systemPrompt: "你是旧智能体。",
+      providerModel: null,
+      source: "user",
+      createdAt: "2026-06-30T00:00:00.000Z",
+      updatedAt: "2026-06-30T00:00:00.000Z",
+    }
+
+    expect(agentPersonaItemsSchema.validate(entry)).toBe(true)
+  })
+
+  it("rejects invalid tool policy records", () => {
+    expect(agentPersonaItemsSchema.validate({
+      id: "persona-1",
+      schemaVersion: 1,
+      name: "产品顾问",
+      description: "整理产品判断。",
+      systemPrompt: "你是产品顾问。",
+      providerModel: null,
+      toolPolicy: { mode: "invalid", allowedTools: [] },
+      source: "user",
+      createdAt: "2026-06-30T00:00:00.000Z",
+      updatedAt: "2026-06-30T00:00:00.000Z",
+    })).toBe(false)
   })
 
   it("rejects blank required fields and builtin records", () => {

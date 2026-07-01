@@ -851,7 +851,7 @@ export const accountIpcModule: IpcModule = {
       channel: "synapse:account:refresh",
       request: z.void(),
       response: accountStateSchema,
-      handler: async () => accountService.refreshFromStorage(),
+      handler: async () => accountService.refreshFromStorage({ reason: "manual" }),
     },
     logout: {
       kind: "invoke",

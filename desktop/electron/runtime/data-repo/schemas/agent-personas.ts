@@ -3,7 +3,10 @@ import {
   AGENT_PERSONAS_ITEMS_NAMESPACE,
   AGENT_PERSONAS_SETTINGS_NAMESPACE,
 } from "../../../../app-capabilities/agent-personas/shared/capability"
-import type { AgentPersonaModelTier } from "../../../../app-capabilities/agent-personas/shared/schema"
+import type {
+  AgentPersonaModelTier,
+  AgentPersonaToolPolicyMode,
+} from "../../../../app-capabilities/agent-personas/shared/schema"
 
 export interface AgentPersonaProviderModelEntryV1 extends Record<string, unknown> {
   providerId: string
@@ -17,9 +20,15 @@ export interface AgentPersonaItemEntryV1 extends Record<string, unknown> {
   description: string
   systemPrompt: string
   providerModel: AgentPersonaProviderModelEntryV1 | null
+  toolPolicy?: AgentPersonaToolPolicyEntryV1
   source: "user"
   createdAt: string
   updatedAt: string
+}
+
+export interface AgentPersonaToolPolicyEntryV1 extends Record<string, unknown> {
+  mode: AgentPersonaToolPolicyMode
+  allowedTools?: string[]
 }
 
 export interface AgentPersonaSettingsEntryV1 extends Record<string, unknown> {
@@ -29,6 +38,7 @@ export interface AgentPersonaSettingsEntryV1 extends Record<string, unknown> {
 
 const noMigrations: readonly Migration[] = []
 const modelTiers = new Set(["default", "haiku", "sonnet", "opus"])
+const toolPolicyModes = new Set(["inherit", "allowlist", "none"])
 
 export const agentPersonaItemsSchema: NamespaceSchema<AgentPersonaItemEntryV1> = {
   name: AGENT_PERSONAS_ITEMS_NAMESPACE,
@@ -64,6 +74,7 @@ function isAgentPersonaItemEntryV1(value: unknown): value is AgentPersonaItemEnt
     && typeof value.systemPrompt === "string"
     && value.systemPrompt.trim().length > 0
     && isNullableProviderModel(value.providerModel)
+    && isOptionalToolPolicy(value.toolPolicy)
     && value.source === "user"
     && isIsoDateString(value.createdAt)
     && isIsoDateString(value.updatedAt)
@@ -85,6 +96,16 @@ function isNullableProviderModel(value: unknown): value is AgentPersonaProviderM
     && value.providerId.trim().length > 0
     && typeof value.modelTier === "string"
     && modelTiers.has(value.modelTier)
+}
+
+function isOptionalToolPolicy(value: unknown): value is AgentPersonaToolPolicyEntryV1 | undefined {
+  if (value === undefined) return true
+  if (!isRecord(value)) return false
+  return typeof value.mode === "string"
+    && toolPolicyModes.has(value.mode)
+    && (value.allowedTools === undefined
+      || (Array.isArray(value.allowedTools)
+        && value.allowedTools.every((tool) => typeof tool === "string" && tool.trim().length > 0)))
 }
 
 function isIsoDateString(value: unknown): value is string {

@@ -12,11 +12,13 @@ const bridge = vi.hoisted(() => ({
     readonly description: string
     readonly systemPrompt: string
     readonly providerModel?: unknown
+    readonly toolPolicy?: unknown
   }) => ({
     id: "persona-1",
     schemaVersion: 1,
     ...input,
     providerModel: input.providerModel ?? null,
+    toolPolicy: input.toolPolicy ?? { mode: "inherit", allowedTools: [] },
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -99,6 +101,7 @@ describe("AgentPersonasModule black-box behavior", () => {
           description: "在中文和英文之间互译，保留原意、语气和格式。",
           systemPrompt: "你是中英翻译智能体。",
           providerModel: null,
+          toolPolicy: { mode: "none", allowedTools: [] },
           source: "builtin",
           readonly: true,
         },
@@ -132,6 +135,7 @@ describe("AgentPersonasModule black-box behavior", () => {
       description: "处理中英文本。",
       systemPrompt: "你是翻译助手。",
       providerModel: null,
+      toolPolicy: { mode: "inherit", allowedTools: [] },
     })
     expect(toast.success).toHaveBeenCalledWith("已保存")
   })
@@ -145,6 +149,7 @@ describe("AgentPersonasModule black-box behavior", () => {
         description: "在中文和英文之间互译，保留原意、语气和格式。",
         systemPrompt: "你是中英翻译智能体。",
         providerModel: null,
+        toolPolicy: { mode: "none", allowedTools: [] },
         source: "builtin",
         readonly: true,
       },

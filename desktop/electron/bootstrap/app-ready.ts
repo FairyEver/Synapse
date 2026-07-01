@@ -120,7 +120,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
 
   await deps.startProtocolHandling(async (handledAuthCallbacks) => {
     if (handledAuthCallbacks === 0) {
-      const state = await accountService.refreshFromStorage()
+      const state = await accountService.refreshFromStorage({ reason: "startup" })
       if (state !== lastLiveAccountState) liveConnectionService.handleAccountState(state)
     }
   })

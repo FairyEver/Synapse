@@ -22,6 +22,16 @@ import {
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
+import { Badge } from "../../../src/components/ui/badge"
+import { Checkbox } from "../../../src/components/ui/checkbox"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../../../src/components/ui/command"
 import {
   Dialog,
   DialogContent,
@@ -43,6 +53,8 @@ import {
   FieldLabel,
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
+import { NativeSelect, NativeSelectOption } from "../../../src/components/ui/native-select"
+import { Popover, PopoverContent, PopoverTrigger } from "../../../src/components/ui/popover"
 import { ProviderModelSelectDialog } from "../../../src/components/provider-model-select-dialog"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
@@ -59,7 +71,11 @@ import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { useProviderModelLabel } from "../../../src/lib/provider-model"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
-import type { SynapseAgentPersona } from "../../../src/types/agent-persona"
+import type {
+  SynapseAgentPersona,
+  SynapseAgentPersonaToolPolicy,
+  SynapseAgentPersonaToolPolicyMode,
+} from "../../../src/types/agent-persona"
 import type { ProviderModelSelection } from "../../../src/types/provider-model"
 
 const logger = createRendererLogger("agent-personas.app")
@@ -71,6 +87,21 @@ const agentPersonaTabs = [
   { id: "user", label: "我的" },
 ] as const
 
+const agentPersonaToolOptions = [
+  "Read",
+  "Glob",
+  "Grep",
+  "Bash",
+  "Edit",
+  "MultiEdit",
+  "Write",
+  "NotebookEdit",
+  "WebFetch",
+  "WebSearch",
+  "TodoWrite",
+  "Agent",
+] as const
+
 type AgentPersonaFormState = {
   readonly mode: "create" | "edit" | "configureBuiltinModel"
   readonly item: SynapseAgentPersona | null
@@ -78,6 +109,8 @@ type AgentPersonaFormState = {
   readonly description: string
   readonly systemPrompt: string
   readonly providerModel: ProviderModelSelection | null
+  readonly toolPolicyMode: SynapseAgentPersonaToolPolicyMode
+  readonly allowedTools: string[]
   readonly errors: Partial<Record<"name" | "description" | "systemPrompt" | "form", string>>
 }
 
@@ -88,6 +121,8 @@ const emptyFormState: AgentPersonaFormState = {
   description: "",
   systemPrompt: "",
   providerModel: null,
+  toolPolicyMode: "inherit",
+  allowedTools: [],
   errors: {},
 }
 
@@ -143,6 +178,8 @@ export function AgentPersonasModule() {
       description: item.description,
       systemPrompt: item.systemPrompt,
       providerModel: item.providerModel,
+      toolPolicyMode: normalizeToolPolicy(item.toolPolicy).mode,
+      allowedTools: normalizeToolPolicy(item.toolPolicy).allowedTools,
       errors: {},
     })
     setFormOpen(true)
@@ -174,6 +211,7 @@ export function AgentPersonasModule() {
         providerModel: form.providerModel
           ? { providerId: form.providerModel.providerId, modelTier: form.providerModel.modelTier }
           : null,
+        toolPolicy: formToolPolicy(form),
       }
       const saved = form.mode === "configureBuiltinModel" && form.item
         ? await agentPersonasBridge.updateBuiltinModel({
@@ -313,6 +351,7 @@ function AgentPersonaTable({
         <col data-column="name" className="w-44" />
         <col data-column="description" />
         <col data-column="model" className="w-40" />
+        <col data-column="tools" className="w-36" />
         <col data-column="actions" className="w-28" />
       </colgroup>
       <TableHeader>
@@ -320,6 +359,7 @@ function AgentPersonaTable({
           <TableHead>名称</TableHead>
           <TableHead>简介</TableHead>
           <TableHead>模型</TableHead>
+          <TableHead>工具</TableHead>
           <TableHead className="text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -353,6 +393,7 @@ function AgentPersonaRow({
   readonly tab: AgentPersonaTab
 }) {
   const modelLabel = useProviderModelLabel(item.providerModel)
+  const toolPolicy = normalizeToolPolicy(item.toolPolicy)
   return (
     <TableRow>
       <TableCell className="min-w-0 align-middle font-medium">
@@ -365,6 +406,9 @@ function AgentPersonaRow({
         <span className="block truncate text-muted-foreground">
           {item.providerModel ? modelLabel || item.providerModel.providerId : "未指定"}
         </span>
+      </TableCell>
+      <TableCell className="min-w-0 align-middle">
+        <span className="block truncate text-muted-foreground">{toolPolicyLabel(toolPolicy)}</span>
       </TableCell>
       <TableCell className="align-middle text-center">
         <div className="flex justify-center gap-1">
@@ -425,44 +469,46 @@ function AgentPersonaDialog({
             <DialogTitle className="text-balance">{title}</DialogTitle>
             <DialogDescription className="sr-only">管理智能体基础配置。</DialogDescription>
           </DialogHeader>
-          <FieldGroup>
-            <Field data-invalid={Boolean(form.errors.name) || undefined}>
-              <FieldLabel htmlFor="agent-persona-name">名称</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="agent-persona-name"
-                  value={form.name}
-                  disabled={saving}
-                  readOnly={isTextReadonly}
-                  aria-invalid={Boolean(form.errors.name)}
-                  onChange={(event) => onFormChange((current) => ({
-                    ...current,
-                    name: event.target.value,
-                    errors: { ...current.errors, name: undefined, form: undefined },
-                  }))}
-                  autoFocus={!isTextReadonly}
-                />
-                {form.errors.name ? <FieldError>{form.errors.name}</FieldError> : null}
-              </FieldContent>
-            </Field>
-            <Field data-invalid={Boolean(form.errors.description) || undefined}>
-              <FieldLabel htmlFor="agent-persona-description">简介</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="agent-persona-description"
-                  value={form.description}
-                  disabled={saving}
-                  readOnly={isTextReadonly}
-                  aria-invalid={Boolean(form.errors.description)}
-                  onChange={(event) => onFormChange((current) => ({
-                    ...current,
-                    description: event.target.value,
-                    errors: { ...current.errors, description: undefined, form: undefined },
-                  }))}
-                />
-                {form.errors.description ? <FieldError>{form.errors.description}</FieldError> : null}
-              </FieldContent>
-            </Field>
+          <FieldGroup className="gap-4">
+            <div className="grid gap-4 md:grid-cols-2" data-agent-persona-basic-grid>
+              <Field data-invalid={Boolean(form.errors.name) || undefined}>
+                <FieldLabel htmlFor="agent-persona-name">名称</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="agent-persona-name"
+                    value={form.name}
+                    disabled={saving}
+                    readOnly={isTextReadonly}
+                    aria-invalid={Boolean(form.errors.name)}
+                    onChange={(event) => onFormChange((current) => ({
+                      ...current,
+                      name: event.target.value,
+                      errors: { ...current.errors, name: undefined, form: undefined },
+                    }))}
+                    autoFocus={!isTextReadonly}
+                  />
+                  {form.errors.name ? <FieldError>{form.errors.name}</FieldError> : null}
+                </FieldContent>
+              </Field>
+              <Field data-invalid={Boolean(form.errors.description) || undefined}>
+                <FieldLabel htmlFor="agent-persona-description">简介</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="agent-persona-description"
+                    value={form.description}
+                    disabled={saving}
+                    readOnly={isTextReadonly}
+                    aria-invalid={Boolean(form.errors.description)}
+                    onChange={(event) => onFormChange((current) => ({
+                      ...current,
+                      description: event.target.value,
+                      errors: { ...current.errors, description: undefined, form: undefined },
+                    }))}
+                  />
+                  {form.errors.description ? <FieldError>{form.errors.description}</FieldError> : null}
+                </FieldContent>
+              </Field>
+            </div>
             <Field data-invalid={Boolean(form.errors.systemPrompt) || undefined}>
               <FieldLabel htmlFor="agent-persona-system-prompt">系统提示词</FieldLabel>
               <FieldContent>
@@ -482,37 +528,45 @@ function AgentPersonaDialog({
                 {form.errors.systemPrompt ? <FieldError>{form.errors.systemPrompt}</FieldError> : null}
               </FieldContent>
             </Field>
-            <Field>
-              <FieldLabel>模型</FieldLabel>
-              <FieldContent>
-                <div className="flex min-w-0 items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-w-0 flex-1 justify-between"
-                    disabled={saving}
-                    onClick={() => onModelDialogOpenChange(true)}
-                  >
-                    <span className="truncate text-muted-foreground">
-                      {modelDisplay}
-                    </span>
-                    <ChevronDown data-icon="inline-end" />
-                  </Button>
-                  {form.providerModel ? (
+            <div className="grid gap-4 md:grid-cols-2" data-agent-persona-options-grid>
+              <Field>
+                <FieldLabel>模型</FieldLabel>
+                <FieldContent>
+                  <div className="flex min-w-0 items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      size="icon"
-                      aria-label="清除模型"
+                      className="min-w-0 flex-1 justify-between"
                       disabled={saving}
-                      onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
+                      onClick={() => onModelDialogOpenChange(true)}
                     >
-                      <X className="size-4" />
+                      <span className="truncate text-muted-foreground">
+                        {modelDisplay}
+                      </span>
+                      <ChevronDown data-icon="inline-end" />
                     </Button>
-                  ) : null}
-                </div>
-              </FieldContent>
-            </Field>
+                    {form.providerModel ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="清除模型"
+                        disabled={saving}
+                        onClick={() => onFormChange((current) => ({ ...current, providerModel: null }))}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                </FieldContent>
+              </Field>
+              <AgentPersonaToolPolicyField
+                form={form}
+                saving={saving}
+                readonly={isTextReadonly}
+                onFormChange={onFormChange}
+              />
+            </div>
             {form.errors.form ? <FieldError>{form.errors.form}</FieldError> : null}
           </FieldGroup>
           <DialogFooter>
@@ -536,12 +590,228 @@ function AgentPersonaDialog({
   )
 }
 
+function AgentPersonaToolPolicyField({
+  form,
+  onFormChange,
+  readonly,
+  saving,
+}: {
+  readonly form: AgentPersonaFormState
+  readonly onFormChange: Dispatch<SetStateAction<AgentPersonaFormState>>
+  readonly readonly: boolean
+  readonly saving: boolean
+}) {
+  if (readonly) {
+    return (
+      <Field>
+        <FieldLabel htmlFor="agent-persona-tool-policy-readonly">工具能力</FieldLabel>
+        <FieldContent>
+          <Input
+            id="agent-persona-tool-policy-readonly"
+            value={toolPolicyLabel({
+              mode: form.toolPolicyMode,
+              allowedTools: form.allowedTools,
+            })}
+            readOnly
+            disabled={saving}
+          />
+        </FieldContent>
+      </Field>
+    )
+  }
+
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor="agent-persona-tool-policy-mode">工具能力</FieldLabel>
+        <FieldContent>
+          <NativeSelect
+            id="agent-persona-tool-policy-mode"
+            className="w-full"
+            value={form.toolPolicyMode}
+            disabled={saving}
+            onChange={(event) => onFormChange((current) => ({
+              ...current,
+              toolPolicyMode: event.target.value as SynapseAgentPersonaToolPolicyMode,
+              allowedTools: event.target.value === "allowlist" ? current.allowedTools : [],
+              errors: { ...current.errors, form: undefined },
+            }))}
+          >
+            <NativeSelectOption value="inherit">继承默认工具</NativeSelectOption>
+            <NativeSelectOption value="allowlist">白名单</NativeSelectOption>
+            <NativeSelectOption value="none">禁用全部工具</NativeSelectOption>
+          </NativeSelect>
+        </FieldContent>
+      </Field>
+      {form.toolPolicyMode === "allowlist" ? (
+        <Field className="md:col-span-2" data-agent-persona-tool-allowlist-field>
+          <FieldLabel htmlFor="agent-persona-tool-allowlist">工具白名单</FieldLabel>
+          <FieldContent>
+            <AgentPersonaToolAllowlistSelector
+              id="agent-persona-tool-allowlist"
+              value={form.allowedTools}
+              disabled={saving}
+              onChange={(allowedTools) => onFormChange((current) => ({
+                ...current,
+                allowedTools,
+                errors: { ...current.errors, form: undefined },
+              }))}
+            />
+          </FieldContent>
+        </Field>
+      ) : null}
+    </>
+  )
+}
+
+function AgentPersonaToolAllowlistSelector({
+  disabled,
+  id,
+  onChange,
+  value,
+}: {
+  readonly disabled: boolean
+  readonly id: string
+  readonly onChange: (value: string[]) => void
+  readonly value: string[]
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = useMemo(() => new Set(value), [value])
+  const customTools = value.filter((tool) => !agentPersonaToolOptions.includes(tool as (typeof agentPersonaToolOptions)[number]))
+  const triggerLabel = value.length > 0 ? `${value.length} 个工具` : "选择工具"
+
+  const toggleTool = (tool: string) => {
+    onChange(selected.has(tool) ? value.filter((item) => item !== tool) : [...value, tool])
+  }
+
+  const removeTool = (tool: string) => {
+    onChange(value.filter((item) => item !== tool))
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <Popover open={open} onOpenChange={setOpen} data-track="agent-persona-tool-allowlist">
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            className="w-full justify-between"
+            disabled={disabled}
+          >
+            <span className="truncate text-muted-foreground">{triggerLabel}</span>
+            <ChevronDown data-icon="inline-end" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 p-0">
+          <Command>
+            <CommandInput placeholder="搜索工具" data-track="agent-persona-tool-search" />
+            <CommandList>
+              <CommandEmpty>没有匹配工具</CommandEmpty>
+              <CommandGroup>
+                {agentPersonaToolOptions.map((tool) => (
+                  <CommandItem
+                    key={tool}
+                    value={tool}
+                    data-checked={selected.has(tool)}
+                    onSelect={() => toggleTool(tool)}
+                  >
+                    <Checkbox
+                      checked={selected.has(tool)}
+                      aria-label={`选择工具：${tool}`}
+                      tabIndex={-1}
+                      onClick={(event) => event.stopPropagation()}
+                      onCheckedChange={() => toggleTool(tool)}
+                    />
+                    <span className="truncate">{tool}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              {customTools.length > 0 ? (
+                <CommandGroup heading="已选工具">
+                  {customTools.map((tool) => (
+                    <CommandItem
+                      key={tool}
+                      value={tool}
+                      data-checked
+                      onSelect={() => removeTool(tool)}
+                    >
+                      <Checkbox
+                        checked
+                        aria-label={`选择工具：${tool}`}
+                        tabIndex={-1}
+                        onClick={(event) => event.stopPropagation()}
+                        onCheckedChange={() => removeTool(tool)}
+                      />
+                      <span className="truncate">{tool}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {value.length > 0 ? (
+        <div className="flex min-w-0 flex-wrap gap-1">
+          {value.map((tool) => (
+            <Badge key={tool} variant="secondary" className="max-w-full gap-1 pr-1">
+              <span className="truncate">{tool}</span>
+              <button
+                type="button"
+                className="rounded-full px-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`移除工具：${tool}`}
+                disabled={disabled}
+                onClick={() => removeTool(tool)}
+              >
+                <X />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function validateForm(form: AgentPersonaFormState): AgentPersonaFormState["errors"] {
   const errors: AgentPersonaFormState["errors"] = {}
   if (!form.name.trim()) errors.name = "名称不能为空"
   if (!form.description.trim()) errors.description = "简介不能为空"
   if (!form.systemPrompt.trim()) errors.systemPrompt = "系统提示词不能为空"
   return errors
+}
+
+function formToolPolicy(form: AgentPersonaFormState): SynapseAgentPersonaToolPolicy {
+  if (form.toolPolicyMode !== "allowlist") {
+    return { mode: form.toolPolicyMode, allowedTools: [] }
+  }
+  return { mode: "allowlist", allowedTools: uniqueNonBlankStrings(form.allowedTools) }
+}
+
+function normalizeToolPolicy(value: SynapseAgentPersonaToolPolicy | undefined): Required<SynapseAgentPersonaToolPolicy> {
+  if (!value || value.mode !== "allowlist") {
+    return { mode: value?.mode ?? "inherit", allowedTools: [] }
+  }
+  return { mode: "allowlist", allowedTools: uniqueNonBlankStrings(value.allowedTools ?? []) }
+}
+
+function uniqueNonBlankStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const tool = value.trim()
+    if (!tool || seen.has(tool)) continue
+    seen.add(tool)
+    result.push(tool)
+  }
+  return result
+}
+
+function toolPolicyLabel(policy: Required<SynapseAgentPersonaToolPolicy>): string {
+  if (policy.mode === "none") return "禁用全部工具"
+  if (policy.mode === "allowlist") return `白名单 · ${policy.allowedTools.length}`
+  return "继承默认工具"
 }
 
 function mergeItem(items: SynapseAgentPersona[], item: SynapseAgentPersona): SynapseAgentPersona[] {

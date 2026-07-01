@@ -192,6 +192,11 @@ describe("SessionManager", () => {
       hasWorkspacePath: true,
       resumePolicy: "resume",
       sdkSessionId: "sdk-1",
+      activePersonaId: null,
+      activeAgentName: undefined,
+      personaToolPolicyMode: "inherit",
+      personaAllowedToolCount: 0,
+      hasPersonaSystemPrompt: false,
     })
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/liyang")
   })
@@ -272,7 +277,12 @@ describe("SessionManager", () => {
 
   it("passes active main-thread persona into new live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
-    const createSession = vi.fn(() => new FakeLiveSession())
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn(() => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -287,11 +297,19 @@ describe("SessionManager", () => {
       sdkPersonaConfig: async () => ({
         activePersonaId: "builtin-zh-en-translator",
         activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        providerModel: null,
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: "Translate only.",
+        },
+        toolPolicy: { mode: "none", allowedTools: [] },
         agents: {
           "synapse-persona__builtin-zh-en-translator": {
             description: "Translates between Chinese and English.",
             prompt: "Translate only.",
-            disallowedTools: ["Agent"],
+            tools: [],
+            disallowedTools: ["*"],
           },
         },
         definitionsHash: "hash-translator",
@@ -308,14 +326,122 @@ describe("SessionManager", () => {
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       agent: "synapse-persona__builtin-zh-en-translator",
       agentDefinitionsHash: "hash-translator",
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "Translate only.",
+      },
+      tools: [],
+      disallowedTools: ["*"],
+      personaToolPolicy: { mode: "none", allowedTools: [] },
       agents: {
         "synapse-persona__builtin-zh-en-translator": expect.objectContaining({
           prompt: "Translate only.",
         }),
       },
     }))
+    expect(sessions[0]?.setMainThreadAgent).not.toHaveBeenCalled()
     expect(state.mainThreadAgentName).toBe("synapse-persona__builtin-zh-en-translator")
     expect(state.agentDefinitionsHash).toBe("hash-translator")
+  })
+
+  it("does not fail a newly-created persona session when hot agent switching is unsupported", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession({
+      agentSwitchError: new Error("当前会话不支持切换智能体"),
+    }))
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "builtin-zh-en-translator",
+        activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        providerModel: null,
+        agents: {
+          "synapse-persona__builtin-zh-en-translator": {
+            description: "Translates between Chinese and English.",
+            prompt: "Translate only.",
+            disallowedTools: ["Agent"],
+          },
+        },
+        definitionsHash: "hash-translator",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await expect(manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })).resolves.toMatchObject({ created: true })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "synapse-persona__builtin-zh-en-translator",
+    }))
+    expect(state.mainThreadAgentName).toBe("synapse-persona__builtin-zh-en-translator")
+  })
+
+  it("logs active persona runtime metadata without prompt text", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const logger = structuredLogger()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      logger,
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "builtin-zh-en-translator",
+        activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        providerModel: null,
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: "Secret persona prompt text.",
+        },
+        toolPolicy: { mode: "none", allowedTools: [] },
+        agents: {
+          "synapse-persona__builtin-zh-en-translator": {
+            description: "Translates.",
+            prompt: "Secret persona prompt text.",
+            tools: [],
+            disallowedTools: ["*"],
+          },
+        },
+        definitionsHash: "hash-translator",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(logger.info).toHaveBeenCalledWith("Created agent live session.", expect.objectContaining({
+      activePersonaId: "builtin-zh-en-translator",
+      activeAgentName: "synapse-persona__builtin-zh-en-translator",
+      personaToolPolicyMode: "none",
+      personaAllowedToolCount: 0,
+      hasPersonaSystemPrompt: true,
+    }))
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("Secret persona prompt text")
   })
 
   it("switches the reusable live session when only the active persona changes", async () => {
@@ -341,6 +467,7 @@ describe("SessionManager", () => {
       sdkPersonaConfig: async () => ({
         activePersonaId: activeAgentName ? "persona-id" : null,
         activeAgentName,
+        providerModel: null,
         agents: {
           "synapse-persona__old": { description: "Old", prompt: "Old" },
           "synapse-persona__new": { description: "New", prompt: "New" },
@@ -370,6 +497,60 @@ describe("SessionManager", () => {
     expect(state.mainThreadAgentName).toBe("synapse-persona__new")
   })
 
+  it("recreates without resuming the old SDK session when an active persona switch cannot be applied live", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSessionInputs: CreateAgentLiveSessionInput[] = []
+    const createSession = vi.fn((input: CreateAgentLiveSessionInput) => {
+      createSessionInputs.push(input)
+      const session = new FakeLiveSession({ disableAgentSwitch: sessions.length === 0 })
+      sessions.push(session)
+      return session
+    })
+    let activeAgentName: string | undefined
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: activeAgentName ? "persona-id" : null,
+        activeAgentName,
+        providerModel: null,
+        agents: {
+          "synapse-persona__new": { description: "New", prompt: "New" },
+        },
+        definitionsHash: "hash-personas",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+    activeAgentName = "synapse-persona__new"
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
+    expect(createSessionInputs.map((input) => input.sdkSessionId)).toEqual(["sdk-1", undefined])
+    expect(createSessionInputs[1]?.agent).toBe("synapse-persona__new")
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
+
   it("recreates the live session when persona definitions change", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []
@@ -393,6 +574,7 @@ describe("SessionManager", () => {
       sdkPersonaConfig: async () => ({
         activePersonaId: "builtin-zh-en-translator",
         activeAgentName: "synapse-persona__builtin-zh-en-translator",
+        providerModel: null,
         agents: {
           "synapse-persona__builtin-zh-en-translator": {
             description: "Translates.",
@@ -711,6 +893,100 @@ describe("SessionManager", () => {
     expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBe("reply-sonnet")
   })
 
+  it("uses the conversation model when the active persona has no provider model", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_MODEL: "provider-default",
+          ANTHROPIC_DEFAULT_SONNET_MODEL: "provider-sonnet",
+        })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "persona-1",
+        activeAgentName: "synapse-persona__persona-1",
+        providerModel: null,
+        agents: {
+          "synapse-persona__persona-1": { description: "Persona", prompt: "Persona" },
+        },
+        definitionsHash: "hash-persona",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        providerId: "qwen",
+        agentConfig: { modelTier: "sonnet", activeMainThreadPersonaId: "persona-1" },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "qwen",
+      model: "provider-sonnet",
+    }))
+  })
+
+  it("uses the active persona provider model instead of the conversation model", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const buildEnv = vi.fn(async (providerId: string) => (
+      providerId === "deepseek"
+        ? { ANTHROPIC_MODEL: "deepseek-chat" }
+        : { ANTHROPIC_MODEL: "qwen-max", ANTHROPIC_DEFAULT_SONNET_MODEL: "qwen-plus" }
+    ))
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv,
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "persona-deepseek",
+        activeAgentName: "synapse-persona__persona-deepseek",
+        providerModel: { providerId: "deepseek", modelTier: "default" },
+        agents: {
+          "synapse-persona__persona-deepseek": { description: "Persona", prompt: "Persona" },
+        },
+        definitionsHash: "hash-persona",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        providerId: "qwen",
+        agentConfig: { modelTier: "sonnet", activeMainThreadPersonaId: "persona-deepseek" },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(buildEnv).toHaveBeenCalledWith("deepseek", expect.any(Object))
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "deepseek",
+      model: "deepseek-chat",
+    }))
+    expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBe("deepseek-chat")
+  })
+
   it("leaves the SDK model unset for local Claude Code default without provider model env", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())
@@ -980,6 +1256,66 @@ describe("SessionManager", () => {
     ])
     expect(sessions[0]?.close).toHaveBeenCalledOnce()
   })
+
+  it("recreates an alive SDK session when the active persona provider changes", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSessionInputs: CreateAgentLiveSessionInput[] = []
+    const createSession = vi.fn((input: CreateAgentLiveSessionInput) => {
+      createSessionInputs.push(input)
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    const buildEnv = vi.fn(async (providerId: string) => (
+      providerId === "deepseek"
+        ? { ANTHROPIC_MODEL: "deepseek-chat" }
+        : { ANTHROPIC_MODEL: "qwen-max" }
+    ))
+    let providerId = "qwen"
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv,
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "persona",
+        activeAgentName: "synapse-persona__persona",
+        providerModel: { providerId, modelTier: "default" },
+        agents: {
+          "synapse-persona__persona": { description: "Persona", prompt: "Persona" },
+        },
+        definitionsHash: "hash-persona",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), agentConfig: { activeMainThreadPersonaId: "persona" } },
+      message: baseMessage("default"),
+    })
+    providerId = "deepseek"
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), agentConfig: { activeMainThreadPersonaId: "persona" } },
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
+    expect(createSessionInputs.map((input) => input.providerId)).toEqual(["qwen", "deepseek"])
+    expect(createSessionInputs.map((input) => input.model)).toEqual(["qwen-max", "deepseek-chat"])
+    expect(createSessionInputs.map((input) => input.sdkSessionId)).toEqual(["sdk-1", undefined])
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
 })
 
 function baseConversation(): ConversationEntryV1 {
@@ -1015,15 +1351,23 @@ class FakeLiveSession implements AgentLiveSession {
     if (this.closeError) throw this.closeError
     this.closed = true
   })
-  readonly setMainThreadAgent = vi.fn(async (agentName: string | null) => {
-    this.mainThreadAgentName = agentName ?? undefined
-  })
+  readonly setMainThreadAgent?: (agentName: string | null) => Promise<void>
   readonly cancelCurrentTurn?: () => Promise<boolean>
   mainThreadAgentName: string | undefined
   protected closed = false
   private closeError: Error | undefined
 
-  constructor(options: { readonly cancelError?: Error } = {}) {
+  constructor(options: {
+    readonly agentSwitchError?: Error
+    readonly cancelError?: Error
+    readonly disableAgentSwitch?: boolean
+  } = {}) {
+    if (!options.disableAgentSwitch) {
+      this.setMainThreadAgent = vi.fn(async (agentName: string | null) => {
+        if (options.agentSwitchError) throw options.agentSwitchError
+        this.mainThreadAgentName = agentName ?? undefined
+      })
+    }
     if (options.cancelError) {
       this.cancelCurrentTurn = vi.fn(async () => {
         throw options.cancelError

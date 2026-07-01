@@ -151,10 +151,28 @@ model UserSession {
   revokedAt        DateTime?
   lastUsedAt       DateTime?
   createdAt        DateTime  @default(now())
+  refreshTokens    UserSessionRefreshToken[]
 
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+}
+
+model UserSessionRefreshToken {
+  id               String      @id @default(cuid())
+  sessionId        String
+  session          UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  refreshTokenHash String      @unique
+  expiresAt        DateTime
+  replacedAt       DateTime?
+  graceExpiresAt   DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime    @default(now())
+
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@index([graceExpiresAt])
 }
 
 model UserDevice {

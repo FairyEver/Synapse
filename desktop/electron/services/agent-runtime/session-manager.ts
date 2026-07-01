@@ -17,11 +17,13 @@ import {
 import {
   ClaudeSDKSession,
   DEFAULT_CLAUDE_SDK_MAX_TURNS,
+  type ClaudeSDKPersonaToolPolicy,
   type ClaudeSDKRuntimeSettings,
 } from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
   AgentSdkPluginSpec,
+  AgentSdkSystemPrompt,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
@@ -52,6 +54,10 @@ export interface CreateAgentLiveSessionInput {
   readonly agent?: string
   readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
+  readonly systemPrompt?: AgentSdkSystemPrompt
+  readonly tools?: string[]
+  readonly disallowedTools?: readonly string[]
+  readonly personaToolPolicy?: ClaudeSDKPersonaToolPolicy
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
@@ -120,6 +126,10 @@ export class SessionManager {
         agent: input.agent,
         agentDefinitionsHash: input.agentDefinitionsHash,
         agents: input.agents,
+        systemPrompt: input.systemPrompt,
+        tools: input.tools,
+        disallowedTools: input.disallowedTools,
+        personaToolPolicy: input.personaToolPolicy,
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
         sdkSettings: input.sdkSettings,
@@ -169,7 +179,14 @@ export class SessionManager {
     readonly message: AgentMessage
     readonly abortSignal?: AbortSignal
   }): Promise<AgentLiveSessionHandle> {
-    const providerId = input.conversation.providerId ?? input.message.providerId
+    const personaConfig = await Promise.resolve(this.deps.sdkPersonaConfig?.(
+      input.message,
+      input.conversation,
+    ) ?? ordinaryPersonaSdkConfig())
+    const providerId = personaConfig.providerModel?.providerId
+      ?? input.message.providerId
+      ?? input.conversation.providerId
+      ?? await this.getActiveProviderId()
     if (!providerId) {
       throw new Error(AGENT_PROVIDER_REQUIRED_MESSAGE)
     }
@@ -196,7 +213,9 @@ export class SessionManager {
       ...replyTargetEnv,
       ...providerEnv,
     }
-    const effectiveTier = input.message.modelTier ?? input.conversation.agentConfig?.modelTier
+    const effectiveTier = personaConfig.providerModel?.modelTier
+      ?? input.message.modelTier
+      ?? input.conversation.agentConfig?.modelTier
     if (effectiveTier) {
       const tierModel = resolveTierFromEnv(env, effectiveTier)
       if (tierModel) {
@@ -206,14 +225,11 @@ export class SessionManager {
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
     const sdkSettings = await this.resolveSdkSettings(providerId, env)
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
-    const personaConfig = await Promise.resolve(this.deps.sdkPersonaConfig?.(
-      input.message,
-      input.conversation,
-    ) ?? ordinaryPersonaSdkConfig())
     const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
     const agents = { ...contributionAgents, ...personaConfig.agents }
     const activeAgentName = personaConfig.activeAgentName
     const agentDefinitionsHash = personaConfig.definitionsHash
+    const personaSdkToolOptions = sdkToolOptionsForPersonaPolicy(personaConfig.toolPolicy)
     const personaDefinitionsMatch = (input.state.agentDefinitionsHash ?? "") === agentDefinitionsHash
     const activeAgentMatches = input.state.mainThreadAgentName === activeAgentName
     const canReuseBaseSession =
@@ -237,6 +253,19 @@ export class SessionManager {
         return { liveSession: reusableLiveSession, created: false }
       }
     }
+
+    const hadLiveSession = Boolean(input.state.liveSession)
+    const recreatingPersonaRuntime = Boolean(
+      activeAgentName
+      && hadLiveSession
+      && (
+        !activeAgentMatches
+        || !providerMatches
+        || !modelMatches
+        || !sdkSettingsMatch
+        || !personaDefinitionsMatch
+      ),
+    )
 
     if (input.state.liveSession) {
       if (
@@ -263,7 +292,7 @@ export class SessionManager {
       await this.closeLiveSession(input.state, input.conversation.id)
     }
 
-    const sdkSessionId = input.conversation.resumePolicy === "fresh"
+    const sdkSessionId = input.conversation.resumePolicy === "fresh" || recreatingPersonaRuntime
       ? undefined
       : input.conversation.sdkSessionId
     const liveSession = await this.createSession({
@@ -283,6 +312,9 @@ export class SessionManager {
       agent: activeAgentName,
       agentDefinitionsHash,
       agents,
+      systemPrompt: personaConfig.systemPrompt,
+      ...personaSdkToolOptions,
+      personaToolPolicy: personaConfig.toolPolicy,
       subagentToolPolicies: await Promise.resolve(
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
@@ -310,6 +342,11 @@ export class SessionManager {
       hasWorkspacePath: Boolean(input.message.workspacePath),
       resumePolicy: input.conversation.resumePolicy,
       sdkSessionId,
+      activePersonaId: personaConfig.activePersonaId,
+      activeAgentName,
+      personaToolPolicyMode: personaConfig.toolPolicy?.mode ?? "inherit",
+      personaAllowedToolCount: personaConfig.toolPolicy?.allowedTools.length ?? 0,
+      hasPersonaSystemPrompt: Boolean(personaConfig.systemPrompt),
     })
     return { liveSession, created: true }
   }
@@ -429,6 +466,7 @@ export class SessionManager {
     }
     state.liveSession = undefined
     state.providerId = undefined
+    state.effectiveModel = undefined
     state.modeOverride = undefined
     state.mainThreadAgentName = undefined
     state.agentDefinitionsHash = undefined
@@ -593,9 +631,18 @@ function sdkSettingsEqual(
 function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {
   return {
     activePersonaId: null,
+    providerModel: null,
     agents: {},
     definitionsHash: "",
   }
+}
+
+function sdkToolOptionsForPersonaPolicy(
+  policy: ResolvedPersonaSdkConfig["toolPolicy"],
+): { readonly tools?: string[], readonly disallowedTools?: readonly string[] } {
+  if (!policy || policy.mode === "inherit") return {}
+  if (policy.mode === "none") return { tools: [], disallowedTools: ["*"] }
+  return { tools: [...policy.allowedTools] }
 }
 
 function errorDiagnostic(error: unknown): {

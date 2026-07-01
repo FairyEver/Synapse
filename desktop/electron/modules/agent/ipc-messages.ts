@@ -205,6 +205,9 @@ const sendRequestSchema = projectRequestSchema.extend({
   content: z.string(),
   clientSubmittedAt: z.string().optional(),
   providerId: z.string().min(1).optional(),
+  mainThreadPersonaId: z.string().min(1).nullable().optional(),
+  mainThreadPersonaName: z.string().optional(),
+  mainThreadPersonaSource: z.enum(["builtin", "user"]).optional(),
   attachments: z.array(z.discriminatedUnion("kind", [
     z.object({
       kind: z.literal("image"),
@@ -463,6 +466,9 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           userName: "Renderer",
           content: request.content,
           providerId: request.providerId,
+          mainThreadPersonaId: request.mainThreadPersonaId,
+          mainThreadPersonaName: request.mainThreadPersonaName,
+          mainThreadPersonaSource: request.mainThreadPersonaSource,
           attachments,
           replyCtx: {
             kind: LOCAL_RENDERER_PLATFORM,

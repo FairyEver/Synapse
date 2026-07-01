@@ -35,6 +35,8 @@ export interface UserTokenPair {
   readonly refreshToken: string
 }
 
+type RefreshFailureCode = "refresh_invalid" | "refresh_expired" | "refresh_revoked" | "account_disabled"
+
 export interface UserRegistrationResult {
   readonly ok: true
 }
@@ -69,9 +71,18 @@ function addDays(date: Date, days: number): Date {
   return next
 }
 
+function addMs(date: Date, ms: number): Date {
+  return new Date(date.getTime() + ms)
+}
+
+function refreshUnauthorized(code: RefreshFailureCode, message = "未登录或登录已过期。"): UnauthorizedException {
+  return new UnauthorizedException({ message, code })
+}
+
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 const desktopLoginCodeTtlMs = 5 * 60 * 1000
 const passwordResetTokenTtlMs = 30 * 60 * 1000
+const refreshTokenGraceMs = 24 * 60 * 60 * 1000
 
 type DesktopLoginExchangeFailureReason =
   | "code_not_found"
@@ -342,6 +353,13 @@ export class UserAuthService {
           where: { userId: record.userId, revokedAt: null },
           data: { revokedAt: now },
         })
+        await tx.userSessionRefreshToken.updateMany({
+          where: {
+            session: { userId: record.userId },
+            revokedAt: null,
+          },
+          data: { revokedAt: now },
+        })
         await tx.userPasswordResetToken.updateMany({
           where: { userId: record.userId, usedAt: null },
           data: { usedAt: now },
@@ -517,37 +535,47 @@ export class UserAuthService {
 
   async refresh(input: { refreshToken: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const currentRefreshTokenHash = hashToken(input.refreshToken)
-    const session = await this.prisma.userSession.findUnique({
+    const tokenRecord = await this.prisma.userSessionRefreshToken.findUnique({
       where: { refreshTokenHash: currentRefreshTokenHash },
-      include: { user: true },
+      include: { session: { include: { user: true } } },
     })
     const now = new Date()
-    if (!session) {
+    if (!tokenRecord) {
       await this.recordUserAudit({
         adminEmail: "unknown",
         action: "user.refresh.invalid",
         targetId: "unknown",
         ipAddress,
       })
-      throw new UnauthorizedException("未登录或登录已过期。")
+      throw refreshUnauthorized("refresh_invalid")
     }
-    if (session.revokedAt) {
+    const session = tokenRecord.session
+    if (tokenRecord.revokedAt || session.revokedAt) {
       await this.recordUserAudit({
         adminEmail: session.user.email,
         action: "user.refresh.revoked",
         targetId: session.user.id,
         ipAddress,
       })
-      throw new UnauthorizedException("未登录或登录已过期。")
+      throw refreshUnauthorized("refresh_revoked")
     }
-    if (session.expiresAt <= now) {
+    if (tokenRecord.expiresAt <= now || session.expiresAt <= now) {
       await this.recordUserAudit({
         adminEmail: session.user.email,
         action: "user.refresh.expired",
         targetId: session.user.id,
         ipAddress,
       })
-      throw new UnauthorizedException("未登录或登录已过期。")
+      throw refreshUnauthorized("refresh_expired")
+    }
+    if (tokenRecord.replacedAt && (!tokenRecord.graceExpiresAt || tokenRecord.graceExpiresAt <= now)) {
+      await this.recordUserAudit({
+        adminEmail: session.user.email,
+        action: "user.refresh.invalid",
+        targetId: session.user.id,
+        ipAddress,
+      })
+      throw refreshUnauthorized("refresh_invalid")
     }
     if (session.user.status !== "active") {
       await this.auditLog?.record({
@@ -557,43 +585,61 @@ export class UserAuthService {
         targetId: session.user.id,
         ipAddress,
       })
-      throw new UnauthorizedException("账号已停用。")
+      throw refreshUnauthorized("account_disabled", "账号已停用。")
     }
 
     const refreshToken = createOpaqueToken()
-    const result = await this.prisma.userSession.updateMany({
-      where: {
-        id: session.id,
-        refreshTokenHash: currentRefreshTokenHash,
-        revokedAt: null,
-      },
-      data: {
-        refreshTokenHash: hashToken(refreshToken),
-        expiresAt: addDays(new Date(), this.options.refreshDays),
-        lastUsedAt: new Date(),
-      },
-    })
-    if (result.count === 0) {
-      await this.recordUserAudit({
-        adminEmail: session.user.email,
-        action: "user.refresh.race_lost",
-        targetId: session.user.id,
-        ipAddress,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userSessionRefreshToken.updateMany({
+        where: {
+          sessionId: session.id,
+          refreshTokenHash: currentRefreshTokenHash,
+          revokedAt: null,
+        },
+        data: {
+          replacedAt: now,
+          graceExpiresAt: addMs(now, refreshTokenGraceMs),
+        },
       })
-      throw new UnauthorizedException("未登录或登录已过期。")
-    }
+      await tx.userSessionRefreshToken.create({
+        data: {
+          sessionId: session.id,
+          refreshTokenHash: hashToken(refreshToken),
+          expiresAt: addDays(now, this.options.refreshDays),
+        },
+      })
+      await tx.userSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+        },
+        data: {
+          refreshTokenHash: hashToken(refreshToken),
+          expiresAt: addDays(now, this.options.refreshDays),
+          lastUsedAt: now,
+        },
+      })
+    })
     return { accessToken: this.signAccessToken(session.user), refreshToken }
   }
 
   async logout(input: { refreshToken: string }, ipAddress = "system"): Promise<{ ok: true }> {
-    const session = await this.prisma.userSession.findUnique({
+    const tokenRecord = await this.prisma.userSessionRefreshToken.findUnique({
       where: { refreshTokenHash: hashToken(input.refreshToken) },
-      include: { user: { select: { id: true, email: true } } },
+      include: { session: { include: { user: { select: { id: true, email: true } } } } },
     })
+    const session = tokenRecord?.session
     if (session && !session.revokedAt) {
-      await this.prisma.userSession.update({
-        where: { id: session.id },
-        data: { revokedAt: new Date() },
+      const now = new Date()
+      await this.prisma.$transaction(async (tx) => {
+        await tx.userSession.update({
+          where: { id: session.id },
+          data: { revokedAt: now },
+        })
+        await tx.userSessionRefreshToken.updateMany({
+          where: { sessionId: session.id, revokedAt: null },
+          data: { revokedAt: now },
+        })
       })
       await this.recordUserAuthSuccessAuditSafely({
         adminEmail: session.user.email,
@@ -876,11 +922,19 @@ export class UserAuthService {
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<UserTokenPair> {
     const refreshToken = createOpaqueToken()
-    await client.userSession.create({
+    const expiresAt = addDays(new Date(), this.options.refreshDays)
+    const session = await client.userSession.create({
       data: {
         userId: user.id,
         refreshTokenHash: hashToken(refreshToken),
-        expiresAt: addDays(new Date(), this.options.refreshDays),
+        expiresAt,
+      },
+    })
+    await client.userSessionRefreshToken.create({
+      data: {
+        sessionId: session.id,
+        refreshTokenHash: hashToken(refreshToken),
+        expiresAt,
       },
     })
     return { accessToken: this.signAccessToken(user), refreshToken }

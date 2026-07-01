@@ -15,6 +15,10 @@ type PersonaInput = {
   readonly description: string
   readonly systemPrompt: string
   readonly providerModel?: ModelInput | null
+  readonly toolPolicy?: {
+    readonly mode: "inherit" | "allowlist" | "none"
+    readonly allowedTools: readonly string[]
+  }
 }
 
 const fixtures = vi.hoisted(() => ({
@@ -26,6 +30,7 @@ const fixtures = vi.hoisted(() => ({
       description: "在中文和英文之间互译，保留原意、语气和格式。",
       systemPrompt: "你是中英翻译智能体。",
       providerModel: null,
+      toolPolicy: { mode: "none", allowedTools: [] },
       source: "builtin",
       readonly: true,
     },
@@ -36,6 +41,7 @@ const fixtures = vi.hoisted(() => ({
       description: "整理产品判断。",
       systemPrompt: "你是产品顾问。",
       providerModel: null,
+      toolPolicy: { mode: "inherit", allowedTools: [] },
       source: "user",
       readonly: false,
       createdAt: "2026-06-30T00:00:00.000Z",
@@ -51,6 +57,7 @@ const bridge = vi.hoisted(() => ({
     schemaVersion: 1,
     ...input,
     providerModel: input.providerModel ?? null,
+    toolPolicy: input.toolPolicy ?? { mode: "inherit", allowedTools: [] },
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -60,6 +67,7 @@ const bridge = vi.hoisted(() => ({
     schemaVersion: 1,
     ...input,
     providerModel: input.providerModel ?? null,
+    toolPolicy: input.toolPolicy ?? { mode: "inherit", allowedTools: [] },
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -135,6 +143,7 @@ import { AgentPersonasModule } from "../index"
   unobserve() {}
   disconnect() {}
 }
+HTMLElement.prototype.scrollIntoView = vi.fn()
 
 let roots: Root[] = []
 
@@ -195,6 +204,7 @@ describe("AgentPersonasModule", () => {
       "name",
       "description",
       "model",
+      "tools",
       "actions",
     ])
     expect(cellWithText("操作")?.className).toContain("text-center")
@@ -213,6 +223,29 @@ describe("AgentPersonasModule", () => {
     expect(bridge.create).not.toHaveBeenCalled()
   })
 
+  it("keeps short persona fields in responsive two-column groups", async () => {
+    await renderModule()
+
+    await clickButton("我的")
+    await clickButton("新增")
+
+    const basicGrid = document.body.querySelector<HTMLElement>("[data-agent-persona-basic-grid]")
+    const optionsGrid = document.body.querySelector<HTMLElement>("[data-agent-persona-options-grid]")
+
+    expect(basicGrid?.className).toContain("md:grid-cols-2")
+    expect(optionsGrid?.className).toContain("md:grid-cols-2")
+    expect(basicGrid?.querySelector("#agent-persona-name")).toBeTruthy()
+    expect(basicGrid?.querySelector("#agent-persona-description")).toBeTruthy()
+    expect(optionsGrid?.querySelector("#agent-persona-tool-policy-mode")).toBeTruthy()
+
+    await setSelectValue("#agent-persona-tool-policy-mode", "allowlist")
+
+    const allowlistField = document.body.querySelector<HTMLElement>("[data-agent-persona-tool-allowlist-field]")
+
+    expect(allowlistField?.className).toContain("md:col-span-2")
+    expect(allowlistField?.querySelector("#agent-persona-tool-allowlist")).toBeTruthy()
+  })
+
   it("creates a user persona with a selected model", async () => {
     await renderModule()
 
@@ -223,6 +256,10 @@ describe("AgentPersonasModule", () => {
     await setFieldValue("#agent-persona-system-prompt", "你是翻译助手。")
     await clickButton("未指定")
     await clickButton("选择 Sonnet 模型")
+    await setSelectValue("#agent-persona-tool-policy-mode", "allowlist")
+    await clickButton("选择工具")
+    await clickToolOption("Read")
+    await clickToolOption("Bash")
     await clickButton("保存智能体")
 
     expect(bridge.create).toHaveBeenCalledWith({
@@ -230,8 +267,42 @@ describe("AgentPersonasModule", () => {
       description: "处理中英文本。",
       systemPrompt: "你是翻译助手。",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
+      toolPolicy: {
+        mode: "allowlist",
+        allowedTools: ["Read", "Bash"],
+      },
     })
     expect(toast.success).toHaveBeenCalledWith("已保存")
+  })
+
+  it("edits selected and legacy custom allowlist tools without text entry", async () => {
+    const original = fixtures.items[1]
+    fixtures.items[1] = {
+      ...original,
+      toolPolicy: { mode: "allowlist", allowedTools: ["Read", "mcp__synapse-mcp__database_query"] },
+    }
+
+    try {
+      await renderModule()
+
+      await clickButton("我的")
+      await clickButtonByLabel("编辑智能体：产品顾问")
+
+      expect(document.body.textContent).toContain("Read")
+      expect(document.body.textContent).toContain("mcp__synapse-mcp__database_query")
+
+      await clickButton("2 个工具")
+      await clickToolOption("Bash")
+      await clickRemoveSelectedTool("mcp__synapse-mcp__database_query")
+      await clickButton("保存智能体")
+
+      expect(bridge.update).toHaveBeenCalledWith(expect.objectContaining({
+        id: "persona-1",
+        toolPolicy: { mode: "allowlist", allowedTools: ["Read", "Bash"] },
+      }))
+    } finally {
+      fixtures.items[1] = original
+    }
   })
 
   it("updates a user persona", async () => {
@@ -250,6 +321,7 @@ describe("AgentPersonasModule", () => {
       description: "整理产品策略。",
       systemPrompt: "你是产品教练。",
       providerModel: null,
+      toolPolicy: { mode: "inherit", allowedTools: [] },
     })
   })
 
@@ -273,6 +345,7 @@ describe("AgentPersonasModule", () => {
     expect(document.body.querySelector<HTMLInputElement>("#agent-persona-name")?.readOnly).toBe(true)
     expect(document.body.querySelector<HTMLInputElement>("#agent-persona-description")?.readOnly).toBe(true)
     expect(document.body.querySelector<HTMLTextAreaElement>("#agent-persona-system-prompt")?.readOnly).toBe(true)
+    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-tool-policy-readonly")?.value).toBe("禁用全部工具")
 
     await clickButton("未指定")
     await clickButton("选择 Sonnet 模型")
@@ -337,6 +410,20 @@ async function setFieldValue(selector: string, value: string) {
   })
 }
 
+async function setSelectValue(selector: string, value: string) {
+  const field = document.body.querySelector<HTMLSelectElement>(selector)
+  if (!field) throw new Error(`Select not found: ${selector}`)
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set
+    if (valueSetter) {
+      valueSetter.call(field, value)
+    } else {
+      field.value = value
+    }
+    field.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+}
+
 function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(document.body.querySelectorAll("button"))
     .find((button) => button.getAttribute("aria-label") === label) ?? null
@@ -345,6 +432,21 @@ function buttonByLabel(label: string): HTMLButtonElement | null {
 function buttonWithText(text: string): HTMLButtonElement | null {
   return Array.from(document.body.querySelectorAll("button"))
     .find((item) => item.textContent === text) ?? null
+}
+
+async function clickToolOption(text: string) {
+  const option = Array.from(document.body.querySelectorAll<HTMLElement>("[cmdk-item], [role='option']"))
+    .find((item) => item.textContent?.includes(text))
+  if (!option) throw new Error(`Tool option not found: ${text}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    option.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickRemoveSelectedTool(tool: string) {
+  await clickButtonByLabel(`移除工具：${tool}`)
 }
 
 function cellWithText(text: string): HTMLTableCellElement | null {

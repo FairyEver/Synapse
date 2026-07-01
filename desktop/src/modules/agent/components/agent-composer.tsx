@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from "react"
-import { ArrowUp, Bot, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
+import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -473,7 +473,7 @@ function AgentComposer({
                     <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-muted-foreground">
-                        {formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}
+                        {pendingMessageDisplayText(message)}
                       </p>
                       {message.status === "failed" ? (
                         <p className="truncate text-xs text-destructive">{message.error ?? "发送失败"}</p>
@@ -679,6 +679,11 @@ function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachme
   return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
 }
 
+function pendingMessageDisplayText(message: PendingMessage): string {
+  const personaName = message.mainThreadPersonaName?.trim() || "普通"
+  return `${personaName} | ${formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}`
+}
+
 function AgentPersonaMenu({
   personas,
   activePersonaId,
@@ -698,14 +703,12 @@ function AgentPersonaMenu({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          aria-label="智能体"
+          aria-label={`智能体：${activePersonaName ?? "普通"}`}
           data-track="agent-persona-select"
           disabled={disabled}
-          className="rounded-lg px-2.5 text-muted-foreground"
+          className="agent-composer__persona-trigger rounded-lg px-2.5 text-muted-foreground"
         >
-          <Bot data-icon="inline-start" />
-          {activePersonaName ?? "普通"}
+          <span>{activePersonaName ?? "普通"}</span>
           <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>

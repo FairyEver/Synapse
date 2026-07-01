@@ -447,6 +447,11 @@ describe("model price service", () => {
         cacheReadPer1M: 0.42,
       }),
       expect.objectContaining({
+        modelPattern: "kimi-k2.7-code",
+        inputPer1M: 6.5,
+        outputPer1M: 27,
+      }),
+      expect.objectContaining({
         modelPattern: "kimi-k2.6",
         inputPer1M: 6.5,
         outputPer1M: 27,
@@ -466,10 +471,26 @@ describe("model price service", () => {
         cacheReadPer1M: 0.8,
       }),
       expect.objectContaining({
+        modelPattern: "kimi/kimi-k2.7-code-highspeed",
+        inputPer1M: 13,
+        outputPer1M: 54,
+      }),
+      expect.objectContaining({
+        modelPattern: "kimi/kimi-k2.7-code",
+        inputPer1M: 6.5,
+        outputPer1M: 27,
+      }),
+      expect.objectContaining({
         modelPattern: "kimi/kimi-k2.6",
         inputPer1M: 6.5,
         outputPer1M: 27,
         cacheReadPer1M: 1.1,
+      }),
+      expect.objectContaining({
+        modelPattern: "glm-5.2",
+        inputPer1M: 8,
+        outputPer1M: 28,
+        cacheReadPer1M: 2,
       }),
       expect.objectContaining({
         modelPattern: "glm-5.1",
@@ -483,6 +504,12 @@ describe("model price service", () => {
         inputPer1M: 6,
         outputPer1M: 22,
         cacheReadPer1M: 1.2,
+      }),
+      expect.objectContaining({
+        modelPattern: "ZHIPU/GLM-5.2",
+        inputPer1M: 8,
+        outputPer1M: 28,
+        cacheReadPer1M: 2,
       }),
       expect.objectContaining({
         modelPattern: "ZHIPU/GLM-5",

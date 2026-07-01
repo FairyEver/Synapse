@@ -45,6 +45,9 @@ export interface AgentMessage {
   readonly agentType?: string
   readonly providerId?: string
   readonly modelTier?: string
+  readonly mainThreadPersonaId?: string | null
+  readonly mainThreadPersonaName?: string
+  readonly mainThreadPersonaSource?: "builtin" | "user"
   readonly userMeta?: Record<string, unknown>
 }
 

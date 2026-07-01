@@ -54,6 +54,10 @@ describe("AgentPersonaService", () => {
       description: "  整理产品判断  ",
       systemPrompt: "  你是产品顾问。  ",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
+      toolPolicy: {
+        mode: "allowlist",
+        allowedTools: [" Read ", "Bash", "Read", " ", "mcp__synapse-mcp__database_query"],
+      },
     })
     expect(created).toMatchObject({
       id: "id-1",
@@ -61,6 +65,10 @@ describe("AgentPersonaService", () => {
       description: "整理产品判断",
       systemPrompt: "你是产品顾问。",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
+      toolPolicy: {
+        mode: "allowlist",
+        allowedTools: ["Read", "Bash", "mcp__synapse-mcp__database_query"],
+      },
       source: "user",
       readonly: false,
     })
@@ -71,11 +79,13 @@ describe("AgentPersonaService", () => {
       description: "处理中英文本。",
       systemPrompt: "你是翻译助手。",
       providerModel: null,
+      toolPolicy: { mode: "none", allowedTools: ["Read"] },
     })
     expect(updated).toMatchObject({
       id: created.id,
       name: "翻译助手",
       providerModel: null,
+      toolPolicy: { mode: "none", allowedTools: [] },
     })
 
     await service.delete({ id: created.id })
@@ -141,6 +151,29 @@ describe("AgentPersonaService", () => {
     })).rejects.toThrow("模型供应商不能为空")
   })
 
+  it("defaults legacy personas to inherited tools", async () => {
+    const harness = createHarness()
+    harness.items.records.set("legacy-persona", {
+      id: "legacy-persona",
+      schemaVersion: 1,
+      name: "旧智能体",
+      description: "旧数据。",
+      systemPrompt: "你是旧智能体。",
+      providerModel: null,
+      source: "user",
+      createdAt: "2026-06-29T00:00:00.000Z",
+      updatedAt: "2026-06-29T00:00:00.000Z",
+    })
+    const service = createAgentPersonaService(harness.deps)
+
+    await expect(service.list()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "legacy-persona",
+        toolPolicy: { mode: "inherit", allowedTools: [] },
+      }),
+    ]))
+  })
+
   it("applies and clears built-in model overrides", async () => {
     const harness = createHarness()
     harness.settings.singleton = {
@@ -157,6 +190,7 @@ describe("AgentPersonaService", () => {
       {
         id: BUILTIN_ZH_EN_TRANSLATOR_ID,
         source: "builtin",
+        toolPolicy: { mode: "none", allowedTools: [] },
         providerModel: { providerId: "claude", modelTier: "sonnet" },
       },
     ])

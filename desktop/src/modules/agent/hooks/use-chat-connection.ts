@@ -32,6 +32,9 @@ type SendMessageTarget = TimelineTarget
 
 type SendMessageOptions = {
   readonly attachments?: readonly AgentDraftAttachment[]
+  readonly mainThreadPersonaId?: string | null
+  readonly mainThreadPersonaName?: string
+  readonly mainThreadPersonaSource?: "builtin" | "user"
 }
 
 type ChatConnectionRefs = {
@@ -630,6 +633,9 @@ function useChatConnection(
         content: readableContent,
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
+        mainThreadPersonaId: options.mainThreadPersonaId,
+        mainThreadPersonaName: options.mainThreadPersonaName,
+        mainThreadPersonaSource: options.mainThreadPersonaSource,
       })
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal

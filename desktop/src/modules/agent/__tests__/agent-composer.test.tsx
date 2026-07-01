@@ -151,8 +151,10 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).toContain('aria-label="智能体"')
+    expect(html).toContain("agent-composer__persona-trigger")
+    expect(html).toContain('aria-label="智能体：普通"')
     expect(html).toContain("普通")
+    expect(html).not.toContain("lucide-bot")
   })
 
   it("does not render the jump-to-bottom pill unless there are unread messages", () => {
@@ -1379,6 +1381,56 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("sending message")
     expect(html).toContain('aria-label="删除待发送消息"')
     expect(html).toContain('aria-label="重试发送"')
+  })
+
+  it("prefixes queued messages with the persona snapshot", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={true}
+        cancelPhase="idle"
+        pendingMessages={[
+          {
+            id: "pending-translator",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "hello",
+            createdAt: "2026-06-30T10:00:00.000Z",
+            status: "queued",
+            mainThreadPersonaId: "builtin-zh-en-translator",
+            mainThreadPersonaName: "中英翻译",
+          },
+          {
+            id: "pending-ordinary",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "普通问题",
+            createdAt: "2026-06-30T10:00:01.000Z",
+            status: "queued",
+            mainThreadPersonaId: null,
+            mainThreadPersonaName: "普通",
+          },
+        ]}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+        onRemovePendingMessage={vi.fn()}
+        onRetryPendingMessage={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("中英翻译 | hello")
+    expect(html).toContain("普通 | 普通问题")
   })
 
   it("renders all permission modes in the selector", async () => {

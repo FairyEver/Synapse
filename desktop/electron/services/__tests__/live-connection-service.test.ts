@@ -53,7 +53,7 @@ function createAccountService(input: {
   readonly token?: string | null
   readonly apiBaseUrl?: string
   readonly state?: SynapseAccountState
-  readonly refreshFromStorage?: () => Promise<unknown>
+  readonly refreshFromStorage?: (options?: unknown) => Promise<unknown>
 } = {}) {
   const token = Object.prototype.hasOwnProperty.call(input, "token") ? input.token : "access-token"
 
@@ -462,6 +462,7 @@ describe("LiveConnectionService", () => {
     await flushPromises()
 
     expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(accountService.refreshFromStorage).toHaveBeenCalledWith({ reason: "live-auth-failure" })
     expect(createSocket).toHaveBeenNthCalledWith(1, "ws://localhost:3000/api/live/desktop", {
       headers: { Authorization: "Bearer expired-token" },
     })
@@ -492,6 +493,54 @@ describe("LiveConnectionService", () => {
     })
     expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 2_000)
     expect(timers.timers).toHaveLength(1)
+  })
+
+  it("does not rebuild the socket for duplicate authenticated state of the same account", async () => {
+    const socket = new FakeSocket()
+    const createSocket = vi.fn(() => socket as never)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    expect(socket.close).not.toHaveBeenCalled()
+  })
+
+  it("reconnects after a normal close without refreshing the account token", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const accountService = createAccountService()
+    const createSocket = vi.fn()
+      .mockReturnValueOnce(firstSocket as never)
+      .mockReturnValueOnce(secondSocket as never)
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("close", 1006)
+    timers.timers[0]?.callback()
+    await flushPromises()
+
+    expect(accountService.refreshFromStorage).not.toHaveBeenCalled()
+    expect(createSocket).toHaveBeenCalledTimes(2)
+    expect(createSocket).toHaveBeenNthCalledWith(2, "ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer access-token" },
+    })
   })
 
   it("schedules reconnect when startup fails before socket creation", async () => {
@@ -582,6 +631,7 @@ describe("LiveConnectionService", () => {
     await service.connect()
 
     expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(accountService.refreshFromStorage).toHaveBeenCalledWith({ reason: "live-auth-failure" })
     expect(createSocket).not.toHaveBeenCalled()
     expect(service.getState()).toMatchObject({
       status: "unauthenticated",
@@ -613,6 +663,7 @@ describe("LiveConnectionService", () => {
     await service.connect()
 
     expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(accountService.refreshFromStorage).toHaveBeenCalledWith({ reason: "live-auth-failure" })
     expect(createSocket).not.toHaveBeenCalled()
     expect(service.getState()).toMatchObject({
       status: "reconnecting",

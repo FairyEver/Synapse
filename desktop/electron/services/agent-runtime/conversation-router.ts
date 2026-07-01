@@ -9,7 +9,11 @@ import type { ScopedEventBus } from "../../runtime/project-container"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
-import { estimateSynapseUsageCostSnapshot, type ModelPriceRule } from "../model-price"
+import {
+  estimateSynapseUsageCostSnapshot,
+  usageTokenBreakdownFromRecord,
+  type ModelPriceRule,
+} from "../model-price"
 import {
   AGENT_CANCELLED_MESSAGE,
   AGENT_COMPRESSION_UNSUPPORTED_MESSAGE,
@@ -436,7 +440,7 @@ export class ConversationRouter {
         message.content,
         mergeHistoryMetadata(
           attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadata(conversation),
+          mainThreadPersonaHistoryMetadataForTurn(message, conversation),
         ),
       )
       this.emitConversationUpdated(conversation)
@@ -659,6 +663,7 @@ export class ConversationRouter {
         const finalized = await this.finalizeResultUsageMetadata({
           state,
           conversation,
+          message,
           event,
           turnId,
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
@@ -691,7 +696,7 @@ export class ConversationRouter {
         if (sdkResultUsage) {
           resultUsage = sdkResultUsage
           resultCostUsd = event.costUsd
-          resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage)?.total
+          resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage, event.modelUsage)?.total
           resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
           await this.repository.recordSdkResultUsage({
             conversationId: conversation.id,
@@ -854,7 +859,7 @@ export class ConversationRouter {
         message.content,
         mergeHistoryMetadata(
           attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadata(conversation),
+          mainThreadPersonaHistoryMetadataForTurn(message, conversation),
         ),
       )
       const sessionHandle = await this.sessionManager.getOrCreateSession({
@@ -910,6 +915,7 @@ export class ConversationRouter {
           const finalized = await this.finalizeResultUsageMetadata({
             state,
             conversation,
+            message,
             event,
             turnId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
@@ -941,7 +947,7 @@ export class ConversationRouter {
           if (sdkResultUsage) {
             resultUsage = sdkResultUsage
             resultCostUsd = event.costUsd
-            resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage)?.total
+            resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage, event.modelUsage)?.total
             resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
             await this.repository.recordSdkResultUsage({
               conversationId: conversation.id,
@@ -1262,6 +1268,7 @@ export class ConversationRouter {
   private async finalizeResultUsageMetadata(input: {
     readonly state: RuntimeSessionState
     readonly conversation: ConversationEntryV1
+    readonly message: AgentMessage
     readonly event: Extract<AgentEvent, { type: "result" }>
     readonly turnId: string
     readonly sdkSessionId?: string
@@ -1277,8 +1284,8 @@ export class ConversationRouter {
     const usage = resultUsageFromEvent(input.event)
     const costUsd = resultCostFromEvent(input.event)
     let metadata = resultHistoryMetadata(input.event)
-    metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadata(input.conversation))
-    metadata = this.withLocalCostMetadata(input.state, usage, metadata)
+    metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadataForTurn(input.message, input.conversation))
+    metadata = this.withLocalCostMetadata(input.state, usage, resultModelUsageFromEvent(input.event), metadata)
     const costCny = metadataNumber(metadata, "costCny")
     const costCurrency = costCny === undefined ? undefined : "CNY"
     await this.repository.recordSdkResultUsage({
@@ -1334,10 +1341,11 @@ export class ConversationRouter {
   private withLocalCostMetadata(
     state: RuntimeSessionState,
     usage: Record<string, unknown> | undefined,
+    modelUsage: Record<string, unknown> | undefined,
     metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
   ): ConversationEntryV1["history"][number]["metadata"] | undefined {
     const cleaned = metadataWithoutLocalCost(metadata)
-    const cost = this.estimateLocalCostCny(state, usage)
+    const cost = this.estimateLocalCostCny(state, usage, modelUsage)
     if (!cost) return cleaned
     return compactMetadata({
       ...(cleaned ?? {}),
@@ -1350,7 +1358,11 @@ export class ConversationRouter {
   private estimateLocalCostCny(
     state: RuntimeSessionState,
     usage: Record<string, unknown> | undefined,
+    modelUsage?: Record<string, unknown>,
   ): { total: number; breakdown: Record<string, number> } | undefined {
+    const perModelCost = this.estimatePerModelUsageCostCny(modelUsage)
+    if (perModelCost.hasModelUsage) return perModelCost.cost
+
     const snapshot = estimateSynapseUsageCostSnapshot({
       modelName: state.effectiveModel,
       usage,
@@ -1365,6 +1377,49 @@ export class ConversationRouter {
         cacheRead: roundCost(snapshot.costBreakdownCny.cacheRead),
         cacheWrite: roundCost(snapshot.costBreakdownCny.cacheWrite),
         reasoning: roundCost(snapshot.costBreakdownCny.reasoning),
+      },
+    }
+  }
+
+  private estimatePerModelUsageCostCny(
+    modelUsage: Record<string, unknown> | undefined,
+  ): {
+    readonly hasModelUsage: boolean
+    readonly cost?: { total: number; breakdown: Record<string, number> }
+  } {
+    if (!modelUsage) return { hasModelUsage: false }
+
+    let hasModelUsage = false
+    let total = 0
+    let breakdown: Record<string, number> | undefined
+    for (const [modelName, rawUsage] of Object.entries(modelUsage)) {
+      if (!isRecord(rawUsage)) continue
+      if (!usageTokenBreakdownFromRecord(rawUsage)) continue
+      hasModelUsage = true
+      const snapshot = estimateSynapseUsageCostSnapshot({
+        modelName,
+        usage: rawUsage,
+        priceRules: this.deps.getUsagePriceRules?.() ?? [],
+      })
+      if (!snapshot?.priceKnown || snapshot.costCny === undefined || !snapshot.costBreakdownCny) {
+        return { hasModelUsage: true }
+      }
+      total += snapshot.costCny
+      breakdown = addCostBreakdowns(breakdown, {
+        input: snapshot.costBreakdownCny.input,
+        output: snapshot.costBreakdownCny.output,
+        cacheRead: snapshot.costBreakdownCny.cacheRead,
+        cacheWrite: snapshot.costBreakdownCny.cacheWrite,
+        reasoning: snapshot.costBreakdownCny.reasoning,
+      })
+    }
+
+    if (!hasModelUsage || !breakdown) return { hasModelUsage }
+    return {
+      hasModelUsage: true,
+      cost: {
+        total: roundCost(total),
+        breakdown,
       },
     }
   }
@@ -1868,6 +1923,23 @@ function mainThreadPersonaHistoryMetadata(
       name: snapshot.name,
       source: snapshot.source,
       definitionHash: snapshot.definitionHash,
+    },
+  }
+}
+
+function mainThreadPersonaHistoryMetadataForTurn(
+  message: AgentMessage,
+  conversation: ConversationEntryV1,
+): ConversationEntryV1["history"][number]["metadata"] | undefined {
+  if (message.mainThreadPersonaId === undefined) {
+    return mainThreadPersonaHistoryMetadata(conversation)
+  }
+  if (!message.mainThreadPersonaId) return undefined
+  return {
+    mainThreadPersona: {
+      id: message.mainThreadPersonaId,
+      name: message.mainThreadPersonaName?.trim() || message.mainThreadPersonaId,
+      source: message.mainThreadPersonaSource ?? "user",
     },
   }
 }

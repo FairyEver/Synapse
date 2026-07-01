@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto"
 
-import type { AgentPersona } from "../../../app-capabilities/agent-personas/shared/schema"
+import type {
+  AgentPersona,
+  AgentPersonaProviderModel,
+  AgentPersonaToolPolicy,
+} from "../../../app-capabilities/agent-personas/shared/schema"
 import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } from "../../runtime/data-repo"
-import type { AgentSdkAgentDefinitions } from "./project-contributions"
+import type { AgentSdkAgentDefinitions, AgentSdkSystemPrompt } from "./project-contributions"
 
 export const AGENT_PERSONA_UNAVAILABLE_MESSAGE = "智能体不可用"
 const SDK_AGENT_PREFIX = "synapse-persona__"
@@ -13,10 +17,18 @@ export type AgentPersonaRuntimeResolverDeps = {
 
 export type ResolvedPersonaSdkConfig = {
   readonly activePersonaId: string | null
+  readonly providerModel: AgentPersonaProviderModel | null
   readonly activeAgentName?: string
+  readonly systemPrompt?: AgentSdkSystemPrompt
+  readonly toolPolicy?: AgentPersonaRuntimeToolPolicy
   readonly snapshot?: ConversationMainThreadPersonaSnapshotV1
   readonly agents: AgentSdkAgentDefinitions
   readonly definitionsHash: string
+}
+
+export type AgentPersonaRuntimeToolPolicy = {
+  readonly mode: "inherit" | "allowlist" | "none"
+  readonly allowedTools: readonly string[]
 }
 
 export function sdkAgentNameForPersona(personaId: string): string {
@@ -32,15 +44,19 @@ export function createAgentPersonaRuntimeResolver(deps: AgentPersonaRuntimeResol
     const definitionsHash = hashJson(agents)
     const activePersonaId = conversation.agentConfig?.activeMainThreadPersonaId ?? null
     if (!activePersonaId) {
-      return { activePersonaId: null, agents, definitionsHash }
+      return { activePersonaId: null, providerModel: null, agents, definitionsHash }
     }
     const persona = personas.find((item) => item.id === activePersonaId)
     if (!persona) throw new Error(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
     const activeAgentName = sdkAgentNameForPersona(persona.id)
     const snapshot = snapshotForPersona(persona, agents[activeAgentName])
+    const toolPolicy = normalizeToolPolicy(persona.toolPolicy)
     return {
       activePersonaId,
+      providerModel: persona.providerModel,
       activeAgentName,
+      systemPrompt: systemPromptForPersona(persona),
+      toolPolicy,
       snapshot,
       agents,
       definitionsHash,
@@ -51,14 +67,63 @@ export function createAgentPersonaRuntimeResolver(deps: AgentPersonaRuntimeResol
 }
 
 function toSdkAgents(personas: readonly AgentPersona[]): AgentSdkAgentDefinitions {
-  return Object.fromEntries(personas.map((persona) => [
-    sdkAgentNameForPersona(persona.id),
-    {
-      description: persona.description,
-      prompt: persona.systemPrompt,
-      disallowedTools: ["Agent"],
-    },
-  ]))
+  return Object.fromEntries(personas.map((persona) => {
+    const toolPolicy = normalizeToolPolicy(persona.toolPolicy)
+    return [
+      sdkAgentNameForPersona(persona.id),
+      {
+        description: persona.description,
+        prompt: persona.systemPrompt,
+        ...sdkToolOptionsForPolicy(toolPolicy),
+      },
+    ]
+  }))
+}
+
+function systemPromptForPersona(persona: AgentPersona): AgentSdkSystemPrompt {
+  return {
+    type: "preset",
+    preset: "claude_code",
+    append: persona.systemPrompt,
+  }
+}
+
+function sdkToolOptionsForPolicy(
+  policy: AgentPersonaRuntimeToolPolicy,
+): Pick<AgentSdkAgentDefinitions[string], "tools" | "disallowedTools"> {
+  if (policy.mode === "none") {
+    return { tools: [], disallowedTools: ["*"] }
+  }
+  if (policy.mode === "allowlist") {
+    return { tools: [...policy.allowedTools], disallowedTools: disallowedToolsForAllowlist(policy.allowedTools) }
+  }
+  return { disallowedTools: ["Agent"] }
+}
+
+function disallowedToolsForAllowlist(allowedTools: readonly string[]): string[] {
+  return allowedTools.includes("Agent") ? [] : ["Agent"]
+}
+
+function normalizeToolPolicy(value: AgentPersonaToolPolicy | undefined): AgentPersonaRuntimeToolPolicy {
+  if (value?.mode !== "allowlist") {
+    return { mode: value?.mode ?? "inherit", allowedTools: [] }
+  }
+  return {
+    mode: "allowlist",
+    allowedTools: uniqueNonBlankStrings(value.allowedTools ?? []),
+  }
+}
+
+function uniqueNonBlankStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    result.push(normalized)
+  }
+  return result
 }
 
 function snapshotForPersona(

@@ -16,6 +16,7 @@ import type {
   AgentPersonaCreateInput,
   AgentPersonaIdInput,
   AgentPersonaProviderModel,
+  AgentPersonaToolPolicy,
   AgentPersonaUpdateInput,
 } from "../shared/schema"
 
@@ -77,6 +78,7 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
       description: normalizeRequired(input.description, "简介不能为空。"),
       systemPrompt: normalizeRequired(input.systemPrompt, "系统提示词不能为空。"),
       providerModel: normalizeProviderModel(input.providerModel ?? null),
+      toolPolicy: normalizeToolPolicy(input.toolPolicy),
       source: "user",
       createdAt: now,
       updatedAt: now,
@@ -99,6 +101,7 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
       description: normalizeRequired(input.description, "简介不能为空。"),
       systemPrompt: normalizeRequired(input.systemPrompt, "系统提示词不能为空。"),
       providerModel: normalizeProviderModel(input.providerModel ?? null),
+      toolPolicy: normalizeToolPolicy(input.toolPolicy),
       updatedAt: timestamp(),
     }
 
@@ -182,6 +185,28 @@ function normalizeProviderModel(value: AgentPersonaProviderModel | null): AgentP
   }
 }
 
+function normalizeToolPolicy(value: AgentPersonaToolPolicy | undefined): Required<AgentPersonaToolPolicy> {
+  if (value?.mode !== "allowlist") {
+    return { mode: value?.mode ?? "inherit", allowedTools: [] }
+  }
+  return {
+    mode: "allowlist",
+    allowedTools: uniqueNonBlankStrings(value.allowedTools ?? []),
+  }
+}
+
+function uniqueNonBlankStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    result.push(normalized)
+  }
+  return result
+}
+
 function compareUserItems(a: AgentPersonaItemEntryV1, b: AgentPersonaItemEntryV1): number {
   return Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id)
 }
@@ -194,6 +219,7 @@ function toPublicUserItem(item: AgentPersonaItemEntryV1): AgentPersona {
     description: item.description,
     systemPrompt: item.systemPrompt,
     providerModel: item.providerModel,
+    toolPolicy: normalizeToolPolicy(item.toolPolicy),
     source: "user",
     readonly: false,
     createdAt: item.createdAt,
@@ -212,5 +238,6 @@ function toPublicBuiltinItem(
   return {
     ...item,
     providerModel,
+    toolPolicy: normalizeToolPolicy(item.toolPolicy),
   }
 }

@@ -889,6 +889,124 @@ describe("ConversationRouter", () => {
     }))
   })
 
+  it("estimates result cost from per-model usage when multiple models are reported", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentUsage,
+      eventBus,
+      env: { ANTHROPIC_MODEL: "fallback-model" },
+      priceRules: [
+        priceRule("qwen-max", { inputPer1M: 1, outputPer1M: 2 }),
+        priceRule("deepseek-chat", { inputPer1M: 10, outputPer1M: 20 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "multi model usage answer",
+          done: true,
+          sdkResultUuid: "result-multi-model",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 3_000,
+            output_tokens: 400,
+          },
+          modelUsage: {
+            "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
+            "deepseek-chat": { inputTokens: 2_000, outputTokens: 300 },
+          },
+          costUsd: 0.5,
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+    const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
+
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      modelUsage: {
+        "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
+        "deepseek-chat": { inputTokens: 2_000, outputTokens: 300 },
+      },
+      costCny: 0.0272,
+      costBreakdownCny: {
+        input: 0.021,
+        output: 0.0062,
+        cacheRead: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      totalCostCny: 0.0272,
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+    expect(resultEvent).toEqual(expect.objectContaining({
+      costCny: 0.0272,
+      costCurrency: "CNY",
+      metadata: expect.objectContaining({
+        costBreakdownCny: assistantEntry?.metadata?.costBreakdownCny,
+      }),
+    }))
+    expect(result.costCny).toBe(0.0272)
+  })
+
+  it("omits CNY result cost when per-model usage includes an unpriced model", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentUsage,
+      eventBus,
+      env: { ANTHROPIC_MODEL: "fallback-model" },
+      priceRules: [
+        priceRule("qwen-max", { inputPer1M: 1, outputPer1M: 2 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "partially priced usage answer",
+          done: true,
+          sdkResultUuid: "result-partial-model",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 3_000,
+            output_tokens: 400,
+          },
+          modelUsage: {
+            "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
+            "unknown-model": { inputTokens: 2_000, outputTokens: 300 },
+          },
+          costUsd: 0.5,
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+    const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
+
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      modelUsage: {
+        "qwen-max": { input_tokens: 1_000, output_tokens: 100 },
+        "unknown-model": { inputTokens: 2_000, outputTokens: 300 },
+      },
+      costUsd: 0.5,
+    }))
+    expect(assistantEntry?.metadata).not.toEqual(expect.objectContaining({
+      costCny: expect.any(Number),
+      totalCostCny: expect.any(Number),
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+    expect(resultEvent).not.toEqual(expect.objectContaining({
+      costCny: expect.any(Number),
+      costCurrency: "CNY",
+    }))
+    expect(result.costCny).toBeUndefined()
+  })
+
   it("omits CNY result cost when the effective model has no Synapse price rule", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const { eventBus, events } = createEventBusRecorder()
@@ -2266,6 +2384,26 @@ function baseMessage(content: string): AgentMessage {
 
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
+}
+
+function priceRule(
+  modelPattern: string,
+  patch: Pick<ModelPriceRule, "inputPer1M" | "outputPer1M"> & Partial<ModelPriceRule>,
+): ModelPriceRule {
+  return {
+    id: modelPattern,
+    modelPattern,
+    inputPer1M: patch.inputPer1M,
+    outputPer1M: patch.outputPer1M,
+    cacheReadPer1M: patch.cacheReadPer1M ?? 0,
+    cacheWritePer1M: patch.cacheWritePer1M ?? 0,
+    reasoningPer1M: patch.reasoningPer1M ?? 0,
+    currency: "CNY",
+    enabled: patch.enabled ?? true,
+    source: patch.source ?? "user",
+    sortIndex: patch.sortIndex ?? 0,
+    updatedAt: patch.updatedAt ?? "2026-06-02T00:00:00.000Z",
+  }
 }
 
 async function flushAsync(): Promise<void> {

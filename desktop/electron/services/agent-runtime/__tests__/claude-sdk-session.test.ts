@@ -270,11 +270,20 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
       agent: "synapse-persona__builtin-zh-en-translator",
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "Translate only.",
+      },
+      tools: [],
+      disallowedTools: ["*"],
+      personaToolPolicy: { mode: "none", allowedTools: [] },
       agents: {
         "synapse-persona__builtin-zh-en-translator": {
           description: "Translates between Chinese and English.",
           prompt: "Translate only.",
-          disallowedTools: ["Agent"],
+          tools: [],
+          disallowedTools: ["*"],
         },
       },
       agentDefinitionsHash: "hash-1",
@@ -282,10 +291,64 @@ describe("ClaudeSDKSession", () => {
 
     expect(getOptions()).toMatchObject({
       agent: "synapse-persona__builtin-zh-en-translator",
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "Translate only.",
+      },
+      tools: [],
+      disallowedTools: ["*"],
       agents: {
         "synapse-persona__builtin-zh-en-translator": {
           prompt: "Translate only.",
         },
+      },
+    })
+  })
+
+  it("denies every tool in persona none mode before SDK permissions", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      personaToolPolicy: { mode: "none", allowedTools: [] },
+    })
+
+    const guard = preToolUseHook(getOptions(), "*")
+
+    await expect(guard({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "git status" },
+    })).resolves.toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringContaining("当前智能体未启用工具"),
+      },
+    })
+  })
+
+  it("denies tools outside the persona allowlist before SDK permissions", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      personaToolPolicy: { mode: "allowlist", allowedTools: ["Read", "mcp__synapse-mcp__database_query"] },
+    })
+
+    const guard = preToolUseHook(getOptions(), "*")
+
+    await expect(guard({
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: "README.md" },
+    })).resolves.toEqual({})
+    await expect(guard({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "git status" },
+    })).resolves.toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringContaining("当前智能体未允许使用该工具"),
       },
     })
   })
@@ -1343,17 +1406,19 @@ function canUseTool(options: Record<string, unknown>): (
   ) => Promise<PermissionResult>
 }
 
-function preToolUseHook(options: Record<string, unknown>): (
+function preToolUseHook(options: Record<string, unknown>, matcher = "TodoWrite"): (
   input: Record<string, unknown>,
 ) => Promise<unknown> {
   const hooks = options.hooks as {
-    PreToolUse: [{ hooks: [(
+    PreToolUse: Array<{ matcher?: string, hooks: [(
       input: Record<string, unknown>,
       toolUseID: string | undefined,
       context: { signal: AbortSignal },
-    ) => Promise<unknown>] }]
+    ) => Promise<unknown>] }>
   }
-  return (input) => hooks.PreToolUse[0].hooks[0](
+  const hook = hooks.PreToolUse.find((entry) => (entry.matcher ?? "*") === matcher)
+  if (!hook) throw new Error(`missing PreToolUse hook: ${matcher}`)
+  return (input) => hook.hooks[0](
     input,
     "toolu-todo",
     { signal: new AbortController().signal },

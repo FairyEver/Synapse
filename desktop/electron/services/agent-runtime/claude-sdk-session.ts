@@ -86,6 +86,10 @@ export interface ClaudeSDKSessionOptions {
   readonly agent?: string
   readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
+  readonly systemPrompt?: Options["systemPrompt"]
+  readonly tools?: Options["tools"]
+  readonly disallowedTools?: readonly string[]
+  readonly personaToolPolicy?: ClaudeSDKPersonaToolPolicy
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
@@ -116,6 +120,11 @@ export type ClaudeSDKToolPolicy = (
   toolName: string,
   input: Record<string, unknown>,
 ) => PermissionResult | undefined
+
+export type ClaudeSDKPersonaToolPolicy = {
+  readonly mode: "inherit" | "allowlist" | "none"
+  readonly allowedTools: readonly string[]
+}
 
 export { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./turn-limits"
 
@@ -149,6 +158,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly permissions = new Map<string, PendingPermission>()
   private readonly logger: Pick<StructuredLogger, "warn"> | undefined
   private readonly subagentToolPolicies: AgentSdkSubagentToolPolicies
+  private readonly personaToolPolicy: ClaudeSDKPersonaToolPolicy | undefined
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
   private readonly query: QueryLike
   private readonly abortController: AbortController | undefined
@@ -176,6 +186,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.sdkSessionId = options.sdkSessionId
     this.logger = options.logger
     this.subagentToolPolicies = options.subagentToolPolicies ?? {}
+    this.personaToolPolicy = options.personaToolPolicy
     this.toolPolicy = options.toolPolicy
     this.now = options.now ?? (() => new Date())
     this.mainThreadAgentName = options.agent
@@ -354,6 +365,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
       ;(queryOptions as Record<string, unknown>).agent = options.agent
     }
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
+    if (options.systemPrompt) queryOptions.systemPrompt = options.systemPrompt
+    if (options.tools !== undefined) queryOptions.tools = options.tools
+    if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
     if (options.additionalDirectories?.length) {
       queryOptions.additionalDirectories = [...options.additionalDirectories]
     }
@@ -380,11 +394,32 @@ export class ClaudeSDKSession implements AgentLiveSession {
       }],
     }
 
+    if (this.personaToolPolicy && this.personaToolPolicy.mode !== "inherit") {
+      hooks.PreToolUse?.unshift({
+        matcher: "*",
+        hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardPersonaToolPolicy(input)],
+      })
+    }
+
     if (Object.keys(this.subagentToolPolicies).length > 0) {
       Object.assign(hooks, this.subagentTrackingHooks())
     }
 
     return hooks
+  }
+
+  private guardPersonaToolPolicy(input: HookInput): HookJSONOutput {
+    const record = input as unknown as Record<string, unknown>
+    if (record.hook_event_name !== "PreToolUse") return {}
+    const toolName = typeof record.tool_name === "string" ? record.tool_name : ""
+    if (!toolName) return denyToolUse("当前智能体未允许使用该工具。")
+    const policy = this.personaToolPolicy
+    if (!policy || policy.mode === "inherit") return {}
+    if (policy.mode === "none") {
+      return denyToolUse("当前智能体未启用工具。")
+    }
+    if (policy.allowedTools.includes(toolName)) return {}
+    return denyToolUse("当前智能体未允许使用该工具。")
   }
 
   private guardRepeatedTodoWrite(input: HookInput): HookJSONOutput {
@@ -795,6 +830,16 @@ function toPermissionResult(
 
 function permissionCancelledResult(): PermissionResult {
   return { behavior: "deny", message: AGENT_PERMISSION_CANCELLED_MESSAGE }
+}
+
+function denyToolUse(message: string): HookJSONOutput {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: message,
+    },
+  }
 }
 
 function isWriteTool(toolName: string): boolean {

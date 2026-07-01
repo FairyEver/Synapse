@@ -105,12 +105,20 @@ type PersistedAccount = Record<string, unknown> & {
   }
 }
 
+type AccountRefreshReason = "startup" | "api-auth-failure" | "live-auth-failure" | "manual" | "offline-retry"
+
+type AccountRefreshFromStorageOptions = {
+  readonly resetRetryBackoff?: boolean
+  readonly reason?: AccountRefreshReason
+}
+
 type AccountHttpFailureKind = "temporary" | "auth" | "other"
 
 type AccountHttpError = Error & {
   status: number
   url?: string
   method?: string
+  code?: string
 }
 
 type PaginatedAccountResponse<T> = {
@@ -390,7 +398,7 @@ export class AccountService {
     const url = pathOrUrl.startsWith("/") ? `${apiBaseUrl()}${pathOrUrl}` : pathOrUrl
     let token = this.accessToken
     if (!token) {
-      await this.refreshFromStorage()
+      await this.refreshFromStorage({ reason: "api-auth-failure" })
       token = this.accessToken
     }
     if (!token) throw new AccountAuthenticationRequiredError()
@@ -403,7 +411,7 @@ export class AccountService {
 
     let response = await request()
     if (response.status === 401 || response.status === 403) {
-      await this.refreshFromStorage()
+      await this.refreshFromStorage({ reason: "api-auth-failure" })
       token = this.accessToken
       if (!token) {
         throw await createHttpError(init.method ?? "GET", url, response, errorMessage)
@@ -1631,7 +1639,7 @@ export class AccountService {
     return this.state
   }
 
-  async refreshFromStorage(options: { resetRetryBackoff?: boolean } = {}): Promise<SynapseAccountState> {
+  async refreshFromStorage(options: AccountRefreshFromStorageOptions = {}): Promise<SynapseAccountState> {
     if (this.refreshInFlight) return this.refreshInFlight
     const refresh = this.performRefreshFromStorage(options)
       .finally(() => {
@@ -1643,7 +1651,8 @@ export class AccountService {
     return refresh
   }
 
-  private async performRefreshFromStorage(options: { resetRetryBackoff?: boolean } = {}): Promise<SynapseAccountState> {
+  private async performRefreshFromStorage(options: AccountRefreshFromStorageOptions = {}): Promise<SynapseAccountState> {
+    const reason = options.reason ?? "manual"
     const resetRetryBackoff = options.resetRetryBackoff ?? true
     if (resetRetryBackoff) {
       this.cancelOfflineRetry()
@@ -1657,6 +1666,7 @@ export class AccountService {
         if (persisted?.activeAttempt) {
           logger.info("Desktop account refresh skipped.", {
             operation: "refreshFromStorage",
+            reason,
             status: "active-attempt",
           })
           return this.state
@@ -1664,6 +1674,7 @@ export class AccountService {
         this.setState({ status: "unauthenticated" })
         logger.info("Desktop account refresh skipped.", {
           operation: "refreshFromStorage",
+          reason,
           status: "no-refresh-token",
         })
         return this.state
@@ -1700,13 +1711,21 @@ export class AccountService {
       if (committed.activeAttempt) return this.state
       this.cancelOfflineRetry()
       this.setState({ status: "authenticated", connectivity: "online", profile })
-      logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile))
+      logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile, reason))
     } catch (error) {
-      logger.warn("Account refresh failed.", { error })
+      logger.warn("Account refresh failed.", {
+        operation: "refreshFromStorage",
+        reason,
+        status: "failed",
+        httpStatus: isAccountHttpError(error) ? error.status : undefined,
+        code: isAccountHttpError(error) ? error.code : undefined,
+        error,
+      })
       const latest = await this.readPersisted("Failed to read stored account after account refresh failed.")
       if (attemptedRefreshToken && latest?.refreshToken && latest.refreshToken !== attemptedRefreshToken) {
         logger.info("Ignored stale account refresh failure.", {
           operation: "refreshFromStorage",
+          reason,
           status: "stale-refresh-token",
         })
         return this.state
@@ -1731,7 +1750,7 @@ export class AccountService {
       return this.state
     }
     this.cancelOfflineRetry()
-    return this.refreshFromStorage()
+    return this.refreshFromStorage({ reason: "manual" })
   }
 
   async logout(): Promise<SynapseAccountState> {
@@ -1932,7 +1951,7 @@ export class AccountService {
     this.retryTimer = setTimeout(async () => {
       this.retryTimer = null
       this.retryAttempt += 1
-      await this.refreshFromStorage({ resetRetryBackoff: false })
+      await this.refreshFromStorage({ resetRetryBackoff: false, reason: "offline-retry" })
     }, delayMs)
     this.retryTimer.unref?.()
   }
@@ -1992,9 +2011,11 @@ export class AccountService {
 function authenticatedLogMeta(
   operation: "handleAuthCallback" | "refreshFromStorage",
   profile: SynapseAccountProfile,
+  reason?: AccountRefreshReason,
 ): Record<string, unknown> {
   return {
     operation,
+    ...(reason ? { reason } : {}),
     status: "authenticated",
     userId: profile.user.id,
     teamCount: profile.teams.length,
@@ -2007,26 +2028,37 @@ async function createHttpError(
   response: Response,
   fallbackMessage: string,
 ): Promise<AccountHttpError> {
-  const detail = await formatHttpFailureBody(response)
-  const detailText = detail ? `: ${detail}` : ""
+  const failure = await readHttpFailureBody(response)
+  const detailText = failure.detail ? `: ${failure.detail}` : ""
   const error = new Error(
     `${fallbackMessage} (${method} ${endpointPath(url)} HTTP ${response.status})${detailText}`,
   ) as AccountHttpError
   error.status = response.status
   error.url = url
   error.method = method
+  error.code = failure.code
   return error
 }
 
-async function formatHttpFailureBody(response: Response): Promise<string> {
+async function readHttpFailureBody(response: Response): Promise<{ readonly detail: string; readonly code?: string }> {
   const text = await response.text().catch(() => "")
-  if (!text) return ""
+  if (!text) return { detail: "" }
 
   try {
-    return truncateHttpFailureDetail(JSON.stringify(redactHttpFailureDetail(JSON.parse(text))))
+    const parsed = JSON.parse(text)
+    return {
+      detail: truncateHttpFailureDetail(JSON.stringify(redactHttpFailureDetail(parsed))),
+      code: stableHttpErrorCode(parsed),
+    }
   } catch {
-    return truncateHttpFailureDetail(redactSensitiveText(text))
+    return { detail: truncateHttpFailureDetail(redactSensitiveText(text)) }
   }
+}
+
+function stableHttpErrorCode(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || !("code" in value)) return undefined
+  const code = (value as { readonly code?: unknown }).code
+  return typeof code === "string" ? code : undefined
 }
 
 function redactHttpFailureDetail(value: unknown): unknown {
@@ -2195,7 +2227,8 @@ function errorCode(error: unknown): string | undefined {
 
 function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {
   if (isAccountHttpError(error)) {
-    if (error.status === 401 || error.status === 403) return "auth"
+    if (isTerminalRefreshFailureCode(error.code)) return "auth"
+    if (error.status === 401 || error.status === 403) return "temporary"
     if (error.status === 429) return "temporary"
     if (error.status >= 500) return "temporary"
     return "other"
@@ -2204,8 +2237,17 @@ function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {
 }
 
 function offlineReasonForFailure(error: unknown): SynapseAccountOfflineReason {
-  if (isAccountHttpError(error) && (error.status === 429 || error.status >= 500)) return "server_unavailable"
+  if (isAccountHttpError(error) && (error.status === 401 || error.status === 403 || error.status === 429 || error.status >= 500)) {
+    return "server_unavailable"
+  }
   return "network_error"
+}
+
+function isTerminalRefreshFailureCode(code: string | undefined): boolean {
+  return code === "refresh_invalid"
+    || code === "refresh_expired"
+    || code === "refresh_revoked"
+    || code === "account_disabled"
 }
 
 function isAccountHttpError(error: unknown): error is AccountHttpError {
