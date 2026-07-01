@@ -5,6 +5,7 @@ import { AdminModule } from "./admin/admin.module"
 import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { LiveModule } from "./live/live.module"
+import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 
 describe("AppModule", () => {
   it("registers audit logging at the application level", () => {
@@ -15,6 +16,7 @@ describe("AppModule", () => {
       { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     ]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
   })
 })
 
