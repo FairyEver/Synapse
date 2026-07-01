@@ -1147,11 +1147,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     baseline: readonly DriveSyncBaselineEntryV1[],
     changes: readonly DriveSyncLocalChange[],
   ): Promise<readonly DriveSyncLocalChange[]> {
-    if (binding.kind !== "folder" || !hasLocalMoveSignal(changes)) return changes
+    if (binding.kind !== "folder" || !hasLocalRescanSignal(changes)) return changes
     return localWatcher.scanBinding({ binding, baseline }).catch(() => changes)
   }
 
-  function hasLocalMoveSignal(changes: readonly DriveSyncLocalChange[]): boolean {
+  function hasLocalRescanSignal(changes: readonly DriveSyncLocalChange[]): boolean {
+    if (changes.some((change) =>
+      (change.kind === "created" || change.kind === "modified") && change.localKind === "folder",
+    )) return true
     return changes.some((change) => change.kind === "created")
       && changes.some((change) => change.kind === "deleted")
   }
