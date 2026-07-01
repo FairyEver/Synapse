@@ -120,6 +120,52 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("recursively downloads remote folder descendants without existing local baselines", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const bindingEntry = binding({ localPath: tempDir })
+    const accountService = createAccountService({
+      listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
+        if (parentId === "remote-project") {
+          return {
+            items: [
+              { id: "remote-docs", name: "docs", type: "folder", path: "Docs/Project/docs" },
+              { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/docs/spec.md" },
+            ],
+            nextOffset: null,
+          }
+        }
+        return { items: [], nextOffset: null }
+      }),
+      downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+        await writeFile(outputPath, itemId, "utf8")
+        return { ok: true as const, path: outputPath }
+      }),
+    })
+
+    await executeDriveSyncOperation({
+      binding: bindingEntry,
+      operation: operation({
+        kind: "download",
+        relativePath: "Project",
+        driveItemId: "remote-project",
+        localPath: path.join(tempDir, "Project"),
+        remoteItemKind: "folder",
+        remotePathHint: "/Docs/Project",
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(readFile(path.join(tempDir, "Project", "docs", "spec.md"), "utf8")).resolves.toBe("remote-spec")
+    await expect(namespace.list()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
+      expect.objectContaining({ relativePath: "Project/docs", remoteItemId: "remote-docs", kind: "folder" }),
+      expect.objectContaining({ relativePath: "Project/docs/spec.md", remoteItemId: "remote-spec", kind: "file" }),
+    ]))
+  })
+
   it("uploads local files and updates baseline with the remote item id", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const records: unknown[] = []
@@ -646,7 +692,7 @@ function operation(input: Partial<DriveSyncPlannedOperation> & {
     driveItemId: input.driveItemId === undefined ? "remote-item" : input.driveItemId,
     relativePath: input.relativePath,
     localPath: input.localPath ?? path.join("/Users/me/Docs", input.relativePath),
-    remotePathHint: null,
+    remotePathHint: input.remotePathHint ?? null,
     remoteItemKind: input.remoteItemKind ?? null,
   }
 }

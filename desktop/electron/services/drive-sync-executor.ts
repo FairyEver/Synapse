@@ -7,6 +7,7 @@ import type { DriveSyncPlannedOperation } from "./drive-sync-planner"
 import type { DriveSyncBindingEntryV1, DriveSyncOperationEntryV1 } from "../runtime/data-repo"
 import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile } from "./drive-sync-local-snapshot"
+import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import {
   createDriveSyncDirectoryTarget,
   driveSyncLocalWriteRootPath,
@@ -106,6 +107,67 @@ async function downloadFolder(deps: DriveSyncExecutorDeps): Promise<void> {
     localHash: null,
     deletedAt: null,
   })
+  await downloadFolderDescendants(deps, {
+    rootDriveItemId: driveItemId,
+    rootLocalPath: localPath,
+    rootRelativePath: deps.operation.relativePath,
+  })
+}
+
+async function downloadFolderDescendants(
+  deps: DriveSyncExecutorDeps,
+  input: {
+    readonly rootDriveItemId: string
+    readonly rootLocalPath: string
+    readonly rootRelativePath: string
+  },
+): Promise<void> {
+  const rootName = path.basename(input.rootLocalPath)
+  let offset: number | null = 0
+  while (offset !== null) {
+    const page = await deps.accountService.listDriveItemTree({ parentId: input.rootDriveItemId, offset, limit: 200 })
+    for (const item of page.items) {
+      const relativePath = downloadedFolderChildRelativePath(input.rootRelativePath, rootName, item.path ?? item.name, deps.operation.remotePathHint)
+      if (!relativePath || isDriveSyncExcluded(relativePath, deps.binding.excludeRules)) continue
+      const localPath = path.join(deps.binding.localPath, relativePath)
+      if (item.type === "folder") {
+        await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), localPath)
+        const stats = await lstat(localPath)
+        await deps.baselineStore.upsert({
+          bindingId: deps.binding.id,
+          relativePath,
+          kind: "folder",
+          remoteItemId: item.id,
+          remoteVersionId: null,
+          remoteEtag: null,
+          localSize: null,
+          localMtimeMs: stats.mtimeMs,
+          localHash: null,
+          deletedAt: null,
+        })
+        continue
+      }
+      const writtenPath = await writeDriveSyncFileTarget(
+        driveSyncLocalWriteRootPath(deps.binding),
+        localPath,
+        (outputPath) => deps.accountService.downloadDriveFile({ itemId: item.id, outputPath }),
+      )
+      const stats = await lstat(writtenPath)
+      await deps.baselineStore.upsert({
+        bindingId: deps.binding.id,
+        relativePath,
+        kind: "file",
+        remoteItemId: item.id,
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: stats.size,
+        localMtimeMs: stats.mtimeMs,
+        localHash: await hashDriveSyncFile(writtenPath),
+        deletedAt: null,
+      })
+    }
+    offset = page.nextOffset ?? null
+  }
 }
 
 async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
@@ -150,6 +212,18 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
     localHash: await hashDriveSyncFile(localPath),
     deletedAt: null,
   })
+}
+
+function downloadedFolderChildRelativePath(rootRelativePath: string, rootName: string, remotePath: string, remotePathHint: string | null): string {
+  const normalizedRemotePath = remotePath.split(/[\\/]+/u).filter(Boolean).join("/")
+  const remoteRootPath = remotePathHint?.split(/[\\/]+/u).filter(Boolean).join("/") ?? ""
+  if (normalizedRemotePath === remoteRootPath || normalizedRemotePath === rootName) return rootRelativePath
+  const rootPrefixes = [remoteRootPath, rootName]
+    .filter(Boolean)
+    .map((value) => `${value}/`)
+  const matchedPrefix = rootPrefixes.find((prefix) => normalizedRemotePath.startsWith(prefix))
+  const suffix = matchedPrefix ? normalizedRemotePath.slice(matchedPrefix.length) : normalizedRemotePath
+  return [rootRelativePath, suffix].filter(Boolean).join("/")
 }
 
 async function deleteRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {

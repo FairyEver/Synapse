@@ -1450,6 +1450,75 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("polls moved remote folders and downloads their descendants", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-project",
+              parentId: "drive-root",
+              type: "moved",
+              itemKind: "folder",
+              versionId: null,
+              etag: null,
+              name: "Project",
+              pathHint: "/Docs/Project",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
+            if (parentId === "remote-project") {
+              return {
+                items: [
+                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/Project/notes" },
+                  { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
+                ],
+                nextOffset: null,
+              }
+            }
+            return { items: [], nextOffset: null }
+          }),
+          downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+            await writeFile(outputPath, itemId, "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await service.pollRemoteChanges(binding.id)
+
+      await expect(readFile(path.join(tempDir, "Project", "notes", "spec.md"), "utf8")).resolves.toBe("remote-spec")
+      await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ bindingId: binding.id, relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
+        expect.objectContaining({ bindingId: binding.id, relativePath: "Project/notes", remoteItemId: "remote-notes", kind: "folder" }),
+        expect.objectContaining({ bindingId: binding.id, relativePath: "Project/notes/spec.md", remoteItemId: "remote-spec", kind: "file" }),
+      ]))
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "move_local", status: "succeeded", relativePath: "Project" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("blocks remote downloads through symlinked local folders during polling", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     const outsideDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-outside-"))
