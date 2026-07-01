@@ -2028,6 +2028,59 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("resolves a remote folder conflict without downloading it as a file", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "docs")
+      await mkdir(localPath, { recursive: true })
+      await writeFile(path.join(localPath, "local.md"), "local", "utf8")
+      const downloadDriveFile = vi.fn(async () => ({ ok: true as const, path: "" }))
+      const harness = createHarness({
+        accountService: { downloadDriveFile },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-docs",
+        relativePath: "docs",
+        localPath,
+        remotePathHint: "/Docs/docs",
+        type: "both_modified",
+        remoteSnapshot: {
+          change: {
+            itemId: "remote-docs",
+            itemKind: "folder",
+          },
+        },
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" })
+
+      expect(downloadDriveFile).not.toHaveBeenCalled()
+      const stats = await lstat(localPath)
+      expect(stats.isDirectory()).toBe(true)
+      await expect(harness.baseline.get(`${binding.id}:docs`)).resolves.toMatchObject({
+        bindingId: binding.id,
+        relativePath: "docs",
+        kind: "folder",
+        remoteItemId: "remote-docs",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "succeeded", relativePath: "docs" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("checks and audits local writes before applying remote conflict resolution", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

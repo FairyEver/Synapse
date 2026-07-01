@@ -1087,8 +1087,20 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       relativePath: conflict.relativePath,
       localPath,
       remotePathHint: conflict.remotePathHint,
-      remoteItemKind: null,
+      remoteItemKind: kind === "download" ? remoteItemKindForConflict(conflict) : null,
     }
+  }
+
+  function remoteItemKindForConflict(conflict: DriveSyncConflictEntryV1): DriveSyncPlannedOperation["remoteItemKind"] {
+    return driveItemKindFromSnapshotValue(conflict.remoteSnapshot?.change)
+      ?? driveItemKindFromSnapshotValue(conflict.remoteSnapshot?.baseline)
+  }
+
+  function driveItemKindFromSnapshotValue(value: unknown): DriveSyncPlannedOperation["remoteItemKind"] {
+    if (!value || typeof value !== "object") return null
+    const record = value as Record<string, unknown>
+    const kind = record.itemKind ?? record.kind
+    return kind === "file" || kind === "folder" ? kind : null
   }
 
   function conflictLocalPath(binding: DriveSyncBindingEntryV1, conflict: DriveSyncConflictEntryV1): string {
