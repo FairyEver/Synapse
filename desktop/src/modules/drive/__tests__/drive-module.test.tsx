@@ -659,6 +659,46 @@ describe("DriveModule", () => {
     expect(detailDialog.textContent).not.toContain("notes-operation.md")
   })
 
+  it("offers confirm delete for delete-modify drive sync conflicts", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 2 },
+      {
+        bindings: [createDriveSyncBinding({ status: "conflict" })],
+        conflicts: [
+          {
+            id: "conflict-delete",
+            bindingId: "binding-1",
+            relativePath: "deleted-spec.md",
+            type: "delete_vs_modify",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+          {
+            id: "conflict-edit",
+            bindingId: "binding-1",
+            relativePath: "edited-spec.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+        ],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：2 个冲突")
+    await clickButtonByLabel("处理同步冲突 Docs")
+
+    expect(rowButtonTexts("deleted-spec.md")).toEqual(["确认删除", "保留两份", "稍后"])
+    expect(rowButtonTexts("edited-spec.md")).toEqual(["用本地", "用云端", "保留两份", "稍后"])
+
+    await clickRowButtonText("deleted-spec.md", "确认删除")
+
+    expect(mocks.resolveDriveSyncConflict).toHaveBeenCalledWith({
+      conflictId: "conflict-delete",
+      action: "confirm_delete",
+    })
+  })
+
   it("keeps the drive sync detail close button inside the dialog header", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 1 },

@@ -724,8 +724,14 @@ function DriveSyncConflictTable({
             <TableCell>{formatConflictType(conflict.type)}</TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-1">
-                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
-                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
+                {conflict.type === "delete_vs_modify" ? (
+                  <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "confirm_delete" }), "已确认删除") }}>确认删除</Button>
+                ) : (
+                  <>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
+                  </>
+                )}
                 <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_both" }), "已保留两份") }}>保留两份</Button>
                 <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "skip" }), "已跳过") }}>稍后</Button>
               </div>
