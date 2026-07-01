@@ -301,6 +301,97 @@ describe("DriveSyncService", () => {
     })).rejects.toThrow("本地路径已绑定。")
   })
 
+  it("blocks remote parent and child items from being bound separately", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async (itemId: string) => {
+            if (itemId === "remote-docs") return { ...mockDriveItem(itemId), id: itemId, type: "folder", name: "Docs", parentId: null }
+            if (itemId === "remote-spec") return { ...mockDriveItem(itemId), id: itemId, type: "file", name: "spec.md", parentId: "remote-docs" }
+            return mockDriveItem(itemId)
+          }),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote spec", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      await service.createBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: path.join(tempDir, "Docs"),
+        deferWatcher: true,
+      })
+
+      await expect(service.previewBinding({
+        driveItemId: "remote-spec",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath: path.join(tempDir, "spec.md"),
+        remoteExists: true,
+      })).resolves.toMatchObject({
+        status: "blocked",
+        reason: "云盘条目位于已同步的云盘文件夹内。",
+      })
+      await expect(service.createSafeBinding({
+        driveItemId: "remote-spec",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath: path.join(tempDir, "spec.md"),
+        direction: "remote_to_local",
+      })).rejects.toThrow("云盘条目位于已同步的云盘文件夹内。")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("blocks remote folder bindings that would contain an existing remote binding", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async (itemId: string) => {
+            if (itemId === "remote-docs") return { ...mockDriveItem(itemId), id: itemId, type: "folder", name: "Docs", parentId: null }
+            if (itemId === "remote-spec") return { ...mockDriveItem(itemId), id: itemId, type: "file", name: "spec.md", parentId: "remote-docs" }
+            return mockDriveItem(itemId)
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      await service.createBinding({
+        driveItemId: "remote-spec",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath: path.join(tempDir, "spec.md"),
+        deferWatcher: true,
+      })
+
+      await expect(service.previewBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: path.join(tempDir, "Docs"),
+        remoteExists: true,
+      })).resolves.toMatchObject({
+        status: "blocked",
+        reason: "云盘条目包含已同步的云盘条目。",
+      })
+      await expect(service.createSafeBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: path.join(tempDir, "Docs"),
+        direction: "remote_to_local",
+      })).rejects.toThrow("云盘条目包含已同步的云盘条目。")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("records operations, conflicts, and health for snapshots", async () => {
     const harness = createHarness()
     const service = createDriveSyncService(harness.deps)

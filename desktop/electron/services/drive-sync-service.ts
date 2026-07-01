@@ -462,11 +462,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       },
     })
     const remoteItem = input.remoteExists ? await getDriveItemFromAccountService(deps.accountService, input.driveItemId) : null
+    const activeBindings = await deps.bindings.list()
+    const remoteOverlapReason = input.remoteExists
+      ? await findRemoteBindingOverlapReason(input.driveItemId, activeBindings)
+      : null
     const preview = await previewDriveSyncBinding({
       ...input,
       remoteSize: remoteItem?.size ?? null,
-      activeBindings: await deps.bindings.list(),
+      activeBindings,
     })
+    if (remoteOverlapReason) {
+      return {
+        ...preview,
+        status: "blocked",
+        direction: null,
+        reason: remoteOverlapReason,
+      }
+    }
     if (
       preview.status === "ready"
       && preview.direction === "bind_existing"
@@ -558,15 +570,49 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
   }
 
+  async function findRemoteBindingOverlapReason(
+    driveItemId: string,
+    activeBindings: readonly DriveSyncBindingEntryV1[],
+  ): Promise<string | null> {
+    const active = activeBindings.filter((binding) => binding.status !== "removed")
+    if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
+    if (active.length === 0) return null
+
+    const candidateAncestors = await collectRemoteAncestorIds(driveItemId)
+    if (active.some((binding) => candidateAncestors.has(binding.driveItemId))) {
+      return "云盘条目位于已同步的云盘文件夹内。"
+    }
+
+    for (const binding of active) {
+      const boundAncestors = await collectRemoteAncestorIds(binding.driveItemId)
+      if (boundAncestors.has(driveItemId)) return "云盘条目包含已同步的云盘条目。"
+    }
+    return null
+  }
+
+  async function collectRemoteAncestorIds(driveItemId: string): Promise<ReadonlySet<string>> {
+    const ancestors = new Set<string>()
+    let currentId: string | null = driveItemId
+    while (currentId && !ancestors.has(currentId)) {
+      ancestors.add(currentId)
+      const item = await getDriveItemFromAccountService(deps.accountService, currentId)
+      currentId = item.parentId ?? null
+    }
+    return ancestors
+  }
+
   async function assertRemoteToLocalTargetStillSafe(input: DriveSyncCreateSafeBindingInput): Promise<void> {
     const remoteItem = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
     if (remoteItem.type !== input.kind) throw new Error("云盘条目类型与绑定类型不一致。")
+    const activeBindings = await deps.bindings.list()
+    const remoteOverlapReason = await findRemoteBindingOverlapReason(input.driveItemId, activeBindings)
+    if (remoteOverlapReason) throw new Error(remoteOverlapReason)
     const preview = await previewDriveSyncBinding({
       ...input,
       remoteExists: true,
       remoteSize: remoteItem.size,
       directionHint: "remote_to_local",
-      activeBindings: await deps.bindings.list(),
+      activeBindings,
     })
     if (preview.status !== "ready" || preview.direction !== "remote_to_local") {
       throw new Error(preview.reason ?? "本地路径已变化，请重新校验后再同步。")
@@ -576,12 +622,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function createBindExistingBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
     const remoteItem = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
     if (remoteItem.type !== input.kind) throw new Error("云盘条目类型与绑定类型不一致。")
+    const activeBindings = await deps.bindings.list()
+    const remoteOverlapReason = await findRemoteBindingOverlapReason(input.driveItemId, activeBindings)
+    if (remoteOverlapReason) throw new Error(remoteOverlapReason)
     const preview = await previewDriveSyncBinding({
       ...input,
       remoteExists: true,
       remoteSize: remoteItem.size,
       directionHint: input.direction,
-      activeBindings: await deps.bindings.list(),
+      activeBindings,
     })
     if (preview.status !== "ready" || preview.direction !== "bind_existing") {
       throw new Error(preview.reason ?? "本地路径不能和已有云盘条目建立绑定。")
