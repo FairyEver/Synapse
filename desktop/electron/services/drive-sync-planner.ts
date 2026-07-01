@@ -113,7 +113,9 @@ export function planDriveSyncRemoteChanges(input: {
   for (const change of input.changes) {
     const baseline = baselineByRemoteId.get(change.itemId)
     if (input.binding.kind === "file" && !baseline && change.itemId !== input.binding.driveItemId) continue
-    const relativePath = baseline?.relativePath ?? remoteRelativePath(input.binding, change)
+    const relativePath = change.type === "renamed" || change.type === "moved"
+      ? remoteRelativePath(input.binding, change)
+      : baseline?.relativePath ?? remoteRelativePath(input.binding, change)
     if (relativePath === null) continue
     if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
     const localPath = path.join(input.binding.localPath, relativePath)

@@ -96,6 +96,26 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("uses remote rename and move paths instead of stale baseline paths", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [baseline({ relativePath: "old.md", remoteItemId: "remote-old" })],
+      changes: [
+        remoteChange({ itemId: "remote-old", type: "renamed", pathHint: "/Docs/new.md" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "move_local",
+        relativePath: "new.md",
+        localPath: "/Users/me/Docs/new.md",
+        driveItemId: "remote-old",
+      }),
+    ])
+  })
+
   it("keeps nested remote paths and item kinds from change metadata", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),
