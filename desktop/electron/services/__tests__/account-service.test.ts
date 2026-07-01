@@ -335,6 +335,36 @@ describe("AccountService", () => {
     expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
   })
 
+  it("materializes a single-file Drive share when the link has no child listing", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
+      items: [],
+      page: { hasMore: false, nextOffset: null },
+    })
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "share",
+      access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+      root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
+      ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+    })
+    const readDriveLinkText = vi.spyOn(service, "readDriveLinkText").mockResolvedValueOnce({
+      path: "需求说明.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      text: "# 单文件\n正文",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+
+    const result = await service.materializeDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret", scope: "text" })
+
+    expect(readDriveLinkText).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
+    expect(result.entryPath).toContain("需求说明.md")
+    expect(result.files).toEqual([{ relativePath: "需求说明.md", kind: "markdown", size: "18" }])
+    await expect(readFile(result.entryPath!, "utf8")).resolves.toBe("# 单文件\n正文")
+  })
+
   it("downloads Drive link files through the link-intake download endpoint", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-link-download-"))
     const outputPath = path.join(dir, "sample-data.json")
