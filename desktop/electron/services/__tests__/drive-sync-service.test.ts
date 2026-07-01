@@ -1185,6 +1185,59 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("does not advance the binding cursor when a remote operation fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile: vi.fn(async () => {
+            throw new Error("disk full")
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("disk full")
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        remoteCursor: "41",
+        status: "error",
+        lastError: "disk full",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "error" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("polls remote changes in the background and downloads updated files", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     let service: ReturnType<typeof createDriveSyncService> | null = null

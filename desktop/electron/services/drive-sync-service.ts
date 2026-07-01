@@ -354,7 +354,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       binding,
       baseline,
       accountService: deps.accountService,
-      onOperations: executePlannedOperations,
+      onOperations: (operations) => executePlannedOperations(operations, { throwOnError: true }),
       onConflicts: recordPlannedConflicts,
       updateBindingCursor,
       localChangedPaths,
@@ -1113,7 +1113,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return true
   }
 
-  async function executePlannedOperations(operations: readonly DriveSyncPlannedOperation[]): Promise<void> {
+  async function executePlannedOperations(
+    operations: readonly DriveSyncPlannedOperation[],
+    options: { readonly throwOnError?: boolean } = {},
+  ): Promise<void> {
     for (const operation of operations) {
       const binding = await requireBinding(operation.bindingId)
       const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
@@ -1144,6 +1147,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         })
       } catch (error) {
         await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
+        if (options.throwOnError) throw error
       }
     }
   }
