@@ -8,6 +8,7 @@ import {
   agentPersonaChangedEventSchema,
   agentPersonaCreateInputSchema,
   agentPersonaIdInputSchema,
+  agentPersonaListResultSchema,
   agentPersonaSchema,
   agentPersonaUpdateInputSchema,
 } from "../shared/schema"
@@ -27,8 +28,11 @@ function wireAgentPersonaEvents(
   if (wiredServices.has(service)) return
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
-  service.events.on("changed", (payload) => {
-    windowManager.broadcast(agentPersonasIpcModule.events.changed.channel, payload)
+  service.events.on("changed", (result) => {
+    windowManager.broadcast(agentPersonasIpcModule.events.changed.channel, {
+      result,
+      items: result.items,
+    })
   })
   wiredServices.add(service)
 }
@@ -40,7 +44,7 @@ export const agentPersonasIpcModule: IpcModule = {
       channel: "synapse:agent-personas:list",
       kind: "invoke",
       request: z.void(),
-      response: z.array(agentPersonaSchema),
+      response: agentPersonaListResultSchema,
       handler: (ctx) => resolveAgentPersonaService(ctx).list(),
     },
     create: {
