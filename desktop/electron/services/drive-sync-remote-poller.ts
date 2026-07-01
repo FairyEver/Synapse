@@ -32,7 +32,6 @@ export async function pollDriveSyncRemoteChanges(input: {
         remotePathHint: input.binding.drivePathHint,
         remoteItemKind: input.binding.kind,
       }])
-      await input.updateBindingCursor(input.binding.id, page.nextCursor)
       return
     }
 

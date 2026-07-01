@@ -1588,6 +1588,49 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps the remote cursor and marks the binding as error when resync is required", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [],
+            nextCursor: "50",
+            hasMore: false,
+            resyncRequired: true,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("远端变更记录已过期")
+
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        remoteCursor: "41",
+        status: "error",
+        lastError: "远端变更记录已过期，需要重新建立同步绑定后再同步。",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({
+          bindingId: binding.id,
+          kind: "resync",
+          status: "error",
+          message: "远端变更记录已过期，需要重新建立同步绑定后再同步。",
+        }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("polls moved remote folders and downloads their descendants", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

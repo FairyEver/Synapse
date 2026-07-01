@@ -158,6 +158,7 @@ type DriveSyncServiceEvents = {
 const LOCAL_ROOT_MISSING_ERROR = "本地路径不存在。"
 const LOCAL_ROOT_INACCESSIBLE_ERROR = "本地路径无法访问。"
 const REMOTE_ROOT_MISSING_ERROR = "云端同步根目录不存在。"
+const REMOTE_RESYNC_REQUIRED_ERROR = "远端变更记录已过期，需要重新建立同步绑定后再同步。"
 const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
 
 class TypedDriveSyncEventEmitter extends EventEmitter {
@@ -1287,13 +1288,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         await recordOperation({
           bindingId: operation.bindingId,
           kind: "resync",
-          status: "retry_wait",
+          status: "error",
           driveItemId: operation.driveItemId,
           relativePath: operation.relativePath,
           localPath: operation.localPath,
           remotePathHint: operation.remotePathHint,
-          message: "需要重新扫描。",
+          message: REMOTE_RESYNC_REQUIRED_ERROR,
         })
+        await markBindingError(operation.bindingId, REMOTE_RESYNC_REQUIRED_ERROR, { emitChanged: true })
+        if (options.throwOnError) throw new Error(REMOTE_RESYNC_REQUIRED_ERROR)
         continue
       }
       markSelfWriteForOperation(operation)
