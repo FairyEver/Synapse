@@ -2969,16 +2969,27 @@ describe("DriveService", () => {
 
   it("ensures nested folder paths by reusing existing folders and creating missing folders", async () => {
     const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const work = await service.createFolder("user-1", { parentId: null, name: "Work" })
+    changes.append.mockClear()
 
     const result = await service.ensureFolderPath("user-1", { parentId: null, segments: ["Work", "Reports"] })
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
 
     expect(result.item.name).toBe("Reports")
     expect(result.item.parentId).toBe(work.id)
     expect(result.reused.map((item) => item.id)).toEqual([work.id])
     expect(result.created.map((item) => item.name)).toEqual(["Reports"])
+    expect(changeInputs).toEqual([expect.objectContaining({
+      userId: "user-1",
+      itemId: result.item.id,
+      parentId: work.id,
+      type: "created",
+      name: "Reports",
+      actor: "user-1",
+    })])
   })
 
   it("previews and applies reorganization plans with drift protection", async () => {
@@ -3121,12 +3132,14 @@ describe("DriveService", () => {
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async (_input: any) => undefined) }
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const parent = await service.createFolder("user-1", { parentId: null, name: "Parent" })
     const child = await service.createFolder("user-1", { parentId: parent.id, name: "Child" })
     const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
     const file = await createCompletedUpload(service, "user-1", { parentId: parent.id, name: "report.md", mimeType: "text/markdown" })
+    changes.append.mockClear()
 
     await expect(service.previewReorganization("user-1", {
       moves: [
@@ -3145,6 +3158,15 @@ describe("DriveService", () => {
       moves: [{ itemId: file.id, fromParentId: parent.id, targetParentId: target.id }],
     })
     await expect(service.getItem("user-1", file.id)).resolves.toMatchObject({ parentId: target.id })
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
+    expect(changeInputs).toEqual([expect.objectContaining({
+      userId: "user-1",
+      itemId: file.id,
+      parentId: target.id,
+      type: "moved",
+      name: "report.md",
+      actor: "user-1",
+    })])
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "drive.reorganization.apply",
       targetType: "drive.item",

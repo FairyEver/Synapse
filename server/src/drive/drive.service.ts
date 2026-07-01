@@ -1510,40 +1510,50 @@ export class DriveService implements OnApplicationBootstrap {
     const created: DriveItemDto[] = []
     const reused: DriveItemDto[] = []
 
-    for (const name of segments) {
-      const fileCollision = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
-        select: { id: true },
-      })
-      if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
+    await this.prisma.$transaction(async (tx) => {
+      for (const name of segments) {
+        const fileCollision = await tx.driveItem.findFirst({
+          where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+          select: { id: true },
+        })
+        if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
 
-      const existingFolder = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
-        include: driveItemWithShares,
-      })
-      if (existingFolder) {
-        const dto = toDriveItemDto(existingFolder)
-        reused.push(dto)
-        parentId = dto.id
-        continue
-      }
+        const existingFolder = await tx.driveItem.findFirst({
+          where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+          include: driveItemWithShares,
+        })
+        if (existingFolder) {
+          const dto = toDriveItemDto(existingFolder)
+          reused.push(dto)
+          parentId = dto.id
+          continue
+        }
 
-      const folder = await this.prisma.driveItem.create({
-        data: {
+        const folder = await tx.driveItem.create({
+          data: {
+            userId,
+            parentId,
+            type: DRIVE_ITEM_TYPE.folder,
+            name,
+            size: 0n,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+          },
+          include: driveItemWithShares,
+        })
+        await this.recordDriveChange({
           userId,
-          parentId,
-          type: DRIVE_ITEM_TYPE.folder,
-          name,
-          size: 0n,
-          storageStatus: DRIVE_STORAGE_STATUS.active,
-          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
-        },
-        include: driveItemWithShares,
-      })
-      const dto = toDriveItemDto(folder)
-      created.push(dto)
-      parentId = dto.id
-    }
+          itemId: folder.id,
+          parentId: folder.parentId,
+          type: "created",
+          name: folder.name,
+          actor: userId,
+        }, tx)
+        const dto = toDriveItemDto(folder)
+        created.push(dto)
+        parentId = dto.id
+      }
+    })
 
     const item = created.at(-1) ?? reused.at(-1)
     if (!item) throw new BadRequestException("文件夹路径不能为空。")
@@ -1604,6 +1614,14 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: move.itemId },
           data: { parentId: move.targetParentId },
         })
+        await this.recordDriveChange({
+          userId,
+          itemId: move.itemId,
+          parentId: move.targetParentId,
+          type: "moved",
+          name: move.name,
+          actor: userId,
+        }, tx)
       }
     })
     this.reorganizationPlans.delete(input.planId)
