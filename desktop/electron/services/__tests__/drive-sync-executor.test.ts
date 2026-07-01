@@ -266,6 +266,59 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("rewrites descendant baselines when moving local folders", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await mkdir(path.join(tempDir, "old"), { recursive: true })
+    await writeFile(path.join(tempDir, "old", "spec.md"), "remote", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old",
+      kind: "folder",
+      remoteItemId: "remote-folder",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old/spec.md",
+      kind: "file",
+      remoteItemId: "remote-spec",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 6,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_local",
+        relativePath: "new",
+        driveItemId: "remote-folder",
+        localPath: path.join(tempDir, "new"),
+      }),
+      baselineStore: store,
+      accountService: createAccountService(),
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(readFile(path.join(tempDir, "new", "spec.md"), "utf8")).resolves.toBe("remote")
+    await expect(namespace.list()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ relativePath: "new", remoteItemId: "remote-folder", deletedAt: null }),
+      expect.objectContaining({ relativePath: "new/spec.md", remoteItemId: "remote-spec", deletedAt: null }),
+    ]))
+    await expect(namespace.get("binding-1:old")).resolves.toBeNull()
+    await expect(namespace.get("binding-1:old/spec.md")).resolves.toBeNull()
+  })
+
   it("deletes local files through a recoverable trash strategy", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })

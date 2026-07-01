@@ -173,6 +173,9 @@ async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
     await rename(previousLocalPath, localPath)
   }
   const stats = await lstat(localPath)
+  if (existing.kind === "folder" && stats.isDirectory()) {
+    await rewriteDescendantBaselines(deps, existing.relativePath, deps.operation.relativePath)
+  }
   await deps.baselineStore.removePath(deps.binding.id, existing.relativePath)
   await deps.baselineStore.upsert({
     bindingId: deps.binding.id,
@@ -186,6 +189,36 @@ async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
     localHash: stats.isFile() ? await hashDriveSyncFile(localPath) : null,
     deletedAt: null,
   })
+}
+
+async function rewriteDescendantBaselines(
+  deps: DriveSyncExecutorDeps,
+  fromPrefix: string,
+  toPrefix: string,
+): Promise<void> {
+  const sourcePrefix = fromPrefix === "" ? "" : `${fromPrefix}/`
+  if (sourcePrefix === "") return
+  const entries = await deps.baselineStore.listByBinding(deps.binding.id)
+  const descendants = entries.filter((entry) =>
+    entry.deletedAt === null && entry.relativePath.startsWith(sourcePrefix),
+  )
+  for (const entry of descendants) {
+    const suffix = entry.relativePath.slice(sourcePrefix.length)
+    const nextRelativePath = toPrefix ? `${toPrefix}/${suffix}` : suffix
+    await deps.baselineStore.removePath(deps.binding.id, entry.relativePath)
+    await deps.baselineStore.upsert({
+      bindingId: entry.bindingId,
+      relativePath: nextRelativePath,
+      kind: entry.kind,
+      remoteItemId: entry.remoteItemId,
+      remoteVersionId: entry.remoteVersionId,
+      remoteEtag: entry.remoteEtag,
+      localSize: entry.localSize,
+      localMtimeMs: entry.localMtimeMs,
+      localHash: entry.localHash,
+      deletedAt: null,
+    })
+  }
 }
 
 async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: string): Promise<string> {
