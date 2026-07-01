@@ -7,7 +7,7 @@ import {
   type DriveBrowserSurface,
   type DriveUsageDto,
 } from '@synapse/shared'
-import { Upload } from 'lucide-react'
+import { FolderUp, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
@@ -103,7 +103,13 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
   const nameInputId = 'drive-console-name-input'
+
+  const setFolderInputRef = (node: HTMLInputElement | null) => {
+    folderInputRef.current = node
+    node?.setAttribute('webkitdirectory', '')
+  }
 
   const refreshAfterMutation = async () => {
     await state.refresh()
@@ -212,6 +218,21 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
           <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             <Upload data-icon='inline-start' />
             上传文件
+          </Button>
+          <input
+            ref={setFolderInputRef}
+            type='file'
+            multiple
+            className='hidden'
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? [])
+              event.currentTarget.value = ''
+              void runUpload(files)
+            }}
+          />
+          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => folderInputRef.current?.click()}>
+            <FolderUp data-icon='inline-start' />
+            上传文件夹
           </Button>
           <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
             新建文件夹
