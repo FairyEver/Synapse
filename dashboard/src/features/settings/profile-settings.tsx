@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { normalizeUserHandle, userHandleMaxLength } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
@@ -10,12 +11,29 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 
 const maxDisplayNameLength = 40
+const maxHandleLength = userHandleMaxLength
+type HandleError = 'format' | 'unavailable'
+
+function getHandleError(value: string): HandleError | null {
+  if (!value) return null
+  try {
+    normalizeUserHandle(value)
+    return null
+  } catch (error) {
+    if (!(error instanceof Error)) return 'format'
+    if (error.message.includes('保留路由') || error.message.includes('Windows')) {
+      return 'unavailable'
+    }
+    return 'format'
+  }
+}
 
 export function ProfileSettings() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const setAuthUser = useAuthStore((state) => state.auth.setUser)
   const [displayName, setDisplayName] = useState('')
+  const [handle, setHandle] = useState('')
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
     queryFn: dashboardApi.getMe,
@@ -38,7 +56,10 @@ export function ProfileSettings() {
   })
 
   useEffect(() => {
-    if (data) setDisplayName(data.user.displayName ?? '')
+    if (data) {
+      setDisplayName(data.user.displayName ?? '')
+      setHandle(data.user.handle ?? '')
+    }
   }, [data])
 
   if (authUser?.role !== 'user') {
@@ -68,15 +89,24 @@ export function ProfileSettings() {
   if (!data) return null
 
   const trimmedDisplayName = displayName.trim()
+  const trimmedHandle = handle.trim().toLowerCase()
+  const hasHandleValue = trimmedHandle.length > 0
+  const handleError = getHandleError(trimmedHandle)
   const isInvalid =
     trimmedDisplayName.length === 0 ||
-    trimmedDisplayName.length > maxDisplayNameLength
-  const hasChanged = trimmedDisplayName !== (data.user.displayName ?? '')
+    trimmedDisplayName.length > maxDisplayNameLength ||
+    handleError !== null
+  const hasChanged =
+    trimmedDisplayName !== (data.user.displayName ?? '') ||
+    (hasHandleValue && trimmedHandle !== (data.user.handle ?? ''))
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isInvalid || !hasChanged) return
-    updateProfile.mutate({ displayName: trimmedDisplayName })
+    updateProfile.mutate({
+      displayName: trimmedDisplayName,
+      ...(trimmedHandle ? { handle: trimmedHandle } : {}),
+    })
   }
 
   return (
@@ -113,6 +143,21 @@ export function ProfileSettings() {
                 maxLength={maxDisplayNameLength}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='user-handle'>用户名</Label>
+              <Input
+                id='user-handle'
+                value={handle}
+                maxLength={maxHandleLength}
+                onChange={(event) => setHandle(event.target.value)}
+              />
+              {handleError === 'format' ? (
+                <p className='text-sm text-destructive'>只能使用小写字母、数字和连字符，并以字母或数字开头和结尾。</p>
+              ) : null}
+              {handleError === 'unavailable' ? (
+                <p className='text-sm text-destructive'>该用户名不可用。</p>
+              ) : null}
             </div>
             <Button
               type='submit'

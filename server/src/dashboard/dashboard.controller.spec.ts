@@ -71,6 +71,23 @@ describe("DashboardController", () => {
     )
   })
 
+  it("passes handle updates to the profile service", async () => {
+    const auth = {
+      updateMyProfile: vi.fn().mockResolvedValue({
+        user: { id: "user-1", email: "u@example.test", status: "active", displayName: "Liyang", handle: "liyang" },
+        teams: [],
+      }),
+    }
+    const controller = new DashboardController(auth as never)
+
+    await controller.updateMe({ displayName: "Liyang", handle: "liyang" }, {
+      ip: "127.0.0.1",
+      user: { id: "user-1" },
+    } as never)
+
+    expect(auth.updateMyProfile).toHaveBeenCalledWith("user-1", { displayName: "Liyang", handle: "liyang" }, "127.0.0.1")
+  })
+
   it("rejects invalid profile update bodies", async () => {
     const auth = { updateMyProfile: vi.fn() }
     const controller = new DashboardController(auth as never)

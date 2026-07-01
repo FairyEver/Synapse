@@ -164,6 +164,7 @@ export type DashboardMe = {
     email: string
     status: 'active' | 'disabled'
     displayName: string | null
+    handle: string | null
   }
   teams: Array<{
     id: string
@@ -677,7 +678,7 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
-  updateMe: (input: { displayName: string }) =>
+  updateMe: (input: { displayName?: string; handle?: string }) =>
     request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',
       body: JSON.stringify(input),
