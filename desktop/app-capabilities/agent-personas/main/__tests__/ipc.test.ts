@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import type { AgentPersona, AgentPersonaListResult } from "../../shared/schema"
 import { agentPersonasIpcModule } from "../ipc"
 
 describe("agentPersonasIpcModule", () => {
@@ -13,20 +14,16 @@ describe("agentPersonasIpcModule", () => {
   })
 
   it("dispatches list through the core service", async () => {
+    const result: AgentPersonaListResult = { status: "unauthenticated", items: [] }
     const service = {
       events: { on: vi.fn() },
-      list: vi.fn(async () => []),
+      list: vi.fn(async () => result),
     }
-    const ctx = {
-      resolve: vi.fn((id: string) => {
-        if (id === "core.agent-personas") return service
-        if (id === "core.window-manager") return { broadcast: vi.fn() }
-        throw new Error(id)
-      }),
-    }
+    const ctx = createCtx(service)
 
     await expect(agentPersonasIpcModule.methods.list.handler(ctx as never, undefined))
-      .resolves.toEqual([])
+      .resolves.toEqual(result)
+    expect(agentPersonasIpcModule.methods.list.response.safeParse(result).success).toBe(true)
     expect(service.list).toHaveBeenCalled()
   })
 
@@ -79,13 +76,7 @@ describe("agentPersonasIpcModule", () => {
       events: { on: vi.fn() },
       create: vi.fn(async () => created),
     }
-    const ctx = {
-      resolve: vi.fn((id: string) => {
-        if (id === "core.agent-personas") return service
-        if (id === "core.window-manager") return { broadcast: vi.fn() }
-        throw new Error(id)
-      }),
-    }
+    const ctx = createCtx(service)
     const input = {
       name: "产品顾问",
       description: "整理产品判断。",
@@ -113,13 +104,7 @@ describe("agentPersonasIpcModule", () => {
       events: { on: vi.fn() },
       updateBuiltinModel: vi.fn(async () => updated),
     }
-    const ctx = {
-      resolve: vi.fn((id: string) => {
-        if (id === "core.agent-personas") return service
-        if (id === "core.window-manager") return { broadcast: vi.fn() }
-        throw new Error(id)
-      }),
-    }
+    const ctx = createCtx(service)
     const input = {
       id: "builtin-zh-en-translator",
       providerModel: { providerId: "claude", modelTier: "sonnet" as const },
@@ -133,27 +118,60 @@ describe("agentPersonasIpcModule", () => {
   it("broadcasts changed events after wiring the service once", async () => {
     const listeners: Array<(payload: unknown) => void> = []
     const broadcast = vi.fn()
-    const service = {
-      events: {
-        on: vi.fn((_eventName: "changed", listener: (payload: unknown) => void) => {
-          listeners.push(listener)
-        }),
-      },
-      list: vi.fn(async () => []),
-    }
-    const ctx = {
-      resolve: vi.fn((id: string) => {
-        if (id === "core.agent-personas") return service
-        if (id === "core.window-manager") return { broadcast }
-        throw new Error(id)
-      }),
-    }
+    const service = createEventService(listeners)
+    const ctx = createCtx(service, broadcast)
 
     await agentPersonasIpcModule.methods.list.handler(ctx as never, undefined)
     await agentPersonasIpcModule.methods.list.handler(ctx as never, undefined)
 
     expect(service.events.on).toHaveBeenCalledTimes(1)
-    listeners[0]?.({ items: [] })
-    expect(broadcast).toHaveBeenCalledWith("synapse:agent-personas:changed", { items: [] })
+    const result: AgentPersonaListResult = {
+      status: "online",
+      items: [persona()],
+      syncedAt: "2026-07-01T00:00:00.000Z",
+    }
+    listeners[0]?.(result)
+    expect(broadcast).toHaveBeenCalledWith("synapse:agent-personas:changed", {
+      result,
+      items: [persona()],
+    })
   })
 })
+
+function createCtx(service: unknown, broadcast = vi.fn()) {
+  return {
+    resolve: vi.fn((id: string) => {
+      if (id === "core.agent-personas") return service
+      if (id === "core.window-manager") return { broadcast }
+      throw new Error(id)
+    }),
+  }
+}
+
+function createEventService(listeners: Array<(payload: AgentPersonaListResult) => void>) {
+  return {
+    events: {
+      on: vi.fn((_eventName: "changed", listener: (payload: AgentPersonaListResult) => void) => {
+        listeners.push(listener)
+      }),
+    },
+    list: vi.fn(async () => ({ status: "unauthenticated" as const, items: [] })),
+  }
+}
+
+function persona(): AgentPersona {
+  return {
+    id: "persona-1",
+    schemaVersion: 1,
+    name: "产品顾问",
+    description: "整理产品判断。",
+    systemPrompt: "你是产品顾问。",
+    providerModel: null,
+    toolPolicy: null,
+    source: "user",
+    readonly: false,
+    version: 1,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  }
+}
