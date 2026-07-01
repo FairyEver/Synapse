@@ -2307,14 +2307,11 @@ export class DriveService implements OnApplicationBootstrap {
     if (input.input.contentType !== "text") throw new BadRequestException("编辑内容无效。")
     this.assertEditableTextFile(input.item)
     const body = Buffer.from(input.input.text, "utf8")
+    const bodySize = BigInt(body.byteLength)
     if (body.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new PayloadTooLargeException("文件内容过大。")
     const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
       throw new ConflictException("文件已有新内容。")
-    }
-    const usage = await ensureUsage(this.prisma, input.ownerId)
-    if (usage.usedBytes + usage.reservedBytes + BigInt(body.byteLength) > usage.quotaBytes) {
-      throw new BadRequestException("云盘空间不足。")
     }
 
     const nextVersionId = createDriveFileVersionId()
@@ -2340,16 +2337,17 @@ export class DriveService implements OnApplicationBootstrap {
         if (!transactionCurrentVersion || transactionCurrentVersion.id !== input.input.baseVersionId) {
           throw new ConflictException("文件已有新内容。")
         }
+        await reserveDriveUsageBytes(tx, input.ownerId, bodySize)
         await updateDriveUsageAfterUploadCompletion(tx, input.ownerId, {
-          reservedBytes: 0n,
-          usedBytesDelta: BigInt(body.byteLength),
+          reservedBytes: bodySize,
+          usedBytesDelta: bodySize,
         })
         await createDriveFileVersion(tx, {
           id: nextVersionId,
           itemId: currentItem.id,
           userId: input.ownerId,
           storageKey: nextStorageKey,
-          size: BigInt(body.byteLength),
+          size: bodySize,
           mimeType: currentItem.mimeType,
           source: DRIVE_FILE_VERSION_SOURCE.onlineEdit,
           createdBy: input.actorUserId,
@@ -2358,7 +2356,7 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: currentItem.id },
           data: {
             storageKey: nextStorageKey,
-            size: BigInt(body.byteLength),
+            size: bodySize,
             mimeType: currentItem.mimeType,
             storageStatus: DRIVE_STORAGE_STATUS.active,
             uploadStatus: DRIVE_UPLOAD_STATUS.completed,

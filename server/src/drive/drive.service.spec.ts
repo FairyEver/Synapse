@@ -160,6 +160,40 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("rejects stale concurrent online edit quota checks before used quota exceeds the limit", async () => {
+    const prisma = createPrismaMemory({ staleUsageReads: true })
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: 5n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.driveUsage.upsert({
+      where: { userId: "user-1" },
+      create: { userId: "user-1", usedBytes: 0n, reservedBytes: 0n, quotaBytes: 30n },
+      update: {},
+    })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "first.md", mimeType: "text/markdown", size: "5" })
+    const second = await createCompletedUpload(service, "user-1", { parentId: null, name: "second.md", mimeType: "text/markdown", size: "5" })
+    const firstBaseVersion = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const secondBaseVersion = (await service.listFileVersions("user-1", second.id, { offset: 0, limit: 20 })).items[0]!
+
+    await service.updateOwnerFileText("user-1", first.id, {
+      contentType: "text",
+      text: "123456789012345",
+      baseVersionId: firstBaseVersion.id,
+    })
+    await expect(service.updateOwnerFileText("user-1", second.id, {
+      contentType: "text",
+      text: "123456789012345",
+      baseVersionId: secondBaseVersion.id,
+    })).rejects.toThrow("云盘空间不足。")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(25n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("records a content change when an upload is completed", async () => {
     const prisma = createPrismaMemory()
     const changes = createDriveChangeLogMock()
@@ -3319,10 +3353,10 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
     driveUsage: {
       upsert: async ({ where, create }: any) => {
         const existing = usages.get(where.userId)
-        if (existing) return options.staleUsageReads ? { ...existing, reservedBytes: 0n } : existing
+        if (existing) return options.staleUsageReads ? { ...existing, usedBytes: 0n, reservedBytes: 0n } : existing
         usages.set(where.userId, { ...create, updatedAt: now() })
         const usage = usages.get(where.userId)
-        return options.staleUsageReads ? { ...usage, reservedBytes: 0n } : usage
+        return options.staleUsageReads ? { ...usage, usedBytes: 0n, reservedBytes: 0n } : usage
       },
       update: async ({ where, data }: any) => {
         const usage = usages.get(where.userId)
@@ -3468,6 +3502,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
         )
         return select ? found.map((version) => selectFields(version, select)) : found
       },
+      findUnique: async ({ where }: any) => versions.get(where.id) ?? null,
       findUniqueOrThrow: async ({ where }: any) => {
         const version = versions.get(where.id)
         if (!version) throw new Error("version not found")
