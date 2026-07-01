@@ -789,9 +789,13 @@ describe("DriveSyncService", () => {
       await mkdir(path.join(tempDir, "empty"), { recursive: true })
       await mkdir(path.join(tempDir, "more"), { recursive: true })
       await mkdir(path.join(tempDir, "notes"), { recursive: true })
+      await mkdir(path.join(tempDir, "secrets"), { recursive: true })
+      await writeFile(path.join(tempDir, ".gitignore"), "secrets/\n*.tmp\n", "utf8")
       await writeFile(path.join(tempDir, ".git", "config"), "private", "utf8")
+      await writeFile(path.join(tempDir, "draft.tmp"), "temporary", "utf8")
       await writeFile(path.join(tempDir, "more", "readme.md"), "more", "utf8")
       await writeFile(path.join(tempDir, "notes", "spec.md"), "local spec", "utf8")
+      await writeFile(path.join(tempDir, "secrets", "token.txt"), "secret", "utf8")
       const harness = createHarness({
         accountService: {
           uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
@@ -801,7 +805,10 @@ describe("DriveSyncService", () => {
             }
             if (parentId === "remote-docs") {
               if (offset === 1) {
-                return { items: [{ id: "remote-more", name: "more", type: "folder" }], nextOffset: null }
+                return { items: [{ id: "remote-more", name: "more", type: "folder" }], nextOffset: 2 }
+              }
+              if (offset === 2) {
+                return { items: [{ id: "remote-gitignore", name: ".gitignore", type: "file" }], nextOffset: null }
               }
               return { items: [{ id: "remote-notes", name: "notes", type: "folder" }], nextOffset: 1 }
             }
@@ -821,20 +828,29 @@ describe("DriveSyncService", () => {
         kind: "folder",
         localPath: tempDir,
         direction: "local_to_remote",
+        importGitignore: true,
       })
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "remote-docs" })
-      expect(harness.deps.accountService.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
-        items: [expect.objectContaining({
-          kind: "folder",
-          files: expect.arrayContaining([
-            expect.objectContaining({ relativePath: "more/readme.md" }),
-            expect.objectContaining({ relativePath: "notes/spec.md" }),
-          ]),
-        })],
-      }))
+      const uploadInput = vi.mocked(harness.deps.accountService.uploadDriveLocalItems).mock.calls[0]?.[0]
+      const uploadedFolder = uploadInput?.items[0]
+      expect(uploadedFolder?.kind).toBe("folder")
+      if (!uploadedFolder || uploadedFolder.kind !== "folder") throw new Error("expected folder upload")
+      const uploadedRelativePaths = uploadedFolder.files.map((file) => file.relativePath)
+      expect(uploadedRelativePaths).toEqual(expect.arrayContaining([
+        ".gitignore",
+        "more/readme.md",
+        "notes/spec.md",
+      ]))
+      expect(uploadedRelativePaths).not.toEqual(expect.arrayContaining([
+        ".git/config",
+        "draft.tmp",
+        "secrets/token.txt",
+      ]))
+      expect(binding.excludeRules.importedGitignore).toEqual(["secrets/**", "*.tmp"])
       await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
         expect.objectContaining({ relativePath: "", remoteItemId: "remote-docs", kind: "folder" }),
+        expect.objectContaining({ relativePath: ".gitignore", remoteItemId: "remote-gitignore", kind: "file" }),
         expect.objectContaining({ relativePath: "empty", remoteItemId: "remote-empty", kind: "folder" }),
         expect.objectContaining({ relativePath: "more", remoteItemId: "remote-more", kind: "folder" }),
         expect.objectContaining({ relativePath: "more/readme.md", remoteItemId: "remote-readme", kind: "file" }),
@@ -843,8 +859,15 @@ describe("DriveSyncService", () => {
       ]))
       expect(harness.deps.accountService.createDriveFolder).toHaveBeenCalledWith({ parentId: "remote-docs", name: "empty" })
       expect(harness.deps.accountService.createDriveFolder).not.toHaveBeenCalledWith({ parentId: "remote-docs", name: "more" })
+      expect(harness.deps.accountService.createDriveFolder).not.toHaveBeenCalledWith({ parentId: "remote-docs", name: "secrets" })
       await expect(harness.baseline.list()).resolves.not.toContainEqual(
         expect.objectContaining({ relativePath: ".git/config" }),
+      )
+      await expect(harness.baseline.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ relativePath: "draft.tmp" }),
+      )
+      await expect(harness.baseline.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ relativePath: "secrets/token.txt" }),
       )
     } finally {
       await rm(tempDir, { recursive: true, force: true })

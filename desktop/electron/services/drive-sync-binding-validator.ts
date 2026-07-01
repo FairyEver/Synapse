@@ -26,7 +26,7 @@ export async function previewDriveSyncBinding(input: {
   }
 
   const importedGitignoreRules = input.importGitignore && local.kind === "folder"
-    ? await readGitignoreRules(localPath)
+    ? await readDriveSyncGitignoreRules(localPath)
     : []
 
   if (input.kind === "file") {
@@ -149,7 +149,7 @@ function findDuplicateBindingReason(
   return null
 }
 
-async function readGitignoreRules(localPath: string): Promise<readonly string[]> {
+export async function readDriveSyncGitignoreRules(localPath: string): Promise<readonly string[]> {
   try {
     return parseGitignoreForDriveSync(await readFile(path.join(localPath, ".gitignore"), "utf8"))
   } catch (error) {

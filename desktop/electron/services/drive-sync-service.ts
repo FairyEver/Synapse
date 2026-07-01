@@ -28,7 +28,7 @@ import type {
 } from "../runtime/data-repo"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
-import { previewDriveSyncBinding } from "./drive-sync-binding-validator"
+import { previewDriveSyncBinding, readDriveSyncGitignoreRules } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { isDriveSyncExcluded } from "./drive-sync-excludes"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
@@ -105,6 +105,7 @@ export interface DriveSyncCreateBindingInput {
   readonly localPath: string
   readonly remoteCursor?: string | null
   readonly excludeRules?: readonly string[]
+  readonly importedGitignoreRules?: readonly string[]
   readonly deferWatcher?: boolean
 }
 
@@ -265,7 +266,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       remoteCursor: input.remoteCursor ?? null,
       lastSyncedAt: null,
       lastError: null,
-      excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+      excludeRules: createBindingExcludeRules(input.excludeRules ?? [], input.importedGitignoreRules ?? []),
       createdAt: now,
       updatedAt: now,
     }
@@ -449,7 +450,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         driveItemId: input.driveItemId,
         driveItemName: remoteItem.name,
         localPath: input.localPath,
-        excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+        excludeRules: createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules),
         hashFiles: false,
       })
       if (differences.length > 0) {
@@ -479,13 +480,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (input.direction === "bind_existing") {
       return createBindExistingBinding(input)
     }
+    const importedGitignoreRules = await readBindingImportedGitignoreRules(input)
     if (input.direction === "remote_to_local") {
       await assertRemoteToLocalTargetStillSafe(input)
       if (input.kind === "folder") {
         await assertRemoteFolderTreeLocallyRepresentable({
           driveItemId: input.driveItemId,
           driveItemName: input.driveItemName,
-          excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+          excludeRules: createBindingExcludeRules(input.excludeRules ?? [], importedGitignoreRules),
         })
       }
     }
@@ -497,6 +499,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       drivePathHint: input.drivePathHint ?? null,
       localPath: input.localPath,
       excludeRules: input.excludeRules ?? [],
+      importedGitignoreRules,
       deferWatcher: true,
     })
 
@@ -561,7 +564,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         driveItemId: input.driveItemId,
         driveItemName: remoteItem.name,
         localPath: input.localPath,
-        excludeRules: createBindingExcludeRules(input.excludeRules ?? []),
+        excludeRules: createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules),
       })
 
     const binding = await createBinding({
@@ -571,6 +574,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       drivePathHint: input.drivePathHint ?? null,
       localPath: input.localPath,
       excludeRules: input.excludeRules ?? [],
+      importedGitignoreRules: preview.importedGitignoreRules,
       deferWatcher: true,
     })
     for (const entry of prepared) {
@@ -1599,11 +1603,19 @@ function normalizeRequiredString(value: string, message: string): string {
   return normalized
 }
 
-function createBindingExcludeRules(userRules: readonly string[]): DriveSyncBindingEntryV1["excludeRules"] {
+async function readBindingImportedGitignoreRules(input: DriveSyncCreateSafeBindingInput): Promise<readonly string[]> {
+  if (!input.importGitignore || input.kind !== "folder") return []
+  return readDriveSyncGitignoreRules(normalizeLocalPath(input.localPath))
+}
+
+function createBindingExcludeRules(
+  userRules: readonly string[],
+  importedGitignoreRules: readonly string[] = [],
+): DriveSyncBindingEntryV1["excludeRules"] {
   return {
     forced: [".git/**", ".git"],
     defaults: [],
-    importedGitignore: [],
+    importedGitignore: [...importedGitignoreRules],
     user: [...userRules],
   }
 }
