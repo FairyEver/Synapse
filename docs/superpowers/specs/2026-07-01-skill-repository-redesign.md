@@ -350,6 +350,105 @@ Settings should handle:
 
 Changing from private to public requires a user handle. If the handle is missing, route the user to personal profile settings.
 
+## UI And UX Requirements
+
+Skill Repository is a product workspace, not a marketplace landing page. The interface should feel like Synapse's existing precision workbench: compact, calm, familiar, and built for repeated management work.
+
+### Existing UI Patterns To Reuse
+
+Use existing dashboard and component vocabulary first:
+
+- `Header` and `Main` for authenticated dashboard pages;
+- `ServerDataTable` for My Skills and Explore list views;
+- shadcn/Radix primitives from `dashboard/src/components/ui/`;
+- token classes from the existing Tailwind and OKLCH theme;
+- `RelativeTime`, `Badge`, `Button`, `Input`, `Select`, `Switch`, `Dialog`, `AlertDialog`, and `ScrollArea` where they already match the job;
+- Drive Browser Finder layout and Code Renderer interaction model after extracting Drive-specific naming.
+
+Do not extend the old Content Store editor as the new long-term UI. The old draft/publish/editor shape exists for a heavier store model and should be replaced by repository pages, repository settings, and the shared file browser.
+
+### Surfaces And Layout
+
+Repository pages should be dense and operational:
+
+- top header shows `owner / repoName`, visibility, and primary actions;
+- root content opens directly into the file browser;
+- file browser uses one stable bordered/ringed work surface, not a card grid;
+- file rows use table/list affordances with icon, name, size, and updated time;
+- settings use a plain form layout with aligned labels and controls;
+- avoid nested cards, decorative side stripes, large shadows, gradients, glow, and over-rounded containers.
+
+Use borders, rings, separators, muted surfaces, selected rows, and focus states for hierarchy. Do not combine decorative shadow, border, and background on the same resting surface.
+
+When rounded elements are nested closely, keep the radius visually concentric. If a page needs a new container shape, choose from existing `rounded-md` or `rounded-lg` patterns before adding anything else.
+
+### Typography And Copy
+
+Use fixed product typography:
+
+- no viewport-scaled headings;
+- page headings stay around the existing `text-lg font-semibold` dashboard pattern;
+- repository title or path text must truncate safely instead of overflowing;
+- short headings can use `text-balance`;
+- descriptions and empty/error copy can use `text-pretty`;
+- dynamic counts and install numbers use `tabular-nums`;
+- numeric table columns are right-aligned.
+
+Copy should be short and operational. Avoid feature-introduction paragraphs such as "This page lets you..." and avoid implementation explanations. Preferred labels are direct actions: `安装`, `Fork`, `保存`, `重新加载`, `上传文件`, `重命名`, `删除`.
+
+### Actions And State
+
+Use familiar control placement:
+
+- primary repository action is `安装`;
+- owner-only management actions are grouped separately from visitor actions;
+- destructive actions use existing destructive variants and confirmation flows;
+- visibility changes show clear private/public state;
+- missing handle flows use an inline actionable state and route to profile settings;
+- file save state uses `已同步`, `未保存`, saving, reload, conflict, and error states from the Code Renderer pattern.
+
+Every interactive control must have default, hover, focus, active, disabled, loading, and error behavior where applicable. Icon-only buttons need accessible labels and at least a 40px hit area, preferably through the shared button component rather than one-off padding.
+
+### Motion And Performance
+
+Motion is for state, not decoration:
+
+- no page-load choreography;
+- no decorative reveal sequences;
+- keep interaction transitions around 150 to 250 ms;
+- prefer interruptible CSS transitions for hover, focus, drawer, menu, and selected-state changes;
+- do not use `transition: all`;
+- use `will-change` only after a visible first-frame stutter is confirmed;
+- respect reduced-motion behavior.
+
+### Accessibility And Responsive Behavior
+
+Skill Repository pages must work as product tools:
+
+- keyboard users can navigate file rows, activate rows with Enter, and reach toolbar actions;
+- selected rows expose state with `aria-current` or equivalent semantics;
+- focus states are visible in light and dark themes;
+- status and errors do not rely on color alone;
+- the file browser and editor keep stable height and scroll regions in desktop layouts;
+- mobile and narrow desktop widths collapse action groups without overlapping text;
+- long owner handles, repository names, and file paths truncate or wrap in controlled regions.
+
+### Visual Verification Targets
+
+Implementation should include visual checks for:
+
+- My Skills list;
+- Explore list;
+- owner repository page;
+- public visitor repository page;
+- repository settings;
+- file browser folder view;
+- Code Renderer file edit view;
+- empty, loading, error, conflict, and missing-handle states;
+- narrow viewport behavior.
+
+These checks should verify that text does not overflow, controls stay aligned, table numeric columns remain right-aligned, and the UI does not introduce custom colors or one-off decorative styling.
+
 ## Server Data Model
 
 Add new tables rather than extending old Content Store tables.
