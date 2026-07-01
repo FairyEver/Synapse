@@ -49,11 +49,10 @@ import {
   QUICK_INPUT_ITEMS_NAMESPACE,
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
+import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
+import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
-import {
-  AGENT_PERSONAS_ITEMS_NAMESPACE,
-  AGENT_PERSONAS_SETTINGS_NAMESPACE,
-} from "../../app-capabilities/agent-personas/shared/capability"
+import { AGENT_PERSONAS_REMOTE_CACHE_NAMESPACE } from "../../app-capabilities/agent-personas/shared/capability"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
@@ -104,8 +103,7 @@ import {
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type {
-  AgentPersonaItemEntryV1,
-  AgentPersonaSettingsEntryV1,
+  AgentPersonaRemoteCacheEntryV1,
   ConversationEntryV1,
   DriveSyncBaselineEntryV1,
   DriveSyncBindingEntryV1,
@@ -367,8 +365,11 @@ export const coreAgentPersonasDescriptor: ServiceDescriptor<AgentPersonaService>
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createAgentPersonaService({
-      items: dataRepository.namespace<AgentPersonaItemEntryV1>(AGENT_PERSONAS_ITEMS_NAMESPACE),
-      settings: dataRepository.namespace<AgentPersonaSettingsEntryV1>(AGENT_PERSONAS_SETTINGS_NAMESPACE),
+      remote: new RemoteAgentPersonaClient(accountService),
+      cache: new AgentPersonaCache(
+        dataRepository.namespace<AgentPersonaRemoteCacheEntryV1>(AGENT_PERSONAS_REMOTE_CACHE_NAMESPACE),
+      ),
+      account: accountService,
       logger: ctx.logger.child("agent-personas"),
     })
   },

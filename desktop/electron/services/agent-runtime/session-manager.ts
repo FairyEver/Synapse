@@ -344,7 +344,7 @@ export class SessionManager {
       sdkSessionId,
       activePersonaId: personaConfig.activePersonaId,
       activeAgentName,
-      personaToolPolicyMode: personaConfig.toolPolicy?.mode ?? "inherit",
+      personaToolPolicyMode: personaConfig.toolPolicy?.mode ?? "all",
       personaAllowedToolCount: personaConfig.toolPolicy?.allowedTools.length ?? 0,
       hasPersonaSystemPrompt: Boolean(personaConfig.systemPrompt),
     })
@@ -640,8 +640,8 @@ function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {
 function sdkToolOptionsForPersonaPolicy(
   policy: ResolvedPersonaSdkConfig["toolPolicy"],
 ): { readonly tools?: string[], readonly disallowedTools?: readonly string[] } {
-  if (!policy || policy.mode === "inherit") return {}
-  if (policy.mode === "none") return { tools: [], disallowedTools: ["*"] }
+  if (!policy || policy.mode === "all") return {}
+  if (policy.mode === "disabled") return { tools: [], disallowedTools: ["*"] }
   return { tools: [...policy.allowedTools] }
 }
 

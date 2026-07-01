@@ -277,7 +277,7 @@ describe("ClaudeSDKSession", () => {
       },
       tools: [],
       disallowedTools: ["*"],
-      personaToolPolicy: { mode: "none", allowedTools: [] },
+      personaToolPolicy: { mode: "disabled", allowedTools: [] },
       agents: {
         "synapse-persona__builtin-zh-en-translator": {
           description: "Translates between Chinese and English.",
@@ -306,10 +306,10 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it("denies every tool in persona none mode before SDK permissions", async () => {
+  it("denies every tool in persona disabled mode before SDK permissions", async () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
-      personaToolPolicy: { mode: "none", allowedTools: [] },
+      personaToolPolicy: { mode: "disabled", allowedTools: [] },
     })
 
     const guard = preToolUseHook(getOptions(), "*")

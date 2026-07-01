@@ -7,14 +7,22 @@ export const agentPersonaProviderModelSchema = z.object({
   modelTier: agentPersonaModelTierSchema,
 })
 
+export const agentPersonaToolPolicySchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("all") }),
+  z.object({ mode: z.literal("disabled") }),
+  z.object({
+    mode: z.literal("allowlist"),
+    allowedTools: z.array(z.string().min(1)).default([]),
+  }),
+])
+
 export const agentPersonaSourceSchema = z.enum(["builtin", "user"])
-
-export const agentPersonaToolPolicyModeSchema = z.enum(["inherit", "allowlist", "none"])
-
-export const agentPersonaToolPolicySchema = z.object({
-  mode: agentPersonaToolPolicyModeSchema,
-  allowedTools: z.array(z.string()).optional(),
-})
+export const agentPersonaDesktopListStatusSchema = z.enum([
+  "unauthenticated",
+  "online",
+  "offline-cache",
+  "offline-empty",
+])
 
 export const agentPersonaSchema = z.object({
   id: z.string().min(1),
@@ -23,9 +31,10 @@ export const agentPersonaSchema = z.object({
   description: z.string().min(1),
   systemPrompt: z.string().min(1),
   providerModel: agentPersonaProviderModelSchema.nullable(),
-  toolPolicy: agentPersonaToolPolicySchema.optional(),
+  toolPolicy: agentPersonaToolPolicySchema.nullable().optional(),
   source: agentPersonaSourceSchema,
   readonly: z.boolean().optional(),
+  version: z.number().int().positive().optional(),
   createdAt: z.string().min(1).optional(),
   updatedAt: z.string().min(1).optional(),
 })
@@ -35,7 +44,7 @@ export const agentPersonaCreateInputSchema = z.object({
   description: z.string(),
   systemPrompt: z.string(),
   providerModel: agentPersonaProviderModelSchema.nullable().optional(),
-  toolPolicy: agentPersonaToolPolicySchema.optional(),
+  toolPolicy: agentPersonaToolPolicySchema.nullable().optional(),
 })
 
 export const agentPersonaUpdateInputSchema = agentPersonaCreateInputSchema.extend({
@@ -45,6 +54,7 @@ export const agentPersonaUpdateInputSchema = agentPersonaCreateInputSchema.exten
 export const agentPersonaBuiltinModelUpdateInputSchema = z.object({
   id: z.string().min(1),
   providerModel: agentPersonaProviderModelSchema.nullable(),
+  toolPolicy: agentPersonaToolPolicySchema.nullable().optional(),
 })
 
 export const agentPersonaIdInputSchema = z.object({
@@ -52,14 +62,26 @@ export const agentPersonaIdInputSchema = z.object({
 })
 
 export const agentPersonaChangedEventSchema = z.object({
+  result: z.object({
+    status: agentPersonaDesktopListStatusSchema,
+    items: z.array(agentPersonaSchema),
+    syncedAt: z.string().min(1).optional(),
+  }).optional(),
   items: z.array(agentPersonaSchema),
+})
+
+export const agentPersonaListResultSchema = z.object({
+  status: agentPersonaDesktopListStatusSchema,
+  items: z.array(agentPersonaSchema),
+  syncedAt: z.string().min(1).optional(),
 })
 
 export type AgentPersonaModelTier = z.infer<typeof agentPersonaModelTierSchema>
 export type AgentPersonaProviderModel = z.infer<typeof agentPersonaProviderModelSchema>
-export type AgentPersonaToolPolicyMode = z.infer<typeof agentPersonaToolPolicyModeSchema>
 export type AgentPersonaToolPolicy = z.infer<typeof agentPersonaToolPolicySchema>
+export type AgentPersonaToolPolicyMode = AgentPersonaToolPolicy["mode"]
 export type AgentPersona = z.infer<typeof agentPersonaSchema>
+export type AgentPersonaListResult = z.infer<typeof agentPersonaListResultSchema>
 export type AgentPersonaBuiltinModelUpdateInput = z.infer<typeof agentPersonaBuiltinModelUpdateInputSchema>
 export type AgentPersonaCreateInput = z.infer<typeof agentPersonaCreateInputSchema>
 export type AgentPersonaUpdateInput = z.infer<typeof agentPersonaUpdateInputSchema>

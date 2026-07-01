@@ -77,8 +77,46 @@ model User {
   contentStoreDrafts          ContentStoreDraft[]
   contentStoreInstallSessions ContentStoreInstallSession[]
   contentStoreInstallEvents   ContentStoreInstallEvent[]
+  agentPersonas               AgentPersona[]
+  agentPersonaPreferences     AgentPersonaPreference[]
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
+}
+
+model AgentPersona {
+  id                   String                    @id @default(cuid())
+  source               String                    @db.VarChar(16)
+  ownerUserId          String?
+  owner                User?                     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  stableKey            String?                   @db.VarChar(120)
+  name                 String                    @db.VarChar(120)
+  description          String                    @db.VarChar(1000)
+  systemPrompt         String
+  defaultProviderModel Json?
+  defaultToolPolicy    Json?
+  status               String                    @db.VarChar(16)
+  version              Int                       @default(1)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  preferences          AgentPersonaPreference[]
+
+  @@unique([source, stableKey])
+  @@index([ownerUserId, source, updatedAt])
+  @@index([source, status, updatedAt])
+}
+
+model AgentPersonaPreference {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personaId     String
+  persona       AgentPersona @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  providerModel Json?
+  toolPolicy    Json?
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([userId, personaId])
+  @@index([userId, updatedAt])
 }
 
 model Team {

@@ -7,6 +7,7 @@ import {
   agentCommandsSchema,
   agentEventsSchema,
   agentPersonaItemsSchema,
+  agentPersonaRemoteCacheSchema,
   agentPersonaSettingsSchema,
   agentUsageSchema,
   automationItemsSchema,
@@ -50,6 +51,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.events",
         "agent.usage",
         "app.agent-personas.items",
+        "app.agent-personas.remote-cache",
         "app.agent-personas.settings",
         "app.quick-input.items",
         "app.quick-input.settings",
@@ -117,6 +119,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(agentEventsSchema.backend).toBe("sqlite")
     expect(agentUsageSchema.backend).toBe("sqlite")
     expect(agentPersonaItemsSchema.backend).toBe("sqlite")
+    expect(agentPersonaRemoteCacheSchema.backend).toBe("json")
     expect(agentPersonaSettingsSchema.backend).toBe("json")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
     expect(quickInputItemsSchema.backend).toBe("sqlite")

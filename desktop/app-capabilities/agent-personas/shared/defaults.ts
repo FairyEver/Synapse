@@ -15,7 +15,7 @@ export const BUILTIN_AGENT_PERSONAS = [
       "遇到术语、代码、路径、命令、变量名、品牌名时保持准确；无法确定专有名词时保留原文。",
     ].join("\n"),
     providerModel: null,
-    toolPolicy: { mode: "none", allowedTools: [] },
+    toolPolicy: { mode: "disabled" },
     source: "builtin",
     readonly: true,
   },

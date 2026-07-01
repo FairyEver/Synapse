@@ -5,6 +5,10 @@ import {
   type AgentPersonaItemEntryV1,
   type AgentPersonaSettingsEntryV1,
 } from "../schemas/agent-personas"
+import {
+  agentPersonaRemoteCacheSchema,
+  type AgentPersonaRemoteCacheEntryV1,
+} from "../schemas/agent-persona-remote-cache"
 import { allSchemas } from "../schemas"
 import { sqliteIndexesFor } from "../factory"
 
@@ -89,9 +93,37 @@ describe("agent persona DataRepository schema", () => {
   it("registers the namespace and sqlite index", () => {
     expect(allSchemas.some((schema) => schema.name === "app.agent-personas.items")).toBe(true)
     expect(allSchemas.some((schema) => schema.name === "app.agent-personas.settings")).toBe(true)
+    expect(allSchemas.some((schema) => schema.name === "app.agent-personas.remote-cache")).toBe(true)
     expect(sqliteIndexesFor("app.agent-personas.items")).toEqual([
       "json_extract(value, '$.createdAt'), id",
     ])
+  })
+
+  it("accepts remote cache entries partitioned by user id", () => {
+    const entry: AgentPersonaRemoteCacheEntryV1 = {
+      schemaVersion: 1,
+      users: {
+        "user-1": {
+          syncedAt: "2026-07-01T00:00:00.000Z",
+          items: [{
+            id: "persona-1",
+            schemaVersion: 1,
+            name: "产品顾问",
+            description: "整理产品判断。",
+            systemPrompt: "你是产品顾问。",
+            providerModel: null,
+            toolPolicy: { mode: "disabled" },
+            source: "user",
+            readonly: false,
+            version: 1,
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          }],
+        },
+      },
+    }
+
+    expect(agentPersonaRemoteCacheSchema.validate(entry)).toBe(true)
   })
 
   it("accepts built-in model settings", () => {

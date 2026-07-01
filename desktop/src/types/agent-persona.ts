@@ -4,6 +4,7 @@ import type {
   AgentPersonaChangedEvent,
   AgentPersonaCreateInput,
   AgentPersonaIdInput,
+  AgentPersonaListResult,
   AgentPersonaProviderModel,
   AgentPersonaToolPolicy,
   AgentPersonaToolPolicyMode,
@@ -14,6 +15,7 @@ export type SynapseAgentPersona = AgentPersona
 export type SynapseAgentPersonaProviderModel = AgentPersonaProviderModel
 export type SynapseAgentPersonaToolPolicy = AgentPersonaToolPolicy
 export type SynapseAgentPersonaToolPolicyMode = AgentPersonaToolPolicyMode
+export type SynapseAgentPersonaListResult = AgentPersonaListResult
 export type SynapseAgentPersonaBuiltinModelUpdateInput = AgentPersonaBuiltinModelUpdateInput
 export type SynapseAgentPersonaCreateInput = AgentPersonaCreateInput
 export type SynapseAgentPersonaUpdateInput = AgentPersonaUpdateInput

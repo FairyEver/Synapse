@@ -122,7 +122,7 @@ export type ClaudeSDKToolPolicy = (
 ) => PermissionResult | undefined
 
 export type ClaudeSDKPersonaToolPolicy = {
-  readonly mode: "inherit" | "allowlist" | "none"
+  readonly mode: "all" | "allowlist" | "disabled"
   readonly allowedTools: readonly string[]
 }
 
@@ -394,7 +394,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       }],
     }
 
-    if (this.personaToolPolicy && this.personaToolPolicy.mode !== "inherit") {
+    if (this.personaToolPolicy && this.personaToolPolicy.mode !== "all") {
       hooks.PreToolUse?.unshift({
         matcher: "*",
         hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardPersonaToolPolicy(input)],
@@ -414,8 +414,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     const toolName = typeof record.tool_name === "string" ? record.tool_name : ""
     if (!toolName) return denyToolUse("当前智能体未允许使用该工具。")
     const policy = this.personaToolPolicy
-    if (!policy || policy.mode === "inherit") return {}
-    if (policy.mode === "none") {
+    if (!policy || policy.mode === "all") return {}
+    if (policy.mode === "disabled") {
       return denyToolUse("当前智能体未启用工具。")
     }
     if (policy.allowedTools.includes(toolName)) return {}

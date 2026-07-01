@@ -38,7 +38,7 @@ export interface AgentPersonaSettingsEntryV1 extends Record<string, unknown> {
 
 const noMigrations: readonly Migration[] = []
 const modelTiers = new Set(["default", "haiku", "sonnet", "opus"])
-const toolPolicyModes = new Set(["inherit", "allowlist", "none"])
+const toolPolicyModes = new Set(["all", "allowlist", "disabled"])
 
 export const agentPersonaItemsSchema: NamespaceSchema<AgentPersonaItemEntryV1> = {
   name: AGENT_PERSONAS_ITEMS_NAMESPACE,

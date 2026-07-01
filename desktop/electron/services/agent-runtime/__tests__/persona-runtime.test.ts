@@ -13,7 +13,7 @@ const translator: AgentPersona = {
   description: "在中文和英文之间互译。",
   systemPrompt: "你是中英翻译智能体。",
   providerModel: null,
-  toolPolicy: { mode: "none", allowedTools: [] },
+  toolPolicy: { mode: "disabled" },
   source: "builtin",
   readonly: true,
 }
@@ -45,7 +45,7 @@ describe("agent persona runtime resolver", () => {
       preset: "claude_code",
       append: "你是中英翻译智能体。",
     })
-    expect(resolved.toolPolicy).toEqual({ mode: "none", allowedTools: [] })
+    expect(resolved.toolPolicy).toEqual({ mode: "disabled", allowedTools: [] })
     expect(resolved.agents["synapse-persona__builtin-zh-en-translator"]).not.toHaveProperty("initialPrompt")
     expect(resolved.snapshot).toMatchObject({
       id: translator.id,
@@ -56,7 +56,7 @@ describe("agent persona runtime resolver", () => {
     expect(resolved.definitionsHash).toHaveLength(64)
   })
 
-  it("defaults legacy user personas to inherited tools", async () => {
+  it("defaults legacy user personas to all tools", async () => {
     const userPersona: AgentPersona = {
       ...translator,
       id: "user-1",
@@ -72,7 +72,7 @@ describe("agent persona runtime resolver", () => {
       agentConfig: { activeMainThreadPersonaId: userPersona.id },
     })
 
-    expect(resolved.toolPolicy).toEqual({ mode: "inherit", allowedTools: [] })
+    expect(resolved.toolPolicy).toEqual({ mode: "all", allowedTools: [] })
     expect(resolved.agents["synapse-persona__user-1"]).toEqual({
       description: "在中文和英文之间互译。",
       prompt: "你是中英翻译智能体。",
@@ -136,13 +136,17 @@ describe("agent persona runtime resolver", () => {
     expect(resolved.agents).toHaveProperty("synapse-persona__builtin-zh-en-translator")
   })
 
-  it("throws when the active persona no longer exists", async () => {
+  it("falls back to ordinary mode when the active persona no longer exists", async () => {
     const resolver = createAgentPersonaRuntimeResolver({
       listPersonas: async () => [],
     })
 
-    await expect(resolver.resolve({
+    const resolved = await resolver.resolve({
       agentConfig: { activeMainThreadPersonaId: translator.id },
-    })).rejects.toThrow("智能体不可用")
+    })
+
+    expect(resolved.activePersonaId).toBeNull()
+    expect(resolved.activeAgentName).toBeUndefined()
+    expect(resolved.agents).toEqual({})
   })
 })

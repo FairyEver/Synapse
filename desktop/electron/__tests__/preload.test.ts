@@ -311,6 +311,59 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps agent persona bridge methods to agent persona IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+    const input = {
+      name: "产品顾问",
+      description: "整理产品判断。",
+      systemPrompt: "你是产品顾问。",
+      providerModel: null,
+    }
+
+    await bridge.agentPersonas.list()
+    await bridge.agentPersonas.create(input)
+    await bridge.agentPersonas.update({ id: "persona-1", ...input })
+    await bridge.agentPersonas.updateBuiltinModel({
+      id: "builtin-zh-en-translator",
+      providerModel: { providerId: "claude", modelTier: "sonnet" },
+    })
+    await bridge.agentPersonas.delete({ id: "persona-1" })
+    bridge.agentPersonas.onChanged(vi.fn())
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:agent-personas:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:agent-personas:create",
+      input,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:agent-personas:update",
+      { id: "persona-1", ...input },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      4,
+      "synapse:agent-personas:builtin-model:update",
+      {
+        id: "builtin-zh-en-translator",
+        providerModel: { providerId: "claude", modelTier: "sonnet" },
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      5,
+      "synapse:agent-personas:delete",
+      { id: "persona-1" },
+    )
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
+      "synapse:agent-personas:changed",
+      expect.any(Function),
+    )
+  })
+
   it("rethrows structured IPC error envelopes with user-facing failure", async () => {
     const bridge = await loadPreloadBridge()
     electronMock.ipcRenderer.invoke.mockResolvedValue(undefined)

@@ -2,27 +2,28 @@ import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
 
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
-import type {
-  AgentPersonaItemEntryV1,
-  AgentPersonaSettingsEntryV1,
-} from "../../../../electron/runtime/data-repo/schemas/agent-personas"
+import type { AgentPersonaRemoteCacheEntryV1 } from "../../../../electron/runtime/data-repo/schemas/agent-persona-remote-cache"
 import {
   createInMemoryHarness,
   IpcValidationError,
   type IpcHandlerContext,
 } from "../../../../electron/runtime/ipc"
-import { BUILTIN_ZH_EN_TRANSLATOR_ID } from "../../shared/defaults"
+import type { AgentPersona } from "../../shared/schema"
+import { AgentPersonaCache } from "../cache"
 import { agentPersonasIpcModule } from "../ipc"
 import { createAgentPersonaService } from "../service"
 
+const builtinId = "builtin-zh-en-translator"
+
 describe("Agent personas public IPC contract", () => {
-  it("manages user personas without exposing built-in personas as mutable records", async () => {
+  it("manages user personas through cloud-backed public channels", async () => {
     const harness = createBlackBoxHarness()
 
     await expect(harness.invoke("synapse:agent-personas:list", undefined))
-      .resolves.toMatchObject([
-        { id: BUILTIN_ZH_EN_TRANSLATOR_ID, source: "builtin", readonly: true },
-      ])
+      .resolves.toMatchObject({
+        status: "online",
+        items: [{ id: builtinId, source: "builtin", readonly: true }],
+      })
 
     const created = await harness.invoke("synapse:agent-personas:create", {
       name: "  产品顾问  ",
@@ -41,10 +42,13 @@ describe("Agent personas public IPC contract", () => {
     })
 
     await expect(harness.invoke("synapse:agent-personas:list", undefined))
-      .resolves.toMatchObject([
-        { id: BUILTIN_ZH_EN_TRANSLATOR_ID, source: "builtin", readonly: true },
-        { id: created.id, name: "产品顾问", source: "user", readonly: false },
-      ])
+      .resolves.toMatchObject({
+        status: "online",
+        items: [
+          { id: builtinId, source: "builtin", readonly: true },
+          { id: created.id, name: "产品顾问", source: "user", readonly: false },
+        ],
+      })
 
     await expect(harness.invoke("synapse:agent-personas:update", {
       id: created.id,
@@ -61,9 +65,10 @@ describe("Agent personas public IPC contract", () => {
     await expect(harness.invoke("synapse:agent-personas:delete", { id: created.id }))
       .resolves.toBeUndefined()
     await expect(harness.invoke("synapse:agent-personas:list", undefined))
-      .resolves.toMatchObject([
-        { id: BUILTIN_ZH_EN_TRANSLATOR_ID, source: "builtin", readonly: true },
-      ])
+      .resolves.toMatchObject({
+        status: "online",
+        items: [{ id: builtinId, source: "builtin", readonly: true }],
+      })
   })
 
   it("rejects invalid public payloads at the IPC boundary", async () => {
@@ -82,11 +87,11 @@ describe("Agent personas public IPC contract", () => {
     })).rejects.toBeInstanceOf(IpcValidationError)
   })
 
-  it("rejects built-in mutations through public channels", async () => {
+  it("relies on remote authorization for built-in mutations", async () => {
     const harness = createBlackBoxHarness()
 
     await expect(harness.invoke("synapse:agent-personas:update", {
-      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      id: builtinId,
       name: "中英翻译",
       description: "修改描述。",
       systemPrompt: "修改提示词。",
@@ -94,7 +99,7 @@ describe("Agent personas public IPC contract", () => {
     })).rejects.toThrow("内置智能体不可编辑")
 
     await expect(harness.invoke("synapse:agent-personas:delete", {
-      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      id: builtinId,
     })).rejects.toThrow("内置智能体不可删除")
   })
 
@@ -102,30 +107,22 @@ describe("Agent personas public IPC contract", () => {
     const harness = createBlackBoxHarness()
 
     await expect(harness.invoke("synapse:agent-personas:builtin-model:update", {
-      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      id: builtinId,
       providerModel: { providerId: "claude", modelTier: "sonnet" },
     })).resolves.toMatchObject({
-      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      id: builtinId,
       source: "builtin",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
     })
 
     await expect(harness.invoke("synapse:agent-personas:list", undefined))
-      .resolves.toMatchObject([
-        {
-          id: BUILTIN_ZH_EN_TRANSLATOR_ID,
+      .resolves.toMatchObject({
+        items: [{
+          id: builtinId,
           source: "builtin",
           providerModel: { providerId: "claude", modelTier: "sonnet" },
-        },
-      ])
-
-    await expect(harness.invoke("synapse:agent-personas:update", {
-      id: BUILTIN_ZH_EN_TRANSLATOR_ID,
-      name: "改名",
-      description: "修改描述。",
-      systemPrompt: "修改提示词。",
-      providerModel: null,
-    })).rejects.toThrow("内置智能体不可编辑")
+        }],
+      })
   })
 
   it("broadcasts changed events after public mutations", async () => {
@@ -141,8 +138,15 @@ describe("Agent personas public IPC contract", () => {
     expect(harness.broadcast).toHaveBeenCalledWith(
       "synapse:agent-personas:changed",
       {
+        result: expect.objectContaining({
+          status: "online",
+          items: expect.arrayContaining([
+            expect.objectContaining({ id: builtinId, source: "builtin" }),
+            expect.objectContaining({ name: "产品顾问", source: "user" }),
+          ]),
+        }),
         items: expect.arrayContaining([
-          expect.objectContaining({ id: BUILTIN_ZH_EN_TRANSLATOR_ID, source: "builtin" }),
+          expect.objectContaining({ id: builtinId, source: "builtin" }),
           expect.objectContaining({ name: "产品顾问", source: "user" }),
         ]),
       },
@@ -151,13 +155,52 @@ describe("Agent personas public IPC contract", () => {
 })
 
 function createBlackBoxHarness() {
-  const items = createMemoryNamespace<AgentPersonaItemEntryV1>()
-  const settings = createMemorySingletonNamespace<AgentPersonaSettingsEntryV1>()
+  const cache = createMemorySingletonNamespace<AgentPersonaRemoteCacheEntryV1>()
+  const personas: AgentPersona[] = [remoteBuiltin()]
+  const remote = {
+    list: vi.fn(async () => personas),
+    create: vi.fn(async (input: { name: string; description: string; systemPrompt: string; providerModel?: AgentPersona["providerModel"] }) => {
+      const item = remoteUser({
+        id: `persona-${personas.length}`,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        systemPrompt: input.systemPrompt.trim(),
+        providerModel: input.providerModel ?? null,
+      })
+      personas.push(item)
+      return item
+    }),
+    update: vi.fn(async (input: { id: string; name: string; description: string; systemPrompt: string; providerModel?: AgentPersona["providerModel"] }) => {
+      const index = personas.findIndex((item) => item.id === input.id && item.source === "user")
+      if (index < 0) throw new Error("内置智能体不可编辑")
+      const item = remoteUser({
+        id: input.id,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        systemPrompt: input.systemPrompt.trim(),
+        providerModel: input.providerModel ?? null,
+      })
+      personas[index] = item
+      return item
+    }),
+    updateBuiltinModel: vi.fn(async (input: { id: string; providerModel: AgentPersona["providerModel"] }) => {
+      const index = personas.findIndex((item) => item.id === input.id && item.source === "builtin")
+      if (index < 0) throw new Error("内置智能体不存在")
+      const item = { ...personas[index]!, providerModel: input.providerModel } as AgentPersona
+      personas[index] = item
+      return item
+    }),
+    delete: vi.fn(async (input: { id: string }) => {
+      const index = personas.findIndex((item) => item.id === input.id && item.source === "user")
+      if (index < 0) throw new Error("内置智能体不可删除")
+      personas.splice(index, 1)
+    }),
+  }
   const service = createAgentPersonaService({
-    items,
-    settings,
-    now: () => new Date("2026-06-30T00:00:00.000Z"),
-    createId: () => `persona-${items.records.size + 1}`,
+    remote,
+    cache: new AgentPersonaCache(cache),
+    account: { getState: () => authenticatedOnline("user-1") },
+    now: () => new Date("2026-07-01T00:00:00.000Z"),
     logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
   })
   const broadcast = vi.fn()
@@ -176,6 +219,52 @@ function createBlackBoxHarness() {
   return {
     broadcast,
     invoke: ipc.invoke,
+  }
+}
+
+function authenticatedOnline(userId: string) {
+  return {
+    status: "authenticated" as const,
+    connectivity: "online" as const,
+    profile: {
+      user: { id: userId, email: `${userId}@example.test`, displayName: null, status: "active" as const },
+      teams: [],
+      syncedAt: "2026-07-01T00:00:00.000Z",
+    },
+  }
+}
+
+function remoteBuiltin(overrides: Partial<AgentPersona> = {}): AgentPersona {
+  return {
+    id: builtinId,
+    schemaVersion: 1,
+    name: "中英翻译",
+    description: "在中文和英文之间互译。",
+    systemPrompt: "你是中英翻译智能体。",
+    providerModel: null,
+    toolPolicy: { mode: "disabled" },
+    source: "builtin",
+    readonly: true,
+    version: 1,
+    ...overrides,
+  }
+}
+
+function remoteUser(overrides: Partial<AgentPersona> = {}): AgentPersona {
+  return {
+    id: "persona-1",
+    schemaVersion: 1,
+    name: "产品顾问",
+    description: "整理产品判断。",
+    systemPrompt: "你是产品顾问。",
+    providerModel: null,
+    toolPolicy: null,
+    source: "user",
+    readonly: false,
+    version: 1,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+    ...overrides,
   }
 }
 
@@ -200,27 +289,4 @@ function createMemorySingletonNamespace<T>(): DataNamespace<T> & { singleton: T 
     },
   } satisfies DataNamespace<T> & { singleton: T | null }
   return namespace
-}
-
-function createMemoryNamespace<T extends { id: string }>(): DataNamespace<T> & { records: Map<string, T> } {
-  const events = new EventEmitter()
-  const records = new Map<string, T>()
-  return {
-    name: "memory",
-    schemaVersion: 1,
-    backend: "sqlite",
-    records,
-    async getSingleton() { return null },
-    async setSingleton() {},
-    async clearSingleton() {},
-    async list() { return Array.from(records.values()) },
-    async count() { return records.size },
-    async get(id) { return records.get(id) ?? null },
-    async upsert(item) { records.set(item.id, item) },
-    async remove(id) { records.delete(id) },
-    onChange(listener) {
-      events.on("change", listener)
-      return () => events.off("change", listener)
-    },
-  }
 }

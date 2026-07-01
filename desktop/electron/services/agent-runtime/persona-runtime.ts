@@ -8,7 +8,6 @@ import type {
 import type { ConversationEntryV1, ConversationMainThreadPersonaSnapshotV1 } from "../../runtime/data-repo"
 import type { AgentSdkAgentDefinitions, AgentSdkSystemPrompt } from "./project-contributions"
 
-export const AGENT_PERSONA_UNAVAILABLE_MESSAGE = "智能体不可用"
 const SDK_AGENT_PREFIX = "synapse-persona__"
 
 export type AgentPersonaRuntimeResolverDeps = {
@@ -27,7 +26,7 @@ export type ResolvedPersonaSdkConfig = {
 }
 
 export type AgentPersonaRuntimeToolPolicy = {
-  readonly mode: "inherit" | "allowlist" | "none"
+  readonly mode: "all" | "allowlist" | "disabled"
   readonly allowedTools: readonly string[]
 }
 
@@ -47,7 +46,9 @@ export function createAgentPersonaRuntimeResolver(deps: AgentPersonaRuntimeResol
       return { activePersonaId: null, providerModel: null, agents, definitionsHash }
     }
     const persona = personas.find((item) => item.id === activePersonaId)
-    if (!persona) throw new Error(AGENT_PERSONA_UNAVAILABLE_MESSAGE)
+    if (!persona) {
+      return { activePersonaId: null, providerModel: null, agents, definitionsHash }
+    }
     const activeAgentName = sdkAgentNameForPersona(persona.id)
     const snapshot = snapshotForPersona(persona, agents[activeAgentName])
     const toolPolicy = normalizeToolPolicy(persona.toolPolicy)
@@ -91,7 +92,7 @@ function systemPromptForPersona(persona: AgentPersona): AgentSdkSystemPrompt {
 function sdkToolOptionsForPolicy(
   policy: AgentPersonaRuntimeToolPolicy,
 ): Pick<AgentSdkAgentDefinitions[string], "tools" | "disallowedTools"> {
-  if (policy.mode === "none") {
+  if (policy.mode === "disabled") {
     return { tools: [], disallowedTools: ["*"] }
   }
   if (policy.mode === "allowlist") {
@@ -104,9 +105,9 @@ function disallowedToolsForAllowlist(allowedTools: readonly string[]): string[] 
   return allowedTools.includes("Agent") ? [] : ["Agent"]
 }
 
-function normalizeToolPolicy(value: AgentPersonaToolPolicy | undefined): AgentPersonaRuntimeToolPolicy {
+function normalizeToolPolicy(value: AgentPersonaToolPolicy | null | undefined): AgentPersonaRuntimeToolPolicy {
   if (value?.mode !== "allowlist") {
-    return { mode: value?.mode ?? "inherit", allowedTools: [] }
+    return { mode: value?.mode ?? "all", allowedTools: [] }
   }
   return {
     mode: "allowlist",

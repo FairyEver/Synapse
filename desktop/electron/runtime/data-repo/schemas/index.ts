@@ -53,6 +53,11 @@ export {
   type AgentPersonaSettingsEntryV1,
 } from "./agent-personas"
 export {
+  agentPersonaRemoteCacheSchema,
+  type AgentPersonaRemoteCacheEntryV1,
+  type AgentPersonaRemoteCacheUserBucketV1,
+} from "./agent-persona-remote-cache"
+export {
   reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   type SoundNotifierSettingsEntryV1,
@@ -135,6 +140,7 @@ import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
+import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
@@ -157,8 +163,6 @@ import {
   secretsSchema,
   webhookConfigSchema,
   webhookRunsSchema,
-  normalizeWorkflowEntry,
-  reviveWorkflowsEnvelope,
   workflowParamPresetsSchema,
   workflowsSchema,
 } from "./placeholders"
@@ -180,6 +184,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   quickInputSettingsSchema,
   agentPersonaItemsSchema,
   agentPersonaSettingsSchema,
+  agentPersonaRemoteCacheSchema,
   soundNotifierSettingsSchemaDefinition,
   secretsSchema,
   providersSchema,

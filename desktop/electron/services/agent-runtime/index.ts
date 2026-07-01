@@ -162,7 +162,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         "core.agent-personas",
       )
       const personaRuntimeResolver = agentPersonas
-        ? createAgentPersonaRuntimeResolver({ listPersonas: () => agentPersonas.list() })
+        ? createAgentPersonaRuntimeResolver({
+          listPersonas: async () => (await agentPersonas.list()).items,
+        })
         : undefined
       const customCommands = new CustomCommandRegistry({
         projectId: ctx.projectId,

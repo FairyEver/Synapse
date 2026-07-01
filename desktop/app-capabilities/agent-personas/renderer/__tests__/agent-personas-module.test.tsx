@@ -16,8 +16,8 @@ type PersonaInput = {
   readonly systemPrompt: string
   readonly providerModel?: ModelInput | null
   readonly toolPolicy?: {
-    readonly mode: "inherit" | "allowlist" | "none"
-    readonly allowedTools: readonly string[]
+    readonly mode: "all" | "allowlist" | "disabled"
+    readonly allowedTools?: readonly string[]
   }
 }
 
@@ -30,7 +30,7 @@ const fixtures = vi.hoisted(() => ({
       description: "在中文和英文之间互译，保留原意、语气和格式。",
       systemPrompt: "你是中英翻译智能体。",
       providerModel: null,
-      toolPolicy: { mode: "none", allowedTools: [] },
+      toolPolicy: { mode: "disabled" },
       source: "builtin",
       readonly: true,
     },
@@ -41,7 +41,7 @@ const fixtures = vi.hoisted(() => ({
       description: "整理产品判断。",
       systemPrompt: "你是产品顾问。",
       providerModel: null,
-      toolPolicy: { mode: "inherit", allowedTools: [] },
+      toolPolicy: { mode: "all" },
       source: "user",
       readonly: false,
       createdAt: "2026-06-30T00:00:00.000Z",
@@ -51,13 +51,13 @@ const fixtures = vi.hoisted(() => ({
 }))
 
 const bridge = vi.hoisted(() => ({
-  list: vi.fn(async () => fixtures.items),
+  list: vi.fn(async () => ({ status: "online" as const, items: fixtures.items })),
   create: vi.fn(async (input: PersonaInput) => ({
     id: "persona-2",
     schemaVersion: 1,
     ...input,
     providerModel: input.providerModel ?? null,
-    toolPolicy: input.toolPolicy ?? { mode: "inherit", allowedTools: [] },
+    toolPolicy: input.toolPolicy ?? { mode: "all" },
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -67,7 +67,7 @@ const bridge = vi.hoisted(() => ({
     schemaVersion: 1,
     ...input,
     providerModel: input.providerModel ?? null,
-    toolPolicy: input.toolPolicy ?? { mode: "inherit", allowedTools: [] },
+    toolPolicy: input.toolPolicy ?? { mode: "all" },
     source: "user",
     readonly: false,
     createdAt: "2026-06-30T00:00:00.000Z",
@@ -148,7 +148,8 @@ HTMLElement.prototype.scrollIntoView = vi.fn()
 let roots: Root[] = []
 
 beforeEach(() => {
-  bridge.list.mockClear()
+  bridge.list.mockReset()
+  bridge.list.mockResolvedValue({ status: "online", items: fixtures.items })
   bridge.create.mockClear()
   bridge.update.mockClear()
   bridge.updateBuiltinModel.mockClear()
@@ -184,6 +185,41 @@ describe("AgentPersonasModule", () => {
     expect(document.body.textContent).toContain("产品顾问")
     expect(document.body.textContent).not.toContain("中英翻译")
     expect(buttonWithText("新增")).toBeTruthy()
+  })
+
+  it("shows login action when personas require authentication", async () => {
+    bridge.list.mockResolvedValueOnce({ status: "unauthenticated", items: [] })
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("登录后使用智能体")
+    expect(buttonWithText("登录")).toBeTruthy()
+    expect(buttonWithText("新增")).toBeNull()
+  })
+
+  it("disables writes when rendering offline cache", async () => {
+    bridge.list.mockResolvedValueOnce({
+      status: "offline-cache",
+      syncedAt: "2026-07-01T00:00:00.000Z",
+      items: fixtures.items,
+    })
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("离线")
+    await clickButton("我的")
+    expect(buttonWithText("新增")?.hasAttribute("disabled")).toBe(true)
+    expect(buttonByLabel("编辑智能体：产品顾问")?.hasAttribute("disabled")).toBe(true)
+    expect(buttonByLabel("删除智能体：产品顾问")?.hasAttribute("disabled")).toBe(true)
+  })
+
+  it("shows reconnect state when offline cache is empty", async () => {
+    bridge.list.mockResolvedValueOnce({ status: "offline-empty", items: [] })
+
+    await renderModule()
+
+    expect(document.body.textContent).toContain("重新连接后加载")
+    expect(buttonWithText("新增")).toBeNull()
   })
 
   it("shows only model configuration for built-in personas", async () => {
@@ -321,7 +357,7 @@ describe("AgentPersonasModule", () => {
       description: "整理产品策略。",
       systemPrompt: "你是产品教练。",
       providerModel: null,
-      toolPolicy: { mode: "inherit", allowedTools: [] },
+      toolPolicy: { mode: "all" },
     })
   })
 
@@ -354,6 +390,7 @@ describe("AgentPersonasModule", () => {
     expect(bridge.updateBuiltinModel).toHaveBeenCalledWith({
       id: "builtin-zh-en-translator",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
+      toolPolicy: { mode: "disabled" },
     })
     expect(bridge.update).not.toHaveBeenCalled()
   })

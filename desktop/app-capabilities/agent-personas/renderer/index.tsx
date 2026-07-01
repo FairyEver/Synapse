@@ -10,6 +10,7 @@ import {
 import { ChevronDown, CircleAlert, Pencil, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { requestOpenSettingsAccount } from "../../../src/app-shell/navigation"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
 import {
   AlertDialog,
@@ -73,6 +74,7 @@ import { useProviderModelLabel } from "../../../src/lib/provider-model"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseAgentPersona,
+  SynapseAgentPersonaListResult,
   SynapseAgentPersonaToolPolicy,
   SynapseAgentPersonaToolPolicyMode,
 } from "../../../src/types/agent-persona"
@@ -121,13 +123,13 @@ const emptyFormState: AgentPersonaFormState = {
   description: "",
   systemPrompt: "",
   providerModel: null,
-  toolPolicyMode: "inherit",
+  toolPolicyMode: "all",
   allowedTools: [],
   errors: {},
 }
 
 export function AgentPersonasModule() {
-  const [items, setItems] = useState<SynapseAgentPersona[]>([])
+  const [listResult, setListResult] = useState<SynapseAgentPersonaListResult>({ status: "offline-empty", items: [] })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [saving, setSaving] = useState(false)
@@ -143,7 +145,7 @@ export function AgentPersonasModule() {
     try {
       setLoading(true)
       setLoadError("")
-      setItems(await agentPersonasBridge.list())
+      setListResult(await agentPersonasBridge.list())
     } catch (error) {
       const message = errorMessage(error, "加载失败")
       logger.error("Failed to load agent personas.", error)
@@ -157,10 +159,14 @@ export function AgentPersonasModule() {
   useEffect(() => {
     void reload()
     return agentPersonasBridge.onChanged((event) => {
-      setItems(event.items)
+      setListResult(event.result ?? { status: "online", items: event.items })
     })
   }, [agentPersonasBridge, reload])
 
+  const items = listResult.items
+  const isReadOnly = listResult.status === "offline-cache"
+  const requiresLogin = listResult.status === "unauthenticated"
+  const offlineEmpty = listResult.status === "offline-empty"
   const builtinItems = items.filter((item) => item.source === "builtin")
   const userItems = items.filter((item) => item.source === "user")
   const visibleItems = activeTab === "builtin" ? builtinItems : userItems
@@ -195,6 +201,10 @@ export function AgentPersonasModule() {
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving) return
+    if (isReadOnly) {
+      toast.error("离线时不能修改智能体")
+      return
+    }
 
     const errors = validateForm(form)
     if (Object.keys(errors).length > 0) {
@@ -217,12 +227,13 @@ export function AgentPersonasModule() {
         ? await agentPersonasBridge.updateBuiltinModel({
           id: form.item.id,
           providerModel: input.providerModel,
+          toolPolicy: input.toolPolicy,
         })
         : form.mode === "edit" && form.item
         ? await agentPersonasBridge.update({ id: form.item.id, ...input })
         : await agentPersonasBridge.create(input)
 
-      setItems((current) => mergeItem(current, saved))
+      setListResult((current) => ({ ...current, items: mergeItem(current.items, saved) }))
       toast.success("已保存")
       closeForm()
     } catch (error) {
@@ -237,9 +248,16 @@ export function AgentPersonasModule() {
 
   const deleteItem = async () => {
     if (!deleteTarget || deleteTarget.source !== "user") return
+    if (isReadOnly) {
+      toast.error("离线时不能删除智能体")
+      return
+    }
     try {
       await agentPersonasBridge.delete({ id: deleteTarget.id })
-      setItems((current) => current.filter((entry) => entry.id !== deleteTarget.id))
+      setListResult((current) => ({
+        ...current,
+        items: current.items.filter((entry) => entry.id !== deleteTarget.id),
+      }))
       setDeleteTarget(null)
     } catch (error) {
       logger.error("Failed to delete agent persona.", error)
@@ -252,8 +270,8 @@ export function AgentPersonasModule() {
       tabs={agentPersonaTabs}
       value={activeTab}
       onValueChange={setActiveTab}
-      actions={activeTab === "user" ? (
-        <Button type="button" onClick={openCreateForm}>
+      actions={activeTab === "user" && !requiresLogin && !offlineEmpty ? (
+        <Button type="button" onClick={openCreateForm} disabled={isReadOnly}>
           <Plus data-icon="inline-start" />
           新增
         </Button>
@@ -273,6 +291,21 @@ export function AgentPersonasModule() {
                 重试
               </Button>
             </Alert>
+          ) : requiresLogin ? (
+            <Empty className="min-h-40 border bg-background">
+              <EmptyHeader>
+                <EmptyTitle>登录后使用智能体</EmptyTitle>
+              </EmptyHeader>
+              <Button type="button" onClick={requestOpenSettingsAccount}>
+                登录
+              </Button>
+            </Empty>
+          ) : offlineEmpty ? (
+            <Empty className="min-h-40 border bg-background">
+              <EmptyHeader>
+                <EmptyTitle>重新连接后加载</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
           ) : activeTab === "user" && userItems.length === 0 ? (
             <Empty className="min-h-40 border bg-background">
               <EmptyHeader>
@@ -280,13 +313,23 @@ export function AgentPersonasModule() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <AgentPersonaTable
-              items={visibleItems}
-              tab={activeTab}
-              onConfigureModel={(item) => openItem(item, "configureBuiltinModel")}
-              onEdit={(item) => openItem(item, "edit")}
-              onDelete={setDeleteTarget}
-            />
+            <>
+              {isReadOnly ? (
+                <Alert>
+                  <CircleAlert />
+                  <AlertTitle>离线</AlertTitle>
+                  <AlertDescription>可使用上次同步的智能体，暂不能修改。</AlertDescription>
+                </Alert>
+              ) : null}
+              <AgentPersonaTable
+                items={visibleItems}
+                tab={activeTab}
+                readOnly={isReadOnly}
+                onConfigureModel={(item) => openItem(item, "configureBuiltinModel")}
+                onEdit={(item) => openItem(item, "edit")}
+                onDelete={setDeleteTarget}
+              />
+            </>
           )}
         </div>
       </ScrollArea>
@@ -337,12 +380,14 @@ function AgentPersonaTable({
   onConfigureModel,
   onDelete,
   onEdit,
+  readOnly,
   tab,
 }: {
   readonly items: SynapseAgentPersona[]
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
+  readonly readOnly: boolean
   readonly tab: AgentPersonaTab
 }) {
   return (
@@ -369,6 +414,7 @@ function AgentPersonaTable({
             key={item.id}
             item={item}
             tab={tab}
+            readOnly={readOnly}
             onConfigureModel={onConfigureModel}
             onDelete={onDelete}
             onEdit={onEdit}
@@ -384,12 +430,14 @@ function AgentPersonaRow({
   onConfigureModel,
   onDelete,
   onEdit,
+  readOnly,
   tab,
 }: {
   readonly item: SynapseAgentPersona
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
   readonly onDelete: (item: SynapseAgentPersona) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
+  readonly readOnly: boolean
   readonly tab: AgentPersonaTab
 }) {
   const modelLabel = useProviderModelLabel(item.providerModel)
@@ -413,15 +461,15 @@ function AgentPersonaRow({
       <TableCell className="align-middle text-center">
         <div className="flex justify-center gap-1">
           {tab === "builtin" ? (
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`配置模型：${item.name}`} onClick={() => onConfigureModel(item)}>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`配置模型：${item.name}`} disabled={readOnly} onClick={() => onConfigureModel(item)}>
               <Settings2 />
             </Button>
           ) : item.source === "user" ? (
             <>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑智能体：${item.name}`} onClick={() => onEdit(item)}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑智能体：${item.name}`} disabled={readOnly} onClick={() => onEdit(item)}>
                 <Pencil />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除智能体：${item.name}`} onClick={() => onDelete(item)}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除智能体：${item.name}`} disabled={readOnly} onClick={() => onDelete(item)}>
                 <Trash2 />
               </Button>
             </>
@@ -637,9 +685,9 @@ function AgentPersonaToolPolicyField({
               errors: { ...current.errors, form: undefined },
             }))}
           >
-            <NativeSelectOption value="inherit">继承默认工具</NativeSelectOption>
+            <NativeSelectOption value="all">全部工具</NativeSelectOption>
             <NativeSelectOption value="allowlist">白名单</NativeSelectOption>
-            <NativeSelectOption value="none">禁用全部工具</NativeSelectOption>
+            <NativeSelectOption value="disabled">禁用全部工具</NativeSelectOption>
           </NativeSelect>
         </FieldContent>
       </Field>
@@ -784,14 +832,19 @@ function validateForm(form: AgentPersonaFormState): AgentPersonaFormState["error
 
 function formToolPolicy(form: AgentPersonaFormState): SynapseAgentPersonaToolPolicy {
   if (form.toolPolicyMode !== "allowlist") {
-    return { mode: form.toolPolicyMode, allowedTools: [] }
+    return { mode: form.toolPolicyMode }
   }
   return { mode: "allowlist", allowedTools: uniqueNonBlankStrings(form.allowedTools) }
 }
 
-function normalizeToolPolicy(value: SynapseAgentPersonaToolPolicy | undefined): Required<SynapseAgentPersonaToolPolicy> {
+type NormalizedToolPolicy = {
+  readonly mode: SynapseAgentPersonaToolPolicyMode
+  readonly allowedTools: string[]
+}
+
+function normalizeToolPolicy(value: SynapseAgentPersonaToolPolicy | null | undefined): NormalizedToolPolicy {
   if (!value || value.mode !== "allowlist") {
-    return { mode: value?.mode ?? "inherit", allowedTools: [] }
+    return { mode: value?.mode ?? "all", allowedTools: [] }
   }
   return { mode: "allowlist", allowedTools: uniqueNonBlankStrings(value.allowedTools ?? []) }
 }
@@ -808,10 +861,10 @@ function uniqueNonBlankStrings(values: readonly string[]): string[] {
   return result
 }
 
-function toolPolicyLabel(policy: Required<SynapseAgentPersonaToolPolicy>): string {
-  if (policy.mode === "none") return "禁用全部工具"
+function toolPolicyLabel(policy: NormalizedToolPolicy): string {
+  if (policy.mode === "disabled") return "禁用全部工具"
   if (policy.mode === "allowlist") return `白名单 · ${policy.allowedTools.length}`
-  return "继承默认工具"
+  return "全部工具"
 }
 
 function mergeItem(items: SynapseAgentPersona[], item: SynapseAgentPersona): SynapseAgentPersona[] {

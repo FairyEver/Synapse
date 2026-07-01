@@ -194,7 +194,7 @@ describe("SessionManager", () => {
       sdkSessionId: "sdk-1",
       activePersonaId: null,
       activeAgentName: undefined,
-      personaToolPolicyMode: "inherit",
+      personaToolPolicyMode: "all",
       personaAllowedToolCount: 0,
       hasPersonaSystemPrompt: false,
     })
@@ -303,7 +303,7 @@ describe("SessionManager", () => {
           preset: "claude_code",
           append: "Translate only.",
         },
-        toolPolicy: { mode: "none", allowedTools: [] },
+        toolPolicy: { mode: "disabled", allowedTools: [] },
         agents: {
           "synapse-persona__builtin-zh-en-translator": {
             description: "Translates between Chinese and English.",
@@ -333,7 +333,7 @@ describe("SessionManager", () => {
       },
       tools: [],
       disallowedTools: ["*"],
-      personaToolPolicy: { mode: "none", allowedTools: [] },
+      personaToolPolicy: { mode: "disabled", allowedTools: [] },
       agents: {
         "synapse-persona__builtin-zh-en-translator": expect.objectContaining({
           prompt: "Translate only.",
@@ -414,7 +414,7 @@ describe("SessionManager", () => {
           preset: "claude_code",
           append: "Secret persona prompt text.",
         },
-        toolPolicy: { mode: "none", allowedTools: [] },
+        toolPolicy: { mode: "disabled", allowedTools: [] },
         agents: {
           "synapse-persona__builtin-zh-en-translator": {
             description: "Translates.",
@@ -437,7 +437,7 @@ describe("SessionManager", () => {
     expect(logger.info).toHaveBeenCalledWith("Created agent live session.", expect.objectContaining({
       activePersonaId: "builtin-zh-en-translator",
       activeAgentName: "synapse-persona__builtin-zh-en-translator",
-      personaToolPolicyMode: "none",
+      personaToolPolicyMode: "disabled",
       personaAllowedToolCount: 0,
       hasPersonaSystemPrompt: true,
     }))
