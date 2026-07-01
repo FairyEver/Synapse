@@ -220,7 +220,7 @@ function plannedConflict(input: {
 function remoteRelativePath(binding: DriveSyncBindingEntryV1, change: DriveChangeDto): string | null {
   if (change.itemId === binding.driveItemId) return ""
   if (binding.kind === "file") return null
-  if (!change.pathHint || !binding.drivePathHint) return change.name ?? null
+  if (!change.pathHint || !binding.drivePathHint) return null
   const bindingPath = normalizeDrivePath(binding.drivePathHint)
   const changePath = normalizeDrivePath(change.pathHint)
   if (changePath === bindingPath) return ""

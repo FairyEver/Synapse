@@ -137,6 +137,35 @@ describe("drive sync planner", () => {
     expect(result.conflicts).toEqual([])
   })
 
+  it("ignores unscoped remote changes without baseline or path hints", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [],
+      changes: [
+        remoteChange({ itemId: "remote-outside", type: "trashed", pathHint: null, name: "notes.md" }),
+        remoteChange({ itemId: "remote-update", type: "content_updated", pathHint: null, name: "spec.md" }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([])
+  })
+
+  it("uses the existing baseline for remote changes without path hints", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [baseline({ relativePath: "notes.md", remoteItemId: "remote-notes" })],
+      changes: [
+        remoteChange({ itemId: "remote-notes", type: "trashed", pathHint: null, name: "notes.md" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "delete_local", relativePath: "notes.md", driveItemId: "remote-notes" }),
+    ])
+  })
+
   it("ignores unrelated account-wide changes for file bindings", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({
@@ -262,7 +291,8 @@ function localChange(input: Partial<DriveSyncLocalChange> & {
 }
 
 function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
-  readonly pathHint: string
+  readonly pathHint: string | null
+  readonly name?: string | null
   readonly itemKind?: DriveChangeDto["itemKind"]
 }): DriveChangeDto {
   return {
@@ -273,7 +303,7 @@ function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
     type: input.type,
     versionId: null,
     etag: null,
-    name: input.pathHint.split("/").at(-1) ?? null,
+    name: input.name ?? input.pathHint?.split("/").at(-1) ?? null,
     pathHint: input.pathHint,
     itemKind: input.itemKind ?? null,
     actor: "user",
