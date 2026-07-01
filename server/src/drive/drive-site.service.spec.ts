@@ -161,6 +161,42 @@ describe("DriveSiteService", () => {
       asset: { relativePath: "index.html", storageKey: "drive-sites/site_existing/dep-old/index.html" },
     })
   })
+
+  it("includes the exact asset when listing a concrete site file path", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({ currentDeploymentId: "dep-1", siteId: "site_existing" })],
+      deployments: [createDeploymentRecord({ id: "dep-1", driveSiteId: "site-row-1" })],
+      assets: [
+        createAssetRecord({
+          deploymentId: "dep-1",
+          relativePath: "index.html",
+          storageKey: "drive-sites/site_existing/dep-1/index.html",
+        }),
+        createAssetRecord({
+          deploymentId: "dep-1",
+          relativePath: "pages/create-task.html",
+          storageKey: "drive-sites/site_existing/dep-1/pages/create-task.html",
+          size: 20n,
+        }),
+        createAssetRecord({
+          deploymentId: "dep-1",
+          relativePath: "pages/other.html",
+          storageKey: "drive-sites/site_existing/dep-1/pages/other.html",
+        }),
+      ],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.listPublicSiteAssets("site_existing", { cookie: null, path: "pages/create-task.html" }))
+      .resolves.toMatchObject({
+        status: "ok",
+        assets: [
+          { relativePath: "pages/create-task.html", storageKey: "drive-sites/site_existing/dep-1/pages/create-task.html" },
+        ],
+        page: { hasMore: false, nextOffset: null },
+      })
+  })
 })
 
 function createMemoryStorage() {
@@ -289,11 +325,40 @@ function createMemoryPrisma(seed: {
           && asset.relativePath === args.where.deploymentId_relativePath.relativePath
         )) ?? null
       },
+      async findMany(args: {
+        readonly where: {
+          readonly deploymentId: string
+          readonly OR?: ReadonlyArray<
+            | { readonly relativePath: string }
+            | { readonly relativePath: { readonly startsWith: string } }
+          >
+          readonly relativePath?: { readonly startsWith: string }
+        }
+        readonly skip?: number
+        readonly take?: number
+      }) {
+        const filtered = assets
+          .filter((asset) => asset.deploymentId === args.where.deploymentId)
+          .filter((asset) => {
+            if (args.where.OR) {
+              return args.where.OR.some((condition) => matchesAssetRelativePath(asset.relativePath, condition.relativePath))
+            }
+            if (args.where.relativePath) return matchesAssetRelativePath(asset.relativePath, args.where.relativePath)
+            return true
+          })
+          .sort((first, second) => first.relativePath.localeCompare(second.relativePath) || first.id.localeCompare(second.id))
+        const start = args.skip ?? 0
+        return filtered.slice(start, typeof args.take === "number" ? start + args.take : undefined)
+      },
     },
     async $transaction(actions: readonly Promise<unknown>[]) {
       return Promise.all(actions)
     },
   }
+}
+
+function matchesAssetRelativePath(relativePath: string, condition: string | { readonly startsWith: string }): boolean {
+  return typeof condition === "string" ? relativePath === condition : relativePath.startsWith(condition.startsWith)
 }
 
 function createItem(overrides: Record<string, unknown>) {

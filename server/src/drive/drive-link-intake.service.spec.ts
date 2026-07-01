@@ -230,6 +230,43 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("lists the exact published site asset for concrete site file links", async () => {
+    const { service, sites } = createService()
+    sites.listPublicSiteAssets.mockResolvedValueOnce({
+      status: "ok",
+      assets: [
+        {
+          relativePath: "pages/create-task.html",
+          storageKey: "site/pages/create-task.html",
+          contentType: "text/html",
+          size: 20n,
+        },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    } as never)
+
+    await expect(service.list({ url: `${publicAppUrl}/sites/site_public/pages/create-task.html` })).resolves.toEqual({
+      items: [
+        {
+          path: "pages/create-task.html",
+          name: "create-task.html",
+          type: "file",
+          mimeType: "text/html",
+          previewKind: "html-source",
+          size: "20",
+        },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+    expect(sites.listPublicSiteAssets).toHaveBeenCalledWith("site_public", {
+      cookie: null,
+      password: undefined,
+      path: "pages/create-task.html",
+      offset: undefined,
+      limit: undefined,
+    })
+  })
+
   it("reads markdown text from a share link", async () => {
     const { service } = createService()
 

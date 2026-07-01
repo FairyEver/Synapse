@@ -292,7 +292,9 @@ export class DriveSiteService {
     const assets = await this.prisma.driveSiteAsset.findMany({
       where: {
         deploymentId: context.deployment.id,
-        ...(pathFilter ? { relativePath: { startsWith: pathFilter } } : {}),
+        ...(pathFilter
+          ? { OR: [{ relativePath: prefix }, { relativePath: { startsWith: pathFilter } }] }
+          : {}),
       },
       orderBy: [{ relativePath: "asc" }, { id: "asc" }],
       skip: page.offset,
