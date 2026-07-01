@@ -90,7 +90,10 @@ describe("drive sync executor", () => {
     const accountService = createAccountService({
       uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
       listDriveItemTree: vi.fn(async () => ({
-        items: [{ id: "remote-local", name: "local.md", type: "file" }],
+        items: [
+          { id: "nested-local", name: "local.md", type: "file", path: "Docs/Archive/local.md", depth: 2 },
+          { id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 },
+        ],
       })),
     })
 
@@ -204,7 +207,7 @@ describe("drive sync executor", () => {
     const accountService = createAccountService({
       uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
       listDriveItemTree: vi.fn(async () => ({
-        items: [{ id: "remote-local", name: "local.md", type: "file" }],
+        items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/Folder/local.md", depth: 2 }],
       })),
     })
 

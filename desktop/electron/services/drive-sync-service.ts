@@ -750,7 +750,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       items: [{ kind: "file", path: binding.localPath, name: binding.driveItemName }],
     })
     if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
-    const remoteItemId = await findUploadedRemoteItemId(binding.driveItemName)
+    const remoteItemId = await findUploadedRemoteItemId(binding.driveItemName, "file")
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -776,9 +776,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return remoteItemId
   }
 
-  async function findUploadedRemoteItemId(name: string): Promise<string> {
-    const tree = await deps.accountService.listDriveItemTree({ parentId: null })
-    return tree.items.find((item) => item.name === name)?.id ?? name
+  async function findUploadedRemoteItemId(name: string, expectedType: "file" | "folder"): Promise<string> {
+    let offset: number | null = 0
+    while (offset !== null) {
+      const page = await deps.accountService.listDriveItemTree({ parentId: null, offset, limit: 200 })
+      const item = page.items.find((candidate) => isDirectUploadedRemoteMatch(candidate, name, name, expectedType))
+      if (item) return item.id
+      offset = page.nextOffset ?? null
+    }
+    return name
   }
 
   async function downloadInitialFolder(binding: DriveSyncBindingDto): Promise<void> {
@@ -891,7 +897,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       createdRemoteRootId = created.id
     }
 
-    const remoteRootId = createdRemoteRootId ?? await findUploadedRemoteItemId(binding.driveItemName)
+    const remoteRootId = createdRemoteRootId ?? await findUploadedRemoteItemId(binding.driveItemName, "folder")
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -1644,6 +1650,22 @@ function toRemoteTreeEntry(item: Partial<DriveItemTreeListPageDto["items"][numbe
     path: item.path,
     size: item.size,
   }
+}
+
+function isDirectUploadedRemoteMatch(
+  item: Partial<DriveItemTreeListPageDto["items"][number]> & {
+    readonly name: string
+    readonly type: string
+  },
+  name: string,
+  expectedPath: string,
+  expectedType: "file" | "folder",
+): boolean {
+  const expectedDepth = expectedPath.split("/").filter(Boolean).length - 1
+  return item.name === name
+    && item.type === expectedType
+    && item.path === expectedPath
+    && item.depth === expectedDepth
 }
 
 function isRunningOperationStatus(status: DriveSyncOperationStatus): boolean {

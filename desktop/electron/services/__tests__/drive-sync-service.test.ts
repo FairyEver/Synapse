@@ -546,7 +546,7 @@ describe("DriveSyncService", () => {
         accountService: {
           uploadDriveLocalItems,
           listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "drive-item-1", name: "spec.md", type: "file", size: "3", mimeType: "text/markdown" }],
+            items: [{ id: "drive-item-1", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "3", mimeType: "text/markdown" }],
           })),
         },
       })
@@ -584,7 +584,10 @@ describe("DriveSyncService", () => {
         accountService: {
           uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
           listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "created-item-1", name: "spec.md", type: "file", size: "10", mimeType: "text/markdown" }],
+            items: [
+              { id: "nested-item-1", name: "spec.md", type: "file", path: "Archive/spec.md", depth: 1, size: "10", mimeType: "text/markdown" },
+              { id: "created-item-1", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "10", mimeType: "text/markdown" },
+            ],
           })),
         },
       })
@@ -854,7 +857,12 @@ describe("DriveSyncService", () => {
           uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
           listDriveItemTree: vi.fn(async ({ parentId, offset }: { parentId?: string | null; offset?: number | null }) => {
             if (parentId === null || parentId === undefined) {
-              return { items: [{ id: "remote-docs", name: "Docs", type: "folder" }] }
+              return {
+                items: [
+                  { id: "nested-docs", name: "Docs", type: "folder", path: "Archive/Docs", depth: 1 },
+                  { id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0 },
+                ],
+              }
             }
             if (parentId === "remote-docs") {
               if (offset === 1) {
@@ -1158,7 +1166,7 @@ describe("DriveSyncService", () => {
         accountService: {
           uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
           listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "remote-local", name: "local.md", type: "file" }],
+            items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 }],
           })),
         },
       })

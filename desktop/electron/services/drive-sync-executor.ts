@@ -125,7 +125,7 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
     items: [{ kind: "file", path: localPath, name: path.basename(localPath) }],
   })
   if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
-  const remoteItemId = deps.operation.driveItemId ?? await findUploadedRemoteItemId(deps, path.basename(localPath))
+  const remoteItemId = deps.operation.driveItemId ?? await findUploadedRemoteItemId(deps, path.basename(localPath), "file")
   await deps.baselineStore.upsert({
     bindingId: deps.binding.id,
     relativePath: deps.operation.relativePath,
@@ -222,9 +222,35 @@ async function rewriteDescendantBaselines(
   }
 }
 
-async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: string): Promise<string> {
-  const tree = await deps.accountService.listDriveItemTree({ parentId: await parentRemoteId(deps) })
-  return tree.items.find((item) => item.name === name)?.id ?? name
+async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: string, expectedType: "file" | "folder"): Promise<string> {
+  const parentId = await parentRemoteId(deps)
+  const expectedPath = uploadedRemotePath(deps, name)
+  let offset: number | null = 0
+  while (offset !== null) {
+    const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
+    const item = page.items.find((candidate) => isDirectUploadedRemoteMatch(candidate, name, expectedPath, expectedType))
+    if (item) return item.id
+    offset = page.nextOffset ?? null
+  }
+  return name
+}
+
+function uploadedRemotePath(deps: DriveSyncExecutorDeps, name: string): string {
+  if (deps.binding.kind !== "folder" || !deps.operation.relativePath) return name
+  return path.posix.join(deps.binding.driveItemName, deps.operation.relativePath)
+}
+
+function isDirectUploadedRemoteMatch(
+  item: Awaited<ReturnType<DriveSyncAccountService["listDriveItemTree"]>>["items"][number],
+  name: string,
+  expectedPath: string,
+  expectedType: "file" | "folder",
+): boolean {
+  const expectedDepth = expectedPath.split("/").filter(Boolean).length - 1
+  return item.name === name
+    && item.type === expectedType
+    && item.path === expectedPath
+    && item.depth === expectedDepth
 }
 
 async function parentRemoteId(deps: DriveSyncExecutorDeps): Promise<string | null> {
