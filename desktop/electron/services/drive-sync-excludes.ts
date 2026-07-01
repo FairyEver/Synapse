@@ -47,7 +47,7 @@ function matchesRule(relativePath: string, rawRule: string): boolean {
   if (!rule) return false
   if (rule.endsWith("/**")) {
     const directory = rule.slice(0, -3)
-    return relativePath === directory || relativePath.startsWith(`${directory}/`)
+    return matchesDirectoryRule(relativePath, directory)
   }
   if (rule.startsWith("*.")) {
     return basename(relativePath).endsWith(rule.slice(1))
@@ -56,6 +56,13 @@ function matchesRule(relativePath: string, rawRule: string): boolean {
     return globToRegExp(rule).test(relativePath)
   }
   return relativePath === rule || basename(relativePath) === rule
+}
+
+function matchesDirectoryRule(relativePath: string, directory: string): boolean {
+  return relativePath === directory
+    || relativePath.startsWith(`${directory}/`)
+    || relativePath.endsWith(`/${directory}`)
+    || relativePath.includes(`/${directory}/`)
 }
 
 function normalizeRelativePath(value: string): string {
