@@ -537,6 +537,42 @@ export class AccountService {
     const maxBytes = input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES
     const queue: Array<{ readonly itemId?: string; readonly path?: string; readonly prefix: string }> = [{ prefix: "" }]
     let maxFilesReached = false
+    const finish = async (): Promise<DriveLinkMaterializeDto> => {
+      if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
+      const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
+      const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
+      const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
+      await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+      return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
+    }
+
+    if (isPublicAssetDriveLink(input.url)) {
+      const resolved = await this.resolveDriveLink(baseInput)
+      const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
+      if (files.length >= maxFiles) {
+        skipped.push({ path: relativePath, reason: "max-files" })
+        maxFilesReached = true
+        return finish()
+      }
+      if (scope !== "all") {
+        skipped.push({ path: relativePath, reason: "not-text" })
+        return finish()
+      }
+      const outputPath = path.join(root.contentPath, relativePath)
+      await mkdir(path.dirname(outputPath), { recursive: true })
+      const downloaded = await this.downloadDriveLinkFile({
+        ...baseInput,
+        outputPath,
+      })
+      const actualSize = Number(downloaded.size)
+      if (Number.isFinite(actualSize) && actualSize > maxBytes) {
+        await rm(outputPath, { force: true })
+        skipped.push({ path: relativePath, reason: "max-bytes" })
+        return finish()
+      }
+      files.push({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+      return finish()
+    }
 
     while (queue.length > 0 && !maxFilesReached) {
       const current = queue.shift()!
@@ -607,12 +643,7 @@ export class AccountService {
       } while (offset !== undefined && !maxFilesReached)
     }
 
-    if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
-    const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
-    const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
-    const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
-    await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
-    return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
+    return finish()
   }
 
   async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
@@ -2138,6 +2169,14 @@ function isDriveLinkTextPreview(previewKind: string): boolean {
 
 function joinDriveLinkRelativePath(prefix: string, childPath: string): string {
   return [prefix, childPath].filter(Boolean).join("/")
+}
+
+function isPublicAssetDriveLink(value: string): boolean {
+  try {
+    return new URL(value).pathname.startsWith("/files/")
+  } catch {
+    return /(^|\/)files\/[^/?#]+/u.test(value)
+  }
 }
 
 function parseDriveLinkSize(value: string): number | null {

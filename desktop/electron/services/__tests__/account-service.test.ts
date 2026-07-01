@@ -449,6 +449,33 @@ describe("AccountService", () => {
     await expect(readFile(path.join(result.localRootPath, "content", "assets", "logo.png"), "utf8")).resolves.toBe("pngdata")
   })
 
+  it("materializes public asset links without listing a directory", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink")
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "public_asset",
+      access: { status: "ok", canRead: true, canList: false, canReadText: false, canDownload: true },
+      root: { name: "logo.png", type: "asset", previewKind: "image" },
+      ref: { kind: "public_asset", shareId: null, itemId: null, siteId: null, path: null, assetId: "asset-logo" },
+    })
+    vi.spyOn(service, "downloadDriveLinkFile").mockImplementation(async (input) => {
+      if (!input.outputPath) throw new Error("outputPath required")
+      await writeFile(input.outputPath, "pngdata")
+      return { localPath: input.outputPath, mimeType: "image/png", size: "7" }
+    })
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/files/asset-logo",
+      scope: "all",
+      maxBytes: 1024,
+    })
+
+    expect(listDriveLink).not.toHaveBeenCalled()
+    expect(result.files).toEqual([{ relativePath: "logo.png", kind: "image", size: "7" }])
+    await expect(readFile(path.join(result.localRootPath, "content", "logo.png"), "utf8")).resolves.toBe("pngdata")
+  })
+
   it("rejects local files over the shared single file limit before preparing upload", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-too-large-"))
     const filePath = path.join(dir, "large.bin")
