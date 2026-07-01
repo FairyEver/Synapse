@@ -30,7 +30,7 @@ import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from
 import { createDriveSyncBaselineStore } from "./drive-sync-baseline"
 import { previewDriveSyncBinding, readDriveSyncGitignoreRules } from "./drive-sync-binding-validator"
 import { executeDriveSyncOperation } from "./drive-sync-executor"
-import { isDriveSyncExcluded } from "./drive-sync-excludes"
+import { createDefaultDriveSyncExcludeRules, isDriveSyncExcluded } from "./drive-sync-excludes"
 import { sanitizeError } from "./error-sanitize"
 import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
 import {
@@ -1751,9 +1751,10 @@ function createBindingExcludeRules(
   userRules: readonly string[],
   importedGitignoreRules: readonly string[] = [],
 ): DriveSyncBindingEntryV1["excludeRules"] {
+  const defaults = createDefaultDriveSyncExcludeRules()
   return {
-    forced: [".git/**", ".git"],
-    defaults: [],
+    forced: defaults.forced,
+    defaults: defaults.defaults,
     importedGitignore: [...importedGitignoreRules],
     user: [...userRules],
   }

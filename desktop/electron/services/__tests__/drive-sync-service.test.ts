@@ -971,13 +971,18 @@ describe("DriveSyncService", () => {
     try {
       await mkdir(path.join(tempDir, ".git"), { recursive: true })
       await mkdir(path.join(tempDir, "empty"), { recursive: true })
+      await mkdir(path.join(tempDir, "dist"), { recursive: true })
       await mkdir(path.join(tempDir, "more"), { recursive: true })
+      await mkdir(path.join(tempDir, "node_modules", "pkg"), { recursive: true })
       await mkdir(path.join(tempDir, "notes"), { recursive: true })
       await mkdir(path.join(tempDir, "secrets"), { recursive: true })
       await writeFile(path.join(tempDir, ".gitignore"), "secrets/\n*.tmp\n", "utf8")
       await writeFile(path.join(tempDir, ".git", "config"), "private", "utf8")
+      await writeFile(path.join(tempDir, "dist", "app.js"), "compiled", "utf8")
       await writeFile(path.join(tempDir, "draft.tmp"), "temporary", "utf8")
+      await writeFile(path.join(tempDir, "error.log"), "log", "utf8")
       await writeFile(path.join(tempDir, "more", "readme.md"), "more", "utf8")
+      await writeFile(path.join(tempDir, "node_modules", "pkg", "index.js"), "dependency", "utf8")
       await writeFile(path.join(tempDir, "notes", "spec.md"), "local spec", "utf8")
       await writeFile(path.join(tempDir, "secrets", "token.txt"), "secret", "utf8")
       const harness = createHarness({
@@ -1021,6 +1026,7 @@ describe("DriveSyncService", () => {
       })
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "remote-docs" })
+      expect(binding.excludeRules.defaults).toEqual(expect.arrayContaining(["node_modules/**", "dist/**", "*.log"]))
       const uploadInput = vi.mocked(harness.deps.accountService.uploadDriveLocalItems).mock.calls[0]?.[0]
       const uploadedFolder = uploadInput?.items[0]
       expect(uploadedFolder?.kind).toBe("folder")
@@ -1033,7 +1039,10 @@ describe("DriveSyncService", () => {
       ]))
       expect(uploadedRelativePaths).not.toEqual(expect.arrayContaining([
         ".git/config",
+        "dist/app.js",
         "draft.tmp",
+        "error.log",
+        "node_modules/pkg/index.js",
         "secrets/token.txt",
       ]))
       expect(binding.excludeRules.importedGitignore).toEqual(["secrets/**", "*.tmp"])
