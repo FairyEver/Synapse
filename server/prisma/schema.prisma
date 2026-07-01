@@ -47,40 +47,44 @@ model DashboardRevokedToken {
 }
 
 model User {
-  id                          String                       @id @default(cuid())
-  email                       String                       @unique
-  displayName                 String?                      @db.VarChar(40)
-  adminNote                   String?                      @db.VarChar(500)
-  passwordHash                String
-  passwordChangedAt           DateTime?
-  status                      UserStatus                   @default(active)
-  memberships                 TeamMembership[]
-  createdTeams                Team[]                       @relation("TeamCreator")
-  sessions                    UserSession[]
-  desktopLoginCodes           DesktopLoginCode[]
-  passwordResetTokens         UserPasswordResetToken[]
-  acceptedInvitations         Invitation[]                 @relation("AcceptedInvitations")
-  createdInvitations          Invitation[]                 @relation("UserCreatedInvitations")
-  modulePermissions           UserModulePermission[]
-  webhooks                    UserWebhook[]
-  devices                     UserDevice[]
-  driveItems                  DriveItem[]
-  driveUsage                  DriveUsage?
-  driveUploadSessions         DriveUploadSession[]
-  driveFileVersions           DriveFileVersion[]
-  driveChanges                DriveChange[]
-  driveAnnotationThreads      DriveAnnotationThread[]
-  driveAnnotationComments     DriveAnnotationComment[]
-  publicAssets                PublicAsset[]
-  driveSites                  DriveSite[]
-  contentStoreItems           ContentStoreItem[]
-  contentStoreDrafts          ContentStoreDraft[]
-  contentStoreInstallSessions ContentStoreInstallSession[]
-  contentStoreInstallEvents   ContentStoreInstallEvent[]
-  agentPersonas               AgentPersona[]
-  agentPersonaPreferences     AgentPersonaPreference[]
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
+  id                           String                        @id @default(cuid())
+  email                        String                        @unique
+  handle                       String?                       @unique @db.VarChar(64)
+  displayName                  String?                       @db.VarChar(40)
+  adminNote                    String?                       @db.VarChar(500)
+  passwordHash                 String
+  passwordChangedAt            DateTime?
+  status                       UserStatus                    @default(active)
+  memberships                  TeamMembership[]
+  createdTeams                 Team[]                        @relation("TeamCreator")
+  sessions                     UserSession[]
+  desktopLoginCodes            DesktopLoginCode[]
+  passwordResetTokens          UserPasswordResetToken[]
+  acceptedInvitations          Invitation[]                  @relation("AcceptedInvitations")
+  createdInvitations           Invitation[]                  @relation("UserCreatedInvitations")
+  modulePermissions            UserModulePermission[]
+  webhooks                     UserWebhook[]
+  devices                      UserDevice[]
+  driveItems                   DriveItem[]
+  driveUsage                   DriveUsage?
+  driveUploadSessions          DriveUploadSession[]
+  driveFileVersions            DriveFileVersion[]
+  driveChanges                 DriveChange[]
+  driveAnnotationThreads       DriveAnnotationThread[]
+  driveAnnotationComments      DriveAnnotationComment[]
+  publicAssets                 PublicAsset[]
+  driveSites                   DriveSite[]
+  contentStoreItems            ContentStoreItem[]
+  contentStoreDrafts           ContentStoreDraft[]
+  contentStoreInstallSessions  ContentStoreInstallSession[]
+  contentStoreInstallEvents    ContentStoreInstallEvent[]
+  userHandleRedirects          UserHandleRedirect[]
+  skillRepositories            SkillRepository[]
+  skillRepositoryInstallEvents SkillRepositoryInstallEvent[]
+  agentPersonas                AgentPersona[]
+  agentPersonaPreferences      AgentPersonaPreference[]
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
 }
 
 model AgentPersona {
@@ -802,4 +806,87 @@ model ContentStoreInstallEvent {
 
   @@unique([userId, itemId, versionId, clientInstanceId])
   @@index([itemId, versionId])
+}
+
+model UserHandleRedirect {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oldHandle String   @unique @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model SkillRepository {
+  id                       String                        @id @default(cuid())
+  ownerUserId              String
+  owner                    User                          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name                     String                        @db.VarChar(64)
+  title                    String                        @db.VarChar(160)
+  description              String?
+  visibility               String                        @default("private") @db.VarChar(16)
+  status                   String                        @default("active") @db.VarChar(16)
+  forkedFromRepositoryId   String?
+  forkedFromRepository     SkillRepository?              @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
+  forks                    SkillRepository[]             @relation("SkillRepositoryForks")
+  lastSyncedAt             DateTime?
+  legacyContentStoreItemId String?
+  legacyInstallCount       Int                           @default(0)
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  files                    SkillRepositoryFile[]
+  nameRedirects            SkillRepositoryNameRedirect[]
+  installEvents            SkillRepositoryInstallEvent[]
+
+  @@unique([ownerUserId, name])
+  @@index([visibility, status, updatedAt])
+  @@index([ownerUserId, updatedAt])
+  @@index([forkedFromRepositoryId])
+  @@index([legacyContentStoreItemId])
+}
+
+model SkillRepositoryNameRedirect {
+  id           String          @id @default(cuid())
+  ownerUserId  String
+  oldName      String          @db.VarChar(64)
+  repositoryId String
+  repository   SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime        @default(now())
+
+  @@unique([ownerUserId, oldName])
+  @@index([repositoryId])
+}
+
+model SkillRepositoryFile {
+  id           String          @id @default(cuid())
+  repositoryId String
+  repository   SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  path         String          @db.VarChar(1024)
+  pathKey      String          @db.VarChar(1024)
+  kind         String          @db.VarChar(16)
+  mimeType     String?         @db.VarChar(255)
+  size         BigInt
+  sha256       String          @db.VarChar(64)
+  storageKey   String?
+  text         String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([repositoryId, pathKey])
+  @@index([repositoryId, path])
+  @@index([sha256])
+}
+
+model SkillRepositoryInstallEvent {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId     String
+  repository       SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  clientInstanceId String          @db.VarChar(120)
+  createdAt        DateTime        @default(now())
+
+  @@unique([userId, repositoryId, clientInstanceId])
+  @@index([repositoryId])
 }
