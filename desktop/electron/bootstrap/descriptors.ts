@@ -58,6 +58,7 @@ import { createContentCapabilityDispatcher } from "../capabilities/content-dispa
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
+import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
 import { createVariableCapabilityDispatcher } from "../capabilities/variable-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
@@ -127,6 +128,8 @@ import { readSkillDraftFromDirectory } from "../services/content-skill-source-se
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
+import { SkillRepositoryUploadService } from "../services/skill-repository-upload-service"
 import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
 import {
   AutomationExecutionService,
@@ -912,6 +915,20 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const skillRepositoryUploadService = new SkillRepositoryUploadService({
+      accountService,
+      publicAppUrl: SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl,
+      openExternal: (url) => shell.openExternal(url),
+    })
+    const skillRepositoryDispatcher = createSkillRepositoryCapabilityDispatcher({
+      accountService,
+      uploadService: skillRepositoryUploadService,
+      publicAppUrl: SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl,
+      openExternal: (url) => shell.openExternal(url),
+      auditSink,
+      permissionGuard,
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+    })
     const variableDispatcher = createVariableCapabilityDispatcher({
       loadConfig: () => configStore.load(),
       updateConfig: (patch) => configStore.update(patch),
@@ -970,6 +987,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
+      skillRepositoryDispatch: (action, params, context) => skillRepositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(
         action,
         params,

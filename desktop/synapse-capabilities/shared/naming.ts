@@ -3,6 +3,7 @@ const CAPABILITY_ACTIONS = [
   "get",
   "create",
   "update",
+  "update_local",
   "upsert",
   "delete",
   "count",
@@ -17,11 +18,13 @@ const CAPABILITY_ACTIONS = [
   "execute",
   "reorder",
   "move",
+  "import_local",
   "upload",
   "restore",
   "generate",
   "play",
   "stop",
+  "open",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]
