@@ -34,6 +34,40 @@ describe("AgentPersonaService", () => {
     expect(harness.cacheNamespace.singleton?.users["user-1"]?.items.map((item) => item.id)).toEqual(["builtin-1", "persona-1"])
   })
 
+  it("emits changed when a later remote list returns updated personas", async () => {
+    const remoteItems = [remoteBuiltin()]
+    const harness = createCloudHarness({
+      accountState: authenticatedOnline("user-1"),
+      remoteItems,
+    })
+    const service = createAgentPersonaService(harness.deps)
+    const changed = vi.fn()
+    service.events.on("changed", changed)
+
+    await service.list()
+    expect(changed).not.toHaveBeenCalled()
+
+    remoteItems[0] = remoteBuiltin({
+      systemPrompt: "你是中英翻译智能体。只输出翻译结果。",
+      version: 2,
+    })
+
+    await expect(service.list()).resolves.toMatchObject({
+      status: "online",
+      items: [expect.objectContaining({ version: 2 })],
+    })
+    await service.list()
+
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(changed).toHaveBeenCalledWith(expect.objectContaining({
+      status: "online",
+      items: [expect.objectContaining({
+        systemPrompt: "你是中英翻译智能体。只输出翻译结果。",
+        version: 2,
+      })],
+    }))
+  })
+
   it("falls back to current user cache when remote list fails", async () => {
     const harness = createCloudHarness({
       accountState: authenticatedOffline("user-1"),
@@ -96,6 +130,7 @@ describe("AgentPersonaService", () => {
       status: "online",
       items: expect.arrayContaining([expect.objectContaining({ id: "persona-1" })]),
     }))
+    expect(changed).toHaveBeenCalledTimes(1)
   })
 })
 

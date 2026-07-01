@@ -952,6 +952,169 @@ describe("ConversationRouter", () => {
     expect(result.costCny).toBe(0.0272)
   })
 
+  it("charges cumulative per-model usage by turn delta when a resumed SDK session reports snapshots", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentUsage,
+      eventBus,
+      env: { ANTHROPIC_MODEL: "glm-5.1" },
+      priceRules: [
+        priceRule("helper-model", { inputPer1M: 1, outputPer1M: 2, cacheReadPer1M: 0.2 }),
+        priceRule("glm-5.1", { inputPer1M: 8, outputPer1M: 28, cacheReadPer1M: 8 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "first usage answer",
+          done: true,
+          sdkResultUuid: "result-cumulative-1",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 26,
+            output_tokens: 3_532,
+            cache_read_input_tokens: 1_213_607,
+            cache_creation_input_tokens: 105_082,
+          },
+          modelUsage: {
+            "helper-model": { inputTokens: 21, outputTokens: 350, cacheReadInputTokens: 256 },
+            "glm-5.1": {
+              inputTokens: 26,
+              outputTokens: 3_532,
+              cacheReadInputTokens: 1_213_607,
+              cacheCreationInputTokens: 105_082,
+            },
+          },
+          costUsd: 1.360979,
+          payload: { total_cost_usd: 1.360979 },
+        },
+        {
+          type: "result",
+          content: "second usage answer",
+          done: true,
+          sdkResultUuid: "result-cumulative-2",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 18,
+            output_tokens: 1_100,
+            cache_read_input_tokens: 969_945,
+            cache_creation_input_tokens: 6_590,
+          },
+          modelUsage: {
+            "helper-model": { inputTokens: 21, outputTokens: 350, cacheReadInputTokens: 256 },
+            "glm-5.1": {
+              inputTokens: 44,
+              outputTokens: 4_632,
+              cacheReadInputTokens: 2_183_552,
+              cacheCreationInputTokens: 111_672,
+            },
+          },
+          costUsd: 1.914729,
+          payload: { total_cost_usd: 1.914729 },
+        },
+      ], "sdk-1"),
+    })
+
+    const first = await router.send(baseMessage("hello"))
+    const second = await router.send(baseMessage("again"))
+    const savedConversation = await conversations.get(second.conversationId)
+    const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
+    const resultEvents = events
+      .filter((event) => event.type === "result")
+      .map((event) => event.payload?.event as AgentResultEvent)
+
+    expect(first.conversationId).toBe(second.conversationId)
+    expect(assistantEntries?.[0]?.metadata).toEqual(expect.objectContaining({
+      costCny: 9.808732,
+      totalCostCny: 9.808732,
+      costUsd: 1.360979,
+      totalCostUsd: 1.360979,
+    }))
+    expect(assistantEntries?.[1]?.metadata).toEqual(expect.objectContaining({
+      costCny: 7.790504,
+      totalCostCny: 17.599236,
+      costBreakdownCny: {
+        input: 0.000144,
+        output: 0.0308,
+        cacheRead: 7.75956,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      totalCostBreakdownCny: {
+        input: 0.000373,
+        output: 0.130396,
+        cacheRead: 17.468467,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      costUsd: 0.55375,
+      totalCostUsd: 1.914729,
+    }))
+    expect(resultEvents[1]).toEqual(expect.objectContaining({
+      costCny: 7.790504,
+      costUsd: 0.55375,
+      metadata: expect.objectContaining({
+        modelUsage: {
+          "helper-model": { inputTokens: 21, outputTokens: 350, cacheReadInputTokens: 256 },
+          "glm-5.1": {
+            inputTokens: 44,
+            outputTokens: 4_632,
+            cacheReadInputTokens: 2_183_552,
+            cacheCreationInputTokens: 111_672,
+          },
+        },
+      }),
+    }))
+  })
+
+  it("falls back to turn usage pricing when cumulative per-model usage cannot be normalized", async () => {
+    const { conversations, router } = createRouter({
+      env: { ANTHROPIC_MODEL: "fallback-model" },
+      priceRules: [
+        priceRule("fallback-model", { inputPer1M: 10, outputPer1M: 20 }),
+        priceRule("reported-model", { inputPer1M: 1000, outputPer1M: 1000 }),
+      ],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "first usage answer",
+          done: true,
+          sdkResultUuid: "result-invalid-1",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 100, output_tokens: 10 },
+          modelUsage: { "reported-model": { inputTokens: 100, outputTokens: 10 } },
+        },
+        {
+          type: "result",
+          content: "second usage answer",
+          done: true,
+          sdkResultUuid: "result-invalid-2",
+          sdkSessionId: "sdk-1",
+          usage: { input_tokens: 20, output_tokens: 5 },
+          modelUsage: { "reported-model": { inputTokens: 500, outputTokens: 500 } },
+        },
+      ], "sdk-1"),
+    })
+
+    const first = await router.send(baseMessage("hello"))
+    const second = await router.send(baseMessage("again"))
+    const savedConversation = await conversations.get(second.conversationId)
+    const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
+
+    expect(first.conversationId).toBe(second.conversationId)
+    expect(assistantEntries?.[1]?.metadata).toEqual(expect.objectContaining({
+      costCny: 0.0003,
+      totalCostCny: 0.1103,
+      costBreakdownCny: {
+        input: 0.0002,
+        output: 0.0001,
+        cacheRead: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+    }))
+  })
+
   it("omits CNY result cost when per-model usage includes an unpriced model", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const { eventBus, events } = createEventBusRecorder()

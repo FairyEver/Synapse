@@ -102,6 +102,15 @@ const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
 const STREAM_EVENT_QUEUE_SIZE = 20
+const COST_EPSILON = 0.000001
+
+interface ModelUsageBreakdown {
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+}
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -695,8 +704,14 @@ export class ConversationRouter {
         const sdkResultUsage = sdkResultUsageFromError(event)
         if (sdkResultUsage) {
           resultUsage = sdkResultUsage
-          resultCostUsd = event.costUsd
-          resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage, event.modelUsage)?.total
+          resultCostUsd = this.normalizedEventCostUsd(conversation, event.costUsd, event.payload)
+          resultCostCny = this.estimateLocalCostCny(
+            state,
+            conversation,
+            sdkResultUsage,
+            event.modelUsage,
+            event.sdkSessionId ?? liveSession.currentSessionId(),
+          )?.total
           resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
           await this.repository.recordSdkResultUsage({
             conversationId: conversation.id,
@@ -946,8 +961,14 @@ export class ConversationRouter {
           const sdkResultUsage = sdkResultUsageFromError(event)
           if (sdkResultUsage) {
             resultUsage = sdkResultUsage
-            resultCostUsd = event.costUsd
-            resultCostCny = this.estimateLocalCostCny(state, sdkResultUsage, event.modelUsage)?.total
+            resultCostUsd = this.normalizedEventCostUsd(conversation, event.costUsd, event.payload)
+            resultCostCny = this.estimateLocalCostCny(
+              state,
+              conversation,
+              sdkResultUsage,
+              event.modelUsage,
+              event.sdkSessionId ?? liveSession.currentSessionId(),
+            )?.total
             resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
             await this.repository.recordSdkResultUsage({
               conversationId: conversation.id,
@@ -1282,10 +1303,18 @@ export class ConversationRouter {
     readonly costCurrency: "CNY" | undefined
   }> {
     const usage = resultUsageFromEvent(input.event)
-    const costUsd = resultCostFromEvent(input.event)
     let metadata = resultHistoryMetadata(input.event)
     metadata = mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadataForTurn(input.message, input.conversation))
-    metadata = this.withLocalCostMetadata(input.state, usage, resultModelUsageFromEvent(input.event), metadata)
+    metadata = this.withNormalizedSdkCostMetadata(input.conversation, input.event, metadata)
+    metadata = this.withLocalCostMetadata(
+      input.state,
+      input.conversation,
+      usage,
+      resultModelUsageFromEvent(input.event),
+      input.sdkSessionId,
+      metadata,
+    )
+    const costUsd = metadataNumber(metadata, "costUsd")
     const costCny = metadataNumber(metadata, "costCny")
     const costCurrency = costCny === undefined ? undefined : "CNY"
     await this.repository.recordSdkResultUsage({
@@ -1340,12 +1369,14 @@ export class ConversationRouter {
 
   private withLocalCostMetadata(
     state: RuntimeSessionState,
+    conversation: ConversationEntryV1,
     usage: Record<string, unknown> | undefined,
     modelUsage: Record<string, unknown> | undefined,
+    sdkSessionId: string | undefined,
     metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
   ): ConversationEntryV1["history"][number]["metadata"] | undefined {
     const cleaned = metadataWithoutLocalCost(metadata)
-    const cost = this.estimateLocalCostCny(state, usage, modelUsage)
+    const cost = this.estimateLocalCostCny(state, conversation, usage, modelUsage, sdkSessionId)
     if (!cost) return cleaned
     return compactMetadata({
       ...(cleaned ?? {}),
@@ -1357,11 +1388,14 @@ export class ConversationRouter {
 
   private estimateLocalCostCny(
     state: RuntimeSessionState,
+    conversation: ConversationEntryV1,
     usage: Record<string, unknown> | undefined,
     modelUsage?: Record<string, unknown>,
+    sdkSessionId?: string,
   ): { total: number; breakdown: Record<string, number> } | undefined {
-    const perModelCost = this.estimatePerModelUsageCostCny(modelUsage)
-    if (perModelCost.hasModelUsage) return perModelCost.cost
+    const normalizedModelUsage = this.modelUsageForTurnCost(conversation, usage, modelUsage, sdkSessionId)
+    const perModelCost = this.estimatePerModelUsageCostCny(normalizedModelUsage)
+    if (normalizedModelUsage && perModelCost.hasModelUsage) return perModelCost.cost
 
     const snapshot = estimateSynapseUsageCostSnapshot({
       modelName: state.effectiveModel,
@@ -1379,6 +1413,79 @@ export class ConversationRouter {
         reasoning: roundCost(snapshot.costBreakdownCny.reasoning),
       },
     }
+  }
+
+  private modelUsageForTurnCost(
+    conversation: ConversationEntryV1,
+    usage: Record<string, unknown> | undefined,
+    modelUsage: Record<string, unknown> | undefined,
+    sdkSessionId: string | undefined,
+  ): Record<string, unknown> | undefined {
+    const current = normalizedModelUsageRecords(modelUsage)
+    if (!current) return undefined
+    const turnBreakdown = usageTokenBreakdownFromRecord(usage)
+    const previous = this.previousModelUsageForSdkSession(conversation, sdkSessionId)
+    if (!previous) return modelUsageRecordsFromBreakdowns(current)
+
+    const currentSum = sumModelUsageBreakdowns(current)
+    if (turnBreakdown && usageBreakdownsEqual(currentSum, turnBreakdown)) return modelUsageRecordsFromBreakdowns(current)
+
+    const delta = subtractModelUsageRecords(current, previous)
+    if (!delta) return undefined
+    if (!turnBreakdown || usageBreakdownsEqual(sumModelUsageBreakdowns(delta), turnBreakdown)) {
+      return modelUsageRecordsFromBreakdowns(delta)
+    }
+    return undefined
+  }
+
+  private previousModelUsageForSdkSession(
+    conversation: ConversationEntryV1,
+    sdkSessionId: string | undefined,
+  ): Record<string, ModelUsageBreakdown> | undefined {
+    for (let index = conversation.history.length - 1; index >= 0; index -= 1) {
+      const entry = conversation.history[index]
+      if (entry?.role !== "assistant") continue
+      const modelUsage = normalizedModelUsageRecords(recordMetadataValue(entry.metadata, "modelUsage"))
+      if (!modelUsage) continue
+      if (!sdkSessionId) return modelUsage
+      const entrySdkSessionId = metadataString(entry.metadata, "sdkSessionId")
+      if (entrySdkSessionId) {
+        if (entrySdkSessionId === sdkSessionId) return modelUsage
+        continue
+      }
+      if (!conversation.sdkSessionId || conversation.sdkSessionId === sdkSessionId) return modelUsage
+    }
+    return undefined
+  }
+
+  private withNormalizedSdkCostMetadata(
+    conversation: ConversationEntryV1,
+    event: Extract<AgentEvent, { type: "result" }>,
+    metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
+  ): ConversationEntryV1["history"][number]["metadata"] | undefined {
+    const costUsd = metadataNumber(metadata, "costUsd")
+    if (costUsd === undefined || !isSdkTotalCostPayload(event.payload)) return metadata
+    const normalized = this.normalizedEventCostUsd(conversation, costUsd, event.payload)
+    if (normalized === undefined) {
+      const next = { ...(metadata ?? {}) }
+      delete next.costUsd
+      return Object.keys(next).length > 0 ? next : undefined
+    }
+    return compactMetadata({
+      ...(metadata ?? {}),
+      costUsd: normalized,
+    })
+  }
+
+  private normalizedEventCostUsd(
+    conversation: ConversationEntryV1,
+    costUsd: number | undefined,
+    payload: Record<string, unknown> | undefined,
+  ): number | undefined {
+    if (costUsd === undefined || !isSdkTotalCostPayload(payload)) return costUsd
+    const previousCostUsd = sumAssistantMetadataNumber(conversation.history, "costUsd")
+    if (costUsd + COST_EPSILON < previousCostUsd) return undefined
+    return roundCost(Math.max(0, costUsd - previousCostUsd))
   }
 
   private estimatePerModelUsageCostCny(
@@ -1851,6 +1958,7 @@ function resultHistoryMetadata(
   const turnUsage = resultUsageFromEvent(event)
   const metadata = compactMetadata({
     ...event.metadata,
+    sdkSessionId: event.sdkSessionId,
     usage: turnUsage,
     turnUsage,
     modelUsage: resultModelUsageFromEvent(event),
@@ -1988,6 +2096,102 @@ function sumAssistantMetadataCostBreakdown(
     if (!breakdown) return total
     return addCostBreakdowns(total, breakdown)
   }, undefined)
+}
+
+function normalizedModelUsageRecords(
+  modelUsage: Record<string, unknown> | undefined,
+): Record<string, ModelUsageBreakdown> | undefined {
+  if (!modelUsage) return undefined
+  const entries = Object.entries(modelUsage).flatMap(([modelName, rawUsage]) => {
+    if (!isRecord(rawUsage)) return []
+    const breakdown = usageTokenBreakdownFromRecord(rawUsage)
+    return breakdown ? [[modelName, breakdown] as const] : []
+  })
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function modelUsageRecordsFromBreakdowns(
+  modelUsage: Record<string, ModelUsageBreakdown>,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(modelUsage).map(([modelName, breakdown]) => [modelName, {
+    inputTokens: breakdown.input,
+    outputTokens: breakdown.output,
+    cacheReadInputTokens: breakdown.cacheRead,
+    cacheCreationInputTokens: breakdown.cacheWrite,
+    reasoningOutputTokens: breakdown.reasoning,
+  }]))
+}
+
+function sumModelUsageBreakdowns(modelUsage: Record<string, ModelUsageBreakdown>): ModelUsageBreakdown {
+  return Object.values(modelUsage).reduce<ModelUsageBreakdown>((total, breakdown) => ({
+    input: total.input + breakdown.input,
+    output: total.output + breakdown.output,
+    cacheRead: total.cacheRead + breakdown.cacheRead,
+    cacheWrite: total.cacheWrite + breakdown.cacheWrite,
+    reasoning: total.reasoning + breakdown.reasoning,
+  }), zeroUsageBreakdown())
+}
+
+function subtractModelUsageRecords(
+  current: Record<string, ModelUsageBreakdown>,
+  previous: Record<string, ModelUsageBreakdown>,
+): Record<string, ModelUsageBreakdown> | undefined {
+  const entries: Array<readonly [string, ModelUsageBreakdown]> = []
+  for (const [modelName, currentBreakdown] of Object.entries(current)) {
+    const delta = subtractUsageBreakdowns(currentBreakdown, previous[modelName] ?? zeroUsageBreakdown())
+    if (!delta) return undefined
+    if (!isZeroUsageBreakdown(delta)) entries.push([modelName, delta])
+  }
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function subtractUsageBreakdowns(
+  current: ModelUsageBreakdown,
+  previous: ModelUsageBreakdown,
+): ModelUsageBreakdown | undefined {
+  const delta = {
+    input: current.input - previous.input,
+    output: current.output - previous.output,
+    cacheRead: current.cacheRead - previous.cacheRead,
+    cacheWrite: current.cacheWrite - previous.cacheWrite,
+    reasoning: current.reasoning - previous.reasoning,
+  }
+  return Object.values(delta).some((value) => value < 0) ? undefined : delta
+}
+
+function usageBreakdownsEqual(a: ModelUsageBreakdown, b: ModelUsageBreakdown): boolean {
+  return a.input === b.input
+    && a.output === b.output
+    && a.cacheRead === b.cacheRead
+    && a.cacheWrite === b.cacheWrite
+    && a.reasoning === b.reasoning
+}
+
+function isZeroUsageBreakdown(value: ModelUsageBreakdown): boolean {
+  return usageBreakdownsEqual(value, zeroUsageBreakdown())
+}
+
+function zeroUsageBreakdown(): ModelUsageBreakdown {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    reasoning: 0,
+  }
+}
+
+function recordMetadataValue(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = metadata?.[key]
+  return isRecord(value) ? value : undefined
+}
+
+function isSdkTotalCostPayload(payload: Record<string, unknown> | undefined): boolean {
+  const value = payload?.total_cost_usd
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
 }
 
 function metadataCostBreakdown(metadata: Record<string, unknown> | undefined, key: string): Record<string, number> | undefined {

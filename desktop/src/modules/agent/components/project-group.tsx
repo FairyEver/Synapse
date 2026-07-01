@@ -68,17 +68,19 @@ function ProjectGroup({
         openIcon={FolderOpen}
         closedIcon={Folder}
         actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            data-track="agent-project-new-session"
-            title="新建会话"
-            onClick={() => onCreateSession()}
-          >
-            <Plus className="size-3.5" />
-            <span className="sr-only">新建会话</span>
-          </Button>
+          <span className="flex w-16 shrink-0 justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              data-track="agent-project-new-session"
+              title="新建会话"
+              onClick={() => onCreateSession()}
+            >
+              <Plus className="size-3.5" />
+              <span className="sr-only">新建会话</span>
+            </Button>
+          </span>
         }
       >
         {sessions.map((session) => {

@@ -35,6 +35,10 @@ type AgentPersonaServiceEvents = {
   changed: [result: AgentPersonaListResult]
 }
 
+type ListForUserOptions = {
+  readonly emitRemoteChange?: boolean
+}
+
 class TypedAgentPersonaEventEmitter extends EventEmitter {
   override on<K extends keyof AgentPersonaServiceEvents>(
     eventName: K,
@@ -54,6 +58,7 @@ class TypedAgentPersonaEventEmitter extends EventEmitter {
 export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
   const events = new TypedAgentPersonaEventEmitter()
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
+  const remoteListFingerprints = new Map<string, string>()
 
   async function list(): Promise<AgentPersonaListResult> {
     const state = deps.account.getState()
@@ -88,12 +93,21 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
     await emitChangedForUser(userId)
   }
 
-  async function listForUser(userId: string): Promise<AgentPersonaListResult> {
+  async function listForUser(userId: string, options: ListForUserOptions = {}): Promise<AgentPersonaListResult> {
     try {
       const items = await deps.remote.list()
       const syncedAt = timestamp()
       await deps.cache.write(userId, items, syncedAt)
-      return { status: "online", items, syncedAt }
+      const result: AgentPersonaListResult = { status: "online", items, syncedAt }
+      const nextFingerprint = fingerprintItems(items)
+      const previousFingerprint = remoteListFingerprints.get(userId)
+      remoteListFingerprints.set(userId, nextFingerprint)
+      if (options.emitRemoteChange !== false
+        && previousFingerprint !== undefined
+        && previousFingerprint !== nextFingerprint) {
+        events.emit("changed", result)
+      }
+      return result
     } catch (error) {
       deps.logger.warn("Agent personas remote list failed.", {
         error,
@@ -106,7 +120,7 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
   }
 
   async function emitChangedForUser(userId: string): Promise<void> {
-    events.emit("changed", await listForUser(userId))
+    events.emit("changed", await listForUser(userId, { emitRemoteChange: false }))
   }
 
   function requireOnlineAccount(): { userId: string } {
@@ -127,3 +141,15 @@ export function createAgentPersonaService(deps: AgentPersonaServiceDeps) {
 }
 
 export type AgentPersonaService = ReturnType<typeof createAgentPersonaService>
+
+function fingerprintItems(items: readonly AgentPersona[]): string {
+  return JSON.stringify(sortJson(items))
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => [key, sortJson(item)]))
+}

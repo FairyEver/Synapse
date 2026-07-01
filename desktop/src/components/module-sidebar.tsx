@@ -273,7 +273,7 @@ function ModuleSidebarRow({
         <span className="block min-w-0 flex-1 truncate">{children}</span>
       </span>
       {trailing ? (
-        <span className="ml-2 flex min-w-7 shrink-0 items-center justify-end text-right tabular-nums">{trailing}</span>
+        <span className="ml-2 flex w-16 shrink-0 items-center justify-end text-right tabular-nums">{trailing}</span>
       ) : null}
     </div>
   )

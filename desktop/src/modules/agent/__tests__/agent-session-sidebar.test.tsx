@@ -73,6 +73,12 @@ describe("AgentSessionSidebar", () => {
     expect(html).toContain("新建会话")
     expect(html).not.toContain("尚未配置项目")
     expect(html).not.toContain("添加项目后即可开始 Agent 对话")
+
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const newSessionButton = wrapper.querySelector<HTMLButtonElement>("button[title='新建会话']")
+    expect(newSessionButton?.parentElement?.className).toContain("w-16")
+    expect(newSessionButton?.parentElement?.className).toContain("justify-end")
   })
 
   it("lets users edit the generated name before creating a session", async () => {
@@ -261,7 +267,7 @@ describe("AgentSessionSidebar", () => {
     const trailingRail = [...wrapper.querySelectorAll("span")]
       .find((span) => span.textContent === "status" && span.className.includes("shrink-0"))
 
-    expect(trailingRail?.className).toContain("min-w-7")
+    expect(trailingRail?.className).toContain("w-16")
     expect(trailingRail?.className).toContain("justify-end")
     expect(trailingRail?.className).toContain("tabular-nums")
   })

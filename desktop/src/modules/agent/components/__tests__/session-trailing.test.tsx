@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -37,6 +40,12 @@ describe("SessionTrailing", () => {
       />,
     )
 
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const spinnerCell = wrapper.querySelector<HTMLElement>("[aria-label='正在输出']")
+
+    expect(spinnerCell?.className).toContain("size-6")
+    expect(spinnerCell?.className).toContain("place-items-center")
     expect(html).toContain("animate-spin")
     expect(html).toContain("正在输出")
     expect(html).not.toContain("未读")
@@ -57,6 +66,12 @@ describe("SessionTrailing", () => {
       />,
     )
 
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const unreadCell = wrapper.querySelector<HTMLElement>("[aria-label='未读']")
+
+    expect(unreadCell?.className).toContain("size-6")
+    expect(unreadCell?.className).toContain("place-items-center")
     expect(html).toContain("bg-blue-500")
     expect(html).toContain("未读")
     expect(html).not.toContain(">3<")
@@ -82,5 +97,27 @@ describe("SessionTrailing", () => {
     )
     expect(html).not.toContain("animate-spin")
     expect(html).not.toContain("未读")
+  })
+
+  it("uses a fixed icon button cell for delete actions", () => {
+    const html = renderToStaticMarkup(
+      <SessionTrailing
+        updatedAt="2026-06-04T05:58:00.000Z"
+        unread={0}
+        running={false}
+        canDelete
+        onDelete={vi.fn()}
+      />,
+    )
+
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const button = wrapper.querySelector<HTMLButtonElement>("button[title='删除会话']")
+    const actionCell = button?.parentElement
+
+    expect(actionCell?.className).toContain("size-6")
+    expect(actionCell?.className).toContain("place-items-center")
+    expect(button?.getAttribute("data-variant")).toBe("ghost")
+    expect(button?.getAttribute("data-size")).toBe("icon-xs")
   })
 })

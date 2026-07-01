@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { Check, LoaderCircle, Trash2 } from "lucide-react"
 
 import { RelativeTime } from "@/components/relative-time"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 function SessionTrailing({
   updatedAt,
@@ -35,43 +37,67 @@ function SessionTrailing({
     }
   }, [armed])
 
+  const status = running ? (
+    <span className="inline-grid size-6 place-items-center text-muted-foreground" aria-label="正在输出">
+      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+    </span>
+  ) : unread > 0 ? (
+    <span
+      className="inline-grid size-6 place-items-center"
+      aria-label="未读"
+    >
+      <span
+        className="size-2 rounded-full bg-blue-500"
+        aria-hidden="true"
+      />
+    </span>
+  ) : updatedAt ? (
+    <RelativeTime
+      value={updatedAt}
+      fallback=""
+      className="block min-w-0 max-w-full truncate text-xs text-muted-foreground"
+    />
+  ) : null
+
   return (
-    <span className="flex items-center gap-1">
-      {running ? (
-        <span className="text-muted-foreground group-hover/item:hidden" aria-label="正在输出">
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-        </span>
-      ) : unread > 0 ? (
-        <span
-          className="size-2 rounded-full bg-blue-500 group-hover/item:hidden"
-          aria-label="未读"
-        />
-      ) : updatedAt ? (
-        <RelativeTime
-          value={updatedAt}
-          fallback=""
-          className="text-xs text-muted-foreground group-hover/item:hidden"
-        />
-      ) : null}
+    <span className="relative flex h-6 w-full min-w-0 items-center justify-end">
+      <span
+        className={cn(
+          "flex min-w-0 flex-1 items-center justify-end",
+          canDelete && "transition-opacity duration-150 ease-out group-hover/item:opacity-0 group-focus-within/item:opacity-0",
+        )}
+      >
+        {status}
+      </span>
       {canDelete ? (
-        <button
-          ref={buttonRef}
-          type="button"
-          title={armed ? "确认删除" : "删除会话"}
-          className={`hidden rounded p-0.5 group-hover/item:block ${armed ? "text-destructive" : "text-muted-foreground hover:text-destructive"}`}
-          onClick={(event) => {
-            event.stopPropagation()
-            if (armed) {
-              setArmed(false)
-              onDelete()
-            } else {
-              setArmed(true)
-            }
-          }}
+        <span
+          className="pointer-events-none absolute inset-y-0 right-0 inline-grid size-6 place-items-center opacity-0 transition-opacity duration-150 ease-out group-hover/item:pointer-events-auto group-hover/item:opacity-100 group-focus-within/item:pointer-events-auto group-focus-within/item:opacity-100"
         >
-          {armed ? <Check className="size-3.5" /> : <Trash2 className="size-3.5" />}
-          <span className="sr-only">{armed ? "确认删除" : "删除会话"}</span>
-        </button>
+          <Button
+            ref={buttonRef}
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            tabIndex={-1}
+            title={armed ? "确认删除" : "删除会话"}
+            className={cn(
+              "transition-colors",
+              armed ? "text-destructive" : "text-muted-foreground hover:text-destructive",
+            )}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (armed) {
+                setArmed(false)
+                onDelete()
+              } else {
+                setArmed(true)
+              }
+            }}
+          >
+            {armed ? <Check className="size-3.5" /> : <Trash2 className="size-3.5" />}
+            <span className="sr-only">{armed ? "确认删除" : "删除会话"}</span>
+          </Button>
+        </span>
       ) : null}
     </span>
   )
