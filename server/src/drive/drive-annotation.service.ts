@@ -104,7 +104,7 @@ export class DriveAnnotationService {
   }
 
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput): Promise<DriveAnnotationCommentDto> {
-    await this.requireOwnerItem(userId, itemId)
+    const item = await this.requireOwnerItem(userId, itemId)
     await this.requireThread(itemId, threadId)
     await this.requireParentComment(threadId, input.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
@@ -116,11 +116,11 @@ export class DriveAnnotationService {
       },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
-    return toCommentDto(comment, userId)
+    return toCommentDto(comment, userId, item.userId)
   }
 
   async updateOwnerComment(userId: string, itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput): Promise<DriveAnnotationCommentDto> {
-    await this.requireOwnerItem(userId, itemId)
+    const item = await this.requireOwnerItem(userId, itemId)
     const comment = await this.requireComment(itemId, commentId)
     if (comment.createdByUserId !== userId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
@@ -128,13 +128,13 @@ export class DriveAnnotationService {
       data: { body: input.body, editedAt: new Date() },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
-    return toCommentDto(updated, userId)
+    return toCommentDto(updated, userId, item.userId)
   }
 
   async deleteOwnerComment(userId: string, itemId: string, commentId: string): Promise<{ readonly ok: true }> {
-    await this.requireOwnerItem(userId, itemId)
-    const comment = await this.requireComment(itemId, commentId)
-    if (comment.createdByUserId !== userId) throw new ForbiddenException("不能删除该评论。")
+    const item = await this.requireOwnerItem(userId, itemId)
+    if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
+    await this.requireComment(itemId, commentId)
     await this.prisma.driveAnnotationComment.update({ where: { id: commentId }, data: { deletedAt: new Date() } })
     return { ok: true }
   }
@@ -207,7 +207,7 @@ export class DriveAnnotationService {
       },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
-    return toCommentDto(comment, input.actorUserId)
+    return toCommentDto(comment, input.actorUserId, item.userId)
   }
 
   async updateShareComment(input: {
@@ -226,7 +226,7 @@ export class DriveAnnotationService {
       data: { body: input.body.body, editedAt: new Date() },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
-    return toCommentDto(updated, input.actorUserId)
+    return toCommentDto(updated, input.actorUserId, item.userId)
   }
 
   async deleteShareComment(input: {
@@ -238,7 +238,7 @@ export class DriveAnnotationService {
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
     const comment = await this.requireComment(item.id, input.commentId)
-    if (comment.createdByUserId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
+    if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
     return { ok: true }
   }
@@ -373,7 +373,7 @@ function toThreadDto(
     target: record.target as DriveAnnotationTargetDto,
     anchorStatus: record.anchorStatus === "shifted" || record.anchorStatus === "orphaned" ? record.anchorStatus : "attached",
     author: toAuthorDto(record.createdByUser, redactAuthorEmail),
-    comments: visibleComments(record.comments).map((comment) => toCommentDto(comment, actorUserId, canWrite, redactAuthorEmail)),
+    comments: visibleComments(record.comments).map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     permissions: { canDelete: canWrite && Boolean(actorUserId && actorUserId === fileOwnerUserId) },
@@ -388,11 +388,13 @@ function visibleComments(comments: readonly AnnotationCommentRecord[]): readonly
 function toCommentDto(
   record: AnnotationCommentRecord,
   actorUserId: string | null,
+  fileOwnerUserId: string,
   canWrite = true,
   redactAuthorEmail = false,
 ): DriveAnnotationCommentDto {
   const deleted = Boolean(record.deletedAt)
   const isAuthor = actorUserId === record.createdByUserId
+  const isFileOwner = actorUserId === fileOwnerUserId
   return {
     id: record.id,
     threadId: record.threadId,
@@ -406,7 +408,7 @@ function toCommentDto(
     deleted,
     permissions: {
       canEdit: canWrite && !deleted && isAuthor,
-      canDelete: canWrite && !deleted && isAuthor,
+      canDelete: canWrite && !deleted && (isAuthor || isFileOwner),
     },
   }
 }

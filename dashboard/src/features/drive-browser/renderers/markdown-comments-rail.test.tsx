@@ -213,7 +213,7 @@ describe('MarkdownCommentsRail', () => {
     expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
   })
 
-  it('labels owner discussion deletion as deleting the visible comment', async () => {
+  it('keeps discussion deletion separate when only thread delete is allowed', async () => {
     const onDeleteThread = vi.fn(async () => undefined)
     renderRail({
       onDeleteThread,
@@ -225,19 +225,19 @@ describe('MarkdownCommentsRail', () => {
 
     await click(requiredButtonWithLabel('更多评论操作'))
 
-    expect(document.body.textContent).toContain('删除评论')
-    expect(document.body.textContent).not.toContain('删除讨论')
+    expect(document.body.textContent).not.toContain('删除评论')
+    expect(document.body.textContent).toContain('删除讨论')
 
-    await click(actionElementWithText('删除评论'))
-    expect(document.body.textContent).toContain('删除评论？')
+    await click(actionElementWithText('删除讨论'))
+    expect(document.body.textContent).toContain('删除讨论？')
     expect(onDeleteThread).not.toHaveBeenCalled()
 
-    await click(buttonWithText('删除评论'))
+    await click(buttonWithText('删除讨论'))
 
     expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
   })
 
-  it('deletes the discussion from the visible comment action when both delete permissions are allowed', async () => {
+  it('offers comment and discussion deletion separately when both delete permissions are allowed', async () => {
     const onDeleteComment = vi.fn(async () => undefined)
     const onDeleteThread = vi.fn(async () => undefined)
     renderRail({
@@ -252,13 +252,20 @@ describe('MarkdownCommentsRail', () => {
     await click(requiredButtonWithLabel('更多评论操作'))
 
     expect(document.body.textContent).toContain('删除评论')
-    expect(document.body.textContent).not.toContain('删除讨论')
+    expect(document.body.textContent).toContain('删除讨论')
 
     await click(actionElementWithText('删除评论'))
     await click(buttonWithText('删除评论'))
 
+    expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
+    expect(onDeleteThread).not.toHaveBeenCalled()
+
+    await click(requiredButtonWithLabel('更多评论操作'))
+    await click(actionElementWithText('删除讨论'))
+    expect(document.body.textContent).toContain('删除讨论？')
+    await click(buttonWithText('删除讨论'))
+
     expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
-    expect(onDeleteComment).not.toHaveBeenCalled()
   })
 })
 

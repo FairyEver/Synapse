@@ -356,9 +356,9 @@ function CommentActionMenu({
   readonly onDeleteComment?: () => CommentActionPromise
   readonly onDeleteThread?: () => CommentActionPromise
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [activeDeleteConfig, setActiveDeleteConfig] = useState<CommentDeleteConfig | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const deleteConfig = getCommentDeleteConfig(onDeleteComment, onDeleteThread)
+  const deleteConfigs = getCommentDeleteConfigs(onDeleteComment, onDeleteThread)
   return (
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -368,24 +368,26 @@ function CommentActionMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end'>
-          {deleteConfig ? (
-            <DropdownMenuItem variant='destructive' onSelect={() => {
+          {deleteConfigs.map((config) => (
+            <DropdownMenuItem key={config.key} variant='destructive' onSelect={() => {
               setMenuOpen(false)
-              setDeleteOpen(true)
+              setActiveDeleteConfig(config)
             }}>
-              删除评论
+              {config.label}
             </DropdownMenuItem>
-          ) : null}
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {deleteConfig ? (
+      {activeDeleteConfig ? (
         <DeleteConfirmDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          title={deleteConfig.title}
-          description={deleteConfig.description}
-          actionLabel={deleteConfig.actionLabel}
-          onConfirm={deleteConfig.onConfirm}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setActiveDeleteConfig(null)
+          }}
+          title={activeDeleteConfig.title}
+          description={activeDeleteConfig.description}
+          actionLabel={activeDeleteConfig.actionLabel}
+          onConfirm={activeDeleteConfig.onConfirm}
         />
       ) : null}
     </>
@@ -489,32 +491,41 @@ function DeleteConfirmDialog({
   )
 }
 
-function getCommentDeleteConfig(
-  onDeleteComment: (() => CommentActionPromise) | undefined,
-  onDeleteThread: (() => CommentActionPromise) | undefined,
-): {
+type CommentDeleteConfig = {
+  readonly key: 'comment' | 'thread'
+  readonly label: string
   readonly title: string
   readonly description: string
   readonly actionLabel: string
   readonly onConfirm: () => CommentActionPromise
-} | null {
-  if (onDeleteThread) {
-    return {
-      title: '删除评论？',
-      description: '会删除这条评论及其回复。',
-      actionLabel: '删除评论',
-      onConfirm: onDeleteThread,
-    }
-  }
+}
+
+function getCommentDeleteConfigs(
+  onDeleteComment: (() => CommentActionPromise) | undefined,
+  onDeleteThread: (() => CommentActionPromise) | undefined,
+): CommentDeleteConfig[] {
+  const configs: CommentDeleteConfig[] = []
   if (onDeleteComment) {
-    return {
+    configs.push({
+      key: 'comment',
+      label: '删除评论',
       title: '删除评论？',
       description: '会删除这条评论。',
       actionLabel: '删除评论',
       onConfirm: onDeleteComment,
-    }
+    })
   }
-  return null
+  if (onDeleteThread) {
+    configs.push({
+      key: 'thread',
+      label: '删除讨论',
+      title: '删除讨论？',
+      description: '会删除这条讨论及其回复。',
+      actionLabel: '删除讨论',
+      onConfirm: onDeleteThread,
+    })
+  }
+  return configs
 }
 
 function displayAuthor(author: { readonly displayName: string | null } | undefined): string {
