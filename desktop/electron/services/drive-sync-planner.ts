@@ -14,6 +14,9 @@ export interface DriveSyncLocalChange {
   readonly kind: "created" | "modified" | "deleted"
   readonly localPath: string
   readonly localKind: "missing" | "file" | "folder" | "other"
+  readonly localSize?: number | null
+  readonly localMtimeMs?: number | null
+  readonly localHash?: string | null
 }
 
 export interface DriveSyncPlannedOperation {
@@ -52,8 +55,21 @@ export function planDriveSyncLocalChanges(input: {
   const operations: DriveSyncPlannedOperation[] = []
   const conflicts: DriveSyncPlannedConflict[] = []
   const remoteChangedPaths = input.remoteChangedPaths ?? new Set<string>()
+  const plannedMoves = detectLocalMoveOperations({
+    binding: input.binding,
+    baseline: input.baseline,
+    baselineByPath,
+    changes: input.changes,
+    remoteChangedPaths,
+  })
+  const consumedMovePaths = new Set<string>()
+  for (const move of plannedMoves) {
+    operations.push(move.operation)
+    for (const relativePath of move.consumedPaths) consumedMovePaths.add(relativePath)
+  }
 
   for (const change of input.changes) {
+    if (consumedMovePaths.has(change.relativePath)) continue
     if (isDriveSyncExcluded(change.relativePath, input.binding.excludeRules)) continue
     const baseline = baselineByPath.get(change.relativePath)
     if (remoteChangedPaths.has(change.relativePath)) {
@@ -93,6 +109,126 @@ export function planDriveSyncLocalChanges(input: {
   }
 
   return sortPlan({ operations, conflicts })
+}
+
+function detectLocalMoveOperations(input: {
+  readonly binding: DriveSyncBindingEntryV1
+  readonly baseline: readonly DriveSyncBaselineEntryV1[]
+  readonly baselineByPath: ReadonlyMap<string, DriveSyncBaselineEntryV1>
+  readonly changes: readonly DriveSyncLocalChange[]
+  readonly remoteChangedPaths: ReadonlySet<string>
+}): Array<{ readonly operation: DriveSyncPlannedOperation; readonly consumedPaths: readonly string[] }> {
+  if (input.binding.kind !== "folder") return []
+  const activeBaseline = input.baseline.filter((entry) => entry.deletedAt === null)
+  const changesByPath = new Map(input.changes.map((change) => [change.relativePath, change] as const))
+  const deletedChanges = input.changes.filter((change) =>
+    change.kind === "deleted" && !isDriveSyncExcluded(change.relativePath, input.binding.excludeRules),
+  )
+  const createdChanges = input.changes.filter((change) =>
+    change.kind === "created"
+    && !input.baselineByPath.has(change.relativePath)
+    && !isDriveSyncExcluded(change.relativePath, input.binding.excludeRules),
+  )
+  const usedDeleted = new Set<string>()
+  const usedCreated = new Set<string>()
+  const moves: Array<{ readonly operation: DriveSyncPlannedOperation; readonly consumedPaths: readonly string[] }> = []
+
+  for (const created of createdChanges) {
+    if (usedCreated.has(created.relativePath) || input.remoteChangedPaths.has(created.relativePath)) continue
+    if (!hasExistingRemoteParent(created.relativePath, input.baselineByPath)) continue
+    const deleted = deletedChanges.find((candidate) => {
+      if (usedDeleted.has(candidate.relativePath) || input.remoteChangedPaths.has(candidate.relativePath)) return false
+      const deletedBaseline = input.baselineByPath.get(candidate.relativePath)
+      if (!deletedBaseline || deletedBaseline.kind !== created.localKind) return false
+      if (created.localKind === "file") return sameFileSnapshot(created, deletedBaseline)
+      if (created.localKind === "folder") return sameFolderSubtree({
+        oldRoot: candidate.relativePath,
+        newRoot: created.relativePath,
+        activeBaseline,
+        changesByPath,
+        remoteChangedPaths: input.remoteChangedPaths,
+      })
+      return false
+    })
+    if (!deleted) continue
+    const deletedBaseline = input.baselineByPath.get(deleted.relativePath)
+    if (!deletedBaseline) continue
+    const consumedPaths = consumedLocalMovePaths(deleted.relativePath, created.relativePath, activeBaseline)
+    for (const relativePath of consumedPaths) {
+      if (relativePath === deleted.relativePath || relativePath.startsWith(`${deleted.relativePath}/`)) usedDeleted.add(relativePath)
+      if (relativePath === created.relativePath || relativePath.startsWith(`${created.relativePath}/`)) usedCreated.add(relativePath)
+    }
+    moves.push({
+      operation: plannedOperation({
+        binding: input.binding,
+        kind: "move_remote",
+        relativePath: created.relativePath,
+        localPath: created.localPath,
+        driveItemId: deletedBaseline.remoteItemId,
+        remotePathHint: null,
+        remoteItemKind: deletedBaseline.kind,
+      }),
+      consumedPaths,
+    })
+  }
+
+  return moves
+}
+
+function sameFileSnapshot(change: DriveSyncLocalChange, baseline: DriveSyncBaselineEntryV1): boolean {
+  return change.localKind === "file"
+    && Boolean(change.localHash)
+    && Boolean(baseline.localHash)
+    && change.localHash === baseline.localHash
+}
+
+function sameFolderSubtree(input: {
+  readonly oldRoot: string
+  readonly newRoot: string
+  readonly activeBaseline: readonly DriveSyncBaselineEntryV1[]
+  readonly changesByPath: ReadonlyMap<string, DriveSyncLocalChange>
+  readonly remoteChangedPaths: ReadonlySet<string>
+}): boolean {
+  const subtree = input.activeBaseline.filter((entry) => isPathInSubtree(entry.relativePath, input.oldRoot))
+  if (subtree.length === 0) return false
+  for (const baseline of subtree) {
+    if (input.remoteChangedPaths.has(baseline.relativePath)) return false
+    const suffix = subtreeSuffix(baseline.relativePath, input.oldRoot)
+    const newPath = suffix ? path.posix.join(input.newRoot, suffix) : input.newRoot
+    if (input.remoteChangedPaths.has(newPath)) return false
+    const change = input.changesByPath.get(newPath)
+    if (!change || change.kind !== "created" || change.localKind !== baseline.kind) return false
+    if (baseline.kind === "file" && !sameFileSnapshot(change, baseline)) return false
+  }
+  return true
+}
+
+function consumedLocalMovePaths(
+  oldRoot: string,
+  newRoot: string,
+  activeBaseline: readonly DriveSyncBaselineEntryV1[],
+): readonly string[] {
+  const paths = new Set<string>()
+  for (const baseline of activeBaseline) {
+    if (!isPathInSubtree(baseline.relativePath, oldRoot)) continue
+    paths.add(baseline.relativePath)
+    const suffix = subtreeSuffix(baseline.relativePath, oldRoot)
+    paths.add(suffix ? path.posix.join(newRoot, suffix) : newRoot)
+  }
+  return [...paths]
+}
+
+function hasExistingRemoteParent(relativePath: string, baselineByPath: ReadonlyMap<string, DriveSyncBaselineEntryV1>): boolean {
+  const parent = path.posix.dirname(relativePath)
+  return parent === "." || baselineByPath.has(parent)
+}
+
+function isPathInSubtree(relativePath: string, root: string): boolean {
+  return relativePath === root || relativePath.startsWith(`${root}/`)
+}
+
+function subtreeSuffix(relativePath: string, root: string): string {
+  return relativePath === root ? "" : relativePath.slice(root.length + 1)
 }
 
 export function planDriveSyncRemoteChanges(input: {

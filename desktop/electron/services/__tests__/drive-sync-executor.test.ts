@@ -322,6 +322,100 @@ describe("drive sync executor", () => {
     await expect(namespace.get("binding-1:old/spec.md")).resolves.toBeNull()
   })
 
+  it("moves remote files for local renames without changing remote identity", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await writeFile(path.join(tempDir, "new.md"), "local", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old.md",
+      kind: "file",
+      remoteItemId: "remote-old",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 5,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+    const accountService = createAccountService()
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_remote",
+        relativePath: "new.md",
+        driveItemId: "remote-old",
+        localPath: path.join(tempDir, "new.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.moveDriveItem).toHaveBeenCalledWith("remote-old", "drive-root")
+    expect(accountService.renameDriveItem).toHaveBeenCalledWith("remote-old", "new.md")
+    await expect(namespace.list()).resolves.toEqual([
+      expect.objectContaining({ relativePath: "new.md", remoteItemId: "remote-old", kind: "file", deletedAt: null }),
+    ])
+  })
+
+  it("moves remote folders and rewrites descendant baselines for local folder renames", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await mkdir(path.join(tempDir, "new"), { recursive: true })
+    await writeFile(path.join(tempDir, "new", "spec.md"), "remote", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old",
+      kind: "folder",
+      remoteItemId: "remote-folder",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: null,
+      localMtimeMs: null,
+      localHash: null,
+      deletedAt: null,
+    })
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old/spec.md",
+      kind: "file",
+      remoteItemId: "remote-spec",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 6,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+    const accountService = createAccountService()
+
+    await executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_remote",
+        relativePath: "new",
+        driveItemId: "remote-folder",
+        localPath: path.join(tempDir, "new"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })
+
+    expect(accountService.moveDriveItem).toHaveBeenCalledWith("remote-folder", "drive-root")
+    expect(accountService.renameDriveItem).toHaveBeenCalledWith("remote-folder", "new")
+    await expect(namespace.list()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ relativePath: "new", remoteItemId: "remote-folder", deletedAt: null }),
+      expect.objectContaining({ relativePath: "new/spec.md", remoteItemId: "remote-spec", deletedAt: null }),
+    ]))
+    await expect(namespace.get("binding-1:old")).resolves.toBeNull()
+    await expect(namespace.get("binding-1:old/spec.md")).resolves.toBeNull()
+  })
+
   it("deletes local files through a recoverable trash strategy", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })

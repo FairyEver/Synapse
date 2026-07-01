@@ -1108,14 +1108,30 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (binding.status !== "active") continue
       const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
       if (!rootReady) continue
+      const baseline = await baselineStore.listByBinding(bindingId)
+      const changesForPlan = await localChangesForPlanning(binding, baseline, bindingChanges)
       const plan = planDriveSyncLocalChanges({
         binding,
-        baseline: await baselineStore.listByBinding(bindingId),
-        changes: bindingChanges,
+        baseline,
+        changes: changesForPlan,
       })
       await recordPlannedConflicts(plan.conflicts)
       await executePlannedOperations(plan.operations)
     }
+  }
+
+  async function localChangesForPlanning(
+    binding: DriveSyncBindingEntryV1,
+    baseline: readonly DriveSyncBaselineEntryV1[],
+    changes: readonly DriveSyncLocalChange[],
+  ): Promise<readonly DriveSyncLocalChange[]> {
+    if (binding.kind !== "folder" || !hasLocalMoveSignal(changes)) return changes
+    return localWatcher.scanBinding({ binding, baseline }).catch(() => changes)
+  }
+
+  function hasLocalMoveSignal(changes: readonly DriveSyncLocalChange[]): boolean {
+    return changes.some((change) => change.kind === "created")
+      && changes.some((change) => change.kind === "deleted")
   }
 
   async function handleMissingFileBindingRoot(input: {

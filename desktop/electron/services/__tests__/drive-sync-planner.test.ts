@@ -38,6 +38,43 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("plans local file renames as remote moves when the hash is unchanged", () => {
+    const result = planDriveSyncLocalChanges({
+      binding: binding(),
+      baseline: [baseline({ relativePath: "old.md", remoteItemId: "remote-old", localHash: "sha256:same" })],
+      changes: [
+        localChange({ relativePath: "new.md", kind: "created", localHash: "sha256:same" }),
+        localChange({ relativePath: "old.md", kind: "deleted", localKind: "missing" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "move_remote", relativePath: "new.md", driveItemId: "remote-old" }),
+    ])
+  })
+
+  it("plans local folder renames as one remote folder move when the subtree is unchanged", () => {
+    const result = planDriveSyncLocalChanges({
+      binding: binding(),
+      baseline: [
+        baseline({ relativePath: "old", remoteItemId: "remote-folder", kind: "folder", localHash: null }),
+        baseline({ relativePath: "old/spec.md", remoteItemId: "remote-spec", localHash: "sha256:same" }),
+      ],
+      changes: [
+        localChange({ relativePath: "new", kind: "created", localKind: "folder", localHash: null }),
+        localChange({ relativePath: "new/spec.md", kind: "created", localHash: "sha256:same" }),
+        localChange({ relativePath: "old", kind: "deleted", localKind: "missing" }),
+        localChange({ relativePath: "old/spec.md", kind: "deleted", localKind: "missing" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "move_remote", relativePath: "new", driveItemId: "remote-folder" }),
+    ])
+  })
+
   it("turns simultaneous local and remote modifications into conflicts", () => {
     const result = planDriveSyncLocalChanges({
       binding: binding(),
@@ -307,6 +344,9 @@ function localChange(input: Partial<DriveSyncLocalChange> & {
     kind: input.kind,
     localPath: `/Users/me/Docs/${input.relativePath}`,
     localKind: input.localKind ?? "file",
+    localSize: input.localSize,
+    localMtimeMs: input.localMtimeMs,
+    localHash: input.localHash,
   }
 }
 

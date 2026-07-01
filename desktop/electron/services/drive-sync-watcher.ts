@@ -13,6 +13,9 @@ export interface DriveSyncLocalChange {
   readonly kind: DriveSyncLocalChangeKind
   readonly localPath: string
   readonly localKind: "missing" | "file" | "folder" | "other"
+  readonly localSize?: number | null
+  readonly localMtimeMs?: number | null
+  readonly localHash?: string | null
 }
 
 export interface DriveSyncWatcherBindingScanInput {
@@ -101,9 +104,9 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
       const baseline = baselineByPath.get(local.relativePath)
       const localPath = path.join(binding.localPath, local.relativePath)
       if (!baseline) {
-        changes.push(localChange(binding.id, local.relativePath, "created", localPath, local.kind))
+        changes.push(localChange(binding.id, local.relativePath, "created", localPath, local.kind, local))
       } else if (hasLocalChanged(local, baseline)) {
-        changes.push(localChange(binding.id, local.relativePath, "modified", localPath, local.kind))
+        changes.push(localChange(binding.id, local.relativePath, "modified", localPath, local.kind, local))
       }
     }
 
@@ -284,8 +287,18 @@ function localChange(
   kind: DriveSyncLocalChangeKind,
   localPath: string,
   localKind: DriveSyncLocalChange["localKind"],
+  snapshot?: { readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null },
 ): DriveSyncLocalChange {
-  return { bindingId, relativePath, kind, localPath, localKind }
+  return {
+    bindingId,
+    relativePath,
+    kind,
+    localPath,
+    localKind,
+    ...(snapshot
+      ? { localSize: snapshot.size, localMtimeMs: snapshot.mtimeMs, localHash: snapshot.hash }
+      : {}),
+  }
 }
 
 function compareChanges(left: DriveSyncLocalChange, right: DriveSyncLocalChange): number {

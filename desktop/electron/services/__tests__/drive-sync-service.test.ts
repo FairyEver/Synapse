@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -1187,6 +1187,67 @@ describe("DriveSyncService", () => {
       ])
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("rescans watcher rename batches and preserves remote file identity", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const oldPath = path.join(tempDir, "old.md")
+      const newPath = path.join(tempDir, "new.md")
+      await writeFile(oldPath, "same", "utf8")
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const harness = createHarness({ watch })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const stats = await lstat(oldPath)
+      await harness.baseline.upsert({
+        id: `${binding.id}:old.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "old.md",
+        kind: "file",
+        remoteItemId: "remote-old",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: stats.size,
+        localMtimeMs: stats.mtimeMs,
+        localHash: await hashDriveSyncFile(oldPath),
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+
+      await rename(oldPath, newPath)
+      rawEvent?.("rename", "old.md")
+      rawEvent?.("rename", "new.md")
+
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.moveDriveItem).toHaveBeenCalledWith("remote-old", "drive-root")
+        expect(harness.deps.accountService.renameDriveItem).toHaveBeenCalledWith("remote-old", "new.md")
+      }, 1000)
+      expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+      await expect(harness.baseline.get(`${binding.id}:new.md`)).resolves.toMatchObject({
+        bindingId: binding.id,
+        relativePath: "new.md",
+        remoteItemId: "remote-old",
+      })
+      await expect(harness.baseline.get(`${binding.id}:old.md`)).resolves.toBeNull()
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "move_remote", status: "succeeded", relativePath: "new.md" }),
       )
     } finally {
       await rm(tempDir, { recursive: true, force: true })

@@ -44,6 +44,9 @@ async function executeOperationBody(deps: DriveSyncExecutorDeps): Promise<void> 
     case "move_local":
       await moveLocalItem(deps)
       return
+    case "move_remote":
+      await moveRemoteItem(deps)
+      return
     default:
       throw new Error(`暂不支持的同步操作：${deps.operation.kind}`)
   }
@@ -178,6 +181,34 @@ async function moveLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
     await rewriteDescendantBaselines(deps, existing.relativePath, deps.operation.relativePath)
   }
   await deps.baselineStore.removePath(deps.binding.id, existing.relativePath)
+  await deps.baselineStore.upsert({
+    bindingId: deps.binding.id,
+    relativePath: deps.operation.relativePath,
+    kind: stats.isDirectory() ? "folder" : "file",
+    remoteItemId: driveItemId,
+    remoteVersionId: null,
+    remoteEtag: null,
+    localSize: stats.isFile() ? stats.size : null,
+    localMtimeMs: stats.mtimeMs,
+    localHash: stats.isFile() ? await hashDriveSyncFile(localPath) : null,
+    deletedAt: null,
+  })
+}
+
+async function moveRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
+  const driveItemId = requireDriveItemId(deps.operation)
+  const localPath = requireLocalPath(deps.operation)
+  const stats = await lstat(localPath)
+  const parentId = await parentRemoteId(deps)
+  await deps.accountService.moveDriveItem(driveItemId, parentId)
+  await deps.accountService.renameDriveItem(driveItemId, path.basename(localPath))
+
+  const existing = (await deps.baselineStore.listByBinding(deps.binding.id))
+    .find((entry) => entry.remoteItemId === driveItemId && entry.deletedAt === null)
+  if (existing?.kind === "folder" && stats.isDirectory()) {
+    await rewriteDescendantBaselines(deps, existing.relativePath, deps.operation.relativePath)
+  }
+  if (existing) await deps.baselineStore.removePath(deps.binding.id, existing.relativePath)
   await deps.baselineStore.upsert({
     bindingId: deps.binding.id,
     relativePath: deps.operation.relativePath,
