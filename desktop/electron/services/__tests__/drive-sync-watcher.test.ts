@@ -110,20 +110,72 @@ describe("drive sync watcher", () => {
       expect.objectContaining({ relativePath: "gone.md", kind: "deleted", localKind: "missing" }),
     ]])
   })
+
+  it("reports watcher startup failures without emitting root deletes", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const errors: unknown[] = []
+    const failingWatch: DriveSyncWatchFactory = () => {
+      throw new Error("watch unavailable")
+    }
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: failingWatch,
+      onChanges: (batch) => { changes.push(batch) },
+      onError: (input) => { errors.push(input) },
+    })
+
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([])
+    expect(errors).toEqual([expect.objectContaining({
+      bindingId: "binding-1",
+      localPath: tempDir,
+      error: expect.any(Error),
+    })])
+  })
+
+  it("reports watcher error events without emitting root deletes", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const errors: unknown[] = []
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+      onError: (input) => { errors.push(input) },
+    })
+
+    watcher.reconcile([binding({ localPath: tempDir })])
+    fakeWatch.emitError(tempDir, new Error("watcher crashed"))
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([])
+    expect(errors).toEqual([expect.objectContaining({
+      bindingId: "binding-1",
+      localPath: tempDir,
+      error: expect.any(Error),
+    })])
+  })
 })
 
 function createFakeWatch() {
   const listeners = new Map<string, (eventType: string, filename: string | Buffer | null) => void>()
+  const watchers = new Map<string, EventEmitter>()
   const watch: DriveSyncWatchFactory = (rootPath, _options, listener) => {
     listeners.set(rootPath, listener)
     const watcher = new EventEmitter() as unknown as ReturnType<DriveSyncWatchFactory> & { close: () => void }
     watcher.close = vi.fn()
+    watchers.set(rootPath, watcher as unknown as EventEmitter)
     return watcher
   }
   return {
     watch,
     emit(rootPath: string, eventType: string, filename: string) {
       listeners.get(rootPath)?.(eventType, filename)
+    },
+    emitError(rootPath: string, error: Error) {
+      watchers.get(rootPath)?.emit("error", error)
     },
   }
 }

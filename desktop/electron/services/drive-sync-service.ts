@@ -40,7 +40,7 @@ import {
   type DriveSyncPlannedOperation,
 } from "./drive-sync-planner"
 import { pollDriveSyncRemoteChanges } from "./drive-sync-remote-poller"
-import { createDriveSyncWatcher, type DriveSyncLocalChange } from "./drive-sync-watcher"
+import { createDriveSyncWatcher, type DriveSyncLocalChange, type DriveSyncWatchFactory } from "./drive-sync-watcher"
 
 export interface DriveSyncServiceDeps {
   readonly bindings: DataNamespace<DriveSyncBindingEntryV1>
@@ -54,6 +54,7 @@ export interface DriveSyncServiceDeps {
   readonly auditSink?: AuditSink
   readonly now?: () => Date
   readonly createId?: (prefix: string) => string
+  readonly watch?: DriveSyncWatchFactory
 }
 
 type DriveSyncRemoteTreeEntry = {
@@ -167,6 +168,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const baselineStore = createDriveSyncBaselineStore({ baseline: deps.baseline, now: deps.now })
   const localWatcher = createDriveSyncWatcher({
     onChanges: handleLocalChanges,
+    onError: ({ bindingId, error }) => {
+      void updateBindingStatus(bindingId, "error", `本地路径监听失败：${errorMessage(error)}`)
+    },
+    watch: deps.watch,
   })
   let remotePollTimer: ReturnType<typeof setInterval> | null = null
   let remotePollRunning = false

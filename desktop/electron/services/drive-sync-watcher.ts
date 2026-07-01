@@ -22,6 +22,11 @@ export interface DriveSyncWatcherBindingScanInput {
 
 export interface DriveSyncWatcherDeps {
   readonly onChanges: (changes: readonly DriveSyncLocalChange[]) => void | Promise<void>
+  readonly onError?: (input: {
+    readonly bindingId: string
+    readonly localPath: string
+    readonly error: unknown
+  }) => void | Promise<void>
   readonly debounceMs?: number
   readonly watch?: DriveSyncWatchFactory
 }
@@ -121,13 +126,22 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
       const watcher = watch(rootPath, { persistent: false, recursive: true }, (eventType, filename) => {
         handleRawEvent(binding.id, eventType, filename)
       })
-      watcher.on("error", () => {
-        enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+      watcher.on("error", (error) => {
+        stopBinding(binding.id)
+        reportWatcherError(binding, error)
       })
       entries.set(binding.id, { binding, rootPath, watcher })
-    } catch {
-      enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+    } catch (error) {
+      reportWatcherError(binding, error)
     }
+  }
+
+  function reportWatcherError(binding: DriveSyncBindingEntryV1, error: unknown): void {
+    void Promise.resolve(deps.onError?.({
+      bindingId: binding.id,
+      localPath: binding.localPath,
+      error,
+    })).catch(() => undefined)
   }
 
   function stopBinding(bindingId: string): void {

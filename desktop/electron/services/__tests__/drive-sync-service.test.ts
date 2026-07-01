@@ -15,6 +15,7 @@ import type {
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { hashDriveSyncFile } from "../drive-sync-local-snapshot"
 import { createDriveSyncService } from "../drive-sync-service"
+import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
   it("creates bindings and exposes a sync snapshot", async () => {
@@ -29,6 +30,7 @@ describe("DriveSyncService", () => {
       localPath: "/Users/me/docs",
       remoteCursor: "42",
       excludeRules: [".git/**"],
+      deferWatcher: true,
     })
 
     expect(binding).toMatchObject({
@@ -199,6 +201,7 @@ describe("DriveSyncService", () => {
       driveItemName: "spec.md",
       kind: "file",
       localPath: "/Users/me/spec.md",
+      deferWatcher: true,
     })
     await harness.baseline.upsert({
       id: `${binding.id}:`,
@@ -237,6 +240,7 @@ describe("DriveSyncService", () => {
       kind: "folder",
       drivePathHint: "/产品文档",
       localPath: "/Users/me/docs",
+      deferWatcher: true,
     })
 
     await service.recordOperation({
@@ -1526,6 +1530,42 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("marks bindings as error when the local watcher cannot start without deleting remote roots", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const failingWatch: DriveSyncWatchFactory = () => {
+        throw new Error("watch unavailable")
+      }
+      const harness = createHarness({ watch: failingWatch })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      await service.pauseBinding(binding.id)
+
+      await service.resumeBinding(binding.id)
+
+      await waitForExpect(async () => {
+        await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+          status: "error",
+          lastError: "本地路径监听失败：watch unavailable",
+        })
+      })
+      expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "delete_remote" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps missing file roots in error when retrying sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -2012,6 +2052,7 @@ function createHarness(overrides: {
   readonly accountService?: Record<string, unknown>
   readonly auditSink?: AuditSink
   readonly permissionGuard?: PermissionGuard
+  readonly watch?: DriveSyncWatchFactory
 } = {}) {
   const bindings = createMemoryNamespace<DriveSyncBindingEntryV1>()
   const baseline = createMemoryNamespace<DriveSyncBaselineEntryV1>()
@@ -2050,6 +2091,7 @@ function createHarness(overrides: {
       permissionGuard: overrides.permissionGuard,
       now: () => new Date("2026-06-28T00:00:00.000Z"),
       createId: (prefix: string) => `${prefix}-${++idCounter}`,
+      watch: overrides.watch,
     },
   }
 }
