@@ -6,6 +6,7 @@ import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
+import { AgentPersonasModule } from "./agent-personas/agent-personas.module"
 import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { ContentStoreModule } from "./content-store/content-store.module"
@@ -66,6 +67,7 @@ type RequestLogObject = {
     WebhookModule,
     AdminAuthModule,
     DashboardModule,
+    AgentPersonasModule,
     ContentStoreModule,
     DriveModule,
     AdminModule,
