@@ -61,7 +61,7 @@ export type DriveLinkIntakeDeps = {
         readonly size?: bigint
         readonly contentType?: string | null
       }
-      | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> }
+      | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }> }
     >
   }
   readonly sites: {

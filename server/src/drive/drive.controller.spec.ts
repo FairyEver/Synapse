@@ -1611,7 +1611,10 @@ describe("DriveController", () => {
     drive.openShareBrowserItemDownload.mockResolvedValue({
       kind: "zip",
       filename: "资料.zip",
-      entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+      entries: [
+        { path: "empty/", storageKey: null },
+        { path: "brief.txt", storageKey: "drive/file-1" },
+      ],
     })
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
@@ -1628,6 +1631,7 @@ describe("DriveController", () => {
       cookie: undefined,
       password: undefined,
     })
+    expect(storage.getObjectStream).toHaveBeenCalledTimes(1)
     expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -1652,7 +1656,10 @@ describe("DriveController", () => {
       drive.openOwnerBrowserItemDownload.mockResolvedValue({
         kind: "zip",
         filename: "项目资料.zip",
-        entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+        entries: [
+          { path: "empty/", storageKey: null },
+          { path: "brief.txt", storageKey: "drive/file-1" },
+        ],
       })
 
       const response = await request(userApp.getHttpServer()).get("/drive/items/folder-2/download").expect(200)
@@ -1665,6 +1672,8 @@ describe("DriveController", () => {
         userId: "user-1",
         itemId: "folder-2",
       })
+      expect(storage.getObjectStream).toHaveBeenCalledTimes(1)
+      expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
     } finally {
       await userApp.close()
     }

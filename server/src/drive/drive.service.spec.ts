@@ -1904,9 +1904,34 @@ describe("DriveService", () => {
 
     expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
     expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toEqual([
+      { path: "docs/", storageKey: null },
       { path: "docs/spec.txt", storageKey: fileItem.storageKey },
     ])
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("includes empty directories in owner folder archive entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
+    const assets = await service.createFolder("user-1", { parentId: root.id, name: "assets" })
+    await service.createFolder("user-1", { parentId: assets.id, name: "icons" })
+    await service.createFolder("user-1", { parentId: root.id, name: "empty" })
+
+    const archive = await service.openOwnerBrowserItemDownload({
+      userId: "user-1",
+      itemId: root.id,
+    })
+    const entries = archive.kind === "zip" ? await collectAsync(archive.entries) : []
+
+    expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
+    expect(entries).toHaveLength(3)
+    expect(entries).toEqual(expect.arrayContaining([
+      { path: "assets/", storageKey: null },
+      { path: "assets/icons/", storageKey: null },
+      { path: "empty/", storageKey: null },
+    ]))
   })
 
   it("defers folder archive traversal until zip entries are consumed", async () => {

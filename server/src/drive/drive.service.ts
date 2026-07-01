@@ -153,7 +153,7 @@ type DriveRenderedAssetValue = {
 
 type DriveFolderZipEntry = {
   readonly path: string
-  readonly storageKey: string
+  readonly storageKey: string | null
 }
 
 type DriveFolderZipBrowserResult = {
@@ -2886,7 +2886,9 @@ export class DriveService implements OnApplicationBootstrap {
       for (const child of children) {
         const childPath = current.prefix ? `${current.prefix}/${child.name}` : child.name
         if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: childPath })
+          const folderPath = createUniqueDriveZipEntryPath(childPath, usedPaths)
+          yield { path: `${folderPath}/`, storageKey: null }
+          queue.push({ parentId: child.id, prefix: folderPath })
           continue
         }
         if (!child.storageKey) continue

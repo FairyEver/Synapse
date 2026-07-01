@@ -1960,7 +1960,7 @@ function decodeCookieValue(value: string): string | undefined {
 async function sendDriveZip(
   response: Response,
   filename: string,
-  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }>,
+  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }>,
   storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
@@ -1972,6 +1972,10 @@ async function sendDriveZip(
   archive.pipe(response)
   try {
     for await (const entry of entries) {
+      if (entry.storageKey === null) {
+        archive.append(Buffer.alloc(0), { name: ensureDriveZipDirectoryPath(entry.path) })
+        continue
+      }
       const object = await storage.getObjectStream({ key: entry.storageKey })
       archive.append(object.stream as unknown as Readable, { name: entry.path })
     }
@@ -1984,6 +1988,10 @@ async function sendDriveZip(
     response.destroy(error instanceof Error ? error : new Error("Drive zip stream failed."))
     throw error
   }
+}
+
+function ensureDriveZipDirectoryPath(path: string): string {
+  return path.endsWith("/") ? path : `${path}/`
 }
 
 async function sendDriveFileDownload(response: Response, download: {
@@ -2002,7 +2010,7 @@ async function sendDriveTransfer(
   response: Response,
   transfer:
     | ({ readonly kind: "file" } & Parameters<typeof sendDriveFileDownload>[1])
-    | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> },
+    | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }> },
   storage: DriveStoragePort,
 ): Promise<void> {
   if (transfer.kind === "zip") {
