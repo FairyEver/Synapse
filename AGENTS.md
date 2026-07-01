@@ -103,7 +103,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 本节优先于下方详细说明和模块设计文档。
 - 模块设计文档中的 `Hard Rules`、`Non-Goals`、明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”语句都是强约束。
 - 如果本节、模块设计文档、当前代码实现或用户需求之间冲突，不要静默选择；先指出冲突并请求确认。
-- 如果本次任务改变了长期设计基线，必须同步更新对应文档，避免后续 agent 继续读取旧规则。
+- 如果用户明确要求的改动会让 `AGENTS.md` 中的长期规则、模块边界、配置说明、存储归属、权限模型、部署要求或同步清单与代码不一致，必须在同一次任务中同步更新 `AGENTS.md`；不要只改代码后让后续 agent 继续读取旧规则。用户没有明确要求改变长期基线时，不要借机扩写无关规则。
 
 ### UI 与文案
 
@@ -122,8 +122,17 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 
 - 做外科手术式修改，只改任务要求范围内的内容。
 - 新增代码前先查现有模块、组件、hooks、services、utils 和类型。
+- `AGENTS.md` 是仓库级长期约束，不只是说明文档。凡是修改以下关键部分，都必须主动检查并按需同步本文件：对象存储域和 bucket 用途、环境变量和配置项、数据落库位置和备份/恢复策略、权限/审计/安全边界、MCP capability/schema/tool 命名、系统 App 能力包结构、Electron 打包边界、用户可操作模块的长期产品边界。更新时只记录稳定规则、归属和禁止事项，不写一次性实现流水账。
 - `desktop/config.ts` 用于集中放置桌面端全局配置常量；该文件内每个常量定义都必须添加中文注释，说明用途和影响范围，后续 AI 编码新增常量时必须自动补齐注释。
 - 配置文件（例如 `.env`、`.env.example`、`*.env.*`）必须按职责分组，并为每组和每个配置项添加中文注释，说明用途、影响范围或单位；示例文件不得携带密码、token、secret、私钥、真实数据库连接串等关键信息。
+- 服务端腾讯 COS 按业务域隔离，不要因为“都是文件”混用 bucket 或复用错误模块。当前域划分如下：
+  - `DRIVE_COS_*` / Drive Storage：只用于用户云盘文件、云盘文件版本、Drive 公开素材和 Drive Sites 发布资源；这些对象受 Drive 元数据、权限、生命周期、容量统计或 Drive 专属公开资源规则约束。不得把用户头像、智能体头像、系统图标、模板封面等平台媒体塞进 Drive，也不得让这类平台媒体占用用户网盘额度。
+  - `CONTENT_STORE_COS_*` / Content Store Storage：只用于 Content Store 草稿附件、skill/rule 包和安装分发产物。不得复用它存头像、普通用户文件、临时上传、备份包或任意平台媒体。
+  - `PLATFORM_MEDIA_COS_*` / Platform Media Storage：用于用户头像、智能体头像、系统应用图标、团队头像、模板封面、分享封面、模型图标等平台承担费用的小型媒体资源。默认按私有读写 bucket 设计，前端应使用 Synapse 后端媒体 URL 或后端签发的短期访问能力，不直接暴露 COS bucket/key。对象 key 应使用稳定业务前缀，例如 `platform-media/users/<userId>/avatar/...`、`platform-media/agent-personas/<personaId>/avatar/...`、`platform-media/system/<kind>/...`。
+  - `BACKUP_COS_*` / Backup Storage：只用于服务端灾备归档，当前 key 前缀为 `backups/`。不得让业务运行时文件、头像、用户上传文件或 Content Store 包写入备份桶。
+- 新增任何服务端对象存储用途前，必须先判断能否归入现有 COS 域；如果语义、权限、生命周期、计费归属或备份策略不同，应新增明确的 storage domain，而不是临时复用 Drive、Content Store 或 Backup。新增 COS 域时必须同步更新 `server/src/config/env.ts`、`server/src/config/env.spec.ts`、`server/compose.yml`、`server/.env.example`、部署/初始化脚本、README 和本文件，并保持 `*_COS_SECRET_ID`、`*_COS_SECRET_KEY`、`*_COS_BUCKET`、`*_COS_REGION` 四项完整性校验。
+- 数据库只能保存对象元数据和引用，例如 `storageKey`、`assetId`、`mimeType`、`size`、`sha256`、归属关系、状态和版本；不要把图片或大文件字节写入 PostgreSQL / SQLite / DataRepository。删除、替换、回滚和孤儿对象清理必须显式设计，底层对象删除失败不得静默丢失元数据。
+- 备份策略必须按 COS 域明确说明。当前 Backup 轻量灾备包含数据库和 Drive COS 对象清单，不包含 Drive 文件字节、Content Store 对象字节或 Platform Media 对象字节；如果未来某个新域需要可恢复，必须同步补 manifest、复制、恢复说明或其它明确方案。
 - 不新增依赖，除非用户明确要求或设计文档明确批准。
 - 不做未确认的破坏性操作，不静默覆盖用户数据。
 - 生产代码禁止用 `console.log` 当日志；错误必须显式处理、结构化记录或带上下文向上抛出。

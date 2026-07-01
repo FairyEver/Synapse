@@ -1,21 +1,33 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ButtonHTMLAttributes, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import type { EditorWriteTargetSelection } from "@/modules/content/components/editor-write-target-selector"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
-import type { SynapseRuleInstallerSource } from "@/types/installers"
+import type { SynapseInstallerSource, SynapseRuleInstallerSource, SynapseSkillInstallerSource } from "@/types/installers"
 import { SharedInstallerFlow } from "../shared-installer-flow"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mocks = vi.hoisted(() => ({
+  config: {
+    global: {
+      projects: [],
+      variables: [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }],
+    },
+  },
   installSourceToEditor: vi.fn(),
+  readContent: vi.fn(),
   resolveEditorInstallTarget: vi.fn(),
+  updateConfig: vi.fn(),
+  warning: vi.fn(),
 }))
 
 vi.mock("@/app-shell/content", () => ({
+  readContent: mocks.readContent,
   resolveEditorInstallTarget: mocks.resolveEditorInstallTarget,
 }))
 
@@ -23,9 +35,147 @@ vi.mock("@/app-shell/installers", () => ({
   installSourceToEditor: mocks.installSourceToEditor,
 }))
 
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: mocks.config,
+    updateConfig: mocks.updateConfig,
+  }),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  }),
+}))
+
+vi.mock("@/app-shell/notifications", () => ({
+  useAppNotifications: () => ({
+    warning: mocks.warning,
+  }),
+}))
+
 vi.mock("@/components/editor-icon", () => ({
   EditorIcon: ({ editorId }: { editorId: string }) => (
     <span aria-hidden="true" data-testid={`editor-icon-${editorId}`} />
+  ),
+}))
+
+vi.mock("@/components/ui/alert-dialog", () => ({
+  AlertDialog: ({ children, open }: { children: ReactNode; open: boolean }) => open ? <div>{children}</div> : null,
+  AlertDialogAction: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
+  AlertDialogCancel: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
+  AlertDialogContent: ({ children }: { children: ReactNode }) => <section>{children}</section>,
+  AlertDialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+  AlertDialogFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
+  AlertDialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+  AlertDialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+}))
+
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children, open }: { children: ReactNode; open: boolean }) => open ? <div>{children}</div> : null,
+  DialogContent: ({ children }: { children: ReactNode }) => <section>{children}</section>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+  DialogFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
+  DialogFrame: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogFrameBody: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogFrameFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
+  DialogFrameHeader: ({ title, description }: { title: ReactNode; description?: ReactNode }) => (
+    <header>
+      <h2>{title}</h2>
+      {description ? <p>{description}</p> : null}
+    </header>
+  ),
+  DialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+}))
+
+vi.mock("@/components/ui/scroll-area", () => ({
+  ScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock("@/definitions/generated/renderer-registry", () => ({
+  installFormDefinitionByEditorId: new Map([
+    ["codex", {
+      RuleGlobalInstallForm: ({
+        onConfirm,
+        open,
+      }: {
+        onConfirm: (values: Record<string, unknown>) => void
+        open: boolean
+      }) => open ? (
+        <section>
+          <h2>规则元数据</h2>
+          <button type="button" onClick={() => onConfirm({ description: "from form" })}>
+            确定并安装
+          </button>
+        </section>
+      ) : null,
+      RuleProjectInstallForm: ({
+        onConfirm,
+        open,
+      }: {
+        onConfirm: (values: Record<string, unknown>) => void
+        open: boolean
+      }) => open ? (
+        <section>
+          <h2>规则元数据</h2>
+          <button type="button" onClick={() => onConfirm({ description: "from form" })}>
+            确定并安装
+          </button>
+        </section>
+      ) : null,
+    }],
+  ]),
+}))
+
+vi.mock("@/modules/content/components/editor-write-target-selector", () => ({
+  EditorWriteTargetSelector: ({
+    contentType,
+    initialSelection,
+    onSelectionChange,
+  }: {
+    contentType: "rule" | "skill"
+    initialSelection?: { projectPath?: string; scope: "global" | "project" } | null
+    onSelectionChange: (selection: EditorWriteTargetSelection) => void
+  }) => (
+    <div>
+      <span data-testid="initial-selection">
+        {initialSelection ? `${initialSelection.scope}:${initialSelection.projectPath ?? ""}` : "none"}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          const targetKind = contentType === "skill" ? "directory" as const : "file" as const
+          const scope = initialSelection?.scope ?? "global"
+          const projectPath = initialSelection?.projectPath ?? ""
+          const activeTarget = {
+            contentType,
+            editorId: "codex" as SynapseEditorAdapterSummary["id"],
+            label: "Codex",
+            message: null,
+            scope,
+            status: "ready" as const,
+            targetExists: false,
+            targetKind,
+            targetPath: targetKind === "directory" ? "/tmp/skills/demo" : "/tmp/rules/demo.md",
+          }
+          onSelectionChange({
+            activeTarget,
+            activeTargetState: {
+              error: null,
+              isLoading: false,
+              value: activeTarget,
+            },
+            projectPath,
+            scope,
+          })
+        }}
+      >
+        选择目标
+      </button>
+    </div>
   ),
 }))
 
@@ -47,9 +197,41 @@ const ruleSource: SynapseRuleInstallerSource = {
   body: "# Rule",
 }
 
+const repositorySkillSource: SynapseSkillInstallerSource = {
+  kind: "skill",
+  origin: "repository",
+  repositoryContentId: "skill-1",
+  sourceIdentity: "skill-1",
+  name: "demo",
+  title: "Demo",
+}
+
 let roots: Root[] = []
 
-async function renderFlow() {
+async function renderFlow(
+  source: SynapseInstallerSource = ruleSource,
+  projects: SynapseProjectConfig[] = mocks.config.global.projects,
+) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(
+      <SharedInstallerFlow
+        mode="modal"
+        source={source}
+        editors={[editor]}
+        projects={projects}
+        onCancel={vi.fn()}
+        onInstalled={vi.fn()}
+      />,
+    )
+  })
+}
+
+async function renderFlowWithInitialTarget() {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -61,7 +243,9 @@ async function renderFlow() {
         mode="modal"
         source={ruleSource}
         editors={[editor]}
-        projects={[]}
+        initialEditor={editor}
+        initialSelection={{ scope: "project", projectPath: "/tmp/project" }}
+        projects={[{ id: "project-1", name: "Project", path: "/tmp/project" }]}
         onCancel={vi.fn()}
         onInstalled={vi.fn()}
       />,
@@ -76,6 +260,12 @@ function clickButton(text: string) {
   button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
 afterEach(() => {
   for (const root of roots) {
     act(() => {
@@ -85,6 +275,8 @@ afterEach(() => {
   roots = []
   document.body.innerHTML = ""
   vi.clearAllMocks()
+  mocks.config.global.projects = []
+  mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
 })
 
 describe("SharedInstallerFlow", () => {
@@ -110,5 +302,146 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("目标位置")
+  })
+
+  it("starts at the original target when an initial editor is provided", async () => {
+    await renderFlowWithInitialTarget()
+
+    expect(document.body.textContent).toContain("目标位置")
+    expect(document.body.textContent).not.toContain("选择编辑器")
+    expect(document.querySelector("[data-testid='initial-selection']")?.textContent).toBe("project:/tmp/project")
+  })
+
+  it("asks for repository Skill variables before install and passes substitutions", async () => {
+    mocks.readContent.mockResolvedValue({ content: "```text\nGITEE_TOKEN=${{ GITEE_TOKEN }}\n```" })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+
+    expect(document.body.textContent).toContain("变量替换")
+    expect(document.body.textContent).toContain("${{ GITEE_TOKEN }}")
+    const input = document.querySelector<HTMLInputElement>("input")
+    expect(input?.value).toBe("saved-token")
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      variableSubstitutions: { GITEE_TOKEN: "saved-token" },
+    }))
+  })
+
+  it("keeps placeholders when submitted variable values are empty", async () => {
+    mocks.config.global.variables = []
+    mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.not.objectContaining({
+      variableSubstitutions: expect.anything(),
+    }))
+  })
+
+  it("saves new variables before continuing install", async () => {
+    mocks.config.global.variables = []
+    mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
+    mocks.updateConfig.mockResolvedValue(undefined)
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input")
+    await act(async () => {
+      if (input) setInputValue(input, "new-token")
+    })
+    await act(async () => {
+      clickButton("继续安装")
+    })
+
+    expect(document.body.textContent).toContain("保存变量变更")
+
+    await act(async () => {
+      clickButton("保存并继续")
+      await Promise.resolve()
+    })
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      global: {
+        variables: [{ name: "GITEE_TOKEN", value: "new-token" }],
+      },
+    })
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      variableSubstitutions: { GITEE_TOKEN: "new-token" },
+    }))
+  })
+
+  it("passes rule install form values through the shared installer", async () => {
+    const projectEditor = {
+      ...editor,
+      id: "codex" as SynapseEditorAdapterSummary["id"],
+    }
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/rules/demo.md" })
+    await renderFlow(ruleSource, [{ id: "project-1", name: "Project", path: "/tmp/project" }])
+
+    void projectEditor
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+
+    expect(document.body.textContent).toContain("规则元数据")
+
+    await act(async () => {
+      clickButton("确定并安装")
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      installFormValues: { description: "from form" },
+    }))
   })
 })

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { isBackupCosConfigured, isContentStoreCosConfigured, isDriveCosConfigured, loadEnv } from "./env"
+import {
+  isBackupCosConfigured,
+  isContentStoreCosConfigured,
+  isDriveCosConfigured,
+  isPlatformMediaCosConfigured,
+  loadEnv,
+} from "./env"
 
 describe("loadEnv", () => {
   it("parses required production settings", () => {
@@ -214,6 +220,25 @@ describe("loadEnv", () => {
     expect(isDriveCosConfigured(env)).toBe(true)
   })
 
+  it("loads Platform Media COS settings independently", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+      PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+      PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      PLATFORM_MEDIA_COS_REGION: "ap-beijing",
+      DRIVE_COS_SECRET_ID: "drive-secret-id",
+      DRIVE_COS_SECRET_KEY: "drive-secret-key",
+      DRIVE_COS_BUCKET: "drive-bucket",
+      DRIVE_COS_REGION: "ap-guangzhou",
+    })
+
+    expect(env.platformMediaCosBucket).toBe("platform-media-bucket")
+    expect(env.driveCosBucket).toBe("drive-bucket")
+    expect(isPlatformMediaCosConfigured(env)).toBe(true)
+    expect(isDriveCosConfigured(env)).toBe(true)
+  })
+
   it.each([
     {
       name: "Drive",
@@ -241,6 +266,15 @@ describe("loadEnv", () => {
         BACKUP_COS_REGION: "ap-guangzhou",
       },
       missing: "BACKUP_COS_SECRET_ID",
+    },
+    {
+      name: "Platform Media",
+      values: {
+        PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+        PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+        PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      },
+      missing: "PLATFORM_MEDIA_COS_REGION",
     },
   ])("rejects partial $name COS settings", ({ values, missing }) => {
     expect(() =>
@@ -276,6 +310,7 @@ describe("loadEnv", () => {
     expect(isDriveCosConfigured(env)).toBe(false)
     expect(isBackupCosConfigured(env)).toBe(false)
     expect(isContentStoreCosConfigured(env)).toBe(false)
+    expect(isPlatformMediaCosConfigured(env)).toBe(false)
   })
 })
 

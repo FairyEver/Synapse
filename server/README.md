@@ -143,11 +143,15 @@ APP_PUBLIC_URL=https://yourdomain.com
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
 PORT=3001
 
-# 腾讯云 COS 存储（可选；Drive 用于用户云盘文件，Backup 用于后台备份）
+# 腾讯云 COS 存储（可选；Drive 用于用户云盘文件，Platform Media 用于头像等平台媒体，Backup 用于后台备份）
 DRIVE_COS_SECRET_ID=用户文件桶 SecretId
 DRIVE_COS_SECRET_KEY=用户文件桶 SecretKey
 DRIVE_COS_BUCKET=用户文件桶名称，如 synapse-drive-1250000000
 DRIVE_COS_REGION=用户文件桶地域，如 ap-beijing
+PLATFORM_MEDIA_COS_SECRET_ID=平台媒体桶 SecretId
+PLATFORM_MEDIA_COS_SECRET_KEY=平台媒体桶 SecretKey
+PLATFORM_MEDIA_COS_BUCKET=平台媒体桶名称，如 synapse-file-platform-1250000000
+PLATFORM_MEDIA_COS_REGION=平台媒体桶地域，如 ap-beijing
 BACKUP_COS_SECRET_ID=备份桶 SecretId
 BACKUP_COS_SECRET_KEY=备份桶 SecretKey
 BACKUP_COS_BUCKET=备份桶名称，如 synapse-backup-1250000000
@@ -340,7 +344,7 @@ docker compose down -v
 
 ### 后台轻量灾备备份
 
-管理后台“备份”页面和每天凌晨 3 点的定时任务会把轻量灾备包上传到 `BACKUP_COS_BUCKET/backups/`。灾备包包含业务数据库、PostgreSQL globals、Drive COS 对象清单、备份 manifest 和恢复说明。灾备包不包含 `.env`、JWT secret、COS Secret、数据库密码或 Drive 文件字节。
+管理后台“备份”页面和每天凌晨 3 点的定时任务会把轻量灾备包上传到 `BACKUP_COS_BUCKET/backups/`。灾备包包含业务数据库、PostgreSQL globals、Drive COS 对象清单、备份 manifest 和恢复说明。灾备包不包含 `.env`、JWT secret、COS Secret、数据库密码、Drive 文件字节或平台媒体文件字节。
 
 恢复时需要使用你本机保存的 `server/.env.server` 作为生产配置来源。如果 Drive COS bucket 或对象已经被删除，灾备包只能恢复数据库和 Drive 元数据，不能恢复文件内容。
 

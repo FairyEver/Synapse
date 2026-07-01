@@ -142,6 +142,7 @@ type DriveSyncServiceEvents = {
 const LOCAL_ROOT_MISSING_ERROR = "本地路径不存在。"
 const LOCAL_ROOT_INACCESSIBLE_ERROR = "本地路径无法访问。"
 const REMOTE_ROOT_MISSING_ERROR = "云端同步根目录不存在。"
+const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
 
 class TypedDriveSyncEventEmitter extends EventEmitter {
   override on<K extends keyof DriveSyncServiceEvents>(
@@ -167,6 +168,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const localWatcher = createDriveSyncWatcher({
     onChanges: handleLocalChanges,
   })
+  let remotePollTimer: ReturnType<typeof setInterval> | null = null
+  let remotePollRunning = false
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindingEntries = (await deps.bindings.list())
@@ -356,6 +359,31 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       updateBindingCursor,
       localChangedPaths,
     })
+  }
+
+  function startRemotePolling(intervalMs: number = DEFAULT_REMOTE_POLL_INTERVAL_MS): void {
+    if (remotePollTimer !== null) return
+    remotePollTimer = setInterval(() => {
+      void runBackgroundRemotePoll()
+    }, intervalMs)
+  }
+
+  function stopRemotePolling(): void {
+    if (remotePollTimer === null) return
+    clearInterval(remotePollTimer)
+    remotePollTimer = null
+  }
+
+  async function runBackgroundRemotePoll(): Promise<void> {
+    if (remotePollRunning) return
+    remotePollRunning = true
+    try {
+      await pollRemoteChanges()
+    } catch (error) {
+      await setHealth({ health: "error", lastError: errorMessage(error) })
+    } finally {
+      remotePollRunning = false
+    }
   }
 
   async function stopLocalWatcher(): Promise<void> {
@@ -1450,6 +1478,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     createSafeBinding,
     rescanBinding,
     pollRemoteChanges,
+    startRemotePolling,
+    stopRemotePolling,
     stopLocalWatcher,
     pauseBinding,
     resumeBinding,

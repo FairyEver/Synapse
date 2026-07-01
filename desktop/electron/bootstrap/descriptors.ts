@@ -421,6 +421,13 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
     })
   },
+  start(service) {
+    service.startRemotePolling()
+  },
+  async stop(service) {
+    service.stopRemotePolling()
+    await service.stopLocalWatcher()
+  },
 }
 
 export const coreKnowledgeBaseDescriptor: ServiceDescriptor<KnowledgeBaseService> = {

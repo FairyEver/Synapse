@@ -18,14 +18,22 @@ export type InstallerFlowState = {
 
 type UseInstallerFlowOptions = {
   editors: SynapseEditorAdapterSummary[]
+  initialEditor?: SynapseEditorAdapterSummary | null
   kind?: SynapseInstallerKind
   source?: SynapseInstallerSource
 }
 
-export function useInstallerFlow({ editors, kind, source: initialSource }: UseInstallerFlowOptions) {
+export function useInstallerFlow({
+  editors,
+  initialEditor,
+  kind,
+  source: initialSource,
+}: UseInstallerFlowOptions) {
   const [source, setSource] = useState<SynapseInstallerSource | null>(initialSource ?? null)
-  const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(null)
-  const [step, setStep] = useState<InstallerFlowStep>(initialSource ? "editor" : "source")
+  const [selectedEditor, setSelectedEditor] = useState<SynapseEditorAdapterSummary | null>(initialEditor ?? null)
+  const [step, setStep] = useState<InstallerFlowStep>(
+    initialSource ? initialEditor ? "target" : "editor" : "source",
+  )
 
   const activeKind = source?.kind ?? kind
 
@@ -38,9 +46,9 @@ export function useInstallerFlow({ editors, kind, source: initialSource }: UseIn
 
   const selectSource = useCallback((nextSource: SynapseInstallerSource) => {
     setSource(nextSource)
-    setSelectedEditor(null)
-    setStep("editor")
-  }, [])
+    setSelectedEditor(initialEditor ?? null)
+    setStep(initialEditor ? "target" : "editor")
+  }, [initialEditor])
 
   const selectEditor = useCallback((editor: SynapseEditorAdapterSummary) => {
     setSelectedEditor(editor)
@@ -50,6 +58,9 @@ export function useInstallerFlow({ editors, kind, source: initialSource }: UseIn
   const back = useCallback(() => {
     setStep((currentStep) => {
       if (currentStep === "target") {
+        if (initialEditor) {
+          return currentStep
+        }
         return "editor"
       }
       if (currentStep === "editor" && !initialSource) {
@@ -57,7 +68,7 @@ export function useInstallerFlow({ editors, kind, source: initialSource }: UseIn
       }
       return currentStep
     })
-  }, [initialSource])
+  }, [initialEditor, initialSource])
 
   const markInstalled = useCallback(() => {
     setStep("success")

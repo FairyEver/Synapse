@@ -56,11 +56,11 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
-import { ContentInstallDialog } from "@/modules/content/components/content-install-dialog"
 import type { EditorWriteTargetInitialSelection } from "@/modules/content/components/editor-write-target-selector"
-import type { SynapseContentMeta } from "@/types/content"
+import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installer-flow"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type { EditorScanSkillFileEntry, ScanItemForDetail } from "@/types/editor-scan"
+import type { SynapseInstallerSource } from "@/types/installers"
 import { useScanItemContent, useSkillFiles } from "../hooks/use-scan-item-content"
 import {
   buildRuleQuickPublishPayload,
@@ -114,7 +114,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const [trashError, setTrashError] = useState<string | null>(null)
   const [isTrashConfirmOpen, setIsTrashConfirmOpen] = useState(false)
   const [isTrashBusy, setIsTrashBusy] = useState(false)
-  const [reinstallMeta, setReinstallMeta] = useState<SynapseContentMeta | null>(null)
+  const [reinstallSource, setReinstallSource] = useState<SynapseInstallerSource | null>(null)
   const [reinstallEditor, setReinstallEditor] = useState<SynapseEditorAdapterSummary | null>(null)
   const [reinstallSelection, setReinstallSelection] = useState<EditorWriteTargetInitialSelection | null>(null)
   const [isReinstallOpen, setIsReinstallOpen] = useState(false)
@@ -346,10 +346,26 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         return
       }
 
-      const { content: detailContent, attachments: detailAttachments, ...metaFields } = detail
-      void detailContent
-      void detailAttachments
-      setReinstallMeta(metaFields as SynapseContentMeta)
+      const nextSource: SynapseInstallerSource = detail.type === "skill"
+        ? {
+            kind: "skill",
+            origin: "repository",
+            repositoryContentId: detail.id,
+            sourceIdentity: detail.id,
+            name: detail.name ?? item.name,
+            title: detail.title,
+            description: detail.description,
+          }
+        : {
+            kind: "rule",
+            origin: "repository",
+            repositoryContentId: detail.id,
+            sourceIdentity: detail.id,
+            name: detail.name ?? item.name,
+            title: detail.title,
+            description: detail.description,
+          }
+      setReinstallSource(nextSource)
       setReinstallEditor(adapter)
       setReinstallSelection({
         scope: item.scope,
@@ -372,7 +388,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const handleReinstallOpenChange = useCallback((nextOpen: boolean) => {
     setIsReinstallOpen(nextOpen)
     if (!nextOpen) {
-      setReinstallMeta(null)
+      setReinstallSource(null)
       setReinstallEditor(null)
       setReinstallSelection(null)
     }
@@ -869,16 +885,29 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         onOpenChange={setIsEditorCopyOpen}
       />
 
-      {reinstallMeta ? (
-        <ContentInstallDialog
-          editor={reinstallEditor}
-          initialSelection={reinstallSelection}
-          item={reinstallMeta}
-          onInstalled={onChanged}
-          open={isReinstallOpen}
-          onOpenChange={handleReinstallOpenChange}
-          projects={config.global.projects}
-        />
+      {reinstallSource && reinstallEditor ? (
+        <Dialog open={isReinstallOpen} onOpenChange={handleReinstallOpenChange}>
+          <DialogContent className="p-0 sm:max-w-lg" showCloseButton={false}>
+            <DialogFrame>
+              <DialogFrameHeader title="重新安装" />
+              <DialogFrameBody className="px-5 pb-5">
+                <SharedInstallerFlow
+                  editors={[reinstallEditor]}
+                  initialEditor={reinstallEditor}
+                  initialSelection={reinstallSelection}
+                  mode="modal"
+                  onCancel={() => handleReinstallOpenChange(false)}
+                  onInstalled={async () => {
+                    await onChanged?.()
+                    handleReinstallOpenChange(false)
+                  }}
+                  projects={config.global.projects}
+                  source={reinstallSource}
+                />
+              </DialogFrameBody>
+            </DialogFrame>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
   )

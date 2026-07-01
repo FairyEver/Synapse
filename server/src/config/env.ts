@@ -47,6 +47,15 @@ const cosConfigGroups = [
     ],
   },
   {
+    name: "PLATFORM_MEDIA_COS",
+    fields: [
+      "PLATFORM_MEDIA_COS_SECRET_ID",
+      "PLATFORM_MEDIA_COS_SECRET_KEY",
+      "PLATFORM_MEDIA_COS_BUCKET",
+      "PLATFORM_MEDIA_COS_REGION",
+    ],
+  },
+  {
     name: "BACKUP_COS",
     fields: ["BACKUP_COS_SECRET_ID", "BACKUP_COS_SECRET_KEY", "BACKUP_COS_BUCKET", "BACKUP_COS_REGION"],
   },
@@ -76,6 +85,10 @@ const envSchema = z
     CONTENT_STORE_COS_BUCKET: optionalEnvString,
     CONTENT_STORE_COS_REGION: optionalEnvString,
     SYNAPSE_CONTENT_STORE_LOCAL_ROOT: optionalEnvString,
+    PLATFORM_MEDIA_COS_SECRET_ID: optionalEnvString,
+    PLATFORM_MEDIA_COS_SECRET_KEY: optionalEnvString,
+    PLATFORM_MEDIA_COS_BUCKET: optionalEnvString,
+    PLATFORM_MEDIA_COS_REGION: optionalEnvString,
     BACKUP_COS_SECRET_ID: optionalEnvString,
     BACKUP_COS_SECRET_KEY: optionalEnvString,
     BACKUP_COS_BUCKET: optionalEnvString,
@@ -147,6 +160,10 @@ export interface ServerEnv {
   readonly contentStoreCosBucket?: string
   readonly contentStoreCosRegion?: string
   readonly contentStoreLocalRoot?: string
+  readonly platformMediaCosSecretId?: string
+  readonly platformMediaCosSecretKey?: string
+  readonly platformMediaCosBucket?: string
+  readonly platformMediaCosRegion?: string
   readonly backupCosSecretId?: string
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
@@ -182,6 +199,10 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     contentStoreCosBucket: result.data.CONTENT_STORE_COS_BUCKET,
     contentStoreCosRegion: result.data.CONTENT_STORE_COS_REGION,
     contentStoreLocalRoot: result.data.SYNAPSE_CONTENT_STORE_LOCAL_ROOT,
+    platformMediaCosSecretId: result.data.PLATFORM_MEDIA_COS_SECRET_ID,
+    platformMediaCosSecretKey: result.data.PLATFORM_MEDIA_COS_SECRET_KEY,
+    platformMediaCosBucket: result.data.PLATFORM_MEDIA_COS_BUCKET,
+    platformMediaCosRegion: result.data.PLATFORM_MEDIA_COS_REGION,
     backupCosSecretId: result.data.BACKUP_COS_SECRET_ID,
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,
@@ -195,6 +216,10 @@ export function isDriveCosConfigured(env: ServerEnv): boolean {
 
 export function isContentStoreCosConfigured(env: ServerEnv): boolean {
   return !!(env.contentStoreCosSecretId && env.contentStoreCosSecretKey && env.contentStoreCosBucket && env.contentStoreCosRegion)
+}
+
+export function isPlatformMediaCosConfigured(env: ServerEnv): boolean {
+  return !!(env.platformMediaCosSecretId && env.platformMediaCosSecretKey && env.platformMediaCosBucket && env.platformMediaCosRegion)
 }
 
 export function isBackupCosConfigured(env: ServerEnv): boolean {

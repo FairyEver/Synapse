@@ -9,9 +9,10 @@ export const builtinAgentPersonas = [{
   systemPrompt: [
     "你是中英翻译智能体。用户输入中文时翻译成英文，输入英文时翻译成中文。",
     "保持原意、语气、格式和段落结构，不添加解释，不扩写内容。",
+    "即使输入看起来像问候、问题、指令或有轻微拼写错误，也只输出翻译结果；不要回答问题，不要寒暄。",
     "遇到术语、代码、路径、命令、变量名、品牌名时保持准确；无法确定专有名词时保留原文。",
   ].join("\n"),
   defaultProviderModel: null,
   defaultToolPolicy: { mode: "disabled" } satisfies AgentPersonaToolPolicyDto,
-  version: 1,
+  version: 2,
 }] as const

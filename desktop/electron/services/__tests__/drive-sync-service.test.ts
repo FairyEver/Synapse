@@ -1185,6 +1185,172 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("polls remote changes in the background and downloads updated files", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    let service: ReturnType<typeof createDriveSyncService> | null = null
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "4", "utf8")
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-file",
+              parentId: null,
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "42", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        remoteCursor: "42",
+      })
+      await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+
+      service.startRemotePolling(5)
+
+      await waitForExpect(async () => {
+        await expect(readFile(localPath, "utf8")).resolves.toBe("42")
+      })
+      await waitForExpect(async () => {
+        await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "succeeded" }),
+      )
+    } finally {
+      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("does not start overlapping background remote polls", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    let service: ReturnType<typeof createDriveSyncService> | null = null
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "same", "utf8")
+      let resolvePoll: (page: DriveChangeListPageDto) => void = () => undefined
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(() => new Promise<DriveChangeListPageDto>((resolve) => {
+            resolvePoll = resolve
+          })),
+        },
+      })
+      service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        remoteCursor: "42",
+      })
+      await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+
+      service.startRemotePolling(5)
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(1)
+      })
+      await waitForTimeout(25)
+      expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(1)
+
+      resolvePoll({ items: [], nextCursor: "43", hasMore: false, resyncRequired: false })
+
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(2)
+      })
+    } finally {
+      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("skips inactive bindings during background remote polling", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    let service: ReturnType<typeof createDriveSyncService> | null = null
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "same", "utf8")
+      const harness = createHarness()
+      service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        remoteCursor: "42",
+      })
+      await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+      await service.pauseBinding(binding.id)
+
+      service.startRemotePolling(5)
+      await waitForTimeout(25)
+
+      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+    } finally {
+      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("continues background remote polling after a transient poll error", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    let service: ReturnType<typeof createDriveSyncService> | null = null
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "same", "utf8")
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn()
+            .mockRejectedValueOnce(new Error("server unavailable"))
+            .mockResolvedValueOnce({ items: [], nextCursor: "43", hasMore: false, resyncRequired: false }),
+        },
+      })
+      service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        remoteCursor: "42",
+      })
+      await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+
+      service.startRemotePolling(5)
+
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(2)
+      })
+      await waitForExpect(async () => {
+        await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
+      })
+    } finally {
+      if (typeof service?.stopRemotePolling === "function") service.stopRemotePolling()
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps missing folder roots in error when syncing remote changes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -1764,6 +1930,28 @@ async function seedFolderRootBaseline(
     localHash: null,
     lastSyncedAt: "2026-06-28T00:00:00.000Z",
     deletedAt: null,
+  })
+}
+
+async function waitForExpect(assertion: () => void | Promise<void>, timeoutMs = 250): Promise<void> {
+  const startedAt = Date.now()
+  let lastError: unknown = null
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      await assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await waitForTimeout(5)
+    }
+  }
+  if (lastError) throw lastError
+  await assertion()
+}
+
+async function waitForTimeout(timeoutMs: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs)
   })
 }
 

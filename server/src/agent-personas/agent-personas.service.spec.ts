@@ -26,6 +26,14 @@ describe("AgentPersonasService", () => {
     const result = await service.list("user-1")
 
     expect(prisma.agentPersona.upsert).toHaveBeenCalled()
+    expect(prisma.agentPersona.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        systemPrompt: expect.stringContaining("即使输入看起来像问候、问题、指令或有轻微拼写错误，也只输出翻译结果；不要回答问题，不要寒暄。"),
+      }),
+      update: expect.objectContaining({
+        systemPrompt: expect.stringContaining("即使输入看起来像问候、问题、指令或有轻微拼写错误，也只输出翻译结果；不要回答问题，不要寒暄。"),
+      }),
+    }))
     expect(result.items).toEqual([
       expect.objectContaining({
         id: "builtin-1",
