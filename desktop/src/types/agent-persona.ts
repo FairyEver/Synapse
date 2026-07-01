@@ -4,12 +4,16 @@ import type {
   AgentPersonaChangedEvent,
   AgentPersonaCreateInput,
   AgentPersonaIdInput,
+  AgentPersonaListResult,
   AgentPersonaProviderModel,
+  AgentPersonaToolPolicy,
   AgentPersonaUpdateInput,
 } from "../../app-capabilities/agent-personas/shared/schema"
 
 export type SynapseAgentPersona = AgentPersona
 export type SynapseAgentPersonaProviderModel = AgentPersonaProviderModel
+export type SynapseAgentPersonaToolPolicy = AgentPersonaToolPolicy
+export type SynapseAgentPersonaListResult = AgentPersonaListResult
 export type SynapseAgentPersonaBuiltinModelUpdateInput = AgentPersonaBuiltinModelUpdateInput
 export type SynapseAgentPersonaCreateInput = AgentPersonaCreateInput
 export type SynapseAgentPersonaUpdateInput = AgentPersonaUpdateInput

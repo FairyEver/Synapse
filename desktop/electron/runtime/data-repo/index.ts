@@ -52,6 +52,7 @@ export {
   agentEventsSchema,
   agentUsageSchema,
   agentPersonaItemsSchema,
+  agentPersonaRemoteCacheSchema,
   agentPersonaSettingsSchema,
   automationItemsSchema,
   automationRunsSchema,

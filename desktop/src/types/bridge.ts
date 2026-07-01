@@ -33,6 +33,7 @@ import type {
   SynapseAgentPersonaChangedEvent,
   SynapseAgentPersonaCreateInput,
   SynapseAgentPersonaIdInput,
+  SynapseAgentPersonaListResult,
   SynapseAgentPersonaUpdateInput,
 } from "./agent-persona"
 import type {
@@ -905,7 +906,7 @@ export type SynapseBridge = {
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
   }
   agentPersonas: {
-    list: () => Promise<SynapseAgentPersona[]>
+    list: () => Promise<SynapseAgentPersonaListResult>
     create: (input: SynapseAgentPersonaCreateInput) => Promise<SynapseAgentPersona>
     update: (input: SynapseAgentPersonaUpdateInput) => Promise<SynapseAgentPersona>
     updateBuiltinModel: (input: SynapseAgentPersonaBuiltinModelUpdateInput) => Promise<SynapseAgentPersona>
