@@ -514,7 +514,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       } else if (input.kind === "folder" && input.direction === "local_to_remote") {
         binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding))
       }
-      return await updateBindingStatus(binding.id, "active")
+      return await activateBindingAtCurrentRemoteCursor(binding.id)
     } catch (error) {
       await recordOperation({
         bindingId: binding.id,
@@ -581,7 +581,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     for (const entry of prepared) {
       await baselineStore.upsert({ ...entry, bindingId: binding.id })
     }
-    return await updateBindingStatus(binding.id, "active")
+    return await activateBindingAtCurrentRemoteCursor(binding.id)
+  }
+
+  async function activateBindingAtCurrentRemoteCursor(bindingId: string): Promise<DriveSyncBindingDto> {
+    await updateBindingCursor(bindingId, await currentRemoteCursor())
+    return updateBindingStatus(bindingId, "active")
+  }
+
+  async function currentRemoteCursor(): Promise<string | null> {
+    const page = await deps.accountService.listDriveChanges({ cursor: "latest", limit: 1 })
+    return page.nextCursor
   }
 
   async function prepareExistingFileBaseline(

@@ -502,6 +502,43 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("initializes safe binding remote cursor after the initial sync", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const listDriveChanges = vi.fn(async (): Promise<DriveChangeListPageDto> => ({
+        items: [],
+        nextCursor: "42",
+        hasMore: false,
+        resyncRequired: false,
+      }))
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote spec", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "remote_to_local",
+      })
+
+      expect(binding).toMatchObject({ status: "active", remoteCursor: "42" })
+      expect(listDriveChanges).toHaveBeenCalledWith({ cursor: "latest", limit: 1 })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "42" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("rejects remote file downloads when the local target appears after preview", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

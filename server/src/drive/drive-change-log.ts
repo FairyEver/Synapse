@@ -51,6 +51,7 @@ export class DriveChangeLogService {
   }
 
   async list(userId: string, input: DriveChangeListInput = {}): Promise<DriveChangeListPageDto> {
+    if (input.cursor === "latest") return this.currentCursor(userId)
     const limit = Math.max(1, Math.min(Math.floor(input.limit ?? 100), 500))
     const cursor = parseCursor(input.cursor)
     const rows = await this.prisma.driveChange.findMany({
@@ -68,6 +69,20 @@ export class DriveChangeLogService {
       items: pageRows.map((row) => toDriveChangeDto(row, metadata.get(row.itemId))),
       nextCursor: pageRows.at(-1)?.sequence.toString() ?? input.cursor ?? null,
       hasMore: rows.length > limit,
+      resyncRequired: false,
+    }
+  }
+
+  private async currentCursor(userId: string): Promise<DriveChangeListPageDto> {
+    const latest = await this.prisma.driveChange.findFirst({
+      where: { userId },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    })
+    return {
+      items: [],
+      nextCursor: latest?.sequence.toString() ?? null,
+      hasMore: false,
       resyncRequired: false,
     }
   }
