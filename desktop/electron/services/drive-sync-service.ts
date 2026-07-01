@@ -65,6 +65,12 @@ type DriveSyncRemoteTreeEntry = {
   readonly size: string
 }
 
+type DriveSyncRemoteTreeChild = Partial<DriveItemTreeListPageDto["items"][number]> & {
+  readonly id: string
+  readonly name: string
+  readonly type: string
+}
+
 export interface DriveSyncAccountService {
   readonly getDriveItem?: (itemId: string) => Promise<DriveItemDto>
   readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<{ readonly ok: true; readonly path: string }>
@@ -922,8 +928,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly relativeRoot: string
     readonly localEntries: readonly { readonly relativePath: string; readonly kind: "file" | "folder"; readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null }[]
   }): Promise<void> {
-    const tree = await deps.accountService.listDriveItemTree({ parentId: input.parentId })
-    for (const item of tree.items) {
+    const items = await listRemoteTreeChildren(input.parentId)
+    for (const item of items) {
       const relativePath = joinRelativePath(input.relativeRoot, item.name)
       const localEntry = input.localEntries.find((entry) => entry.relativePath === relativePath)
       if (!localEntry) continue
@@ -948,6 +954,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         })
       }
     }
+  }
+
+  async function listRemoteTreeChildren(parentId: string): Promise<readonly DriveSyncRemoteTreeChild[]> {
+    const items: DriveSyncRemoteTreeChild[] = []
+    let offset: number | null = 0
+    while (offset !== null) {
+      const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
+      items.push(...page.items)
+      offset = page.nextOffset ?? null
+    }
+    return items
   }
 
   async function createMissingUploadedFolders(input: {
