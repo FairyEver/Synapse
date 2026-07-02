@@ -20,7 +20,7 @@ Phase 1 cloud Skill Repository is private-only. Public browsing, fork, install l
 
 1. For an existing local Skill folder, call `app_skill_repository_import_local` with `sourceDirectoryPath`.
 2. The local folder must contain root `SKILL.md`. The tool uploads `SKILL.md` and non-hidden attachments.
-3. If the upload succeeds, Synapse writes `.synapse.json` into the local Skill folder through its local permission and audit boundary.
+3. If the upload succeeds, Synapse attempts to write `.synapse.json` into the local Skill folder through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked.
 4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` can also use the local `.synapse.json` cloud identity when present.
 5. Use `app_skill_repository_open` to get the management URL. It opens the user's browser only when `openInBrowser` is true.
 
@@ -36,7 +36,7 @@ If the server returns `USER_HANDLE_REQUIRED`, ask the user to set a username in 
 
 ## Safety
 
-Uploading reads local files and writing `.synapse.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks.
+Uploading reads local files and writing `.synapse.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
 
 Do not upload arbitrary project folders as Skills. Use a folder that is intended to be a Skill and contains root `SKILL.md`.
 

@@ -32,7 +32,6 @@ export interface SkillRepositoryFileDto {
   readonly sha256: string
   readonly kind: SkillRepositoryFileKind
   readonly mimeType: string | null
-  readonly text?: string
   readonly createdAt: string
   readonly updatedAt: string
 }

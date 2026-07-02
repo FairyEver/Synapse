@@ -42,6 +42,20 @@ Returns repository metadata and files.
 
 Use this for the first upload of a local Skill folder. If local `.synapse.json` already contains a cloud Skill repository id, the tool can update that repository instead of creating a new one.
 
+Returns the repository id, repository name, owner handle, management URL, and local identity write status:
+
+```json
+{
+  "repositoryId": "repo-id",
+  "name": "team-skill",
+  "owner": "liyang",
+  "managementUrl": "https://synapse.example/console/skill-repositories/repo-id",
+  "identityWritten": true
+}
+```
+
+If `identityWritten` is false, the cloud upload succeeded but Synapse could not write `.synapse.json` locally. The result may include `identityWriteError`.
+
 ## Update Local Skill
 
 `app_skill_repository_update_local`
@@ -58,6 +72,8 @@ Use this for the first upload of a local Skill folder. If local `.synapse.json` 
 ```
 
 `repositoryId` and `sourceDirectoryPath` are required. Use this when the user has confirmed which cloud repository should be replaced by the local Skill folder.
+
+The response uses the same shape as `app_skill_repository_import_local`, including `identityWritten`.
 
 ## Open Management URL
 
