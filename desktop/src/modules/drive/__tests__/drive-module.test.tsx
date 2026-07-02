@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   preflightDriveSite: vi.fn(),
   renameDriveItem: vi.fn(),
   createDriveSite: vi.fn(),
+  updateDriveSiteAccess: vi.fn(),
   shareDriveItem: vi.fn(),
   uploadDriveLocalItems: vi.fn(),
   toast: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       preflightDriveSite: mocks.preflightDriveSite,
       renameDriveItem: mocks.renameDriveItem,
       createDriveSite: mocks.createDriveSite,
+      updateDriveSiteAccess: mocks.updateDriveSiteAccess,
       shareDriveItem: mocks.shareDriveItem,
       uploadDriveLocalItems: mocks.uploadDriveLocalItems,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
@@ -209,6 +211,7 @@ beforeEach(() => {
   })
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
   mocks.createDriveSite.mockResolvedValue(createDriveSite())
+  mocks.updateDriveSiteAccess.mockResolvedValue(createDriveSite())
   mocks.shareDriveItem.mockResolvedValue({
     id: "share-row-1",
     shareId: "shr_test",
@@ -403,6 +406,7 @@ describe("DriveModule", () => {
       createDriveSite({
         name: "001",
         accessMode: "password",
+        expiresIn: "3d",
         expiresAt: "2026-06-26T06:04:00.000Z",
         totalBytes: "26522",
         url: "https://synapse.d2.pub/sites/site_AZYoLz4O/",
@@ -429,6 +433,33 @@ describe("DriveModule", () => {
     expect(dialog.textContent).toContain("25.9 KB")
     expect(queryButtonByLabel("复制 001")).not.toBeNull()
     expect(queryButtonByLabel("打开 001")).not.toBeNull()
+  })
+
+  it("preserves the current site expiration option when saving access settings", async () => {
+    mocks.listDriveSites.mockResolvedValue(createDriveSitePage([
+      createDriveSite({
+        name: "001",
+        accessMode: "password",
+        passwordEnabled: true,
+        expiresIn: "1y",
+        expiresAt: "2027-06-23T00:00:00.000Z",
+      }),
+    ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("站点")
+    await flushAct()
+    await openRowMenu("001")
+    await clickText("访问设置")
+    await clickButtonText("保存")
+
+    expect(mocks.updateDriveSiteAccess).toHaveBeenCalledWith({
+      siteId: "site_abc",
+      accessMode: "password",
+      expiresIn: "1y",
+    })
   })
 
   it("groups cloud drive actions in the top toolbar", async () => {
@@ -3156,6 +3187,7 @@ function createDriveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     urlWithPassword: "https://synapse.test/sites/site_abc/",
     passwordEnabled: false,
     password: null,
+    expiresIn: "forever",
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "原型",

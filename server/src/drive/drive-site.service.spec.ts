@@ -49,6 +49,7 @@ describe("DriveSiteService", () => {
     expect(result.passwordEnabled).toBe(true)
     expect(result.password).toMatch(/^[0-9A-Za-z]{8}$/u)
     expect(result.urlWithPassword).toBe(`${result.url}?password=${result.password}`)
+    expect(result.expiresIn).toBe("3d")
     expect(result.expiresAt).not.toBeNull()
 
     const stored = await prisma.driveSite.findFirst({ where: { userId: "user-1", siteId: result.siteId, deletedAt: null } })
@@ -204,6 +205,7 @@ describe("DriveSiteService", () => {
 
     expect(result.passwordEnabled).toBe(true)
     expect(result.password).toMatch(/^[0-9A-Za-z]{8}$/u)
+    expect(result.expiresIn).toBe("7d")
     expect(result.urlWithPassword).toBe(`${result.url}?password=${result.password}`)
   })
 
@@ -506,6 +508,7 @@ function createSiteRecord(overrides: Record<string, unknown> = {}) {
     accessMode: "public",
     passwordHash: null,
     passwordEncrypted: null,
+    expiresIn: "forever",
     expiresAt: null,
     currentDeploymentId: null,
     sourceFolderItemId: "folder-1",

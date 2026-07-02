@@ -81,6 +81,7 @@ type DriveSiteRecord = {
   readonly accessMode: string
   readonly passwordHash: string | null
   readonly passwordEncrypted: string | null
+  readonly expiresIn: string
   readonly expiresAt: Date | null
   readonly currentDeploymentId: string | null
   readonly sourceFolderItemId: string | null
@@ -161,6 +162,7 @@ export class DriveSiteService {
         accessMode: input.accessMode,
         passwordHash: passwordMaterial.passwordHash,
         passwordEncrypted: passwordMaterial.passwordEncrypted,
+        expiresIn: input.expiresIn,
         expiresAt: expiresAtFromInput(input.expiresIn),
         sourceFolderItemId: snapshot.sourceFolderItemId,
         sourceFolderName: snapshot.sourceFolderName,
@@ -219,6 +221,7 @@ export class DriveSiteService {
         accessMode: input.accessMode,
         passwordHash: passwordMaterial.passwordHash,
         passwordEncrypted: passwordMaterial.passwordEncrypted,
+        expiresIn: input.expiresIn,
         expiresAt: expiresAtFromInput(input.expiresIn),
       },
     })

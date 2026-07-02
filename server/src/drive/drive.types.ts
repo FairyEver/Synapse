@@ -5,6 +5,7 @@ import {
   type DriveItemLifecycleStatus,
   type DrivePublicAssetDto,
   type DriveShareAccessMode,
+  type DriveAccessExpiresIn,
   type DriveSiteDto,
   type DriveStorageStatus,
   buildDriveUrlWithPassword,
@@ -208,6 +209,7 @@ export function toDriveSiteDto(site: {
   readonly status: string
   readonly accessMode: string
   readonly password?: string | null
+  readonly expiresIn: string
   readonly expiresAt: Date | null
   readonly sourceFolderItemId: string | null
   readonly sourceFolderName: string | null
@@ -234,6 +236,7 @@ export function toDriveSiteDto(site: {
     urlWithPassword: buildDriveUrlWithPassword(url, password),
     passwordEnabled,
     password,
+    expiresIn: site.expiresIn as DriveAccessExpiresIn,
     expiresAt: site.expiresAt?.toISOString() ?? null,
     sourceFolderItemId: site.sourceFolderItemId,
     sourceFolderName: site.sourceFolderName,

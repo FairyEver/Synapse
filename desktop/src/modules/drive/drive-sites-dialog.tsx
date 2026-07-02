@@ -381,7 +381,7 @@ function DriveSiteRow({
               <DropdownMenuItem onClick={() => onAccess({
                 site,
                 passwordEnabled: site.accessMode === "password",
-                expiresIn: site.expiresAt ? "30d" : "forever",
+                expiresIn: site.expiresIn,
               })}>
                 访问设置
               </DropdownMenuItem>

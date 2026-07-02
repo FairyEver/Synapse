@@ -391,6 +391,7 @@ export interface DriveSiteDto {
   readonly urlWithPassword: string
   readonly passwordEnabled: boolean
   readonly password: string | null
+  readonly expiresIn: DriveAccessExpiresIn
   readonly expiresAt: string | null
   readonly sourceFolderItemId: string | null
   readonly sourceFolderName: string | null
