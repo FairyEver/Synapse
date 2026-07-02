@@ -499,6 +499,25 @@ describe('DriveMarkdownRenderer', () => {
     windowAddEventListener.mockRestore()
   })
 
+  it('does not walk the rendered text once per comment overlay', async () => {
+    annotationsMock.threads = [
+      thread({ id: 'thread-1', range: { start: 3, end: 5 }, quote: '重点' }),
+      thread({ id: 'thread-2', range: { start: 6, end: 8 }, quote: '内容' }),
+      thread({ id: 'thread-3', range: { start: 0, end: 2 }, quote: '这是' }),
+    ]
+    const threadCount = annotationsMock.threads.length
+    const createTreeWalker = vi.spyOn(document, 'createTreeWalker')
+    renderMarkdown()
+
+    await act(async () => undefined)
+    createTreeWalker.mockClear()
+    triggerMarkdownResize()
+
+    await flushAnimationFrames()
+
+    expect(createTreeWalker.mock.calls.length).toBeLessThan(threadCount)
+  })
+
   it('moves anchored comment cards with a compositor transform during markdown document scroll', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
