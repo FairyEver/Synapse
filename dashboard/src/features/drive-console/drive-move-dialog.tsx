@@ -20,25 +20,30 @@ export function DriveMoveDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (parentId: string | null) => void
 }) {
-  const [folders, setFolders] = useState<readonly DriveItemTreeEntryDto[]>([])
+  const [treeItems, setTreeItems] = useState<readonly DriveItemTreeEntryDto[]>([])
   const [loadingFolders, setLoadingFolders] = useState(false)
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null)
+  const folders = selectableMoveFolders(treeItems, item)
 
   useEffect(() => {
     if (!open) {
-      setFolders([])
+      setTreeItems([])
+      setNextOffset(null)
       setSelectedParentId(null)
       return
     }
 
     let cancelled = false
     setLoadingFolders(true)
-    setFolders([])
+    setTreeItems([])
+    setNextOffset(null)
     setSelectedParentId(null)
     void driveApi.listTree({ parentId: null, offset: 0, limit: DRIVE_MOVE_TREE_LIMIT })
       .then((page) => {
         if (cancelled) return
-        setFolders(selectableMoveFolders(page.items, item))
+        setTreeItems(page.items)
+        setNextOffset(page.hasMore ? page.nextOffset : null)
       })
       .catch((error) => {
         if (!cancelled) toast(errorMessage(error, '目标位置加载失败'))
@@ -51,6 +56,20 @@ export function DriveMoveDialog({
       cancelled = true
     }
   }, [item?.id, item?.type, open])
+
+  const loadMoreFolders = async () => {
+    if (loadingFolders || nextOffset === null) return
+    setLoadingFolders(true)
+    try {
+      const page = await driveApi.listTree({ parentId: null, offset: nextOffset, limit: DRIVE_MOVE_TREE_LIMIT })
+      setTreeItems((current) => [...current, ...page.items])
+      setNextOffset(page.hasMore ? page.nextOffset : null)
+    } catch (error) {
+      toast(errorMessage(error, '目标位置加载失败'))
+    } finally {
+      setLoadingFolders(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,8 +99,15 @@ export function DriveMoveDialog({
                 <span className='truncate'>{folder.path}</span>
               </Button>
             ))}
-            {loadingFolders ? <div className='px-3 py-2 text-sm text-muted-foreground'>加载中</div> : null}
+            {loadingFolders && treeItems.length === 0 ? <div className='px-3 py-2 text-sm text-muted-foreground'>加载中</div> : null}
             {!loadingFolders && folders.length === 0 ? <div className='px-3 py-2 text-sm text-muted-foreground'>暂无文件夹</div> : null}
+            {nextOffset !== null ? (
+              <div className='flex justify-center p-2'>
+                <Button type='button' variant='outline' size='sm' disabled={loadingFolders} onClick={() => { void loadMoreFolders() }}>
+                  {loadingFolders ? '加载中' : '加载更多'}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
         <DialogFooter>

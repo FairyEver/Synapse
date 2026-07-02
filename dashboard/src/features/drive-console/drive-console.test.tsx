@@ -389,6 +389,48 @@ describe('DriveConsolePage', () => {
     expect(reload).toHaveBeenCalled()
   })
 
+  it('loads more move targets before moving a row', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listTree)
+      .mockResolvedValueOnce(treePage([treeFolder({ id: 'target-1', name: '第一页目标', path: '第一页目标' })], {
+        hasMore: true,
+        nextOffset: 200,
+        total: 201,
+      }))
+      .mockResolvedValueOnce(treePage([treeFolder({ id: 'target-201', name: '后续目标', path: '后续目标' })], {
+        hasMore: false,
+        nextOffset: null,
+        total: 201,
+      }))
+    vi.mocked(driveApi.moveItem).mockResolvedValue({} as never)
+    await render(<DriveConsolePage />)
+
+    await openMoreActions()
+    await click(menuItem('移动'))
+    await act(async () => undefined)
+    await click(button('加载更多'))
+    await act(async () => undefined)
+    await click(button('后续目标'))
+    await click(lastButton('移动'))
+
+    expect(driveApi.listTree).toHaveBeenNthCalledWith(1, { parentId: null, offset: 0, limit: 200 })
+    expect(driveApi.listTree).toHaveBeenNthCalledWith(2, { parentId: null, offset: 200, limit: 200 })
+    expect(driveApi.moveItem).toHaveBeenCalledWith('folder-1', 'target-201')
+    expect(reload).toHaveBeenCalled()
+  })
+
   it('opens my shares from the toolbar', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -713,6 +755,20 @@ function publicAssetPage(
       hasMore: page.hasMore ?? false,
       nextOffset: page.nextOffset ?? null,
     },
+  }
+}
+
+function treePage(
+  items: readonly ReturnType<typeof treeFolder>[],
+  page: { readonly hasMore?: boolean; readonly nextOffset?: number | null; readonly total?: number } = {},
+) {
+  return {
+    items,
+    total: page.total ?? items.length,
+    fileCount: 0,
+    folderCount: items.length,
+    hasMore: page.hasMore ?? false,
+    nextOffset: page.nextOffset ?? null,
   }
 }
 
