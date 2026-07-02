@@ -2094,6 +2094,39 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
+  it("ignores duplicate cancel-share clicks from the file row", async () => {
+    const disableShare = createDeferred<{ readonly ok: true }>()
+    mocks.disableDriveShare.mockReturnValueOnce(disableShare.promise)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({
+        id: "file-1",
+        name: "shared.txt",
+        type: "file",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({ expiresAt: driveShareExpiresInDays(3), passwordEnabled: true }),
+      }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = rowButton("shared.txt", "取消分享")
+    if (!button) throw new Error("Cancel share button not found")
+    await act(async () => {
+      button.click()
+      button.click()
+      await flushPromises()
+    })
+
+    expect(mocks.disableDriveShare).toHaveBeenCalledTimes(1)
+    expect(button.disabled).toBe(true)
+
+    disableShare.resolve({ ok: true })
+    await flushAct()
+
+    expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
   it("opens existing share details from the shared summary", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
@@ -2551,6 +2584,33 @@ describe("DriveModule", () => {
     expect(mocks.listDriveShares).toHaveBeenCalled()
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(2)
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
+  it("ignores duplicate cancel-share clicks from the public links dialog", async () => {
+    const disableShare = createDeferred<{ readonly ok: true }>()
+    mocks.disableDriveShare.mockReturnValueOnce(disableShare.promise)
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
+      createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+    ]))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("我的分享")
+    await flushAct()
+    const button = getButtonByLabel("取消分享 report.txt")
+    await act(async () => {
+      button.click()
+      button.click()
+      await flushPromises()
+    })
+
+    expect(mocks.disableDriveShare).toHaveBeenCalledTimes(1)
+    expect(button.disabled).toBe(true)
+
+    disableShare.resolve({ ok: true })
+    await flushAct()
+
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 

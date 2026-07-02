@@ -202,6 +202,23 @@ function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
+function useBusyIdSet() {
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
+  const busyIdsRef = useRef<Set<string>>(new Set())
+  const setBusyId = useCallback((id: string, busy: boolean) => {
+    const nextIds = new Set(busyIdsRef.current)
+    if (busy) {
+      nextIds.add(id)
+    } else {
+      nextIds.delete(id)
+    }
+    busyIdsRef.current = nextIds
+    setBusyIds(nextIds)
+  }, [])
+
+  return { busyIds, busyIdsRef, setBusyId }
+}
+
 function DriveModule() {
   return (
     <DriveRendererActionsProvider>
@@ -229,6 +246,11 @@ function DriveModuleContent() {
   const [sitesOpen, setSitesOpen] = useState(false)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
+  const {
+    busyIds: disablingShareIds,
+    busyIdsRef: disablingShareIdsRef,
+    setBusyId: setDisablingShareId,
+  } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
@@ -583,15 +605,19 @@ function DriveModuleContent() {
   }, [accessSettingsTarget, loadItems])
 
   const handleDisableShare = useCallback(async (item: DriveItemDto) => {
-    if (!item.activeShareId) return
+    const shareId = item.activeShareId
+    if (!shareId || disablingShareIdsRef.current.has(shareId)) return
+    setDisablingShareId(shareId, true)
     try {
-      await requireSynapseBridge().account.disableDriveShare({ shareId: item.activeShareId })
+      await requireSynapseBridge().account.disableDriveShare({ shareId })
       toast("已取消分享")
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "取消分享失败"))
+    } finally {
+      setDisablingShareId(shareId, false)
     }
-  }, [loadItems])
+  }, [disablingShareIdsRef, loadItems, setDisablingShareId])
 
   const activePath: readonly DrivePathEntry[] = (() => {
     if (activeView === "public-assets") {
@@ -752,6 +778,7 @@ function DriveModuleContent() {
         onOpenSyncBinding={(item, drivePathHint) => setSyncDialog({ mode: "bind", item, drivePathHint })}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
+        disablingShareIds={disablingShareIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
       />
@@ -1225,6 +1252,7 @@ function DriveFileList({
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
+  disablingShareIds,
   onUploadDroppedFiles,
   uploadDisabled,
 }: {
@@ -1244,6 +1272,7 @@ function DriveFileList({
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly disablingShareIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly uploadDisabled: boolean
 }) {
@@ -1326,6 +1355,7 @@ function DriveFileList({
                   onOpenSyncBinding={onOpenSyncBinding}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
+                  disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
                 />
               ))}
             </TableBody>
@@ -1666,6 +1696,7 @@ function DriveFileListRow({
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
+  disablingShare,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -1680,6 +1711,7 @@ function DriveFileListRow({
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly disablingShare: boolean
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -1786,7 +1818,8 @@ function DriveFileListRow({
           onPointerDown={(event) => event.stopPropagation()}
         >
           {hasActiveShare ? (
-            <Button type="button" variant="ghost" size="xs" disabled={!canShare} onClick={() => onDisableShare(item)}>
+            <Button type="button" variant="ghost" size="xs" disabled={!canShare || disablingShare} onClick={() => onDisableShare(item)}>
+              {disablingShare ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
               取消分享
             </Button>
           ) : (
@@ -2119,6 +2152,11 @@ function DrivePublicLinksDialog({
 }) {
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
   const [shareFilter, setShareFilter] = useState<DrivePublicLinkFilter>("file")
+  const {
+    busyIds: disablingShareIds,
+    busyIdsRef: disablingShareIdsRef,
+    setBusyId: setDisablingShareId,
+  } = useBusyIdSet()
   const shareLoadGenerationRef = useRef(0)
   const visibleShares = shareState.items.filter((item) => item.itemType === shareFilter)
 
@@ -2170,6 +2208,20 @@ function DrivePublicLinksDialog({
     await onDriveItemsChanged()
   }, [loadShares, onDriveItemsChanged])
 
+  const handleDisableShare = useCallback(async (shareId: string) => {
+    if (disablingShareIdsRef.current.has(shareId)) return
+    setDisablingShareId(shareId, true)
+    try {
+      await requireSynapseBridge().account.disableDriveShare({ shareId })
+      toast("已取消分享")
+      await reloadAfterPublicLinkChange()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "取消分享失败"))
+    } finally {
+      setDisablingShareId(shareId, false)
+    }
+  }, [disablingShareIdsRef, reloadAfterPublicLinkChange, setDisablingShareId])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -2210,7 +2262,8 @@ function DrivePublicLinksDialog({
                       await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
                     }}
                     onRetry={loadShares}
-                    onReload={reloadAfterPublicLinkChange}
+                    onDisableShare={handleDisableShare}
+                    disablingShareIds={disablingShareIds}
                   />
                 </div>
               </ScrollArea>
@@ -2234,7 +2287,8 @@ function DrivePublicLinkList({
   shares,
   onLoadMore,
   onRetry,
-  onReload,
+  onDisableShare,
+  disablingShareIds,
 }: {
   readonly emptyTitle: string
   readonly error: string | null
@@ -2244,7 +2298,8 @@ function DrivePublicLinkList({
   readonly shares: readonly DriveShareListItemDto[]
   readonly onLoadMore: () => Promise<void>
   readonly onRetry: () => Promise<void>
-  readonly onReload: () => Promise<void>
+  readonly onDisableShare: (shareId: string) => void
+  readonly disablingShareIds: ReadonlySet<string>
 }) {
   if (loading) return <DrivePublicLinkTableSkeleton />
   if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
@@ -2252,7 +2307,14 @@ function DrivePublicLinkList({
 
   return (
     <div className="grid gap-3">
-      <DriveShareList error={null} items={shares} loading={false} onReload={onReload} />
+      <DriveShareList
+        error={null}
+        items={shares}
+        loading={false}
+        onReload={onRetry}
+        onDisableShare={onDisableShare}
+        disablingShareIds={disablingShareIds}
+      />
       {page?.hasMore ? (
         <div className="flex justify-center pt-1">
           <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
@@ -2278,11 +2340,13 @@ function DrivePublicLinkTableHeader() {
 }
 
 function DriveShareActions({
+  disablingShare,
   item,
-  onReload,
+  onDisableShare,
 }: {
+  readonly disablingShare: boolean
   readonly item: DriveShareListItemDto
-  readonly onReload: () => Promise<void>
+  readonly onDisableShare: (shareId: string) => void
 }) {
   const password = item.password
   return (
@@ -2317,9 +2381,10 @@ function DriveShareActions({
       <DriveIconAction
         label={`取消分享 ${item.itemName}`}
         tooltip="取消分享"
-        onClick={() => { void disableDriveShare(item.id, onReload) }}
+        disabled={disablingShare}
+        onClick={() => onDisableShare(item.id)}
       >
-        <X />
+        {disablingShare ? <LoaderCircle className="animate-spin" /> : <X />}
       </DriveIconAction>
     </div>
   )
@@ -2327,11 +2392,13 @@ function DriveShareActions({
 
 function DriveIconAction({
   children,
+  disabled = false,
   label,
   onClick,
   tooltip,
 }: {
   readonly children: ReactNode
+  readonly disabled?: boolean
   readonly label: string
   readonly onClick: () => void
   readonly tooltip: string
@@ -2344,6 +2411,7 @@ function DriveIconAction({
           variant="ghost"
           size="icon-sm"
           aria-label={label}
+          disabled={disabled}
           onClick={onClick}
         >
           {children}
@@ -2507,11 +2575,15 @@ function DriveShareList({
   error,
   items,
   loading,
+  disablingShareIds,
+  onDisableShare,
   onReload,
 }: {
   readonly error: string | null
   readonly items: readonly DriveShareListItemDto[]
   readonly loading: boolean
+  readonly disablingShareIds: ReadonlySet<string>
+  readonly onDisableShare: (shareId: string) => void
   readonly onReload: () => Promise<void>
 }) {
   if (loading) return <DriveShareTableSkeleton />
@@ -2551,7 +2623,11 @@ function DriveShareList({
               </div>
             </TableCell>
             <TableCell className="align-top">
-              <DriveShareActions item={item} onReload={onReload} />
+              <DriveShareActions
+                disablingShare={disablingShareIds.has(item.id)}
+                item={item}
+                onDisableShare={onDisableShare}
+              />
             </TableCell>
           </TableRow>
         ))}
@@ -2970,16 +3046,6 @@ async function openDriveUrl(url: string): Promise<void> {
     await requireSynapseBridge().shell.openExternal(url)
   } catch (rawError) {
     toast(errorMessage(rawError, "打开失败"))
-  }
-}
-
-async function disableDriveShare(shareId: string, onReload: () => Promise<void>): Promise<void> {
-  try {
-    await requireSynapseBridge().account.disableDriveShare({ shareId })
-    toast("已取消分享")
-    await onReload()
-  } catch (rawError) {
-    toast(errorMessage(rawError, "取消分享失败"))
   }
 }
 
