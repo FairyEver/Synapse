@@ -178,7 +178,7 @@ Input:
 - `maxFiles` optional.
 - `maxBytes` optional.
 
-Writes a local cache directory and returns `localRootPath`, `manifestPath`, `entryPath`, `files`, `skipped`, and `warnings`.
+Writes a local cache directory and returns `localRootPath`, `manifestPath`, `entryPath`, `files`, `skipped`, and `warnings`. Folder entries are included in `files` and the manifest with `kind: "folder"`, including empty folders.
 
 ### `app_drive_link_download_file`
 

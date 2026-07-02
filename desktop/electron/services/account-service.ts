@@ -579,15 +579,21 @@ export class AccountService {
     const skipped: Array<DriveLinkMaterializeDto["skipped"][number]> = []
     const warnings: string[] = []
     let totalBytes = 0
+    let materializedFileCount = 0
     const scope = input.scope ?? "text"
     const maxFiles = scope === "entry" ? 1 : input.maxFiles ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES
     const maxBytes = input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES
     const queue: Array<{ readonly itemId?: string; readonly path?: string; readonly prefix: string }> = [{ prefix: "" }]
     let maxFilesReached = false
     let listedEntryCount = 0
+    const addMaterializedFile = (file: DriveLinkMaterializeDto["files"][number]): void => {
+      files.push(file)
+      if (file.kind !== "folder") materializedFileCount += 1
+    }
     const finish = async (): Promise<DriveLinkMaterializeDto> => {
       if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
-      const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
+      const entry = files.find((file) => file.kind !== "folder" && file.relativePath.toLowerCase() === "index.html")
+        ?? files.find((file) => file.kind !== "folder")
       const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
       const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
       await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
@@ -597,7 +603,7 @@ export class AccountService {
       const resolved = await this.resolveDriveLink(baseInput)
       if (resolved.root.type !== "file") return
       const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
-      if (files.length >= maxFiles) {
+      if (materializedFileCount >= maxFiles) {
         skipped.push({ path: relativePath, reason: "max-files" })
         maxFilesReached = true
         return
@@ -613,7 +619,7 @@ export class AccountService {
         await mkdir(path.dirname(outputPath), { recursive: true })
         await writeFile(outputPath, text.text, "utf8")
         totalBytes += bytes
-        files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+        addMaterializedFile({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
         return
       }
       if (scope !== "all" && scope !== "entry") {
@@ -632,13 +638,13 @@ export class AccountService {
         return
       }
       totalBytes += Number.isFinite(actualSize) ? actualSize : 0
-      files.push({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+      addMaterializedFile({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
     }
 
     if (isPublicAssetDriveLink(input.url)) {
       const resolved = await this.resolveDriveLink(baseInput)
       const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
-      if (files.length >= maxFiles) {
+      if (materializedFileCount >= maxFiles) {
         skipped.push({ path: relativePath, reason: "max-files" })
         maxFilesReached = true
         return finish()
@@ -659,7 +665,7 @@ export class AccountService {
         skipped.push({ path: relativePath, reason: "max-bytes" })
         return finish()
       }
-      files.push({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+      addMaterializedFile({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
       return finish()
     }
 
@@ -677,10 +683,12 @@ export class AccountService {
         for (const item of page.items) {
           const relativePath = safeDriveLinkOutputPath(joinDriveLinkRelativePath(current.prefix, item.path || item.name))
           if (item.type === "folder") {
+            await mkdir(path.join(root.contentPath, relativePath), { recursive: true })
+            addMaterializedFile({ relativePath, kind: "folder", size: "0" })
             queue.push({ itemId: item.itemId ?? undefined, prefix: relativePath })
             continue
           }
-          if (files.length >= maxFiles) {
+          if (materializedFileCount >= maxFiles) {
             skipped.push({ path: relativePath, reason: "max-files" })
             maxFilesReached = true
             continue
@@ -700,7 +708,7 @@ export class AccountService {
             await mkdir(path.dirname(outputPath), { recursive: true })
             await writeFile(outputPath, text.text, "utf8")
             totalBytes += bytes
-            files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+            addMaterializedFile({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
             continue
           }
           if (scope !== "all") {
@@ -726,7 +734,7 @@ export class AccountService {
             continue
           }
           totalBytes += Number.isFinite(actualSize) ? actualSize : 0
-          files.push({ relativePath, kind: driveLinkFileKind(item.previewKind, downloaded.mimeType ?? item.mimeType), size: downloaded.size })
+          addMaterializedFile({ relativePath, kind: driveLinkFileKind(item.previewKind, downloaded.mimeType ?? item.mimeType), size: downloaded.size })
         }
         offset = page.page.hasMore ? page.page.nextOffset ?? undefined : undefined
         if (page.page.hasMore && offset === undefined) warnings.push("目录还有更多文件，本次只处理了可定位的页面。")

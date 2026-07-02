@@ -335,6 +335,26 @@ describe("AccountService", () => {
     expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
   })
 
+  it("materializes empty Drive link folders into the local cache manifest", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink")
+      .mockResolvedValueOnce({
+        items: [{ path: "empty", name: "empty", type: "folder", mimeType: null, previewKind: "download-only", size: "0", itemId: "folder-empty" }],
+        page: { hasMore: false, nextOffset: null },
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        page: { hasMore: false, nextOffset: null },
+      })
+
+    const result = await service.materializeDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret", scope: "text" })
+
+    expect(listDriveLink).toHaveBeenNthCalledWith(2, { url: "https://synapse.test/share/shr_123", password: "secret", itemId: "folder-empty", path: undefined, offset: undefined })
+    expect(result.files).toEqual([{ relativePath: "empty", kind: "folder", size: "0" }])
+    await expect(readdir(path.join(result.localRootPath, "content", "empty"))).resolves.toEqual([])
+    await expect(readFile(result.manifestPath, "utf8")).resolves.toContain('"kind": "folder"')
+  })
+
   it("materializes a single-file Drive share when the link has no child listing", async () => {
     const { service } = await createTestAccountService()
     vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
@@ -447,11 +467,14 @@ describe("AccountService", () => {
     expect(listDriveLink).toHaveBeenNthCalledWith(1, { url: "https://synapse.test/share/shr_html", password: "secret" })
     expect(result.files.map((file) => file.relativePath)).toEqual([
       "index.html",
+      "pages",
+      "assets",
       "pages/create-task.html",
       "pages/review-task.html",
       "assets/styles.css",
     ])
     expect(result.skipped).toEqual([{ path: "assets/logo.png", reason: "not-text" }])
+    await expect(readdir(path.join(result.localRootPath, "content", "pages"))).resolves.toEqual(["create-task.html", "review-task.html"])
     await expect(readFile(path.join(result.localRootPath, "content", "pages", "create-task.html"), "utf8"))
       .resolves.toBe("content:pages/create-task.html")
   })
