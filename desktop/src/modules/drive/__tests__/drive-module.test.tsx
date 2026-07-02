@@ -1284,12 +1284,17 @@ describe("DriveModule", () => {
 
   it("shows an account login state without listing drive items when unauthenticated", async () => {
     accountState.current = { status: "unauthenticated" }
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      { bindings: [createDriveSyncBinding()] },
+    ))
 
     await render(<DriveModule />)
     await flushAct()
 
     expect(mocks.listDriveItems).not.toHaveBeenCalled()
     expect(mocks.getDriveUsage).not.toHaveBeenCalled()
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).toContain("需要登录账号")
     expect(document.body.textContent).toContain("登录后才能查看云盘。")
     expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
@@ -1300,8 +1305,15 @@ describe("DriveModule", () => {
     expect(getButton("新建文件夹").disabled).toBe(true)
     expect(getButton("我的分享").disabled).toBe(true)
     expect(getButton("刷新").disabled).toBe(true)
+    expect(getButtonByLabel("同步状态：1 个绑定").textContent).toContain("1")
+    expect(queryButtonByLabel("同步状态：暂无同步绑定")).toBeNull()
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
+
+    await clickButtonByLabel("同步状态：1 个绑定")
+
+    expect(document.body.textContent).toContain("Docs")
+    expect(document.body.textContent).not.toContain("暂无同步对象")
 
     await clickButtonText("登录")
 

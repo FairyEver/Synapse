@@ -388,7 +388,6 @@ function DriveModuleContent() {
       setLoadingMoreItems(false)
       setLoadMoreItemsError(null)
       setUsageState({ status: "idle", usage: null })
-      setSyncSnapshot(null)
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
@@ -405,7 +404,6 @@ function DriveModuleContent() {
   }, [accountAuthenticated, parentId, refreshDriveView])
 
   useEffect(() => {
-    if (!accountAuthenticated) return
     const bridge = requireSynapseBridge()
     let disposed = false
     void bridge.driveSync.getSnapshot()
@@ -422,7 +420,7 @@ function DriveModuleContent() {
       disposed = true
       unsubscribe()
     }
-  }, [accountAuthenticated])
+  }, [])
 
   const actionsDisabled = activeView !== "files" || !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
