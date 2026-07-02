@@ -97,7 +97,7 @@ export function DriveMDXeditorRenderer({
   const [parseError, setParseError] = useState<string | null>(null)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
-  const loginUrl = useMemo(() => buildLoginUrl(), [])
+  const loginUrl = buildLoginUrl()
   const imageSources = useDriveMarkdownImageSources({
     context: imageSourceContext,
     edit,

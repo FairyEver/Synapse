@@ -41,7 +41,7 @@ export function DriveCodeRenderer({
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
-  const loginUrl = useMemo(() => buildLoginUrl(), [])
+  const loginUrl = buildLoginUrl()
 
   useEffect(() => {
     savedValueRef.current = initialText

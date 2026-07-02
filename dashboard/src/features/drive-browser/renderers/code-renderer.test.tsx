@@ -137,6 +137,23 @@ describe('DriveCodeRenderer', () => {
     expect(editor().readOnly).toBe(true)
     expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
   })
+
+  it('updates the login action redirect after switching shared files', () => {
+    const loginEdit = {
+      ...editable(),
+      canEdit: false,
+      currentVersionId: null,
+      reason: 'login_required' as const,
+    }
+    window.history.pushState(null, '', '/share/share-1/items/file-a')
+    const { rerender } = renderRenderer({ edit: loginEdit })
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a')
+
+    window.history.pushState(null, '', '/share/share-1/items/file-b')
+    rerender({ edit: loginEdit })
+
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b')
+  })
 })
 
 function renderRenderer(input: {
@@ -149,19 +166,31 @@ function renderRenderer(input: {
   document.body.append(host)
   root = createRoot(host)
 
-  act(() => {
+  const render = (nextInput: typeof input) => {
     root?.render(
       <DriveRendererToolbarProvider>
         <ToolbarHost />
         <DriveCodeRenderer
-          current={input.current ?? baseCurrent()}
-          preview={input.preview ?? basePreview()}
-          edit={input.edit === undefined ? editable() : input.edit}
-          editContext={input.editContext ?? createEditContext()}
+          current={nextInput.current ?? baseCurrent()}
+          preview={nextInput.preview ?? basePreview()}
+          edit={nextInput.edit === undefined ? editable() : nextInput.edit}
+          editContext={nextInput.editContext ?? createEditContext()}
         />
       </DriveRendererToolbarProvider>
     )
+  }
+
+  act(() => {
+    render(input)
   })
+
+  return {
+    rerender: (nextInput: typeof input) => {
+      act(() => {
+        render(nextInput)
+      })
+    },
+  }
 }
 
 function ToolbarHost() {

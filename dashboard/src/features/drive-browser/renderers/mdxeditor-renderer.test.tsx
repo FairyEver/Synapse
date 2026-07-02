@@ -492,6 +492,23 @@ describe('DriveMDXeditorRenderer', () => {
     expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
   })
 
+  it('updates the login action redirect after switching shared files', () => {
+    const loginEdit = {
+      ...editable(),
+      canEdit: false,
+      currentVersionId: null,
+      reason: 'login_required' as const,
+    }
+    window.history.pushState(null, '', '/share/share-1/items/file-a')
+    const { rerender } = renderRenderer({ edit: loginEdit })
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a')
+
+    window.history.pushState(null, '', '/share/share-1/items/file-b')
+    rerender({ edit: loginEdit })
+
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b')
+  })
+
   it('opens a conflict dialog and can reload after a version conflict', async () => {
     const editContext = createEditContext()
     editContext.saveText.mockRejectedValue(new ApiError('版本冲突', 409))
