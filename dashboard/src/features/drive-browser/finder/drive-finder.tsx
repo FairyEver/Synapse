@@ -11,6 +11,7 @@ import {
   type DriveRendererId,
 } from '../renderers/drive-renderer-registry'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
+import type { DriveBrowserNavigate } from '../shared/drive-navigation'
 import { getDriveFinderActions } from '../shared/drive-view-model'
 import { DriveFinderBreadcrumbs } from './drive-finder-breadcrumbs'
 import { DriveFinderList } from './drive-finder-list'
@@ -24,6 +25,7 @@ export function DriveFinder({
   loadMoreChildrenError = null,
   editContext,
   annotationContext,
+  onNavigate,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly mode: 'console' | 'share' | 'standalone'
@@ -32,6 +34,7 @@ export function DriveFinder({
   readonly loadMoreChildrenError?: string | null
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
+  readonly onNavigate?: DriveBrowserNavigate
 }) {
   const fileSelected = snapshot.current.type === 'file'
   const rendererOptions = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
@@ -44,7 +47,7 @@ export function DriveFinder({
 
   return (
     <section data-drive-finder-mode={mode} className='flex min-h-0 flex-1 flex-col gap-3'>
-      <DriveFinderToolbar snapshot={snapshot} mode={mode} />
+      <DriveFinderToolbar snapshot={snapshot} mode={mode} onNavigate={onNavigate} />
       {fileSelected ? (
         <DriveFinderFileLayout>
           <DriveRendererShell
@@ -59,6 +62,7 @@ export function DriveFinder({
         <DriveFinderFullLayout>
           <DriveFinderList
             snapshot={snapshot}
+            onNavigate={onNavigate}
             onLoadMoreChildren={onLoadMoreChildren}
             loadingMoreChildren={loadingMoreChildren}
             loadMoreChildrenError={loadMoreChildrenError}
@@ -69,11 +73,19 @@ export function DriveFinder({
   )
 }
 
-function DriveFinderToolbar({ snapshot, mode }: { readonly snapshot: DriveBrowserSnapshotDto; readonly mode: 'console' | 'share' | 'standalone' }) {
+function DriveFinderToolbar({
+  snapshot,
+  mode,
+  onNavigate,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly mode: 'console' | 'share' | 'standalone'
+  readonly onNavigate?: DriveBrowserNavigate
+}) {
   const actions = getDriveFinderActions(snapshot)
   return (
     <div className='flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between'>
-      <DriveFinderBreadcrumbs snapshot={snapshot} />
+      <DriveFinderBreadcrumbs snapshot={snapshot} onNavigate={onNavigate} />
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
         {mode === 'share' ? <DriveShareViewerStatus snapshot={snapshot} /> : null}
         {actions.directoryDownloadUrl ? (

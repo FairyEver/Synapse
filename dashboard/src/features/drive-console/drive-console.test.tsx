@@ -141,6 +141,20 @@ describe('DriveConsolePage', () => {
     expect(reader?.className).not.toContain('h-svh')
   })
 
+  it('uses injected client navigation for file rows and preview actions', async () => {
+    const onNavigate = vi.fn()
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsolePage onNavigate={onNavigate} />)
+
+    await click(rowWithText('文档'))
+    expect(onNavigate).toHaveBeenCalledWith('/console/drive/folders/folder-1')
+
+    await click(button('预览'))
+    expect(onNavigate).toHaveBeenCalledWith('/console/drive/folders/folder-1')
+  })
+
   it('creates folders in the root folder and refreshes', async () => {
     const snapshot = folderSnapshot()
     const reload = vi.fn(async () => snapshot)
@@ -604,6 +618,12 @@ function lastButton(text: string) {
 function tabTrigger(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-slot="tabs-trigger"]'))
     .find((item) => item.textContent?.trim() === text)
+    ?? null
+}
+
+function rowWithText(text: string) {
+  return Array.from(document.querySelectorAll<HTMLTableRowElement>('tr'))
+    .find((row) => row.textContent?.includes(text))
     ?? null
 }
 

@@ -1,5 +1,10 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { cn } from '@/lib/utils'
+import {
+  navigateDriveBrowserUrl,
+  shouldHandleDriveBrowserLinkClick,
+  type DriveBrowserNavigate,
+} from '../shared/drive-navigation'
 
 const driveConsoleHomeBreadcrumb = {
   id: '__drive_console_home__',
@@ -16,7 +21,13 @@ export function getDriveFinderBreadcrumbs(snapshot: DriveBrowserSnapshotDto) {
   return [driveConsoleHomeBreadcrumb, ...snapshot.breadcrumbs]
 }
 
-export function DriveFinderBreadcrumbs({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+export function DriveFinderBreadcrumbs({
+  snapshot,
+  onNavigate = navigateDriveBrowserUrl,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly onNavigate?: DriveBrowserNavigate
+}) {
   const breadcrumbs = getDriveFinderBreadcrumbs(snapshot)
   return (
     <nav className='flex min-w-0 flex-wrap items-center gap-1 text-sm' aria-label='当前位置'>
@@ -29,6 +40,11 @@ export function DriveFinderBreadcrumbs({ snapshot }: { readonly snapshot: DriveB
               'min-w-0 truncate rounded-sm px-1 py-0.5 hover:bg-accent',
               index === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'
             )}
+            onClick={(event) => {
+              if (!shouldHandleDriveBrowserLinkClick(event)) return
+              event.preventDefault()
+              onNavigate(item.browserUrl)
+            }}
           >
             {item.name}
           </a>

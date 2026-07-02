@@ -159,6 +159,45 @@ describe('DriveBrowserPage', () => {
 
     expect(document.body.textContent).toContain('notes.md')
   })
+
+  it('uses injected client navigation for finder rows and breadcrumbs', () => {
+    const onNavigate = vi.fn()
+    mockDriveBrowserState({
+      status: 'ready',
+      snapshot: createSnapshot({
+        current: {
+          ...baseCurrent(),
+          id: 'folder',
+          name: 'folder',
+          type: 'folder',
+          previewKind: 'download-only',
+        },
+        preview: null,
+        canZip: true,
+        children: [{
+          ...baseCurrent(),
+          id: 'child',
+          name: 'child.md',
+          browserUrl: '/drive/items/child',
+        }],
+      }),
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload: vi.fn(async () => createSnapshot()),
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+
+    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='folder' onNavigate={onNavigate} />)
+
+    rowWithText('child.md')?.click()
+    expect(onNavigate).toHaveBeenCalledWith('/drive/items/child')
+
+    const breadcrumb = document.querySelector<HTMLAnchorElement>('a[href="/drive/items/root"]')
+    breadcrumb?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, cancelable: true }))
+    expect(onNavigate).toHaveBeenCalledWith('/drive/items/root')
+  })
 })
 
 function mockDriveBrowserState(state: DriveBrowserState) {
@@ -230,6 +269,11 @@ function selectStrongText(): void {
 function buttonWithText(text: string): HTMLButtonElement | null {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
     .find((button) => button.textContent?.includes(text)) ?? null
+}
+
+function rowWithText(text: string): HTMLTableRowElement | null {
+  return Array.from(document.querySelectorAll<HTMLTableRowElement>('tr'))
+    .find((row) => row.textContent?.includes(text)) ?? null
 }
 
 function domRect(input: Partial<DOMRect> = {}): DOMRect {
