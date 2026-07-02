@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/select'
 import { driveApi } from '@/lib/api'
 
+const DRIVE_SITE_DIALOG_PAGE_SIZE = 50
+
 export function DriveSiteCreateDialog({
   folder,
   open,
@@ -100,11 +102,34 @@ export function DriveSitesDialog({
   const [accessMode, setAccessMode] = useState<DriveSiteAccessMode>('public')
   const [deleteTarget, setDeleteTarget] = useState<DriveSiteDto | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
 
-  const load = async () => {
+  const load = async ({ offset = 0, append = false }: { readonly offset?: number; readonly append?: boolean } = {}) => {
     try {
-      const page = await driveApi.listSites({ offset: 0, limit: 50 })
-      setSites([...page.items])
+      const page = await driveApi.listSites({ offset, limit: DRIVE_SITE_DIALOG_PAGE_SIZE })
+      setSites((current) => append ? [...current, ...page.items] : [...page.items])
+      setNextOffset(page.page.hasMore ? page.page.nextOffset : null)
+    } catch (error) {
+      toast(errorMessage(error, '站点加载失败'))
+    }
+  }
+
+  const refreshLoadedSites = async () => {
+    const targetCount = Math.max(DRIVE_SITE_DIALOG_PAGE_SIZE, sites.length)
+    const loaded: DriveSiteDto[] = []
+    let offset = 0
+    let next: number | null = null
+    try {
+      while (loaded.length < targetCount) {
+        const page = await driveApi.listSites({ offset, limit: DRIVE_SITE_DIALOG_PAGE_SIZE })
+        loaded.push(...page.items)
+        next = page.page.hasMore ? page.page.nextOffset : null
+        if (!page.page.hasMore || page.page.nextOffset === null) break
+        offset = page.page.nextOffset
+      }
+      setSites(loaded)
+      setNextOffset(next)
     } catch (error) {
       toast(errorMessage(error, '站点加载失败'))
     }
@@ -114,11 +139,21 @@ export function DriveSitesDialog({
     if (open) void load()
   }, [open])
 
+  const loadMore = async () => {
+    if (nextOffset === null || loadingMore) return
+    setLoadingMore(true)
+    try {
+      await load({ offset: nextOffset, append: true })
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const runSiteAction = async (action: () => Promise<unknown>, fallback: string) => {
     setSubmitting(true)
     try {
       await action()
-      await load()
+      await refreshLoadedSites()
     } catch (error) {
       toast(errorMessage(error, fallback))
     } finally {
@@ -135,7 +170,7 @@ export function DriveSitesDialog({
         expiresIn: 'forever',
       })
       setAccessTarget(null)
-      await load()
+      await refreshLoadedSites()
     } catch (error) {
       toast(errorMessage(error, '访问设置保存失败'))
     } finally {
@@ -193,6 +228,13 @@ export function DriveSitesDialog({
                 </div>
               </div>
             ))}
+            {nextOffset !== null ? (
+              <div className='flex justify-center pt-2'>
+                <Button type='button' variant='outline' size='sm' disabled={submitting || loadingMore} onClick={() => { void loadMore() }}>
+                  {loadingMore ? '加载中' : '加载更多'}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button type='button' variant='outline' onClick={() => handleOpenChange(false)}>关闭</Button>

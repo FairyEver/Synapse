@@ -268,6 +268,30 @@ describe('Drive site dialogs', () => {
     expect(driveApi.deleteSite).toHaveBeenCalledWith('site-1')
   })
 
+  it('loads more sites from the next page', async () => {
+    vi.mocked(driveApi.listSites)
+      .mockResolvedValueOnce({
+        items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs 1', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
+        total: 51,
+        page: { offset: 0, limit: 50, hasMore: true, nextOffset: 50 },
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: 'db-51', siteId: 'site-51', name: 'Docs 51', status: 'active', accessMode: 'public', url: '/sites/site-51', urlWithPassword: '/sites/site-51', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
+        total: 51,
+        page: { offset: 50, limit: 50, hasMore: false, nextOffset: null },
+      })
+    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+    await flush()
+
+    expect(document.body.textContent).toContain('Docs 1')
+    expect(document.body.textContent).not.toContain('Docs 51')
+    await click(textButton('加载更多'))
+
+    expect(driveApi.listSites).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain('Docs 51')
+    expect(() => textButton('加载更多')).toThrow()
+  })
+
   it('does not offer enable for failed sites without a deployment', async () => {
     vi.mocked(driveApi.listSites).mockResolvedValue({
       items: [{ id: 'db-1', siteId: 'site-failed', name: 'Broken', status: 'failed', accessMode: 'public', url: '/sites/site-failed', urlWithPassword: '/sites/site-failed', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: null, fileCount: 0, totalBytes: '0', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: null }],
