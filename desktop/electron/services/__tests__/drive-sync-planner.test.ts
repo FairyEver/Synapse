@@ -115,6 +115,23 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("turns local parent deletes versus remote child updates into conflicts", () => {
+    const result = planDriveSyncLocalChanges({
+      binding: binding(),
+      baseline: [
+        baseline({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder", localHash: null }),
+        baseline({ relativePath: "Project/draft.md", remoteItemId: "remote-draft" }),
+      ],
+      remoteChangedPaths: new Set(["Project/draft.md"]),
+      changes: [localChange({ relativePath: "Project", kind: "deleted", localKind: "missing" })],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([
+      expect.objectContaining({ type: "delete_vs_modify", relativePath: "Project", driveItemId: "remote-project" }),
+    ])
+  })
+
   it("turns local file/folder mismatches into conflicts", () => {
     const result = planDriveSyncLocalChanges({
       binding: binding(),
@@ -143,6 +160,55 @@ describe("drive sync planner", () => {
       expect.objectContaining({ kind: "download", relativePath: "new.md", driveItemId: "remote-new" }),
       expect.objectContaining({ kind: "download", relativePath: "old.md", driveItemId: "remote-old" }),
       expect.objectContaining({ kind: "delete_local", relativePath: "trash.md", driveItemId: "remote-trash" }),
+    ])
+  })
+
+  it("turns remote parent deletes versus local child updates into conflicts", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [
+        baseline({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder", localHash: null }),
+        baseline({ relativePath: "Project/draft.md", remoteItemId: "remote-draft" }),
+      ],
+      localChangedPaths: new Set(["Project/draft.md"]),
+      changes: [
+        remoteChange({ itemId: "remote-project", type: "trashed", pathHint: "/Docs/Project", itemKind: "folder" }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([
+      expect.objectContaining({
+        type: "delete_vs_modify",
+        relativePath: "Project",
+        localPath: "/Users/me/Docs/Project",
+        driveItemId: "remote-project",
+      }),
+    ])
+  })
+
+  it("turns remote parent renames versus local child updates into conflicts", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [
+        baseline({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder", localHash: null }),
+        baseline({ relativePath: "Project/draft.md", remoteItemId: "remote-draft" }),
+      ],
+      localChangedPaths: new Set(["Project/draft.md"]),
+      changes: [
+        remoteChange({ itemId: "remote-project", type: "renamed", pathHint: "/Docs/Archive", itemKind: "folder" }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([
+      expect.objectContaining({
+        type: "both_modified",
+        relativePath: "Project",
+        localPath: "/Users/me/Docs/Project",
+        remotePathHint: "/Docs/Archive",
+        driveItemId: "remote-project",
+      }),
     ])
   })
 

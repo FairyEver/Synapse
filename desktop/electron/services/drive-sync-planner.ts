@@ -73,7 +73,7 @@ export function planDriveSyncLocalChanges(input: {
     if (isDriveSyncExcluded(change.relativePath, input.binding.excludeRules)) continue
     if (input.binding.kind === "folder" && change.relativePath === "") continue
     const baseline = baselineByPath.get(change.relativePath)
-    if (remoteChangedPaths.has(change.relativePath)) {
+    if (hasChangedPathOverlap(remoteChangedPaths, change.relativePath)) {
       conflicts.push(plannedConflict({
         binding: input.binding,
         baseline,
@@ -135,10 +135,10 @@ function detectLocalMoveOperations(input: {
   const moves: Array<{ readonly operation: DriveSyncPlannedOperation; readonly consumedPaths: readonly string[] }> = []
 
   for (const created of createdChanges) {
-    if (usedCreated.has(created.relativePath) || input.remoteChangedPaths.has(created.relativePath)) continue
+    if (usedCreated.has(created.relativePath) || hasChangedPathOverlap(input.remoteChangedPaths, created.relativePath)) continue
     if (!hasExistingRemoteParent(created.relativePath, input.baselineByPath)) continue
     const deleted = deletedChanges.find((candidate) => {
-      if (usedDeleted.has(candidate.relativePath) || input.remoteChangedPaths.has(candidate.relativePath)) return false
+      if (usedDeleted.has(candidate.relativePath) || hasChangedPathOverlap(input.remoteChangedPaths, candidate.relativePath)) return false
       const deletedBaseline = input.baselineByPath.get(candidate.relativePath)
       if (!deletedBaseline || deletedBaseline.kind !== created.localKind) return false
       if (created.localKind === "file") return sameFileSnapshot(created, deletedBaseline)
@@ -193,10 +193,10 @@ function sameFolderSubtree(input: {
   const subtree = input.activeBaseline.filter((entry) => isPathInSubtree(entry.relativePath, input.oldRoot))
   if (subtree.length === 0) return false
   for (const baseline of subtree) {
-    if (input.remoteChangedPaths.has(baseline.relativePath)) return false
+    if (hasChangedPathOverlap(input.remoteChangedPaths, baseline.relativePath)) return false
     const suffix = subtreeSuffix(baseline.relativePath, input.oldRoot)
     const newPath = suffix ? path.posix.join(input.newRoot, suffix) : input.newRoot
-    if (input.remoteChangedPaths.has(newPath)) return false
+    if (hasChangedPathOverlap(input.remoteChangedPaths, newPath)) return false
     const change = input.changesByPath.get(newPath)
     if (!change || change.kind !== "created" || change.localKind !== baseline.kind) return false
     if (baseline.kind === "file" && !sameFileSnapshot(change, baseline)) return false
@@ -228,6 +228,32 @@ function isPathInSubtree(relativePath: string, root: string): boolean {
   return relativePath === root || relativePath.startsWith(`${root}/`)
 }
 
+function hasChangedPathOverlap(changedPaths: ReadonlySet<string>, relativePath: string): boolean {
+  for (const changedPath of changedPaths) {
+    if (relativePathsOverlap(changedPath, relativePath)) return true
+  }
+  return false
+}
+
+function overlappingChangedRelativePath(
+  changedPaths: ReadonlySet<string>,
+  relativePaths: ReadonlyArray<string | undefined>,
+): string | null {
+  for (const relativePath of relativePaths) {
+    if (relativePath === undefined) continue
+    if (hasChangedPathOverlap(changedPaths, relativePath)) return relativePath
+  }
+  return null
+}
+
+function relativePathsOverlap(left: string, right: string): boolean {
+  return left === right
+    || left === ""
+    || right === ""
+    || left.startsWith(`${right}/`)
+    || right.startsWith(`${left}/`)
+}
+
 function subtreeSuffix(relativePath: string, root: string): string {
   return relativePath === root ? "" : relativePath.slice(root.length + 1)
 }
@@ -256,13 +282,17 @@ export function planDriveSyncRemoteChanges(input: {
     if (relativePath === null) continue
     if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
     const localPath = path.join(input.binding.localPath, relativePath)
+    const conflictRelativePath = overlappingChangedRelativePath(localChangedPaths, [
+      relativePath,
+      baseline?.relativePath,
+    ])
 
-    if (localChangedPaths.has(relativePath)) {
+    if (conflictRelativePath !== null) {
       conflicts.push({
         bindingId: input.binding.id,
         driveItemId: change.itemId,
-        relativePath,
-        localPath,
+        relativePath: conflictRelativePath,
+        localPath: path.join(input.binding.localPath, conflictRelativePath),
         remotePathHint: change.pathHint ?? null,
         type: change.type === "trashed" || change.type === "deleted" ? "delete_vs_modify" : "both_modified",
         localSnapshot: null,
