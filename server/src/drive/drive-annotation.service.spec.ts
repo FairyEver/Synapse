@@ -279,17 +279,20 @@ describe("DriveAnnotationService", () => {
       cookie: "cookie",
       commentId: "comment-1",
     })
-    await expect(service.deleteShareThread({
+    await service.deleteShareThread({
       actorUserId: "reader-1",
       shareId: "share-1",
       itemId: "item-1",
       cookie: "cookie",
       threadId: "thread-1",
-    })).rejects.toBeInstanceOf(ForbiddenException)
+    })
     expect(prisma.driveAnnotationThread.create).toHaveBeenCalled()
     expect(prisma.driveAnnotationComment.create).toHaveBeenCalled()
     expect(prisma.driveAnnotationComment.update).toHaveBeenCalled()
-    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).toHaveBeenCalledWith({
+      where: { id: "thread-1" },
+      data: { deletedAt: expect.any(Date) },
+    })
   })
 
   it("records share annotation write audits with share context redacted", async () => {
@@ -405,6 +408,61 @@ describe("DriveAnnotationService", () => {
       actorUserId: "reader-1",
     }))
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: true, canDelete: true })
+    expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("does not project thread delete permission when another visible share comment remains", async () => {
+    prisma.driveAnnotationThread.findMany.mockResolvedValueOnce([
+      threadRecord({
+        comments: [
+          commentRecord({ id: "comment-1", createdByUserId: "reader-1" }),
+          commentRecord({ id: "comment-2", parentCommentId: "comment-1", createdByUserId: "reader-2" }),
+        ],
+      }),
+    ])
+
+    const result = await service.listShareAnnotations({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+    })
+
+    expect(result[0]?.permissions.canDelete).toBe(false)
+  })
+
+  it("allows share thread creators to delete threads with only their visible comments", async () => {
+    await service.deleteShareThread({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+    })
+
+    expect(prisma.driveAnnotationThread.update).toHaveBeenCalledWith({
+      where: { id: "thread-1" },
+      data: { deletedAt: expect.any(Date) },
+    })
+  })
+
+  it("rejects share thread creators deleting threads with another visible comment", async () => {
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({
+      comments: [
+        commentRecord({ id: "comment-1", createdByUserId: "reader-1" }),
+        commentRecord({ id: "comment-2", parentCommentId: "comment-1", createdByUserId: "reader-2" }),
+      ],
+    }))
+
+    await expect(service.deleteShareThread({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+    })).rejects.toBeInstanceOf(ForbiddenException)
+
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
   })
 
   it("redacts author emails for share annotation reads", async () => {

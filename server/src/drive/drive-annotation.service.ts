@@ -395,8 +395,10 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
-    if (item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
-    await this.requireThread(item.id, input.threadId)
+    const thread = await this.requireThread(item.id, input.threadId)
+    if (!canDeleteThread(thread, visibleComments(thread.comments), input.actorUserId, item.userId)) {
+      throw new ForbiddenException("不能删除该评论。")
+    }
     await this.prisma.driveAnnotationThread.update({ where: { id: input.threadId }, data: { deletedAt: new Date() } })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
@@ -460,8 +462,8 @@ export class DriveAnnotationService {
     return { item, canComment: Boolean(snapshot.annotation?.canComment) }
   }
 
-  private async requireThread(itemId: string, threadId: string) {
-    const thread = await this.prisma.driveAnnotationThread.findFirst({ where: { id: threadId, itemId, deletedAt: null } })
+  private async requireThread(itemId: string, threadId: string): Promise<AnnotationThreadRecord> {
+    const thread = await this.prisma.driveAnnotationThread.findFirst({ where: { id: threadId, itemId, deletedAt: null }, include: annotationInclude })
     if (!thread) throw new NotFoundException("评论不存在。")
     return thread
   }
@@ -597,6 +599,7 @@ function toThreadDto(
   canWrite = true,
   redactAuthorEmail = false,
 ): DriveAnnotationThreadDto {
+  const comments = visibleComments(record.comments)
   return {
     id: record.id,
     itemId: record.itemId,
@@ -605,11 +608,24 @@ function toThreadDto(
     target: record.target as DriveAnnotationTargetDto,
     anchorStatus: record.anchorStatus === "shifted" || record.anchorStatus === "orphaned" ? record.anchorStatus : "attached",
     author: toAuthorDto(record.createdByUser, redactAuthorEmail),
-    comments: visibleComments(record.comments).map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
+    comments: comments.map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
-    permissions: { canDelete: canWrite && Boolean(actorUserId && actorUserId === fileOwnerUserId) },
+    permissions: { canDelete: canDeleteThread(record, comments, actorUserId, fileOwnerUserId, canWrite) },
   }
+}
+
+function canDeleteThread(
+  record: Pick<AnnotationThreadRecord, "createdByUserId">,
+  comments: readonly AnnotationCommentRecord[],
+  actorUserId: string | null,
+  fileOwnerUserId: string,
+  canWrite = true,
+): boolean {
+  if (!canWrite || !actorUserId) return false
+  if (actorUserId === fileOwnerUserId) return true
+  if (record.createdByUserId !== actorUserId) return false
+  return comments.every((comment) => comment.createdByUserId === actorUserId)
 }
 
 function visibleComments(comments: readonly AnnotationCommentRecord[]): readonly AnnotationCommentRecord[] {
