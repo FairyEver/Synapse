@@ -156,6 +156,18 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("uses password query values from generated share links", async () => {
+    const { service, drive } = createService()
+
+    await service.resolve({ url: `${publicAppUrl}/share/shr_123?password=query-secret` })
+
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_123",
+      password: "query-secret",
+      cookie: undefined,
+    })
+  })
+
   it("rejects drive-shaped links from other origins before resolving content", async () => {
     const { service, drive, sites, publicAssets } = createService()
     const url = "https://example.com/share/shr_123"
@@ -317,6 +329,16 @@ describe("DriveLinkIntakeService", () => {
       access: { status: "ok", canRead: true, canReadText: false, canDownload: true },
       root: { name: "assets/logo.png", type: "site", previewKind: "image" },
     })
+  })
+
+  it("uses password query values from generated site links", async () => {
+    const { service, sites } = createService()
+
+    await service.list({ url: `${publicAppUrl}/sites/site_123/?password=site-secret` })
+
+    expect(sites.listPublicSiteAssets).toHaveBeenCalledWith("site_123", expect.objectContaining({
+      password: "site-secret",
+    }))
   })
 
   it("lists share folder children from a browser snapshot", async () => {

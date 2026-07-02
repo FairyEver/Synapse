@@ -105,9 +105,9 @@ export type DriveLinkIntakeDeps = {
 }
 
 type ParsedDriveLink =
-  | { readonly linkType: "share"; readonly shareId: string; readonly itemId: string | null }
-  | { readonly linkType: "site"; readonly siteId: string; readonly path: string }
-  | { readonly linkType: "public_asset"; readonly assetId: string }
+  | { readonly linkType: "share"; readonly shareId: string; readonly itemId: string | null; readonly password: string | null }
+  | { readonly linkType: "site"; readonly siteId: string; readonly path: string; readonly password: string | null }
+  | { readonly linkType: "public_asset"; readonly assetId: string; readonly password: string | null }
 
 @Injectable()
 export class DriveLinkIntakeService {
@@ -128,7 +128,7 @@ export class DriveLinkIntakeService {
     if (parsed.linkType === "site") {
       const access = await this.deps.sites.listPublicSiteAssets(parsed.siteId, {
         cookie: null,
-        password: input.password,
+        password: driveLinkPassword(input.password, parsed.password),
         path: input.path ?? parsed.path,
         offset: input.offset,
         limit: input.limit,
@@ -145,7 +145,7 @@ export class DriveLinkIntakeService {
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
       itemId,
-      password: input.password,
+      password: driveLinkPassword(input.password, parsed.password),
       cookie: undefined,
       childrenPage: { offset: input.offset, limit: input.limit },
     })
@@ -189,7 +189,7 @@ export class DriveLinkIntakeService {
     if (parsed.linkType === "site") {
       const access = await this.deps.sites.resolvePublicSite(parsed.siteId, {
         cookie: null,
-        password: input.password,
+        password: driveLinkPassword(input.password, parsed.password),
         relativePath: input.path ?? parsed.path,
       })
       if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
@@ -207,7 +207,7 @@ export class DriveLinkIntakeService {
     const transfer = await this.deps.drive.openShareBrowserItemDownload({
       shareId: parsed.shareId,
       itemId,
-      password: input.password,
+      password: driveLinkPassword(input.password, parsed.password),
       cookie: undefined,
     })
     if (transfer.kind === "zip") throw new BadRequestException("请选择具体文件下载。")
@@ -217,7 +217,7 @@ export class DriveLinkIntakeService {
   private async resolveShare(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
     const access = await this.deps.drive.resolvePublicShareAccess({
       shareId: parsed.shareId,
-      password: input.password,
+      password: driveLinkPassword(input.password, parsed.password),
       cookie: undefined,
     })
     const ref = toShareRef(parsed)
@@ -229,7 +229,7 @@ export class DriveLinkIntakeService {
       const snapshot = await this.deps.drive.getShareBrowserSnapshot({
         shareId: parsed.shareId,
         itemId: parsed.itemId,
-        password: input.password,
+        password: driveLinkPassword(input.password, parsed.password),
         cookie: undefined,
       })
       return {
@@ -253,7 +253,11 @@ export class DriveLinkIntakeService {
 
   private async resolveSite(parsed: Extract<ParsedDriveLink, { readonly linkType: "site" }>, input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
     const ref = toSiteRef(parsed)
-    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, password: input.password, relativePath: parsed.path })
+    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, {
+      cookie: null,
+      password: driveLinkPassword(input.password, parsed.password),
+      relativePath: parsed.path,
+    })
     if (access.status === "password_required") return passwordRequiredResolve(parsed.path ? "site_path" : "site", ref)
     if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
 
@@ -285,7 +289,7 @@ export class DriveLinkIntakeService {
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
       itemId,
-      password: input.password,
+      password: driveLinkPassword(input.password, parsed.password),
       cookie: undefined,
     })
     const preview = snapshot.preview
@@ -304,7 +308,11 @@ export class DriveLinkIntakeService {
   }
 
   private async readSiteText(parsed: Extract<ParsedDriveLink, { readonly linkType: "site" }>, input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
-    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, { cookie: null, password: input.password, relativePath: input.path ?? parsed.path })
+    const access = await this.deps.sites.resolvePublicSite(parsed.siteId, {
+      cookie: null,
+      password: driveLinkPassword(input.password, parsed.password),
+      relativePath: input.path ?? parsed.path,
+    })
     if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
     if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
 
@@ -339,7 +347,7 @@ export class DriveLinkIntakeService {
         const snapshot = await this.deps.drive.getShareBrowserSnapshot({
           shareId: parsed.shareId,
           itemId: currentItemId,
-          password: input.password,
+          password: driveLinkPassword(input.password, parsed.password),
           cookie: undefined,
           childrenPage: { offset, limit: 200 },
         })
@@ -363,6 +371,7 @@ function parseDriveLinkUrl(value: string, publicAppUrl: string): ParsedDriveLink
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new BadRequestException("云盘链接无效。")
   if (!hasSynapsePublicOrigin(url, publicAppUrl)) throw new BadRequestException("仅支持当前 Synapse 公共地址的云盘链接。")
+  const password = normalizeDriveLinkPassword(url.searchParams.get("password"))
 
   const segments = url.pathname.split("/").filter(Boolean).map((segment) => {
     try {
@@ -372,15 +381,24 @@ function parseDriveLinkUrl(value: string, publicAppUrl: string): ParsedDriveLink
     }
   })
   if (segments[0] === DRIVE_PUBLIC_PATH_PREFIX.slice(1) && segments[1]) {
-    return { linkType: "share", shareId: segments[1], itemId: segments[2] === "items" ? segments[3] ?? null : null }
+    return { linkType: "share", shareId: segments[1], itemId: segments[2] === "items" ? segments[3] ?? null : null, password }
   }
   if (segments[0] === DRIVE_SITE_PATH_PREFIX.slice(1) && segments[1]) {
-    return { linkType: "site", siteId: segments[1], path: segments.slice(2).join("/") }
+    return { linkType: "site", siteId: segments[1], path: segments.slice(2).join("/"), password }
   }
   if (segments[0] === DRIVE_PUBLIC_ASSET_PATH_PREFIX.slice(1) && segments[1] && segments.length === 2) {
-    return { linkType: "public_asset", assetId: segments[1] }
+    return { linkType: "public_asset", assetId: segments[1], password }
   }
   throw new BadRequestException("仅支持 Synapse 云盘 /share、/sites 和 /files 链接。")
+}
+
+function driveLinkPassword(inputPassword: string | undefined, parsedPassword: string | null): string | undefined {
+  return inputPassword ?? parsedPassword ?? undefined
+}
+
+function normalizeDriveLinkPassword(value: string | null): string | null {
+  if (value === null || value.length === 0) return null
+  return value
 }
 
 function hasSynapsePublicOrigin(url: URL, publicAppUrl: string): boolean {
