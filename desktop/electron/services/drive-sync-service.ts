@@ -776,7 +776,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       hashFiles: input.hashFiles,
     })
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
-    const remoteByPath = new Map(remoteEntries.map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint), entry]))
+    const remoteByPath = new Map(
+      remoteEntries
+        .map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint), entry] as const)
+        .filter(([relativePath]) => !isDriveSyncExcluded(relativePath, input.excludeRules)),
+    )
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
     assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, input.excludeRules, input.drivePathHint)
 

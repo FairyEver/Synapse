@@ -922,6 +922,74 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("ignores excluded remote-only paths when binding existing folders", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await mkdir(path.join(tempDir, "notes"), { recursive: true })
+      await writeFile(path.join(tempDir, "notes", "spec.md"), "same", "utf8")
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => ({
+            id: "remote-docs",
+            parentId: null,
+            type: "folder",
+            name: "Docs",
+            size: "0",
+            mimeType: null,
+            storageStatus: "active",
+            shared: false,
+            createdAt: "2026-06-28T00:00:00.000Z",
+            updatedAt: "2026-06-28T00:00:00.000Z",
+          })),
+          listDriveItemTree: vi.fn(async () => ({
+            items: [
+              { id: "remote-notes", parentId: "remote-docs", type: "folder", name: "notes", path: "notes", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-spec", parentId: "remote-notes", type: "file", name: "spec.md", path: "notes/spec.md", depth: 2, size: "4", mimeType: "text/markdown", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-node-modules", parentId: "remote-docs", type: "folder", name: "node_modules", path: "node_modules", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-package", parentId: "remote-node-modules", type: "file", name: "package.json", path: "node_modules/package.json", depth: 2, size: "2", mimeType: "application/json", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+            ],
+            total: 4,
+            fileCount: 2,
+            folderCount: 2,
+            hasMore: false,
+            nextOffset: null,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.previewBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        remoteExists: true,
+        directionHint: "bind_existing",
+      })).resolves.toMatchObject({ status: "ready", direction: "bind_existing" })
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        direction: "bind_existing",
+      })
+
+      const baselines = await harness.baseline.list()
+      expect(baselines).toHaveLength(3)
+      expect(baselines).toEqual(expect.arrayContaining([
+        expect.objectContaining({ bindingId: binding.id, relativePath: "", remoteItemId: "remote-docs", kind: "folder" }),
+        expect.objectContaining({ bindingId: binding.id, relativePath: "notes", remoteItemId: "remote-notes", kind: "folder" }),
+        expect.objectContaining({ bindingId: binding.id, relativePath: "notes/spec.md", remoteItemId: "remote-spec", kind: "file" }),
+      ]))
+      expect(baselines).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ relativePath: expect.stringContaining("node_modules") }),
+      ]))
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("blocks bind-existing folder previews when local and remote trees differ", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
