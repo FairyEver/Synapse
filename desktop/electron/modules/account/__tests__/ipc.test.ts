@@ -246,17 +246,15 @@ describe("accountIpcModule", () => {
     })).toThrow()
   })
 
-  it("keeps public asset and trash list requests pagination-only", () => {
+  it("accepts public asset and trash list search filters", () => {
     const publicAssetsRequest = accountIpcModule.methods.listDrivePublicAssets.request
     const trashRequest = accountIpcModule.methods.listDriveTrash.request
     expect(publicAssetsRequest).toBeDefined()
     expect(trashRequest).toBeDefined()
     if (!publicAssetsRequest || !trashRequest) throw new Error("expected drive list request schemas")
 
-    expect(publicAssetsRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
-    expect(trashRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
-    expect(publicAssetsRequest.safeParse({ offset: 0, limit: 50, search: "logo" }).success).toBe(false)
-    expect(trashRequest.safeParse({ offset: 0, limit: 50, search: "old" }).success).toBe(false)
+    expect(publicAssetsRequest.parse({ offset: 0, limit: 50, search: "logo" })).toEqual({ offset: 0, limit: 50, search: "logo" })
+    expect(trashRequest.parse({ offset: 0, limit: 50, search: "old" })).toEqual({ offset: 0, limit: 50, search: "old" })
   })
 
   it("accepts Drive site list filters and routes site handlers", async () => {
