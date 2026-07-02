@@ -8,6 +8,9 @@ packages:
   - auto/web
   - templates/shadcn-admin
 
+overrides:
+  js-yaml: 4.2.0
+
 onlyBuiltDependencies:
   - electron
   - node-pty

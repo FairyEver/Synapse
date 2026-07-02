@@ -18,10 +18,5 @@
     "desktop:release:mac": "pnpm --filter @synapse/desktop run release:mac",
     "auto": "pnpm --filter @synapse/auto run start",
     "dev:shadcn-admin": "pnpm --filter @synapse/shadcn-admin run dev"
-  },
-  "pnpm": {
-    "overrides": {
-      "js-yaml": "4.2.0"
-    }
   }
 }
