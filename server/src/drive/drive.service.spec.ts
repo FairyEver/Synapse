@@ -676,6 +676,20 @@ describe("DriveService", () => {
     expect(versions.items.find((version) => version.id === historical.id)?.deletePending).toBe(true)
   })
 
+  it("keeps post-commit version cleanup best effort when candidate lookup fails", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const findFirst = vi.fn(async () => {
+      throw new Error("db unavailable")
+    })
+    ;(prisma.driveItem as unknown as { findFirst: typeof findFirst }).findFirst = findFirst
+
+    await expect((service as unknown as {
+      cleanupFileVersionsAfterChange: (userId: string, itemId: string) => Promise<void>
+    }).cleanupFileVersionsAfterChange("user-1", "item-1")).resolves.toBeUndefined()
+    expect(findFirst).toHaveBeenCalled()
+  })
+
   it("rejects actions for file versions pending cleanup", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {

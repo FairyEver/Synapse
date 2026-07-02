@@ -3151,40 +3151,49 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   private async cleanupFileVersionsAfterChange(userId: string, itemId: string): Promise<void> {
-    const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
-      select: { id: true, storageKey: true },
-    })
-    if (!item) return
-    const candidates = await this.prisma.$transaction((tx) =>
-      listCleanupCandidateVersions(tx, {
-        itemId: item.id,
-        currentStorageKey: item.storageKey,
-        now: new Date(),
-      }))
-    for (const version of candidates) {
-      const claimed = await this.prisma.driveFileVersion.updateMany({
-        where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
-        data: { deletePending: true },
+    try {
+      const item = await this.prisma.driveItem.findFirst({
+        where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+        select: { id: true, storageKey: true },
       })
-      if (claimed.count === 0) continue
-      try {
-        await this.storage.deleteObject(version.storageKey)
-        await this.finalizeFileVersionDelete({
-          userId,
+      if (!item) return
+      const candidates = await this.prisma.$transaction((tx) =>
+        listCleanupCandidateVersions(tx, {
           itemId: item.id,
-          versionId: version.id,
-          size: version.size,
+          currentStorageKey: item.storageKey,
+          now: new Date(),
+        }))
+      for (const version of candidates) {
+        const claimed = await this.prisma.driveFileVersion.updateMany({
+          where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
+          data: { deletePending: true },
         })
-      } catch (error) {
-        this.logger.warn({
-          itemId,
-          versionId: version.id,
-          storageKeyLength: version.storageKey.length,
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorMessage: formatAuditError(error),
-        }, "Drive file version cleanup delete failed")
+        if (claimed.count === 0) continue
+        try {
+          await this.storage.deleteObject(version.storageKey)
+          await this.finalizeFileVersionDelete({
+            userId,
+            itemId: item.id,
+            versionId: version.id,
+            size: version.size,
+          })
+        } catch (error) {
+          this.logger.warn({
+            itemId,
+            versionId: version.id,
+            storageKeyLength: version.storageKey.length,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorMessage: formatAuditError(error),
+          }, "Drive file version cleanup delete failed")
+        }
       }
+    } catch (error) {
+      this.logger.warn({
+        userId,
+        itemId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Drive file version cleanup failed")
     }
   }
 
