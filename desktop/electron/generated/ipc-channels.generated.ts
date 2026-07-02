@@ -286,7 +286,6 @@ export const IPC_CHANNELS = {
   },
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
-    "createBinding": "synapse:drive-sync:bindings:create",
     "previewBinding": "synapse:drive-sync:bindings:preview",
     "createSafeBinding": "synapse:drive-sync:bindings:safe-create",
     "removeBinding": "synapse:drive-sync:bindings:remove",

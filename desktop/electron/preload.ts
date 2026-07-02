@@ -413,7 +413,6 @@ const IPC_CHANNELS = {
   },
   "driveSync": {
     "getSnapshot": "synapse:drive-sync:snapshot:get",
-    "createBinding": "synapse:drive-sync:bindings:create",
     "previewBinding": "synapse:drive-sync:bindings:preview",
     "createSafeBinding": "synapse:drive-sync:bindings:safe-create",
     "removeBinding": "synapse:drive-sync:bindings:remove",
@@ -887,7 +886,6 @@ const synapseBridge: SynapseBridge = {
   },
   driveSync: {
     getSnapshot: () => invoke(IPC_CHANNELS.driveSync.getSnapshot)(),
-    createBinding: (input) => invoke(IPC_CHANNELS.driveSync.createBinding)(input),
     previewBinding: (input) => invoke(IPC_CHANNELS.driveSync.previewBinding)(input),
     createSafeBinding: (input) => invoke(IPC_CHANNELS.driveSync.createSafeBinding)(input),
     removeBinding: (input) => invoke(IPC_CHANNELS.driveSync.removeBinding)(input),

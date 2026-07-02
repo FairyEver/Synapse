@@ -639,6 +639,7 @@ describe("preload bridge", () => {
   it("maps drive sync methods to drive sync IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
+    expect(bridge.driveSync).not.toHaveProperty("createBinding")
     await bridge.driveSync.getSnapshot()
     await bridge.driveSync.previewBinding({
       driveItemId: "drive-item-1",

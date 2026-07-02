@@ -80,16 +80,6 @@ const driveSyncBindingPreviewSchema = z.object({
   importedGitignoreRules: z.array(z.string()),
 })
 
-const driveSyncCreateBindingInputSchema = z.object({
-  driveItemId: z.string().min(1),
-  driveItemName: z.string().min(1),
-  kind: driveItemKindSchema,
-  drivePathHint: z.string().nullable().optional(),
-  localPath: z.string().min(1),
-  remoteCursor: z.string().min(1).nullable().optional(),
-  excludeRules: z.array(z.string()).optional(),
-})
-
 const driveSyncPreviewBindingInputSchema = z.object({
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
@@ -163,14 +153,6 @@ export const driveSyncIpcModule: IpcModule = {
       request: z.void(),
       response: driveSyncSnapshotSchema,
       handler: (ctx) => resolveDriveSyncService(ctx).getSnapshot(),
-    },
-    createBinding: {
-      channel: "synapse:drive-sync:bindings:create",
-      kind: "invoke",
-      request: driveSyncCreateBindingInputSchema,
-      response: driveSyncBindingSchema,
-      handler: (ctx, request: z.infer<typeof driveSyncCreateBindingInputSchema>) =>
-        resolveDriveSyncService(ctx).createBinding(request),
     },
     previewBinding: {
       channel: "synapse:drive-sync:bindings:preview",

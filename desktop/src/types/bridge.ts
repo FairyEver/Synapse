@@ -920,15 +920,6 @@ export type SynapseBridge = {
   }
   driveSync: {
     getSnapshot: () => Promise<DriveSyncSnapshotDto>
-    createBinding: (input: {
-      driveItemId: string
-      driveItemName: string
-      kind: "file" | "folder"
-      drivePathHint?: string | null
-      localPath: string
-      remoteCursor?: string | null
-      excludeRules?: readonly string[]
-    }) => Promise<DriveSyncBindingDto>
     previewBinding: (input: {
       driveItemId: string
       driveItemName: string

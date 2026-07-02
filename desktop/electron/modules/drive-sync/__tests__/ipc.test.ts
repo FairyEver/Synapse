@@ -13,7 +13,7 @@ import { driveSyncIpcModule } from "../ipc"
 describe("driveSyncIpcModule", () => {
   it("registers drive sync channels", () => {
     expect(driveSyncIpcModule.methods.getSnapshot.channel).toBe("synapse:drive-sync:snapshot:get")
-    expect(driveSyncIpcModule.methods.createBinding.channel).toBe("synapse:drive-sync:bindings:create")
+    expect(driveSyncIpcModule.methods).not.toHaveProperty("createBinding")
     expect(driveSyncIpcModule.methods.previewBinding.channel).toBe("synapse:drive-sync:bindings:preview")
     expect(driveSyncIpcModule.methods.createSafeBinding.channel).toBe("synapse:drive-sync:bindings:safe-create")
     expect(driveSyncIpcModule.methods.removeBinding.channel).toBe("synapse:drive-sync:bindings:remove")
