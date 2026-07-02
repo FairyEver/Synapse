@@ -313,6 +313,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await updateBindingStatus(id, "removed")
   }
 
+  async function discardBinding(id: string): Promise<void> {
+    await baselineStore.removeBinding(id)
+    await deps.bindings.remove(id)
+    await reconcileLocalWatcher()
+    await emitChanged()
+  }
+
   async function pauseBinding(id: string): Promise<DriveSyncBindingDto> {
     return updateBindingStatus(id, "paused")
   }
@@ -560,17 +567,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       }
       return await activateBindingAtCurrentRemoteCursor(binding.id)
     } catch (error) {
+      const message = errorMessage(error)
+      const rollbackUnfinishedLocalUpload = input.direction === "local_to_remote" && binding.driveItemId === input.driveItemId
       await recordOperation({
         bindingId: binding.id,
         kind: input.direction === "remote_to_local" ? "download" : "upload",
         status: "error",
-        driveItemId: input.driveItemId,
+        driveItemId: rollbackUnfinishedLocalUpload ? null : binding.driveItemId,
         relativePath: "",
         localPath: input.localPath,
         remotePathHint: input.drivePathHint ?? null,
-        message: errorMessage(error),
+        message,
       })
-      return await updateBindingStatus(binding.id, "error", errorMessage(error))
+      if (rollbackUnfinishedLocalUpload) {
+        await discardBinding(binding.id)
+        throw new Error(message)
+      }
+      return await updateBindingStatus(binding.id, "error", message)
     }
   }
 

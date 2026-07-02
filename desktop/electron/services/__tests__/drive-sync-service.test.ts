@@ -1359,6 +1359,47 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rolls back local-to-remote bindings when the initial upload fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems: vi.fn(async () => ({
+            completed: 0,
+            failed: 1,
+            skipped: 0,
+            message: "quota exceeded",
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: `local:${localPath}`,
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "local_to_remote",
+      })).rejects.toThrow("quota exceeded")
+
+      await expect(harness.bindings.list()).resolves.toEqual([])
+      await expect(harness.operations.list()).resolves.toMatchObject([
+        {
+          bindingId: "drive-sync-binding-1",
+          kind: "upload",
+          status: "error",
+          driveItemId: null,
+          localPath,
+          message: "quota exceeded",
+        },
+      ])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("removes baseline entries when a binding is removed", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
