@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import type { DriveBrowserSnapshotDto, DriveUsageDto } from '@synapse/shared'
+import type { DriveBrowserSnapshotDto, DrivePublicAssetDto, DrivePublicAssetListPageDto, DriveUsageDto } from '@synapse/shared'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { DirectionProvider } from '@/context/direction-provider'
 import { LayoutProvider } from '@/context/layout-provider'
@@ -435,6 +435,32 @@ describe('DriveConsolePage', () => {
     expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
 
+  it('loads more public assets from the next page', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listPublicAssets)
+      .mockResolvedValueOnce(publicAssetPage(
+        [publicAsset({ assetId: 'asset_first', name: 'first.png' })],
+        { hasMore: true, nextOffset: 50, total: 51 },
+      ))
+      .mockResolvedValueOnce(publicAssetPage(
+        [publicAsset({ assetId: 'asset_second', name: 'second.png' })],
+        { offset: 50, hasMore: false, nextOffset: null, total: 51 },
+      ))
+    await render(<DriveConsolePage />)
+
+    await click(tabTrigger('公开素材'))
+    await act(async () => undefined)
+    expect(document.body.textContent).toContain('first.png')
+    expect(document.body.textContent).not.toContain('second.png')
+
+    await click(button('加载更多'))
+
+    expect(driveApi.listPublicAssets).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain('first.png')
+    expect(document.body.textContent).toContain('second.png')
+  })
+
   it('returns from root system subviews to files', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -655,6 +681,38 @@ function usage(): DriveUsageDto {
     usedBytes: '1048576',
     reservedBytes: '0',
     quotaBytes: '5368709120',
+  }
+}
+
+function publicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {
+  return {
+    assetId: 'asset_1',
+    itemId: 'item-1',
+    name: 'logo.png',
+    size: '1024',
+    mimeType: 'image/png',
+    url: 'https://synapse.test/files/asset_1',
+    lifecycleStatus: 'active',
+    storageStatus: 'active',
+    createdAt: '2026-06-29T00:00:00.000Z',
+    updatedAt: '2026-06-29T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function publicAssetPage(
+  items: readonly DrivePublicAssetDto[],
+  page: Partial<DrivePublicAssetListPageDto['page']> & { readonly total?: number } = {},
+): DrivePublicAssetListPageDto {
+  return {
+    items,
+    total: page.total ?? items.length,
+    page: {
+      offset: page.offset ?? 0,
+      limit: page.limit ?? 50,
+      hasMore: page.hasMore ?? false,
+      nextOffset: page.nextOffset ?? null,
+    },
   }
 }
 

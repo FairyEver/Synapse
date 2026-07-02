@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DrivePublicAssetDto } from '@synapse/shared'
+import type { DrivePublicAssetDto, DrivePublicAssetListPageDto } from '@synapse/shared'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,9 @@ import { driveApi } from '@/lib/api'
 
 export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () => Promise<void> }) {
   const [items, setItems] = useState<DrivePublicAssetDto[]>([])
+  const [page, setPage] = useState<DrivePublicAssetListPageDto['page']>({ offset: 0, limit: 50, hasMore: false, nextOffset: null })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [renameTarget, setRenameTarget] = useState<DrivePublicAssetDto | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DrivePublicAssetDto | null>(null)
@@ -24,8 +26,9 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
   const load = async () => {
     setLoading(true)
     try {
-      const page = await driveApi.listPublicAssets({ offset: 0, limit: 50 })
-      setItems([...page.items])
+      const nextPage = await driveApi.listPublicAssets({ offset: 0, limit: 50 })
+      setItems([...nextPage.items])
+      setPage(nextPage.page)
     } catch (error) {
       toast(errorMessage(error, '公开素材加载失败'))
     } finally {
@@ -36,6 +39,20 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
   useEffect(() => {
     void load()
   }, [])
+
+  const loadMore = async () => {
+    if (!page.hasMore || page.nextOffset === null) return
+    setLoadingMore(true)
+    try {
+      const nextPage = await driveApi.listPublicAssets({ offset: page.nextOffset, limit: page.limit })
+      setItems((current) => [...current, ...nextPage.items])
+      setPage(nextPage.page)
+    } catch (error) {
+      toast(errorMessage(error, '公开素材加载失败'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const uploadPublicAsset = async (file: File, target: DrivePublicAssetDto | null) => {
     const prepared = target
@@ -179,6 +196,13 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
               ))}
             </TableBody>
           </Table>
+          {page.hasMore ? (
+            <div className='flex justify-end border-t p-3'>
+              <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={() => { void loadMore() }}>
+                {loadingMore ? '加载中' : '加载更多'}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
