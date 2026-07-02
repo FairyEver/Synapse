@@ -299,6 +299,53 @@ describe("DriveDocumentImageService", () => {
     expect(result.summary.replacedOccurrenceCount).toBe(1)
   })
 
+  it("cleans imported public assets when saving the updated markdown fails", async () => {
+    const saveError = new Error("文件已有新内容。")
+    const harness = createServiceHarness({
+      currentMarkdown: [
+        `![other](https://synapse.test/files/${COLLABORATOR_ASSET_ID})`,
+        "![external](https://example.test/a.png)",
+      ].join("\n"),
+      ownerId: "owner-1",
+      versionId: "ver-1",
+      assetOwners: new Map([[COLLABORATOR_ASSET_ID, "user-2"]]),
+      remoteImages: new Map([[
+        "https://example.test/a.png",
+        { body: Buffer.from([0x89, 0x50, 0x4e, 0x47]), mimeType: "image/png", size: 4n },
+      ]]),
+      saveError,
+    })
+    const auditContext = { ipAddress: "127.0.0.1" }
+
+    await expect(harness.service.importOwnerItemImages({
+      actorUserId: "owner-1",
+      itemId: "item-1",
+      body: {
+        baseVersionId: "ver-1",
+        sources: [
+          { src: `https://synapse.test/files/${COLLABORATOR_ASSET_ID}` },
+          { src: "https://example.test/a.png" },
+        ],
+      },
+      publicAppUrl: PUBLIC_APP_URL,
+      auditContext,
+    })).rejects.toBe(saveError)
+
+    expect(harness.publicAssets.cleanupImportedAsset).toHaveBeenCalledTimes(2)
+    expect(harness.publicAssets.cleanupImportedAsset).toHaveBeenNthCalledWith(
+      1,
+      "owner-1",
+      "asset_copied",
+      auditContext,
+    )
+    expect(harness.publicAssets.cleanupImportedAsset).toHaveBeenNthCalledWith(
+      2,
+      "owner-1",
+      "asset_imported",
+      auditContext,
+    )
+  })
+
   it("keeps the real DriveService owner helper bound to actor-owned documents", async () => {
     const previousSecret = process.env.USER_ACCESS_JWT_SECRET
     process.env.USER_ACCESS_JWT_SECRET = "drive-document-image-service-test-secret"
@@ -387,6 +434,7 @@ function createServiceHarness(options: CreateServiceOptions) {
       url: `${PUBLIC_APP_URL}/files/asset_imported`,
       size: input.body.byteLength.toString(),
     })),
+    cleanupImportedAsset: vi.fn(async () => ({ ok: true as const })),
   }
   const fetcher = {
     fetchImage: vi.fn(async (src: string) => {
@@ -434,10 +482,13 @@ function createDriveMock(options: CreateServiceOptions) {
       markdown: options.currentMarkdown,
     })),
     findPublicAssetOwner: vi.fn(async (assetId: string) => assetOwners.get(assetId) ?? null),
-    updateOwnerFileText: vi.fn(async (_userId: string, _itemId: string, _input: unknown) => ({
-      item: {},
-      version: { id: "ver-2" },
-    })),
+    updateOwnerFileText: vi.fn(async (_userId: string, _itemId: string, _input: unknown) => {
+      if (options.saveError) throw options.saveError
+      return {
+        item: {},
+        version: { id: "ver-2" },
+      }
+    }),
   }
 }
 
@@ -448,6 +499,7 @@ interface CreateServiceOptions {
   readonly assetOwners?: ReadonlyMap<string, string>
   readonly remoteImages?: ReadonlyMap<string, { readonly body: Buffer; readonly mimeType: string; readonly size: bigint }>
   readonly fetchErrors?: ReadonlyMap<string, Error>
+  readonly saveError?: Error
 }
 
 function createDriveItemRecord(input: Partial<ReturnType<typeof createDriveItemRecordBase>> = {}) {

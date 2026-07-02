@@ -322,6 +322,36 @@ describe("DrivePublicAssetService", () => {
     expect(trashed.lifecycleStatus).toBe("trashed")
   })
 
+  it("cleans imported assets by hiding them through the lifecycle service", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+
+    await expect(service.cleanupImportedAsset("user-1", asset.assetId, { ipAddress: "127.0.0.1" }))
+      .resolves.toEqual({ ok: true })
+
+    const current = await prisma.publicAsset.findFirst({ where: { assetId: asset.assetId }, include: { item: true } })
+    expect(current?.lifecycleStatus).toBe(DRIVE_ITEM_LIFECYCLE_STATUS.hidden)
+    expect(current?.item.lifecycleStatus).toBe(DRIVE_ITEM_LIFECYCLE_STATUS.hidden)
+    expect(lifecycle.trashItem).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      itemId: asset.itemId,
+      actorId: "user-1",
+      ipAddress: "127.0.0.1",
+      allowPublicAsset: true,
+    }))
+    expect(lifecycle.hideTrashedItem).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      itemId: asset.itemId,
+      actorId: "user-1",
+      ipAddress: "127.0.0.1",
+      allowPublicAsset: true,
+    }))
+  })
+
   it("renames with caller publicAppUrl while keeping assetId and URL identity", async () => {
     const asset = await seedPublicAsset({
       prisma,
@@ -879,6 +909,7 @@ type LifecycleMemory = {
   readonly forgetUploadSessionCleanup: (sessionId: string) => void
   readonly cleanupUploadSessionState: (sessionId: string) => void
   readonly trashItem: (input: { readonly itemId: string; readonly actorId: string }) => Promise<unknown>
+  readonly hideTrashedItem: (input: { readonly itemId: string; readonly actorId: string }) => Promise<unknown>
   readonly restoreItem: (input: { readonly itemId: string }) => Promise<unknown>
   readonly hideTrashedItemAsAdmin: (input: { readonly itemId: string; readonly actorId: string }) => Promise<unknown>
 }
@@ -913,6 +944,25 @@ function createLifecycleMemory(prisma: ReturnType<typeof createPrismaMemory>): L
           lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
           trashedAt: new Date("2026-06-07T12:00:00.000Z"),
           trashedBy: input.actorId,
+        },
+      })
+      return item
+    }),
+    hideTrashedItem: vi.fn(async (input: { readonly itemId: string; readonly actorId: string }) => {
+      const item = await prisma.driveItem.update({
+        where: { id: input.itemId },
+        data: {
+          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
+          hiddenAt: new Date("2026-06-07T12:00:00.000Z"),
+          hiddenBy: input.actorId,
+        },
+      })
+      await prisma.publicAsset.updateMany({
+        where: { itemId: input.itemId },
+        data: {
+          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
+          hiddenAt: new Date("2026-06-07T12:00:00.000Z"),
+          hiddenBy: input.actorId,
         },
       })
       return item
