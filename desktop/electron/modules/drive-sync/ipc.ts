@@ -42,6 +42,7 @@ const driveSyncConflictSchema = z.object({
   bindingId: z.string().min(1),
   relativePath: z.string(),
   type: z.string().min(1),
+  availableActions: z.array(driveSyncConflictResolutionSchema),
   createdAt: z.string().min(1),
 })
 

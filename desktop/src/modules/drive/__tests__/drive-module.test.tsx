@@ -753,7 +753,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("同步状态：2 个冲突")
     await clickButtonByLabel("处理同步冲突 Docs")
 
-    expect(rowButtonTexts("deleted-spec.md")).toEqual(["确认删除", "保留两份", "稍后"])
+    expect(rowButtonTexts("deleted-spec.md")).toEqual(["确认删除", "稍后"])
     expect(rowButtonTexts("edited-spec.md")).toEqual(["用本地", "用云端", "保留两份", "稍后"])
 
     await clickRowButtonText("deleted-spec.md", "确认删除")
@@ -762,6 +762,30 @@ describe("DriveModule", () => {
       conflictId: "conflict-delete",
       action: "confirm_delete",
     })
+  })
+
+  it("hides keep-both for folder-backed drive sync conflicts", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 1 },
+      {
+        bindings: [createDriveSyncBinding({ status: "conflict" })],
+        conflicts: [{
+          id: "folder-conflict",
+          bindingId: "binding-1",
+          relativePath: "docs",
+          type: "both_modified",
+          availableActions: ["keep_local", "keep_remote", "skip"],
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个冲突")
+    await clickButtonByLabel("处理同步冲突 Docs")
+
+    expect(rowButtonTexts("docs")).toEqual(["用本地", "用云端", "稍后"])
   })
 
   it("keeps the drive sync detail close button inside the dialog header", async () => {
@@ -3504,7 +3528,11 @@ function createDriveTrashPage(
 
 function createDriveSyncSnapshot(
   summary: Partial<DriveSyncSnapshotDto["summary"]> = {},
-  entries: Partial<Pick<DriveSyncSnapshotDto, "bindings" | "conflicts" | "operations">> = {},
+  entries: {
+    readonly bindings?: DriveSyncSnapshotDto["bindings"]
+    readonly conflicts?: readonly DriveSyncConflictFixture[]
+    readonly operations?: DriveSyncSnapshotDto["operations"]
+  } = {},
 ): DriveSyncSnapshotDto {
   const nextSummary = {
     activeBindingCount: 0,
@@ -3515,10 +3543,23 @@ function createDriveSyncSnapshot(
   }
   return {
     bindings: entries.bindings ?? [],
-    conflicts: entries.conflicts ?? [],
+    conflicts: (entries.conflicts ?? []).map((conflict) => ({
+      ...conflict,
+      availableActions: conflict.availableActions ?? defaultConflictActions(conflict.type),
+    })),
     operations: entries.operations ?? [],
     summary: nextSummary,
   }
+}
+
+type DriveSyncConflictFixture =
+  Omit<DriveSyncSnapshotDto["conflicts"][number], "availableActions">
+  & Partial<Pick<DriveSyncSnapshotDto["conflicts"][number], "availableActions">>
+
+function defaultConflictActions(type: string): DriveSyncSnapshotDto["conflicts"][number]["availableActions"] {
+  return type === "delete_vs_modify"
+    ? ["confirm_delete", "skip"]
+    : ["keep_local", "keep_remote", "keep_both", "skip"]
 }
 
 function createDriveSyncBinding(input: Partial<DriveSyncSnapshotDto["bindings"][number]> = {}): DriveSyncSnapshotDto["bindings"][number] {

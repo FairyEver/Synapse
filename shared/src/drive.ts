@@ -215,6 +215,7 @@ export interface DriveSyncConflictDto {
   readonly bindingId: string
   readonly relativePath: string
   readonly type: string
+  readonly availableActions: readonly DriveSyncConflictResolutionAction[]
   readonly createdAt: string
 }
 

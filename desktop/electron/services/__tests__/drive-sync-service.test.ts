@@ -721,6 +721,43 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("exposes keep-both only for file-backed conflicts", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+      deferWatcher: true,
+    })
+
+    const fileConflict = await service.recordConflict({
+      bindingId: binding.id,
+      driveItemId: "remote-spec",
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: "/产品文档/spec.md",
+      type: "both_modified",
+      localSnapshot: { change: { localKind: "file" } },
+      remoteSnapshot: { baseline: { kind: "file" } },
+    })
+    const folderConflict = await service.recordConflict({
+      bindingId: binding.id,
+      driveItemId: "remote-docs",
+      relativePath: "docs",
+      localPath: "/Users/me/docs/docs",
+      remotePathHint: "/产品文档/docs",
+      type: "both_modified",
+      localSnapshot: { change: { localKind: "folder" } },
+      remoteSnapshot: { baseline: { kind: "folder" } },
+    })
+
+    expect(fileConflict.availableActions).toEqual(["keep_local", "keep_remote", "keep_both", "skip"])
+    expect(folderConflict.availableActions).toEqual(["keep_local", "keep_remote", "skip"])
+  })
+
   it("previews and creates a remote file to missing local file binding", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

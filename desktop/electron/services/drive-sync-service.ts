@@ -13,6 +13,7 @@ import type {
   DriveChangeListPageDto,
   DriveSyncBindingDto,
   DriveSyncBindingStatus,
+  DriveSyncConflictResolutionAction,
   DriveSyncOperationDto,
   DriveSyncOperationStatus,
   DriveSyncConflictDto,
@@ -1851,8 +1852,38 @@ function toConflictDto(entry: DriveSyncConflictEntryV1): DriveSyncConflictDto {
     bindingId: entry.bindingId,
     relativePath: entry.relativePath,
     type: entry.type,
+    availableActions: availableConflictActions(entry),
     createdAt: entry.createdAt,
   }
+}
+
+function availableConflictActions(entry: DriveSyncConflictEntryV1): readonly DriveSyncConflictResolutionAction[] {
+  if (entry.type === "delete_vs_modify") return ["confirm_delete", "skip"]
+  const actions: DriveSyncConflictResolutionAction[] = ["keep_local", "keep_remote"]
+  if (isFileBackedConflict(entry)) actions.push("keep_both")
+  actions.push("skip")
+  return actions
+}
+
+function isFileBackedConflict(entry: DriveSyncConflictEntryV1): boolean {
+  return localItemKindForConflict(entry) === "file" && remoteItemKindForConflictEntry(entry) === "file"
+}
+
+function localItemKindForConflict(entry: DriveSyncConflictEntryV1): "file" | "folder" | null {
+  return driveItemKindFromSnapshotRecord(entry.localSnapshot?.change)
+    ?? driveItemKindFromSnapshotRecord(entry.localSnapshot?.baseline)
+}
+
+function remoteItemKindForConflictEntry(entry: DriveSyncConflictEntryV1): "file" | "folder" | null {
+  return driveItemKindFromSnapshotRecord(entry.remoteSnapshot?.change)
+    ?? driveItemKindFromSnapshotRecord(entry.remoteSnapshot?.baseline)
+}
+
+function driveItemKindFromSnapshotRecord(value: unknown): "file" | "folder" | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Record<string, unknown>
+  const kind = record.itemKind ?? record.localKind ?? record.kind
+  return kind === "file" || kind === "folder" ? kind : null
 }
 
 function normalizeRequiredString(value: string, message: string): string {

@@ -781,22 +781,28 @@ function DriveSyncConflictTable({
       <TableBody>
         {conflicts.map((conflict) => {
           const isPending = isBindingActionPending(conflict.bindingId)
+          const availableActions = new Set(conflict.availableActions)
           return (
             <TableRow key={conflict.id}>
               <TableCell className="truncate">{conflict.relativePath || "/"}</TableCell>
               <TableCell>{formatConflictType(conflict.type)}</TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
-                  {conflict.type === "delete_vs_modify" ? (
+                  {availableActions.has("confirm_delete") ? (
                     <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "confirm_delete" }), "已确认删除") }}>确认删除</Button>
-                  ) : (
-                    <>
-                      <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
-                      <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
-                    </>
-                  )}
-                  <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_both" }), "已保留两份") }}>保留两份</Button>
-                  <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "skip" }), "稍后处理") }}>稍后</Button>
+                  ) : null}
+                  {availableActions.has("keep_local") ? (
+                    <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
+                  ) : null}
+                  {availableActions.has("keep_remote") ? (
+                    <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
+                  ) : null}
+                  {availableActions.has("keep_both") ? (
+                    <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_both" }), "已保留两份") }}>保留两份</Button>
+                  ) : null}
+                  {availableActions.has("skip") ? (
+                    <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "skip" }), "稍后处理") }}>稍后</Button>
+                  ) : null}
                 </div>
               </TableCell>
             </TableRow>
