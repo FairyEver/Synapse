@@ -277,6 +277,14 @@ Input:
 
 - `siteId` required.
 
+### `app_drive_site_enable`
+
+Restore public access to a disabled site.
+
+Input:
+
+- `siteId` required.
+
 ### `app_drive_site_delete`
 
 Delete a published site and make its `/sites/<siteId>/` URL inaccessible.

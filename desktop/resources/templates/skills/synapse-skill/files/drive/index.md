@@ -35,6 +35,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_site_list`
 - `app_drive_site_update_access`
 - `app_drive_site_disable`
+- `app_drive_site_enable`
 - `app_drive_site_delete`
 - `app_drive_site_republish`
 - `app_drive_usage_get`
@@ -96,7 +97,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
    - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Do not provide a password value; Synapse generates it and returns it in the result.
-   - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.
+   - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_enable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.
    - Use the `app_drive_site_create` or `app_drive_site_update_access` result when the user needs a newly generated site password. `app_drive_site_list` lists existing sites without returning passwords.
 12. If a folder needs to exist first, call `app_drive_folder_create`, then pass the returned folder id as `parentId`.
 13. To organize the user's Drive, call `app_drive_stats_get` and `app_drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
@@ -140,6 +141,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "重新发布站点": call `app_drive_site_republish`.
 - "管理站点": call `app_drive_site_list`.
 - "停用站点": call `app_drive_site_disable`.
+- "启用站点": call `app_drive_site_enable`.
 - "删除站点": call `app_drive_site_delete`.
 - "把这个目录传到云盘": call `app_drive_folder_upload`.
 - "打开/预览这个文件": call `app_drive_item_preview_get`.

@@ -35,6 +35,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
   { id: "app.drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
   { id: "app.drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
+  { id: "app.drive.site.enable" as CapabilityId, title: "Enable Drive site", description: "Restore public access to a disabled Drive-published site.", mutates: true },
   { id: "app.drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
   { id: "app.drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
   { id: "app.drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
@@ -451,6 +452,17 @@ export function buildDriveTools(): McpToolDefinition[] {
     {
       name: "drive_site_disable",
       description: "Disable public access to a Drive-published site while keeping its record and deployment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+        },
+        required: ["siteId"],
+      },
+    },
+    {
+      name: "drive_site_enable",
+      description: "Restore public access to a disabled Drive-published site.",
       inputSchema: {
         type: "object",
         properties: {

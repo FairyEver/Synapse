@@ -74,6 +74,7 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_site_list",
       "drive_site_update_access",
       "drive_site_disable",
+      "drive_site_enable",
       "drive_site_delete",
       "drive_site_republish",
       "drive_usage_get",
@@ -455,12 +456,14 @@ describe("createDriveCapabilityDispatcher", () => {
     const listDriveSites = vi.fn(async () => listPage)
     const updateDriveSiteAccess = vi.fn(async () => driveSite({ siteId: "site_public", accessMode: "password" }))
     const disableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "disabled" }))
+    const enableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "active" }))
     const deleteDriveSite = vi.fn(async () => ({ ok: true as const }))
     const republishDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
     const accountService = createAccountService({
       listDriveSites,
       updateDriveSiteAccess,
       disableDriveSite,
+      enableDriveSite,
       deleteDriveSite,
       republishDriveSite,
     })
@@ -497,6 +500,12 @@ describe("createDriveCapabilityDispatcher", () => {
       ok: true,
       data: driveSite({ siteId: "site_public", status: "disabled" }),
     })
+    await expect(dispatcher.dispatch("drive.site.enable", {
+      siteId: "site_public",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveSite({ siteId: "site_public", status: "active" }),
+    })
     await expect(dispatcher.dispatch("drive.site.delete", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
@@ -515,6 +524,7 @@ describe("createDriveCapabilityDispatcher", () => {
       expiresIn: "7d",
     })
     expect(disableDriveSite).toHaveBeenCalledWith("site_public")
+    expect(enableDriveSite).toHaveBeenCalledWith("site_public")
     expect(deleteDriveSite).toHaveBeenCalledWith("site_public")
     expect(republishDriveSite).toHaveBeenCalledWith({ siteId: "site_public", entryPath: "pages/home.html" })
   })
@@ -1614,6 +1624,7 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     listDriveSites: vi.fn(),
     updateDriveSiteAccess: vi.fn(),
     disableDriveSite: vi.fn(),
+    enableDriveSite: vi.fn(),
     deleteDriveSite: vi.fn(),
     republishDriveSite: vi.fn(),
     getDriveUsage: vi.fn(),

@@ -90,6 +90,7 @@ type DriveAccountServicePort = {
   readonly listDriveSites: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
   readonly updateDriveSiteAccess: (input: { readonly siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
   readonly disableDriveSite: (siteId: string) => Promise<DriveSiteDto>
+  readonly enableDriveSite: (siteId: string) => Promise<DriveSiteDto>
   readonly deleteDriveSite: (siteId: string) => Promise<{ ok: true }>
   readonly republishDriveSite: (input: { readonly siteId: string; readonly entryPath?: string | null }) => Promise<DriveSiteDto>
   readonly getDriveItemPreview: (input: {
@@ -392,6 +393,11 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.disableDriveSite(requireString(params, "siteId")),
+          }))
+        case "drive.site.enable":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.enableDriveSite(requireString(params, "siteId")),
           }))
         case "drive.site.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
