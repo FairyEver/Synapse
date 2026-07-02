@@ -1096,7 +1096,7 @@ export class DrivePublicController {
         response.redirect(302, cleanPasswordUrl(request))
         return
       }
-      if (relativePath === "" || isDriveSiteHtmlPath(relativePath)) {
+      if (isDriveSitePasswordPagePath(relativePath)) {
         response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
         return
       }
@@ -1108,7 +1108,7 @@ export class DrivePublicController {
       relativePath,
     })
     if (access.status === "password_required") {
-      if (relativePath === "" || isDriveSiteHtmlPath(relativePath)) {
+      if (isDriveSitePasswordPagePath(relativePath)) {
         response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
         return
       }
@@ -2213,6 +2213,10 @@ ${renderDrivePublicPageCss()}
 </main>
 </body>
 </html>`
+}
+
+function isDriveSitePasswordPagePath(relativePath: string): boolean {
+  return relativePath === "" || relativePath.endsWith("/") || isDriveSiteHtmlPath(relativePath)
 }
 
 function renderDrivePublicPageCss(): string {

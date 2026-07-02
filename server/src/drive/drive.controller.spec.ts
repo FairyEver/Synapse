@@ -469,6 +469,18 @@ describe("DriveController", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("renders the password page for protected static site directory paths", async () => {
+    sites.resolvePublicSite.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer()).get("/sites/site_secret/docs/").expect(200)
+
+    expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_secret", { cookie: null, relativePath: "docs/" })
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/sites/site_secret/docs/"')
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
   it("calls owner browser APIs with the authenticated user and surface", async () => {
     const snapshot = createBrowserSnapshot()
     const moduleRef = await Test.createTestingModule({
