@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -104,36 +105,38 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='sm:max-w-3xl'>
-          <DialogHeader className='text-start'>
-            <DialogTitle className='pr-8'>历史版本</DialogTitle>
-          </DialogHeader>
-          <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
-            <DriveFileVersionContent
-              itemId={itemId}
-              versions={versions}
-              loading={versionsQuery.isLoading}
-              error={versions.length === 0 && versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
-              loadMoreError={
-                versions.length > 0 && versionsQuery.isFetchNextPageError && versionsQuery.error instanceof Error
-                  ? versionsQuery.error.message
-                  : null
-              }
-              pinningVersionId={pinMutation.variables?.versionId ?? null}
-              pinning={pinMutation.isPending}
-              hasMore={versionsQuery.hasNextPage}
-              loadingMore={versionsQuery.isFetchingNextPage}
-              onRetry={() => {
-                void versionsQuery.refetch()
-              }}
-              onLoadMore={() => {
-                void versionsQuery.fetchNextPage()
-              }}
-              onPin={(version) => pinMutation.mutate({ versionId: version.id, isPinned: !version.isPinned })}
-              onRestore={(version) => setConfirmTarget({ action: 'restore', version })}
-              onDelete={(version) => setConfirmTarget({ action: 'delete', version })}
-            />
-          </div>
+        <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-3xl' showCloseButton={false} aria-describedby={undefined}>
+          <DialogFrame>
+            <DialogFrameHeader title='历史版本' bordered />
+            <DialogFrameBody className='px-6 py-4'>
+              <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
+                <DriveFileVersionContent
+                  itemId={itemId}
+                  versions={versions}
+                  loading={versionsQuery.isLoading}
+                  error={versions.length === 0 && versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
+                  loadMoreError={
+                    versions.length > 0 && versionsQuery.isFetchNextPageError && versionsQuery.error instanceof Error
+                      ? versionsQuery.error.message
+                      : null
+                  }
+                  pinningVersionId={pinMutation.variables?.versionId ?? null}
+                  pinning={pinMutation.isPending}
+                  hasMore={versionsQuery.hasNextPage}
+                  loadingMore={versionsQuery.isFetchingNextPage}
+                  onRetry={() => {
+                    void versionsQuery.refetch()
+                  }}
+                  onLoadMore={() => {
+                    void versionsQuery.fetchNextPage()
+                  }}
+                  onPin={(version) => pinMutation.mutate({ versionId: version.id, isPinned: !version.isPinned })}
+                  onRestore={(version) => setConfirmTarget({ action: 'restore', version })}
+                  onDelete={(version) => setConfirmTarget({ action: 'delete', version })}
+                />
+              </div>
+            </DialogFrameBody>
+          </DialogFrame>
         </DialogContent>
       </Dialog>
       {confirmTarget ? (

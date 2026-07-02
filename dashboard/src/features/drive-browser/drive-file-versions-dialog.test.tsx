@@ -45,16 +45,19 @@ afterEach(() => {
 })
 
 describe('DriveFileVersionContent', () => {
-  it('uses the shadcn-admin scrollable dialog body pattern', () => {
+  it('uses the shared frame structure for the scrollable dialog body', () => {
     const source = readDialogSource()
-    const contentClass = source.match(/<DialogContent className='([^']+)'/)?.[1]?.split(/\s+/u) ?? []
 
-    expect(contentClass).toEqual(['sm:max-w-3xl'])
+    expect(source).toContain('DialogFrame')
+    expect(source).toContain('DialogFrameHeader')
+    expect(source).toContain('DialogFrameBody')
+    expect(source).toContain("showCloseButton={false}")
+    expect(source).toContain("aria-describedby={undefined}")
+    expect(source).toContain("title='历史版本'")
     expect(source).toContain("className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'")
+    expect(source).not.toContain("DialogTitle className='pr-8'")
+    expect(source).not.toContain("DialogHeader className='text-start'")
     expect(source).not.toContain("from '@/components/ui/scroll-area'")
-    expect(contentClass).not.toContain('flex')
-    expect(contentClass).not.toContain('overflow-hidden')
-    expect(contentClass).not.toContain('sm:max-w-2xl')
   })
 
   it('uses the version page cursor for additional history pages', () => {
