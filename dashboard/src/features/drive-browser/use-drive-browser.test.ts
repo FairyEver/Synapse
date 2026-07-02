@@ -412,6 +412,84 @@ describe('toDriveBrowserQueryKey', () => {
     expect(readySnapshot?.preview?.text).toBe('<p>updated</p>')
   })
 
+  it('invalidates stale rendered markdown when the follow-up reload fails', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    vi.mocked(driveBrowserApi.updateOwnerText).mockReset()
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        kind: 'markdown',
+        text: '# Old',
+        html: '<h1 id="old">Old</h1>',
+        outline: [
+          {
+            id: 'old',
+            text: 'Old',
+            depth: 1,
+            children: [],
+          },
+        ],
+        truncated: false,
+        imageUrl: null,
+        visitUrl: null,
+      },
+      edit: {
+        canEdit: true,
+        editorKind: 'mdxeditor',
+        currentVersionId: 'version-1',
+        maxInlineEditBytes: '1024',
+        reason: null,
+      },
+    })
+    const updateResult = createTextUpdateResult({
+      item: {
+        name: 'notes.md',
+        size: '7',
+        mimeType: 'text/markdown',
+      },
+      version: {
+        size: '7',
+        mimeType: 'text/markdown',
+      },
+    })
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(snapshot)
+      .mockRejectedValueOnce(new Error('刷新失败'))
+    vi.mocked(driveBrowserApi.updateOwnerText).mockResolvedValueOnce(updateResult)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'item-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      await hook.result.current.saveText({
+        text: '# New',
+        baseVersionId: 'version-1',
+      })
+    })
+
+    const readySnapshot = hook.result.current.status === 'ready' ? hook.result.current.snapshot : null
+    expect(readySnapshot?.edit?.currentVersionId).toBe('version-2')
+    expect(readySnapshot?.preview?.text).toBe('# New')
+    expect(readySnapshot?.preview?.html).toBeNull()
+    expect(readySnapshot?.preview?.outline).toBeNull()
+  })
+
   it('does not reuse unlocked share snapshots after share route changes', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },
@@ -550,7 +628,10 @@ function baseCurrent(): DriveBrowserSnapshotDto['current'] {
   }
 }
 
-function createTextUpdateResult(): DriveFileContentUpdateResult {
+function createTextUpdateResult(overrides: {
+  readonly item?: Partial<DriveFileContentUpdateResult['item']>
+  readonly version?: Partial<DriveFileContentUpdateResult['version']>
+} = {}): DriveFileContentUpdateResult {
   const now = '2026-06-13T00:00:00.000Z'
   return {
     item: {
@@ -564,6 +645,7 @@ function createTextUpdateResult(): DriveFileContentUpdateResult {
       shared: false,
       createdAt: now,
       updatedAt: now,
+      ...overrides.item,
     },
     version: {
       id: 'version-2',
@@ -578,6 +660,7 @@ function createTextUpdateResult(): DriveFileContentUpdateResult {
       restoredFromVersionId: null,
       createdAt: now,
       createdBy: null,
+      ...overrides.version,
     },
   }
 }

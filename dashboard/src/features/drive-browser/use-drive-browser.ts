@@ -258,10 +258,17 @@ function snapshotAfterTextSave(
         }
       : snapshot.edit,
     preview: snapshot.preview && isEditableTextPreviewKind(snapshot.preview.kind)
-      ? {
-          ...snapshot.preview,
-          text,
-        }
+      ? snapshot.preview.kind === 'markdown'
+        ? {
+            ...snapshot.preview,
+            text,
+            html: null,
+            outline: null,
+          }
+        : {
+            ...snapshot.preview,
+            text,
+          }
       : snapshot.preview,
   }
 }
