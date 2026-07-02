@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
+  type DriveBrowserChildrenPageDto,
   type DriveShareAccessMode,
   type DriveShareListItemDto,
 } from '@synapse/shared'
@@ -24,6 +25,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { driveApi } from '@/lib/api'
 
 type ShareFilter = 'file' | 'folder'
+const DRIVE_SHARE_LIST_PAGE_LIMIT = 50
 
 export function DriveShareSettingsDialog({
   itemName,
@@ -212,15 +214,17 @@ export function DriveSharesDialog({
   readonly onOpenChange: (open: boolean) => void
 }) {
   const [items, setItems] = useState<DriveShareListItemDto[]>([])
+  const [page, setPage] = useState<DriveBrowserChildrenPageDto | null>(null)
   const [filter, setFilter] = useState<ShareFilter>('file')
   const [loading, setLoading] = useState(false)
   const [actionShareId, setActionShareId] = useState<string | null>(null)
 
-  const load = async () => {
+  const load = async ({ offset = 0, append = false }: { readonly offset?: number; readonly append?: boolean } = {}) => {
     setLoading(true)
     try {
-      const page = await driveApi.listShares({ offset: 0, limit: 50 })
-      setItems([...page.items])
+      const nextPage = await driveApi.listShares({ offset, limit: DRIVE_SHARE_LIST_PAGE_LIMIT })
+      setItems((current) => append ? [...current, ...nextPage.items] : [...nextPage.items])
+      setPage(nextPage.page)
     } catch (error) {
       toast(errorMessage(error, '分享列表加载失败'))
     } finally {
@@ -246,6 +250,11 @@ export function DriveSharesDialog({
   }
 
   const visible = items.filter((item) => item.itemType === filter)
+  const canLoadMore = Boolean(page?.hasMore && page.nextOffset !== null)
+  const loadMore = async () => {
+    if (loading || !canLoadMore || page?.nextOffset === null || page?.nextOffset === undefined) return
+    await load({ offset: page.nextOffset, append: true })
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='sm:max-w-3xl' aria-describedby={undefined}>
@@ -259,8 +268,8 @@ export function DriveSharesDialog({
           </TabsList>
         </Tabs>
         <div className='grid gap-2'>
-          {loading ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
-          {!loading && visible.length === 0 ? <div className='text-sm text-muted-foreground'>暂无分享</div> : null}
+          {loading && items.length === 0 ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
+          {!loading && visible.length === 0 && !canLoadMore ? <div className='text-sm text-muted-foreground'>暂无分享</div> : null}
           {visible.map((item) => (
             <div key={item.id} className='flex items-center justify-between gap-3 border-b py-2'>
               <div className='min-w-0 flex-1'>
@@ -280,6 +289,13 @@ export function DriveSharesDialog({
               </Button>
             </div>
           ))}
+          {canLoadMore ? (
+            <div className='flex justify-center pt-2'>
+              <Button type='button' variant='outline' size='sm' disabled={loading} onClick={() => { void loadMore() }}>
+                {loading ? '加载中' : '加载更多'}
+              </Button>
+            </div>
+          ) : null}
         </div>
         <DialogFooter>
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>关闭</Button>

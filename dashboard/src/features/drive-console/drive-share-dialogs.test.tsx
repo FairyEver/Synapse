@@ -4,6 +4,7 @@ import { act } from 'react'
 import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { DriveShareListItemDto } from '@synapse/shared'
 import { toast } from 'sonner'
 import { driveApi } from '@/lib/api'
 import {
@@ -149,6 +150,32 @@ describe('DriveSharesDialog', () => {
 
     expect(toast).toHaveBeenCalledWith('取消失败')
   })
+
+  it('loads more share pages before showing an empty filtered tab', async () => {
+    vi.mocked(driveApi.listShares)
+      .mockResolvedValueOnce({
+        items: [shareItem({ id: 'share-folder', itemName: '资料夹', itemType: 'folder' })],
+        page: { offset: 0, limit: 50, hasMore: true, nextOffset: 50 },
+      })
+      .mockResolvedValueOnce({
+        items: [shareItem({ id: 'share-file', itemName: '后续文件.md', itemType: 'file' })],
+        page: { offset: 50, limit: 50, hasMore: false, nextOffset: null },
+      })
+
+    render(<DriveSharesDialog open onOpenChange={() => undefined} onChanged={async () => undefined} />)
+    await flush()
+
+    expect(document.body.textContent).not.toContain('暂无分享')
+    expect(document.body.textContent).toContain('加载更多')
+
+    await click(textButton('加载更多'))
+    await flush()
+
+    expect(driveApi.listShares).toHaveBeenNthCalledWith(1, { offset: 0, limit: 50 })
+    expect(driveApi.listShares).toHaveBeenNthCalledWith(2, { offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain('后续文件.md')
+    expect(document.body.textContent).not.toContain('加载更多')
+  })
 })
 
 function render(element: ReactElement) {
@@ -172,4 +199,24 @@ async function click(element: HTMLElement) {
   await act(async () => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function shareItem(overrides: Partial<DriveShareListItemDto> = {}): DriveShareListItemDto {
+  return {
+    id: 'share-db-id',
+    shareId: 'shr_1',
+    itemId: 'item-1',
+    itemName: 'notes.md',
+    itemType: 'file',
+    sourceDeleted: false,
+    url: 'https://example.com/share/shr_1',
+    urlWithPassword: 'https://example.com/share/shr_1?p=abc',
+    passwordEnabled: true,
+    password: 'abc',
+    expiresAt: null,
+    accessMode: 'link_read',
+    editorEmails: [],
+    createdAt: '2026-06-29T00:00:00.000Z',
+    ...overrides,
+  }
 }
