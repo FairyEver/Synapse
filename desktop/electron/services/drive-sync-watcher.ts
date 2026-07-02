@@ -30,6 +30,11 @@ export interface DriveSyncWatcherDeps {
     readonly localPath: string
     readonly error: unknown
   }) => void | Promise<void>
+  readonly onFlushError?: (input: {
+    readonly bindingId: string
+    readonly changes: readonly DriveSyncLocalChange[]
+    readonly error: unknown
+  }) => void | Promise<void>
   readonly debounceMs?: number
   readonly watch?: DriveSyncWatchFactory
 }
@@ -187,12 +192,15 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const byPath = pending.get(binding.id) ?? new Map<string, DriveSyncLocalChange>()
     byPath.set(relativePath, localChange(binding.id, relativePath, kind, localPath, localKind))
     pending.set(binding.id, byPath)
+    scheduleFlush(binding.id)
+  }
 
-    const existingTimer = timers.get(binding.id)
+  function scheduleFlush(bindingId: string): void {
+    const existingTimer = timers.get(bindingId)
     if (existingTimer) clearTimeout(existingTimer)
-    timers.set(binding.id, setTimeout(() => {
-      timers.delete(binding.id)
-      void flush(binding.id)
+    timers.set(bindingId, setTimeout(() => {
+      timers.delete(bindingId)
+      void flush(bindingId)
     }, debounceMs))
   }
 
@@ -200,7 +208,28 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const byPath = pending.get(bindingId)
     if (!byPath || byPath.size === 0) return
     pending.delete(bindingId)
-    await deps.onChanges([...byPath.values()].sort(compareChanges))
+    const changes = [...byPath.values()].sort(compareChanges)
+    try {
+      await deps.onChanges(changes)
+    } catch (error) {
+      requeueChanges(bindingId, changes)
+      reportFlushError(bindingId, changes, error)
+      scheduleFlush(bindingId)
+    }
+  }
+
+  function requeueChanges(bindingId: string, changes: readonly DriveSyncLocalChange[]): void {
+    const byPath = pending.get(bindingId) ?? new Map<string, DriveSyncLocalChange>()
+    for (const change of changes) byPath.set(change.relativePath, change)
+    pending.set(bindingId, byPath)
+  }
+
+  function reportFlushError(bindingId: string, changes: readonly DriveSyncLocalChange[], error: unknown): void {
+    void Promise.resolve(deps.onFlushError?.({
+      bindingId,
+      changes,
+      error,
+    })).catch(() => undefined)
   }
 
   function consumeSelfWrite(bindingId: string, relativePath: string): boolean {

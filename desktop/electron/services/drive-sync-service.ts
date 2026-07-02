@@ -184,6 +184,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const baselineStore = createDriveSyncBaselineStore({ baseline: deps.baseline, now: deps.now })
   const localWatcher = createDriveSyncWatcher({
     onChanges: handleLocalChanges,
+    onFlushError: ({ changes, error }) => {
+      void recordLocalChangeFlushError(changes, error)
+    },
     onError: ({ bindingId, error }) => {
       void updateBindingStatus(bindingId, "error", `本地路径监听失败：${errorMessage(error)}`)
     },
@@ -1228,6 +1231,22 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       })
       await recordPlannedConflicts(plan.conflicts)
       await executePlannedOperations(plan.operations)
+    }
+  }
+
+  async function recordLocalChangeFlushError(changes: readonly DriveSyncLocalChange[], error: unknown): Promise<void> {
+    const message = `本地变更处理失败，稍后重试：${errorMessage(error)}`
+    for (const change of changes) {
+      await recordOperation({
+        bindingId: change.bindingId,
+        kind: change.kind === "deleted" ? "delete_remote" : "upload",
+        status: "retry_wait",
+        driveItemId: null,
+        relativePath: change.relativePath,
+        localPath: change.localPath,
+        remotePathHint: null,
+        message,
+      })
     }
   }
 

@@ -111,6 +111,42 @@ describe("drive sync watcher", () => {
     ]])
   })
 
+  it("requeues local changes when flush handling fails", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const errors: unknown[] = []
+    const fakeWatch = createFakeWatch()
+    let attempts = 0
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => {
+        changes.push(batch)
+        attempts += 1
+        if (attempts === 1) throw new Error("temporary failure")
+      },
+      onFlushError: (input) => { errors.push(input) },
+    })
+    watcher.reconcile([binding({ localPath: tempDir })])
+
+    await writeFile(path.join(tempDir, "notes.md"), "hello", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(changes).toHaveLength(1)
+    expect(errors).toEqual([expect.objectContaining({
+      bindingId: "binding-1",
+      changes: [expect.objectContaining({ relativePath: "notes.md" })],
+      error: expect.any(Error),
+    })])
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(changes).toHaveLength(2)
+    expect(changes[1]).toEqual([
+      expect.objectContaining({ relativePath: "notes.md", kind: "created" }),
+    ])
+  })
+
   it("reports watcher startup failures without emitting root deletes", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
     const errors: unknown[] = []
