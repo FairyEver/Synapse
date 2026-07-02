@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import type {
   DriveBrowserEditDto,
   DriveDocumentImageImportResult,
@@ -50,7 +50,12 @@ export function useDriveMarkdownImageSources({
   readonly toolbarItem: DriveRendererToolbarItem | null
   readonly panel: ReactNode
 } {
-  const [sources, setSources] = useState<DriveDocumentImageSourcesDto | null>(null)
+  const sourceCacheKey = useMemo(
+    () => driveMarkdownImageSourceCacheKey(context, edit?.currentVersionId ?? null),
+    [context, edit?.currentVersionId]
+  )
+  const [scanResult, setScanResult] = useState<{ readonly key: string; readonly sources: DriveDocumentImageSourcesDto } | null>(null)
+  const sources = scanResult?.key === sourceCacheKey ? scanResult.sources : null
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -58,29 +63,24 @@ export function useDriveMarkdownImageSources({
   const [importFailures, setImportFailures] = useState<readonly DriveDocumentImageImportFailure[]>([])
   const currentVersionId = edit?.currentVersionId ?? sources?.versionId ?? null
   const importableCount = sources?.summary.importable ?? 0
-  const visibleSourceCount = sources?.summary.total ?? 0
   const canImport = Boolean(sources?.canImport && currentVersionId && editContext && !disabled)
 
   const scan = useCallback(async () => {
-    if (!context || !editContext) {
-      setSources(null)
+    if (!context || !editContext || !sourceCacheKey) {
+      setScanResult(null)
       return
     }
     setLoading(true)
     setError(null)
     setImportFailures([])
     try {
-      setSources(await scanImageSources(context))
+      setScanResult({ key: sourceCacheKey, sources: await scanImageSources(context) })
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : '图片来源加载失败。')
     } finally {
       setLoading(false)
     }
-  }, [context, editContext])
-
-  useEffect(() => {
-    void scan()
-  }, [scan])
+  }, [context, editContext, sourceCacheKey])
 
   const importSources = useCallback(async (srcValues: readonly string[]) => {
     if (!context || !currentVersionId || !editContext || srcValues.length === 0 || disabled) return
@@ -108,13 +108,18 @@ export function useDriveMarkdownImageSources({
   }, [context, currentVersionId, disabled, editContext, scan])
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) setImportFailures([])
-    setOpen(nextOpen)
-  }, [])
+    if (!nextOpen) {
+      setImportFailures([])
+      setOpen(false)
+      return
+    }
+    setOpen(true)
+    if (!sources && !loading && !disabled) void scan()
+  }, [disabled, loading, scan, sources])
 
   const toolbarItem = useMemo<DriveRendererToolbarItem | null>(() => {
-    if (!context || visibleSourceCount === 0) return null
-    const count = importableCount > 0 ? ` ${importableCount}` : ''
+    if (!context || !editContext) return null
+    const count = sources && importableCount > 0 ? ` ${importableCount}` : ''
     return {
       kind: 'button',
       id: 'markdown-image-sources',
@@ -122,9 +127,9 @@ export function useDriveMarkdownImageSources({
       icon: Image,
       variant: 'outline',
       disabled: disabled || loading,
-      onClick: () => setOpen(true),
+      onClick: () => handleOpenChange(true),
     }
-  }, [context, disabled, importableCount, loading, visibleSourceCount])
+  }, [context, disabled, editContext, handleOpenChange, importableCount, loading, sources])
 
   return {
     toolbarItem,
@@ -148,6 +153,15 @@ export function useDriveMarkdownImageSources({
 async function scanImageSources(context: DriveMarkdownImageSourceContext): Promise<DriveDocumentImageSourcesDto> {
   if (context.context === 'owner') return driveBrowserApi.scanOwnerImageSources(context.itemId)
   return driveBrowserApi.scanShareImageSources(context.shareId, context.itemId)
+}
+
+function driveMarkdownImageSourceCacheKey(
+  context: DriveMarkdownImageSourceContext | undefined,
+  versionId: string | null,
+): string | null {
+  if (!context) return null
+  if (context.context === 'owner') return `owner:${context.itemId}:${versionId ?? ''}`
+  return `share:${context.shareId}:${context.itemId ?? ''}:${versionId ?? ''}`
 }
 
 async function importImageSources(

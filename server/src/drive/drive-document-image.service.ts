@@ -15,6 +15,8 @@ import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveService } from "./drive.service"
 
+const DRIVE_DOCUMENT_IMAGE_SCAN_MAX_SOURCES = DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES
+
 export interface DriveMarkdownImageDocument {
   readonly itemId: string
   readonly ownerId: string
@@ -135,7 +137,9 @@ export class DriveDocumentImageService {
     readonly actorUserId: string
   }): Promise<DriveDocumentImageSourcesDto> {
     const sources: DriveDocumentImageSource[] = []
-    for (const image of extractDriveMarkdownImages(input.document.markdown)) {
+    const images = extractDriveMarkdownImages(input.document.markdown)
+      .slice(0, DRIVE_DOCUMENT_IMAGE_SCAN_MAX_SOURCES)
+    for (const image of images) {
       sources.push(await this.classifySource({
         source: image,
         documentOwnerId: input.document.ownerId,

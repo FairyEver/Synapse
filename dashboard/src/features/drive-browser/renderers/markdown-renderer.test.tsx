@@ -651,7 +651,7 @@ describe('DriveMarkdownRenderer', () => {
 
   it('registers image source action and imports owner markdown images', async () => {
     const reload = vi.fn(async () => ({} as never))
-    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
       canImport: true,
       sources: [
         imageSource({
@@ -664,11 +664,12 @@ describe('DriveMarkdownRenderer', () => {
     vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
 
     renderMarkdown({ editContext: { reload, reloading: false, saveText: vi.fn(), savingText: false } })
-    await act(async () => {
-      await Promise.resolve()
-    })
 
-    await click(buttonWithText('图片来源 1'))
+    expect(scanImages).not.toHaveBeenCalled()
+
+    await click(buttonWithText('图片来源'))
+
+    expect(scanImages).toHaveBeenCalledWith('item-1')
     await click(buttonWithText('转存全部'))
 
     expect(driveBrowserApi.importOwnerImageSources).toHaveBeenCalledWith('item-1', {
@@ -680,7 +681,7 @@ describe('DriveMarkdownRenderer', () => {
 
   it('keeps image source dialog open when image import partially fails', async () => {
     const reload = vi.fn(async () => ({} as never))
-    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
       canImport: true,
       sources: [
         imageSource({
@@ -717,11 +718,11 @@ describe('DriveMarkdownRenderer', () => {
     }))
 
     renderMarkdown({ editContext: { reload, reloading: false, saveText: vi.fn(), savingText: false } })
-    await act(async () => {
-      await Promise.resolve()
-    })
 
-    await click(buttonWithText('图片来源 2'))
+    expect(scanImages).not.toHaveBeenCalled()
+
+    await click(buttonWithText('图片来源'))
+    expect(scanImages).toHaveBeenCalledWith('item-1')
     await click(buttonWithText('转存全部'))
     await act(async () => {
       await Promise.resolve()
@@ -732,6 +733,29 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('https://example.test/missing.png')
     expect(document.body.textContent).toContain('图片无法访问。')
     expect(buttonWithText('转存全部')).not.toBeNull()
+  })
+
+  it('rescans image sources after the markdown version changes', async () => {
+    const editContext = { reload: vi.fn(async () => ({} as never)), reloading: false, saveText: vi.fn(), savingText: false }
+    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources')
+      .mockResolvedValueOnce(imageSources({
+        canImport: true,
+        sources: [imageSource({ id: 'source-v1', src: 'https://example.test/v1.png', kind: 'external' })],
+      }))
+      .mockResolvedValueOnce(imageSources({
+        canImport: true,
+        sources: [imageSource({ id: 'source-v2', src: 'https://example.test/v2.png', kind: 'external' })],
+      }))
+    const { rerender } = renderMarkdown({ edit: editable({ currentVersionId: 'version-1' }), editContext })
+
+    await click(imageSourceToolbarButton())
+    expect(scanImages).toHaveBeenCalledTimes(1)
+    await click(dialogCloseButton())
+
+    rerender({ edit: editable({ currentVersionId: 'version-2' }) })
+    await click(imageSourceToolbarButton())
+
+    expect(scanImages).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -760,20 +784,31 @@ function renderMarkdown({
   })
   document.body.append(host)
   root = createRoot(host)
-  act(() => {
+  const initialInput = { currentItem, previewData, edit, annotationContext, editContext }
+  const render = (input: typeof initialInput) => {
     root?.render(
       <DriveRendererToolbarProvider>
         <ToolbarHost />
         <DriveMarkdownRenderer
-          current={currentItem}
-          preview={previewData}
-          edit={edit}
-          annotationContext={annotationContext}
-          editContext={editContext}
+          current={input.currentItem}
+          preview={input.previewData}
+          edit={input.edit}
+          annotationContext={input.annotationContext}
+          editContext={input.editContext}
         />
       </DriveRendererToolbarProvider>
     )
+  }
+  act(() => {
+    render(initialInput)
   })
+  return {
+    rerender: (overrides: Partial<typeof initialInput>) => {
+      act(() => {
+        render({ ...initialInput, ...overrides })
+      })
+    },
+  }
 }
 
 function ToolbarHost() {
@@ -785,13 +820,14 @@ function ToolbarHost() {
   )
 }
 
-function editable() {
+function editable(overrides: Partial<DriveBrowserEditDto> = {}) {
   return {
     canEdit: true,
     editorKind: 'text' as const,
     currentVersionId: 'version-1',
     maxInlineEditBytes: '1024',
     reason: null,
+    ...overrides,
   }
 }
 
@@ -983,6 +1019,19 @@ function queryButtonWithText(text: string) {
 function buttonByLabel(label: string) {
   const button = document.querySelector(`button[aria-label="${label}"]`)
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`)
+  return button
+}
+
+function dialogCloseButton() {
+  const button = document.querySelector('[data-slot="dialog-close"]')
+  if (!(button instanceof HTMLButtonElement)) throw new Error('Missing dialog close button')
+  return button
+}
+
+function imageSourceToolbarButton() {
+  const button = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="toolbar"] button'))
+    .find((item) => item.textContent?.trim().startsWith('图片来源'))
+  if (!(button instanceof HTMLButtonElement)) throw new Error('Missing image source toolbar button')
   return button
 }
 

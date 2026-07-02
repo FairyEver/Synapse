@@ -92,6 +92,21 @@ describe("DriveDocumentImageService", () => {
     expect(result.summary.invalid).toBe(1)
   })
 
+  it("caps image source scans before querying every public asset owner", async () => {
+    const assetIds = Array.from({ length: DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES + 5 }, (_, index) => publicAssetId(index))
+    const harness = createServiceHarness({
+      currentMarkdown: assetIds.map((assetId, index) => `![asset ${index}](https://synapse.test/files/${assetId})`).join("\n"),
+      assetOwners: new Map(assetIds.map((assetId) => [assetId, "user-2"])),
+    })
+
+    const result = await harness.service.scanOwnerItemImages({ actorUserId: "owner-1", itemId: "item-1" })
+
+    expect(result.sources).toHaveLength(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES)
+    expect(result.summary.total).toBe(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES)
+    expect(harness.drive.findPublicAssetOwner).toHaveBeenCalledTimes(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES)
+    expect(harness.drive.findPublicAssetOwner).not.toHaveBeenCalledWith(assetIds[DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES])
+  })
+
   it("rejects imports with too many sources before loading the document", async () => {
     const drive = createDriveMock({
       currentMarkdown: "![external](https://example.test/a.png)",
@@ -500,6 +515,10 @@ interface CreateServiceOptions {
   readonly remoteImages?: ReadonlyMap<string, { readonly body: Buffer; readonly mimeType: string; readonly size: bigint }>
   readonly fetchErrors?: ReadonlyMap<string, Error>
   readonly saveError?: Error
+}
+
+function publicAssetId(index: number): string {
+  return `asset_${index.toString(36).padStart(32, "A")}`
 }
 
 function createDriveItemRecord(input: Partial<ReturnType<typeof createDriveItemRecordBase>> = {}) {

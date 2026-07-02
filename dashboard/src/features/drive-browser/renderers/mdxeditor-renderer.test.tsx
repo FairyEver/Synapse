@@ -354,7 +354,7 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('disables image source import while markdown has unsaved edits', async () => {
-    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
       canImport: true,
       sources: [
         imageSource({
@@ -366,13 +366,12 @@ describe('DriveMDXeditorRenderer', () => {
     }))
     const importImages = vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
     renderRenderer({ edit: editable(), imageSourceContext: { context: 'owner', itemId: 'file' } })
-    await act(async () => {
-      await Promise.resolve()
-    })
+
+    expect(scanImages).not.toHaveBeenCalled()
 
     await inputValue(editor(), '# Draft')
 
-    expect(buttonWithText('图片来源 1').disabled).toBe(true)
+    expect(buttonWithText('图片来源').disabled).toBe(true)
     expect(importImages).not.toHaveBeenCalled()
   })
 
