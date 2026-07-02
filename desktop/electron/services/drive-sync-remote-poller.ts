@@ -21,7 +21,12 @@ export async function pollDriveSyncRemoteChanges(input: {
   const seenChangeIds = new Set<string>()
 
   while (true) {
-    const page = await input.accountService.listDriveChanges({ cursor, limit })
+    const page = await input.accountService.listDriveChanges({
+      cursor,
+      limit,
+      rootItemId: input.binding.driveItemId,
+      rootPathHint: input.binding.drivePathHint,
+    })
     if (page.resyncRequired) {
       await input.onOperations([{
         bindingId: input.binding.id,

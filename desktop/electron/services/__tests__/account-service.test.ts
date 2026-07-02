@@ -2235,6 +2235,37 @@ describe("AccountService", () => {
     await expect(service.listDriveItemsPage({ parentId: "folder-1", offset: 20, limit: 10 })).resolves.toEqual(page)
   })
 
+  it("requests Drive changes with scoped binding parameters", async () => {
+    const page = {
+      items: [],
+      nextCursor: "42",
+      hasMore: false,
+      resyncRequired: false,
+    }
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      if (String(url).endsWith("/drive/changes?cursor=41&limit=25&rootItemId=drive-root&rootPathHint=%2FDocs")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse(page)
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    await expect(service.listDriveChanges({
+      cursor: "41",
+      limit: 25,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })).resolves.toEqual(page)
+  })
+
   it("refreshes and retries account webhook list when the access token expires", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({

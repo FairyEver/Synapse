@@ -54,8 +54,9 @@ export class DriveChangeLogService {
     if (input.cursor === "latest") return this.currentCursor(userId)
     const limit = Math.max(1, Math.min(Math.floor(input.limit ?? 100), 500))
     const cursor = parseCursor(input.cursor)
+    const scopeWhere = driveChangeScopeWhere(input)
     const rows = await this.prisma.driveChange.findMany({
-      where: { userId, sequence: { gt: cursor } },
+      where: { userId, sequence: { gt: cursor }, ...scopeWhere },
       orderBy: { sequence: "asc" },
       take: limit + 1,
     })
@@ -92,6 +93,34 @@ function parseCursor(cursor: string | null | undefined): bigint {
   if (!cursor) return 0n
   if (!/^\d+$/u.test(cursor)) return 0n
   return BigInt(cursor)
+}
+
+function driveChangeScopeWhere(input: DriveChangeListInput): Prisma.DriveChangeWhereInput {
+  const rootItemId = normalizeScopeValue(input.rootItemId)
+  const rootPathHint = normalizeRootPathHint(input.rootPathHint)
+  const conditions: Prisma.DriveChangeWhereInput[] = []
+  if (rootItemId) {
+    conditions.push({ itemId: rootItemId }, { parentId: rootItemId })
+  }
+  if (rootPathHint) {
+    conditions.push(
+      { pathHint: rootPathHint },
+      { pathHint: { startsWith: `${rootPathHint}/` } },
+    )
+  }
+  return conditions.length > 0 ? { OR: conditions } : {}
+}
+
+function normalizeScopeValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+function normalizeRootPathHint(value: string | null | undefined): string | null {
+  const trimmed = normalizeScopeValue(value)
+  if (!trimmed || trimmed === "/") return null
+  const withLeadingSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+  return withLeadingSlash.replace(/\/+$/u, "")
 }
 
 type DriveChangeItemMetadata = {

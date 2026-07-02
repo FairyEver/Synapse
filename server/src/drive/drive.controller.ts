@@ -316,11 +316,15 @@ export class DriveUserController {
   listChanges(
     @Query("cursor") cursor: string | undefined,
     @Query("limit") limit: string | undefined,
+    @Query("rootItemId") rootItemId: string | undefined,
+    @Query("rootPathHint") rootPathHint: string | undefined,
     @Req() request: AuthenticatedUserRequest,
   ) {
     return requireDriveChangeLog(this.changes).list(request.user!.id, {
       cursor: cursor ?? null,
       limit: parseOptionalPositiveInteger(limit, "limit"),
+      rootItemId: rootItemId ?? null,
+      rootPathHint: rootPathHint ?? null,
     })
   }
 

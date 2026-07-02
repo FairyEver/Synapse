@@ -920,6 +920,8 @@ export class AccountService {
     const params = new URLSearchParams()
     if (input.cursor) params.set("cursor", input.cursor)
     if (input.limit !== undefined) params.set("limit", String(input.limit))
+    if (input.rootItemId) params.set("rootItemId", input.rootItemId)
+    if (input.rootPathHint) params.set("rootPathHint", input.rootPathHint)
     const query = params.toString()
     return this.getAuthenticatedJson<DriveChangeListPageDto>(
       `${apiBaseUrl()}/drive/changes${query ? `?${query}` : ""}`,

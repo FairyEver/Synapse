@@ -27,7 +27,12 @@ describe("drive sync remote poller", () => {
       updateBindingCursor: updateCursor,
     })
 
-    expect(accountService.listDriveChanges).toHaveBeenCalledWith({ cursor: "41", limit: 100 })
+    expect(accountService.listDriveChanges).toHaveBeenCalledWith({
+      cursor: "41",
+      limit: 100,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
     expect(operations).toEqual([
       expect.objectContaining({ kind: "download", relativePath: "new.md", driveItemId: "remote-new" }),
       expect.objectContaining({ kind: "download", relativePath: "spec.md", driveItemId: "remote-spec" }),
@@ -51,8 +56,18 @@ describe("drive sync remote poller", () => {
       updateBindingCursor: async () => undefined,
     })
 
-    expect(accountService.listDriveChanges).toHaveBeenNthCalledWith(1, { cursor: "41", limit: 100 })
-    expect(accountService.listDriveChanges).toHaveBeenNthCalledWith(2, { cursor: "42", limit: 100 })
+    expect(accountService.listDriveChanges).toHaveBeenNthCalledWith(1, {
+      cursor: "41",
+      limit: 100,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
+    expect(accountService.listDriveChanges).toHaveBeenNthCalledWith(2, {
+      cursor: "42",
+      limit: 100,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
     expect(operations).toHaveLength(2)
   })
 
@@ -95,6 +110,28 @@ describe("drive sync remote poller", () => {
     })
 
     expect(operations).toHaveLength(1)
+  })
+
+  it("requests remote changes scoped to the binding root", async () => {
+    const accountService = createAccountService([
+      page({ items: [], nextCursor: "42" }),
+    ])
+
+    await pollDriveSyncRemoteChanges({
+      binding: binding({ remoteCursor: "41" }),
+      baseline: [],
+      accountService,
+      onOperations: async () => undefined,
+      onConflicts: async () => undefined,
+      updateBindingCursor: async () => undefined,
+    })
+
+    expect(accountService.listDriveChanges).toHaveBeenCalledWith({
+      cursor: "41",
+      limit: 100,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
   })
 })
 

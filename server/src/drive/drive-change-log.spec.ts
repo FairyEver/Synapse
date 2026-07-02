@@ -111,6 +111,68 @@ describe("DriveChangeLogService", () => {
     })
   })
 
+  it("lists changes with scoped root filters", async () => {
+    const prisma = {
+      driveItem: {
+        findMany: vi.fn(async () => []),
+      },
+      driveChange: {
+        findMany: vi.fn(async () => [
+          {
+            id: "chg_2",
+            sequence: 2n,
+            userId: "user-1",
+            itemId: "drive-root",
+            parentId: null,
+            type: "renamed",
+            versionId: null,
+            etag: null,
+            name: "Docs",
+            pathHint: "/Docs",
+            actor: "user-1",
+            occurredAt: new Date("2026-06-28T08:01:00.000Z"),
+          },
+          {
+            id: "chg_3",
+            sequence: 3n,
+            userId: "user-1",
+            itemId: "item-child",
+            parentId: "drive-root",
+            type: "content_updated",
+            versionId: null,
+            etag: null,
+            name: "a.md",
+            pathHint: "/Docs/a.md",
+            actor: "user-1",
+            occurredAt: new Date("2026-06-28T08:02:00.000Z"),
+          },
+        ]),
+      },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    const page = await service.list("user-1", {
+      cursor: "1",
+      limit: 50,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
+
+    expect(page.items.map((item) => item.id)).toEqual(["chg_2", "chg_3"])
+    expect(page.nextCursor).toBe("3")
+    expect(page.hasMore).toBe(false)
+    expect(prisma.driveChange.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { itemId: "drive-root" },
+          { parentId: "drive-root" },
+          { pathHint: "/Docs" },
+          { pathHint: { startsWith: "/Docs/" } },
+        ]),
+      }),
+    }))
+  })
+
   it("returns the current cursor without replaying historical changes", async () => {
     const prisma = {
       driveItem: {

@@ -184,6 +184,8 @@ export interface DriveChangeDto {
 export interface DriveChangeListInput {
   readonly cursor?: string | null
   readonly limit?: number
+  readonly rootItemId?: string | null
+  readonly rootPathHint?: string | null
 }
 
 export interface DriveChangeListPageDto {
