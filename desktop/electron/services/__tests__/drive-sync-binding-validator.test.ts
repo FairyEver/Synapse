@@ -193,6 +193,26 @@ describe("drive sync binding validator", () => {
     })
   })
 
+  it("blocks local folder uploads that contain symlinks", async () => {
+    const folder = path.join(tempDir, "docs")
+    await mkdir(folder)
+    await writeFile(path.join(folder, "spec.md"), "spec", "utf8")
+    await symlink(path.join(folder, "spec.md"), path.join(folder, "link.md"))
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: folder,
+      remoteExists: false,
+      activeBindings: [],
+    })).resolves.toMatchObject({
+      status: "blocked",
+      direction: null,
+      reason: "本地文件夹包含无法同步的符号链接：link.md。请移除这些条目后再同步。",
+    })
+  })
+
   it("copies gitignore rules once when requested", async () => {
     const folder = path.join(tempDir, "repo")
     await mkdir(folder)

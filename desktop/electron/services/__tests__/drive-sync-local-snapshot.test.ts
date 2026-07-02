@@ -6,6 +6,7 @@ import { createDefaultDriveSyncExcludeRules } from "../drive-sync-excludes"
 import {
   hashDriveSyncFile,
   inspectDriveSyncLocalPath,
+  scanDriveSyncLocalTreeDetailed,
   scanDriveSyncLocalTree,
 } from "../drive-sync-local-snapshot"
 
@@ -52,6 +53,21 @@ describe("drive sync local snapshot", () => {
       size: 4,
       hash: expect.stringMatching(/^sha256:/u),
     })
+  })
+
+  it("reports skipped symlinks during local tree scans", async () => {
+    await mkdir(path.join(tempDir, "docs"), { recursive: true })
+    await writeFile(path.join(tempDir, "docs", "spec.md"), "spec", "utf8")
+    await symlink(path.join(tempDir, "docs", "spec.md"), path.join(tempDir, "docs", "link.md"))
+
+    const snapshot = await scanDriveSyncLocalTreeDetailed({
+      rootPath: tempDir,
+      rules: createDefaultDriveSyncExcludeRules(),
+      hashFiles: true,
+    })
+
+    expect(snapshot.entries.map((entry) => entry.relativePath)).toEqual(["docs", "docs/spec.md"])
+    expect(snapshot.skipped).toEqual([{ relativePath: "docs/link.md", reason: "symlink" }])
   })
 
   it("hashes files with a stable sha256 prefix", async () => {

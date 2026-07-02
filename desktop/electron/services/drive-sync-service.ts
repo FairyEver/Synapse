@@ -33,7 +33,13 @@ import { previewDriveSyncBinding, readDriveSyncGitignoreRules } from "./drive-sy
 import { executeDriveSyncOperation } from "./drive-sync-executor"
 import { createDefaultDriveSyncExcludeRules, isDriveSyncExcluded } from "./drive-sync-excludes"
 import { sanitizeError } from "./error-sanitize"
-import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } from "./drive-sync-local-snapshot"
+import {
+  formatDriveSyncSkippedLocalEntries,
+  hashDriveSyncFile,
+  inspectDriveSyncLocalPath,
+  scanDriveSyncLocalTree,
+  scanDriveSyncLocalTreeDetailed,
+} from "./drive-sync-local-snapshot"
 import {
   createDriveSyncDirectoryTarget,
   driveSyncLocalWriteRootPath,
@@ -549,6 +555,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       return createBindExistingBinding(input)
     }
     const importedGitignoreRules = await readBindingImportedGitignoreRules(input)
+    if (input.kind === "folder" && input.direction === "local_to_remote") {
+      await assertLocalFolderTreeFullySyncable(input.localPath, createBindingExcludeRules(input.excludeRules ?? [], importedGitignoreRules))
+    }
     if (input.direction === "remote_to_local") {
       await assertRemoteToLocalTargetStillSafe(input)
       if (input.kind === "folder") {
@@ -1012,6 +1021,19 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
   }): Promise<void> {
     assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemName, input.excludeRules, input.drivePathHint)
+  }
+
+  async function assertLocalFolderTreeFullySyncable(
+    localPath: string,
+    excludeRules: DriveSyncBindingEntryV1["excludeRules"],
+  ): Promise<void> {
+    const snapshot = await scanDriveSyncLocalTreeDetailed({
+      rootPath: localPath,
+      rules: excludeRules,
+      hashFiles: false,
+    })
+    const skippedReason = formatDriveSyncSkippedLocalEntries(snapshot.skipped)
+    if (skippedReason) throw new Error(skippedReason)
   }
 
   async function uploadInitialFolder(binding: DriveSyncBindingDto): Promise<string> {

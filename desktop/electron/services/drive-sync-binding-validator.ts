@@ -3,7 +3,7 @@ import path from "node:path"
 import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { createDefaultDriveSyncExcludeRules, parseGitignoreForDriveSync } from "./drive-sync-excludes"
-import { inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
+import { formatDriveSyncSkippedLocalEntries, inspectDriveSyncLocalPath, scanDriveSyncLocalTreeDetailed } from "./drive-sync-local-snapshot"
 import { localPathIdentitiesOverlap, normalizeLocalPath } from "./drive-sync-paths"
 
 export async function previewDriveSyncBinding(input: {
@@ -28,6 +28,12 @@ export async function previewDriveSyncBinding(input: {
   const importedGitignoreRules = input.importGitignore && local.kind === "folder"
     ? await readDriveSyncGitignoreRules(localPath)
     : []
+  const skippedLocalFolderReason = input.kind === "folder" && local.kind === "folder" && shouldRequireCompleteLocalFolder(input)
+    ? await findSkippedLocalFolderReason(localPath, importedGitignoreRules)
+    : null
+  if (skippedLocalFolderReason) {
+    return blocked(localPath, local.kind, local.empty, skippedLocalFolderReason, importedGitignoreRules)
+  }
 
   if (input.kind === "file") {
     if (input.remoteExists && input.directionHint === "bind_existing") {
@@ -156,4 +162,29 @@ export async function readDriveSyncGitignoreRules(localPath: string): Promise<re
     if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") return []
     throw error
   }
+}
+
+function shouldRequireCompleteLocalFolder(input: {
+  readonly remoteExists: boolean
+  readonly directionHint?: DriveSyncInitialDirection | null
+}): boolean {
+  return !input.remoteExists || input.directionHint === "bind_existing"
+}
+
+async function findSkippedLocalFolderReason(
+  localPath: string,
+  importedGitignoreRules: readonly string[],
+): Promise<string | null> {
+  const defaults = createDefaultDriveSyncExcludeRules()
+  const snapshot = await scanDriveSyncLocalTreeDetailed({
+    rootPath: localPath,
+    rules: {
+      forced: defaults.forced,
+      defaults: defaults.defaults,
+      importedGitignore: importedGitignoreRules,
+      user: [],
+    },
+    hashFiles: false,
+  })
+  return formatDriveSyncSkippedLocalEntries(snapshot.skipped)
 }

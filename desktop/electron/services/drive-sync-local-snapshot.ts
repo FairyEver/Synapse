@@ -14,6 +14,16 @@ export interface DriveSyncLocalSnapshotEntry {
   readonly hash: string | null
 }
 
+export interface DriveSyncLocalSnapshotSkippedEntry {
+  readonly relativePath: string
+  readonly reason: "symlink" | "unsupported"
+}
+
+export interface DriveSyncLocalTreeSnapshot {
+  readonly entries: readonly DriveSyncLocalSnapshotEntry[]
+  readonly skipped: readonly DriveSyncLocalSnapshotSkippedEntry[]
+}
+
 export interface DriveSyncLocalSnapshotHashCacheEntry {
   readonly kind: "file" | "folder"
   readonly size: number | null
@@ -44,8 +54,18 @@ export async function scanDriveSyncLocalTree(input: {
   readonly hashFiles?: boolean
   readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
 }): Promise<readonly DriveSyncLocalSnapshotEntry[]> {
+  return (await scanDriveSyncLocalTreeDetailed(input)).entries
+}
+
+export async function scanDriveSyncLocalTreeDetailed(input: {
+  readonly rootPath: string
+  readonly rules: DriveSyncExcludeRulesDto
+  readonly hashFiles?: boolean
+  readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
+}): Promise<DriveSyncLocalTreeSnapshot> {
   const rootPath = path.resolve(input.rootPath)
   const result: DriveSyncLocalSnapshotEntry[] = []
+  const skipped: DriveSyncLocalSnapshotSkippedEntry[] = []
 
   async function walk(directoryPath: string): Promise<void> {
     const entries = await readdir(directoryPath, { withFileTypes: true })
@@ -54,7 +74,10 @@ export async function scanDriveSyncLocalTree(input: {
       const relativePath = toDriveSyncRelativePath(rootPath, absolutePath)
       if (isDriveSyncExcluded(relativePath, input.rules)) continue
       const stats = await lstat(absolutePath)
-      if (stats.isSymbolicLink()) continue
+      if (stats.isSymbolicLink()) {
+        skipped.push({ relativePath, reason: "symlink" })
+        continue
+      }
       if (stats.isDirectory()) {
         result.push({
           relativePath,
@@ -72,12 +95,26 @@ export async function scanDriveSyncLocalTree(input: {
           mtimeMs: stats.mtimeMs,
           hash: await resolveDriveSyncFileHash(input, absolutePath, relativePath, stats.size, stats.mtimeMs),
         })
+      } else {
+        skipped.push({ relativePath, reason: "unsupported" })
       }
     }
   }
 
   await walk(rootPath)
-  return result.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+  return {
+    entries: result.sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
+    skipped: skipped.sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
+  }
+}
+
+export function formatDriveSyncSkippedLocalEntries(skipped: readonly DriveSyncLocalSnapshotSkippedEntry[]): string | null {
+  if (skipped.length === 0) return null
+  const symlinkCount = skipped.filter((entry) => entry.reason === "symlink").length
+  const noun = symlinkCount === skipped.length ? "符号链接" : "本地条目"
+  const paths = skipped.slice(0, 3).map((entry) => entry.relativePath).join("、")
+  const suffix = skipped.length > 3 ? `等 ${skipped.length} 个条目` : paths
+  return `本地文件夹包含无法同步的${noun}：${suffix}。请移除这些条目后再同步。`
 }
 
 async function resolveDriveSyncFileHash(

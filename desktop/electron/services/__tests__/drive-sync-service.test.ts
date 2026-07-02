@@ -920,6 +920,28 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects local folder uploads that contain symlinks before creating a binding", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "spec", "utf8")
+      await symlink(path.join(tempDir, "spec.md"), path.join(tempDir, "link.md"))
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: "new-folder",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        direction: "local_to_remote",
+      })).rejects.toThrow("本地文件夹包含无法同步的符号链接")
+      await expect(harness.bindings.list()).resolves.toEqual([])
+      expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("creates a local file to new remote file binding", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
