@@ -345,6 +345,50 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("reads empty markdown text from a share link", async () => {
+    const { service, drive } = createService()
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      context: "share",
+      surface: "standalone",
+      current: {
+        id: "item-empty",
+        name: "empty.md",
+        type: "file",
+        size: "0",
+        mimeType: "text/markdown",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        previewKind: "markdown",
+        browserUrl: "/share/shr_123",
+        downloadUrl: "/share/shr_123/download",
+      },
+      breadcrumbs: [],
+      children: [],
+      childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+      preview: {
+        kind: "markdown",
+        text: "",
+        html: "",
+        outline: [],
+        truncated: false,
+        imageUrl: null,
+        visitUrl: null,
+      },
+      edit: null,
+      annotation: null,
+      canDownload: true,
+      canZip: false,
+    } as never)
+
+    await expect(service.readText({ url: `${publicAppUrl}/share/shr_123`, maxBytes: 64 })).resolves.toMatchObject({
+      path: "empty.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      text: "",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+  })
+
   it("resolves share-relative paths before reading text", async () => {
     const { service, drive } = createService()
     drive.getShareBrowserSnapshot

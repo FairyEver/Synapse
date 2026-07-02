@@ -288,16 +288,17 @@ export class DriveLinkIntakeService {
       password: input.password,
       cookie: undefined,
     })
-    if (!snapshot.preview?.text || snapshot.preview.kind === "download-only") {
+    const preview = snapshot.preview
+    if (!preview || preview.kind === "download-only" || preview.text === null || preview.text === undefined) {
       throw new BadRequestException("该链接不是可读取的文本内容。")
     }
-    const text = truncateUtf8(snapshot.preview.text, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
+    const text = truncateUtf8(preview.text, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
     return {
       path: snapshot.current.name,
       mimeType: snapshot.current.mimeType,
-      previewKind: snapshot.preview.kind,
+      previewKind: preview.kind,
       text: text.text,
-      truncated: snapshot.preview.truncated || text.truncated,
+      truncated: preview.truncated || text.truncated,
       source: { linkType: parsed.itemId ? "share_item" : "share" },
     }
   }
