@@ -362,6 +362,7 @@ export class DriveService implements OnApplicationBootstrap {
   async restoreFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能恢复当前版本。")
     const usage = await ensureUsage(this.prisma, userId)
     if (usage.usedBytes + usage.reservedBytes + version.size > usage.quotaBytes) {
@@ -556,6 +557,7 @@ export class DriveService implements OnApplicationBootstrap {
   async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true; readonly deletePending?: boolean }> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
     const claimed = await this.prisma.driveFileVersion.updateMany({
       where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
@@ -596,6 +598,7 @@ export class DriveService implements OnApplicationBootstrap {
   async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
     const item = await this.requireOwnedFile(userId, itemId)
     const targetVersion = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(targetVersion)
     if (item.storageKey === targetVersion.storageKey) throw new BadRequestException("不能保留当前版本。")
     const version = await this.prisma.driveFileVersion.update({
       where: { id: versionId },
@@ -615,6 +618,7 @@ export class DriveService implements OnApplicationBootstrap {
   async openFileVersionDownload(userId: string, itemId: string, versionId: string): Promise<DriveBrowserDownloadResult> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     const object = await this.storage.getObjectStream({ key: version.storageKey })
     return {
       stream: object.stream,
@@ -2382,6 +2386,10 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (!version) throw new NotFoundException("历史版本不存在。")
     return version
+  }
+
+  private assertFileVersionNotCleanupPending(version: { readonly deletePending: boolean }): void {
+    if (version.deletePending) throw new BadRequestException("历史版本正在清理中。")
   }
 
   private async commitTextFileChange(input: {

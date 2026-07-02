@@ -327,7 +327,7 @@ Input:
 
 ### `app_drive_file_version_download_create`
 
-Download a specific Drive file version to a local path. This writes to local filesystem and requires write permission.
+Download a specific Drive file version that is not pending cleanup to a local path. This writes to local filesystem and requires write permission.
 
 Input:
 
@@ -337,7 +337,7 @@ Input:
 
 ### `app_drive_file_version_restore`
 
-Restore a historical version as the current file version.
+Restore a non-current historical version that is not pending cleanup as the current file version.
 
 Input:
 
@@ -346,7 +346,7 @@ Input:
 
 ### `app_drive_file_version_delete`
 
-Delete a non-current historical file version. Current versions cannot be deleted.
+Delete a non-current historical file version that is not pending cleanup. Current versions cannot be deleted.
 
 Input:
 
@@ -355,7 +355,7 @@ Input:
 
 ### `app_drive_file_version_pin_update`
 
-Keep or unkeep a historical file version during automatic cleanup.
+Keep or unkeep a non-current historical file version that is not pending cleanup.
 
 Input:
 

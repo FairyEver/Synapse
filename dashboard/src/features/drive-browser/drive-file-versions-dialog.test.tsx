@@ -109,6 +109,18 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('删除')
   })
 
+  it('hides actions for versions pending cleanup', () => {
+    const html = renderVersions([
+      version({ id: 'version-pending', versionNumber: 3, deletePending: true }),
+    ])
+
+    expect(html).toContain('待清理')
+    expect(html).not.toContain('下载')
+    expect(html).not.toContain('恢复')
+    expect(html).not.toContain('保留')
+    expect(html).not.toContain('删除')
+  })
+
   it('shows a load more action when more version pages are available', () => {
     const html = renderVersionContent({
       versions: [version({ id: 'version-100', versionNumber: 100 })],

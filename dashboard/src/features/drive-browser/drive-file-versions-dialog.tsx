@@ -323,6 +323,9 @@ function DriveFileVersionRow({
   readonly onRestore: (version: DriveFileVersionDto) => void
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
+  const canDownload = !version.deletePending
+  const canModify = !version.isCurrent && !version.deletePending
+
   return (
     <TableRow>
       <TableCell>
@@ -342,14 +345,16 @@ function DriveFileVersionRow({
       </TableCell>
       <TableCell>
         <div className='flex items-center justify-end gap-1'>
-          <DriveVersionActionButton
-            href={driveFileVersionsApi.downloadUrl(itemId, version.id)}
-            label={`下载 v${version.versionNumber}`}
-            tooltip='下载'
-          >
-            <Download />
-          </DriveVersionActionButton>
-          {!version.isCurrent ? (
+          {canDownload ? (
+            <DriveVersionActionButton
+              href={driveFileVersionsApi.downloadUrl(itemId, version.id)}
+              label={`下载 v${version.versionNumber}`}
+              tooltip='下载'
+            >
+              <Download />
+            </DriveVersionActionButton>
+          ) : null}
+          {canModify ? (
             <DriveVersionActionButton
               label={`恢复 v${version.versionNumber}`}
               tooltip='恢复'
@@ -358,7 +363,7 @@ function DriveFileVersionRow({
               <RotateCcw />
             </DriveVersionActionButton>
           ) : null}
-          {!version.isCurrent ? (
+          {canModify ? (
             <DriveVersionActionButton
               disabled={pinning}
               label={version.isPinned ? `取消保留 v${version.versionNumber}` : `保留 v${version.versionNumber}`}
@@ -368,7 +373,7 @@ function DriveFileVersionRow({
               {pinning ? <Loader2 className='animate-spin' /> : version.isPinned ? <PinOff /> : <Pin />}
             </DriveVersionActionButton>
           ) : null}
-          {!version.isCurrent ? (
+          {canModify ? (
             <DriveVersionActionButton
               destructive
               label={`删除 v${version.versionNumber}`}

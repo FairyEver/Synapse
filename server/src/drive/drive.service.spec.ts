@@ -544,10 +544,17 @@ describe("DriveService", () => {
     const historical = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((version) => !version.isCurrent)!
     deleteObject.mockClear()
 
-    await expect(Promise.all([
+    const results = await Promise.allSettled([
       service.deleteFileVersion("user-1", item.id, historical.id),
       service.deleteFileVersion("user-1", item.id, historical.id),
-    ])).resolves.toEqual([{ ok: true }, { ok: true, deletePending: true }])
+    ])
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled")
+    const rejected = results.filter((result) => result.status === "rejected")
+    expect(fulfilled).toEqual([{ status: "fulfilled", value: { ok: true } }])
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toBeInstanceOf(BadRequestException)
+    expect(rejected[0]?.reason.message).toBe("历史版本正在清理中。")
 
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(5n)
@@ -643,6 +650,42 @@ describe("DriveService", () => {
     const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
     expect(versions.total).toBe(2)
     expect(versions.items.find((version) => version.id === historical.id)?.deletePending).toBe(true)
+  })
+
+  it("rejects actions for file versions pending cleanup", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject: vi.fn(async () => undefined),
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 5n, contentType: "text/plain" })),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((candidate) => !candidate.isCurrent)!
+    await prisma.driveFileVersion.update({
+      where: { id: version.id },
+      data: { deletePending: true },
+    })
+    vi.mocked(storage.copyObject).mockClear()
+    vi.mocked(storage.getObjectStream).mockClear()
+    vi.mocked(storage.deleteObject).mockClear()
+
+    await expect(service.restoreFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.openFileVersionDownload("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.updateFileVersionPin("user-1", item.id, version.id, true)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.deleteFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+
+    expect(storage.copyObject).not.toHaveBeenCalled()
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+    const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: version.id } })
+    expect(row.isPinned).toBe(false)
+    expect(row.deletePending).toBe(true)
   })
 
   it("retries pending historical version deletes", async () => {
