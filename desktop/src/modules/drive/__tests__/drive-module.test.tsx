@@ -811,6 +811,40 @@ describe("DriveModule", () => {
     expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
   })
 
+  it("disables binding sync actions while an action is running", async () => {
+    const rescan = createDeferred<void>()
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+    mocks.rescanDriveSyncBinding.mockReturnValueOnce(rescan.promise)
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("更多同步操作 Docs")
+    await clickMenuItemText("检查本地变更")
+
+    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledTimes(1)
+    expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(true)
+    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(true)
+
+    await act(async () => {
+      rescan.resolve(undefined)
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(false)
+    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(false)
+  })
+
   it("refreshes the sync snapshot after failed secondary sync actions", async () => {
     mocks.getDriveSyncSnapshot
       .mockResolvedValueOnce(createDriveSyncSnapshot(

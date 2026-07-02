@@ -1944,6 +1944,38 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects concurrent sync actions for the same binding", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const changes = createDeferred<DriveChangeListPageDto>()
+      const listDriveChanges = vi.fn(() => changes.promise)
+      const harness = createHarness({ accountService: { listDriveChanges } })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      const firstPoll = service.pollRemoteChanges(binding.id)
+      await waitForExpect(() => {
+        expect(listDriveChanges).toHaveBeenCalledTimes(1)
+      })
+
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("同步操作正在执行，请稍后再试。")
+
+      changes.resolve({ items: [], nextCursor: "41", hasMore: false, resyncRequired: false })
+      await expect(firstPoll).resolves.toBeUndefined()
+      await expect(service.pollRemoteChanges(binding.id)).resolves.toBeUndefined()
+      expect(listDriveChanges).toHaveBeenCalledTimes(2)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps the remote cursor and marks the binding as error when resync is required", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -3135,6 +3167,16 @@ async function waitForTimeout(timeoutMs: number): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, timeoutMs)
   })
+}
+
+function createDeferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void; readonly reject: (error: unknown) => void } {
+  let resolveDeferred: (value: T) => void = () => {}
+  let rejectDeferred: (error: unknown) => void = () => {}
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve
+    rejectDeferred = reject
+  })
+  return { promise, resolve: resolveDeferred, reject: rejectDeferred }
 }
 
 function createHarness(overrides: {

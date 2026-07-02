@@ -197,6 +197,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   let remotePollTimer: ReturnType<typeof setInterval> | null = null
   let remotePollRunning = false
   let remotePollPromise: Promise<void> | null = null
+  const bindingActionFlights = new Map<string, Promise<unknown>>()
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindingEntries = (await deps.bindings.list())
@@ -351,19 +352,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function rescanBinding(id: string): Promise<void> {
-    const binding = await requireBinding(id)
-    await assertBindingRootReady(binding, { checkRemote: true })
-    const baseline = await baselineStore.listByBinding(id)
-    const changes = await localWatcher.scanBinding({ binding, baseline })
-    await handleLocalChanges(changes)
+    await runBindingActionSingleFlight(id, async () => {
+      const binding = await requireBinding(id)
+      await assertBindingRootReady(binding, { checkRemote: true })
+      const baseline = await baselineStore.listByBinding(id)
+      const changes = await localWatcher.scanBinding({ binding, baseline })
+      await handleLocalChanges(changes)
+    })
   }
 
   async function pollRemoteChanges(id?: string): Promise<void> {
     if (id) {
-      const binding = await requireBinding(id)
-      await assertBindingRootReady(binding, { checkRemote: true })
-      if (binding.status !== "active") return
-      await pollActiveBindingRemoteChanges(binding, true)
+      await runBindingActionSingleFlight(id, async () => {
+        const binding = await requireBinding(id)
+        await assertBindingRootReady(binding, { checkRemote: true })
+        if (binding.status !== "active") return
+        await pollActiveBindingRemoteChanges(binding, true)
+      })
       return
     }
 
@@ -448,18 +453,22 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function resolveConflict(input: DriveSyncConflictResolutionInput): Promise<void> {
     const conflict = await deps.conflicts.get(input.conflictId)
     if (!conflict || conflict.status !== "open") throw new Error("同步冲突不存在。")
-    if (input.action !== "skip") {
-      await applyConflictResolution(conflict, input.action)
-    }
-    const resolved: DriveSyncConflictEntryV1 = {
-      ...conflict,
-      status: input.action === "skip" ? "ignored" : "resolved",
-      resolution: input.action,
-      resolvedAt: timestamp(),
-    }
-    await deps.conflicts.upsert(resolved)
-    await updateBindingStatusAfterConflictResolution(conflict.bindingId)
-    await emitChanged()
+    await runBindingActionSingleFlight(conflict.bindingId, async () => {
+      const currentConflict = await deps.conflicts.get(input.conflictId)
+      if (!currentConflict || currentConflict.status !== "open") throw new Error("同步冲突不存在。")
+      if (input.action !== "skip") {
+        await applyConflictResolution(currentConflict, input.action)
+      }
+      const resolved: DriveSyncConflictEntryV1 = {
+        ...currentConflict,
+        status: input.action === "skip" ? "ignored" : "resolved",
+        resolution: input.action,
+        resolvedAt: timestamp(),
+      }
+      await deps.conflicts.upsert(resolved)
+      await updateBindingStatusAfterConflictResolution(currentConflict.bindingId)
+      await emitChanged()
+    })
   }
 
   async function previewBinding(input: Omit<DriveSyncCreateSafeBindingInput, "direction"> & {
@@ -1705,6 +1714,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       lastStoppedAt: null,
       lastError: null,
       updatedAt: timestamp(),
+    }
+  }
+
+  async function runBindingActionSingleFlight<T>(bindingId: string, action: () => Promise<T>): Promise<T> {
+    if (bindingActionFlights.has(bindingId)) throw new Error("同步操作正在执行，请稍后再试。")
+    const promise = Promise.resolve().then(action)
+    bindingActionFlights.set(bindingId, promise)
+    try {
+      return await promise
+    } finally {
+      if (bindingActionFlights.get(bindingId) === promise) bindingActionFlights.delete(bindingId)
     }
   }
 
