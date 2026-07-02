@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type {
   DriveBrowserEditDto,
+  DriveDocumentImageImportResult,
   DriveDocumentImageImportRequest,
   DriveDocumentImageSource,
   DriveDocumentImageSourcesDto,
@@ -28,6 +29,8 @@ type UseDriveMarkdownImageSourcesInput = {
   readonly disabled?: boolean
 }
 
+type DriveDocumentImageImportFailure = DriveDocumentImageImportResult['failed'][number]
+
 const IMAGE_SOURCE_KIND_LABELS: Record<DriveDocumentImageSource['kind'], string> = {
   owner_asset: '我的素材',
   collaborator_asset: '协作者素材',
@@ -52,6 +55,7 @@ export function useDriveMarkdownImageSources({
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [importFailures, setImportFailures] = useState<readonly DriveDocumentImageImportFailure[]>([])
   const currentVersionId = edit?.currentVersionId ?? sources?.versionId ?? null
   const importableCount = sources?.summary.importable ?? 0
   const visibleSourceCount = sources?.summary.total ?? 0
@@ -64,6 +68,7 @@ export function useDriveMarkdownImageSources({
     }
     setLoading(true)
     setError(null)
+    setImportFailures([])
     try {
       setSources(await scanImageSources(context))
     } catch (scanError) {
@@ -85,17 +90,27 @@ export function useDriveMarkdownImageSources({
     }
     setImporting(true)
     setError(null)
+    setImportFailures([])
     try {
-      await importImageSources(context, body)
+      const result = await importImageSources(context, body)
       await editContext.reload()
-      setOpen(false)
       await scan()
+      if (result.failed.length > 0 || result.summary.failedCount > 0) {
+        setImportFailures(result.failed)
+        return
+      }
+      setOpen(false)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '图片转存失败。')
     } finally {
       setImporting(false)
     }
   }, [context, currentVersionId, disabled, editContext, scan])
+
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) setImportFailures([])
+    setOpen(nextOpen)
+  }, [])
 
   const toolbarItem = useMemo<DriveRendererToolbarItem | null>(() => {
     if (!context || visibleSourceCount === 0) return null
@@ -120,8 +135,9 @@ export function useDriveMarkdownImageSources({
         loading={loading}
         importing={importing}
         error={error}
+        importFailures={importFailures}
         canImport={canImport}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         onImport={importSources}
         onRefresh={scan}
       />
@@ -137,7 +153,7 @@ async function scanImageSources(context: DriveMarkdownImageSourceContext): Promi
 async function importImageSources(
   context: DriveMarkdownImageSourceContext,
   body: DriveDocumentImageImportRequest
-) {
+): Promise<DriveDocumentImageImportResult> {
   if (context.context === 'owner') return driveBrowserApi.importOwnerImageSources(context.itemId, body)
   return driveBrowserApi.importShareImageSources(context.shareId, context.itemId, body)
 }
@@ -148,6 +164,7 @@ function DriveMarkdownImageSourceDialog({
   loading,
   importing,
   error,
+  importFailures,
   canImport,
   onOpenChange,
   onImport,
@@ -158,6 +175,7 @@ function DriveMarkdownImageSourceDialog({
   readonly loading: boolean
   readonly importing: boolean
   readonly error: string | null
+  readonly importFailures: readonly DriveDocumentImageImportFailure[]
   readonly canImport: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onImport: (sources: readonly string[]) => void
@@ -183,6 +201,18 @@ function DriveMarkdownImageSourceDialog({
           </Button>
         </div>
         {error ? <p className='text-sm text-destructive'>{error}</p> : null}
+        {importFailures.length > 0 ? (
+          <div className='grid gap-1 rounded-md border p-2 text-sm text-destructive'>
+            <div>部分图片转存失败：{importFailures.length}</div>
+            <ul className='list-disc pl-4'>
+              {importFailures.map((failure) => (
+                <li key={failure.src} className='break-all'>
+                  {failure.src}：{failure.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {sources ? (
           <div className='grid max-h-96 gap-2 overflow-auto'>
             {sources.sources.map((source) => (

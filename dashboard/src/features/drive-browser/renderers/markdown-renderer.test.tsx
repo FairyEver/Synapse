@@ -3,7 +3,7 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DriveDocumentImageSource, DriveDocumentImageSourcesDto } from '@synapse/shared'
+import type { DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto } from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
 import { driveBrowserApi } from '@/lib/api'
@@ -658,6 +658,62 @@ describe('DriveMarkdownRenderer', () => {
     })
     expect(reload).toHaveBeenCalled()
   })
+
+  it('keeps image source dialog open when image import partially fails', async () => {
+    const reload = vi.fn(async () => ({} as never))
+    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+      canImport: true,
+      sources: [
+        imageSource({
+          id: 'source-ok',
+          src: 'https://example.test/ok.png',
+          canImport: true,
+          kind: 'external',
+        }),
+        imageSource({
+          id: 'source-failed',
+          src: 'https://example.test/missing.png',
+          canImport: true,
+          kind: 'external',
+        }),
+      ],
+    }))
+    vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult({
+      imported: [{
+        previousSrc: 'https://example.test/ok.png',
+        nextSrc: 'https://synapse.test/files/asset',
+        assetId: 'asset-1',
+        size: '10',
+      }],
+      failed: [{
+        src: 'https://example.test/missing.png',
+        reason: 'unreachable',
+        message: '图片无法访问。',
+      }],
+      summary: {
+        importedCount: 1,
+        failedCount: 1,
+        replacedOccurrenceCount: 1,
+      },
+    }))
+
+    renderMarkdown({ editContext: { reload, reloading: false, saveText: vi.fn(), savingText: false } })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await click(buttonWithText('图片来源 2'))
+    await click(buttonWithText('转存全部'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(reload).toHaveBeenCalled()
+    expect(document.body.textContent).toContain('部分图片转存失败：1')
+    expect(document.body.textContent).toContain('https://example.test/missing.png')
+    expect(document.body.textContent).toContain('图片无法访问。')
+    expect(buttonWithText('转存全部')).not.toBeNull()
+  })
 })
 
 function renderMarkdown({
@@ -861,8 +917,8 @@ function imageSource(overrides: Partial<DriveDocumentImageSource> = {}): DriveDo
   }
 }
 
-function imageImportResult() {
-  return {
+function imageImportResult(overrides: Partial<DriveDocumentImageImportResult> = {}): DriveDocumentImageImportResult {
+  const result: DriveDocumentImageImportResult = {
     itemId: 'item-1',
     versionId: 'version-2',
     imported: [{
@@ -876,6 +932,14 @@ function imageImportResult() {
       importedCount: 1,
       failedCount: 0,
       replacedOccurrenceCount: 1,
+    },
+  }
+  return {
+    ...result,
+    ...overrides,
+    summary: {
+      ...result.summary,
+      ...overrides.summary,
     },
   }
 }
