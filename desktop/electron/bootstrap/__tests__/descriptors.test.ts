@@ -1515,6 +1515,26 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config", "core.window-manager"])
   })
 
+  it("coreDriveSyncDescriptor restores local watching during startup", async () => {
+    const { coreDriveSyncDescriptor } = await importBootstrap()
+    const calls: string[] = []
+    const service = {
+      startLocalWatcher: vi.fn(async () => { calls.push("local") }),
+      startRemotePolling: vi.fn(() => { calls.push("remote") }),
+      stopRemotePolling: vi.fn(async () => { calls.push("stop-remote") }),
+      stopLocalWatcher: vi.fn(async () => { calls.push("stop-local") }),
+    }
+
+    await coreDriveSyncDescriptor.start?.(service as never, {} as never)
+    expect(service.startLocalWatcher).toHaveBeenCalledTimes(1)
+    expect(service.startRemotePolling).toHaveBeenCalledTimes(1)
+    expect(calls).toEqual(["local", "remote"])
+
+    await coreDriveSyncDescriptor.stop?.(service as never, {} as never, 1000)
+    expect(service.stopRemotePolling).toHaveBeenCalledTimes(1)
+    expect(service.stopLocalWatcher).toHaveBeenCalledTimes(1)
+  })
+
   it("repoWatchDescriptor depends on core.config and exposes stop", async () => {
     const { repoWatchDescriptor } = await importBootstrap()
     expect(repoWatchDescriptor.id).toBe("repo.watch")

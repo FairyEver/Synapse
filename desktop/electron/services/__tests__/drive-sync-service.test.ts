@@ -55,6 +55,39 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("starts local watchers for active bindings on service startup", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const close = vi.fn()
+      const on = vi.fn()
+      const watch: DriveSyncWatchFactory = vi.fn(() => ({ close, on }))
+      const harness = createHarness({ watch })
+      const service = createDriveSyncService(harness.deps)
+
+      await service.createBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+
+      expect(watch).not.toHaveBeenCalled()
+      await service.startLocalWatcher()
+
+      expect(watch).toHaveBeenCalledWith(
+        tempDir,
+        { persistent: false, recursive: true },
+        expect.any(Function),
+      )
+      await service.stopLocalWatcher()
+      expect(close).toHaveBeenCalled()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("denies local sync creation through PermissionGuard and records audit", async () => {
     const permissionGuard: PermissionGuard = {
       registerPolicy: vi.fn(),

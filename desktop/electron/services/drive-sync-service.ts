@@ -408,6 +408,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }, intervalMs)
   }
 
+  async function startLocalWatcher(): Promise<void> {
+    await reconcileLocalWatcher()
+  }
+
   async function stopRemotePolling(): Promise<void> {
     if (remotePollTimer !== null) {
       clearInterval(remotePollTimer)
@@ -1709,6 +1713,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     rescanBinding,
     pollRemoteChanges,
     startRemotePolling,
+    startLocalWatcher,
     stopRemotePolling,
     stopLocalWatcher,
     pauseBinding,
