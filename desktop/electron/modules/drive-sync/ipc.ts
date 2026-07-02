@@ -88,6 +88,7 @@ const driveSyncPreviewBindingInputSchema = z.object({
   localPath: z.string().min(1),
   remoteExists: z.boolean(),
   directionHint: driveSyncInitialDirectionSchema.nullable().optional(),
+  excludeRules: z.array(z.string()).optional(),
   importGitignore: z.boolean().optional(),
 })
 

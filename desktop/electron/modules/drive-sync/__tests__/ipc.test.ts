@@ -151,9 +151,10 @@ describe("driveSyncIpcModule", () => {
     await driveSyncIpcModule.methods.previewBinding.handler(ctx as never, {
       driveItemId: "drive-item-1",
       driveItemName: "spec.md",
-      kind: "file",
+      kind: "folder",
       localPath: "/tmp/spec.md",
       remoteExists: true,
+      excludeRules: ["build/**"],
     })
     await driveSyncIpcModule.methods.createSafeBinding.handler(ctx as never, {
       driveItemId: "drive-item-1",
@@ -169,7 +170,7 @@ describe("driveSyncIpcModule", () => {
     await driveSyncIpcModule.methods.pollRemoteChanges.handler(ctx as never, { id: "binding-1" })
     await driveSyncIpcModule.methods.resolveConflict.handler(ctx as never, { conflictId: "conflict-1", action: "keep_local" })
 
-    expect(service.previewBinding).toHaveBeenCalled()
+    expect(service.previewBinding).toHaveBeenCalledWith(expect.objectContaining({ excludeRules: ["build/**"] }))
     expect(service.createSafeBinding).toHaveBeenCalled()
     expect(service.pauseBinding).toHaveBeenCalledWith("binding-1")
     expect(service.resumeBinding).toHaveBeenCalledWith("binding-1")

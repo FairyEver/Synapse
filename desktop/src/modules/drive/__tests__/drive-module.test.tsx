@@ -1220,6 +1220,27 @@ describe("DriveModule", () => {
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(usageCallsBeforeSubmit + 1)
   })
 
+  it("sends folder exclude rules when previewing drive sync bindings", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonText("本地同步")
+    await clickText("选择文件夹")
+    mocks.previewDriveSyncBinding.mockClear()
+
+    await textAreaInput("drive-sync-excludes", "build/**\n.tmp/")
+    await clickButtonText("校验")
+
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "local:/Users/me/LocalDocs",
+      kind: "folder",
+      localPath: "/Users/me/LocalDocs",
+      excludeRules: ["build/**", ".tmp/"],
+      importGitignore: true,
+    }))
+  })
+
   it("keeps the sync dialog open when initial safe create returns an error binding", async () => {
     mocks.createDriveSyncSafeBinding.mockResolvedValueOnce(createDriveSyncBinding({
       status: "error",
@@ -3244,6 +3265,17 @@ async function clickButtonText(text: string): Promise<void> {
   if (!element) throw new Error(`Button not found: ${text}`)
   await act(async () => {
     element.click()
+    await flushPromises()
+  })
+}
+
+async function textAreaInput(id: string, value: string): Promise<void> {
+  const element = document.getElementById(id)
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error(`Textarea not found: ${id}`)
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+    setter?.call(element, value)
+    element.dispatchEvent(new Event("input", { bubbles: true }))
     await flushPromises()
   })
 }

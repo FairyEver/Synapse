@@ -155,6 +155,7 @@ export function DriveSyncDialog({
         localPath: currentPath,
         remoteExists: nextMode !== "local_to_remote",
         directionHint: nextMode,
+        excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],
         importGitignore: bindingKind === "folder",
       })
       setPreview(nextPreview)
@@ -276,7 +277,10 @@ export function DriveSyncDialog({
                         <summary className="cursor-default text-sm font-medium">高级设置</summary>
                         <div className="mt-2 grid gap-2">
                           <Label htmlFor="drive-sync-excludes">排除规则（可选）</Label>
-                          <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => setExcludeText(event.target.value)} />
+                          <Textarea id="drive-sync-excludes" value={excludeText} onChange={(event) => {
+                            setExcludeText(event.target.value)
+                            setPreview(null)
+                          }} />
                         </div>
                       </details>
                     ) : null}

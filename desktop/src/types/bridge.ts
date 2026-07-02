@@ -928,6 +928,7 @@ export type SynapseBridge = {
       localPath: string
       remoteExists: boolean
       directionHint?: "remote_to_local" | "local_to_remote" | "bind_existing" | null
+      excludeRules?: readonly string[]
       importGitignore?: boolean
     }) => Promise<DriveSyncBindingPreviewDto>
     createSafeBinding: (input: DriveSyncCreateSafeBindingInput) => Promise<DriveSyncBindingDto>
