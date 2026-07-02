@@ -237,6 +237,11 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.d2.pub/files/***?password=***&token=***&name=logo.png")
   })
 
+  it("redacts drive site ids and sensitive query values", () => {
+    expect(maskDriveBrowserUrl("https://synapse.d2.pub/sites/site_secret/docs/index.html?password=AbC234xy"))
+      .toBe("https://synapse.d2.pub/sites/***/docs/index.html?password=***")
+  })
+
   it("removes URL userinfo while masking drive browser URLs", () => {
     expect(maskDriveBrowserUrl("https://reader:secret-token@synapse.d2.pub/share/shr_secret?password=AbC234xy"))
       .toBe("https://synapse.d2.pub/share/***?password=***")

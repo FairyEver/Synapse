@@ -1066,6 +1066,7 @@ function maskDriveBrowserPath(value: string): string {
     .replace(/\/console\/drive\/items\/[^/?#]+/u, "/console/drive/items/***")
     .replace(/\/share\/[^/?#]+/u, "/share/***")
     .replace(/(\/share\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
+    .replace(/\/sites\/[^/?#]+/u, "/sites/***")
     .replace(/\/files\/[^/?#]+/u, "/files/***")
 }
 
