@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { buffer as readStreamBuffer } from "node:stream/consumers"
 import { Inject, Injectable, Logger } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import {
   normalizeSkillRepositoryName,
   type SkillRepositoryLegacyMigrationResultDto,
@@ -130,7 +131,7 @@ export class SkillRepositoryLegacyMigrationService {
       const uploadedStorageKeys: string[] = []
       try {
         const repositoryName = await this.findAvailableName(ownerUserId, source.title || item.title)
-        const fileRows = []
+        const fileRows: Prisma.SkillRepositoryFileCreateManyInput[] = []
         for (const file of normalizedFiles) {
           const storageKey = `skill-repositories/${repositoryId}/files/${randomUUID()}/${file.sha256}`
           await this.storage.putObject({

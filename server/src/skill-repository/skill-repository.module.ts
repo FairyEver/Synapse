@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { ContentStoreModule } from "../content-store/content-store.module"
 import { PrismaModule } from "../prisma/prisma.module"
@@ -7,7 +8,7 @@ import { SkillRepositoryLegacyMigrationService } from "./skill-repository-legacy
 import { SkillRepositoryService } from "./skill-repository.service"
 
 @Module({
-  imports: [UserAuthModule, PrismaModule, ContentStoreModule],
+  imports: [UserAuthModule, AdminAuthModule, PrismaModule, ContentStoreModule],
   controllers: [SkillRepositoryController],
   providers: [SkillRepositoryService, SkillRepositoryLegacyMigrationService],
   exports: [SkillRepositoryService, SkillRepositoryLegacyMigrationService],

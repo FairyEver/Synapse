@@ -1,5 +1,6 @@
 import { MODULE_METADATA } from "@nestjs/common/constants"
 import { APP_INTERCEPTOR } from "@nestjs/core"
+import { Test } from "@nestjs/testing"
 import { describe, expect, it } from "vitest"
 import { AdminModule } from "./admin/admin.module"
 import { AppModule } from "./app.module"
@@ -18,7 +19,43 @@ describe("AppModule", () => {
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
   })
+
+  it("compiles the application dependency graph", async () => {
+    await withServerEnv(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+      await moduleRef.close()
+    })
+  })
 })
+
+async function withServerEnv(callback: () => Promise<void>): Promise<void> {
+  const previous = {
+    DATABASE_URL: process.env.DATABASE_URL,
+    ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+    ADMIN_JWT_SECRET: process.env.ADMIN_JWT_SECRET,
+    USER_ACCESS_JWT_SECRET: process.env.USER_ACCESS_JWT_SECRET,
+    PORT: process.env.PORT,
+  }
+  process.env.DATABASE_URL = "postgresql://synapse:synapse@localhost:5433/synapse"
+  process.env.ADMIN_EMAIL = "admin@example.com"
+  process.env.ADMIN_PASSWORD = "password-password"
+  process.env.ADMIN_JWT_SECRET = "admin-secret-admin-secret-admin-secret"
+  process.env.USER_ACCESS_JWT_SECRET = "user-secret-user-secret-user-secret"
+  process.env.PORT = "3001"
+  try {
+    await callback()
+  } finally {
+    restoreEnv(previous)
+  }
+}
+
+function restoreEnv(previous: Record<string, string | undefined>): void {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+}
 
 function providersOf(moduleType: object): unknown[] {
   return Reflect.getMetadata(MODULE_METADATA.PROVIDERS, moduleType) ?? []

@@ -810,7 +810,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                   操作
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuContent align="end" className="min-w-56">
                 <DropdownMenuGroup>
                   <DropdownMenuItem
                     disabled={isQuickPublishBusy || disabledReason !== null}

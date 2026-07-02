@@ -310,7 +310,7 @@ function downloadResponse() {
       callback()
     },
   }) as Writable & {
-    readonly setHeader: ReturnType<typeof vi.fn>
+    setHeader: ReturnType<typeof vi.fn>
     headersSent: boolean
     destroyed: boolean
     bytes: () => Buffer

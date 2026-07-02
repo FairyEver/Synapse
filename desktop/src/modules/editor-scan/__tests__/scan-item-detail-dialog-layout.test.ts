@@ -57,14 +57,14 @@ describe("scan item detail dialog layout", () => {
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",
     )
-    const menuStart = source.indexOf('<DropdownMenuContent align="end" className="min-w-40">')
+    const menuStart = source.indexOf('<DropdownMenuContent align="end" className="min-w-56">')
     const menuEnd = source.indexOf("</DropdownMenuContent>", menuStart)
     const menuSource = source.slice(menuStart, menuEnd)
 
     expect(menuSource.match(/<DropdownMenuGroup>/g)).toHaveLength(3)
     expect(menuSource.match(/<DropdownMenuSeparator \/>/g)).toHaveLength(2)
     expect(menuSource).toMatch(
-      /<DropdownMenuGroup>[\s\S]*\{primaryActionLabel\}[\s\S]*重新安装[\s\S]*发布到仓库[\s\S]*发布到商店[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*移到废纸篓[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*复制到其它编辑器[\s\S]*<\/DropdownMenuGroup>/,
+      /<DropdownMenuGroup>[\s\S]*\{primaryActionLabel\}[\s\S]*重新安装[\s\S]*发布到仓库[\s\S]*上传到 Skill Repository[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*移到废纸篓[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*复制到其它编辑器[\s\S]*<\/DropdownMenuGroup>/,
     )
   })
 
@@ -204,7 +204,7 @@ describe("scan item detail dialog layout", () => {
       "utf8",
     )
 
-    expect(source).toContain("发布到商店")
+    expect(source).toContain("上传到 Skill Repository")
     expect(source).toContain('item.type === "skill"')
     expect(source).toContain("getUploadSkillToContentStoreDisabledReason")
     expect(source).toContain("handleUploadSkillToContentStore")

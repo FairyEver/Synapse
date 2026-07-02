@@ -582,7 +582,10 @@ export class SkillRepositoryService {
     const sessionId = randomUUID()
     const packageKey = `skill-repositories/${repository.id}/exports/${sessionId}.zip`
     const packageResult = await buildSkillRepositoryInstallPackage({
-      repository,
+      repository: {
+        ...repository,
+        owner: repository.owner ? { handle: repository.owner.handle } : null,
+      },
       files: repository.files ?? [],
       storage: this.storage,
     })
