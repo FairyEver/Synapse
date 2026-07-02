@@ -1588,6 +1588,7 @@ describe("DriveService", () => {
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const prepareUpload = vi.spyOn(service, "prepareUpload")
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
 
     const result = await service.prepareFolderUpload("user-1", {
@@ -1605,6 +1606,7 @@ describe("DriveService", () => {
     expect(result.entries).toHaveLength(2)
     expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual(["brief.txt", "docs/spec.txt"])
     expect(result.entries.every((entry) => entry.upload.method === "PUT")).toBe(true)
+    expect(prepareUpload).not.toHaveBeenCalled()
     const rootChildren = await service.listItems("user-1", result.root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
   })

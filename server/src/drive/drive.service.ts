@@ -174,6 +174,17 @@ type DriveBrowserTransferResult =
   | ({ readonly kind: "file" } & DriveBrowserDownloadResult)
   | ({ readonly kind: "zip" } & DriveFolderZipBrowserResult)
 
+type PreparedUploadRecord = {
+  readonly item: DriveItemRecord
+  readonly session: {
+    readonly id: string
+    readonly itemId: string
+    readonly storageKey: string
+    readonly expectedSize: bigint
+    readonly reservedBytes: bigint
+  }
+}
+
 type DriveBrowserChildrenPageInput = {
   readonly offset?: number
   readonly limit?: number
@@ -691,78 +702,12 @@ export class DriveService implements OnApplicationBootstrap {
     if (requestedSize > driveMaxFileBytes) throw new BadRequestException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const existingFile = await tx.driveItem.findFirst({
-        where: {
-          userId,
-          parentId: input.parentId,
-          type: DRIVE_ITEM_TYPE.file,
-          name,
-          storageStatus: DRIVE_STORAGE_STATUS.active,
-          deletedAt: null,
-          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
-          publicAsset: null,
-        },
-        include: driveItemWithShares,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      })
-      const reservedBytes = requestedSize
-      if (existingFile) {
-        const sessionId = randomUUID()
-        const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
-        const session = await tx.driveUploadSession.create({
-          data: {
-            id: sessionId,
-            userId,
-            itemId: existingFile.id,
-            storageKey,
-            expectedName: name,
-            expectedSize: requestedSize,
-            expectedMime: input.mimeType ?? null,
-            reservedBytes,
-            status: DRIVE_UPLOAD_STATUS.pending,
-            credentialKind: "presigned_put",
-            expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
-          },
-        })
-        await reserveDriveUsageBytes(tx, userId, reservedBytes)
-        return { item: existingFile, session }
-      }
-      const item = await tx.driveItem.create({
-        data: {
-          userId,
-          parentId: input.parentId,
-          type: DRIVE_ITEM_TYPE.file,
-          name,
-          size: requestedSize,
-          mimeType: input.mimeType ?? null,
-          storageStatus: DRIVE_STORAGE_STATUS.pending,
-          uploadStatus: DRIVE_UPLOAD_STATUS.pending,
-        },
-      })
-      const storageKey = driveStorageKeyForItem(item.id)
-      const updatedItem = await tx.driveItem.update({
-        where: { id: item.id },
-        data: { storageKey },
-        include: driveItemWithShares,
-      })
-      const session = await tx.driveUploadSession.create({
-        data: {
-          userId,
-          itemId: item.id,
-          storageKey,
-          expectedName: name,
-          expectedSize: requestedSize,
-          expectedMime: input.mimeType ?? null,
-          reservedBytes: requestedSize,
-          status: DRIVE_UPLOAD_STATUS.pending,
-          credentialKind: "presigned_put",
-          expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
-        },
-      })
-      await reserveDriveUsageBytes(tx, userId, requestedSize)
-      return { item: updatedItem, session }
-    })
+    const result = await this.prisma.$transaction((tx) => this.prepareUploadRecord(tx, userId, {
+      parentId: input.parentId,
+      name,
+      requestedSize,
+      mimeType: input.mimeType ?? null,
+    }))
 
     let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
     try {
@@ -785,6 +730,88 @@ export class DriveService implements OnApplicationBootstrap {
         headers: upload.headers,
       },
     }
+  }
+
+  private async prepareUploadRecord(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      readonly parentId: string | null
+      readonly name: string
+      readonly requestedSize: bigint
+      readonly mimeType: string | null
+    },
+  ): Promise<PreparedUploadRecord> {
+    const existingFile = await tx.driveItem.findFirst({
+      where: {
+        userId,
+        parentId: input.parentId,
+        type: DRIVE_ITEM_TYPE.file,
+        name: input.name,
+        storageStatus: DRIVE_STORAGE_STATUS.active,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        publicAsset: null,
+      },
+      include: driveItemWithShares,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    })
+    const reservedBytes = input.requestedSize
+    if (existingFile) {
+      const sessionId = randomUUID()
+      const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
+      const session = await tx.driveUploadSession.create({
+        data: {
+          id: sessionId,
+          userId,
+          itemId: existingFile.id,
+          storageKey,
+          expectedName: input.name,
+          expectedSize: input.requestedSize,
+          expectedMime: input.mimeType,
+          reservedBytes,
+          status: DRIVE_UPLOAD_STATUS.pending,
+          credentialKind: "presigned_put",
+          expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
+        },
+      })
+      await reserveDriveUsageBytes(tx, userId, reservedBytes)
+      return { item: existingFile, session }
+    }
+    const item = await tx.driveItem.create({
+      data: {
+        userId,
+        parentId: input.parentId,
+        type: DRIVE_ITEM_TYPE.file,
+        name: input.name,
+        size: input.requestedSize,
+        mimeType: input.mimeType,
+        storageStatus: DRIVE_STORAGE_STATUS.pending,
+        uploadStatus: DRIVE_UPLOAD_STATUS.pending,
+      },
+    })
+    const storageKey = driveStorageKeyForItem(item.id)
+    const updatedItem = await tx.driveItem.update({
+      where: { id: item.id },
+      data: { storageKey },
+      include: driveItemWithShares,
+    })
+    const session = await tx.driveUploadSession.create({
+      data: {
+        userId,
+        itemId: item.id,
+        storageKey,
+        expectedName: input.name,
+        expectedSize: input.requestedSize,
+        expectedMime: input.mimeType,
+        reservedBytes: input.requestedSize,
+        status: DRIVE_UPLOAD_STATUS.pending,
+        credentialKind: "presigned_put",
+        expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
+      },
+    })
+    await reserveDriveUsageBytes(tx, userId, input.requestedSize)
+    return { item: updatedItem, session }
   }
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
@@ -814,14 +841,15 @@ export class DriveService implements OnApplicationBootstrap {
 
     try {
       const rootResult = await this.ensureFolderForUpload(userId, { parentId: input.parentId, name: input.folderName }, auditContext)
-      root = rootResult.folder
+      const rootFolder = rootResult.folder
+      root = rootFolder
       preservedItemIds = rootResult.created
         ? new Set<string>()
-        : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, root.id))
-      const folderIdsByPath = new Map<string, string>([["", root.id]])
+        : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, rootFolder.id))
+      const folderIdsByPath = new Map<string, string>([["", rootFolder.id]])
 
       const ensureRelativeFolderPath = async (folderParts: readonly string[]): Promise<string> => {
-        let parentId = root.id
+        let parentId = rootFolder.id
         let currentPath = ""
         for (const folderName of folderParts) {
           currentPath = currentPath ? `${currentPath}/${folderName}` : folderName
@@ -842,23 +870,69 @@ export class DriveService implements OnApplicationBootstrap {
         await ensureRelativeFolderPath(planned.parts)
       }
 
+      const fileTargets: Array<{
+        readonly relativePath: string
+        readonly parentId: string
+        readonly name: string
+        readonly requestedSize: bigint
+        readonly mimeType: string | null
+      }> = []
       for (const planned of plannedFiles) {
         const { file, parts, relativePath } = planned
         const fileName = parts.at(-1)
         if (!fileName) throw new BadRequestException("文件路径无效。")
         const parentId = await ensureRelativeFolderPath(parts.slice(0, -1))
-        const prepared = await this.prepareUpload(userId, {
+        const requestedSize = parseRequestedSize(file.size)
+        if (requestedSize > driveMaxFileBytes) throw new BadRequestException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
+        fileTargets.push({
+          relativePath,
           parentId,
           name: fileName,
-          size: file.size,
+          requestedSize,
           mimeType: file.mimeType ?? null,
-          publicAppUrl: input.publicAppUrl,
         })
-        preparedSessionIds.push(prepared.sessionId)
-        entries.push({ relativePath, ...prepared })
       }
 
-      return { root, rootCreated: rootResult.created, entries }
+      const preparedFiles = await this.prisma.$transaction(async (tx) => {
+        const result: Array<{
+          readonly relativePath: string
+          readonly mimeType: string | null
+          readonly item: PreparedUploadRecord["item"]
+          readonly session: PreparedUploadRecord["session"]
+        }> = []
+        for (const target of fileTargets) {
+          const prepared = await this.prepareUploadRecord(tx, userId, target)
+          result.push({
+            relativePath: target.relativePath,
+            mimeType: target.mimeType,
+            item: prepared.item,
+            session: prepared.session,
+          })
+        }
+        return result
+      })
+
+      preparedSessionIds.push(...preparedFiles.map((prepared) => prepared.session.id))
+      for (const prepared of preparedFiles) {
+        const upload = await this.storage.createUploadInstruction({
+          key: prepared.session.storageKey,
+          contentType: prepared.mimeType ?? undefined,
+          expectedSize: prepared.session.expectedSize,
+        })
+        entries.push({
+          relativePath: prepared.relativePath,
+          sessionId: prepared.session.id,
+          item: toDriveItemDto(prepared.item),
+          upload: {
+            method: upload.method,
+            url: upload.url,
+            expiresAt: upload.expiresAt.toISOString(),
+            headers: upload.headers,
+          },
+        })
+      }
+
+      return { root: rootFolder, rootCreated: rootResult.created, entries }
     } catch (error) {
       if (root) await this.rollbackFolderUploadPrepare(userId, root.id, preservedItemIds, preparedSessionIds)
       throw error
