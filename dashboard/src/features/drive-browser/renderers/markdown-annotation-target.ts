@@ -1,4 +1,7 @@
-import type { DriveAnnotationTextRangeTargetV1 } from '@synapse/shared'
+import {
+  DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
+  type DriveAnnotationTextRangeTargetV1,
+} from '@synapse/shared'
 
 const CONTEXT_LENGTH = 80
 
@@ -12,6 +15,7 @@ export function createMarkdownAnnotationTargetFromSelection(
 
   const exact = getRangeRenderedText(range)
   if (!exact.trim()) return null
+  if (exact.length > DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH) return null
 
   const beforeRange = document.createRange()
   beforeRange.selectNodeContents(root)

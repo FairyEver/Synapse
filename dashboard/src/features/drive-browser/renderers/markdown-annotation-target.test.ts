@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
+import { DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH } from '@synapse/shared'
 import {
   createMarkdownAnnotationTargetFromSelection,
   getMarkdownRenderedText,
@@ -41,6 +42,22 @@ describe('markdown annotation target helpers', () => {
     const range = document.createRange()
     range.setStart(external, 0)
     range.setEnd(external, 2)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    expect(createMarkdownAnnotationTargetFromSelection(root, selection)).toBeNull()
+  })
+
+  it('returns null for selections longer than the annotation quote limit', () => {
+    const longText = '文'.repeat(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH + 1)
+    document.body.innerHTML = `<main>${longText}</main>`
+    const root = document.querySelector('main')
+    const text = root?.firstChild
+    if (!root || !text) throw new Error('missing fixture')
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, longText.length)
     const selection = window.getSelection()
     selection?.removeAllRanges()
     selection?.addRange(range)

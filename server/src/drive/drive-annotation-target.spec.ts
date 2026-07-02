@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH } from "@synapse/shared"
 import {
   isCommentableMarkdownItem,
   parseDriveAnnotationCreateBody,
@@ -56,6 +57,22 @@ describe("drive annotation target helpers", () => {
       },
       body: "   ",
     })).toThrow("评论内容不能为空。")
+  })
+
+  it("rejects text range targets with overlong exact quotes", () => {
+    const exact = "文".repeat(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH + 1)
+
+    expect(() => parseDriveAnnotationCreateBody({
+      targetKind: "textRange",
+      target: {
+        schemaVersion: 1,
+        kind: "textRange",
+        surface: "markdownRenderedText",
+        range: { start: 0, end: exact.length },
+        quote: { exact, prefix: "", suffix: "" },
+      },
+      body: "ok",
+    })).toThrow("评论请求无效。")
   })
 
   it("reattaches exact quotes after inserted text", () => {

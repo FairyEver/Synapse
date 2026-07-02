@@ -874,6 +874,7 @@ export interface DriveLinkDownloadFileDto {
 
 export type DriveAnnotationTargetKind = "textRange"
 export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
+export const DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH = 1000
 
 export interface DriveAnnotationAuthorDto {
   readonly id: string

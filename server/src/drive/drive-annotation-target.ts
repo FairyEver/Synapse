@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common"
 import {
+  DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
   isDriveMarkdownItem,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCreateInput,
@@ -18,7 +19,7 @@ const textRangeTargetSchema = z.object({
     end: z.number().int().nonnegative(),
   }).strict(),
   quote: z.object({
-    exact: z.string().max(1000),
+    exact: z.string().max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
     prefix: z.string().max(200),
     suffix: z.string().max(200),
   }).strict(),
