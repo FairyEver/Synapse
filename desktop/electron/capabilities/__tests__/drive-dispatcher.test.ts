@@ -627,12 +627,41 @@ describe("createDriveCapabilityDispatcher", () => {
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
-      filePath: "/tmp/logo.txt",
+      filePath: "/tmp/logo.png",
+      name: "logo.txt",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: false,
       error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
       data: { status: "rejected", fileName: "logo.txt", message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE },
     })
+  })
+
+  it("rejects unsupported public asset image formats before calling account helpers", async () => {
+    const uploadDrivePublicAssets = vi.fn()
+    const replaceDrivePublicAssetFile = vi.fn()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets, replaceDrivePublicAssetFile }),
+      fileSystem: regularFileSystemForTest(),
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo.pdf",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.update", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      filePath: "/tmp/logo.svg",
+      mimeType: "image/svg+xml",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+    })
+
+    expect(uploadDrivePublicAssets).not.toHaveBeenCalled()
+    expect(replaceDrivePublicAssetFile).not.toHaveBeenCalled()
   })
 
   it("rejects public asset upload and replacement when the local file is a symbolic link", async () => {

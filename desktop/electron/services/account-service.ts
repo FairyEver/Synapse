@@ -1236,11 +1236,7 @@ export class AccountService {
     if (bytes.byteLength > uploadLimits.maxFileBytes) {
       throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
     }
-    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
-    if (!mimeType || !mimeType.startsWith("image/")) {
-      const shared = await sharedUrlsPromise
-      throw new Error(shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
-    }
+    const mimeType = await resolveDrivePublicAssetImageMimeType(input.name, input.mimeType)
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
       `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,
@@ -1283,7 +1279,7 @@ export class AccountService {
     if (!fileStat?.isFile()) throw new Error("文件不可用。")
     const uploadLimits = await getDriveUploadLimits()
     if (fileStat.size > uploadLimits.maxFileBytes) throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
-    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
+    const mimeType = await resolveDrivePublicAssetImageMimeType(input.name, input.mimeType)
 
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
@@ -1443,7 +1439,16 @@ export class AccountService {
     }
 
     let prepared: DriveUploadPrepareResult
-    const mimeType = await resolveDrivePublicAssetMimeType(file.name, file.mimeType)
+    let mimeType: string
+    try {
+      mimeType = await resolveDrivePublicAssetImageMimeType(file.name, file.mimeType)
+    } catch (error) {
+      return {
+        status: "rejected",
+        fileName: file.name,
+        message: error instanceof Error && error.message.trim() ? error.message : localUploadErrorMessage(error),
+      }
+    }
     try {
       prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
         "POST",
@@ -2339,9 +2344,19 @@ async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; 
 
 async function resolveDrivePublicAssetMimeType(name: string, mimeType?: string | null): Promise<string | null> {
   const normalized = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : null
-  if (normalized) return normalized
+  if (normalized) return normalized.toLowerCase()
   const shared = await sharedUrlsPromise
   return shared.inferDrivePublicAssetMimeType(name)
+}
+
+async function resolveDrivePublicAssetImageMimeType(name: string, mimeType?: string | null): Promise<string> {
+  const shared = await sharedUrlsPromise
+  const resolved = await resolveDrivePublicAssetMimeType(name, mimeType)
+  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+  if (!resolved || !supportedMimeTypes.has(resolved)) {
+    throw new Error(shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
+  }
+  return resolved
 }
 
 function driveMaxFileSizeMessage(label: string): string {

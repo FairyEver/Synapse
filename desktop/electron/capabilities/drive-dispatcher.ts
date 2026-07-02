@@ -640,11 +640,13 @@ async function uploadPublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
+  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  if (!mimeType.ok) return { ok: false, error: mimeType.error }
   const result = await deps.accountService.uploadDrivePublicAssets({
     files: [{
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
+      mimeType: mimeType.value,
     }],
   })
   const first = result.results[0]
@@ -669,13 +671,15 @@ async function replacePublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
+  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  if (!mimeType.ok) return { ok: false, error: mimeType.error }
   return {
     ok: true,
     data: await deps.accountService.replaceDrivePublicAssetFile({
       assetId,
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
+      mimeType: mimeType.value,
     }),
   }
 }
@@ -688,9 +692,22 @@ async function requireLocalUploadFile(fileSystem: FileSystemPort, filePath: stri
 }
 
 async function resolvePublicAssetMimeType(name: string, mimeType?: string): Promise<string | null> {
-  if (mimeType) return mimeType
+  if (mimeType) return mimeType.trim().toLowerCase()
   const { inferDrivePublicAssetMimeType } = await import("@synapse/shared")
   return inferDrivePublicAssetMimeType(name)
+}
+
+async function resolvePublicAssetImageMimeType(name: string, mimeType?: string): Promise<
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly error: string }
+> {
+  const shared = await import("@synapse/shared")
+  const resolved = await resolvePublicAssetMimeType(name, mimeType)
+  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+  if (!resolved || !supportedMimeTypes.has(resolved)) {
+    return { ok: false, error: shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE }
+  }
+  return { ok: true, value: resolved }
 }
 
 async function putPreparedUpload(

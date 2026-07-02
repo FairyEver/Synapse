@@ -976,6 +976,37 @@ describe("AccountService", () => {
     expect(requestAuthenticatedJson).not.toHaveBeenCalled()
   })
 
+  it("rejects unsupported local public asset uploads and replacements before prepare", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-unsupported-"))
+    const uploadPath = path.join(dir, "note.pdf")
+    const replacePath = path.join(dir, "vector.svg")
+    await writeFile(uploadPath, "pdf")
+    await writeFile(replacePath, "<svg />")
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+
+    await expect(service.uploadDrivePublicAssets({
+      files: [{ path: uploadPath, name: "note.pdf", mimeType: null }],
+    })).resolves.toEqual({
+      results: [{
+        status: "rejected",
+        fileName: "note.pdf",
+        message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+      }],
+    })
+
+    await expect(service.replaceDrivePublicAssetFile({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      path: replacePath,
+      name: "vector.svg",
+      mimeType: "image/svg+xml",
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
+
+    expect(requestAuthenticatedJson).not.toHaveBeenCalled()
+  })
+
   it("cancels binary public asset uploads when PUT fails after prepare", async () => {
     const bytes = new TextEncoder().encode("hello").buffer
     const fetch = vi.fn(async () => textResponse("upload failed", 500)) as unknown as typeof globalThis.fetch
