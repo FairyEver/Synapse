@@ -2487,7 +2487,7 @@ describe("DriveService", () => {
     expect(storage.deleteObject).not.toHaveBeenCalled()
   })
 
-  it("user delete disables shares and restore does not reactivate old links", async () => {
+  it("user delete disables shares and restore reactivates old links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -2495,6 +2495,13 @@ describe("DriveService", () => {
       parentId: null,
       name: "shared.txt",
       mimeType: "text/plain",
+    })
+    const manuallyDisabledShare = await service.createShare("user-1", file.id, "https://synapse.test")
+    await service.disableShare("user-1", manuallyDisabledShare.shareId)
+    const manuallyDisabledRecord = await prisma.driveShare.findFirst({ where: { id: manuallyDisabledShare.id } })
+    expect(manuallyDisabledRecord).toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
     })
     const share = await service.createShare("user-1", file.id, "https://synapse.test")
 
@@ -2508,10 +2515,21 @@ describe("DriveService", () => {
 
     await service.restoreItem("user-1", file.id)
 
-    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId, password: share.password ?? undefined })).resolves.toMatchObject({
+      status: "ok",
+      value: {
+        id: share.id,
+        item: { id: file.id },
+      },
+    })
     await expect(prisma.driveShare.findFirst({ where: { id: share.id } })).resolves.toMatchObject({
+      enabled: true,
+      disabledAt: null,
+    })
+    await expect(service.resolvePublicShareAccess({ shareId: manuallyDisabledShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(prisma.driveShare.findFirst({ where: { id: manuallyDisabledShare.id } })).resolves.toMatchObject({
       enabled: false,
-      disabledAt: expect.any(Date),
+      disabledAt: manuallyDisabledRecord?.disabledAt,
     })
   })
 
