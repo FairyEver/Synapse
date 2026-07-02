@@ -6,7 +6,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { driveApi } from '@/lib/api'
-import { DriveShareSettingsDialog, DriveSharesDialog } from './drive-share-dialogs'
+import {
+  DriveShareSettingsDialog,
+  DriveSharesDialog,
+  mergeDriveShareEditorEmails,
+  prepareDriveShareSettingsForSubmit,
+} from './drive-share-dialogs'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -45,6 +50,42 @@ describe('DriveShareSettingsDialog', () => {
       expiresIn: '3d',
       accessMode: 'link_read',
       editorEmails: [],
+    })
+  })
+
+  it('normalizes editor emails for specified user shares', () => {
+    expect(prepareDriveShareSettingsForSubmit({
+      passwordEnabled: true,
+      expiresIn: '3d',
+      accessMode: 'specified_users_edit',
+      editorEmails: ['OWNER@example.com'],
+    }, 'owner@example.com, user@example.com')).toEqual({
+      settings: {
+        passwordEnabled: true,
+        expiresIn: '3d',
+        accessMode: 'specified_users_edit',
+        editorEmails: ['owner@example.com', 'user@example.com'],
+      },
+      error: null,
+    })
+  })
+
+  it('requires editor emails for specified user shares', () => {
+    expect(prepareDriveShareSettingsForSubmit({
+      passwordEnabled: true,
+      expiresIn: '3d',
+      accessMode: 'specified_users_edit',
+      editorEmails: [],
+    }, '')).toEqual({
+      settings: null,
+      error: '请至少添加一个可编辑用户。',
+    })
+  })
+
+  it('rejects invalid editor email input', () => {
+    expect(mergeDriveShareEditorEmails([], 'not-an-email')).toEqual({
+      emails: [],
+      error: '邮箱格式无效。',
     })
   })
 })
