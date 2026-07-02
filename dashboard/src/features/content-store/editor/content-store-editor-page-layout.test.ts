@@ -7,25 +7,13 @@ const editorPagePath = fileURLToPath(
 )
 
 describe('content store editor page layout', () => {
-  it('keeps skill metadata in a side property panel', () => {
-    const source = readFileSync(editorPagePath, 'utf8')
-    const skillBranchStart = source.indexOf('{isSkill ? (')
-    const skillBranchEnd = source.indexOf(') : (', skillBranchStart)
-    const skillBranch = source.slice(skillBranchStart, skillBranchEnd)
-
-    expect(source).toContain("aria-label='内容属性'")
-    expect(skillBranch).toContain("lg:grid-cols-[20rem_minmax(0,1fr)_18rem]")
-    expect(skillBranch).toContain('<ContentMetadataPanel')
-    expect(skillBranch).not.toContain(
-      "grid shrink-0 gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]"
-    )
-  })
-
-  it('routes visibility changes through a confirmation dialog', () => {
+  it('blocks legacy editing and links to Skill Repository', () => {
     const source = readFileSync(editorPagePath, 'utf8')
 
-    expect(source).toContain("import { ConfirmDialog } from '@/components/confirm-dialog'")
-    expect(source).toContain('setVisibilityTarget')
-    expect(source).toContain('<ConfirmDialog')
+    expect(source).toContain("to='/skill-repositories'")
+    expect(source).toContain('云端 Prompt 和 Rule 商店已停止维护')
+    expect(source).not.toContain('useContentStoreDraftEditor')
+    expect(source).not.toContain('<ContentStorePublishDialog')
+    expect(source).not.toContain('<ConfirmDialog')
   })
 })

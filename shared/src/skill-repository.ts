@@ -2,12 +2,15 @@ export type SkillRepositoryVisibility = "private" | "public"
 export type SkillRepositoryStatus = "active" | "removed"
 export type SkillRepositoryFileKind = "text" | "binary"
 
+export const skillRepositoryRootFilePath = "SKILL.md"
+export const skillRepositoryTextPreviewMaxBytes = 1024 * 1024
 export const skillRepositoryMaxTotalBytes = 50 * 1024 * 1024
 export const skillRepositoryMaxFileBytes = 20 * 1024 * 1024
 export const skillRepositoryMaxFileCount = 200
 export const skillRepositoryNameMaxLength = 64
 export const userHandleMaxLength = 64
 export const reservedUserHandles = ["api", "console", "files", "share", "sites", "webhooks"] as const
+export const defaultSkillRepositoryInstallDeepLinkBase = "synapse://skill-install"
 
 export const skillRepositoryErrorCodes = [
   "USER_HANDLE_REQUIRED",
@@ -15,6 +18,10 @@ export const skillRepositoryErrorCodes = [
   "SKILL_REPOSITORY_FORBIDDEN",
   "SKILL_REPOSITORY_NOT_FOUND",
   "SKILL_REPOSITORY_INVALID_SKILL",
+  "SKILL_REPOSITORY_FILE_CONFLICT",
+  "SKILL_REPOSITORY_PROTECTED_ROOT_FILE",
+  "SKILL_REPOSITORY_INSTALL_SESSION_NOT_FOUND",
+  "SKILL_REPOSITORY_LEGACY_FORK_SOURCE_MISSING",
 ] as const
 
 export type SkillRepositoryErrorCode = (typeof skillRepositoryErrorCodes)[number]
@@ -56,6 +63,70 @@ export interface SkillRepositoryDetailDto extends SkillRepositoryItemDto {
   readonly files: readonly SkillRepositoryFileDto[]
 }
 
+export interface SkillRepositoryPublicListInput {
+  readonly page?: number
+  readonly pageSize?: number
+  readonly query?: string | null
+}
+
+export interface SkillRepositoryListResultDto {
+  readonly items: readonly SkillRepositoryItemDto[]
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+}
+
+export interface SkillRepositoryPublicPathDto {
+  readonly repository: SkillRepositoryDetailDto
+  readonly canonicalPath: {
+    readonly ownerHandle: string
+    readonly repositoryName: string
+  }
+  readonly redirected: boolean
+}
+
+export interface SkillRepositoryUpdateInput {
+  readonly name?: string
+  readonly title?: string
+  readonly description?: string | null
+  readonly visibility?: SkillRepositoryVisibility
+}
+
+export interface SkillRepositoryDeleteResultDto {
+  readonly id: string
+  readonly status: SkillRepositoryStatus
+}
+
+export interface SkillRepositoryFileContentDto {
+  readonly file: SkillRepositoryFileDto
+  readonly text: string | null
+  readonly downloadUrl: string | null
+  readonly truncated: boolean
+}
+
+export interface SkillRepositoryTextSaveInput {
+  readonly path: string
+  readonly text: string
+  readonly expectedSha256: string
+}
+
+export interface SkillRepositoryFileUploadInput {
+  readonly path: string
+  readonly contentBase64: string
+  readonly mimeType?: string | null
+  readonly expectedSha256?: string | null
+}
+
+export interface SkillRepositoryFileRenameInput {
+  readonly fromPath: string
+  readonly toPath: string
+}
+
+export interface SkillRepositoryFileDeleteInput {
+  readonly path: string
+  readonly expectedSha256?: string | null
+}
+
 export interface SkillRepositoryImportFileInput {
   readonly path: string
   readonly contentBase64: string
@@ -69,6 +140,96 @@ export interface SkillRepositoryImportInput {
   readonly description?: string | null
   readonly files: readonly SkillRepositoryImportFileInput[]
 }
+
+export interface SkillRepositoryForkInput {
+  readonly name?: string | null
+  readonly title?: string | null
+}
+
+export interface SkillRepositoryForkResultDto {
+  readonly repository: SkillRepositoryDetailDto
+  readonly managementUrl: string | null
+}
+
+export interface SkillRepositoryInstallSessionDto {
+  readonly id: string
+  readonly repositoryId: string
+  readonly repositoryName: string
+  readonly ownerHandle: string
+  readonly title: string
+  readonly packageSha256: string
+  readonly packageSize: number
+  readonly expiresAt: string
+  readonly deepLinkUrl: string
+}
+
+export interface SkillRepositoryResolvedInstallSessionDto {
+  readonly id: string
+  readonly repository: SkillRepositoryItemDto
+  readonly packageSha256: string
+  readonly packageSize: number
+  readonly expiresAt: string
+}
+
+export interface SkillRepositoryInstallManifestFile {
+  readonly path: string
+  readonly size: number
+  readonly sha256: string
+  readonly kind: SkillRepositoryFileKind
+}
+
+export interface SkillRepositoryInstallManifest {
+  readonly schemaVersion: 1
+  readonly repositoryId: string
+  readonly repositoryName: string
+  readonly ownerHandle: string
+  readonly title: string
+  readonly mainFile: "content/SKILL.md"
+  readonly files: readonly SkillRepositoryInstallManifestFile[]
+}
+
+export type SkillRepositoryLegacyMigrationSkippedReason =
+  | "not_skill"
+  | "removed"
+  | "missing_source"
+  | "invalid_skill"
+
+export interface SkillRepositoryLegacyMigrationSkippedDto {
+  readonly contentStoreItemId: string
+  readonly reason: SkillRepositoryLegacyMigrationSkippedReason
+  readonly message?: string
+}
+
+export interface SkillRepositoryLegacyMigrationWarningDto {
+  readonly contentStoreItemId: string
+  readonly code: SkillRepositoryErrorCode
+  readonly message: string
+}
+
+export interface SkillRepositoryLegacyMigrationResultDto {
+  readonly scanned: number
+  readonly migrated: number
+  readonly alreadyMigrated: number
+  readonly skipped: readonly SkillRepositoryLegacyMigrationSkippedDto[]
+  readonly warnings: readonly SkillRepositoryLegacyMigrationWarningDto[]
+}
+
+export type SkillRepositoryLegacyContentRouteDto =
+  | {
+      readonly status: "migrated"
+      readonly repositoryId: string
+      readonly managementUrl: string
+      readonly publicUrl: string | null
+    }
+  | {
+      readonly status: "retired"
+      readonly contentType: "rule" | "prompt"
+      readonly message: string
+    }
+  | {
+      readonly status: "not_found"
+      readonly message: string
+    }
 
 const namePattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u
 const nameBoundaryPattern = /^[a-z0-9].*[a-z0-9]$|^[a-z0-9]$/u
@@ -88,6 +249,22 @@ export function normalizeUserHandle(value: string): string {
 export function buildSkillRepositoryManagementUrl(publicAppUrl: string, repositoryId: string): string {
   const base = publicAppUrl.trim().endsWith("/") ? publicAppUrl.trim() : `${publicAppUrl.trim()}/`
   return new URL(`/console/skill-repositories/${encodeURIComponent(repositoryId)}`, base).toString()
+}
+
+export function buildSkillRepositoryPublicUrl(publicAppUrl: string, ownerHandle: string, repositoryName: string): string {
+  const base = publicAppUrl.trim().endsWith("/") ? publicAppUrl.trim() : `${publicAppUrl.trim()}/`
+  return new URL(`/console/skills/${encodeURIComponent(ownerHandle)}/${encodeURIComponent(repositoryName)}`, base).toString()
+}
+
+export function buildSkillRepositorySettingsUrl(publicAppUrl: string): string {
+  const base = publicAppUrl.trim().endsWith("/") ? publicAppUrl.trim() : `${publicAppUrl.trim()}/`
+  return new URL("/console/settings/profile", base).toString()
+}
+
+export function appendSkillRepositoryInstallSessionToDeepLink(base: string, sessionId: string): string {
+  const url = new URL(base)
+  url.searchParams.set("session", sessionId)
+  return url.toString()
 }
 
 function normalizeDashedIdentifier(value: string, label: string, maxLength: number): string {

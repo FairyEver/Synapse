@@ -514,7 +514,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         buildUploadSkillDraftRequest(item),
       )
       success(buildUploadSkillDraftSuccessMessage())
-      logger.info("Content store skill draft uploaded.", {
+      logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
         itemType: item.type,
         pathBasename: logSafeItemPath(item.path),
@@ -524,7 +524,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       try {
         await bridge.shell.openExternal(result.consoleEditUrl ?? result.dashboardEditUrl)
       } catch (openError) {
-        logger.warn("Content store draft edit URL open failed.", {
+        logger.warn("Skill Repository management URL open failed.", {
           editorId: item.editorId,
           error: openError,
           itemType: item.type,
@@ -535,7 +535,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         notifyError("无法打开 Synapse。")
       }
     } catch (error) {
-      logger.warn("Content store skill draft upload failed.", {
+      logger.warn("Skill Repository upload from scan detail failed.", {
         editorId: item.editorId,
         error,
         itemType: item.type,
@@ -670,7 +670,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>草稿已保存</AlertDialogTitle>
+            <AlertDialogTitle>Skill 仓库已保存</AlertDialogTitle>
             <AlertDialogDescription>
               <span className="block break-all">{contentStoreEditUrl}</span>
             </AlertDialogDescription>
@@ -848,7 +848,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                       onSelect={() => void handleUploadSkillToContentStore()}
                     >
                       {isContentStoreUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                      发布到商店
+                      上传到 Skill Repository
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuGroup>

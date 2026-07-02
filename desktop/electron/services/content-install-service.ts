@@ -54,7 +54,8 @@ type EditorReadSecurityDeps = {
   permissionGuard: PermissionGuard
 }
 
-type PreparedContentInstallSourceProvider = {
+export type PreparedContentInstallSourceProvider = {
+  hasPreparedSource?(sourceId: string, contentId: string): boolean
   readPreparedRule(sourceId: string, contentId: string): Promise<string>
   readPreparedSkill(sourceId: string, contentId: string): Promise<SynapseContentDetail<"skill">>
   beginPreparedInstall(sourceId: string, contentId: string): Promise<void>
@@ -73,6 +74,9 @@ type ContentInstallServiceDeps = {
 }
 
 const unavailablePreparedSourceProvider: PreparedContentInstallSourceProvider = {
+  hasPreparedSource() {
+    return false
+  },
   async readPreparedRule() {
     throw new Error("Content Store 安装源尚未初始化。")
   },
@@ -352,8 +356,43 @@ async function assertTrustedResolvedRuleTarget(
   }
 }
 
+function createCompositePreparedSourceProvider(
+  providers: readonly PreparedContentInstallSourceProvider[],
+): PreparedContentInstallSourceProvider {
+  function resolve(sourceId: string, contentId: string): PreparedContentInstallSourceProvider {
+    const provider = providers.find((candidate) => candidate.hasPreparedSource?.(sourceId, contentId))
+    if (provider) return provider
+    return providers[providers.length - 1] ?? unavailablePreparedSourceProvider
+  }
+
+  return {
+    hasPreparedSource(sourceId, contentId) {
+      return providers.some((provider) => provider.hasPreparedSource?.(sourceId, contentId))
+    },
+    readPreparedRule(sourceId, contentId) {
+      return resolve(sourceId, contentId).readPreparedRule(sourceId, contentId)
+    },
+    readPreparedSkill(sourceId, contentId) {
+      return resolve(sourceId, contentId).readPreparedSkill(sourceId, contentId)
+    },
+    beginPreparedInstall(sourceId, contentId) {
+      return resolve(sourceId, contentId).beginPreparedInstall(sourceId, contentId)
+    },
+    endPreparedInstall(sourceId, contentId) {
+      return resolve(sourceId, contentId).endPreparedInstall(sourceId, contentId)
+    },
+    copyPreparedSkillAttachment(sourceId, contentId, relativePath, targetPath) {
+      return resolve(sourceId, contentId).copyPreparedSkillAttachment(sourceId, contentId, relativePath, targetPath)
+    },
+    markPreparedInstalled(sourceId, contentId) {
+      return resolve(sourceId, contentId).markPreparedInstalled(sourceId, contentId)
+    },
+  }
+}
+
 export class ContentInstallService {
   private preparedSourceProvider: PreparedContentInstallSourceProvider
+  private readonly preparedSourceProviders: PreparedContentInstallSourceProvider[] = []
 
   constructor(deps: ContentInstallServiceDeps = {}) {
     this.preparedSourceProvider = deps.preparedSourceProvider ?? unavailablePreparedSourceProvider
@@ -361,6 +400,14 @@ export class ContentInstallService {
 
   setPreparedSourceProvider(provider: PreparedContentInstallSourceProvider): void {
     this.preparedSourceProvider = provider
+    this.preparedSourceProviders.splice(0, this.preparedSourceProviders.length, provider)
+  }
+
+  addPreparedSourceProvider(provider: PreparedContentInstallSourceProvider): void {
+    if (!this.preparedSourceProviders.includes(provider)) {
+      this.preparedSourceProviders.push(provider)
+    }
+    this.preparedSourceProvider = createCompositePreparedSourceProvider(this.preparedSourceProviders)
   }
 
   async resolveEditorInstallTarget(

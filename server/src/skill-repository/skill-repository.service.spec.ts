@@ -1,5 +1,6 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
+import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { SkillRepositoryService } from "./skill-repository.service"
@@ -219,7 +220,7 @@ describe("SkillRepositoryService", () => {
 
     expect(result).toMatchObject({ id: "repo-1", name: "demo-skill", title: "New Title", description: "Updated" })
     expect(prisma.skillRepository.findFirst).toHaveBeenNthCalledWith(1, {
-      where: { id: "repo-1", ownerUserId: "user-1", visibility: "private", status: "active" },
+      where: { id: "repo-1", ownerUserId: "user-1", status: "active" },
     })
     expect(prisma.skillRepository.create).not.toHaveBeenCalled()
     expect(prisma.skillRepository.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -323,7 +324,7 @@ describe("SkillRepositoryService", () => {
     })).rejects.toThrow(NotFoundException)
 
     expect(prisma.skillRepository.findFirst).toHaveBeenCalledWith({
-      where: { id: "foreign-repo", ownerUserId: "user-1", visibility: "private", status: "active" },
+      where: { id: "foreign-repo", ownerUserId: "user-1", status: "active" },
     })
     expect(prisma.skillRepositoryFile.deleteMany).not.toHaveBeenCalled()
   })
@@ -411,7 +412,7 @@ describe("SkillRepositoryService", () => {
     const result = await service.listMine("user-1")
 
     expect(prisma.skillRepository.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { ownerUserId: "user-1", visibility: "private", status: "active" },
+      where: { ownerUserId: "user-1", status: "active" },
       orderBy: { updatedAt: "desc" },
     }))
     expect(result.map((repo) => repo.id)).toEqual(["repo-new", "repo-old"])
@@ -427,8 +428,271 @@ describe("SkillRepositoryService", () => {
     await expect(service.getMine("user-1", "missing-repo")).rejects.toThrow(NotFoundException)
 
     expect(prisma.skillRepository.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "missing-repo", ownerUserId: "user-1", visibility: "private", status: "active" },
+      where: { id: "missing-repo", ownerUserId: "user-1", status: "active" },
     }))
+  })
+
+  it("reads text file content without adding text to repository detail files", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      path: "SKILL.md",
+      pathKey: "skill.md",
+      kind: "text",
+      storageKey: "skill-repositories/repo-1/files/file-1/sha",
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Demo Skill\n") })
+
+    const result = await service.getFileContent("user-1", "repo-1", "SKILL.md")
+
+    expect(result).toMatchObject({
+      file: { path: "SKILL.md", kind: "text" },
+      text: "# Demo Skill\n",
+      downloadUrl: null,
+      truncated: false,
+    })
+    expect("text" in result.file).toBe(false)
+    expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "skill-repositories/repo-1/files/file-1/sha" })
+  })
+
+  it("returns null text for binary file content", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      path: "assets/logo.png",
+      pathKey: "assets/logo.png",
+      kind: "binary",
+      mimeType: "image/png",
+      storageKey: "skill-repositories/repo-1/files/file-2/sha",
+    }))
+
+    const result = await service.getFileContent("user-1", "repo-1", "assets/logo.png")
+
+    expect(result).toMatchObject({
+      file: { path: "assets/logo.png", kind: "binary" },
+      text: null,
+      downloadUrl: null,
+      truncated: false,
+    })
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("opens a private repository file download for the owner", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", ownerUserId: "user-1", visibility: "private" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      path: "assets/logo.png",
+      pathKey: "assets/logo.png",
+      kind: "binary",
+      mimeType: "image/png",
+      size: BigInt(4),
+      storageKey: "skill-repositories/repo-1/files/file-2/logo-sha",
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream(Buffer.from("logo")) })
+
+    const result = await service.openFileDownload("user-1", "repo-1", "assets/logo.png")
+
+    expect(result).toMatchObject({
+      contentType: "image/png",
+      size: 4,
+      filename: "logo.png",
+    })
+    expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "skill-repositories/repo-1/files/file-2/logo-sha" })
+  })
+
+  it("opens a public repository file download for a non-owner", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", ownerUserId: "user-1", visibility: "public" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      path: "README.md",
+      pathKey: "readme.md",
+      kind: "text",
+      mimeType: "text/markdown",
+      storageKey: "skill-repositories/repo-1/files/file-3/readme-sha",
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Readme") })
+
+    const result = await service.openFileDownload("user-2", "repo-1", "README.md")
+
+    expect(result).toMatchObject({
+      contentType: "text/markdown",
+      filename: "README.md",
+    })
+    expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "skill-repositories/repo-1/files/file-3/readme-sha" })
+  })
+
+  it("rejects private repository file downloads for non-owners", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(null)
+
+    await expect(service.openFileDownload("user-2", "repo-1", "README.md")).rejects.toBeInstanceOf(NotFoundException)
+
+    expect(prisma.skillRepositoryFile.findFirst).not.toHaveBeenCalled()
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects missing repository file downloads", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(null)
+
+    await expect(service.openFileDownload("user-1", "repo-1", "missing.txt")).rejects.toBeInstanceOf(NotFoundException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("saves a text file when expected sha matches", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      id: "file-row-1",
+      path: "SKILL.md",
+      pathKey: "skill.md",
+      sha256: "oldsha",
+      storageKey: "skill-repositories/repo-1/files/old/oldsha",
+    }))
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
+      id: "repo-1",
+      files: [repositoryFileRow({
+        sha256: "22e127a7f2d892b375cc37ca455ab6a6f0c0da9ac42e58d1b4c5cc45d11d7902",
+        size: BigInt(Buffer.byteLength("# Updated")),
+      })],
+    }))
+
+    const result = await service.saveTextFile("user-1", "repo-1", {
+      path: "SKILL.md",
+      text: "# Updated",
+      expectedSha256: "oldsha",
+    })
+
+    expect(result.files[0]).toMatchObject({ path: "SKILL.md" })
+    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringMatching(/^skill-repositories\/repo-1\/files\/file-\d+\/11c312/u),
+      body: Buffer.from("# Updated"),
+    }))
+    expect(prisma.skillRepositoryFile.deleteMany).toHaveBeenCalledWith({
+      where: { repositoryId: "repo-1", pathKey: "skill.md" },
+    })
+    expect(storage.deleteObject).toHaveBeenCalledWith("skill-repositories/repo-1/files/old/oldsha")
+  })
+
+  it("rejects stale text saves with a conflict", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      sha256: "newsha",
+      storageKey: "skill-repositories/repo-1/files/file-1/newsha",
+    }))
+
+    await expect(service.saveTextFile("user-1", "repo-1", {
+      path: "SKILL.md",
+      text: "# Stale",
+      expectedSha256: "oldsha",
+    })).rejects.toMatchObject({
+      constructor: ConflictException,
+      response: { code: "SKILL_REPOSITORY_FILE_CONFLICT" },
+    })
+
+    expect(storage.putObject).not.toHaveBeenCalled()
+  })
+
+  it("renames non-root files and protects SKILL.md from rename or delete", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValue(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      id: "file-row-2",
+      path: "README.md",
+      pathKey: "readme.md",
+      sha256: "readme-sha",
+    }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(null)
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
+      id: "repo-1",
+      files: [
+        repositoryFileRow(),
+        repositoryFileRow({ path: "docs/README.md", pathKey: "docs/readme.md" }),
+      ],
+    }))
+
+    await service.renameFile("user-1", "repo-1", { fromPath: "README.md", toPath: "docs/README.md" })
+
+    expect(prisma.skillRepositoryFile.update).toHaveBeenCalledWith({
+      where: { id: "file-row-2" },
+      data: { path: "docs/README.md", pathKey: "docs/readme.md" },
+    })
+
+    await expect(service.renameFile("user-1", "repo-1", { fromPath: "SKILL.md", toPath: "README.md" })).rejects.toMatchObject({
+      response: { code: "SKILL_REPOSITORY_PROTECTED_ROOT_FILE" },
+    })
+    await expect(service.deleteFile("user-1", "repo-1", { path: "SKILL.md" })).rejects.toMatchObject({
+      response: { code: "SKILL_REPOSITORY_PROTECTED_ROOT_FILE" },
+    })
+  })
+
+  it("uploads, replaces, deletes non-root files, and records stale object cleanup", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValue(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(null)
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
+      id: "repo-1",
+      files: [repositoryFileRow(), repositoryFileRow({ path: "README.md", pathKey: "readme.md" })],
+    }))
+
+    await service.uploadFile("user-1", "repo-1", {
+      path: "README.md",
+      contentBase64: Buffer.from("Read me").toString("base64"),
+      mimeType: "text/markdown",
+    })
+
+    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringMatching(/^skill-repositories\/repo-1\/files\/file-\d+\/[a-f0-9]{64}$/u),
+    }))
+
+    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
+      path: "README.md",
+      pathKey: "readme.md",
+      sha256: "readme-sha",
+      storageKey: "skill-repositories/repo-1/files/file-2/readme-sha",
+    }))
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", files: [repositoryFileRow()] }))
+
+    await service.deleteFile("user-1", "repo-1", { path: "README.md", expectedSha256: "readme-sha" })
+
+    expect(prisma.skillRepositoryObjectCleanupTask.createMany).toHaveBeenCalledWith({
+      data: [{
+        repositoryId: "repo-1",
+        storageKey: "skill-repositories/repo-1/files/file-2/readme-sha",
+        reason: "skill-file-deleted",
+      }],
+      skipDuplicates: true,
+    })
+    expect(storage.deleteObject).toHaveBeenCalledWith("skill-repositories/repo-1/files/file-2/readme-sha")
+  })
+
+  it("updates repository metadata, records name redirects, and soft deletes repositories", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", name: "old-name" }))
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(null)
+    prisma.skillRepositoryNameRedirect.findUnique.mockResolvedValueOnce(null)
+    prisma.skillRepository.update.mockResolvedValueOnce(repositoryRow({ id: "repo-1", name: "new-name", title: "New Title" }))
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", name: "new-name", title: "New Title" }))
+
+    await service.updateMine("user-1", "repo-1", { name: "new-name", title: "New Title" })
+
+    expect(prisma.skillRepositoryNameRedirect.create).toHaveBeenCalledWith({
+      data: { ownerUserId: "user-1", oldName: "old-name", repositoryId: "repo-1" },
+    })
+    expect(prisma.skillRepository.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "repo-1" },
+      data: expect.objectContaining({ name: "new-name", title: "New Title" }),
+    }))
+
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepositoryFile.findMany.mockResolvedValueOnce([
+      { storageKey: "skill-repositories/repo-1/files/file-1/sha" },
+    ])
+    prisma.skillRepository.update.mockResolvedValueOnce(repositoryRow({ id: "repo-1", status: "removed" }))
+
+    const result = await service.deleteMine("user-1", "repo-1")
+
+    expect(result).toEqual({ id: "repo-1", status: "removed" })
+    expect(prisma.skillRepositoryObjectCleanupTask.createMany).toHaveBeenCalledWith({
+      data: [{
+        repositoryId: "repo-1",
+        storageKey: "skill-repositories/repo-1/files/file-1/sha",
+        reason: "skill-repository-removed",
+      }],
+      skipDuplicates: true,
+    })
   })
 })
 
@@ -452,9 +716,12 @@ interface PrismaMock {
   skillRepositoryFile: {
     createMany: MockFn
     deleteMany: MockFn
+    update: MockFn
+    findFirst: MockFn
     findMany: MockFn
   }
   skillRepositoryNameRedirect: {
+    create: MockFn
     findUnique: MockFn
   }
   skillRepositoryObjectCleanupTask: {
@@ -466,6 +733,7 @@ interface PrismaMock {
 
 interface StorageMock {
   putObject: MockFn
+  getObjectStream: MockFn
   deleteObject: MockFn
 }
 
@@ -481,9 +749,12 @@ function createPrismaMock(): PrismaMock {
     skillRepositoryFile: {
       createMany: vi.fn(),
       deleteMany: vi.fn(),
+      update: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     skillRepositoryNameRedirect: {
+      create: vi.fn(),
       findUnique: vi.fn(),
     },
     skillRepositoryObjectCleanupTask: {
@@ -497,8 +768,13 @@ function createPrismaMock(): PrismaMock {
 function createStorageMock(): StorageMock {
   return {
     putObject: vi.fn(async () => undefined),
+    getObjectStream: vi.fn(),
     deleteObject: vi.fn(async () => undefined),
   }
+}
+
+function bufferStream(value: string | Buffer): Readable {
+  return Readable.from([typeof value === "string" ? Buffer.from(value) : value])
 }
 
 function createPrismaKnownRequestError(code: string) {

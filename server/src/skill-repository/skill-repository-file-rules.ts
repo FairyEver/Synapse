@@ -6,6 +6,7 @@ import {
   skillRepositoryMaxFileBytes,
   skillRepositoryMaxFileCount,
   skillRepositoryMaxTotalBytes,
+  skillRepositoryRootFilePath,
 } from "@synapse/shared"
 
 export type NormalizedSkillRepositoryFile = {
@@ -71,25 +72,35 @@ export function normalizeSkillRepositoryFiles(files: readonly SkillRepositoryFil
   const seen = new Set<string>()
   let total = 0
   const normalized = files.map((file) => {
-    const relativePath = normalizeSkillRepositoryPath(file.path)
-    const pathKey = relativePath.toLowerCase()
+    const normalizedFile = normalizeSkillRepositoryFile(file)
+    const pathKey = normalizedFile.pathKey
     if (seen.has(pathKey)) throw new BadRequestException("Skill 文件路径重复。")
     seen.add(pathKey)
 
-    const bytes = decodeStrictBase64(file.contentBase64)
-    if (bytes.length > skillRepositoryMaxFileBytes) throw new BadRequestException("Skill 单文件超过 20MB。")
-    total += bytes.length
+    total += normalizedFile.size
     if (total > skillRepositoryMaxTotalBytes) throw new BadRequestException("Skill 文件总大小超过 50MB。")
 
-    return normalizeFile(relativePath, pathKey, bytes, normalizeMimeType(file.mimeType))
+    return normalizedFile
   })
 
-  const skillFile = normalized.find((file) => file.path === "SKILL.md")
+  const skillFile = normalized.find((file) => isSkillRepositoryRootPath(file.path))
   if (!skillFile || skillFile.kind !== "text" || !skillFile.text?.trim()) {
     throw new BadRequestException("Skill 必须包含非空 SKILL.md。")
   }
 
   return normalized
+}
+
+export function normalizeSkillRepositoryFile(file: SkillRepositoryFileInput): NormalizedSkillRepositoryFile {
+  const relativePath = normalizeSkillRepositoryPath(file.path)
+  const pathKey = relativePath.toLowerCase()
+  const bytes = decodeStrictBase64(file.contentBase64)
+  if (bytes.length > skillRepositoryMaxFileBytes) throw new BadRequestException("Skill 单文件超过 20MB。")
+  return normalizeFile(relativePath, pathKey, bytes, normalizeMimeType(file.mimeType))
+}
+
+export function isSkillRepositoryRootPath(relativePath: string): boolean {
+  return relativePath.toLowerCase() === skillRepositoryRootFilePath.toLowerCase()
 }
 
 export function normalizeSkillRepositoryPath(input: string): string {

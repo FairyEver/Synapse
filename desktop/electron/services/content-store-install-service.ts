@@ -59,7 +59,7 @@ const manifestSchema = z.object({
   files: z.array(manifestFileSchema),
 }).strict()
 
-type ContentStoreInstallLimits = {
+export type ContentStoreInstallLimits = {
   readonly maxCompressedBytes: number
   readonly maxEntries: number
   readonly maxFileBytes: number
@@ -95,7 +95,7 @@ type PreparedInstall = {
   readonly source: SynapseContentStorePreparedSource
 }
 
-type ZipEntry = {
+export type ZipEntry = {
   readonly name: string
   readonly bytes: Buffer
 }
@@ -216,6 +216,11 @@ export class ContentStoreInstallService {
       return
     }
     await this.release(sessionId)
+  }
+
+  hasPreparedSource(sourceId: string, contentId: string): boolean {
+    const prepared = this.preparedById.get(sourceId)
+    return prepared?.source.contentId === contentId
   }
 
   async readPreparedRule(sourceId: string, contentId: string): Promise<string> {
@@ -433,13 +438,13 @@ export class ContentStoreInstallService {
   }
 }
 
-function parseContentLength(value: string | null): number | undefined {
+export function parseContentLength(value: string | null): number | undefined {
   if (!value || !/^\d+$/.test(value)) return undefined
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) ? parsed : undefined
 }
 
-function readZipEntries(archive: Buffer, limits: ContentStoreInstallLimits): Map<string, ZipEntry> {
+export function readZipEntries(archive: Buffer, limits: ContentStoreInstallLimits): Map<string, ZipEntry> {
   const endOffset = findEndOfCentralDirectory(archive)
   const diskNumber = archive.readUInt16LE(endOffset + 4)
   const centralDisk = archive.readUInt16LE(endOffset + 6)
@@ -610,9 +615,9 @@ function validateManifest(
   return manifest
 }
 
-async function materializeEntries(
+export async function materializeEntries(
   entries: Map<string, ZipEntry>,
-  manifest: ContentStoreInstallManifest,
+  manifest: { readonly files: readonly { readonly path: string }[] },
   directoryPath: string,
 ): Promise<void> {
   for (const file of manifest.files) {
@@ -624,7 +629,7 @@ async function materializeEntries(
   }
 }
 
-function assertSafeArchivePath(value: string): void {
+export function assertSafeArchivePath(value: string): void {
   const segments = value.split("/")
   if (
     value.length === 0
@@ -648,11 +653,11 @@ function isWindowsHostileArchivePathSegment(segment: string): boolean {
     || segment.endsWith(" ")
 }
 
-function decodeUtf8(bytes: Uint8Array): string {
+export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
 }
 
-function sha256(bytes: Uint8Array): string {
+export function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
 

@@ -1,6 +1,6 @@
 # Synapse Skill Repository MCP
 
-Use these tools when the user wants to upload, update, list, inspect, or open private cloud Skill repositories.
+Use these tools when the user wants to upload, update, list, inspect, fork, install, or open cloud Skill repositories.
 
 ## Scope
 
@@ -10,11 +10,15 @@ This domain is for cloud Skill Repository only:
 - `app_skill_repository_get`
 - `app_skill_repository_import_local`
 - `app_skill_repository_update_local`
+- `app_skill_repository_set_visibility`
 - `app_skill_repository_open`
+- `app_skill_repository_open_public`
+- `app_skill_repository_fork`
+- `app_skill_repository_create_install_session`
 
-Do not use these tools for local Resource Repository Rules, local Resource Repository Prompts, Drive files, editor installation, public Explore, fork, or public install flows.
+Do not use these tools for local Resource Repository Rules, local Resource Repository Prompts, Drive files, or direct editor installation.
 
-Phase 1 cloud Skill Repository is private-only. Public browsing, fork, install links, web file editing, history, releases, rollback, and team editing are not available through these tools.
+Skill Repository stores Skills only. Rules and prompt sharing are intentionally not part of this domain. There is no release, rollback, version selection, or team co-editing flow.
 
 ## Default Flow
 
@@ -22,7 +26,13 @@ Phase 1 cloud Skill Repository is private-only. Public browsing, fork, install l
 2. The local folder must contain root `SKILL.md`. The tool uploads `SKILL.md` and non-hidden attachments.
 3. If the upload succeeds, Synapse attempts to write `.synapse.json` into the local Skill folder through its local permission and audit boundary. Check `identityWritten`; if it is false, the cloud upload succeeded but the local folder was not linked.
 4. For later updates, prefer `app_skill_repository_update_local` when the target `repositoryId` is known. `app_skill_repository_import_local` can also use the local `.synapse.json` cloud identity when present.
-5. Use `app_skill_repository_open` to get the management URL. It opens the user's browser only when `openInBrowser` is true.
+5. Use `app_skill_repository_set_visibility` when the user explicitly wants a repository to become private or public.
+6. Use `app_skill_repository_open` to get the management URL. It opens the user's browser only when `openInBrowser` is true.
+7. Use `app_skill_repository_open_public` to get the public page URL for a public repository.
+8. Use `app_skill_repository_fork` when the user wants their own editable copy of a readable repository.
+9. Use `app_skill_repository_create_install_session` when the user wants to install a readable Skill into Synapse Desktop. The response contains a short-lived `deepLinkUrl`.
+
+Installing a Skill uses an install session and Desktop deep link. Downloading an individual repository file is a web UI action, not an MCP install flow.
 
 ## Identity Rules
 
@@ -34,11 +44,25 @@ Repository names use lowercase letters, numbers, and hyphens. They must start an
 
 If the server returns `USER_HANDLE_REQUIRED`, ask the user to set a username in the Synapse console. Do not generate, set, or change the username automatically.
 
+Public URLs use `/skills/<ownerHandle>/<repositoryName>`. If a user or repository is renamed, the web app can redirect old paths where the server still has redirect records.
+
+## Legacy Content Store
+
+Old cloud Content Store Skill links may redirect to Skill Repository after migration. Do not create new cloud Prompt or Rule store entries. For Skills, use `app_skill_repository_import_local` or `app_skill_repository_update_local`.
+
+If a user asks about an old Content Store Skill, prefer opening the migrated Skill Repository page. If a server response says the old item is a retired Prompt or Rule, explain that cloud Prompt/Rule sharing has been retired and do not try to migrate it into Skill Repository.
+
+Migrated legacy Skill copies can keep their fork source when the source Skill was also migrated. If the legacy source was not migrated, the copied Skill remains usable as an independent repository.
+
+Admin removal only hides or restores public Skill repositories from the public surface. It is not a publish review, approval, featured, rating, or release workflow.
+
 ## Safety
 
 Uploading reads local files and writing `.synapse.json` modifies the local Skill folder. These actions go through Synapse permission and audit checks. A denied write permission stops the cloud upload before mutation; a later filesystem write failure is returned as `identityWritten: false`.
 
 Do not upload arbitrary project folders as Skills. Use a folder that is intended to be a Skill and contains root `SKILL.md`.
+
+Forking and creating install sessions require a signed-in account. Installing consumes the latest repository content; do not promise historical versions or release selection.
 
 ## API Reference
 

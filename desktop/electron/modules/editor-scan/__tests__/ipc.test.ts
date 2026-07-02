@@ -30,16 +30,16 @@ describe("editorScanIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.uploadService.uploadSkillDraftToContentStore.mockResolvedValue({
-      draftId: "draft-1",
-      itemId: "item-1",
+      draftId: "repo-1",
+      itemId: "repo-1",
       revision: 1,
-      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
-      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
+      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
     })
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
   })
 
-  it("uploads Skill drafts through the content store upload service", async () => {
+  it("uploads scanned Skills through the compatibility channel", async () => {
     const harness = createHarness()
 
     await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
@@ -50,11 +50,11 @@ describe("editorScanIpcModule", () => {
       scope: "project",
       projectPath: "/tmp/project",
     })).resolves.toEqual({
-      draftId: "draft-1",
-      itemId: "item-1",
+      draftId: "repo-1",
+      itemId: "repo-1",
       revision: 1,
-      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
-      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
+      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
     })
 
     expect(mocks.uploadService.uploadSkillDraftToContentStore).toHaveBeenCalledWith(
@@ -115,14 +115,14 @@ describe("editorScanIpcModule", () => {
       itemName: "review",
       editorId: "claude-code",
       scope: "global",
-    })).rejects.toThrow("只有 Skill 可以发布到商店。")
+    })).rejects.toThrow("只有 Skill 可以上传到 Skill Repository。")
     await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
       itemType: "prompt",
       itemPath: "/tmp/prompts/review.md",
       itemName: "review",
       editorId: "claude-code",
       scope: "global",
-    })).rejects.toThrow("只有 Skill 可以发布到商店。")
+    })).rejects.toThrow("只有 Skill 可以上传到 Skill Repository。")
 
     expect(mocks.uploadService.uploadSkillDraftToContentStore).not.toHaveBeenCalled()
   })

@@ -264,7 +264,7 @@ export default function ContentStoreAdminPage({
   return (
     <>
       <Header fixed>
-        <h1 className='text-lg font-semibold'>内容商店</h1>
+        <h1 className='text-lg font-semibold'>Legacy Content Store</h1>
       </Header>
       <Main>
         {itemsQuery.isLoading ? (

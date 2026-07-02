@@ -113,6 +113,51 @@ describe('adminApi.drive', () => {
   })
 })
 
+describe('adminApi.skillRepositories', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses admin skill repository moderation endpoints', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+
+    await adminApi.listSkillRepositories({
+      page: 2,
+      pageSize: 10,
+      sortBy: 'updatedAt',
+      sortOrder: 'desc',
+      status: 'removed',
+      query: 'demo skill',
+    })
+    await adminApi.setSkillRepositoryRemoved('repo/id')
+    await adminApi.restoreSkillRepository('repo/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/skill-repositories?page=2&pageSize=10&sortBy=updatedAt&sortOrder=desc&status=removed&query=demo+skill',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/skill-repositories/repo%2Fid/removed',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/admin/skill-repositories/repo%2Fid/removed',
+      expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+    )
+  })
+})
+
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -831,6 +876,8 @@ describe('dashboardApi.contentStore', () => {
     await dashboardApi.copyContentStoreItem('item/id')
     await dashboardApi.setContentStoreVisibility('item/id', 'public')
     await dashboardApi.createContentStoreInstallSession('item/id')
+    await dashboardApi.migrateLegacyContentStoreSkills()
+    await dashboardApi.resolveLegacyContentStoreRoute('item/id')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -864,6 +911,16 @@ describe('dashboardApi.contentStore', () => {
         credentials: 'include',
         method: 'POST',
       })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      '/api/skill-repositories/legacy/content-store/migrate-skills',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      7,
+      '/api/content-store/items/item%2Fid/legacy-route',
+      expect.objectContaining({ credentials: 'include' })
     )
   })
 
@@ -1076,6 +1133,22 @@ describe('adminApi.contentStore', () => {
         credentials: 'include',
         method: 'POST',
       })
+    )
+  })
+})
+
+describe('dashboardApi.skillRepository', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('builds Skill Repository file download URLs without issuing requests', () => {
+    expect(dashboardApi.getSkillRepositoryFileDownloadUrl('repo/id', 'assets/logo file.png')).toBe(
+      '/api/skill-repositories/repo%2Fid/files/download?path=assets%2Flogo+file.png'
+    )
+    expect(dashboardApi.getSkillRepositoryFileDownloadUrlByPath('alice', 'demo/skill', 'README.md')).toBe(
+      '/api/skill-repositories/by-path/alice/demo%2Fskill/files/download?path=README.md'
     )
   })
 })

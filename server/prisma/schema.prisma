@@ -80,6 +80,7 @@ model User {
   contentStoreInstallEvents    ContentStoreInstallEvent[]
   userHandleRedirects          UserHandleRedirect[]
   skillRepositories            SkillRepository[]
+  skillRepositoryInstallSessions SkillRepositoryInstallSession[]
   skillRepositoryInstallEvents SkillRepositoryInstallEvent[]
   agentPersonas                AgentPersona[]
   agentPersonaPreferences      AgentPersonaPreference[]
@@ -831,13 +832,14 @@ model SkillRepository {
   forkedFromRepository     SkillRepository?              @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
   forks                    SkillRepository[]             @relation("SkillRepositoryForks")
   lastSyncedAt             DateTime?
-  legacyContentStoreItemId String?
+  legacyContentStoreItemId String?                       @unique
   legacyInstallCount       Int                           @default(0)
   createdAt                DateTime                      @default(now())
   updatedAt                DateTime                      @updatedAt
   files                    SkillRepositoryFile[]
   nameRedirects            SkillRepositoryNameRedirect[]
   objectCleanupTasks       SkillRepositoryObjectCleanupTask[]
+  installSessions          SkillRepositoryInstallSession[]
   installEvents            SkillRepositoryInstallEvent[]
 
   @@unique([ownerUserId, name])
@@ -890,6 +892,25 @@ model SkillRepositoryObjectCleanupTask {
   updatedAt    DateTime         @updatedAt
 
   @@index([repositoryId])
+}
+
+model SkillRepositoryInstallSession {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId      String
+  repository        SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  packageStorageKey String
+  packageSha256     String          @db.VarChar(64)
+  packageSize       BigInt
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId, expiresAt])
+  @@index([repositoryId, createdAt])
+  @@index([expiresAt])
 }
 
 model SkillRepositoryInstallEvent {

@@ -1,6 +1,10 @@
 import type {
   SkillRepositoryDetailDto,
+  SkillRepositoryForkInput,
+  SkillRepositoryForkResultDto,
+  SkillRepositoryInstallSessionDto,
   SkillRepositoryItemDto,
+  SkillRepositoryUpdateInput,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
@@ -14,6 +18,15 @@ import type { SkillRepositoryIdentityWriteSecurity } from "../services/skill-rep
 type SkillRepositoryAccountServicePort = {
   readonly listSkillRepositories: () => Promise<SkillRepositoryItemDto[]>
   readonly getSkillRepository: (repositoryId: string) => Promise<SkillRepositoryDetailDto>
+  readonly updateSkillRepository: (
+    repositoryId: string,
+    input: SkillRepositoryUpdateInput,
+  ) => Promise<SkillRepositoryDetailDto>
+  readonly forkSkillRepository: (
+    repositoryId: string,
+    input: SkillRepositoryForkInput,
+  ) => Promise<SkillRepositoryForkResultDto>
+  readonly createSkillRepositoryInstallSession: (repositoryId: string) => Promise<SkillRepositoryInstallSessionDto>
 }
 
 type SkillRepositoryUploadSecurity = ContentSkillSourceSecurityDeps & SkillRepositoryIdentityWriteSecurity
@@ -50,8 +63,16 @@ export function createSkillRepositoryCapabilityDispatcher(deps: SkillRepositoryC
           return importLocalSkillRepository(deps, params, context)
         case "app.skill_repository.item.update_local":
           return updateLocalSkillRepository(deps, params, context)
+        case "app.skill_repository.visibility.update":
+          return setSkillRepositoryVisibility(deps, params)
         case "app.skill_repository.item.open":
           return openSkillRepository(deps, params)
+        case "app.skill_repository.public.open":
+          return openPublicSkillRepository(deps, params)
+        case "app.skill_repository.fork.create":
+          return forkSkillRepository(deps, params)
+        case "app.skill_repository.install_session.create":
+          return createInstallSession(deps, params)
         default:
           throw new Error(`Unknown skill repository action: ${action}`)
       }
@@ -96,6 +117,56 @@ async function updateLocalSkillRepository(
   return { ok: true, data: result }
 }
 
+async function setSkillRepositoryVisibility(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<DispatchResult> {
+  const repositoryId = requireTrimmedString(params, "repositoryId")
+  const visibility = requireVisibility(params)
+  const openInBrowser = optionalBoolean(params, "openInBrowser")
+  const repository = await deps.accountService.updateSkillRepository(repositoryId, { visibility })
+  const { buildSkillRepositoryManagementUrl } = await sharedSkillRepositoryPromise
+  const managementUrl = buildSkillRepositoryManagementUrl(deps.publicAppUrl, repository.id)
+
+  if (openInBrowser === true && deps.openExternal) {
+    await deps.openExternal(managementUrl)
+  }
+
+  return {
+    ok: true,
+    data: {
+      repository,
+      managementUrl,
+    },
+  }
+}
+
+async function forkSkillRepository(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<DispatchResult> {
+  const repositoryId = requireTrimmedString(params, "repositoryId")
+  const result = await deps.accountService.forkSkillRepository(repositoryId, {
+    ...optionalForkStrings(params),
+  })
+  return { ok: true, data: result }
+}
+
+async function createInstallSession(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<DispatchResult> {
+  const repositoryId = requireTrimmedString(params, "repositoryId")
+  const openInBrowser = optionalBoolean(params, "openInBrowser")
+  const session = await deps.accountService.createSkillRepositoryInstallSession(repositoryId)
+
+  if (openInBrowser === true && deps.openExternal) {
+    await deps.openExternal(session.deepLinkUrl)
+  }
+
+  return { ok: true, data: session }
+}
+
 async function openSkillRepository(
   deps: SkillRepositoryCapabilityDispatcherDeps,
   params: Record<string, unknown>,
@@ -118,6 +189,52 @@ async function openSkillRepository(
   }
 }
 
+async function openPublicSkillRepository(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<DispatchResult> {
+  const openInBrowser = optionalBoolean(params, "openInBrowser")
+  const path = await resolvePublicPath(deps, params)
+  const { buildSkillRepositoryPublicUrl } = await sharedSkillRepositoryPromise
+  const publicUrl = buildSkillRepositoryPublicUrl(deps.publicAppUrl, path.ownerHandle, path.repositoryName)
+
+  if (openInBrowser === true && deps.openExternal) {
+    await deps.openExternal(publicUrl)
+  }
+
+  return {
+    ok: true,
+    data: {
+      publicUrl,
+      ownerHandle: path.ownerHandle,
+      repositoryName: path.repositoryName,
+      repositoryId: path.repositoryId,
+    },
+  }
+}
+
+async function resolvePublicPath(
+  deps: SkillRepositoryCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<{ ownerHandle: string; repositoryName: string; repositoryId?: string }> {
+  const ownerHandle = optionalTrimmedString(params, "ownerHandle")
+  const repositoryName = optionalTrimmedString(params, "repositoryName")
+  if (ownerHandle && repositoryName) {
+    return { ownerHandle, repositoryName }
+  }
+
+  const repositoryId = requireTrimmedString(params, "repositoryId")
+  const repository = await deps.accountService.getSkillRepository(repositoryId)
+  if (!repository.owner.handle) {
+    throw new Error("This Skill repository cannot build a public URL because the owner has no username.")
+  }
+  return {
+    ownerHandle: repository.owner.handle,
+    repositoryName: repository.name,
+    repositoryId,
+  }
+}
+
 function buildUploadInput(
   params: Record<string, unknown>,
   repositoryId?: string,
@@ -128,6 +245,15 @@ function buildUploadInput(
     ...(repositoryId ? { repositoryId } : {}),
     ...optionalUploadStrings(params),
     ...(openInBrowser === undefined ? {} : { openInBrowser }),
+  }
+}
+
+function optionalForkStrings(params: Record<string, unknown>): SkillRepositoryForkInput {
+  const name = optionalTrimmedString(params, "name")
+  const title = optionalTrimmedString(params, "title")
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(title === undefined ? {} : { title }),
   }
 }
 
@@ -183,4 +309,10 @@ function optionalBoolean(params: Record<string, unknown>, key: string): boolean 
     throw new Error(`Invalid '${key}': expected boolean`)
   }
   return value
+}
+
+function requireVisibility(params: Record<string, unknown>): "private" | "public" {
+  const value = requireTrimmedString(params, "visibility")
+  if (value === "private" || value === "public") return value
+  throw new Error("Invalid 'visibility': expected private or public")
 }

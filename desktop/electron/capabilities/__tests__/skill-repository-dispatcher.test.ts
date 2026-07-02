@@ -27,6 +27,32 @@ function createDeps(
     accountService: {
       listSkillRepositories: vi.fn(async () => [repository]),
       getSkillRepository: vi.fn(async () => ({ ...repository, files: [] })),
+      updateSkillRepository: vi.fn(async (_repositoryId, input) => ({
+        ...repository,
+        visibility: input.visibility ?? repository.visibility,
+        files: [],
+      })),
+      forkSkillRepository: vi.fn(async () => ({
+        repository: {
+          ...repository,
+          id: "repo-fork",
+          name: "demo-fork",
+          forkedFromRepositoryId: "repo-1",
+          files: [],
+        },
+        managementUrl: "https://synapse.example.test/console/skill-repositories/repo-fork",
+      })),
+      createSkillRepositoryInstallSession: vi.fn(async () => ({
+        id: "install-session-1",
+        repositoryId: "repo-1",
+        repositoryName: "demo",
+        ownerHandle: "liyang",
+        title: "Demo",
+        packageSha256: "a".repeat(64),
+        packageSize: 128,
+        expiresAt: "2026-07-01T00:05:00.000Z",
+        deepLinkUrl: "synapse://skill-install?session=install-session-1",
+      })),
     },
     uploadService: {
       importLocal: vi.fn(async () => ({
@@ -152,6 +178,106 @@ describe("skill repository capability dispatcher", () => {
     )
   })
 
+  it("sets repository visibility and optionally opens management URL", async () => {
+    const deps = createDeps()
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.visibility.update",
+      { repositoryId: " repo-1 ", visibility: "public", openInBrowser: true },
+      { source: "api" },
+    )).resolves.toMatchObject({
+      ok: true,
+      data: {
+        repository: {
+          id: "repo-1",
+          visibility: "public",
+        },
+        managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      },
+    })
+
+    expect(deps.accountService.updateSkillRepository).toHaveBeenCalledWith("repo-1", { visibility: "public" })
+    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.example.test/console/skill-repositories/repo-1")
+  })
+
+  it("returns a public URL from repository id", async () => {
+    const deps = createDeps()
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.public.open",
+      { repositoryId: "repo-1" },
+      { source: "api" },
+    )).resolves.toEqual({
+      ok: true,
+      data: {
+        publicUrl: "https://synapse.example.test/console/skills/liyang/demo",
+        ownerHandle: "liyang",
+        repositoryName: "demo",
+        repositoryId: "repo-1",
+      },
+    })
+    expect(deps.accountService.getSkillRepository).toHaveBeenCalledWith("repo-1")
+  })
+
+  it("opens a public URL from owner handle and repository name when requested", async () => {
+    const deps = createDeps()
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await dispatcher.dispatch(
+      "app.skill_repository.public.open",
+      { ownerHandle: " liyang ", repositoryName: " demo ", openInBrowser: true },
+      { source: "api" },
+    )
+
+    expect(deps.openExternal).toHaveBeenCalledWith(
+      "https://synapse.example.test/console/skills/liyang/demo",
+    )
+    expect(deps.accountService.getSkillRepository).not.toHaveBeenCalled()
+  })
+
+  it("forks a readable repository", async () => {
+    const deps = createDeps()
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.fork.create",
+      { repositoryId: "repo-1", name: "demo-copy", title: "Demo Copy" },
+      { source: "api" },
+    )).resolves.toMatchObject({
+      ok: true,
+      data: {
+        repository: {
+          id: "repo-fork",
+        },
+      },
+    })
+    expect(deps.accountService.forkSkillRepository).toHaveBeenCalledWith("repo-1", {
+      name: "demo-copy",
+      title: "Demo Copy",
+    })
+  })
+
+  it("creates and optionally opens a Desktop install session", async () => {
+    const deps = createDeps()
+    const dispatcher = createSkillRepositoryCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.install_session.create",
+      { repositoryId: "repo-1", openInBrowser: true },
+      { source: "api" },
+    )).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "install-session-1",
+        deepLinkUrl: "synapse://skill-install?session=install-session-1",
+      },
+    })
+    expect(deps.accountService.createSkillRepositoryInstallSession).toHaveBeenCalledWith("repo-1")
+    expect(deps.openExternal).toHaveBeenCalledWith("synapse://skill-install?session=install-session-1")
+  })
+
   it("rejects missing or empty required params", async () => {
     const dispatcher = createSkillRepositoryCapabilityDispatcher(createDeps())
 
@@ -170,6 +296,26 @@ describe("skill repository capability dispatcher", () => {
     await expect(dispatcher.dispatch(
       "app.skill_repository.item.open",
       { repositoryId: "" },
+      { source: "api" },
+    )).rejects.toThrow("repositoryId")
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.visibility.update",
+      { repositoryId: "repo-1", visibility: "team" },
+      { source: "api" },
+    )).rejects.toThrow("visibility")
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.public.open",
+      {},
+      { source: "api" },
+    )).rejects.toThrow("repositoryId")
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.fork.create",
+      {},
+      { source: "api" },
+    )).rejects.toThrow("repositoryId")
+    await expect(dispatcher.dispatch(
+      "app.skill_repository.install_session.create",
+      {},
       { source: "api" },
     )).rejects.toThrow("repositoryId")
   })

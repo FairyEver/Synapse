@@ -32,6 +32,7 @@ const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
+const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name", "legacyInstallCount"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)
@@ -164,6 +165,24 @@ export class AdminController {
     return result
   }
 
+  @Get("/skill-repositories")
+  async listSkillRepositories(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: skillRepositorySortFields })
+    const status = query.status === "removed" ? "removed" : "active"
+    const search = typeof query.query === "string" ? query.query.trim() : ""
+    const result = await this.admin.listSkillRepositories(pagination, {
+      status,
+      query: search || undefined,
+    })
+    await this.recordAdminRead(request, {
+      action: "admin.skill_repositories.list",
+      targetType: "skill_repository",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize, status, query: search || undefined },
+    })
+    return result
+  }
+
   @Patch("/users/:id/status")
   async updateUserStatus(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
     const result = userStatusSchema.safeParse(body)
@@ -176,6 +195,16 @@ export class AdminController {
     const result = userAdminNoteSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "管理员备注无效。")
     return this.admin.updateUserAdminNote(id, result.data, request?.admin?.email, request?.ip)
+  }
+
+  @Post("/skill-repositories/:id/removed")
+  setSkillRepositoryRemoved(@Param("id") id: string, @Req() request?: AdminRequest) {
+    return this.admin.setSkillRepositoryRemoved(id, true, request?.admin?.email, request?.ip)
+  }
+
+  @Delete("/skill-repositories/:id/removed")
+  restoreSkillRepository(@Param("id") id: string, @Req() request?: AdminRequest) {
+    return this.admin.setSkillRepositoryRemoved(id, false, request?.admin?.email, request?.ip)
   }
 
   @Get("/teams")

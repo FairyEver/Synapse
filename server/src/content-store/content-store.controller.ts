@@ -5,6 +5,7 @@ import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { parsePagination } from "../common/pagination"
+import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { contentStoreTextMaxBytes } from "./content-store.constants"
 import { ContentStoreService, defaultContentStoreInstallDeepLinkBase, normalizeContentStoreInstallDeepLinkBase } from "./content-store.service"
@@ -142,6 +143,15 @@ export class ContentStoreUserController {
     return this.service.getDraft(request.user!.id, id)
   }
 
+  @Get("/items/:id/legacy-route")
+  resolveLegacyRoute(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.service.resolveLegacySkillRepositoryRoute(
+      request.user!.id,
+      id,
+      resolveRequestPublicAppUrl(request),
+    )
+  }
+
   @Get("/items/:id")
   getDetail(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.service.getDetail(request.user!.id, id)
@@ -271,4 +281,8 @@ function isStrictBase64(value: string): boolean {
 
 function safeDownloadFilename(value: string): string {
   return value.replace(/[^\x20-\x7E]|["\\;,\r\n]/gu, "_")
+}
+
+function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
+  return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }

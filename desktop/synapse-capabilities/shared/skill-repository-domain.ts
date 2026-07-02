@@ -27,10 +27,34 @@ const skillRepositoryCapabilities = [
     mutates: true,
   },
   {
+    id: "app.skill_repository.visibility.update",
+    title: "Set skill repository visibility",
+    description: "Set a cloud Skill repository to private or public.",
+    mutates: true,
+  },
+  {
     id: "app.skill_repository.item.open",
     title: "Open skill repository",
     description: "Get the management URL for one private cloud Skill repository.",
     mutates: false,
+  },
+  {
+    id: "app.skill_repository.public.open",
+    title: "Open public skill repository",
+    description: "Get the public URL for a public Skill repository.",
+    mutates: false,
+  },
+  {
+    id: "app.skill_repository.fork.create",
+    title: "Fork skill repository",
+    description: "Fork a readable Skill repository into the signed-in account.",
+    mutates: true,
+  },
+  {
+    id: "app.skill_repository.install_session.create",
+    title: "Create skill repository install session",
+    description: "Create a short-lived Desktop install session for a readable Skill repository.",
+    mutates: true,
   },
 ] satisfies readonly CapabilityDefinition[]
 
@@ -44,7 +68,11 @@ export const SKILL_REPOSITORY_MCP_TOOL_ACTIONS: Record<string, CapabilityId> = {
   app_skill_repository_get: "app.skill_repository.item.get",
   app_skill_repository_import_local: "app.skill_repository.item.import_local",
   app_skill_repository_update_local: "app.skill_repository.item.update_local",
+  app_skill_repository_set_visibility: "app.skill_repository.visibility.update",
   app_skill_repository_open: "app.skill_repository.item.open",
+  app_skill_repository_open_public: "app.skill_repository.public.open",
+  app_skill_repository_fork: "app.skill_repository.fork.create",
+  app_skill_repository_create_install_session: "app.skill_repository.install_session.create",
 }
 
 const repositoryIdProperty = {
@@ -74,7 +102,23 @@ const optionalDescriptionProperty = {
 
 const openInBrowserProperty = {
   type: "boolean",
-  description: "Open the management URL in the browser only when true.",
+  description: "Open the returned URL in the browser only when true.",
+}
+
+const visibilityProperty = {
+  type: "string",
+  enum: ["private", "public"],
+  description: "Target Skill repository visibility.",
+}
+
+const ownerHandleProperty = {
+  type: "string",
+  description: "Public owner username used in /skills/<owner>/<repository> URLs.",
+}
+
+const repositoryNameProperty = {
+  type: "string",
+  description: "Public repository name used in /skills/<owner>/<repository> URLs.",
 }
 
 const handleRequiredInstruction =
@@ -133,8 +177,59 @@ export function buildSkillRepositoryTools(): McpToolDefinition[] {
       },
     },
     {
+      name: "app_skill_repository_set_visibility",
+      description: `Set a cloud Skill repository to private or public. ${handleRequiredInstruction}`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          repositoryId: repositoryIdProperty,
+          visibility: visibilityProperty,
+          openInBrowser: openInBrowserProperty,
+        },
+        required: ["repositoryId", "visibility"],
+      },
+    },
+    {
       name: "app_skill_repository_open",
       description: "Get the management URL for one private cloud Skill repository. Opens the browser only when openInBrowser is true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repositoryId: repositoryIdProperty,
+          openInBrowser: openInBrowserProperty,
+        },
+        required: ["repositoryId"],
+      },
+    },
+    {
+      name: "app_skill_repository_open_public",
+      description: "Get the public URL for a public Skill repository. Provide either repositoryId or ownerHandle plus repositoryName. Opens the browser only when openInBrowser is true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repositoryId: repositoryIdProperty,
+          ownerHandle: ownerHandleProperty,
+          repositoryName: repositoryNameProperty,
+          openInBrowser: openInBrowserProperty,
+        },
+      },
+    },
+    {
+      name: "app_skill_repository_fork",
+      description: `Fork a readable Skill repository into the signed-in account. ${handleRequiredInstruction}`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          repositoryId: repositoryIdProperty,
+          name: optionalNameProperty,
+          title: optionalTitleProperty,
+        },
+        required: ["repositoryId"],
+      },
+    },
+    {
+      name: "app_skill_repository_create_install_session",
+      description: "Create a short-lived Desktop install session for a readable Skill repository. Use deepLinkUrl to open Synapse Desktop installation.",
       inputSchema: {
         type: "object",
         properties: {

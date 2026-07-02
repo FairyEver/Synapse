@@ -3,16 +3,19 @@ import { Readable } from "node:stream"
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
-import type {
-  ContentStoreDetailDto,
-  ContentStoreDraftDto,
-  ContentStoreFileDto,
-  ContentStoreInstallSessionDto,
-  ContentStoreItemDto,
-  ContentStoreModerationStatus,
-  ContentStoreType,
-  ContentStoreVersionDto,
-  ContentStoreVisibility,
+import {
+  buildSkillRepositoryManagementUrl,
+  buildSkillRepositoryPublicUrl,
+  type ContentStoreDetailDto,
+  type ContentStoreDraftDto,
+  type ContentStoreFileDto,
+  type ContentStoreInstallSessionDto,
+  type ContentStoreItemDto,
+  type ContentStoreModerationStatus,
+  type ContentStoreType,
+  type ContentStoreVersionDto,
+  type ContentStoreVisibility,
+  type SkillRepositoryLegacyContentRouteDto,
 } from "@synapse/shared"
 import { PrismaService } from "../prisma/prisma.service"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
@@ -440,6 +443,53 @@ export class ContentStoreService {
     }) as ContentStoreItemRow | null
     if (!item) throw new NotFoundException("内容不存在。")
     return this.detailDto(this.prisma, item)
+  }
+
+  async resolveLegacySkillRepositoryRoute(
+    userId: string,
+    contentId: string,
+    publicAppUrl: string,
+  ): Promise<SkillRepositoryLegacyContentRouteDto> {
+    const item = await this.prisma.contentStoreItem.findUnique({
+      where: { id: contentId },
+      select: { id: true, type: true },
+    }) as { readonly id: string; readonly type: string } | null
+    if (!item) return { status: "not_found", message: "旧内容不存在。" }
+    if (item.type === "rule" || item.type === "prompt") {
+      return {
+        status: "retired",
+        contentType: item.type,
+        message: item.type === "rule" ? "云端 Rule 商店已停止维护。" : "云端 Prompt 商店已停止维护。",
+      }
+    }
+
+    const repository = await this.prisma.skillRepository.findUnique({
+      where: { legacyContentStoreItemId: contentId },
+      include: { owner: { select: { id: true, handle: true, displayName: true } } },
+    }) as {
+      readonly id: string
+      readonly ownerUserId: string
+      readonly name: string
+      readonly visibility: string
+      readonly status: string
+      readonly owner: { readonly handle: string | null } | null
+    } | null
+    if (
+      !repository
+      || repository.status !== "active"
+      || (repository.ownerUserId !== userId && repository.visibility !== "public")
+    ) {
+      return { status: "not_found", message: "旧 Skill 尚未迁移。" }
+    }
+
+    return {
+      status: "migrated",
+      repositoryId: repository.id,
+      managementUrl: buildSkillRepositoryManagementUrl(publicAppUrl, repository.id),
+      publicUrl: repository.visibility === "public" && repository.owner?.handle
+        ? buildSkillRepositoryPublicUrl(publicAppUrl, repository.owner.handle, repository.name)
+        : null,
+    }
   }
 
   async copyToMine(userId: string, itemId: string): Promise<ContentStoreItemDto> {

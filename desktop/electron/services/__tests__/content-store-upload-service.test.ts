@@ -1,4 +1,3 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -31,21 +30,6 @@ vi.mock("electron", () => ({
 vi.mock("../log-store", () => ({
   createMainLogger: () => serviceLogger,
 }))
-
-const authenticatedState = {
-  status: "authenticated" as const,
-  connectivity: "online" as const,
-  profile: {
-    user: {
-      id: "user-1",
-      email: "user@example.test",
-      displayName: null,
-      status: "active" as const,
-    },
-    teams: [],
-    syncedAt: "2026-06-10T00:00:00.000Z",
-  },
-}
 
 import {
   buildContentStoreConsoleEditUrl,
@@ -97,94 +81,85 @@ describe("ContentStoreUploadService", () => {
     expect(second).toBe(first)
   })
 
-  it("uploads a local Skill directory as strict base64 draft files", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-store-skill-"))
-    await mkdir(path.join(dir, "assets"))
-    await writeFile(path.join(dir, "SKILL.md"), [
-      "---",
-      "title: Review Skill",
-      "description: Review code changes.",
-      "---",
-      "# Fallback title",
-      "",
-      "Body",
-    ].join("\n"))
-    await writeFile(path.join(dir, "assets", "guide.txt"), "hello")
-    const skillContentBase64 = Buffer.from(await readFile(path.join(dir, "SKILL.md"))).toString("base64")
-    const createContentStoreSkillDraft = vi.fn(async (input) => ({
-      id: "draft-1",
-      itemId: "item-1",
-      baseVersionId: null,
-      revision: 2,
-      title: input.title,
-      description: input.description,
-      body: null,
-      files: [],
-      updatedAt: "2026-06-10T00:00:00.000Z",
-    }))
+  it("delegates scanned Skill uploads to the Skill Repository uploader", async () => {
+    const importLocal = vi.fn(async () => localImportResult())
     const service = new ContentStoreUploadService({
-      accountService: { getState: () => authenticatedState, createContentStoreSkillDraft },
-      publicAppUrl: "https://synapse.example.test/",
+      uploader: { importLocal },
     })
+    const security = {
+      actor: { kind: "user" as const },
+      auditSink: { record: vi.fn(), list: vi.fn(), clearForTests: vi.fn() },
+      permissionGuard: { check: vi.fn(), registerPolicy: vi.fn() },
+    }
 
     await expect(service.uploadSkillDraftToContentStore({
       itemType: "skill",
-      itemPath: dir,
+      itemPath: "/tmp/skills/review",
       itemName: "fallback-skill",
       editorId: "claude-code",
       scope: "project",
       projectPath: "/Users/example/project",
-    })).resolves.toEqual({
-      draftId: "draft-1",
-      itemId: "item-1",
-      revision: 2,
-      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
-      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
+    }, security)).resolves.toEqual({
+      draftId: "repo-1",
+      itemId: "repo-1",
+      revision: 1,
+      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
     })
 
-    expect(createContentStoreSkillDraft).toHaveBeenCalledWith({
-      type: "skill",
-      title: "Review Skill",
-      description: "Review code changes.",
-      localSourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
-      files: [
-        {
-          path: "SKILL.md",
-          contentBase64: skillContentBase64,
-          mimeType: "text/markdown",
-        },
-        {
-          path: "assets/guide.txt",
-          contentBase64: Buffer.from("hello").toString("base64"),
-          mimeType: null,
-        },
-      ],
-    })
+    expect(importLocal).toHaveBeenCalledWith({
+      sourceDirectoryPath: "/tmp/skills/review",
+      name: "fallback-skill",
+      openInBrowser: false,
+    }, security)
   })
 
-  it("requires root SKILL.md even when another markdown file can be read", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-store-readme-"))
-    await writeFile(path.join(dir, "README.md"), "# Readme Skill\n")
+  it("returns the uploader management URL even when identity writing reports a warning", async () => {
+    const importLocal = vi.fn(async () => localImportResult({
+      identityWritten: false,
+      identityWriteError: "disk full",
+    }))
     const service = new ContentStoreUploadService({
-      accountService: { getState: () => authenticatedState, createContentStoreSkillDraft: vi.fn() },
+      uploader: { importLocal },
     })
 
     await expect(service.uploadSkillDraftToContentStore({
       itemType: "skill",
-      itemPath: dir,
-      itemName: "readme-skill",
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
       editorId: "claude-code",
       scope: "global",
-    })).rejects.toThrow("Skill 必须包含根目录 SKILL.md。")
+    })).resolves.toMatchObject({
+      itemId: "repo-1",
+      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+    })
   })
 
-  it("rejects unauthenticated uploads before reading local Skill files", async () => {
-    const createContentStoreSkillDraft = vi.fn()
+  it("uses the repository id returned by the uploader for repeated uploads", async () => {
+    const importLocal = vi.fn(async () => localImportResult({ repositoryId: "repo-local" }))
     const service = new ContentStoreUploadService({
-      accountService: {
-        getState: () => ({ status: "unauthenticated" }),
-        createContentStoreSkillDraft,
-      },
+      uploader: { importLocal },
+    })
+
+    await expect(service.uploadSkillDraftToContentStore({
+      itemType: "skill",
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "global",
+    })).resolves.toMatchObject({
+      draftId: "repo-local",
+      itemId: "repo-local",
+    })
+  })
+
+  it("propagates uploader failures", async () => {
+    const importLocal = vi.fn(async () => {
+      throw new Error("账号未登录。")
+    })
+    const service = new ContentStoreUploadService({
+      uploader: { importLocal },
     })
 
     await expect(service.uploadSkillDraftToContentStore({
@@ -194,13 +169,29 @@ describe("ContentStoreUploadService", () => {
       editorId: "claude-code",
       scope: "global",
     })).rejects.toThrow("账号未登录。")
-
-    expect(createContentStoreSkillDraft).not.toHaveBeenCalled()
   })
 
   it("builds Synapse edit URLs from the public app URL", () => {
     expect(buildContentStoreConsoleEditUrl("https://synapse.example.test", "item 1")).toBe(
-      "https://synapse.example.test/console/my-content/item%201/edit",
+      "https://synapse.example.test/console/skill-repositories/item%201",
     )
   })
 })
+
+function localImportResult(overrides: Partial<{
+  readonly repositoryId: string
+  readonly name: string
+  readonly owner: string | null
+  readonly managementUrl: string
+  readonly identityWritten: boolean
+  readonly identityWriteError: string
+}> = {}) {
+  return {
+    repositoryId: "repo-1",
+    name: "review-skill",
+    owner: "liyang",
+    managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+    identityWritten: true,
+    ...overrides,
+  }
+}
