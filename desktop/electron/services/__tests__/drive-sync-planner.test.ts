@@ -51,6 +51,21 @@ describe("drive sync planner", () => {
     expect(result.conflicts).toEqual([])
   })
 
+  it("does not re-upload already synced folders for local directory events", () => {
+    const result = planDriveSyncLocalChanges({
+      binding: binding(),
+      baseline: [
+        baseline({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder", localHash: null }),
+      ],
+      changes: [
+        localChange({ relativePath: "Project", kind: "modified", localKind: "folder", localHash: null }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([])
+  })
+
   it("plans local file renames as remote moves when the hash is unchanged", () => {
     const result = planDriveSyncLocalChanges({
       binding: binding(),

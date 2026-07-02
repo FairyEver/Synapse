@@ -73,6 +73,7 @@ export function planDriveSyncLocalChanges(input: {
     if (isDriveSyncExcluded(change.relativePath, input.binding.excludeRules)) continue
     if (input.binding.kind === "folder" && change.relativePath === "") continue
     const baseline = baselineByPath.get(change.relativePath)
+    if (baseline && change.kind !== "deleted" && baseline.kind === "folder" && change.localKind === "folder") continue
     if (hasChangedPathOverlap(remoteChangedPaths, change.relativePath)) {
       conflicts.push(plannedConflict({
         binding: input.binding,
