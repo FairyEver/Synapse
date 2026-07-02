@@ -371,14 +371,21 @@ function DriveSyncStatusPanel({
       ? binding.status === "conflict" || conflictBindingIds.has(binding.id)
       : binding.status === filter)
 
-  const refreshSnapshot = async () => {
-    onSnapshotChange(await requireSynapseBridge().driveSync.getSnapshot())
+  const refreshSnapshot = async (): Promise<DriveSyncSnapshotDto> => {
+    const nextSnapshot = await requireSynapseBridge().driveSync.getSnapshot()
+    onSnapshotChange(nextSnapshot)
+    return nextSnapshot
   }
 
-  const runBindingAction = async (action: () => Promise<unknown>, success: string) => {
+  const runBindingAction = async (bindingId: string, action: () => Promise<unknown>, success: string) => {
     try {
       await action()
-      await refreshSnapshot()
+      const nextSnapshot = await refreshSnapshot()
+      const actionError = driveSyncManualActionErrorMessage(nextSnapshot, bindingId)
+      if (actionError) {
+        toast(actionError)
+        return
+      }
       toast(success)
     } catch (error) {
       await refreshSnapshot().catch(() => undefined)
@@ -428,6 +435,7 @@ function DriveSyncStatusPanel({
                 if (!stopTarget) return
                 const targetId = stopTarget.id
                 void runBindingAction(
+                  targetId,
                   () => requireSynapseBridge().driveSync.removeBinding({ id: targetId }),
                   "已停止同步",
                 ).finally(() => setStopTarget(null))
@@ -455,7 +463,7 @@ function DriveSyncBindingList({
   readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onSelectBinding: (binding: DriveSyncBindingDto) => void
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
-  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (bindings.length === 0) {
     return <DriveSyncEmptyState title="暂无同步对象" />
@@ -517,7 +525,7 @@ function DriveSyncBindingDetailDialog({
   readonly onRequestStop: (binding: DriveSyncBindingDto) => void
   readonly onOpenChange: (open: boolean) => void
   readonly operations: NonNullable<DriveSyncSnapshotDto["operations"]>
-  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   const [excludeDraft, setExcludeDraft] = useState("")
 
@@ -575,6 +583,7 @@ function DriveSyncBindingDetailDialog({
                           size="sm"
                           onClick={() => {
                             void runBindingAction(
+                              binding.id,
                               () => requireSynapseBridge().driveSync.updateExcludeRules({
                                 id: binding.id,
                                 user: parseExcludeText(excludeDraft),
@@ -633,13 +642,14 @@ function DriveSyncBindingActions({
   readonly conflictCount: number
   readonly onOpenDetails: () => void
   readonly onRequestStop: () => void
-  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
   readonly showPrimary?: boolean
   readonly showStatus?: boolean
 }) {
   const canPause = binding.status === "active" || binding.status === "conflict"
   const primaryAction = getBindingPrimaryAction(binding, conflictCount)
   const runResume = () => runBindingAction(
+    binding.id,
     () => requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }),
     binding.status === "error" ? "已重试同步" : "已继续同步",
   )
@@ -672,15 +682,15 @@ function DriveSyncBindingActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
+          <DropdownMenuItem onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
             检查本地变更
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
+          <DropdownMenuItem onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
             同步云端变更
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {canPause ? (
-            <DropdownMenuItem onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), "已暂停同步") }}>
+            <DropdownMenuItem onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pauseBinding({ id: binding.id }), "已暂停同步") }}>
               暂停同步
             </DropdownMenuItem>
           ) : (
@@ -703,7 +713,7 @@ function DriveSyncConflictTable({
   runBindingAction,
 }: {
   readonly conflicts: NonNullable<DriveSyncSnapshotDto["conflicts"]>
-  readonly runBindingAction: (action: () => Promise<unknown>, success: string) => Promise<void>
+  readonly runBindingAction: (bindingId: string, action: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   if (conflicts.length === 0) {
     return <DriveSyncEmptyState compact title="暂无冲突" />
@@ -725,15 +735,15 @@ function DriveSyncConflictTable({
             <TableCell className="text-right">
               <div className="flex justify-end gap-1">
                 {conflict.type === "delete_vs_modify" ? (
-                  <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "confirm_delete" }), "已确认删除") }}>确认删除</Button>
+                  <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "confirm_delete" }), "已确认删除") }}>确认删除</Button>
                 ) : (
                   <>
-                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
-                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_local" }), "已保留本地") }}>用本地</Button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }), "已保留云端") }}>用云端</Button>
                   </>
                 )}
-                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_both" }), "已保留两份") }}>保留两份</Button>
-                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(() => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "skip" }), "已跳过") }}>稍后</Button>
+                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "keep_both" }), "已保留两份") }}>保留两份</Button>
+                <Button type="button" variant="ghost" size="xs" onClick={() => { void runBindingAction(conflict.bindingId, () => requireSynapseBridge().driveSync.resolveConflict({ conflictId: conflict.id, action: "skip" }), "已跳过") }}>稍后</Button>
               </div>
             </TableCell>
           </TableRow>
@@ -803,6 +813,12 @@ function countVisibleDriveSyncConflicts(snapshot: DriveSyncSnapshotDto | null): 
   if (!snapshot) return 0
   const bindingIds = new Set(snapshot.bindings.map((binding) => binding.id))
   return snapshot.conflicts.filter((conflict) => bindingIds.has(conflict.bindingId)).length
+}
+
+function driveSyncManualActionErrorMessage(snapshot: DriveSyncSnapshotDto, bindingId: string): string | null {
+  const binding = snapshot.bindings.find((item) => item.id === bindingId)
+  if (binding?.status !== "error") return null
+  return binding.lastError?.trim() || "同步失败，请查看同步记录"
 }
 
 function parseExcludeText(value: string): string[] {
