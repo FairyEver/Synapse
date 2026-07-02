@@ -87,13 +87,26 @@ export class SkillRepositoryUploadService {
     const name = normalizeSkillRepositoryName(input.name ?? source.metadata.name ?? path.basename(source.sourceDirectoryPath))
     const localIdentity = await this.readIdentity(source.sourceDirectoryPath)
     await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
-    const repository = await this.account.importSkillRepository({
-      repositoryId: input.repositoryId ?? localIdentity?.id ?? undefined,
+    const localRepositoryId = localIdentity?.id
+    const explicitRepositoryId = input.repositoryId ?? undefined
+    const importInput: SkillRepositoryImportInput = {
+      repositoryId: explicitRepositoryId ?? localRepositoryId ?? undefined,
       name,
       title: input.title ?? source.metadata.title ?? null,
       description: input.description ?? source.metadata.description ?? null,
       files: skillRepositoryImportFiles(source),
-    })
+    }
+
+    let repository: SkillRepositoryDetailDto
+    try {
+      repository = await this.account.importSkillRepository(importInput)
+    } catch (error) {
+      if (explicitRepositoryId || !localRepositoryId || !isNotFoundError(error)) throw error
+      repository = await this.account.importSkillRepository({
+        ...importInput,
+        repositoryId: undefined,
+      })
+    }
     const owner = repository.owner.handle
     const managementUrl = buildSkillRepositoryManagementUrl(this.publicAppUrl, repository.id)
 
@@ -150,6 +163,10 @@ function assertSkillFileBytes(originalName: string, bytes: Uint8Array | undefine
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "status" in error && error.status === 404)
 }
 
 export const skillRepositoryUploadService = new SkillRepositoryUploadService()

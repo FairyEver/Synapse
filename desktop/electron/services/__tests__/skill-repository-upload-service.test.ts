@@ -174,6 +174,44 @@ describe("SkillRepositoryUploadService", () => {
     }))
   })
 
+  it("recreates a repository when the local cloud identity is stale", async () => {
+    readSkillRepositoryIdentity.mockResolvedValue({
+      id: "repo-stale",
+      kind: "cloud-skill-repository",
+      owner: "liyang",
+      name: "demo-skill",
+    })
+    const staleIdentityError = Object.assign(new Error("Skill 仓库不存在。"), {
+      status: 404,
+      code: "NOT_FOUND",
+    })
+    const importSkillRepository = vi.fn(async (input: SkillRepositoryImportInput) => {
+      if (input.repositoryId === "repo-stale") throw staleIdentityError
+      return repositoryDetail({ id: "repo-new" })
+    })
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+      repositoryId: "repo-new",
+      identityWritten: true,
+    })
+
+    expect(importSkillRepository).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      repositoryId: "repo-stale",
+    }))
+    expect(importSkillRepository).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      repositoryId: undefined,
+    }))
+    expect(writeSkillRepositoryIdentity).toHaveBeenCalledWith("/skills/demo", {
+      id: "repo-new",
+      kind: "cloud-skill-repository",
+      owner: "liyang",
+      name: "demo-skill",
+    }, undefined)
+  })
+
   it("preflights identity write permission before cloud import", async () => {
     ensureSkillRepositoryIdentityWriteAllowed.mockRejectedValueOnce(new Error("denied by policy"))
     const importSkillRepository = vi.fn()
