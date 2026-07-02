@@ -241,6 +241,29 @@ describe('DriveMarkdownRenderer', () => {
     windowAddEventListener.mockRestore()
   })
 
+  it('counts replies in the toolbar comments total', async () => {
+    const baseThread = thread()
+    annotationsMock.threads = [{
+      ...baseThread,
+      comments: [
+        ...baseThread.comments,
+        {
+          ...baseThread.comments[0],
+          id: 'comment-reply-1',
+          parentCommentId: baseThread.comments[0].id,
+          body: 'Reply body',
+        },
+      ],
+    }]
+
+    renderMarkdown()
+
+    await act(async () => undefined)
+
+    expect(toolbarButtonTexts()).toEqual(['宽屏', '评论 2'])
+    expect(document.body.textContent).toContain('Reply body')
+  })
+
   it('refreshes comments from the comment rail header', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()

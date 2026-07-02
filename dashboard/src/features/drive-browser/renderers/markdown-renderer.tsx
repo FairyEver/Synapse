@@ -145,6 +145,7 @@ export function DriveMarkdownRenderer({
     }),
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
+  const commentCount = useMemo(() => countMarkdownComments(railThreads), [railThreads])
 
   const measureAnnotationLayout = useCallback(() => {
     const root = bodyRef.current
@@ -294,7 +295,7 @@ export function DriveMarkdownRenderer({
         {
           kind: 'toggle',
           id: 'markdown-comments',
-          label: `评论 ${annotations.threads.length}`,
+          label: `评论 ${commentCount}`,
           icon: MessageSquare,
           pressed: commentsOpen,
           onPressedChange: setCommentPanelOpen,
@@ -304,8 +305,8 @@ export function DriveMarkdownRenderer({
     if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     return items
   }, [
-    annotations.threads.length,
     annotationsEnabled,
+    commentCount,
     commentsOpen,
     imageSources.toolbarItem,
     outline.length,
@@ -608,6 +609,10 @@ function driveMarkdownImageSourceContextFromAnnotation(
     }
   }
   return { context: 'owner', itemId: current.id }
+}
+
+function countMarkdownComments(threads: readonly MarkdownCommentsRailThread[]): number {
+  return threads.reduce((total, { thread }) => total + thread.comments.length, 0)
 }
 
 function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
