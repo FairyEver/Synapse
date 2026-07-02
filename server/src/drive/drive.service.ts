@@ -480,12 +480,12 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(item)
     this.assertEditableTextFile(item)
     const storageKey = this.requireActiveFileStorage(item)
-    const preview = await this.readTextPreview(storageKey)
+    const markdown = await this.readInlineEditableTextFile(item, storageKey)
     return {
       itemId: item.id,
       ownerId: item.userId,
       versionId: await this.findCurrentDriveFileVersionId(item),
-      markdown: preview.text,
+      markdown,
     }
   }
 
@@ -506,12 +506,12 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(current)
     this.assertEditableTextFile(current)
     const storageKey = this.requireActiveFileStorage(current)
-    const preview = await this.readTextPreview(storageKey)
+    const markdown = await this.readInlineEditableTextFile(current, storageKey)
     return {
       itemId: current.id,
       ownerId: access.value.ownerId,
       versionId: await this.findCurrentDriveFileVersionId(current),
-      markdown: preview.text,
+      markdown,
     }
   }
 
@@ -2595,6 +2595,14 @@ export class DriveService implements OnApplicationBootstrap {
   private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
     const object = await this.storage.getObjectStream({ key: storageKey })
     return readStreamTextPrefix(object.stream, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
+  }
+
+  private async readInlineEditableTextFile(item: DriveItemRecordWithStorage, storageKey: string): Promise<string> {
+    if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    const content = await readStreamTextPrefix(object.stream, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)
+    if (content.truncated) throw new PayloadTooLargeException("文件内容过大。")
+    return content.text
   }
 
   private requireActiveFileStorage(item: DriveItemRecordWithStorage): string {
