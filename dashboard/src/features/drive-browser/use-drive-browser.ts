@@ -202,12 +202,13 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   if (query.isError && isInvalidShareError(input, query.error)) return { status: 'invalidShare' }
   if (query.isError) return { status: 'error', message: getErrorMessage(query.error) }
   if (isDriveBrowserPasswordRequired(query.data)) {
+    const initialPasswordRejected = input.context === 'share' && Boolean(input.initialPassword)
     return {
       status: 'passwordRequired',
       message: query.data.message,
       unlock: (password) => unlockMutation.mutate(password),
       unlocking: unlockMutation.isPending,
-      unlockError: unlockMutation.error ? getErrorMessage(unlockMutation.error) : null,
+      unlockError: unlockMutation.error ? getErrorMessage(unlockMutation.error) : initialPasswordRejected ? query.data.message : null,
     }
   }
   return { status: 'loading' }

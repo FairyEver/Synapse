@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   DriveBrowserSnapshotDto,
   DriveBrowserSurface,
@@ -44,12 +44,27 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const onInitialPasswordConsumed = props.context === 'share'
     ? props.onInitialPasswordConsumed
     : undefined
+  const shareTargetKey = props.context === 'share'
+    ? `${props.shareId}:${props.itemId ?? ''}`
+    : null
+  const [initialPasswordRejectedKey, setInitialPasswordRejectedKey] = useState<string | null>(null)
+  const consumedInitialPasswordKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!initialPassword) return
+    if (!initialPassword) {
+      consumedInitialPasswordKeyRef.current = null
+      return
+    }
     if (state.status !== 'ready' && state.status !== 'passwordRequired') return
+    if (consumedInitialPasswordKeyRef.current === shareTargetKey) return
+    consumedInitialPasswordKeyRef.current = shareTargetKey
+    if (state.status === 'passwordRequired' && initialPasswordRejectedKey !== shareTargetKey) setInitialPasswordRejectedKey(shareTargetKey)
     onInitialPasswordConsumed?.()
-  }, [initialPassword, onInitialPasswordConsumed, state.status])
+  }, [initialPassword, initialPasswordRejectedKey, onInitialPasswordConsumed, shareTargetKey, state.status])
+
+  useEffect(() => {
+    if (state.status === 'ready' && initialPasswordRejectedKey !== null) setInitialPasswordRejectedKey(null)
+  }, [initialPasswordRejectedKey, state.status])
 
   const framed = props.context === 'share' || props.surface === 'standalone'
   const loadingMode: DriveBrowserLoadingMode = framed
@@ -86,7 +101,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
         <DriveBrowserPasswordForm
           message={state.message}
           unlocking={state.unlocking}
-          unlockError={state.unlockError}
+          unlockError={state.unlockError ?? (initialPasswordRejectedKey === shareTargetKey ? state.message : null)}
           onUnlock={state.unlock}
         />
       ) : null}

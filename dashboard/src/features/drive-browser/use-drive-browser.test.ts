@@ -562,6 +562,29 @@ describe('toDriveBrowserQueryKey', () => {
     expect(driveBrowserApi.getShareRoot).not.toHaveBeenCalled()
   })
 
+  it('reports initial share password rejection after the query password is consumed', async () => {
+    vi.mocked(driveBrowserApi.unlockShare).mockResolvedValueOnce({ passwordRequired: true, message: '请输入密码。' })
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, {
+      context: 'share',
+      shareId: 'share-1',
+      initialPassword: 'expired-password',
+    })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('passwordRequired')
+    })
+
+    expect(hook.result.current.status === 'passwordRequired' ? hook.result.current.unlockError : null)
+      .toBe('请输入密码。')
+    expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'expired-password', undefined, {})
+  })
+
   it('keeps a password-unlocked share ready after loading more children', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },

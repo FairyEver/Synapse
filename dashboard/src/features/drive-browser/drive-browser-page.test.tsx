@@ -86,6 +86,38 @@ describe('DriveBrowserPage', () => {
     expect(onInitialPasswordConsumed).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps rejected initial password feedback after clearing the password query', () => {
+    const onInitialPasswordConsumed = vi.fn()
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: false,
+      unlockError: '请输入密码。',
+    })
+    renderPage(
+      <DriveBrowserPage
+        context='share'
+        shareId='share-1'
+        initialPassword='old-password'
+        onInitialPasswordConsumed={onInitialPasswordConsumed}
+      />
+    )
+    expect(document.body.textContent).toContain('密码不正确，请重试。')
+
+    mockDriveBrowserState({
+      status: 'passwordRequired',
+      message: '请输入密码。',
+      unlock: vi.fn(),
+      unlocking: false,
+      unlockError: null,
+    })
+    rerenderPage(<DriveBrowserPage context='share' shareId='share-1' onInitialPasswordConsumed={onInitialPasswordConsumed} />)
+
+    expect(onInitialPasswordConsumed).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain('密码不正确，请重试。')
+  })
+
   it('renders invalid share links without exposing the underlying reason', () => {
     mockDriveBrowserState({
       status: 'invalidShare',
@@ -208,6 +240,12 @@ function renderPage(element: ReactElement) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
+  act(() => {
+    root?.render(element)
+  })
+}
+
+function rerenderPage(element: ReactElement) {
   act(() => {
     root?.render(element)
   })
