@@ -2894,6 +2894,64 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("ignores the next matching remote change after a local upload succeeds", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "first", "utf8")
+      const harness = createHarness({
+        accountService: {
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-spec", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 1 }],
+          })),
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await service.rescanBinding(binding.id)
+      await writeFile(localPath, "second", "utf8")
+      await service.pollRemoteChanges(binding.id)
+
+      await expect(harness.conflicts.list()).resolves.toEqual([])
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        remoteCursor: "43",
+        status: "active",
+      })
+      await expect(readFile(localPath, "utf8")).resolves.toBe("second")
+      await expect(harness.operations.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves a conflict by keeping the remote file", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

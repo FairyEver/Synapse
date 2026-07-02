@@ -264,6 +264,11 @@ export function planDriveSyncRemoteChanges(input: {
   readonly baseline: readonly DriveSyncBaselineEntryV1[]
   readonly changes: readonly DriveChangeDto[]
   readonly localChangedPaths?: ReadonlySet<string>
+  readonly shouldIgnoreChange?: (
+    change: DriveChangeDto,
+    relativePath: string,
+    baseline: DriveSyncBaselineEntryV1 | undefined,
+  ) => boolean
 }): DriveSyncPlanResult {
   const baselineByRemoteId = new Map(
     input.baseline
@@ -282,6 +287,7 @@ export function planDriveSyncRemoteChanges(input: {
       : baseline?.relativePath ?? remoteRelativePath(input.binding, change)
     if (relativePath === null) continue
     if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
+    if (input.shouldIgnoreChange?.(change, relativePath, baseline)) continue
     const localPath = path.join(input.binding.localPath, relativePath)
     const conflictRelativePath = overlappingChangedRelativePath(localChangedPaths, [
       relativePath,

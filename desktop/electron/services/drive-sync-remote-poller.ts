@@ -14,6 +14,7 @@ export async function pollDriveSyncRemoteChanges(input: {
   readonly onConflicts: (conflicts: readonly DriveSyncPlannedConflict[]) => Promise<void>
   readonly updateBindingCursor: (bindingId: string, cursor: string | null) => Promise<void> | void
   readonly localChangedPaths?: ReadonlySet<string>
+  readonly shouldIgnoreChange?: Parameters<typeof planDriveSyncRemoteChanges>[0]["shouldIgnoreChange"]
   readonly limit?: number
 }): Promise<void> {
   const limit = input.limit ?? 100
@@ -50,6 +51,7 @@ export async function pollDriveSyncRemoteChanges(input: {
       baseline: input.baseline,
       changes,
       localChangedPaths: input.localChangedPaths,
+      shouldIgnoreChange: input.shouldIgnoreChange,
     })
     if (plan.operations.length > 0) await input.onOperations(plan.operations)
     if (plan.conflicts.length > 0) await input.onConflicts(plan.conflicts)

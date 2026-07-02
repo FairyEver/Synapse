@@ -186,6 +186,12 @@ class TypedDriveSyncEventEmitter extends EventEmitter {
   }
 }
 
+type PendingRemoteEcho = {
+  readonly itemId: string
+  readonly relativePath: string
+  readonly changeTypes: readonly DriveChangeDto["type"][]
+}
+
 export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const events = new TypedDriveSyncEventEmitter()
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
@@ -205,6 +211,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   let remotePollRunning = false
   let remotePollPromise: Promise<void> | null = null
   const bindingActionFlights = new Map<string, Promise<unknown>>()
+  const pendingRemoteEchoes = new Map<string, PendingRemoteEcho[]>()
 
   async function getSnapshot(): Promise<DriveSyncSnapshotDto> {
     const bindingEntries = (await deps.bindings.list())
@@ -411,6 +418,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       onConflicts: recordPlannedConflicts,
       updateBindingCursor,
       localChangedPaths,
+      shouldIgnoreChange: (change, relativePath) => consumePendingRemoteEcho(binding.id, change, relativePath),
     })
   }
 
@@ -1409,6 +1417,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           recordOperation,
           trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
         })
+        await rememberPendingRemoteEcho(operation)
       } catch (error) {
         await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
         failedBindingIds.add(operation.bindingId)
@@ -1497,6 +1506,55 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       bindingId: operation.bindingId,
       relativePath: operation.relativePath,
     })
+  }
+
+  async function rememberPendingRemoteEcho(operation: DriveSyncPlannedOperation): Promise<void> {
+    const changeTypes = remoteEchoChangeTypes(operation.kind)
+    if (!changeTypes) return
+    const baseline = (await baselineStore.listByBinding(operation.bindingId))
+      .find((entry) => entry.relativePath === operation.relativePath)
+    const itemId = baseline?.remoteItemId ?? operation.driveItemId
+    if (!itemId) return
+    const echoes = pendingRemoteEchoes.get(operation.bindingId) ?? []
+    pendingRemoteEchoes.set(operation.bindingId, [
+      ...echoes,
+      {
+        itemId,
+        relativePath: operation.relativePath,
+        changeTypes,
+      },
+    ])
+  }
+
+  function consumePendingRemoteEcho(bindingId: string, change: DriveChangeDto, relativePath: string): boolean {
+    const echoes = pendingRemoteEchoes.get(bindingId)
+    if (!echoes || echoes.length === 0) return false
+    const index = echoes.findIndex((echo) =>
+      echo.itemId === change.itemId
+      && echo.relativePath === relativePath
+      && echo.changeTypes.includes(change.type),
+    )
+    if (index < 0) return false
+    const next = echoes.slice(0, index).concat(echoes.slice(index + 1))
+    if (next.length > 0) {
+      pendingRemoteEchoes.set(bindingId, next)
+    } else {
+      pendingRemoteEchoes.delete(bindingId)
+    }
+    return true
+  }
+
+  function remoteEchoChangeTypes(kind: DriveSyncPlannedOperation["kind"]): readonly DriveChangeDto["type"][] | null {
+    switch (kind) {
+      case "upload":
+        return ["created", "content_updated"]
+      case "delete_remote":
+        return ["trashed", "deleted"]
+      case "move_remote":
+        return ["renamed", "moved"]
+      default:
+        return null
+    }
   }
 
   async function updateBindingCursor(bindingId: string, cursor: string | null): Promise<void> {
