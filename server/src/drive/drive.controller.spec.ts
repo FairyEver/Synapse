@@ -554,11 +554,28 @@ describe("DriveController", () => {
       await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/thread-1").expect(200)
 
       expect(annotations.listOwnerAnnotations).toHaveBeenCalledWith("user-1", "item-1")
-      expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", expect.objectContaining({ body: "Comment body" }))
-      expect(annotations.replyOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply body" })
-      expect(annotations.updateOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", { body: "Updated body" })
-      expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1")
-      expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1")
+      expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        expect.objectContaining({ body: "Comment body" }),
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.replyOwnerAnnotation).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        "thread-1",
+        { parentCommentId: null, body: "Reply body" },
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.updateOwnerComment).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        "comment-1",
+        { body: "Updated body" },
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", expect.objectContaining({ ipAddress: expect.any(String) }))
+      expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1", expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -1238,6 +1255,7 @@ describe("DriveController", () => {
         itemId: "file-1",
         cookie: "file-cookie",
         body: expect.objectContaining({ body: "Comment body" }),
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
       expect(annotations.replyShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
         actorUserId: "user-1",
@@ -1245,14 +1263,22 @@ describe("DriveController", () => {
         itemId: "file-1",
         threadId: "thread-1",
         body: { parentCommentId: "comment-1", body: "Reply body" },
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
       expect(annotations.updateShareComment).toHaveBeenCalledWith(expect.objectContaining({
         actorUserId: "user-1",
         commentId: "comment-1",
         body: { body: "Updated body" },
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
-      expect(annotations.deleteShareComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: "comment-1" }))
-      expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({ threadId: "thread-1" }))
+      expect(annotations.deleteShareComment).toHaveBeenCalledWith(expect.objectContaining({
+        commentId: "comment-1",
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      }))
+      expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({
+        threadId: "thread-1",
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      }))
     } finally {
       await shareApp.close()
     }

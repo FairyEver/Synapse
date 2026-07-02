@@ -610,6 +610,7 @@ export class DriveUserController {
       request.user!.id,
       itemId,
       parseDriveAnnotationCreateBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -625,6 +626,7 @@ export class DriveUserController {
       itemId,
       threadId,
       parseDriveAnnotationReplyBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -640,6 +642,7 @@ export class DriveUserController {
       itemId,
       commentId,
       parseDriveAnnotationCommentUpdateBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -649,7 +652,7 @@ export class DriveUserController {
     @Param("commentId") commentId: string,
     @Req() request: AuthenticatedUserRequest,
   ) {
-    return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId)
+    return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId, driveAuditContext(request))
   }
 
   @Delete("/browser/owner/items/:itemId/annotations/:threadId")
@@ -658,7 +661,7 @@ export class DriveUserController {
     @Param("threadId") threadId: string,
     @Req() request: AuthenticatedUserRequest,
   ) {
-    return requireDriveAnnotationService(this.annotations).deleteOwnerThread(request.user!.id, itemId, threadId)
+    return requireDriveAnnotationService(this.annotations).deleteOwnerThread(request.user!.id, itemId, threadId, driveAuditContext(request))
   }
 
   @Patch("/browser/owner/items/:itemId/content")
@@ -1182,6 +1185,7 @@ export class DrivePublicController {
       shareId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCreateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1199,6 +1203,7 @@ export class DrivePublicController {
       itemId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCreateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1216,6 +1221,7 @@ export class DrivePublicController {
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationReplyBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1235,6 +1241,7 @@ export class DrivePublicController {
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationReplyBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1252,6 +1259,7 @@ export class DrivePublicController {
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCommentUpdateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1271,6 +1279,7 @@ export class DrivePublicController {
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCommentUpdateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1286,6 +1295,7 @@ export class DrivePublicController {
       shareId,
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1303,6 +1313,7 @@ export class DrivePublicController {
       itemId,
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1318,6 +1329,7 @@ export class DrivePublicController {
       shareId,
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1335,6 +1347,7 @@ export class DrivePublicController {
       itemId,
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 

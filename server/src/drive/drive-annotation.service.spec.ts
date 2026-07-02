@@ -5,11 +5,13 @@ import { DriveAnnotationService } from "./drive-annotation.service"
 describe("DriveAnnotationService", () => {
   const prisma = createPrismaMock()
   const drive = createDriveServiceMock()
-  const service = new DriveAnnotationService(prisma as never, drive as never)
+  const auditLog = { record: vi.fn() }
+  const service = new DriveAnnotationService(prisma as never, drive as never, auditLog as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
     prisma.driveItem.findFirst.mockResolvedValue(markdownItem())
+    prisma.driveShare.findFirst.mockResolvedValue({ id: "share-record-1" })
     prisma.driveFileVersion.findFirst.mockResolvedValue({ id: "version-1" })
     prisma.driveAnnotationThread.findMany.mockResolvedValue([threadRecord()])
     prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord())
@@ -18,6 +20,8 @@ describe("DriveAnnotationService", () => {
     prisma.driveAnnotationComment.create.mockResolvedValue(commentRecord({ createdByUserId: "owner-1" }))
     prisma.driveAnnotationComment.findFirst.mockResolvedValue(commentRecord())
     prisma.driveAnnotationComment.update.mockResolvedValue(commentRecord({ body: "updated", createdByUserId: "owner-1" }))
+    prisma.user.findUnique.mockImplementation(async ({ where }: { readonly where: { readonly id: string } }) => ({ email: `${where.id}@example.com` }))
+    auditLog.record.mockResolvedValue(undefined)
     drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot())
   })
 
@@ -98,6 +102,44 @@ describe("DriveAnnotationService", () => {
       }),
     }))
     expect(result.id).toBe("thread-1")
+  })
+
+  it("records owner annotation write audits without comment content", async () => {
+    prisma.driveAnnotationComment.findFirst
+      .mockResolvedValueOnce(commentRecord({ createdByUserId: "owner-1" }))
+      .mockResolvedValueOnce(commentRecord())
+
+    await service.createOwnerAnnotation("owner-1", "item-1", createInput(), { ipAddress: "127.0.0.1" })
+    await service.replyOwnerAnnotation("owner-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply body" }, { ipAddress: "127.0.0.1" })
+    await service.updateOwnerComment("owner-1", "item-1", "comment-1", { body: "updated" }, { ipAddress: "127.0.0.1" })
+    await service.deleteOwnerComment("owner-1", "item-1", "comment-1", { ipAddress: "127.0.0.1" })
+    await service.deleteOwnerThread("owner-1", "item-1", "thread-1", { ipAddress: "127.0.0.1" })
+
+    expect(auditLog.record.mock.calls.map(([input]) => input.action)).toEqual([
+      "drive.annotation.create",
+      "drive.annotation.reply",
+      "drive.annotation.comment.edit",
+      "drive.annotation.comment.delete",
+      "drive.annotation.thread.delete",
+    ])
+    expect(auditLog.record).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      adminEmail: "owner-1@example.com",
+      targetType: "drive.annotationThread",
+      targetId: "thread-1",
+      detail: expect.objectContaining({
+        actorUserId: "owner-1",
+        ownerId: "owner-1",
+        itemId: "item-1",
+        threadId: "thread-1",
+        commentId: "comment-1",
+      }),
+      ipAddress: "127.0.0.1",
+    }))
+    const serialized = JSON.stringify(auditLog.record.mock.calls)
+    expect(serialized).not.toContain("Comment body")
+    expect(serialized).not.toContain("Reply body")
+    expect(serialized).not.toContain("updated")
+    expect(serialized).not.toContain("Note")
   })
 
   it("rejects owner annotation creation when the preview version is stale", async () => {
@@ -248,6 +290,85 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationComment.create).toHaveBeenCalled()
     expect(prisma.driveAnnotationComment.update).toHaveBeenCalled()
     expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
+  })
+
+  it("records share annotation write audits with share context redacted", async () => {
+    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false, canComment: true }))
+    const ownComment = commentRecord({ createdByUserId: "reader-1" })
+    prisma.driveAnnotationComment.findFirst.mockResolvedValue(ownComment)
+    prisma.driveAnnotationComment.update.mockResolvedValue({ ...ownComment, body: "updated" })
+
+    await service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "shr_file",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: createInput(),
+      auditContext: { ipAddress: "203.0.113.7" },
+    })
+    await service.replyShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "shr_file",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      body: { body: "Reply body" },
+      auditContext: { ipAddress: "203.0.113.7" },
+    })
+    await service.updateShareComment({
+      actorUserId: "reader-1",
+      shareId: "shr_file",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+      body: { body: "updated" },
+      auditContext: { ipAddress: "203.0.113.7" },
+    })
+    await service.deleteShareComment({
+      actorUserId: "reader-1",
+      shareId: "shr_file",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-1",
+      auditContext: { ipAddress: "203.0.113.7" },
+    })
+    await service.deleteShareThread({
+      actorUserId: "owner-1",
+      shareId: "shr_file",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      auditContext: { ipAddress: "203.0.113.7" },
+    })
+
+    expect(auditLog.record.mock.calls.map(([input]) => input.action)).toEqual([
+      "drive.share_annotation.create",
+      "drive.share_annotation.reply",
+      "drive.share_annotation.comment.edit",
+      "drive.share_annotation.comment.delete",
+      "drive.share_annotation.thread.delete",
+    ])
+    expect(auditLog.record).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      adminEmail: "reader-1@example.com",
+      targetType: "drive.annotationThread",
+      targetId: "thread-1",
+      detail: expect.objectContaining({
+        actorUserId: "reader-1",
+        ownerId: "owner-1",
+        itemId: "item-1",
+        shareId: "[redacted-share-id]",
+        shareRecordId: "share-record-1",
+        threadId: "thread-1",
+        commentId: "comment-1",
+      }),
+      ipAddress: "203.0.113.7",
+    }))
+    const serialized = JSON.stringify(auditLog.record.mock.calls)
+    expect(serialized).not.toContain("shr_file")
+    expect(serialized).not.toContain("Comment body")
+    expect(serialized).not.toContain("Reply body")
+    expect(serialized).not.toContain("updated")
+    expect(serialized).not.toContain("Note")
   })
 
   it("rejects share annotation writes when the share cannot be commented", async () => {
@@ -432,7 +553,9 @@ function commentRecord(input: {
 
 function createPrismaMock() {
   return {
+    user: { findUnique: vi.fn() },
     driveItem: { findFirst: vi.fn() },
+    driveShare: { findFirst: vi.fn() },
     driveFileVersion: { findFirst: vi.fn() },
     driveAnnotationThread: {
       findMany: vi.fn(),

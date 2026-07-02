@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type {
   DriveAnnotationCommentDto,
@@ -8,6 +8,8 @@ import type {
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
 } from "@synapse/shared"
+import { formatAuditError } from "../common/audit-error"
+import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 import { isCommentableMarkdownItem } from "./drive-annotation-target"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
@@ -25,6 +27,10 @@ type DriveAnnotationItem = {
 type ShareAnnotationAccess = {
   readonly item: DriveAnnotationItem
   readonly canComment: boolean
+}
+
+type DriveAuditContext = {
+  readonly ipAddress?: string
 }
 
 type AnnotationThreadRecord = {
@@ -70,9 +76,12 @@ const annotationInclude = {
 
 @Injectable()
 export class DriveAnnotationService {
+  private readonly logger = new Logger(DriveAnnotationService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async listOwnerAnnotations(userId: string, itemId: string): Promise<DriveAnnotationThreadDto[]> {
@@ -85,7 +94,7 @@ export class DriveAnnotationService {
     return toVisibleThreadDtos(threads, userId, item.userId)
   }
 
-  async createOwnerAnnotation(userId: string, itemId: string, input: DriveAnnotationCreateInput): Promise<DriveAnnotationThreadDto> {
+  async createOwnerAnnotation(userId: string, itemId: string, input: DriveAnnotationCreateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationThreadDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     assertCommentableItem(item)
     const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.baseVersionId ?? null)
@@ -101,10 +110,25 @@ export class DriveAnnotationService {
       },
       include: annotationInclude,
     })
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.create",
+      targetType: "drive.annotationThread",
+      targetId: thread.id,
+      detail: {
+        actorUserId: userId,
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: thread.id,
+        commentId: thread.comments[0]?.id ?? null,
+        baseVersionId,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return toThreadDto(thread, userId, item.userId)
   }
 
-  async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput): Promise<DriveAnnotationCommentDto> {
+  async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     await this.requireThread(itemId, threadId)
     await this.requireParentComment(threadId, input.parentCommentId ?? null)
@@ -117,10 +141,25 @@ export class DriveAnnotationService {
       },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.reply",
+      targetType: "drive.annotationComment",
+      targetId: comment.id,
+      detail: {
+        actorUserId: userId,
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId,
+        commentId: comment.id,
+        parentCommentId: input.parentCommentId ?? null,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return toCommentDto(comment, userId, item.userId)
   }
 
-  async updateOwnerComment(userId: string, itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput): Promise<DriveAnnotationCommentDto> {
+  async updateOwnerComment(userId: string, itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     const comment = await this.requireComment(itemId, commentId)
     if (comment.createdByUserId !== userId) throw new ForbiddenException("不能编辑他人的评论。")
@@ -129,22 +168,63 @@ export class DriveAnnotationService {
       data: { body: input.body, editedAt: new Date() },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.comment.edit",
+      targetType: "drive.annotationComment",
+      targetId: updated.id,
+      detail: {
+        actorUserId: userId,
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: comment.threadId,
+        commentId: updated.id,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return toCommentDto(updated, userId, item.userId)
   }
 
-  async deleteOwnerComment(userId: string, itemId: string, commentId: string): Promise<{ readonly ok: true }> {
+  async deleteOwnerComment(userId: string, itemId: string, commentId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    await this.requireComment(itemId, commentId)
+    const comment = await this.requireComment(itemId, commentId)
     await this.prisma.driveAnnotationComment.update({ where: { id: commentId }, data: { deletedAt: new Date() } })
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.comment.delete",
+      targetType: "drive.annotationComment",
+      targetId: commentId,
+      detail: {
+        actorUserId: userId,
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: comment.threadId,
+        commentId,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return { ok: true }
   }
 
-  async deleteOwnerThread(userId: string, itemId: string, threadId: string): Promise<{ readonly ok: true }> {
+  async deleteOwnerThread(userId: string, itemId: string, threadId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
     await this.requireThread(itemId, threadId)
     await this.prisma.driveAnnotationThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } })
+    await this.recordAnnotationAudit({
+      actorUserId: userId,
+      action: "drive.annotation.thread.delete",
+      targetType: "drive.annotationThread",
+      targetId: threadId,
+      detail: {
+        actorUserId: userId,
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return { ok: true }
   }
 
@@ -169,6 +249,7 @@ export class DriveAnnotationService {
     readonly itemId?: string
     readonly cookie?: string | null
     readonly body: DriveAnnotationCreateInput
+    readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationThreadDto> {
     const item = await this.requireCommentableShareItem(input)
     assertCommentableItem(item)
@@ -185,6 +266,21 @@ export class DriveAnnotationService {
       },
       include: annotationInclude,
     })
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.create",
+      targetType: "drive.annotationThread",
+      targetId: thread.id,
+      detail: {
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: thread.id,
+        commentId: thread.comments[0]?.id ?? null,
+        baseVersionId,
+      },
+      ipAddress: input.auditContext?.ipAddress,
+    })
     return toThreadDto(thread, input.actorUserId, item.userId)
   }
 
@@ -195,6 +291,7 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly threadId: string
     readonly body: DriveAnnotationReplyInput
+    readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
     await this.requireThread(item.id, input.threadId)
@@ -208,6 +305,21 @@ export class DriveAnnotationService {
       },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
     })
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.reply",
+      targetType: "drive.annotationComment",
+      targetId: comment.id,
+      detail: {
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: input.threadId,
+        commentId: comment.id,
+        parentCommentId: input.body.parentCommentId ?? null,
+      },
+      ipAddress: input.auditContext?.ipAddress,
+    })
     return toCommentDto(comment, input.actorUserId, item.userId)
   }
 
@@ -218,6 +330,7 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly commentId: string
     readonly body: DriveAnnotationCommentUpdateInput
+    readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
     const comment = await this.requireComment(item.id, input.commentId)
@@ -226,6 +339,20 @@ export class DriveAnnotationService {
       where: { id: input.commentId },
       data: { body: input.body.body, editedAt: new Date() },
       include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+    })
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.comment.edit",
+      targetType: "drive.annotationComment",
+      targetId: updated.id,
+      detail: {
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: comment.threadId,
+        commentId: updated.id,
+      },
+      ipAddress: input.auditContext?.ipAddress,
     })
     return toCommentDto(updated, input.actorUserId, item.userId)
   }
@@ -236,11 +363,26 @@ export class DriveAnnotationService {
     readonly itemId?: string
     readonly cookie?: string | null
     readonly commentId: string
+    readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
     const comment = await this.requireComment(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.comment.delete",
+      targetType: "drive.annotationComment",
+      targetId: input.commentId,
+      detail: {
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: comment.threadId,
+        commentId: input.commentId,
+      },
+      ipAddress: input.auditContext?.ipAddress,
+    })
     return { ok: true }
   }
 
@@ -250,11 +392,25 @@ export class DriveAnnotationService {
     readonly itemId?: string
     readonly cookie?: string | null
     readonly threadId: string
+    readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
     if (item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.requireThread(item.id, input.threadId)
     await this.prisma.driveAnnotationThread.update({ where: { id: input.threadId }, data: { deletedAt: new Date() } })
+    await this.recordShareAnnotationAudit({
+      actorUserId: input.actorUserId,
+      shareId: input.shareId,
+      action: "drive.share_annotation.thread.delete",
+      targetType: "drive.annotationThread",
+      targetId: input.threadId,
+      detail: {
+        ownerId: item.userId,
+        itemId: item.id,
+        threadId: input.threadId,
+      },
+      ipAddress: input.auditContext?.ipAddress,
+    })
     return { ok: true }
   }
 
@@ -347,6 +503,75 @@ export class DriveAnnotationService {
     }
     return currentVersionId
   }
+
+  private async recordShareAnnotationAudit(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly action: string
+    readonly targetType: string
+    readonly targetId: string
+    readonly detail: Record<string, unknown>
+    readonly ipAddress?: string
+  }): Promise<void> {
+    if (!this.auditLog) return
+    let shareRecordId: string | null = null
+    try {
+      const share = await this.prisma.driveShare.findFirst({
+        where: { shareId: input.shareId },
+        select: { id: true },
+      })
+      shareRecordId = share?.id ?? null
+    } catch (error) {
+      this.logger.warn({
+        shareIdLength: input.shareId.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Drive annotation share audit context lookup failed")
+    }
+    await this.recordAnnotationAudit({
+      actorUserId: input.actorUserId,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      detail: {
+        actorUserId: input.actorUserId,
+        shareId: input.shareId,
+        shareRecordId,
+        ...input.detail,
+      },
+      ipAddress: input.ipAddress,
+    })
+  }
+
+  private async recordAnnotationAudit(input: {
+    readonly actorUserId: string
+    readonly action: string
+    readonly targetType: string
+    readonly targetId: string
+    readonly detail: Record<string, unknown>
+    readonly ipAddress?: string
+  }): Promise<void> {
+    if (!this.auditLog) return
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id: input.actorUserId }, select: { email: true } })
+      await this.auditLog.record({
+        adminEmail: user?.email ?? input.actorUserId,
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        detail: redactAnnotationAuditDetail(input.detail),
+        ipAddress: input.ipAddress ?? "system",
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Drive annotation audit log write failed")
+    }
+  }
 }
 
 function assertCommentableItem(item: { readonly name: string; readonly type: string; readonly mimeType: string | null }) {
@@ -438,4 +663,36 @@ function toAuthorDto(record: AnnotationAuthorRecord, redactEmail: boolean) {
     email: redactEmail ? null : record.email,
     displayName: record.displayName,
   }
+}
+
+function redactAnnotationAuditDetail(value: Record<string, unknown>): Record<string, unknown> {
+  return redactAnnotationAuditValue(value) as Record<string, unknown>
+}
+
+function redactAnnotationAuditValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return isPublicDriveShareId(value) ? "[redacted-share-id]" : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAnnotationAuditValue(item))
+  }
+  if (!isRecord(value)) return value
+  return Object.fromEntries(Object.entries(value).map(([key, entryValue]) => [
+    key,
+    key === "shareId" || key === "requestedShareId"
+      ? redactAnnotationAuditShareValue(entryValue)
+      : redactAnnotationAuditValue(entryValue),
+  ]))
+}
+
+function redactAnnotationAuditShareValue(value: unknown): unknown {
+  return typeof value === "string" ? "[redacted-share-id]" : redactAnnotationAuditValue(value)
+}
+
+function isPublicDriveShareId(value: string): boolean {
+  return /^shr_[A-Za-z0-9]+$/u.test(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === "[object Object]"
 }
