@@ -648,10 +648,20 @@ function DriveSyncBindingActions({
 }) {
   const canPause = binding.status === "active" || binding.status === "conflict"
   const primaryAction = getBindingPrimaryAction(binding, conflictCount)
+  const runRetry = () => runBindingAction(
+    binding.id,
+    async () => {
+      const { driveSync } = requireSynapseBridge()
+      await driveSync.resumeBinding({ id: binding.id })
+      await driveSync.rescanBinding({ id: binding.id })
+      await driveSync.pollRemoteChanges({ id: binding.id })
+    },
+    "已重试同步",
+  )
   const runResume = () => runBindingAction(
     binding.id,
     () => requireSynapseBridge().driveSync.resumeBinding({ id: binding.id }),
-    binding.status === "error" ? "已重试同步" : "已继续同步",
+    "已继续同步",
   )
   return (
     <div className="flex flex-wrap justify-end gap-1">
@@ -669,7 +679,7 @@ function DriveSyncBindingActions({
               onOpenDetails()
               return
             }
-            void runResume()
+            void (binding.status === "error" ? runRetry() : runResume())
           }}
         >
           {primaryAction.label}

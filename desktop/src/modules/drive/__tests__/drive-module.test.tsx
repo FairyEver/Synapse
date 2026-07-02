@@ -861,6 +861,29 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("重试同步 Docs").textContent).toContain("重试同步")
   })
 
+  it("runs local and remote sync checks when retrying an error binding", async () => {
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { errorCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "error", lastError: "上传失败。" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "active", lastError: null })] },
+      ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个错误")
+    await clickButtonByLabel("重试同步 Docs")
+
+    expect(mocks.resumeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.pollDriveSyncRemoteChanges).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(mocks.toast).toHaveBeenCalledWith("已重试同步")
+  })
+
   it("refreshes the sync snapshot after failed retry actions", async () => {
     mocks.getDriveSyncSnapshot
       .mockResolvedValueOnce(createDriveSyncSnapshot(
