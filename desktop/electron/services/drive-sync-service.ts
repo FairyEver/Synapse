@@ -1580,7 +1580,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
-    await requireBinding(input.bindingId)
+    const binding = await requireBinding(input.bindingId)
     const now = timestamp()
     const entry: DriveSyncOperationEntryV1 = {
       id: createId("drive-sync-operation"),
@@ -1599,6 +1599,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       completedAt: isTerminalOperationStatus(input.status) ? now : null,
     }
     await deps.operations.upsert(entry)
+    if (input.status === "succeeded") {
+      await deps.bindings.upsert({
+        ...binding,
+        lastSyncedAt: now,
+        updatedAt: now,
+      })
+    }
     await emitChanged()
     return toOperationDto(entry)
   }

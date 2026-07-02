@@ -299,6 +299,39 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("updates binding last synced time after a successful operation", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+    })
+
+    await service.recordOperation({
+      bindingId: binding.id,
+      kind: "download",
+      status: "succeeded",
+      driveItemId: "drive-item-1",
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: "/产品文档/spec.md",
+      message: null,
+    })
+
+    await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+      lastSyncedAt: "2026-06-28T00:00:00.000Z",
+    })
+    await expect(service.getSnapshot()).resolves.toMatchObject({
+      bindings: [expect.objectContaining({
+        id: binding.id,
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+      })],
+    })
+  })
+
   it("rejects duplicate active drive items and local paths", async () => {
     const service = createDriveSyncService(createHarness().deps)
     await service.createBinding({
