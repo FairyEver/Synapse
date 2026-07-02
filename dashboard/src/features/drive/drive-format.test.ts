@@ -43,6 +43,9 @@ describe('drive admin format helpers', () => {
   it('only allows useful delete actions', () => {
     expect(canDeleteAdminDriveItem(createDriveItem())).toBe(true)
     expect(canDeleteAdminDriveItem(createDriveItem({
+      lifecycleStatus: 'trashed',
+    }))).toBe(true)
+    expect(canDeleteAdminDriveItem(createDriveItem({
       storageStatus: 'delete_pending',
       storageDeletePending: true,
       lifecycleStatus: 'deleted',

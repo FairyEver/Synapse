@@ -70,10 +70,11 @@ export default function DriveAdminPage() {
   const deleteMutation = useMutation({
     mutationFn: adminApi.deleteDriveItem,
     onSuccess: () => {
+      const message = deleteTarget?.lifecycleStatus === 'trashed' ? '已清理' : '已删除'
       void queryClient.invalidateQueries({ queryKey: ['admin-drive-items'] })
       void queryClient.invalidateQueries({ queryKey: ['admin-drive-storage-summary'] })
       setDeleteTarget(null)
-      toast.success('已删除')
+      toast.success(message)
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -162,6 +163,7 @@ export default function DriveAdminPage() {
         cell: ({ row }) => {
           const item = row.original
           const canDelete = canDeleteAdminDriveItem(item)
+          const deleteLabel = item.lifecycleStatus === 'trashed' ? '清理' : '删除'
 
           return (
             <div className='flex justify-end gap-2'>
@@ -192,7 +194,7 @@ export default function DriveAdminPage() {
                   onClick={() => setDeleteTarget(item)}
                 >
                   <Trash2 data-icon='inline-start' />
-                  <span className='sr-only'>删除</span>
+                  <span className='sr-only'>{deleteLabel}</span>
                 </Button>
               ) : null}
             </div>
@@ -335,10 +337,10 @@ export default function DriveAdminPage() {
           onOpenChange={(open) => {
             if (!open && !deleteMutation.isPending) setDeleteTarget(null)
           }}
-          title='删除云盘项目'
-          desc={deleteTarget ? `删除「${deleteTarget.name}」？` : ''}
+          title={deleteTarget?.lifecycleStatus === 'trashed' ? '清理云盘项目' : '删除云盘项目'}
+          desc={deleteTarget ? `${deleteTarget.lifecycleStatus === 'trashed' ? '清理' : '删除'}「${deleteTarget.name}」？` : ''}
           cancelBtnText='取消'
-          confirmText='删除'
+          confirmText={deleteTarget?.lifecycleStatus === 'trashed' ? '清理' : '删除'}
           destructive
           isLoading={deleteMutation.isPending}
           handleConfirm={() => {
@@ -395,7 +397,7 @@ function isAdminDriveItemNormal(item: AdminDriveItemRow) {
 
 export function canDeleteAdminDriveItem(item: AdminDriveItemRow) {
   return (
-    item.lifecycleStatus === 'active' &&
+    (item.lifecycleStatus === 'active' || item.lifecycleStatus === 'trashed') &&
     item.storageStatus !== 'delete_pending' &&
     !item.storageDeletePending
   )
