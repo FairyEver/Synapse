@@ -454,6 +454,7 @@ function isProtectedDriveApiPath(path: string) {
 
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/image-sources(?:/import)?(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
 }
 
