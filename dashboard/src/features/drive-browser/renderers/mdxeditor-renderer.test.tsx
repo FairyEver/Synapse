@@ -495,6 +495,20 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('源码')
     expect(document.body.textContent).toContain('解析失败')
   })
+
+  it('clears parse error after saving recovered source markdown', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# broken-mdx')
+    await inputValue(sourceEditor(), '# Fixed')
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Fixed', baseVersionId: 'version-1' })
+    expect(document.body.textContent).not.toContain('解析失败')
+    expect(editor().value).toBe('# Fixed')
+    expect(document.body.textContent).toContain('已同步')
+  })
 })
 
 function renderRenderer(input: {
@@ -716,6 +730,12 @@ async function selectImage(file: File) {
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-mdxeditor="true"]')
   if (!(element instanceof HTMLTextAreaElement)) throw new Error('mdx editor not found')
+  return element
+}
+
+function sourceEditor(): HTMLTextAreaElement {
+  const element = Array.from(document.querySelectorAll('textarea')).find((item) => item.dataset.mdxeditor !== 'true')
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error('source editor not found')
   return element
 }
 

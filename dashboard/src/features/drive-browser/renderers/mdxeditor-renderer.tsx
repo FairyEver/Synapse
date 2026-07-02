@@ -281,6 +281,7 @@ export function DriveMDXeditorRenderer({
       }
       savedValueRef.current = normalizedValue
       setDirty(false)
+      setParseError(null)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
         setConflictOpen(true)
