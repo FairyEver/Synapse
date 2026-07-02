@@ -84,7 +84,6 @@ const envSchema = z
     SKILL_REPOSITORY_COS_SECRET_KEY: optionalEnvString,
     SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
     SKILL_REPOSITORY_COS_REGION: optionalEnvString,
-    SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_ID: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_KEY: optionalEnvString,
     PLATFORM_MEDIA_COS_BUCKET: optionalEnvString,
@@ -128,10 +127,10 @@ const envSchema = z
   .refine((env) => {
     if (env.NODE_ENV !== "production") return true
     const hasSkillRepositoryCos = !!(env.SKILL_REPOSITORY_COS_SECRET_ID && env.SKILL_REPOSITORY_COS_SECRET_KEY && env.SKILL_REPOSITORY_COS_BUCKET && env.SKILL_REPOSITORY_COS_REGION)
-    return hasSkillRepositoryCos || !!env.SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT
+    return hasSkillRepositoryCos
   }, {
-    path: ["SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT"],
-    message: "SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT is required in production when Skill Repository COS is not configured",
+    path: ["SKILL_REPOSITORY_COS_SECRET_ID"],
+    message: "SKILL_REPOSITORY_COS_* is required in production",
   })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
@@ -159,7 +158,6 @@ export interface ServerEnv {
   readonly skillRepositoryCosSecretKey?: string
   readonly skillRepositoryCosBucket?: string
   readonly skillRepositoryCosRegion?: string
-  readonly skillRepositoryLocalRoot?: string
   readonly platformMediaCosSecretId?: string
   readonly platformMediaCosSecretKey?: string
   readonly platformMediaCosBucket?: string
@@ -198,7 +196,6 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     skillRepositoryCosSecretKey: result.data.SKILL_REPOSITORY_COS_SECRET_KEY,
     skillRepositoryCosBucket: result.data.SKILL_REPOSITORY_COS_BUCKET,
     skillRepositoryCosRegion: result.data.SKILL_REPOSITORY_COS_REGION,
-    skillRepositoryLocalRoot: result.data.SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT,
     platformMediaCosSecretId: result.data.PLATFORM_MEDIA_COS_SECRET_ID,
     platformMediaCosSecretKey: result.data.PLATFORM_MEDIA_COS_SECRET_KEY,
     platformMediaCosBucket: result.data.PLATFORM_MEDIA_COS_BUCKET,

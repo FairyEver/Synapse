@@ -127,7 +127,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 配置文件（例如 `.env`、`.env.example`、`*.env.*`）必须按职责分组，并为每组和每个配置项添加中文注释，说明用途、影响范围或单位；示例文件不得携带密码、token、secret、私钥、真实数据库连接串等关键信息。
 - 服务端腾讯 COS 按业务域隔离，不要因为“都是文件”混用 bucket 或复用错误模块。当前域划分如下：
   - `DRIVE_COS_*` / Drive Storage：只用于用户云盘文件、云盘文件版本、Drive 公开素材和 Drive Sites 发布资源；这些对象受 Drive 元数据、权限、生命周期、容量统计或 Drive 专属公开资源规则约束。不得把用户头像、智能体头像、系统图标、模板封面等平台媒体塞进 Drive，也不得让这类平台媒体占用用户网盘额度。
-  - `SKILL_REPOSITORY_COS_*` / Skill Repository Storage：只用于云端 Skill 仓库文件、安装包和分发产物。不得复用它存头像、普通用户文件、临时上传、备份包、Rule/Prompt 云端分享数据或任意平台媒体。
+  - `SKILL_REPOSITORY_COS_*` / Skill Repository Storage：只用于云端 Skill 仓库文件、安装包和分发产物。Skill Repository 服务端存储必须使用这组 COS 配置，不提供本地 root 或 fallback 存储。不得复用它存头像、普通用户文件、临时上传、备份包、Rule/Prompt 云端分享数据或任意平台媒体。
   - `PLATFORM_MEDIA_COS_*` / Platform Media Storage：用于用户头像、智能体头像、系统应用图标、团队头像、模板封面、分享封面、模型图标等平台承担费用的小型媒体资源。默认按私有读写 bucket 设计，前端应使用 Synapse 后端媒体 URL 或后端签发的短期访问能力，不直接暴露 COS bucket/key。对象 key 应使用稳定业务前缀，例如 `platform-media/users/<userId>/avatar/...`、`platform-media/agent-personas/<personaId>/avatar/...`、`platform-media/system/<kind>/...`。
   - `BACKUP_COS_*` / Backup Storage：只用于服务端灾备归档，当前 key 前缀为 `backups/`。不得让业务运行时文件、头像、用户上传文件或 Skill Repository 包写入备份桶。
 - 新增任何服务端对象存储用途前，必须先判断能否归入现有 COS 域；如果语义、权限、生命周期、计费归属或备份策略不同，应新增明确的 storage domain，而不是临时复用 Drive、Skill Repository 或 Backup。新增 COS 域时必须同步更新 `server/src/config/env.ts`、`server/src/config/env.spec.ts`、`server/compose.yml`、`server/.env.example`、部署/初始化脚本、README 和本文件，并保持 `*_COS_SECRET_ID`、`*_COS_SECRET_KEY`、`*_COS_BUCKET`、`*_COS_REGION` 四项完整性校验。

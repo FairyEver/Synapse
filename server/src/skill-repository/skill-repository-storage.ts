@@ -1,11 +1,6 @@
-import { Inject, Injectable, Optional } from "@nestjs/common"
-import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, rm, stat, writeFile } from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
-import { pipeline } from "node:stream/promises"
+import { Injectable } from "@nestjs/common"
 import COS from "cos-nodejs-sdk-v5"
-import { isSkillRepositoryCosConfigured, loadEnv } from "../config/env"
+import { loadEnv } from "../config/env"
 
 export interface SkillRepositoryStorageObject {
   readonly key: string
@@ -23,72 +18,6 @@ export interface SkillRepositoryStoragePort {
   getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
   headObject(key: string): Promise<SkillRepositoryStorageObject | null>
   deleteObject(key: string): Promise<void>
-}
-
-export const LOCAL_SKILL_REPOSITORY_STORAGE_OPTIONS = Symbol("LOCAL_SKILL_REPOSITORY_STORAGE_OPTIONS")
-
-export type LocalSkillRepositoryStorageOptions = {
-  readonly root?: string
-}
-
-@Injectable()
-export class LocalSkillRepositoryStorage implements SkillRepositoryStoragePort {
-  private readonly contentTypes = new Map<string, string | null>()
-  private readonly root: string
-
-  constructor(@Optional() @Inject(LOCAL_SKILL_REPOSITORY_STORAGE_OPTIONS) options?: LocalSkillRepositoryStorageOptions) {
-    const env = options?.root ? undefined : loadEnv(process.env)
-    this.root = options?.root ?? env?.skillRepositoryLocalRoot ?? path.join(os.tmpdir(), "synapse-skill-repository-storage")
-  }
-
-  async putObject(input: {
-    readonly key: string
-    readonly body: Buffer | NodeJS.ReadableStream
-    readonly contentType?: string | null
-  }): Promise<void> {
-    const objectPath = this.pathForKey(input.key)
-    await mkdir(path.dirname(objectPath), { recursive: true })
-    if (Buffer.isBuffer(input.body)) {
-      await writeFile(objectPath, input.body)
-    } else {
-      await pipeline(input.body, createWriteStream(objectPath))
-    }
-    this.contentTypes.set(input.key, input.contentType ?? null)
-  }
-
-  async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
-    const objectPath = this.pathForKey(input.key)
-    const info = await stat(objectPath)
-    return {
-      stream: createReadStream(objectPath),
-      size: BigInt(info.size),
-      contentType: this.contentTypes.get(input.key) ?? null,
-    }
-  }
-
-  async headObject(key: string): Promise<SkillRepositoryStorageObject | null> {
-    try {
-      const info = await stat(this.pathForKey(key))
-      return { key, size: BigInt(info.size), contentType: this.contentTypes.get(key) ?? null }
-    } catch (error) {
-      if (error instanceof Error && "code" in error && (error as { readonly code?: string }).code === "ENOENT") return null
-      throw error
-    }
-  }
-
-  async deleteObject(key: string): Promise<void> {
-    await rm(this.pathForKey(key), { force: true })
-    this.contentTypes.delete(key)
-  }
-
-  private pathForKey(key: string): string {
-    const objectPath = path.resolve(this.root, key)
-    const rootPath = path.resolve(this.root)
-    if (objectPath !== rootPath && !objectPath.startsWith(`${rootPath}${path.sep}`)) {
-      throw new Error("Invalid skill repository storage key.")
-    }
-    return objectPath
-  }
 }
 
 @Injectable()
@@ -187,10 +116,6 @@ export class CosSkillRepositoryStorage implements SkillRepositoryStoragePort {
     }
     return this.client
   }
-}
-
-export function shouldUseCosSkillRepositoryStorage(source: NodeJS.ProcessEnv = process.env): boolean {
-  return isSkillRepositoryCosConfigured(loadEnv(source))
 }
 
 function isCosNotFound(error: unknown): boolean {

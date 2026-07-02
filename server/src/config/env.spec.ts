@@ -18,7 +18,10 @@ describe("loadEnv", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       PORT: "3000",
     })
 
@@ -27,7 +30,7 @@ describe("loadEnv", () => {
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.appPublicUrl).toBe("https://synapse.test")
     expect(env.driveLocalRoot).toBe("/app/data/drive")
-    expect(env.skillRepositoryLocalRoot).toBe("/app/data/skill-repository")
+    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
     expect(env.trustProxy).toBe(false)
   })
 
@@ -68,7 +71,10 @@ describe("loadEnv", () => {
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test/api/",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-        SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
+        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       }),
     ).toThrow("APP_PUBLIC_URL")
   })
@@ -83,7 +89,10 @@ describe("loadEnv", () => {
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test",
-        SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
+        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       }),
     ).toThrow("SYNAPSE_DRIVE_LOCAL_ROOT")
   })
@@ -101,14 +110,17 @@ describe("loadEnv", () => {
       DRIVE_COS_SECRET_KEY: "drive-secret-key",
       DRIVE_COS_BUCKET: "drive-bucket",
       DRIVE_COS_REGION: "ap-beijing",
-      SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
     })
 
     expect(isDriveCosConfigured(env)).toBe(true)
     expect(env.driveLocalRoot).toBeUndefined()
   })
 
-  it("rejects production Skill Repository storage without COS or explicit local root", () => {
+  it("rejects production Skill Repository storage without COS", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
@@ -120,7 +132,7 @@ describe("loadEnv", () => {
         APP_PUBLIC_URL: "https://synapse.test",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       }),
-    ).toThrow("SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT")
+    ).toThrow("SKILL_REPOSITORY_COS_SECRET_ID")
   })
 
   it("allows production Skill Repository storage with complete COS settings", () => {
@@ -140,7 +152,6 @@ describe("loadEnv", () => {
     })
 
     expect(isSkillRepositoryCosConfigured(env)).toBe(true)
-    expect(env.skillRepositoryLocalRoot).toBeUndefined()
   })
 
   it("rejects missing required settings", () => {

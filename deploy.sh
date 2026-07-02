@@ -15,17 +15,14 @@ GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_
 ONLINE_BACKUP_FILE="$BACKUP_DIR/synapse-online-before-deploy-${DEPLOY_ID}.sql"
 FINAL_BACKUP_FILE="$BACKUP_DIR/synapse-final-before-switch-${DEPLOY_ID}.sql"
 DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"
-SKILL_REPOSITORY_BACKUP_FILE="$BACKUP_DIR/skill-repository/synapse-skill-repository-final-before-switch-${DEPLOY_ID}.tar.gz"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
 DRIVE_BACKUP_STATUS_FILE=$(mktemp)
-SKILL_REPOSITORY_BACKUP_STATUS_FILE=$(mktemp)
-TOTAL_STEPS=19
+TOTAL_STEPS=18
 TOTAL_START=$(date +%s)
 
 cleanup() {
   rm -f "$APPLIED_MIGRATIONS_FILE"
   rm -f "$DRIVE_BACKUP_STATUS_FILE"
-  rm -f "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"
 }
 
 trap cleanup EXIT
@@ -380,38 +377,6 @@ printf "drive backup saved: %s\n" "$DRIVE_BACKUP_FILE"
 REMOTE_SCRIPT
 }
 
-backup_remote_skill_repository_fallback() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SKILL_REPOSITORY_BACKUP_FILE='$SKILL_REPOSITORY_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT' | tee "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"
-set -euo pipefail
-
-read_env_value() {
-  sed -n "s/^${1}=//p" .env | tail -n 1
-}
-
-skill_repository_cos_secret_id=$(read_env_value SKILL_REPOSITORY_COS_SECRET_ID)
-skill_repository_cos_secret_key=$(read_env_value SKILL_REPOSITORY_COS_SECRET_KEY)
-skill_repository_cos_bucket=$(read_env_value SKILL_REPOSITORY_COS_BUCKET)
-skill_repository_cos_region=$(read_env_value SKILL_REPOSITORY_COS_REGION)
-
-if [ -n "$skill_repository_cos_secret_id" ] && [ -n "$skill_repository_cos_secret_key" ] && [ -n "$skill_repository_cos_bucket" ] && [ -n "$skill_repository_cos_region" ]; then
-  echo "skill repository backup skipped: COS storage is configured"
-  exit 0
-fi
-
-if [ ! -d data/skill-repository ]; then
-  echo "skill repository backup skipped: local skill-repository directory not found"
-  exit 0
-fi
-
-mkdir -p "$(dirname "$SKILL_REPOSITORY_BACKUP_FILE")"
-tar -czf "$SKILL_REPOSITORY_BACKUP_FILE" -C data skill-repository
-test -s "$SKILL_REPOSITORY_BACKUP_FILE"
-chmod 600 "$SKILL_REPOSITORY_BACKUP_FILE"
-
-printf "skill repository backup saved: %s\n" "$SKILL_REPOSITORY_BACKUP_FILE"
-REMOTE_SCRIPT
-}
-
 stop_remote_server() {
   ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env stop server"
 }
@@ -457,25 +422,12 @@ drive_backup_summary() {
   fi
 }
 
-skill_repository_backup_summary() {
-  if grep -q "skill repository backup saved" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
-    echo "$SKILL_REPOSITORY_BACKUP_FILE"
-  elif grep -q "COS storage is configured" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
-    echo "skipped (COS storage is configured)"
-  elif grep -q "local skill-repository directory not found" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
-    echo "skipped (local skill-repository directory not found)"
-  else
-    echo "not available"
-  fi
-}
-
 print_deployment_artifacts() {
   echo "远端 .env 备份: $ENV_BACKUP_FILE"
   echo "Postgres globals 备份: $GLOBALS_BACKUP_FILE"
   echo "在线预演备份: $ONLINE_BACKUP_FILE"
   echo "最终切换前备份: $FINAL_BACKUP_FILE"
   echo "本地 Drive 备份: $(drive_backup_summary)"
-  echo "Skill Repository 本地备份: $(skill_repository_backup_summary)"
   echo "回滚服务镜像: synapse-server:$ROLLBACK_IMAGE_TAG"
 }
 
@@ -625,17 +577,17 @@ REMOTE_SCRIPT
 
 echo ""
 
-# [1/19] 确保远程目录存在
+# [1/18] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ensure_remote_dirs
 
 # 检查是否首次部署
 if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
-  # [2/19] 首次部署同步代码（只传服务端需要的文件）
+  # [2/18] 首次部署同步代码（只传服务端需要的文件）
   step 2 "同步代码到服务器" \
     sync_remote_code
 
-  # [3/19] 首次部署同步本机环境变量
+  # [3/18] 首次部署同步本机环境变量
   step 3 "同步本机环境变量到服务器" \
     sync_remote_env
 
@@ -645,80 +597,76 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [2/19] 同步本机环境变量
+# [2/18] 同步本机环境变量
 step 2 "同步本机环境变量到服务器" \
   sync_remote_env
 
-# [3/19] 检查远程环境变量
+# [3/18] 检查远程环境变量
 step 3 "检查远程环境变量" \
   validate_remote_env
 
-# [4/19] 检查数据库网络认证
+# [4/18] 检查数据库网络认证
 step 4 "检查数据库网络认证" \
   verify_remote_database_auth
 
-# [5/19] 获取远程已应用迁移
+# [5/18] 获取远程已应用迁移
 step 5 "获取远程已应用迁移" \
   fetch_applied_migrations
 
-# [6/19] 扫描待发布迁移风险
+# [6/18] 扫描待发布迁移风险
 step 6 "扫描待发布迁移风险" \
   scan_pending_migrations
 
-# [7/19] 备份 Postgres globals
+# [7/18] 备份 Postgres globals
 step 7 "备份 Postgres globals" \
   backup_remote_postgres_globals
 
-# [8/19] 在线备份远程数据库
+# [8/18] 在线备份远程数据库
 step 8 "在线备份远程数据库" \
   backup_remote_database "$ONLINE_BACKUP_FILE"
 
-# [9/19] 同步代码（只传服务端需要的文件）
+# [9/18] 同步代码（只传服务端需要的文件）
 step 9 "同步代码到服务器" \
   sync_remote_code
 
-# [10/19] 构建新 Docker 镜像
+# [10/18] 构建新 Docker 镜像
 step 10 "构建 Docker 镜像" \
   build_remote_image
 
-# [11/19] 标记当前服务镜像，供失败时回滚
+# [11/18] 标记当前服务镜像，供失败时回滚
 step 11 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [12/19] 用在线备份恢复临时库并预演迁移
+# [12/18] 用在线备份恢复临时库并预演迁移
 step 12 "临时数据库预演迁移" \
   preflight_remote_migrations
 
-# [13/19] 停止旧服务，保留数据库
+# [13/18] 停止旧服务，保留数据库
 step 13 "停止旧服务" \
   stop_remote_server
 
-# [14/19] 停服后最终备份远程数据库
+# [14/18] 停服后最终备份远程数据库
 step 14 "最终备份远程数据库" \
   backup_remote_database "$FINAL_BACKUP_FILE"
 
-# [15/19] 恢复验证最终数据库备份
+# [15/18] 恢复验证最终数据库备份
 step 15 "恢复验证最终数据库备份" \
   verify_final_backup_restore
 
-# [16/19] 备份本地 Drive fallback 数据
+# [16/18] 备份本地 Drive fallback 数据
 step 16 "备份本地 Drive 数据" \
   backup_remote_drive_fallback
 
-# [17/19] 备份本地 Skill Repository fallback 数据
-step 17 "备份本地 Skill Repository 数据" \
-  backup_remote_skill_repository_fallback
-
-# [18/19] 启动新服务
-step 18 "启动新服务" \
+# [17/18] 启动新服务
+step 17 "启动新服务" \
   start_new_remote_server
 
-# [19/19] 健康检查
-printf "\n[%d/%d] 健康检查\n" 19 "$TOTAL_STEPS"
+# [18/18] 健康检查
+printf "\n[%d/%d] 健康检查\n" 18 "$TOTAL_STEPS"
 if run_remote_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 19 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 18 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 19 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 18 "$TOTAL_STEPS"
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
   if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
