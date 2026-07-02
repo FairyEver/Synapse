@@ -532,6 +532,23 @@ describe("model price service", () => {
     ]))
   })
 
+  it("keeps bare glm-5.1 only in the aliyun bailian preset", () => {
+    expect(presetRule("aliyun-bailian", "glm-5.1")).toMatchObject({
+      inputPer1M: 8,
+      outputPer1M: 28,
+      cacheReadPer1M: 0.8,
+      cacheWritePer1M: 10,
+      reasoningPer1M: 28,
+    })
+
+    const duplicatePresetIds = MODEL_PRICE_PRESETS
+      .filter((preset) => preset.id !== "aliyun-bailian")
+      .filter((preset) => preset.rules.some((rule) => rule.modelPattern === "glm-5.1"))
+      .map((preset) => preset.id)
+
+    expect(duplicatePresetIds).toEqual([])
+  })
+
   it("overwrites existing user rule when importing deepseek official preset", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
