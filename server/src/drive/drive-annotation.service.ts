@@ -10,6 +10,7 @@ import type {
 } from "@synapse/shared"
 import { PrismaService } from "../prisma/prisma.service"
 import { isCommentableMarkdownItem } from "./drive-annotation-target"
+import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
 import { DriveService } from "./drive.service"
 
 type DriveAnnotationItem = {
@@ -259,7 +260,13 @@ export class DriveAnnotationService {
 
   private async requireOwnerItem(userId: string, itemId: string): Promise<DriveAnnotationItem> {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null },
+      where: {
+        id: itemId,
+        userId,
+        storageStatus: DRIVE_STORAGE_STATUS.active,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        deletedAt: null,
+      },
       select: { id: true, userId: true, name: true, type: true, mimeType: true, storageKey: true },
     })
     if (!item) throw new NotFoundException("文件未找到")

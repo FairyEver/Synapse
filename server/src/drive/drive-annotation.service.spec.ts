@@ -25,11 +25,32 @@ describe("DriveAnnotationService", () => {
     const result = await service.listOwnerAnnotations("owner-1", "item-1")
 
     expect(prisma.driveItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: "item-1", userId: "owner-1" }),
+      where: expect.objectContaining({
+        deletedAt: null,
+        id: "item-1",
+        lifecycleStatus: "active",
+        storageStatus: "active",
+        userId: "owner-1",
+      }),
     }))
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("rejects owner annotation writes when the item is no longer active", async () => {
+    prisma.driveItem.findFirst.mockResolvedValueOnce(null)
+
+    await expect(service.createOwnerAnnotation("owner-1", "item-1", createInput()))
+      .rejects.toThrow("文件未找到")
+
+    expect(prisma.driveItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        lifecycleStatus: "active",
+        storageStatus: "active",
+      }),
+    }))
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
   it("hides threads after every comment is deleted", async () => {
