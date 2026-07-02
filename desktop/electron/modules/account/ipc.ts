@@ -404,7 +404,11 @@ const driveUsageSchema = z.object({
   quotaBytes: z.string(),
 })
 
-const driveParentSchema = z.object({ parentId: z.string().nullable().optional() })
+const driveItemListInputSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+}).strict().optional()
 const driveSiteIdSchema = z.object({ siteId: z.string().min(1) })
 const driveSitePreflightSchema = z.object({ sourceFolderItemId: z.string().min(1) })
 const driveSiteCreateSchema = z.object({
@@ -875,12 +879,9 @@ export const accountIpcModule: IpcModule = {
     listDriveItems: {
       kind: "invoke",
       channel: "synapse:account:drive:items:list",
-      request: driveParentSchema,
-      response: z.array(driveItemSchema),
-      handler: async (_ctx, input) => {
-        const parsed = driveParentSchema.parse(input)
-        return accountService.listDriveItems(parsed.parentId ?? null)
-      },
+      request: driveItemListInputSchema,
+      response: drivePublicLinksPageSchema(driveItemSchema),
+      handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
     },
     prepareDriveUpload: {
       kind: "invoke",

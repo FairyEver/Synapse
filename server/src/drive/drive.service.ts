@@ -314,13 +314,8 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
-    if (parentId) await this.requireOwnedFolder(userId, parentId)
-    const items = await this.prisma.driveItem.findMany({
-      where: ordinaryDriveItemWhere({ userId, parentId }),
-      include: driveItemWithShares,
-      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
-    })
-    return items.map(toDriveItemDto)
+    const page = await this.listItemsPage(userId, parentId, { offset: 0, limit: DRIVE_ITEM_LIST_DEFAULT_LIMIT })
+    return [...page.items]
   }
 
   async listItemsPage(userId: string, parentId: string | null, input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {

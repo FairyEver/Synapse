@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveItemDto,
+  type DriveItemListPageDto,
   type DrivePublicAssetDto,
   type DrivePublicAssetListPageDto,
   type DrivePublicLinksPageDto,
@@ -298,6 +299,33 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("公开素材")
     expect(document.body.textContent).not.toContain("回收站")
     expect(document.body.textContent).toContain("inside.txt")
+  })
+
+  it("loads additional drive item pages on demand", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce(createDriveItemPage(
+        [createDriveItem({ id: "file-1", name: "第一页.txt", type: "file" })],
+        { offset: 0, limit: 100, hasMore: true, nextOffset: 100 },
+      ))
+      .mockResolvedValueOnce(createDriveItemPage(
+        [createDriveItem({ id: "file-2", name: "第二页.txt", type: "file" })],
+        { offset: 100, limit: 100, hasMore: false, nextOffset: null },
+      ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("第一页.txt")
+    expect(document.body.textContent).not.toContain("第二页.txt")
+    expect(queryExactButton("加载更多")).not.toBeNull()
+
+    await clickButtonText("加载更多")
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null, offset: 100, limit: 100 })
+    expect(document.body.textContent).toContain("第一页.txt")
+    expect(document.body.textContent).toContain("第二页.txt")
+    expect(queryExactButton("加载更多")).toBeNull()
   })
 
   it("opens system entries without normal drive context actions", async () => {
@@ -2748,6 +2776,36 @@ describe("DriveModule", () => {
     expect(mocks.moveDriveItem).toHaveBeenCalledWith({ itemId: "file-1", parentId: "folder-2" })
   })
 
+  it("loads additional move target folders on demand", async () => {
+    mocks.listDriveItems.mockImplementation(async (input: { parentId?: string | null; offset?: number; limit?: number } = {}) => {
+      if ((input.parentId ?? null) === null && input.offset === 100) {
+        return createDriveItemPage([
+          createDriveItem({ id: "folder-2", name: "第二页目录", type: "folder" }),
+        ], { offset: 100, limit: 100, hasMore: false, nextOffset: null })
+      }
+      return createDriveItemPage([
+        createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+        createDriveItem({ id: "folder-1", name: "第一页目录", type: "folder" }),
+      ], { offset: 0, limit: 100, hasMore: true, nextOffset: 100 })
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openFirstMenu()
+    await clickText("移动")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("第一页目录")
+    expect(document.body.textContent).not.toContain("第二页目录")
+
+    await clickButtonByLabel("加载更多 根目录")
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null, offset: 100, limit: 100 })
+    expect(document.body.textContent).toContain("第二页目录")
+  })
+
   it("moves an item to the root folder by default", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
@@ -3198,6 +3256,22 @@ function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
     type: "folder" as const,
     updatedAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
+  }
+}
+
+function createDriveItemPage(
+  items: readonly DriveItemDto[],
+  page: Partial<DriveItemListPageDto["page"]> = {},
+): DriveItemListPageDto {
+  return {
+    items,
+    page: {
+      offset: 0,
+      limit: 100,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
   }
 }
 

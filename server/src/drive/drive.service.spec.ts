@@ -792,6 +792,33 @@ describe("DriveService", () => {
     expect(secondPage.page).toEqual({ offset: 2, limit: 2, hasMore: false, nextOffset: null })
   })
 
+  it("caps legacy Drive item list responses to the default page size", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    for (let index = 0; index < 101; index += 1) {
+      await prisma.driveItem.create({
+        data: {
+          userId: "user-1",
+          parentId: null,
+          type: "file",
+          name: `file-${index}.txt`,
+          size: 1n,
+          mimeType: "text/plain",
+          storageKey: `drive/user-1/file-${index}.txt`,
+          storageStatus: "active",
+          uploadStatus: "completed",
+          lifecycleStatus: "active",
+          deletedAt: null,
+        },
+      })
+    }
+
+    const items = await service.listItems("user-1", null)
+
+    expect(items).toHaveLength(100)
+  })
+
   it("keeps public asset backing files out of normal Drive views and actions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

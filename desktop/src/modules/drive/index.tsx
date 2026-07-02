@@ -16,6 +16,7 @@ import {
   type DriveAccessSettingsInput,
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
+  type DriveItemListPageDto,
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
@@ -122,6 +123,8 @@ type DrivePathEntry = {
   readonly name: string
 }
 
+type DriveItemListBridgeResult = DriveItemListPageDto | DriveItemDto[]
+
 type NameDialogState =
   | { readonly mode: "create"; readonly item: null; readonly value: string }
   | { readonly mode: "rename"; readonly item: DriveItemDto; readonly value: string }
@@ -131,6 +134,9 @@ type DriveMoveTreeBranch = {
   readonly folders: readonly DriveItemDto[]
   readonly loaded: boolean
   readonly loading: boolean
+  readonly loadingMore: boolean
+  readonly loadMoreError: string | null
+  readonly page: DriveBrowserChildrenPageDto
 }
 
 type DriveLoadError =
@@ -171,6 +177,7 @@ type DriveStatusBadge = {
 
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
+const DRIVE_ITEMS_PAGE_SIZE = 100
 const DRIVE_PUBLIC_LINKS_PAGE_SIZE = 20
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
@@ -202,6 +209,38 @@ function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
+function createDriveItemsPage(items: readonly DriveItemDto[] = []): DriveItemListPageDto {
+  return {
+    items,
+    page: {
+      offset: 0,
+      limit: Math.max(items.length, DRIVE_ITEMS_PAGE_SIZE),
+      hasMore: false,
+      nextOffset: null,
+    },
+  }
+}
+
+function normalizeDriveItemsPage(result: DriveItemListBridgeResult): DriveItemListPageDto {
+  return Array.isArray(result) ? createDriveItemsPage(result) : result
+}
+
+function appendDriveItems(current: readonly DriveItemDto[], nextItems: readonly DriveItemDto[]): DriveItemDto[] {
+  const seenIds = new Set(current.map((item) => item.id))
+  return [
+    ...current,
+    ...nextItems.filter((item) => {
+      if (seenIds.has(item.id)) return false
+      seenIds.add(item.id)
+      return true
+    }),
+  ]
+}
+
+function driveFoldersFromPage(page: DriveItemListPageDto): DriveItemDto[] {
+  return page.items.filter((item) => item.type === "folder")
+}
+
 function useBusyIdSet() {
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
   const busyIdsRef = useRef<Set<string>>(new Set())
@@ -231,6 +270,9 @@ function DriveModuleContent() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
   const { actions: rendererActions } = useDriveRendererActions()
   const [items, setItems] = useState<DriveItemDto[]>([])
+  const [itemsPage, setItemsPage] = useState<DriveBrowserChildrenPageDto>(() => createDriveItemsPage().page)
+  const [loadingMoreItems, setLoadingMoreItems] = useState(false)
+  const [loadMoreItemsError, setLoadMoreItemsError] = useState<string | null>(null)
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [activeView, setActiveView] = useState<DriveActiveView>("files")
   const [loading, setLoading] = useState(false)
@@ -277,12 +319,15 @@ function DriveModuleContent() {
     const requestParentId = parentId
     const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(true)
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     setError(null)
     try {
       const bridge = requireSynapseBridge()
-      const nextItems = await bridge.account.listDriveItems({ parentId: requestParentId })
+      const nextPage = normalizeDriveItemsPage(await bridge.account.listDriveItems({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
     } catch (rawError) {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
@@ -311,9 +356,37 @@ function DriveModuleContent() {
     ])
   }, [loadDriveUsage, loadItems])
 
+  const loadMoreItems = useCallback(async () => {
+    if (!accountAuthenticated || loadingMoreItems || !itemsPage.hasMore || itemsPage.nextOffset === null) return
+    const requestParentId = parentId
+    const requestId = driveItemsLoadRequestIdRef.current
+    setLoadingMoreItems(true)
+    setLoadMoreItemsError(null)
+    try {
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId: requestParentId,
+        offset: itemsPage.nextOffset,
+        limit: itemsPage.limit || DRIVE_ITEMS_PAGE_SIZE,
+      }))
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
+      setItems((current) => appendDriveItems(current, nextPage.items))
+      setItemsPage(nextPage.page)
+    } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
+      setLoadMoreItemsError(errorMessage(rawError, "加载更多失败"))
+    } finally {
+      if (driveItemsLoadRequestIdRef.current === requestId && currentParentIdRef.current === requestParentId) {
+        setLoadingMoreItems(false)
+      }
+    }
+  }, [accountAuthenticated, itemsPage, loadingMoreItems, parentId])
+
   useEffect(() => {
     if (!accountAuthenticated) {
       setItems([])
+      setItemsPage(createDriveItemsPage().page)
+      setLoadingMoreItems(false)
+      setLoadMoreItemsError(null)
       setUsageState({ status: "idle", usage: null })
       setSyncSnapshot(null)
       setLoading(false)
@@ -359,13 +432,16 @@ function DriveModuleContent() {
     if (openingFolderId !== null) return
     const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(false)
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     setOpeningFolderId(item.id)
     setError(null)
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: item.id }))
       if (driveItemsLoadRequestIdRef.current !== requestId) return
       prefetchedParentIdRef.current = item.id
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
       setPath((current) => {
         currentParentIdRef.current = item.id
         return [...current, { id: item.id, name: item.name }]
@@ -407,11 +483,14 @@ function DriveModuleContent() {
     if (!accountAuthenticated) return
     const requestParentId = currentParentIdRef.current
     const requestId = ++driveItemsLoadRequestIdRef.current
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(null)
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
     } catch (rawError) {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
@@ -763,12 +842,16 @@ function DriveModuleContent() {
     return (
       <DriveFileList
         items={items}
+        itemsPage={itemsPage}
         systemEntries={driveRootSystemEntries(parentId)}
         loading={loading}
+        loadingMoreItems={loadingMoreItems}
+        loadMoreItemsError={loadMoreItemsError}
         openingFolderId={openingFolderId}
         path={path}
         onOpenFolder={openFolder}
         onOpenSystemEntry={openSystemEntry}
+        onLoadMoreItems={loadMoreItems}
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
@@ -973,21 +1056,30 @@ function DriveMoveTargetTree({
       ...current,
       [key]: {
         error: null,
-        folders: current[key]?.folders ?? [],
+        folders: force ? [] : current[key]?.folders ?? [],
         loaded: false,
         loading: true,
+        loadingMore: false,
+        loadMoreError: null,
+        page: createDriveItemsPage().page,
       },
     }))
 
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId,
+        limit: DRIVE_ITEMS_PAGE_SIZE,
+      }))
       setBranches((current) => ({
         ...current,
         [key]: {
           error: null,
-          folders: nextItems.filter((item) => item.type === "folder"),
+          folders: driveFoldersFromPage(nextPage),
           loaded: true,
           loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: nextPage.page,
         },
       }))
     } catch (rawError) {
@@ -998,6 +1090,53 @@ function DriveMoveTargetTree({
           folders: current[key]?.folders ?? [],
           loaded: false,
           loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: current[key]?.page ?? createDriveItemsPage().page,
+        },
+      }))
+    }
+  }, [branches])
+
+  const loadMoreFolders = useCallback(async (parentId: string | null) => {
+    const key = driveMoveTreeKey(parentId)
+    const existing = branches[key]
+    if (!existing || existing.loading || existing.loadingMore || !existing.page.hasMore || existing.page.nextOffset === null) return
+
+    setBranches((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        loadingMore: true,
+        loadMoreError: null,
+      },
+    }))
+
+    try {
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId,
+        offset: existing.page.nextOffset,
+        limit: existing.page.limit || DRIVE_ITEMS_PAGE_SIZE,
+      }))
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          error: null,
+          folders: appendDriveItems(current[key]?.folders ?? [], driveFoldersFromPage(nextPage)),
+          loaded: true,
+          loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: nextPage.page,
+        },
+      }))
+    } catch (rawError) {
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          ...current[key],
+          loadingMore: false,
+          loadMoreError: errorMessage(rawError, "加载更多失败"),
         },
       }))
     }
@@ -1038,6 +1177,8 @@ function DriveMoveTargetTree({
           disabledFolderId={disabledFolderId}
           expandedIds={expandedIds}
           loadFolders={loadFolders}
+          loadMoreFolders={loadMoreFolders}
+          onLoadMore={() => { void loadMoreFolders(null) }}
           onRetry={() => { void loadFolders(null, true) }}
           onSelect={onSelect}
           onToggle={toggleFolder}
@@ -1080,6 +1221,8 @@ function DriveMoveTreeChildren({
   disabledFolderId,
   expandedIds,
   loadFolders,
+  loadMoreFolders,
+  onLoadMore,
   onRetry,
   onSelect,
   onToggle,
@@ -1091,6 +1234,8 @@ function DriveMoveTreeChildren({
   readonly disabledFolderId: string | null
   readonly expandedIds: ReadonlySet<string>
   readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly loadMoreFolders: (parentId: string | null) => Promise<void>
+  readonly onLoadMore: () => void
   readonly onRetry: () => void
   readonly onSelect: (parentId: string) => void
   readonly onToggle: (folder: DriveItemDto) => void
@@ -1117,7 +1262,8 @@ function DriveMoveTreeChildren({
   }
 
   const folders = branch?.folders ?? []
-  if (folders.length === 0) {
+  const hasMore = branch?.page.hasMore ?? false
+  if (folders.length === 0 && !hasMore) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
         暂无文件夹
@@ -1135,11 +1281,30 @@ function DriveMoveTreeChildren({
           expandedIds={expandedIds}
           folder={folder}
           loadFolders={loadFolders}
+          loadMoreFolders={loadMoreFolders}
           onSelect={onSelect}
           onToggle={onToggle}
           selectedParentId={selectedParentId}
         />
       ))}
+      {branch?.loadMoreError ? (
+        <div className="px-3 py-1 text-sm text-destructive">{branch.loadMoreError}</div>
+      ) : null}
+      {hasMore ? (
+        <div className="px-3 py-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={branch?.loadingMore ?? false}
+            aria-label={`加载更多 ${parentName}`}
+            onClick={onLoadMore}
+          >
+            {branch?.loadingMore ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+            {branch?.loadingMore ? "加载中" : "加载更多"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1150,6 +1315,7 @@ function DriveMoveTreeFolder({
   expandedIds,
   folder,
   loadFolders,
+  loadMoreFolders,
   onSelect,
   onToggle,
   selectedParentId,
@@ -1159,6 +1325,7 @@ function DriveMoveTreeFolder({
   readonly expandedIds: ReadonlySet<string>
   readonly folder: DriveItemDto
   readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly loadMoreFolders: (parentId: string | null) => Promise<void>
   readonly onSelect: (parentId: string) => void
   readonly onToggle: (folder: DriveItemDto) => void
   readonly selectedParentId: string
@@ -1195,6 +1362,8 @@ function DriveMoveTreeFolder({
             disabledFolderId={disabledFolderId}
             expandedIds={expandedIds}
             loadFolders={loadFolders}
+            loadMoreFolders={loadMoreFolders}
+            onLoadMore={() => { void loadMoreFolders(folder.id) }}
             onRetry={() => { void loadFolders(folder.id, true) }}
             onSelect={onSelect}
             onToggle={onToggle}
@@ -1237,12 +1406,16 @@ function DriveMoveTreeSelectButton({
 
 function DriveFileList({
   items,
+  itemsPage,
   systemEntries,
   loading,
+  loadingMoreItems,
+  loadMoreItemsError,
   openingFolderId,
   path,
   onOpenFolder,
   onOpenSystemEntry,
+  onLoadMoreItems,
   onRename,
   onMove,
   onDelete,
@@ -1257,12 +1430,16 @@ function DriveFileList({
   uploadDisabled,
 }: {
   readonly items: readonly DriveItemDto[]
+  readonly itemsPage: DriveBrowserChildrenPageDto
   readonly systemEntries: readonly DriveSystemEntry[]
   readonly loading: boolean
+  readonly loadingMoreItems: boolean
+  readonly loadMoreItemsError: string | null
   readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onOpenSystemEntry: (entry: DriveSystemEntry) => void
+  readonly onLoadMoreItems: () => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
@@ -1360,6 +1537,25 @@ function DriveFileList({
               ))}
             </TableBody>
           </Table>
+          {itemsPage.hasMore || loadMoreItemsError ? (
+            <div className="flex flex-col items-center gap-2 border-t px-3 py-3">
+              {loadMoreItemsError ? (
+                <div className="text-sm text-destructive">{loadMoreItemsError}</div>
+              ) : null}
+              {itemsPage.hasMore ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingMoreItems}
+                  onClick={onLoadMoreItems}
+                >
+                  {loadingMoreItems ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                  {loadingMoreItems ? "加载中" : "加载更多"}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </ModuleContentPanel>
       )}
       {dragActive ? (

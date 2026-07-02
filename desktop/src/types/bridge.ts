@@ -100,6 +100,8 @@ import type {
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveLinkDownloadFileDto,
   DriveLinkDownloadFileInput,
   DriveLinkListDto,
@@ -1043,7 +1045,7 @@ export type SynapseBridge = {
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
-    listDriveItems: (input: { parentId?: string | null }) => Promise<DriveItemDto[]>
+    listDriveItems: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
     prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>

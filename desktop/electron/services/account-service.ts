@@ -465,8 +465,8 @@ export class AccountService {
   }
 
   async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
-    const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""
-    return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
+    const page = await this.listDriveItemsPage({ parentId, offset: 0 })
+    return [...page.items]
   }
 
   async listDriveItemsPage(input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {

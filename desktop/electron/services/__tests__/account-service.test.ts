@@ -2332,9 +2332,12 @@ describe("AccountService", () => {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
         return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
       }
-      if (String(url).endsWith("/drive/items")) {
+      if (String(url).endsWith("/drive/items?offset=0")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse([driveItem({ id: "drive-1" })])
+        return jsonResponse({
+          items: [driveItem({ id: "drive-1" })],
+          page: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+        })
       }
       if (String(url).endsWith("/drive/usage")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
