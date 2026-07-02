@@ -13,6 +13,7 @@ import {
 } from "./content-skill-source-service"
 import { AccountAuthenticationRequiredError, accountService } from "./account-service"
 import {
+  ensureSkillRepositoryIdentityWriteAllowed,
   readSkillRepositoryIdentity,
   writeSkillRepositoryIdentity,
   type SkillRepositoryIdentityWriteSecurity,
@@ -34,6 +35,8 @@ export type SkillRepositoryLocalImportResult = {
   readonly name: string
   readonly owner: string | null
   readonly managementUrl: string
+  readonly identityWritten: boolean
+  readonly identityWriteError?: string
 }
 
 type SkillRepositoryUploadAccountPort = {
@@ -45,6 +48,7 @@ type SkillRepositoryUploadServiceDeps = {
   readonly accountService?: SkillRepositoryUploadAccountPort
   readonly publicAppUrl?: string
   readonly openExternal?: (url: string) => Promise<void> | void
+  readonly ensureIdentityWriteAllowed?: typeof ensureSkillRepositoryIdentityWriteAllowed
   readonly readIdentity?: typeof readSkillRepositoryIdentity
   readonly writeIdentity?: typeof writeSkillRepositoryIdentity
 }
@@ -53,6 +57,7 @@ export class SkillRepositoryUploadService {
   private readonly account: SkillRepositoryUploadAccountPort
   private readonly publicAppUrl: string
   private readonly openExternal?: (url: string) => Promise<void> | void
+  private readonly ensureIdentityWriteAllowed: typeof ensureSkillRepositoryIdentityWriteAllowed
   private readonly readIdentity: typeof readSkillRepositoryIdentity
   private readonly writeIdentity: typeof writeSkillRepositoryIdentity
 
@@ -60,6 +65,7 @@ export class SkillRepositoryUploadService {
     this.account = deps.accountService ?? accountService
     this.publicAppUrl = deps.publicAppUrl ?? SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl
     this.openExternal = deps.openExternal
+    this.ensureIdentityWriteAllowed = deps.ensureIdentityWriteAllowed ?? ensureSkillRepositoryIdentityWriteAllowed
     this.readIdentity = deps.readIdentity ?? readSkillRepositoryIdentity
     this.writeIdentity = deps.writeIdentity ?? writeSkillRepositoryIdentity
   }
@@ -80,6 +86,7 @@ export class SkillRepositoryUploadService {
     const { buildSkillRepositoryManagementUrl, normalizeSkillRepositoryName } = await sharedSkillRepositoryPromise
     const name = normalizeSkillRepositoryName(input.name ?? source.metadata.name ?? path.basename(source.sourceDirectoryPath))
     const localIdentity = await this.readIdentity(source.sourceDirectoryPath)
+    await this.ensureIdentityWriteAllowed(source.sourceDirectoryPath, security)
     const repository = await this.account.importSkillRepository({
       repositoryId: input.repositoryId ?? localIdentity?.id ?? undefined,
       name,
@@ -90,12 +97,19 @@ export class SkillRepositoryUploadService {
     const owner = repository.owner.handle
     const managementUrl = buildSkillRepositoryManagementUrl(this.publicAppUrl, repository.id)
 
-    await this.writeIdentity(source.sourceDirectoryPath, {
-      id: repository.id,
-      kind: "cloud-skill-repository",
-      owner,
-      name: repository.name,
-    }, security)
+    let identityWritten = true
+    let identityWriteError: string | undefined
+    try {
+      await this.writeIdentity(source.sourceDirectoryPath, {
+        id: repository.id,
+        kind: "cloud-skill-repository",
+        owner,
+        name: repository.name,
+      }, security)
+    } catch (error) {
+      identityWritten = false
+      identityWriteError = errorMessage(error)
+    }
 
     if (input.openInBrowser === true && this.openExternal) {
       await this.openExternal(managementUrl)
@@ -106,6 +120,8 @@ export class SkillRepositoryUploadService {
       name: repository.name,
       owner,
       managementUrl,
+      identityWritten,
+      ...(identityWriteError ? { identityWriteError } : {}),
     }
   }
 }
@@ -130,6 +146,10 @@ function assertSkillFileBytes(originalName: string, bytes: Uint8Array | undefine
     throw new Error(`无法读取 Skill 附件：${originalName}`)
   }
   return bytes
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export const skillRepositoryUploadService = new SkillRepositoryUploadService()

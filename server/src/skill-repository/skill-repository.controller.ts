@@ -6,7 +6,7 @@ import { SkillRepositoryService } from "./skill-repository.service"
 
 const fileSchema = z.object({
   path: z.string().min(1).max(1024).refine((value) => value.trim().length > 0, "路径不能为空。"),
-  contentBase64: z.string().min(1).refine(isStrictBase64, "必须是有效的 base64 内容"),
+  contentBase64: z.string().refine(isStrictBase64, "必须是有效的 base64 内容"),
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 

@@ -58,7 +58,6 @@ CREATE TABLE "SkillRepositoryFile" (
   "size" BIGINT NOT NULL,
   "sha256" VARCHAR(64) NOT NULL,
   "storageKey" TEXT,
-  "text" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SkillRepositoryFile_pkey" PRIMARY KEY ("id"),
@@ -67,6 +66,21 @@ CREATE TABLE "SkillRepositoryFile" (
 CREATE UNIQUE INDEX "SkillRepositoryFile_repositoryId_pathKey_key" ON "SkillRepositoryFile"("repositoryId", "pathKey");
 CREATE INDEX "SkillRepositoryFile_repositoryId_path_idx" ON "SkillRepositoryFile"("repositoryId", "path");
 CREATE INDEX "SkillRepositoryFile_sha256_idx" ON "SkillRepositoryFile"("sha256");
+
+CREATE TABLE "SkillRepositoryObjectCleanupTask" (
+  "id" TEXT NOT NULL,
+  "repositoryId" TEXT,
+  "storageKey" TEXT NOT NULL,
+  "reason" VARCHAR(64) NOT NULL,
+  "attempts" INTEGER NOT NULL DEFAULT 0,
+  "lastError" VARCHAR(1000),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "SkillRepositoryObjectCleanupTask_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "SkillRepositoryObjectCleanupTask_repositoryId_fkey" FOREIGN KEY ("repositoryId") REFERENCES "SkillRepository"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+CREATE UNIQUE INDEX "SkillRepositoryObjectCleanupTask_storageKey_key" ON "SkillRepositoryObjectCleanupTask"("storageKey");
+CREATE INDEX "SkillRepositoryObjectCleanupTask_repositoryId_idx" ON "SkillRepositoryObjectCleanupTask"("repositoryId");
 
 CREATE TABLE "SkillRepositoryInstallEvent" (
   "id" TEXT NOT NULL,

@@ -21,6 +21,7 @@ const serviceLogger = vi.hoisted(() => {
 })
 
 const readSkillDraftFromDirectory = vi.hoisted(() => vi.fn())
+const ensureSkillRepositoryIdentityWriteAllowed = vi.hoisted(() => vi.fn())
 const readSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 const writeSkillRepositoryIdentity = vi.hoisted(() => vi.fn())
 
@@ -65,6 +66,7 @@ vi.mock("../skill-repository-local-identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../skill-repository-local-identity")>()
   return {
     ...actual,
+    ensureSkillRepositoryIdentityWriteAllowed,
     readSkillRepositoryIdentity,
     writeSkillRepositoryIdentity,
   }
@@ -92,6 +94,7 @@ describe("SkillRepositoryUploadService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readSkillDraftFromDirectory.mockResolvedValue(skillDraft())
+    ensureSkillRepositoryIdentityWriteAllowed.mockResolvedValue(undefined)
     readSkillRepositoryIdentity.mockResolvedValue(null)
     writeSkillRepositoryIdentity.mockResolvedValue(undefined)
   })
@@ -113,6 +116,7 @@ describe("SkillRepositoryUploadService", () => {
       name: "demo-skill",
       owner: "liyang",
       managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      identityWritten: true,
     })
 
     expect(importSkillRepository).toHaveBeenCalledWith({
@@ -168,6 +172,35 @@ describe("SkillRepositoryUploadService", () => {
     expect(importSkillRepository).toHaveBeenCalledWith(expect.objectContaining({
       repositoryId: "repo-local",
     }))
+  })
+
+  it("preflights identity write permission before cloud import", async () => {
+    ensureSkillRepositoryIdentityWriteAllowed.mockRejectedValueOnce(new Error("denied by policy"))
+    const importSkillRepository = vi.fn()
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" }))
+      .rejects.toThrow("denied by policy")
+
+    expect(ensureSkillRepositoryIdentityWriteAllowed).toHaveBeenCalledWith("/skills/demo", undefined)
+    expect(importSkillRepository).not.toHaveBeenCalled()
+  })
+
+  it("returns cloud upload success when identity write fails after import", async () => {
+    writeSkillRepositoryIdentity.mockRejectedValueOnce(new Error("disk full"))
+    const importSkillRepository = vi.fn(async () => repositoryDetail())
+    const service = new SkillRepositoryUploadService({
+      accountService: { getState: () => authenticatedState, importSkillRepository },
+    })
+
+    await expect(service.importLocal({ sourceDirectoryPath: "/skills/demo" })).resolves.toMatchObject({
+      repositoryId: "repo-1",
+      identityWritten: false,
+      identityWriteError: "disk full",
+    })
+    expect(importSkillRepository).toHaveBeenCalled()
   })
 
   it("uploads attachment bytes by originalName and rejects missing attachment bytes", async () => {

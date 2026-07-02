@@ -48,7 +48,6 @@ interface SkillRepositoryFileRow {
   readonly size: bigint | number
   readonly sha256: string
   readonly storageKey: string | null
-  readonly text: string | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -118,6 +117,17 @@ export class SkillRepositoryService {
           select: { storageKey: true },
         }) as SkillRepositoryStorageKeyRow[]
         staleStorageKeys.push(...oldFiles.map((file) => file.storageKey).filter((key): key is string => Boolean(key)))
+        const staleUniqueKeys = uniqueKeys(staleStorageKeys)
+        if (staleUniqueKeys.length > 0) {
+          await tx.skillRepositoryObjectCleanupTask.createMany({
+            data: staleUniqueKeys.map((storageKey) => ({
+              repositoryId: repository.id,
+              storageKey,
+              reason: "skill-file-replaced",
+            })),
+            skipDuplicates: true,
+          })
+        }
 
         const rows = []
         for (const file of files) {
@@ -178,7 +188,19 @@ export class SkillRepositoryService {
     for (const key of uniqueKeys(keys)) {
       try {
         await this.storage.deleteObject(key)
+        await this.prisma.skillRepositoryObjectCleanupTask.deleteMany({ where: { storageKey: key } })
       } catch (error) {
+        try {
+          await this.prisma.skillRepositoryObjectCleanupTask.updateMany({
+            where: { storageKey: key },
+            data: {
+              attempts: { increment: 1 },
+              lastError: cleanupErrorMessage(error),
+            },
+          })
+        } catch (cleanupTaskError) {
+          this.logger.warn(`Skill repository cleanup task update failed for ${key}: ${cleanupErrorMessage(cleanupTaskError)}`)
+        }
         this.logger.warn(`Skill repository stale object delete failed for ${key}: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
@@ -262,7 +284,6 @@ function skillRepositoryFileCreateRow(
     size: BigInt(file.size),
     sha256: file.sha256,
     storageKey,
-    text: file.text,
   }
 }
 
@@ -303,7 +324,6 @@ function fileDto(file: SkillRepositoryFileRow): SkillRepositoryFileDto {
     sha256: file.sha256,
     kind: toFileKind(file.kind),
     mimeType: file.mimeType,
-    ...(file.kind === "text" && file.text !== null ? { text: file.text } : {}),
     createdAt: file.createdAt.toISOString(),
     updatedAt: file.updatedAt.toISOString(),
   }
@@ -329,6 +349,11 @@ function numberFromSize(size: bigint | number): number {
 
 function uniqueKeys(keys: readonly string[]): string[] {
   return [...new Set(keys)]
+}
+
+function cleanupErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.length > 1000 ? message.slice(0, 1000) : message
 }
 
 function isPrismaUniqueConstraintError(error: unknown): boolean {

@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { ActorIdentity, AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
 import { findSkillDirectoryByContentId } from "../editor-adapters/skill-identity"
-import { readSkillRepositoryIdentity, writeSkillRepositoryIdentity } from "../skill-repository-local-identity"
+import {
+  ensureSkillRepositoryIdentityWriteAllowed,
+  readSkillRepositoryIdentity,
+  writeSkillRepositoryIdentity,
+} from "../skill-repository-local-identity"
 
 const actor: ActorIdentity = { kind: "user", id: "user-1", display: "liyang" }
 const identity = {
@@ -14,6 +18,55 @@ const identity = {
   owner: "liyang",
   name: "demo-skill",
 }
+
+describe("ensureSkillRepositoryIdentityWriteAllowed", () => {
+  it("checks write permission for the local identity file", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-preflight-"))
+    const permissionRequests: PermissionRequest[] = []
+    const permissionGuard = permissionGuardReturning({ allowed: true }, permissionRequests)
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await ensureSkillRepositoryIdentityWriteAllowed(dir, { actor, auditSink, permissionGuard })
+
+    expect(permissionRequests).toEqual([
+      {
+        action: "fs.write",
+        actor,
+        resource: path.join(dir, ".synapse.json"),
+        context: {
+          operation: "skill-repository.identity.write.preflight",
+        },
+      },
+    ])
+    expect(auditEvents).toEqual([])
+  })
+
+  it("records denied audit during preflight and does not write", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-repo-preflight-denied-"))
+    const permissionGuard = permissionGuardReturning({ allowed: false, reason: "denied by policy", policyId: "policy-1" })
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const auditSink = auditSinkRecording(auditEvents)
+
+    await expect(ensureSkillRepositoryIdentityWriteAllowed(dir, { actor, auditSink, permissionGuard }))
+      .rejects.toThrow("denied by policy")
+
+    await expect(readFile(path.join(dir, ".synapse.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    expect(auditEvents).toEqual([
+      {
+        action: "fs.write",
+        actor,
+        resource: path.join(dir, ".synapse.json"),
+        outcome: "denied",
+        metadata: {
+          operation: "skill-repository.identity.write.preflight",
+          reason: "denied by policy",
+          policyId: "policy-1",
+        },
+      },
+    ])
+  })
+})
 
 describe("writeSkillRepositoryIdentity", () => {
   it("checks write permission, writes .synapse.json atomically, and records allowed audit", async () => {

@@ -34,6 +34,7 @@ function createDeps(
         name: "demo",
         owner: "liyang",
         managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+        identityWritten: true,
       })),
     },
     publicAppUrl: "https://synapse.example.test",

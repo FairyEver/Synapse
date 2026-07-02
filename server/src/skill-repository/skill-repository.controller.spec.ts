@@ -49,6 +49,21 @@ describe("SkillRepositoryController", () => {
     }))
   })
 
+  it("allows empty base64 content for non-main files", async () => {
+    const service = createService()
+    const controller = new SkillRepositoryController(service as never)
+    const files = [
+      { path: "SKILL.md", contentBase64: Buffer.from("# Skill").toString("base64") },
+      { path: "assets/.keep", contentBase64: "" },
+    ]
+
+    await controller.importRepository({ name: "skill-name", files }, request("user-1"))
+
+    expect(service.importRepository).toHaveBeenCalledWith("user-1", expect.objectContaining({
+      files,
+    }))
+  })
+
   it("passes authenticated user id to listMine", async () => {
     const service = createService()
     const controller = new SkillRepositoryController(service as never)

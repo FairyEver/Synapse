@@ -23,6 +23,16 @@ export type SkillRepositoryIdentityWriteSecurity = {
 
 type SkillRepositoryIdentityAuditOutcome = "allowed" | "denied" | "failed"
 
+export async function ensureSkillRepositoryIdentityWriteAllowed(
+  sourceDirectoryPath: string,
+  security?: SkillRepositoryIdentityWriteSecurity,
+): Promise<void> {
+  if (!security) return
+  await checkIdentityWritePermission(security, path.join(sourceDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), {
+    operation: "skill-repository.identity.write.preflight",
+  })
+}
+
 export async function writeSkillRepositoryIdentity(
   sourceDirectoryPath: string,
   identity: SkillRepositoryIdentity,
@@ -36,22 +46,7 @@ export async function writeSkillRepositoryIdentity(
     repositoryName: identity.name,
   }
 
-  if (security) {
-    const permission = await security.permissionGuard.check({
-      action: "fs.write",
-      actor: security.actor,
-      resource: targetPath,
-      context: metadata,
-    })
-    if (!permission.allowed) {
-      recordIdentityAudit(security, targetPath, "denied", {
-        ...metadata,
-        reason: permission.reason,
-        policyId: permission.policyId,
-      })
-      throw new Error(permission.reason)
-    }
-  }
+  if (security) await checkIdentityWritePermission(security, targetPath, metadata)
 
   try {
     await mkdir(sourceDirectoryPath, { recursive: true })
@@ -104,6 +99,27 @@ export async function readSkillRepositoryIdentity(sourceDirectoryPath: string): 
     kind: "cloud-skill-repository",
     owner: typeof candidate.owner === "string" && candidate.owner.trim() ? candidate.owner.trim() : null,
     name,
+  }
+}
+
+async function checkIdentityWritePermission(
+  security: SkillRepositoryIdentityWriteSecurity,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  const permission = await security.permissionGuard.check({
+    action: "fs.write",
+    actor: security.actor,
+    resource,
+    context: metadata,
+  })
+  if (!permission.allowed) {
+    recordIdentityAudit(security, resource, "denied", {
+      ...metadata,
+      reason: permission.reason,
+      policyId: permission.policyId,
+    })
+    throw new Error(permission.reason)
   }
 }
 

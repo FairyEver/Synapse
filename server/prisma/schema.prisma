@@ -837,6 +837,7 @@ model SkillRepository {
   updatedAt                DateTime                      @updatedAt
   files                    SkillRepositoryFile[]
   nameRedirects            SkillRepositoryNameRedirect[]
+  objectCleanupTasks       SkillRepositoryObjectCleanupTask[]
   installEvents            SkillRepositoryInstallEvent[]
 
   @@unique([ownerUserId, name])
@@ -869,13 +870,26 @@ model SkillRepositoryFile {
   size         BigInt
   sha256       String          @db.VarChar(64)
   storageKey   String?
-  text         String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
   @@unique([repositoryId, pathKey])
   @@index([repositoryId, path])
   @@index([sha256])
+}
+
+model SkillRepositoryObjectCleanupTask {
+  id           String           @id @default(cuid())
+  repositoryId String?
+  repository   SkillRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  storageKey   String           @unique
+  reason       String           @db.VarChar(64)
+  attempts     Int              @default(0)
+  lastError    String?          @db.VarChar(1000)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([repositoryId])
 }
 
 model SkillRepositoryInstallEvent {

@@ -52,7 +52,6 @@ describe("SkillRepositoryService", () => {
             path: "README.md",
             pathKey: "readme.md",
             storageKey: "skill-repositories/repo-1/files/file-2/03828777bb523525406c9d69f5dfa8a79b7691f6d2dc4bdfbf6d0d45b741255e",
-            text: readmeText,
             sha256: "03828777bb523525406c9d69f5dfa8a79b7691f6d2dc4bdfbf6d0d45b741255e",
             size: BigInt(Buffer.byteLength(readmeText)),
           }),
@@ -61,7 +60,6 @@ describe("SkillRepositoryService", () => {
             path: "SKILL.md",
             pathKey: "skill.md",
             storageKey: "skill-repositories/repo-1/files/file-1/87baa74680c93d2d14f37cbfda03dd3a06fc30cb3e999a867196fb0392ef122a",
-            text: skillText,
             sha256: "87baa74680c93d2d14f37cbfda03dd3a06fc30cb3e999a867196fb0392ef122a",
             size: BigInt(Buffer.byteLength(skillText)),
           }),
@@ -206,7 +204,6 @@ describe("SkillRepositoryService", () => {
         id: "file-row-1",
         path: "SKILL.md",
         pathKey: "skill.md",
-        text: "# Updated",
         sha256: "22e127a7f2d892b375cc37ca455ab6a6f0c0da9ac42e58d1b4c5cc45d11d7902",
         size: BigInt(Buffer.byteLength("# Updated")),
       })],
@@ -237,7 +234,61 @@ describe("SkillRepositoryService", () => {
     expect(prisma.skillRepositoryFile.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ repositoryId: "repo-1", path: "SKILL.md", pathKey: "skill.md" })],
     })
+    expect(prisma.skillRepositoryObjectCleanupTask.createMany).toHaveBeenCalledWith({
+      data: [{
+        repositoryId: "repo-1",
+        storageKey: "skill-repositories/repo-1/files/old-file/oldsha",
+        reason: "skill-file-replaced",
+      }],
+      skipDuplicates: true,
+    })
     expect(storage.deleteObject).toHaveBeenCalledWith("skill-repositories/repo-1/files/old-file/oldsha")
+    expect(prisma.skillRepositoryObjectCleanupTask.deleteMany).toHaveBeenCalledWith({
+      where: { storageKey: "skill-repositories/repo-1/files/old-file/oldsha" },
+    })
+  })
+
+  it("keeps a cleanup task when stale object deletion fails", async () => {
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
+      id: "repo-1",
+      ownerUserId: "user-1",
+    }))
+    prisma.skillRepositoryFile.findMany.mockResolvedValueOnce([
+      { storageKey: "skill-repositories/repo-1/files/old-file/oldsha" },
+    ])
+    prisma.skillRepository.update.mockResolvedValue(repositoryRow({ id: "repo-1" }))
+    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
+      id: "repo-1",
+      files: [repositoryFileRow({
+        sha256: "22e127a7f2d892b375cc37ca455ab6a6f0c0da9ac42e58d1b4c5cc45d11d7902",
+        size: BigInt(Buffer.byteLength("# Updated")),
+      })],
+    }))
+    storage.deleteObject.mockRejectedValueOnce(new Error("temporary storage failure"))
+
+    await expect(service.importRepository("user-1", {
+      repositoryId: "repo-1",
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Updated").toString("base64") }],
+    })).resolves.toMatchObject({ id: "repo-1" })
+
+    expect(prisma.skillRepositoryObjectCleanupTask.createMany).toHaveBeenCalledWith({
+      data: [{
+        repositoryId: "repo-1",
+        storageKey: "skill-repositories/repo-1/files/old-file/oldsha",
+        reason: "skill-file-replaced",
+      }],
+      skipDuplicates: true,
+    })
+    expect(prisma.skillRepositoryObjectCleanupTask.updateMany).toHaveBeenCalledWith({
+      where: { storageKey: "skill-repositories/repo-1/files/old-file/oldsha" },
+      data: {
+        attempts: { increment: 1 },
+        lastError: "temporary storage failure",
+      },
+    })
+    expect(prisma.skillRepositoryObjectCleanupTask.deleteMany).not.toHaveBeenCalledWith({
+      where: { storageKey: "skill-repositories/repo-1/files/old-file/oldsha" },
+    })
   })
 
   it("cleans up newly uploaded objects when DB file replacement fails", async () => {
@@ -406,6 +457,11 @@ interface PrismaMock {
   skillRepositoryNameRedirect: {
     findUnique: MockFn
   }
+  skillRepositoryObjectCleanupTask: {
+    createMany: MockFn
+    deleteMany: MockFn
+    updateMany: MockFn
+  }
 }
 
 interface StorageMock {
@@ -429,6 +485,11 @@ function createPrismaMock(): PrismaMock {
     },
     skillRepositoryNameRedirect: {
       findUnique: vi.fn(),
+    },
+    skillRepositoryObjectCleanupTask: {
+      createMany: vi.fn(),
+      deleteMany: vi.fn(),
+      updateMany: vi.fn(),
     },
   }
 }
@@ -488,7 +549,6 @@ function repositoryFileRow(overrides: Record<string, unknown> = {}) {
     size: BigInt(8),
     sha256: "sha",
     storageKey: "skill-repositories/repo-1/files/file-1/sha",
-    text: "# Demo",
     createdAt: new Date("2026-06-01T00:00:00.000Z"),
     updatedAt: new Date("2026-06-02T00:00:00.000Z"),
     ...overrides,
