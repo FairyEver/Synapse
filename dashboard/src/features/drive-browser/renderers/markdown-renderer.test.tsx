@@ -15,6 +15,29 @@ vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }));
 
+vi.mock('@monaco-editor/react', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+
+  return {
+    default: ({
+      value,
+      onChange,
+      options,
+    }: {
+      readonly value?: string
+      readonly onChange?: (value?: string) => void
+      readonly options?: { readonly readOnly?: boolean }
+    }) => React.createElement('textarea', {
+      'data-monaco-editor': 'true',
+      readOnly: options?.readOnly,
+      value: value ?? '',
+      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onChange?.(event.currentTarget.value)
+      },
+    }),
+  }
+});
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & {
   ResizeObserver: typeof ResizeObserver
@@ -168,6 +191,24 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
 
     expect(queryButtonWithText('评论 0')).toBeNull()
+  })
+
+  it('keeps empty markdown code fallback editable', () => {
+    renderMarkdown({
+      previewData: preview({ html: '   ', text: '' }),
+      editContext: {
+        reload: vi.fn(async () => ({} as never)),
+        reloading: false,
+        saveText: vi.fn(async () => undefined),
+        savingText: false,
+      },
+    })
+
+    const editor = document.querySelector('[data-monaco-editor="true"]')
+    expect(editor).toBeInstanceOf(HTMLTextAreaElement)
+    expect((editor as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(buttonWithText('重新加载')).not.toBeNull()
+    expect(buttonWithText('保存')).not.toBeNull()
   })
 
   it('keeps wide markdown tables scrollable inside the reader column', () => {

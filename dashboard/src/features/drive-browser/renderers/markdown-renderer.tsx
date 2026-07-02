@@ -73,7 +73,7 @@ export function DriveMarkdownRenderer({
   readonly imageSourceContext?: DriveMarkdownImageSourceContext
 }) {
   const renderedHtml = preview.html?.trim()
-  if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} />
+  if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} edit={edit} editContext={editContext} />
   const outline = preview.outline ?? []
   const layoutRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
