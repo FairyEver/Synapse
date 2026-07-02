@@ -180,10 +180,11 @@ export class DriveSiteService {
     const page = normalizeSiteListPage(input)
     const statusWhere = siteListStatusWhere(input.status, new Date())
     const search = input.search?.trim()
-    const matchingDeploymentIds = search ? await this.currentDeploymentIdsMatchingEntryPath(userId, search) : []
+    const includeDeleted = input.status === DRIVE_SITE_STATUS.deleted
+    const matchingDeploymentIds = search ? await this.currentDeploymentIdsMatchingEntryPath(userId, search, includeDeleted) : []
     const where: Prisma.DriveSiteWhereInput = {
       userId,
-      deletedAt: null,
+      deletedAt: includeDeleted ? { not: null } : null,
       ...(statusWhere ? { AND: [statusWhere] } : {}),
       ...(search
         ? {
@@ -220,11 +221,14 @@ export class DriveSiteService {
     }
   }
 
-  private async currentDeploymentIdsMatchingEntryPath(userId: string, search: string): Promise<string[]> {
+  private async currentDeploymentIdsMatchingEntryPath(userId: string, search: string, includeDeleted: boolean): Promise<string[]> {
     const deployments = await this.prisma.driveSiteDeployment.findMany({
       where: {
         entryPath: { contains: search, mode: "insensitive" },
-        driveSite: { userId, deletedAt: null },
+        driveSite: {
+          userId,
+          deletedAt: includeDeleted ? { not: null } : null,
+        },
       },
       select: { id: true },
     })

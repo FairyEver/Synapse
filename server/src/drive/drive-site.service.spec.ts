@@ -199,6 +199,48 @@ describe("DriveSiteService", () => {
     expect(active.page).toMatchObject({ hasMore: false, nextOffset: null })
   })
 
+  it("lists deleted sites only when the deleted status is requested", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [
+        createSiteRecord({
+          id: "site-row-active",
+          siteId: "site_active",
+          name: "Active",
+          status: "active",
+          deletedAt: null,
+          updatedAt: new Date("2026-06-25T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-deleted",
+          siteId: "site_deleted",
+          name: "Deleted",
+          status: "deleted",
+          deletedAt: new Date("2026-06-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-06-26T00:00:00.000Z"),
+        }),
+      ],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const deleted = await service.listSites("user-1", "https://synapse.test", {
+      status: "deleted",
+      offset: 0,
+      limit: 10,
+    })
+    const all = await service.listSites("user-1", "https://synapse.test", {
+      status: "all",
+      offset: 0,
+      limit: 10,
+    })
+
+    expect(deleted.items.map((site) => site.siteId)).toEqual(["site_deleted"])
+    expect(deleted.items[0]?.status).toBe("deleted")
+    expect(deleted.total).toBe(1)
+    expect(all.items.map((site) => site.siteId)).toEqual(["site_active"])
+    expect(all.total).toBe(1)
+  })
+
   it("searches sites by source folder name and current entry path before pagination", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
@@ -582,7 +624,7 @@ type SiteWhere = {
   readonly sourceFolderName?: { readonly contains: string; readonly mode?: string }
   readonly status?: string
   readonly expiresAt?: null | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date }
-  readonly deletedAt?: null | Date
+  readonly deletedAt?: null | Date | { readonly not: null }
 }
 
 type DeploymentWhere = {
@@ -590,7 +632,7 @@ type DeploymentWhere = {
   readonly entryPath?: { readonly contains: string; readonly mode?: string }
   readonly driveSite?: {
     readonly userId?: string
-    readonly deletedAt?: null | Date
+    readonly deletedAt?: null | Date | { readonly not: null }
   }
 }
 
@@ -599,7 +641,7 @@ function matchesSiteWhere(site: MemorySite, where: SiteWhere = {}): boolean {
   if (where.OR && !where.OR.some((condition) => matchesSiteWhere(site, condition))) return false
   if (where.userId !== undefined && site.userId !== where.userId) return false
   if (where.status !== undefined && site.status !== where.status) return false
-  if ("deletedAt" in where && site.deletedAt !== where.deletedAt) return false
+  if ("deletedAt" in where && !matchesDateCondition(site.deletedAt, where.deletedAt)) return false
   if ("currentDeploymentId" in where && !matchesNullableStringCondition(site.currentDeploymentId, where.currentDeploymentId)) return false
   if (where.siteId !== undefined && !matchesStringCondition(site.siteId, where.siteId)) return false
   if (where.name !== undefined && !matchesStringCondition(site.name, where.name)) return false
@@ -615,7 +657,7 @@ function matchesDeploymentWhere(deployment: MemoryDeployment, where: DeploymentW
     const site = sites.find((entry) => entry.id === deployment.driveSiteId)
     if (!site) return false
     if (where.driveSite.userId !== undefined && site.userId !== where.driveSite.userId) return false
-    if ("deletedAt" in where.driveSite && site.deletedAt !== where.driveSite.deletedAt) return false
+    if ("deletedAt" in where.driveSite && !matchesDateCondition(site.deletedAt, where.driveSite.deletedAt)) return false
   }
   return true
 }
@@ -643,10 +685,12 @@ function matchesNullableStringCondition(
 
 function matchesDateCondition(
   value: Date | null,
-  condition: null | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date } | undefined,
+  condition: null | Date | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date; readonly not?: null } | undefined,
 ): boolean {
   if (condition === undefined) return true
   if (condition === null) return value === null
+  if (condition instanceof Date) return value?.getTime() === condition.getTime()
+  if ("not" in condition && condition.not === null && value === null) return false
   if (value === null) return false
   if (condition.gt && value.getTime() <= condition.gt.getTime()) return false
   if (condition.gte && value.getTime() < condition.gte.getTime()) return false
