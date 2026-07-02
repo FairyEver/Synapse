@@ -92,6 +92,39 @@ export function localPathCollisionKey(localPath: string): string {
 export function localPathsOverlap(leftPath: string, rightPath: string): boolean {
   const left = localPathCollisionKey(leftPath)
   const right = localPathCollisionKey(rightPath)
+  return localPathCollisionKeysOverlap(left, right)
+}
+
+export async function localPathIdentitiesOverlap(leftPath: string, rightPath: string): Promise<boolean> {
+  const [left, right] = await Promise.all([
+    localPathIdentityCollisionKey(leftPath),
+    localPathIdentityCollisionKey(rightPath),
+  ])
+  return localPathCollisionKeysOverlap(left, right)
+}
+
+async function localPathIdentityCollisionKey(localPath: string): Promise<string> {
+  return pathCollisionKey(await resolveLocalPathIdentityPath(localPath))
+}
+
+async function resolveLocalPathIdentityPath(input: string): Promise<string> {
+  const normalized = normalizeLocalPath(input)
+  let current = normalized
+  while (true) {
+    try {
+      const currentRealPath = await realpath(current)
+      const relativeTail = path.relative(current, normalized)
+      return relativeTail ? path.join(currentRealPath, relativeTail) : currentRealPath
+    } catch (error) {
+      if (!isNodeErrorCode(error, "ENOENT") && !isNodeErrorCode(error, "ENOTDIR")) throw error
+      const parent = path.dirname(current)
+      if (parent === current) return normalized
+      current = parent
+    }
+  }
+}
+
+function localPathCollisionKeysOverlap(left: string, right: string): boolean {
   return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`)
 }
 

@@ -301,6 +301,53 @@ describe("DriveSyncService", () => {
     })).rejects.toThrow("本地路径已绑定。")
   })
 
+  it("rejects symlink aliases that resolve to an already bound local folder", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const targetFolder = path.join(tempDir, "Docs")
+      const aliasFolder = path.join(tempDir, "Docs Alias")
+      await mkdir(targetFolder)
+      await symlink(targetFolder, aliasFolder, "dir")
+
+      const service = createDriveSyncService(createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async (itemId: string) => ({ ...mockDriveItem(itemId), type: "folder" })),
+        },
+      }).deps)
+      await service.createBinding({
+        driveItemId: "drive-item-1",
+        driveItemName: "产品文档",
+        kind: "folder",
+        drivePathHint: "/产品文档",
+        localPath: targetFolder,
+        deferWatcher: true,
+      })
+
+      await expect(service.previewBinding({
+        driveItemId: "drive-item-2",
+        driveItemName: "资料",
+        kind: "folder",
+        drivePathHint: "/资料",
+        localPath: aliasFolder,
+        remoteExists: true,
+        directionHint: "bind_existing",
+      })).resolves.toMatchObject({
+        status: "blocked",
+        reason: "本地路径已绑定。",
+      })
+      await expect(service.createSafeBinding({
+        driveItemId: "drive-item-2",
+        driveItemName: "资料",
+        kind: "folder",
+        drivePathHint: "/资料",
+        localPath: aliasFolder,
+        direction: "bind_existing",
+      })).rejects.toThrow("本地路径已绑定。")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("blocks remote parent and child items from being bound separately", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

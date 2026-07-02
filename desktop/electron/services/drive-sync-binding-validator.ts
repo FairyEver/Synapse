@@ -4,7 +4,7 @@ import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@syn
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { createDefaultDriveSyncExcludeRules, parseGitignoreForDriveSync } from "./drive-sync-excludes"
 import { inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
-import { localPathsOverlap, normalizeLocalPath } from "./drive-sync-paths"
+import { localPathIdentitiesOverlap, normalizeLocalPath } from "./drive-sync-paths"
 
 export async function previewDriveSyncBinding(input: {
   readonly driveItemId: string
@@ -20,7 +20,7 @@ export async function previewDriveSyncBinding(input: {
   const localPath = normalizeLocalPath(input.localPath)
   const rules = createDefaultDriveSyncExcludeRules()
   const local = await inspectDriveSyncLocalPath(localPath)
-  const duplicateReason = findDuplicateBindingReason(localPath, input.driveItemId, input.activeBindings)
+  const duplicateReason = await findDuplicateBindingReason(localPath, input.driveItemId, input.activeBindings)
   if (duplicateReason) {
     return blocked(localPath, local.kind, local.empty, duplicateReason, rules.importedGitignore)
   }
@@ -134,15 +134,15 @@ function blocked(
   }
 }
 
-function findDuplicateBindingReason(
+async function findDuplicateBindingReason(
   localPath: string,
   driveItemId: string,
   activeBindings: readonly DriveSyncBindingEntryV1[],
-): string | null {
+): Promise<string | null> {
   const active = activeBindings.filter((binding) => binding.status !== "removed")
   if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
   for (const binding of active) {
-    if (localPathsOverlap(binding.localPath, localPath)) {
+    if (await localPathIdentitiesOverlap(binding.localPath, localPath)) {
       return "本地路径已绑定。"
     }
   }

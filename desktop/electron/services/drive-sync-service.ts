@@ -36,7 +36,7 @@ import { hashDriveSyncFile, inspectDriveSyncLocalPath, scanDriveSyncLocalTree } 
 import {
   createDriveSyncDirectoryTarget,
   driveSyncLocalWriteRootPath,
-  localPathsOverlap,
+  localPathIdentitiesOverlap,
   normalizeLocalPath,
   pathCollisionKey,
   writeDriveSyncFileTarget,
@@ -262,7 +262,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
       throw new Error("云盘条目已绑定。")
     }
-    if (activeBindings.some((binding) => localPathsOverlap(binding.localPath, localPath))) {
+    if (await hasOverlappingLocalBinding(activeBindings, localPath)) {
       throw new Error("本地路径已绑定。")
     }
 
@@ -592,6 +592,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (boundAncestors.has(driveItemId)) return "云盘条目包含已同步的云盘条目。"
     }
     return null
+  }
+
+  async function hasOverlappingLocalBinding(
+    activeBindings: readonly DriveSyncBindingEntryV1[],
+    localPath: string,
+  ): Promise<boolean> {
+    for (const binding of activeBindings) {
+      if (await localPathIdentitiesOverlap(binding.localPath, localPath)) return true
+    }
+    return false
   }
 
   async function collectRemoteAncestorIds(driveItemId: string): Promise<ReadonlySet<string>> {
