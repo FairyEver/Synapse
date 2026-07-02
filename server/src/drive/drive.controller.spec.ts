@@ -1618,6 +1618,47 @@ describe("DriveController", () => {
     expect(response.text).toContain('aria-describedby="drive-password-error"')
   })
 
+  it("renders password errors for direct download links with wrong query passwords", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/download?password=wrong")
+      .expect(200)
+
+    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/share/shr_file/download"')
+    expect(response.text).toContain('aria-invalid="true"')
+    expect(response.text).toContain('aria-describedby="drive-password-error"')
+    expect(response.text).not.toContain("链接已失效")
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "wrong",
+      cookie: undefined,
+    })
+  })
+
+  it("renders password errors for direct render links with wrong query passwords", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/render?password=wrong")
+      .expect(200)
+
+    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/share/shr_file/render"')
+    expect(response.text).toContain('aria-invalid="true"')
+    expect(response.text).toContain('aria-describedby="drive-password-error"')
+    expect(response.text).not.toContain("链接已失效")
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "wrong",
+      cookie: undefined,
+    })
+    expect(drive.resolveShareRenderAccess).not.toHaveBeenCalled()
+  })
+
   it("renders password pages for protected direct downloads opened without a cookie", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
 

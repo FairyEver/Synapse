@@ -1642,8 +1642,8 @@ export class DrivePublicController {
         cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
       })
       if (access.status !== "ok") {
-        if (access.status === "password_required" && !password) {
-          response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
+        if (access.status === "password_required") {
+          response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: Boolean(password) }))
           return
         }
         throw new NotFoundException("文件未找到")
@@ -1683,7 +1683,13 @@ export class DrivePublicController {
           password,
           cookie,
         })
-        if (shareAccess.status !== "ok") throw new NotFoundException("文件未找到")
+        if (shareAccess.status !== "ok") {
+          if (shareAccess.status === "password_required") {
+            response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
+            return
+          }
+          throw new NotFoundException("文件未找到")
+        }
         if (shareAccess.cookie) {
           setDriveAccessCookie(response, shareAccess.cookie, { kind: "share", publicId: input.shareId })
         }
