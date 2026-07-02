@@ -2541,6 +2541,56 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps conflicts open when conflict resolution operations fail", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      const harness = createHarness({
+        accountService: {
+          downloadDriveFile: vi.fn(async () => {
+            throw new Error("disk denied")
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath,
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+      })
+
+      await expect(service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" }))
+        .rejects.toThrow("disk denied")
+
+      await expect(readFile(localPath, "utf8")).resolves.toBe("local")
+      await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({
+        status: "open",
+        resolution: null,
+        resolvedAt: null,
+      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        lastError: "disk denied",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "download", status: "error", relativePath: "spec.md" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves a remote folder conflict without downloading it as a file", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

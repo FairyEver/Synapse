@@ -1134,11 +1134,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   ): Promise<void> {
     const binding = await requireBinding(conflict.bindingId)
     if (action === "keep_local") {
-      await executePlannedOperations([plannedConflictOperation(binding, conflict, "upload", conflict.localPath)])
+      await executeConflictResolutionOperations([plannedConflictOperation(binding, conflict, "upload", conflict.localPath)])
       return
     }
     if (action === "keep_remote") {
-      await executePlannedOperations([plannedConflictOperation(binding, conflict, "download", conflictLocalPath(binding, conflict))])
+      await executeConflictResolutionOperations([plannedConflictOperation(binding, conflict, "download", conflictLocalPath(binding, conflict))])
       return
     }
     if (action === "confirm_delete") {
@@ -1155,10 +1155,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const localPath = conflictLocalPath(binding, conflict)
     const local = await inspectDriveSyncLocalPath(localPath)
     if (local.kind !== "missing") {
-      await executePlannedOperations([plannedConflictOperation(binding, conflict, "delete_local", localPath)])
+      await executeConflictResolutionOperations([plannedConflictOperation(binding, conflict, "delete_local", localPath)])
       return
     }
-    await executePlannedOperations([plannedConflictOperation(binding, conflict, "delete_remote", localPath)])
+    await executeConflictResolutionOperations([plannedConflictOperation(binding, conflict, "delete_remote", localPath)])
   }
 
   async function applyConflictKeepBothResolution(
@@ -1172,7 +1172,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await copyFile(localPath, copyLocalPath)
     const copyRelativePath = path.posix.join(path.posix.dirname(conflict.relativePath), path.basename(copyLocalPath))
       .replace(/^\.\//u, "")
-    await executePlannedOperations([
+    await executeConflictResolutionOperations([
       {
         bindingId: binding.id,
         kind: "upload",
@@ -1184,6 +1184,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       },
       plannedConflictOperation(binding, conflict, "download", localPath),
     ])
+  }
+
+  async function executeConflictResolutionOperations(operations: readonly DriveSyncPlannedOperation[]): Promise<void> {
+    await executePlannedOperations(operations, { throwOnError: true })
   }
 
   function plannedConflictOperation(
