@@ -971,6 +971,7 @@ function DriveModuleContent() {
               open={syncDialog !== null}
               state={syncDialog}
               snapshot={syncSnapshot}
+              onDriveItemsChanged={refreshDriveView}
               onOpenChange={(open) => {
                 if (!open) setSyncDialog(null)
               }}

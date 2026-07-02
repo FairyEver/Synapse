@@ -1203,6 +1203,9 @@ describe("DriveModule", () => {
     }))
     expect(dialog.textContent).toContain("上传并同步")
 
+    const listCallsBeforeSubmit = mocks.listDriveItems.mock.calls.length
+    const usageCallsBeforeSubmit = mocks.getDriveUsage.mock.calls.length
+
     await clickButtonText("上传并同步")
 
     expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
@@ -1213,6 +1216,8 @@ describe("DriveModule", () => {
       direction: "local_to_remote",
       importGitignore: true,
     }))
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(listCallsBeforeSubmit + 1)
+    expect(mocks.getDriveUsage).toHaveBeenCalledTimes(usageCallsBeforeSubmit + 1)
   })
 
   it("keeps the sync dialog open when initial safe create returns an error binding", async () => {

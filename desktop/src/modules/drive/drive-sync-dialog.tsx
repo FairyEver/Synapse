@@ -65,12 +65,14 @@ export type DriveSyncDialogState =
   | { readonly mode: "local"; readonly item: null }
 
 export function DriveSyncDialog({
+  onDriveItemsChanged,
   onOpenChange,
   onSnapshotChange,
   open,
   snapshot,
   state,
 }: {
+  readonly onDriveItemsChanged?: () => void | Promise<void>
   readonly onOpenChange: (open: boolean) => void
   readonly onSnapshotChange: (snapshot: DriveSyncSnapshotDto) => void
   readonly open: boolean
@@ -189,6 +191,9 @@ export function DriveSyncDialog({
       if (binding.status === "error") {
         toast(binding.lastError ?? "同步失败")
         return
+      }
+      if (currentPreview.direction === "local_to_remote") {
+        await onDriveItemsChanged?.()
       }
       toast("已创建同步绑定")
       onOpenChange(false)
