@@ -456,12 +456,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await runBindingActionSingleFlight(conflict.bindingId, async () => {
       const currentConflict = await deps.conflicts.get(input.conflictId)
       if (!currentConflict || currentConflict.status !== "open") throw new Error("同步冲突不存在。")
-      if (input.action !== "skip") {
-        await applyConflictResolution(currentConflict, input.action)
+      if (input.action === "skip") {
+        await emitChanged()
+        return
       }
+      await applyConflictResolution(currentConflict, input.action)
       const resolved: DriveSyncConflictEntryV1 = {
         ...currentConflict,
-        status: input.action === "skip" ? "ignored" : "resolved",
+        status: "resolved",
         resolution: input.action,
         resolvedAt: timestamp(),
       }

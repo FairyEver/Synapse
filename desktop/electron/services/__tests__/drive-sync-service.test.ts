@@ -2874,6 +2874,44 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps skipped conflicts open for later resolution", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath: path.join(tempDir, "spec.md"),
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "skip" })
+
+      await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({
+        status: "open",
+        resolution: null,
+        resolvedAt: null,
+      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "conflict" })
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        conflicts: [expect.objectContaining({ id: conflict.id })],
+        summary: { conflictCount: 1 },
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps conflicts open when conflict resolution operations fail", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
