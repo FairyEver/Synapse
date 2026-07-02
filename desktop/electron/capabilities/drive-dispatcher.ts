@@ -384,7 +384,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.site.create":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params)),
+            data: sanitizeDriveSite(await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params))),
           }))
         case "drive.site.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
@@ -394,17 +394,17 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.site.update_access":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params)),
+            data: sanitizeDriveSite(await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params))),
           }))
         case "drive.site.disable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.disableDriveSite(requireString(params, "siteId")),
+            data: sanitizeDriveSite(await deps.accountService.disableDriveSite(requireString(params, "siteId"))),
           }))
         case "drive.site.enable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.enableDriveSite(requireString(params, "siteId")),
+            data: sanitizeDriveSite(await deps.accountService.enableDriveSite(requireString(params, "siteId"))),
           }))
         case "drive.site.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
@@ -414,10 +414,10 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.site.republish":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.republishDriveSite({
+            data: sanitizeDriveSite(await deps.accountService.republishDriveSite({
               siteId: requireString(params, "siteId"),
               entryPath: optionalNullableString(params.entryPath),
-            }),
+            })),
           }))
         case "drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -960,11 +960,15 @@ function sanitizeDriveShareList(page: DriveShareListPageDto): DriveShareListPage
 function sanitizeDriveSiteList(page: DriveSiteListPageDto): DriveSiteListPageDto {
   return {
     ...page,
-    items: page.items.map((item) => ({
-      ...item,
-      urlWithPassword: item.url,
-      password: null,
-    })),
+    items: page.items.map(sanitizeDriveSite),
+  }
+}
+
+function sanitizeDriveSite(site: DriveSiteDto): DriveSiteDto {
+  return {
+    ...site,
+    urlWithPassword: site.url,
+    password: null,
   }
 }
 

@@ -104,7 +104,7 @@ const accessSettingsProperties = {
   accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
-const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password; when omitted, Synapse generates one.")
+const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
 
 export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryAndLegacyMcpTools([

@@ -454,7 +454,13 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("dispatches Drive site creation separately from share creation", async () => {
-    const site = driveSite({ siteId: "site_public" })
+    const site = driveSite({
+      siteId: "site_public",
+      accessMode: "password",
+      urlWithPassword: "https://synapse.test/sites/site_public/?password=site-secret",
+      passwordEnabled: true,
+      password: "site-secret",
+    })
     const createDriveSite = vi.fn(async () => site)
     const shareDriveItem = vi.fn()
     const accountService = createAccountService({ createDriveSite, shareDriveItem })
@@ -466,7 +472,14 @@ describe("createDriveCapabilityDispatcher", () => {
       accessMode: "password",
       password: "site-secret",
       expiresIn: "forever",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: site })
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        ...site,
+        urlWithPassword: site.url,
+        password: null,
+      },
+    })
 
     expect(createDriveSite).toHaveBeenCalledWith({
       sourceFolderItemId: "folder-1",
@@ -487,13 +500,18 @@ describe("createDriveCapabilityDispatcher", () => {
       passwordEnabled: true,
       password: "secret",
     })
+    const sanitizedSite = {
+      ...site,
+      urlWithPassword: site.url,
+      password: null,
+    }
     const listPage: DriveSiteListPageDto = { items: [site], total: 1, page: drivePage() }
     const listDriveSites = vi.fn(async () => listPage)
-    const updateDriveSiteAccess = vi.fn(async () => driveSite({ siteId: "site_public", accessMode: "password" }))
-    const disableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "disabled" }))
-    const enableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "active" }))
+    const updateDriveSiteAccess = vi.fn(async () => site)
+    const disableDriveSite = vi.fn(async () => ({ ...site, status: "disabled" as const }))
+    const enableDriveSite = vi.fn(async () => site)
     const deleteDriveSite = vi.fn(async () => ({ ok: true as const }))
-    const republishDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
+    const republishDriveSite = vi.fn(async () => ({ ...site, lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
     const accountService = createAccountService({
       listDriveSites,
       updateDriveSiteAccess,
@@ -502,7 +520,8 @@ describe("createDriveCapabilityDispatcher", () => {
       deleteDriveSite,
       republishDriveSite,
     })
-    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
     await expect(dispatcher.dispatch("drive.site.list", {
       offset: 2,
@@ -513,11 +532,7 @@ describe("createDriveCapabilityDispatcher", () => {
       ok: true,
       data: {
         ...listPage,
-        items: [{
-          ...site,
-          urlWithPassword: site.url,
-          password: null,
-        }],
+        items: [sanitizedSite],
       },
       total: 1,
     })
@@ -528,19 +543,19 @@ describe("createDriveCapabilityDispatcher", () => {
       expiresIn: "7d",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", accessMode: "password" }),
+      data: sanitizedSite,
     })
     await expect(dispatcher.dispatch("drive.site.disable", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", status: "disabled" }),
+      data: { ...sanitizedSite, status: "disabled" },
     })
     await expect(dispatcher.dispatch("drive.site.enable", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", status: "active" }),
+      data: sanitizedSite,
     })
     await expect(dispatcher.dispatch("drive.site.delete", {
       siteId: "site_public",
@@ -550,7 +565,7 @@ describe("createDriveCapabilityDispatcher", () => {
       entryPath: "pages/home.html",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }),
+      data: { ...sanitizedSite, lastPublishedAt: "2026-06-23T00:00:00.000Z" },
     })
 
     expect(listDriveSites).toHaveBeenCalledWith({ offset: 2, limit: 5, search: "原型", status: "active" })
@@ -564,6 +579,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(enableDriveSite).toHaveBeenCalledWith("site_public")
     expect(deleteDriveSite).toHaveBeenCalledWith("site_public")
     expect(republishDriveSite).toHaveBeenCalledWith({ siteId: "site_public", entryPath: "pages/home.html" })
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
   })
 
   it("uploads a public asset through the account helper after authorizing local file read", async () => {
@@ -1782,6 +1798,7 @@ function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     urlWithPassword: "https://synapse.test/sites/site_public/",
     passwordEnabled: false,
     password: null,
+    expiresIn: "forever",
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "产品原型",

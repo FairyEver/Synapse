@@ -242,15 +242,15 @@ Input:
 - `name` required: site display name.
 - `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
 - `accessMode` required: `public` or `password`.
-- `password` optional: custom site password. Use only with `accessMode: "password"`; omit it to generate a random password.
+- `password` optional: custom site password. Use only with `accessMode: "password"`. MCP responses never return site passwords; ask for or pass a custom password when the user needs a known value.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 Output:
 
 - `siteId`: public id used in `/sites/<siteId>/`.
 - `url`: public site URL.
-- `urlWithPassword`: public site URL with password query when password mode is enabled.
-- `password`: custom or generated password for password sites, or `null` for public sites.
+- `urlWithPassword`: same as `url` in MCP responses.
+- `password`: always `null` in MCP responses.
 
 ### `app_drive_site_list`
 
@@ -265,8 +265,7 @@ Input:
 
 Output:
 
-- Returns published site metadata. List results do not include historical passwords: `password` is `null`, and `urlWithPassword` is the same as `url`.
-- Use `app_drive_site_create` or `app_drive_site_update_access` when the user needs the new password for a specific site.
+- Returns published site metadata. Site tool results never include passwords: `password` is `null`, and `urlWithPassword` is the same as `url`.
 
 ### `app_drive_site_update_access`
 
@@ -276,7 +275,7 @@ Input:
 
 - `siteId` required.
 - `accessMode` required: `public` or `password`.
-- `password` optional: custom site password. Use only with `accessMode: "password"`; omit it to generate a random password.
+- `password` optional: custom site password. Use only with `accessMode: "password"`. MCP responses never return site passwords; ask for or pass a custom password when the user needs a known value.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 ### `app_drive_site_disable`
