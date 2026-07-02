@@ -1373,9 +1373,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         if (options.throwOnError) throw new Error(REMOTE_RESYNC_REQUIRED_ERROR)
         continue
       }
-      markSelfWriteForOperation(operation)
       try {
         await authorizeOperationLocalPath(binding, operation)
+        markSelfWriteForOperation(operation)
         await executeDriveSyncOperation({
           binding,
           operation,

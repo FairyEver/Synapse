@@ -3040,6 +3040,83 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("does not suppress the next local change after local write permission is denied", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const permissionGuard: PermissionGuard = {
+        registerPolicy: vi.fn(),
+        check: vi.fn(async ({ action }) =>
+          action === "fs.write.outside-userdata"
+            ? { allowed: false as const, reason: "denied by test" }
+            : { allowed: true as const },
+        ),
+      }
+      const harness = createHarness({
+        permissionGuard,
+        watch,
+        accountService: {
+          uploadDriveLocalItems,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const stats = await lstat(localPath)
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      await harness.baseline.upsert({
+        id: `${binding.id}:spec.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        kind: "file",
+        remoteItemId: "remote-spec",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: stats.size,
+        localMtimeMs: stats.mtimeMs,
+        localHash: await hashDriveSyncFile(localPath),
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath,
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+      })
+
+      await expect(service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" })).rejects.toThrow("denied by test")
+      await service.resumeBinding(binding.id)
+      await writeFile(localPath, "user edit", "utf8")
+      rawEvent?.("change", "spec.md")
+
+      await waitForExpect(() => {
+        expect(uploadDriveLocalItems).toHaveBeenCalled()
+      }, 1000)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves a conflict by keeping the local file", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
