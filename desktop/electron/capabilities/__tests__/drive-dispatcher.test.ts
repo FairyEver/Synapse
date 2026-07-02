@@ -25,6 +25,17 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("exposes custom password fields on site access tools", () => {
+    const siteCreateTool = buildDriveTools().find((tool) => tool.name === "drive_site_create")
+    const siteUpdateTool = buildDriveTools().find((tool) => tool.name === "drive_site_update_access")
+    expect(siteCreateTool?.inputSchema.properties).toMatchObject({
+      password: { type: "string", description: expect.stringContaining("custom site password") },
+    })
+    expect(siteUpdateTool?.inputSchema.properties).toMatchObject({
+      password: { type: "string", description: expect.stringContaining("custom site password") },
+    })
+  })
+
   it("exposes item id on item deletion", () => {
     const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
     expect(deleteTool?.inputSchema.properties).toEqual({
@@ -452,7 +463,8 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.site.create", {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
-      accessMode: "public",
+      accessMode: "password",
+      password: "site-secret",
       expiresIn: "forever",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: site })
 
@@ -460,7 +472,8 @@ describe("createDriveCapabilityDispatcher", () => {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "public",
+      accessMode: "password",
+      password: "site-secret",
       expiresIn: "forever",
     })
     expect(shareDriveItem).not.toHaveBeenCalled()
@@ -511,6 +524,7 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.site.update_access", {
       siteId: "site_public",
       accessMode: "password",
+      password: "new-secret",
       expiresIn: "7d",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
@@ -543,6 +557,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(updateDriveSiteAccess).toHaveBeenCalledWith({
       siteId: "site_public",
       accessMode: "password",
+      password: "new-secret",
       expiresIn: "7d",
     })
     expect(disableDriveSite).toHaveBeenCalledWith("site_public")

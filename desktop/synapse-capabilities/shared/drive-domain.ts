@@ -104,6 +104,7 @@ const accessSettingsProperties = {
   accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
+const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password; when omitted, Synapse generates one.")
 
 export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryAndLegacyMcpTools([
@@ -419,7 +420,8 @@ export function buildDriveTools(): McpToolDefinition[] {
           sourceFolderItemId: stringField("Drive folder item id to copy into the site deployment."),
           name: stringField("Site display name."),
           entryPath: stringField("Optional HTML entry path inside the folder. Defaults to index.html when available."),
-          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a generated password." },
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: sitePasswordField,
           expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
         },
         required: ["sourceFolderItemId", "name", "accessMode", "expiresIn"],
@@ -439,12 +441,13 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_update_access",
-      description: "Update a Drive site access mode and expiry without republishing files or changing Drive shares. Password mode generates a new password.",
+      description: "Update a Drive site access mode and expiry without republishing files or changing Drive shares.",
       inputSchema: {
         type: "object",
         properties: {
           siteId: stringField("Public site id from /sites/<siteId>/."),
-          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a generated password." },
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: sitePasswordField,
           expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
         },
         required: ["siteId", "accessMode", "expiresIn"],

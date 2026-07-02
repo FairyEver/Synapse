@@ -241,7 +241,8 @@ Input:
 - `sourceFolderItemId` required: Drive folder item id to copy.
 - `name` required: site display name.
 - `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
-- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
+- `accessMode` required: `public` or `password`.
+- `password` optional: custom site password. Use only with `accessMode: "password"`; omit it to generate a random password.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 Output:
@@ -249,7 +250,7 @@ Output:
 - `siteId`: public id used in `/sites/<siteId>/`.
 - `url`: public site URL.
 - `urlWithPassword`: public site URL with password query when password mode is enabled.
-- `password`: generated password, or `null` for public sites.
+- `password`: custom or generated password for password sites, or `null` for public sites.
 
 ### `app_drive_site_list`
 
@@ -265,16 +266,17 @@ Input:
 Output:
 
 - Returns published site metadata. List results do not include historical passwords: `password` is `null`, and `urlWithPassword` is the same as `url`.
-- Use `app_drive_site_create` or `app_drive_site_update_access` when the user needs the newly generated password for a specific site.
+- Use `app_drive_site_create` or `app_drive_site_update_access` when the user needs the new password for a specific site.
 
 ### `app_drive_site_update_access`
 
-Update site access mode and expiry without republishing files. Password mode generates a new password.
+Update site access mode and expiry without republishing files.
 
 Input:
 
 - `siteId` required.
-- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
+- `accessMode` required: `public` or `password`.
+- `password` optional: custom site password. Use only with `accessMode: "password"`; omit it to generate a random password.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 ### `app_drive_site_disable`
