@@ -61,7 +61,7 @@ export type DriveLinkIntakeDeps = {
         readonly size?: bigint
         readonly contentType?: string | null
       }
-      | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> }
+      | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }> }
     >
   }
   readonly sites: {
@@ -225,6 +225,22 @@ export class DriveLinkIntakeService {
       return passwordRequiredResolve(parsed.itemId ? "share_item" : "share", ref)
     }
 
+    if (parsed.itemId) {
+      const snapshot = await this.deps.drive.getShareBrowserSnapshot({
+        shareId: parsed.shareId,
+        itemId: parsed.itemId,
+        password: input.password,
+        cookie: undefined,
+      })
+      return {
+        ok: true,
+        linkType: "share_item",
+        access: { status: "ok", canRead: true, canList: snapshot.current.type === "folder", canReadText: snapshot.current.previewKind !== "download-only", canDownload: true },
+        root: { name: snapshot.current.name, type: snapshot.current.type, previewKind: snapshot.current.previewKind },
+        ref,
+      }
+    }
+
     const previewKind = previewKindFromMime(access.value.item.mimeType, access.value.item.name)
     return {
       ok: true,
@@ -272,16 +288,17 @@ export class DriveLinkIntakeService {
       password: input.password,
       cookie: undefined,
     })
-    if (!snapshot.preview?.text || snapshot.preview.kind === "download-only") {
+    const preview = snapshot.preview
+    if (!preview || preview.kind === "download-only" || preview.text === null || preview.text === undefined) {
       throw new BadRequestException("该链接不是可读取的文本内容。")
     }
-    const text = truncateUtf8(snapshot.preview.text, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
+    const text = truncateUtf8(preview.text, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
     return {
       path: snapshot.current.name,
       mimeType: snapshot.current.mimeType,
-      previewKind: snapshot.preview.kind,
+      previewKind: preview.kind,
       text: text.text,
-      truncated: snapshot.preview.truncated || text.truncated,
+      truncated: preview.truncated || text.truncated,
       source: { linkType: parsed.itemId ? "share_item" : "share" },
     }
   }

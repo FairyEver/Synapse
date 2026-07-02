@@ -7,7 +7,7 @@ import {
   type DriveBrowserSurface,
   type DriveUsageDto,
 } from '@synapse/shared'
-import { Upload } from 'lucide-react'
+import { FolderUp, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
@@ -21,6 +21,7 @@ import {
   DriveBrowserPage,
   DriveSingleFileReaderView,
 } from '@/features/drive-browser/drive-browser-page'
+import type { DriveBrowserNavigate } from '@/features/drive-browser/shared/drive-navigation'
 import { shouldRenderDriveSingleFileReader } from '@/features/drive-browser/shared/drive-view-model'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
 import { driveApi } from '@/lib/api'
@@ -37,14 +38,14 @@ type NameDialogState =
   | { readonly mode: 'create'; readonly item: null; readonly value: string }
   | { readonly mode: 'rename'; readonly item: DriveBrowserItemDto; readonly value: string }
 
-export function DriveConsolePage() {
+export function DriveConsolePage({ onNavigate }: { readonly onNavigate?: DriveBrowserNavigate } = {}) {
   return (
     <>
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
-        <DriveConsoleRoot />
+        <DriveConsoleRoot onNavigate={onNavigate} />
       </Main>
     </>
   )
@@ -53,12 +54,14 @@ export function DriveConsolePage() {
 export function DriveConsoleItemPage({
   itemId,
   surface = 'console',
+  onNavigate,
 }: {
   readonly itemId: string
   readonly surface?: DriveBrowserSurface
+  readonly onNavigate?: DriveBrowserNavigate
 }) {
   if (surface === 'standalone') {
-    return <DriveBrowserPage context='owner' itemId={itemId} surface='standalone' />
+    return <DriveBrowserPage context='owner' itemId={itemId} surface='standalone' onNavigate={onNavigate} />
   }
 
   return (
@@ -66,17 +69,25 @@ export function DriveConsoleItemPage({
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
-      <DriveConsoleItemMain itemId={itemId} surface={surface} />
+      <DriveConsoleItemMain itemId={itemId} surface={surface} onNavigate={onNavigate} />
     </>
   )
 }
 
-function DriveConsoleRoot() {
+function DriveConsoleRoot({ onNavigate }: { readonly onNavigate?: DriveBrowserNavigate }) {
   const state = useDriveConsole({ context: 'root' })
-  return <DriveConsoleContent state={state} />
+  return <DriveConsoleContent state={state} onNavigate={onNavigate} />
 }
 
-function DriveConsoleItemMain({ itemId, surface }: { readonly itemId: string; readonly surface: DriveBrowserSurface }) {
+function DriveConsoleItemMain({
+  itemId,
+  surface,
+  onNavigate,
+}: {
+  readonly itemId: string
+  readonly surface: DriveBrowserSurface
+  readonly onNavigate?: DriveBrowserNavigate
+}) {
   const state = useDriveConsole({ context: 'item', itemId, surface })
   const fileReader = state.browser.status === 'ready' && shouldRenderDriveSingleFileReader(state.browser.snapshot)
 
@@ -85,13 +96,19 @@ function DriveConsoleItemMain({ itemId, surface }: { readonly itemId: string; re
       {fileReader ? (
         <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} embedded />
       ) : (
-        <DriveConsoleContent state={state} />
+        <DriveConsoleContent state={state} onNavigate={onNavigate} />
       )}
     </Main>
   )
 }
 
-function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
+function DriveConsoleContent({
+  state,
+  onNavigate,
+}: {
+  readonly state: DriveConsoleState
+  readonly onNavigate?: DriveBrowserNavigate
+}) {
   const [activeView, setActiveView] = useState<DriveConsoleSystemView>('files')
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
@@ -103,7 +120,13 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
   const nameInputId = 'drive-console-name-input'
+
+  const setFolderInputRef = (node: HTMLInputElement | null) => {
+    folderInputRef.current = node
+    node?.setAttribute('webkitdirectory', '')
+  }
 
   const refreshAfterMutation = async () => {
     await state.refresh()
@@ -213,6 +236,21 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
             <Upload data-icon='inline-start' />
             上传文件
           </Button>
+          <input
+            ref={setFolderInputRef}
+            type='file'
+            multiple
+            className='hidden'
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? [])
+              event.currentTarget.value = ''
+              void runUpload(files)
+            }}
+          />
+          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => folderInputRef.current?.click()}>
+            <FolderUp data-icon='inline-start' />
+            上传文件夹
+          </Button>
           <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
             新建文件夹
           </Button>
@@ -249,6 +287,7 @@ function DriveConsoleContent({ state }: { readonly state: DriveConsoleState }) {
             onPublishSite={setSiteFolder}
             onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
             onShare={setShareTarget}
+            onNavigate={onNavigate}
             onDropFiles={(files) => { void runUpload(files) }}
           />
         ) : null}

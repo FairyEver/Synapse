@@ -160,6 +160,40 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("rejects stale concurrent online edit quota checks before used quota exceeds the limit", async () => {
+    const prisma = createPrismaMemory({ staleUsageReads: true })
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: 5n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.driveUsage.upsert({
+      where: { userId: "user-1" },
+      create: { userId: "user-1", usedBytes: 0n, reservedBytes: 0n, quotaBytes: 30n },
+      update: {},
+    })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "first.md", mimeType: "text/markdown", size: "5" })
+    const second = await createCompletedUpload(service, "user-1", { parentId: null, name: "second.md", mimeType: "text/markdown", size: "5" })
+    const firstBaseVersion = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const secondBaseVersion = (await service.listFileVersions("user-1", second.id, { offset: 0, limit: 20 })).items[0]!
+
+    await service.updateOwnerFileText("user-1", first.id, {
+      contentType: "text",
+      text: "123456789012345",
+      baseVersionId: firstBaseVersion.id,
+    })
+    await expect(service.updateOwnerFileText("user-1", second.id, {
+      contentType: "text",
+      text: "123456789012345",
+      baseVersionId: secondBaseVersion.id,
+    })).rejects.toThrow("云盘空间不足。")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(25n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("records a content change when an upload is completed", async () => {
     const prisma = createPrismaMemory()
     const changes = createDriveChangeLogMock()
@@ -510,10 +544,17 @@ describe("DriveService", () => {
     const historical = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((version) => !version.isCurrent)!
     deleteObject.mockClear()
 
-    await expect(Promise.all([
+    const results = await Promise.allSettled([
       service.deleteFileVersion("user-1", item.id, historical.id),
       service.deleteFileVersion("user-1", item.id, historical.id),
-    ])).resolves.toEqual([{ ok: true }, { ok: true, deletePending: true }])
+    ])
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled")
+    const rejected = results.filter((result) => result.status === "rejected")
+    expect(fulfilled).toEqual([{ status: "fulfilled", value: { ok: true } }])
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toBeInstanceOf(BadRequestException)
+    expect(rejected[0]?.reason.message).toBe("历史版本正在清理中。")
 
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(5n)
@@ -525,11 +566,26 @@ describe("DriveService", () => {
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "11", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => !entry.isCurrent)!
 
     const pinned = await service.updateFileVersionPin("user-1", item.id, version.id, true)
 
     expect(pinned).toMatchObject({ id: version.id, isPinned: true })
+  })
+
+  it("rejects pinning the current file version", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const current = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => entry.isCurrent)!
+
+    await expect(service.updateFileVersionPin("user-1", item.id, current.id, true)).rejects.toThrow("不能保留当前版本。")
+
+    const version = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: current.id } })
+    expect(version.isPinned).toBe(false)
   })
 
   it("cleanup skips current and pinned versions when count exceeds the limit", async () => {
@@ -543,6 +599,14 @@ describe("DriveService", () => {
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
     const v1 = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+    const preparedCurrent = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "1",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", preparedCurrent.sessionId)
     await service.updateFileVersionPin("user-1", item.id, v1.id, true)
 
     for (let index = 0; index < 101; index += 1) {
@@ -586,6 +650,42 @@ describe("DriveService", () => {
     const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
     expect(versions.total).toBe(2)
     expect(versions.items.find((version) => version.id === historical.id)?.deletePending).toBe(true)
+  })
+
+  it("rejects actions for file versions pending cleanup", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject: vi.fn(async () => undefined),
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 5n, contentType: "text/plain" })),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((candidate) => !candidate.isCurrent)!
+    await prisma.driveFileVersion.update({
+      where: { id: version.id },
+      data: { deletePending: true },
+    })
+    vi.mocked(storage.copyObject).mockClear()
+    vi.mocked(storage.getObjectStream).mockClear()
+    vi.mocked(storage.deleteObject).mockClear()
+
+    await expect(service.restoreFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.openFileVersionDownload("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.updateFileVersionPin("user-1", item.id, version.id, true)).rejects.toThrow("历史版本正在清理中。")
+    await expect(service.deleteFileVersion("user-1", item.id, version.id)).rejects.toThrow("历史版本正在清理中。")
+
+    expect(storage.copyObject).not.toHaveBeenCalled()
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+    const row = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: version.id } })
+    expect(row.isPinned).toBe(false)
+    expect(row.deletePending).toBe(true)
   })
 
   it("retries pending historical version deletes", async () => {
@@ -738,6 +838,51 @@ describe("DriveService", () => {
     expect(await service.getItem("user-1", older.id)).toMatchObject({ id: older.id, name: "report.txt", size: "11" })
     expect(await service.getItem("user-1", newer.id)).toMatchObject({ id: newer.id, name: "report.txt", size: "5", mimeType: "text/markdown" })
     expect(await service.listItems("user-1", null)).toHaveLength(2)
+  })
+
+  it("lists Drive items with page metadata when pagination is requested", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "one.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "two.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "three.txt", mimeType: "text/plain" })
+
+    const firstPage = await service.listItemsPage("user-1", null, { limit: 2 })
+    const secondPage = await service.listItemsPage("user-1", null, { offset: 2, limit: 2 })
+
+    expect(await service.listItems("user-1", null)).toHaveLength(3)
+    expect(firstPage.items).toHaveLength(2)
+    expect(firstPage.page).toEqual({ offset: 0, limit: 2, hasMore: true, nextOffset: 2 })
+    expect(secondPage.items).toHaveLength(1)
+    expect(secondPage.page).toEqual({ offset: 2, limit: 2, hasMore: false, nextOffset: null })
+  })
+
+  it("caps legacy Drive item list responses to the default page size", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    for (let index = 0; index < 101; index += 1) {
+      await prisma.driveItem.create({
+        data: {
+          userId: "user-1",
+          parentId: null,
+          type: "file",
+          name: `file-${index}.txt`,
+          size: 1n,
+          mimeType: "text/plain",
+          storageKey: `drive/user-1/file-${index}.txt`,
+          storageStatus: "active",
+          uploadStatus: "completed",
+          lifecycleStatus: "active",
+          deletedAt: null,
+        },
+      })
+    }
+
+    const items = await service.listItems("user-1", null)
+
+    expect(items).toHaveLength(100)
   })
 
   it("keeps public asset backing files out of normal Drive views and actions", async () => {
@@ -1536,6 +1681,7 @@ describe("DriveService", () => {
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const prepareUpload = vi.spyOn(service, "prepareUpload")
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
 
     const result = await service.prepareFolderUpload("user-1", {
@@ -1553,8 +1699,38 @@ describe("DriveService", () => {
     expect(result.entries).toHaveLength(2)
     expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual(["brief.txt", "docs/spec.txt"])
     expect(result.entries.every((entry) => entry.upload.method === "PUT")).toBe(true)
+    expect(prepareUpload).not.toHaveBeenCalled()
     const rootChildren = await service.listItems("user-1", result.root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
+  })
+
+  it("prepares folder uploads with empty directory entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      directories: [
+        { relativePath: "docs/empty" },
+        { relativePath: "assets/icons" },
+      ],
+      files: [],
+      publicAppUrl: "https://synapse.test",
+    })
+
+    expect(result.root.name).toBe("交接材料")
+    expect(result.rootCreated).toBe(true)
+    expect(result.entries).toEqual([])
+    const rootChildren = await service.listItems("user-1", result.root.id)
+    expect(rootChildren.map((item) => item.name).sort()).toEqual(["assets", "docs"])
+    const docs = rootChildren.find((item) => item.name === "docs")
+    const assets = rootChildren.find((item) => item.name === "assets")
+    expect(docs).toBeDefined()
+    expect(assets).toBeDefined()
+    expect((await service.listItems("user-1", docs!.id)).map((item) => item.name)).toEqual(["empty"])
+    expect((await service.listItems("user-1", assets!.id)).map((item) => item.name)).toEqual(["icons"])
   })
 
   it("rejects duplicate normalized folder upload paths before creating artifacts", async () => {
@@ -1841,9 +2017,34 @@ describe("DriveService", () => {
 
     expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
     expect(archive.kind === "zip" ? await collectAsync(archive.entries) : []).toEqual([
+      { path: "docs/", storageKey: null },
       { path: "docs/spec.txt", storageKey: fileItem.storageKey },
     ])
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("includes empty directories in owner folder archive entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
+    const assets = await service.createFolder("user-1", { parentId: root.id, name: "assets" })
+    await service.createFolder("user-1", { parentId: assets.id, name: "icons" })
+    await service.createFolder("user-1", { parentId: root.id, name: "empty" })
+
+    const archive = await service.openOwnerBrowserItemDownload({
+      userId: "user-1",
+      itemId: root.id,
+    })
+    const entries = archive.kind === "zip" ? await collectAsync(archive.entries) : []
+
+    expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
+    expect(entries).toHaveLength(3)
+    expect(entries).toEqual(expect.arrayContaining([
+      { path: "assets/", storageKey: null },
+      { path: "assets/icons/", storageKey: null },
+      { path: "empty/", storageKey: null },
+    ]))
   })
 
   it("defers folder archive traversal until zip entries are consumed", async () => {
@@ -2399,7 +2600,7 @@ describe("DriveService", () => {
     expect(storage.deleteObject).not.toHaveBeenCalled()
   })
 
-  it("user delete disables shares and restore does not reactivate old links", async () => {
+  it("user delete disables shares and restore reactivates old links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -2407,6 +2608,13 @@ describe("DriveService", () => {
       parentId: null,
       name: "shared.txt",
       mimeType: "text/plain",
+    })
+    const manuallyDisabledShare = await service.createShare("user-1", file.id, "https://synapse.test")
+    await service.disableShare("user-1", manuallyDisabledShare.shareId)
+    const manuallyDisabledRecord = await prisma.driveShare.findFirst({ where: { id: manuallyDisabledShare.id } })
+    expect(manuallyDisabledRecord).toMatchObject({
+      enabled: false,
+      disabledAt: expect.any(Date),
     })
     const share = await service.createShare("user-1", file.id, "https://synapse.test")
 
@@ -2420,10 +2628,21 @@ describe("DriveService", () => {
 
     await service.restoreItem("user-1", file.id)
 
-    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId, password: share.password ?? undefined })).resolves.toMatchObject({
+      status: "ok",
+      value: {
+        id: share.id,
+        item: { id: file.id },
+      },
+    })
     await expect(prisma.driveShare.findFirst({ where: { id: share.id } })).resolves.toMatchObject({
+      enabled: true,
+      disabledAt: null,
+    })
+    await expect(service.resolvePublicShareAccess({ shareId: manuallyDisabledShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(prisma.driveShare.findFirst({ where: { id: manuallyDisabledShare.id } })).resolves.toMatchObject({
       enabled: false,
-      disabledAt: expect.any(Date),
+      disabledAt: manuallyDisabledRecord?.disabledAt,
     })
   })
 
@@ -2969,16 +3188,27 @@ describe("DriveService", () => {
 
   it("ensures nested folder paths by reusing existing folders and creating missing folders", async () => {
     const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const work = await service.createFolder("user-1", { parentId: null, name: "Work" })
+    changes.append.mockClear()
 
     const result = await service.ensureFolderPath("user-1", { parentId: null, segments: ["Work", "Reports"] })
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
 
     expect(result.item.name).toBe("Reports")
     expect(result.item.parentId).toBe(work.id)
     expect(result.reused.map((item) => item.id)).toEqual([work.id])
     expect(result.created.map((item) => item.name)).toEqual(["Reports"])
+    expect(changeInputs).toEqual([expect.objectContaining({
+      userId: "user-1",
+      itemId: result.item.id,
+      parentId: work.id,
+      type: "created",
+      name: "Reports",
+      actor: "user-1",
+    })])
   })
 
   it("previews and applies reorganization plans with drift protection", async () => {
@@ -3121,12 +3351,14 @@ describe("DriveService", () => {
   it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
     const prisma = createPrismaMemory()
     const auditLog = { record: vi.fn(async (_input: any) => undefined) }
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never, undefined, changes as unknown as DriveChangeLogService)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const parent = await service.createFolder("user-1", { parentId: null, name: "Parent" })
     const child = await service.createFolder("user-1", { parentId: parent.id, name: "Child" })
     const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
     const file = await createCompletedUpload(service, "user-1", { parentId: parent.id, name: "report.md", mimeType: "text/markdown" })
+    changes.append.mockClear()
 
     await expect(service.previewReorganization("user-1", {
       moves: [
@@ -3145,6 +3377,15 @@ describe("DriveService", () => {
       moves: [{ itemId: file.id, fromParentId: parent.id, targetParentId: target.id }],
     })
     await expect(service.getItem("user-1", file.id)).resolves.toMatchObject({ parentId: target.id })
+    const changeInputs = changes.append.mock.calls.map(([input]) => input)
+    expect(changeInputs).toEqual([expect.objectContaining({
+      userId: "user-1",
+      itemId: file.id,
+      parentId: target.id,
+      type: "moved",
+      name: "report.md",
+      actor: "user-1",
+    })])
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "drive.reorganization.apply",
       targetType: "drive.item",
@@ -3268,10 +3509,10 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
     driveUsage: {
       upsert: async ({ where, create }: any) => {
         const existing = usages.get(where.userId)
-        if (existing) return options.staleUsageReads ? { ...existing, reservedBytes: 0n } : existing
+        if (existing) return options.staleUsageReads ? { ...existing, usedBytes: 0n, reservedBytes: 0n } : existing
         usages.set(where.userId, { ...create, updatedAt: now() })
         const usage = usages.get(where.userId)
-        return options.staleUsageReads ? { ...usage, reservedBytes: 0n } : usage
+        return options.staleUsageReads ? { ...usage, usedBytes: 0n, reservedBytes: 0n } : usage
       },
       update: async ({ where, data }: any) => {
         const usage = usages.get(where.userId)
@@ -3417,6 +3658,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
         )
         return select ? found.map((version) => selectFields(version, select)) : found
       },
+      findUnique: async ({ where }: any) => versions.get(where.id) ?? null,
       findUniqueOrThrow: async ({ where }: any) => {
         const version = versions.get(where.id)
         if (!version) throw new Error("version not found")

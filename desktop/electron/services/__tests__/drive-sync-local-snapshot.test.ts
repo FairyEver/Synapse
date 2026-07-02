@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -59,5 +59,29 @@ describe("drive sync local snapshot", () => {
     await writeFile(filePath, "hello", "utf8")
 
     await expect(hashDriveSyncFile(filePath)).resolves.toMatch(/^sha256:/u)
+  })
+
+  it("reuses cached file hashes when local size and mtime are unchanged", async () => {
+    const filePath = path.join(tempDir, "note.md")
+    await writeFile(filePath, "hello", "utf8")
+    const stats = await lstat(filePath)
+
+    const entries = await scanDriveSyncLocalTree({
+      rootPath: tempDir,
+      rules: createDefaultDriveSyncExcludeRules(),
+      hashFiles: true,
+      hashCache: new Map([
+        ["note.md", {
+          kind: "file",
+          size: stats.size,
+          mtimeMs: stats.mtimeMs,
+          hash: "sha256:cached",
+        }],
+      ]),
+    })
+
+    expect(entries.find((entry) => entry.relativePath === "note.md")).toMatchObject({
+      hash: "sha256:cached",
+    })
   })
 })

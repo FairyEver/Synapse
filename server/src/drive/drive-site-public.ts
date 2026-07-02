@@ -16,7 +16,8 @@ export function driveSiteContentType(relativePath: string, storedContentType?: s
   return "application/octet-stream"
 }
 
-export function driveSiteCacheControl(relativePath: string): string {
+export function driveSiteCacheControl(relativePath: string, input: { readonly accessMode?: string | null } = {}): string {
+  if (input.accessMode === "password") return "private, no-store"
   return /\.html?$/iu.test(relativePath) ? "no-cache" : "public, max-age=300"
 }
 

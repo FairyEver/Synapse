@@ -13,6 +13,9 @@ export interface DriveSyncLocalChange {
   readonly kind: DriveSyncLocalChangeKind
   readonly localPath: string
   readonly localKind: "missing" | "file" | "folder" | "other"
+  readonly localSize?: number | null
+  readonly localMtimeMs?: number | null
+  readonly localHash?: string | null
 }
 
 export interface DriveSyncWatcherBindingScanInput {
@@ -22,6 +25,16 @@ export interface DriveSyncWatcherBindingScanInput {
 
 export interface DriveSyncWatcherDeps {
   readonly onChanges: (changes: readonly DriveSyncLocalChange[]) => void | Promise<void>
+  readonly onError?: (input: {
+    readonly bindingId: string
+    readonly localPath: string
+    readonly error: unknown
+  }) => void | Promise<void>
+  readonly onFlushError?: (input: {
+    readonly bindingId: string
+    readonly changes: readonly DriveSyncLocalChange[]
+    readonly error: unknown
+  }) => void | Promise<void>
   readonly debounceMs?: number
   readonly watch?: DriveSyncWatchFactory
 }
@@ -79,26 +92,24 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const binding = input.binding
     if (binding.kind === "file") return scanFileBinding(binding, input.baseline)
 
+    const activeBaseline = input.baseline.filter((entry) => entry.deletedAt === null)
+    const baselineByPath = new Map(activeBaseline.map((entry) => [entry.relativePath, entry] as const))
     const localEntries = await scanDriveSyncLocalTree({
       rootPath: binding.localPath,
       rules: binding.excludeRules,
       hashFiles: true,
+      hashCache: localSnapshotHashCache(activeBaseline),
     })
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry] as const))
-    const baselineByPath = new Map(
-      input.baseline
-        .filter((entry) => entry.deletedAt === null)
-        .map((entry) => [entry.relativePath, entry] as const),
-    )
     const changes: DriveSyncLocalChange[] = []
 
     for (const local of localEntries) {
       const baseline = baselineByPath.get(local.relativePath)
       const localPath = path.join(binding.localPath, local.relativePath)
       if (!baseline) {
-        changes.push(localChange(binding.id, local.relativePath, "created", localPath, local.kind))
+        changes.push(localChange(binding.id, local.relativePath, "created", localPath, local.kind, local))
       } else if (hasLocalChanged(local, baseline)) {
-        changes.push(localChange(binding.id, local.relativePath, "modified", localPath, local.kind))
+        changes.push(localChange(binding.id, local.relativePath, "modified", localPath, local.kind, local))
       }
     }
 
@@ -121,13 +132,22 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
       const watcher = watch(rootPath, { persistent: false, recursive: true }, (eventType, filename) => {
         handleRawEvent(binding.id, eventType, filename)
       })
-      watcher.on("error", () => {
-        enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+      watcher.on("error", (error) => {
+        stopBinding(binding.id)
+        reportWatcherError(binding, error)
       })
       entries.set(binding.id, { binding, rootPath, watcher })
-    } catch {
-      enqueueLocalChange(binding, "", "deleted", binding.localPath, "missing")
+    } catch (error) {
+      reportWatcherError(binding, error)
     }
+  }
+
+  function reportWatcherError(binding: DriveSyncBindingEntryV1, error: unknown): void {
+    void Promise.resolve(deps.onError?.({
+      bindingId: binding.id,
+      localPath: binding.localPath,
+      error,
+    })).catch(() => undefined)
   }
 
   function stopBinding(bindingId: string): void {
@@ -170,12 +190,15 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const byPath = pending.get(binding.id) ?? new Map<string, DriveSyncLocalChange>()
     byPath.set(relativePath, localChange(binding.id, relativePath, kind, localPath, localKind))
     pending.set(binding.id, byPath)
+    scheduleFlush(binding.id)
+  }
 
-    const existingTimer = timers.get(binding.id)
+  function scheduleFlush(bindingId: string): void {
+    const existingTimer = timers.get(bindingId)
     if (existingTimer) clearTimeout(existingTimer)
-    timers.set(binding.id, setTimeout(() => {
-      timers.delete(binding.id)
-      void flush(binding.id)
+    timers.set(bindingId, setTimeout(() => {
+      timers.delete(bindingId)
+      void flush(bindingId)
     }, debounceMs))
   }
 
@@ -183,7 +206,28 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const byPath = pending.get(bindingId)
     if (!byPath || byPath.size === 0) return
     pending.delete(bindingId)
-    await deps.onChanges([...byPath.values()].sort(compareChanges))
+    const changes = [...byPath.values()].sort(compareChanges)
+    try {
+      await deps.onChanges(changes)
+    } catch (error) {
+      requeueChanges(bindingId, changes)
+      reportFlushError(bindingId, changes, error)
+      scheduleFlush(bindingId)
+    }
+  }
+
+  function requeueChanges(bindingId: string, changes: readonly DriveSyncLocalChange[]): void {
+    const byPath = pending.get(bindingId) ?? new Map<string, DriveSyncLocalChange>()
+    for (const change of changes) byPath.set(change.relativePath, change)
+    pending.set(bindingId, byPath)
+  }
+
+  function reportFlushError(bindingId: string, changes: readonly DriveSyncLocalChange[], error: unknown): void {
+    void Promise.resolve(deps.onFlushError?.({
+      bindingId,
+      changes,
+      error,
+    })).catch(() => undefined)
   }
 
   function consumeSelfWrite(bindingId: string, relativePath: string): boolean {
@@ -204,6 +248,17 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     markSelfWrite,
     scanBinding,
   }
+}
+
+function localSnapshotHashCache(
+  baseline: readonly DriveSyncBaselineEntryV1[],
+): Map<string, { readonly kind: "file" | "folder"; readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null }> {
+  return new Map(baseline.map((entry) => [entry.relativePath, {
+    kind: entry.kind,
+    size: entry.localSize,
+    mtimeMs: entry.localMtimeMs,
+    hash: entry.localHash,
+  }] as const))
 }
 
 async function scanFileBinding(
@@ -230,7 +285,7 @@ function eventRelativePath(binding: DriveSyncBindingEntryV1, filename: string | 
     if (!filename) return ""
     return path.basename(String(filename)) === path.basename(binding.localPath) ? "" : null
   }
-  if (!filename) return ""
+  if (!filename) return null
   return toDriveSyncRelativePath(binding.localPath, path.join(binding.localPath, String(filename)))
 }
 
@@ -270,8 +325,18 @@ function localChange(
   kind: DriveSyncLocalChangeKind,
   localPath: string,
   localKind: DriveSyncLocalChange["localKind"],
+  snapshot?: { readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null },
 ): DriveSyncLocalChange {
-  return { bindingId, relativePath, kind, localPath, localKind }
+  return {
+    bindingId,
+    relativePath,
+    kind,
+    localPath,
+    localKind,
+    ...(snapshot
+      ? { localSize: snapshot.size, localMtimeMs: snapshot.mtimeMs, localHash: snapshot.hash }
+      : {}),
+  }
 }
 
 function compareChanges(left: DriveSyncLocalChange, right: DriveSyncLocalChange): number {

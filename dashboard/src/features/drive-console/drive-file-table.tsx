@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table'
 import { formatDriveBrowserSize } from '@/features/drive-browser/shared/drive-format'
 import { DriveBrowserItemIcon } from '@/features/drive-browser/shared/drive-icons'
+import { navigateDriveBrowserUrl, type DriveBrowserNavigate } from '@/features/drive-browser/shared/drive-navigation'
 
 export type DriveConsoleSystemView = 'files' | 'public-assets' | 'trash'
 
@@ -32,6 +33,7 @@ export function DriveFileTable({
   onPublishSite,
   onRename,
   onShare,
+  onNavigate = navigateDriveBrowserUrl,
   onDropFiles,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
@@ -42,6 +44,7 @@ export function DriveFileTable({
   readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
+  readonly onNavigate?: DriveBrowserNavigate
   readonly onDropFiles: (files: readonly File[]) => void
 }) {
   if (activeView !== 'files') return null
@@ -91,6 +94,7 @@ export function DriveFileTable({
               onPublishSite={onPublishSite}
               onRename={onRename}
               onShare={onShare}
+              onNavigate={onNavigate}
             />
           ))}
         </TableBody>
@@ -122,6 +126,7 @@ function DriveFileRow({
   onPublishSite,
   onRename,
   onShare,
+  onNavigate,
 }: {
   readonly item: DriveBrowserItemDto
   readonly onDelete: (item: DriveBrowserItemDto) => void
@@ -129,15 +134,16 @@ function DriveFileRow({
   readonly onPublishSite: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
+  readonly onNavigate: DriveBrowserNavigate
 }) {
   return (
     <TableRow
       role='link'
       tabIndex={0}
       className='cursor-pointer'
-      onClick={() => window.location.assign(item.browserUrl)}
+      onClick={() => onNavigate(item.browserUrl)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') window.location.assign(item.browserUrl)
+        if (event.key === 'Enter') onNavigate(item.browserUrl)
       }}
     >
       <TableCell>
@@ -158,7 +164,7 @@ function DriveFileRow({
           </Button>
           <Button type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
-            window.location.assign(item.browserUrl)
+            onNavigate(item.browserUrl)
           }}>
             预览
           </Button>

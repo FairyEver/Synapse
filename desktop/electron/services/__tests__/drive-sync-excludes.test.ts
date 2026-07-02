@@ -23,15 +23,19 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded("notes.synapse-sync-tmp", rules)).toBe(true)
     expect(isDriveSyncExcluded(".synapse-sync-trash", rules)).toBe(true)
     expect(isDriveSyncExcluded(".synapse-sync-trash/removed.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/.git/config", rules)).toBe(true)
   })
 
   it("excludes default build and log paths", () => {
     const rules = createDefaultDriveSyncExcludeRules()
 
     expect(isDriveSyncExcluded("node_modules/pkg/index.js", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/node_modules/pkg/index.js", rules)).toBe(true)
     expect(isDriveSyncExcluded("dist/app.js", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/dist/app.js", rules)).toBe(true)
     expect(isDriveSyncExcluded("debug.log", rules)).toBe(true)
     expect(isDriveSyncExcluded("docs/spec.md", rules)).toBe(false)
+    expect(isDriveSyncExcluded("packages/app/mydist/app.js", rules)).toBe(false)
   })
 
   it("applies imported gitignore and user rules without rereading .gitignore", () => {
@@ -42,7 +46,9 @@ describe("drive sync exclude utilities", () => {
     }
 
     expect(isDriveSyncExcluded("secrets/token.txt", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/secrets/token.txt", rules)).toBe(true)
     expect(isDriveSyncExcluded("private/note.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/private/note.md", rules)).toBe(true)
     expect(isDriveSyncExcluded(".gitignore", rules)).toBe(false)
   })
 

@@ -22,6 +22,8 @@ import {
   type DriveFileContentUpdateResult,
   type DriveFileTextUpdateInput,
   type DriveItemDto,
+  type DriveItemListInput,
+  type DriveItemListPageDto,
   type DriveItemTreeEntryDto,
   type DriveItemTreeListInput,
   type DriveItemTreeListPageDto,
@@ -153,7 +155,7 @@ type DriveRenderedAssetValue = {
 
 type DriveFolderZipEntry = {
   readonly path: string
-  readonly storageKey: string
+  readonly storageKey: string | null
 }
 
 type DriveFolderZipBrowserResult = {
@@ -171,6 +173,17 @@ type DriveBrowserDownloadResult = {
 type DriveBrowserTransferResult =
   | ({ readonly kind: "file" } & DriveBrowserDownloadResult)
   | ({ readonly kind: "zip" } & DriveFolderZipBrowserResult)
+
+type PreparedUploadRecord = {
+  readonly item: DriveItemRecord
+  readonly session: {
+    readonly id: string
+    readonly itemId: string
+    readonly storageKey: string
+    readonly expectedSize: bigint
+    readonly reservedBytes: bigint
+  }
+}
 
 type DriveBrowserChildrenPageInput = {
   readonly offset?: number
@@ -224,6 +237,8 @@ const driveShareWithEditors = {
 
 const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
 const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
+const DRIVE_ITEM_LIST_DEFAULT_LIMIT = 100
+const DRIVE_ITEM_LIST_MAX_LIMIT = 200
 const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
@@ -299,13 +314,24 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
+    const page = await this.listItemsPage(userId, parentId, { offset: 0, limit: DRIVE_ITEM_LIST_DEFAULT_LIMIT })
+    return [...page.items]
+  }
+
+  async listItemsPage(userId: string, parentId: string | null, input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const page = normalizeDriveItemListPage(input)
     const items = await this.prisma.driveItem.findMany({
       where: ordinaryDriveItemWhere({ userId, parentId }),
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      skip: page.offset,
+      take: page.limit + 1,
     })
-    return items.map(toDriveItemDto)
+    return {
+      items: items.slice(0, page.limit).map(toDriveItemDto),
+      page: buildDriveBrowserChildrenPage(page, items.length),
+    }
   }
 
   async getItem(userId: string, itemId: string): Promise<DriveItemDto> {
@@ -336,6 +362,7 @@ export class DriveService implements OnApplicationBootstrap {
   async restoreFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能恢复当前版本。")
     const usage = await ensureUsage(this.prisma, userId)
     if (usage.usedBytes + usage.reservedBytes + version.size > usage.quotaBytes) {
@@ -480,12 +507,12 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(item)
     this.assertEditableTextFile(item)
     const storageKey = this.requireActiveFileStorage(item)
-    const preview = await this.readTextPreview(storageKey)
+    const markdown = await this.readInlineEditableTextFile(item, storageKey)
     return {
       itemId: item.id,
       ownerId: item.userId,
       versionId: await this.findCurrentDriveFileVersionId(item),
-      markdown: preview.text,
+      markdown,
     }
   }
 
@@ -506,12 +533,12 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(current)
     this.assertEditableTextFile(current)
     const storageKey = this.requireActiveFileStorage(current)
-    const preview = await this.readTextPreview(storageKey)
+    const markdown = await this.readInlineEditableTextFile(current, storageKey)
     return {
       itemId: current.id,
       ownerId: access.value.ownerId,
       versionId: await this.findCurrentDriveFileVersionId(current),
-      markdown: preview.text,
+      markdown,
     }
   }
 
@@ -530,6 +557,7 @@ export class DriveService implements OnApplicationBootstrap {
   async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true; readonly deletePending?: boolean }> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
     const claimed = await this.prisma.driveFileVersion.updateMany({
       where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
@@ -569,7 +597,9 @@ export class DriveService implements OnApplicationBootstrap {
 
   async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
     const item = await this.requireOwnedFile(userId, itemId)
-    await this.requireOwnedFileVersion(userId, item.id, versionId)
+    const targetVersion = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(targetVersion)
+    if (item.storageKey === targetVersion.storageKey) throw new BadRequestException("不能保留当前版本。")
     const version = await this.prisma.driveFileVersion.update({
       where: { id: versionId },
       data: { isPinned },
@@ -588,6 +618,7 @@ export class DriveService implements OnApplicationBootstrap {
   async openFileVersionDownload(userId: string, itemId: string, versionId: string): Promise<DriveBrowserDownloadResult> {
     const item = await this.requireOwnedFile(userId, itemId)
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    this.assertFileVersionNotCleanupPending(version)
     const object = await this.storage.getObjectStream({ key: version.storageKey })
     return {
       stream: object.stream,
@@ -671,78 +702,12 @@ export class DriveService implements OnApplicationBootstrap {
     if (requestedSize > driveMaxFileBytes) throw new BadRequestException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const existingFile = await tx.driveItem.findFirst({
-        where: {
-          userId,
-          parentId: input.parentId,
-          type: DRIVE_ITEM_TYPE.file,
-          name,
-          storageStatus: DRIVE_STORAGE_STATUS.active,
-          deletedAt: null,
-          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
-          publicAsset: null,
-        },
-        include: driveItemWithShares,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      })
-      const reservedBytes = requestedSize
-      if (existingFile) {
-        const sessionId = randomUUID()
-        const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
-        const session = await tx.driveUploadSession.create({
-          data: {
-            id: sessionId,
-            userId,
-            itemId: existingFile.id,
-            storageKey,
-            expectedName: name,
-            expectedSize: requestedSize,
-            expectedMime: input.mimeType ?? null,
-            reservedBytes,
-            status: DRIVE_UPLOAD_STATUS.pending,
-            credentialKind: "presigned_put",
-            expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
-          },
-        })
-        await reserveDriveUsageBytes(tx, userId, reservedBytes)
-        return { item: existingFile, session }
-      }
-      const item = await tx.driveItem.create({
-        data: {
-          userId,
-          parentId: input.parentId,
-          type: DRIVE_ITEM_TYPE.file,
-          name,
-          size: requestedSize,
-          mimeType: input.mimeType ?? null,
-          storageStatus: DRIVE_STORAGE_STATUS.pending,
-          uploadStatus: DRIVE_UPLOAD_STATUS.pending,
-        },
-      })
-      const storageKey = driveStorageKeyForItem(item.id)
-      const updatedItem = await tx.driveItem.update({
-        where: { id: item.id },
-        data: { storageKey },
-        include: driveItemWithShares,
-      })
-      const session = await tx.driveUploadSession.create({
-        data: {
-          userId,
-          itemId: item.id,
-          storageKey,
-          expectedName: name,
-          expectedSize: requestedSize,
-          expectedMime: input.mimeType ?? null,
-          reservedBytes: requestedSize,
-          status: DRIVE_UPLOAD_STATUS.pending,
-          credentialKind: "presigned_put",
-          expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
-        },
-      })
-      await reserveDriveUsageBytes(tx, userId, requestedSize)
-      return { item: updatedItem, session }
-    })
+    const result = await this.prisma.$transaction((tx) => this.prepareUploadRecord(tx, userId, {
+      parentId: input.parentId,
+      name,
+      requestedSize,
+      mimeType: input.mimeType ?? null,
+    }))
 
     let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
     try {
@@ -767,14 +732,104 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  private async prepareUploadRecord(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      readonly parentId: string | null
+      readonly name: string
+      readonly requestedSize: bigint
+      readonly mimeType: string | null
+    },
+  ): Promise<PreparedUploadRecord> {
+    const existingFile = await tx.driveItem.findFirst({
+      where: {
+        userId,
+        parentId: input.parentId,
+        type: DRIVE_ITEM_TYPE.file,
+        name: input.name,
+        storageStatus: DRIVE_STORAGE_STATUS.active,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        publicAsset: null,
+      },
+      include: driveItemWithShares,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    })
+    const reservedBytes = input.requestedSize
+    if (existingFile) {
+      const sessionId = randomUUID()
+      const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
+      const session = await tx.driveUploadSession.create({
+        data: {
+          id: sessionId,
+          userId,
+          itemId: existingFile.id,
+          storageKey,
+          expectedName: input.name,
+          expectedSize: input.requestedSize,
+          expectedMime: input.mimeType,
+          reservedBytes,
+          status: DRIVE_UPLOAD_STATUS.pending,
+          credentialKind: "presigned_put",
+          expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
+        },
+      })
+      await reserveDriveUsageBytes(tx, userId, reservedBytes)
+      return { item: existingFile, session }
+    }
+    const item = await tx.driveItem.create({
+      data: {
+        userId,
+        parentId: input.parentId,
+        type: DRIVE_ITEM_TYPE.file,
+        name: input.name,
+        size: input.requestedSize,
+        mimeType: input.mimeType,
+        storageStatus: DRIVE_STORAGE_STATUS.pending,
+        uploadStatus: DRIVE_UPLOAD_STATUS.pending,
+      },
+    })
+    const storageKey = driveStorageKeyForItem(item.id)
+    const updatedItem = await tx.driveItem.update({
+      where: { id: item.id },
+      data: { storageKey },
+      include: driveItemWithShares,
+    })
+    const session = await tx.driveUploadSession.create({
+      data: {
+        userId,
+        itemId: item.id,
+        storageKey,
+        expectedName: input.name,
+        expectedSize: input.requestedSize,
+        expectedMime: input.mimeType,
+        reservedBytes: input.requestedSize,
+        status: DRIVE_UPLOAD_STATUS.pending,
+        credentialKind: "presigned_put",
+        expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
+      },
+    })
+    await reserveDriveUsageBytes(tx, userId, input.requestedSize)
+    return { item: updatedItem, session }
+  }
+
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
-    if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
+    const plannedDirectories = (input.directories ?? []).map((directory) => {
+      const parts = normalizeRelativePath(directory.relativePath)
+      const relativePath = parts.join("/")
+      return { parts, relativePath }
+    })
     const plannedFiles = input.files.map((file) => {
       const parts = normalizeRelativePath(file.relativePath)
       const relativePath = parts.join("/")
       return { file, parts, relativePath }
     })
     const seenRelativePaths = new Set<string>()
+    for (const planned of plannedDirectories) {
+      if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件夹路径重复。")
+      seenRelativePaths.add(planned.relativePath)
+    }
     for (const planned of plannedFiles) {
       if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件路径重复。")
       seenRelativePaths.add(planned.relativePath)
@@ -786,18 +841,15 @@ export class DriveService implements OnApplicationBootstrap {
 
     try {
       const rootResult = await this.ensureFolderForUpload(userId, { parentId: input.parentId, name: input.folderName }, auditContext)
-      root = rootResult.folder
+      const rootFolder = rootResult.folder
+      root = rootFolder
       preservedItemIds = rootResult.created
         ? new Set<string>()
-        : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, root.id))
-      const folderIdsByPath = new Map<string, string>([["", root.id]])
+        : new Set(await this.listDriveSubtreeItemIds(this.prisma, userId, rootFolder.id))
+      const folderIdsByPath = new Map<string, string>([["", rootFolder.id]])
 
-      for (const planned of plannedFiles) {
-        const { file, parts, relativePath } = planned
-        const fileName = parts.at(-1)
-        if (!fileName) throw new BadRequestException("文件路径无效。")
-        const folderParts = parts.slice(0, -1)
-        let parentId = root.id
+      const ensureRelativeFolderPath = async (folderParts: readonly string[]): Promise<string> => {
+        let parentId = rootFolder.id
         let currentPath = ""
         for (const folderName of folderParts) {
           currentPath = currentPath ? `${currentPath}/${folderName}` : folderName
@@ -811,18 +863,76 @@ export class DriveService implements OnApplicationBootstrap {
           folderIdsByPath.set(currentPath, folder.id)
           parentId = folder.id
         }
-        const prepared = await this.prepareUpload(userId, {
-          parentId,
-          name: fileName,
-          size: file.size,
-          mimeType: file.mimeType ?? null,
-          publicAppUrl: input.publicAppUrl,
-        })
-        preparedSessionIds.push(prepared.sessionId)
-        entries.push({ relativePath, ...prepared })
+        return parentId
       }
 
-      return { root, rootCreated: rootResult.created, entries }
+      for (const planned of plannedDirectories) {
+        await ensureRelativeFolderPath(planned.parts)
+      }
+
+      const fileTargets: Array<{
+        readonly relativePath: string
+        readonly parentId: string
+        readonly name: string
+        readonly requestedSize: bigint
+        readonly mimeType: string | null
+      }> = []
+      for (const planned of plannedFiles) {
+        const { file, parts, relativePath } = planned
+        const fileName = parts.at(-1)
+        if (!fileName) throw new BadRequestException("文件路径无效。")
+        const parentId = await ensureRelativeFolderPath(parts.slice(0, -1))
+        const requestedSize = parseRequestedSize(file.size)
+        if (requestedSize > driveMaxFileBytes) throw new BadRequestException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
+        fileTargets.push({
+          relativePath,
+          parentId,
+          name: fileName,
+          requestedSize,
+          mimeType: file.mimeType ?? null,
+        })
+      }
+
+      const preparedFiles = await this.prisma.$transaction(async (tx) => {
+        const result: Array<{
+          readonly relativePath: string
+          readonly mimeType: string | null
+          readonly item: PreparedUploadRecord["item"]
+          readonly session: PreparedUploadRecord["session"]
+        }> = []
+        for (const target of fileTargets) {
+          const prepared = await this.prepareUploadRecord(tx, userId, target)
+          result.push({
+            relativePath: target.relativePath,
+            mimeType: target.mimeType,
+            item: prepared.item,
+            session: prepared.session,
+          })
+        }
+        return result
+      })
+
+      preparedSessionIds.push(...preparedFiles.map((prepared) => prepared.session.id))
+      for (const prepared of preparedFiles) {
+        const upload = await this.storage.createUploadInstruction({
+          key: prepared.session.storageKey,
+          contentType: prepared.mimeType ?? undefined,
+          expectedSize: prepared.session.expectedSize,
+        })
+        entries.push({
+          relativePath: prepared.relativePath,
+          sessionId: prepared.session.id,
+          item: toDriveItemDto(prepared.item),
+          upload: {
+            method: upload.method,
+            url: upload.url,
+            expiresAt: upload.expiresAt.toISOString(),
+            headers: upload.headers,
+          },
+        })
+      }
+
+      return { root: rootFolder, rootCreated: rootResult.created, entries }
     } catch (error) {
       if (root) await this.rollbackFolderUploadPrepare(userId, root.id, preservedItemIds, preparedSessionIds)
       throw error
@@ -1510,40 +1620,50 @@ export class DriveService implements OnApplicationBootstrap {
     const created: DriveItemDto[] = []
     const reused: DriveItemDto[] = []
 
-    for (const name of segments) {
-      const fileCollision = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
-        select: { id: true },
-      })
-      if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
+    await this.prisma.$transaction(async (tx) => {
+      for (const name of segments) {
+        const fileCollision = await tx.driveItem.findFirst({
+          where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+          select: { id: true },
+        })
+        if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
 
-      const existingFolder = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
-        include: driveItemWithShares,
-      })
-      if (existingFolder) {
-        const dto = toDriveItemDto(existingFolder)
-        reused.push(dto)
-        parentId = dto.id
-        continue
-      }
+        const existingFolder = await tx.driveItem.findFirst({
+          where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+          include: driveItemWithShares,
+        })
+        if (existingFolder) {
+          const dto = toDriveItemDto(existingFolder)
+          reused.push(dto)
+          parentId = dto.id
+          continue
+        }
 
-      const folder = await this.prisma.driveItem.create({
-        data: {
+        const folder = await tx.driveItem.create({
+          data: {
+            userId,
+            parentId,
+            type: DRIVE_ITEM_TYPE.folder,
+            name,
+            size: 0n,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+          },
+          include: driveItemWithShares,
+        })
+        await this.recordDriveChange({
           userId,
-          parentId,
-          type: DRIVE_ITEM_TYPE.folder,
-          name,
-          size: 0n,
-          storageStatus: DRIVE_STORAGE_STATUS.active,
-          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
-        },
-        include: driveItemWithShares,
-      })
-      const dto = toDriveItemDto(folder)
-      created.push(dto)
-      parentId = dto.id
-    }
+          itemId: folder.id,
+          parentId: folder.parentId,
+          type: "created",
+          name: folder.name,
+          actor: userId,
+        }, tx)
+        const dto = toDriveItemDto(folder)
+        created.push(dto)
+        parentId = dto.id
+      }
+    })
 
     const item = created.at(-1) ?? reused.at(-1)
     if (!item) throw new BadRequestException("文件夹路径不能为空。")
@@ -1604,6 +1724,14 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: move.itemId },
           data: { parentId: move.targetParentId },
         })
+        await this.recordDriveChange({
+          userId,
+          itemId: move.itemId,
+          parentId: move.targetParentId,
+          type: "moved",
+          name: move.name,
+          actor: userId,
+        }, tx)
       }
     })
     this.reorganizationPlans.delete(input.planId)
@@ -2260,6 +2388,10 @@ export class DriveService implements OnApplicationBootstrap {
     return version
   }
 
+  private assertFileVersionNotCleanupPending(version: { readonly deletePending: boolean }): void {
+    if (version.deletePending) throw new BadRequestException("历史版本正在清理中。")
+  }
+
   private async commitTextFileChange(input: {
     readonly ownerId: string
     readonly actorUserId: string
@@ -2273,14 +2405,11 @@ export class DriveService implements OnApplicationBootstrap {
     if (input.input.contentType !== "text") throw new BadRequestException("编辑内容无效。")
     this.assertEditableTextFile(input.item)
     const body = Buffer.from(input.input.text, "utf8")
+    const bodySize = BigInt(body.byteLength)
     if (body.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new PayloadTooLargeException("文件内容过大。")
     const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
       throw new ConflictException("文件已有新内容。")
-    }
-    const usage = await ensureUsage(this.prisma, input.ownerId)
-    if (usage.usedBytes + usage.reservedBytes + BigInt(body.byteLength) > usage.quotaBytes) {
-      throw new BadRequestException("云盘空间不足。")
     }
 
     const nextVersionId = createDriveFileVersionId()
@@ -2306,16 +2435,17 @@ export class DriveService implements OnApplicationBootstrap {
         if (!transactionCurrentVersion || transactionCurrentVersion.id !== input.input.baseVersionId) {
           throw new ConflictException("文件已有新内容。")
         }
+        await reserveDriveUsageBytes(tx, input.ownerId, bodySize)
         await updateDriveUsageAfterUploadCompletion(tx, input.ownerId, {
-          reservedBytes: 0n,
-          usedBytesDelta: BigInt(body.byteLength),
+          reservedBytes: bodySize,
+          usedBytesDelta: bodySize,
         })
         await createDriveFileVersion(tx, {
           id: nextVersionId,
           itemId: currentItem.id,
           userId: input.ownerId,
           storageKey: nextStorageKey,
-          size: BigInt(body.byteLength),
+          size: bodySize,
           mimeType: currentItem.mimeType,
           source: DRIVE_FILE_VERSION_SOURCE.onlineEdit,
           createdBy: input.actorUserId,
@@ -2324,7 +2454,7 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: currentItem.id },
           data: {
             storageKey: nextStorageKey,
-            size: BigInt(body.byteLength),
+            size: bodySize,
             mimeType: currentItem.mimeType,
             storageStatus: DRIVE_STORAGE_STATUS.active,
             uploadStatus: DRIVE_UPLOAD_STATUS.completed,
@@ -2563,6 +2693,14 @@ export class DriveService implements OnApplicationBootstrap {
   private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
     const object = await this.storage.getObjectStream({ key: storageKey })
     return readStreamTextPrefix(object.stream, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
+  }
+
+  private async readInlineEditableTextFile(item: DriveItemRecordWithStorage, storageKey: string): Promise<string> {
+    if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    const content = await readStreamTextPrefix(object.stream, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)
+    if (content.truncated) throw new PayloadTooLargeException("文件内容过大。")
+    return content.text
   }
 
   private requireActiveFileStorage(item: DriveItemRecordWithStorage): string {
@@ -2854,7 +2992,9 @@ export class DriveService implements OnApplicationBootstrap {
       for (const child of children) {
         const childPath = current.prefix ? `${current.prefix}/${child.name}` : child.name
         if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: childPath })
+          const folderPath = createUniqueDriveZipEntryPath(childPath, usedPaths)
+          yield { path: `${folderPath}/`, storageKey: null }
+          queue.push({ parentId: child.id, prefix: folderPath })
           continue
         }
         if (!child.storageKey) continue
@@ -3532,6 +3672,21 @@ function normalizeDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput
   return {
     offset,
     limit: Math.min(rawLimit, DRIVE_BROWSER_CHILDREN_MAX_LIMIT),
+  }
+}
+
+function normalizeDriveItemListPage(input?: Pick<DriveItemListInput, "offset" | "limit">): { readonly offset: number; readonly limit: number } {
+  const requestedOffset = input?.offset
+  const requestedLimit = input?.limit
+  const offset = typeof requestedOffset === "number" && Number.isFinite(requestedOffset) && requestedOffset > 0
+    ? Math.floor(requestedOffset)
+    : 0
+  const rawLimit = typeof requestedLimit === "number" && Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.floor(requestedLimit)
+    : DRIVE_ITEM_LIST_DEFAULT_LIMIT
+  return {
+    offset,
+    limit: Math.min(rawLimit, DRIVE_ITEM_LIST_MAX_LIMIT),
   }
 }
 

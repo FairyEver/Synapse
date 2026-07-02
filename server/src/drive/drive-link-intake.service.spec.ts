@@ -121,6 +121,71 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("resolves direct share child links from the target item snapshot", async () => {
+    const { service, drive } = createService()
+    drive.resolvePublicShareAccess.mockResolvedValueOnce({
+      status: "ok",
+      value: {
+        id: "share-record-1",
+        shareId: "shr_123",
+        ownerId: "owner-1",
+        type: "folder",
+        storageKey: "",
+        accessMode: "link_read",
+        editorEmails: [],
+        item: {
+          id: "folder-1",
+          parentId: null,
+          name: "交付包",
+          type: "folder",
+          size: "0",
+          mimeType: "",
+          storageStatus: "active",
+          shared: true,
+          createdAt: "2026-06-28T00:00:00.000Z",
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    })
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      context: "share",
+      surface: "standalone",
+      current: {
+        id: "item-prd",
+        name: "PRD.md",
+        type: "file",
+        size: "8",
+        mimeType: "text/markdown",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        previewKind: "markdown",
+        browserUrl: "/share/shr_123/items/item-prd",
+        downloadUrl: "/share/shr_123/items/item-prd/download",
+      },
+      breadcrumbs: [],
+      children: [],
+      childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+      preview: { kind: "markdown", text: "# PRD", html: "<h1>PRD</h1>", outline: [], truncated: false, imageUrl: null, visitUrl: null },
+      edit: null,
+      annotation: null,
+      canDownload: true,
+      canZip: false,
+    } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123/items/item-prd`, password: "secret" })).resolves.toMatchObject({
+      ok: true,
+      linkType: "share_item",
+      access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+      root: { name: "PRD.md", type: "file", previewKind: "markdown" },
+      ref: { kind: "share", shareId: "shr_123", itemId: "item-prd" },
+    })
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_123",
+      itemId: "item-prd",
+      password: "secret",
+      cookie: undefined,
+    })
+  })
+
   it("returns password_required without echoing password", async () => {
     const { service, drive } = createService()
     drive.resolvePublicShareAccess.mockResolvedValueOnce({ status: "password_required" } as never)
@@ -230,6 +295,43 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("lists the exact published site asset for concrete site file links", async () => {
+    const { service, sites } = createService()
+    sites.listPublicSiteAssets.mockResolvedValueOnce({
+      status: "ok",
+      assets: [
+        {
+          relativePath: "pages/create-task.html",
+          storageKey: "site/pages/create-task.html",
+          contentType: "text/html",
+          size: 20n,
+        },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    } as never)
+
+    await expect(service.list({ url: `${publicAppUrl}/sites/site_public/pages/create-task.html` })).resolves.toEqual({
+      items: [
+        {
+          path: "pages/create-task.html",
+          name: "create-task.html",
+          type: "file",
+          mimeType: "text/html",
+          previewKind: "html-source",
+          size: "20",
+        },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+    expect(sites.listPublicSiteAssets).toHaveBeenCalledWith("site_public", {
+      cookie: null,
+      password: undefined,
+      path: "pages/create-task.html",
+      offset: undefined,
+      limit: undefined,
+    })
+  })
+
   it("reads markdown text from a share link", async () => {
     const { service } = createService()
 
@@ -238,6 +340,50 @@ describe("DriveLinkIntakeService", () => {
       mimeType: "text/markdown",
       previewKind: "markdown",
       text: "# 需求\n正文",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+  })
+
+  it("reads empty markdown text from a share link", async () => {
+    const { service, drive } = createService()
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      context: "share",
+      surface: "standalone",
+      current: {
+        id: "item-empty",
+        name: "empty.md",
+        type: "file",
+        size: "0",
+        mimeType: "text/markdown",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        previewKind: "markdown",
+        browserUrl: "/share/shr_123",
+        downloadUrl: "/share/shr_123/download",
+      },
+      breadcrumbs: [],
+      children: [],
+      childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+      preview: {
+        kind: "markdown",
+        text: "",
+        html: "",
+        outline: [],
+        truncated: false,
+        imageUrl: null,
+        visitUrl: null,
+      },
+      edit: null,
+      annotation: null,
+      canDownload: true,
+      canZip: false,
+    } as never)
+
+    await expect(service.readText({ url: `${publicAppUrl}/share/shr_123`, maxBytes: 64 })).resolves.toMatchObject({
+      path: "empty.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      text: "",
       truncated: false,
       source: { linkType: "share" },
     })

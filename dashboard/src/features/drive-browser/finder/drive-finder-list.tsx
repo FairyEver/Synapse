@@ -14,14 +14,17 @@ import {
 import { cn } from '@/lib/utils'
 import { formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
+import { navigateDriveBrowserUrl, type DriveBrowserNavigate } from '../shared/drive-navigation'
 
 export function DriveFinderList({
   snapshot,
+  onNavigate = navigateDriveBrowserUrl,
   onLoadMoreChildren,
   loadingMoreChildren = false,
   loadMoreChildrenError = null,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
+  readonly onNavigate?: DriveBrowserNavigate
   readonly onLoadMoreChildren?: () => void
   readonly loadingMoreChildren?: boolean
   readonly loadMoreChildrenError?: string | null
@@ -57,10 +60,10 @@ export function DriveFinderList({
                 aria-current={selected ? 'page' : undefined}
                 className={cn('cursor-pointer', selected && 'bg-muted')}
                 onClick={() => {
-                  window.location.assign(item.browserUrl)
+                  onNavigate(item.browserUrl)
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') window.location.assign(item.browserUrl)
+                  if (event.key === 'Enter') onNavigate(item.browserUrl)
                 }}
               >
                 <TableCell>

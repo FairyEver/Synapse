@@ -64,6 +64,7 @@ describe('DriveFileVersionContent', () => {
     expect(source).toContain('getNextPageParam')
     expect(source).toContain('lastPage.page.nextOffset')
     expect(source).toContain('fetchNextPage')
+    expect(source).toContain('maxPages: versionWindowPageCount')
   })
 
   it('keeps version rows inside a bounded table frame', () => {
@@ -106,6 +107,18 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('恢复')
     expect(html).toContain('保留')
     expect(html).toContain('删除')
+  })
+
+  it('hides actions for versions pending cleanup', () => {
+    const html = renderVersions([
+      version({ id: 'version-pending', versionNumber: 3, deletePending: true }),
+    ])
+
+    expect(html).toContain('待清理')
+    expect(html).not.toContain('下载')
+    expect(html).not.toContain('恢复')
+    expect(html).not.toContain('保留')
+    expect(html).not.toContain('删除')
   })
 
   it('shows a load more action when more version pages are available', () => {
@@ -194,6 +207,33 @@ describe('DriveFileVersionContent', () => {
     })
 
     expect(document.body.textContent).toContain('v2')
+  })
+
+  it('caps loaded version rows after multiple history pages', async () => {
+    vi.mocked(driveFileVersionsApi.list)
+      .mockResolvedValueOnce(versionPage(300, 201, 100))
+      .mockResolvedValueOnce(versionPage(200, 101, 200))
+      .mockResolvedValueOnce(versionPage(100, 1, null))
+    renderVersionDialog()
+
+    await waitFor(() => {
+      expect(buttonByText('加载更多')).toBeTruthy()
+    })
+    await act(async () => {
+      buttonByText('加载更多')?.click()
+    })
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('v200')
+    })
+    await act(async () => {
+      buttonByText('加载更多')?.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('v99')
+      expect(document.querySelectorAll('tbody tr')).toHaveLength(200)
+    })
+    expect(document.body.textContent).not.toContain('v300')
   })
 })
 
@@ -292,5 +332,25 @@ function version(overrides: Partial<DriveFileVersionDto> = {}): DriveFileVersion
     createdAt: '2026-06-17T12:01:33.000Z',
     createdBy: null,
     ...overrides,
+  }
+}
+
+function versionPage(fromVersionNumber: number, toVersionNumber: number, nextOffset: number | null) {
+  const count = fromVersionNumber - toVersionNumber + 1
+  return {
+    items: Array.from({ length: count }, (_, index) => {
+      const versionNumber = fromVersionNumber - index
+      return version({
+        id: `version-${versionNumber}`,
+        versionNumber,
+        isCurrent: versionNumber === 300,
+      })
+    }),
+    page: {
+      limit: 100,
+      offset: 300 - fromVersionNumber,
+      nextOffset,
+      hasMore: nextOffset !== null,
+    },
   }
 }

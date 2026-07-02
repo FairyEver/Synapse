@@ -354,7 +354,7 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('disables image source import while markdown has unsaved edits', async () => {
-    vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
+    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
       canImport: true,
       sources: [
         imageSource({
@@ -366,13 +366,12 @@ describe('DriveMDXeditorRenderer', () => {
     }))
     const importImages = vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
     renderRenderer({ edit: editable(), imageSourceContext: { context: 'owner', itemId: 'file' } })
-    await act(async () => {
-      await Promise.resolve()
-    })
+
+    expect(scanImages).not.toHaveBeenCalled()
 
     await inputValue(editor(), '# Draft')
 
-    expect(buttonWithText('图片来源 1').disabled).toBe(true)
+    expect(buttonWithText('图片来源').disabled).toBe(true)
     expect(importImages).not.toHaveBeenCalled()
   })
 
@@ -494,6 +493,20 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(document.body.textContent).toContain('源码')
     expect(document.body.textContent).toContain('解析失败')
+  })
+
+  it('clears parse error after saving recovered source markdown', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# broken-mdx')
+    await inputValue(sourceEditor(), '# Fixed')
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Fixed', baseVersionId: 'version-1' })
+    expect(document.body.textContent).not.toContain('解析失败')
+    expect(editor().value).toBe('# Fixed')
+    expect(document.body.textContent).toContain('已同步')
   })
 })
 
@@ -716,6 +729,12 @@ async function selectImage(file: File) {
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-mdxeditor="true"]')
   if (!(element instanceof HTMLTextAreaElement)) throw new Error('mdx editor not found')
+  return element
+}
+
+function sourceEditor(): HTMLTextAreaElement {
+  const element = Array.from(document.querySelectorAll('textarea')).find((item) => item.dataset.mdxeditor !== 'true')
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error('source editor not found')
   return element
 }
 

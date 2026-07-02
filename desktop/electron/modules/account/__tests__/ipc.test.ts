@@ -32,6 +32,7 @@ vi.mock("../../../services/account-service", () => ({
     logout: async () => ({ status: "unauthenticated" }),
     listWebhooks: async () => [],
     listDriveItems: async () => [],
+    listDriveItemsPage: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 100, hasMore: false, nextOffset: null } })),
     prepareDriveUpload: async () => ({}),
     prepareDriveFolderUpload: async () => ({}),
     completeDriveUpload: async () => ({}),
@@ -246,17 +247,15 @@ describe("accountIpcModule", () => {
     })).toThrow()
   })
 
-  it("keeps public asset and trash list requests pagination-only", () => {
+  it("accepts public asset and trash list search filters", () => {
     const publicAssetsRequest = accountIpcModule.methods.listDrivePublicAssets.request
     const trashRequest = accountIpcModule.methods.listDriveTrash.request
     expect(publicAssetsRequest).toBeDefined()
     expect(trashRequest).toBeDefined()
     if (!publicAssetsRequest || !trashRequest) throw new Error("expected drive list request schemas")
 
-    expect(publicAssetsRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
-    expect(trashRequest.parse({ offset: 0, limit: 50 })).toEqual({ offset: 0, limit: 50 })
-    expect(publicAssetsRequest.safeParse({ offset: 0, limit: 50, search: "logo" }).success).toBe(false)
-    expect(trashRequest.safeParse({ offset: 0, limit: 50, search: "old" }).success).toBe(false)
+    expect(publicAssetsRequest.parse({ offset: 0, limit: 50, search: "logo" })).toEqual({ offset: 0, limit: 50, search: "logo" })
+    expect(trashRequest.parse({ offset: 0, limit: 50, search: "old" })).toEqual({ offset: 0, limit: 50, search: "old" })
   })
 
   it("accepts Drive site list filters and routes site handlers", async () => {
@@ -774,24 +773,51 @@ describe("accountIpcModule", () => {
     expect(responseSchema).toBeDefined()
     if (!responseSchema) throw new Error("expected drive item list response schema")
 
-    expect(responseSchema.parse([{
-      id: "item-1",
-      parentId: null,
-      type: "file",
-      name: "shared.txt",
-      size: "12",
-      mimeType: "text/plain",
-      storageStatus: "active",
-      shared: true,
-      activeShareId: "share-1",
-      createdAt: "2026-06-07T12:00:00.000Z",
-      updatedAt: "2026-06-07T12:00:00.000Z",
-    }])).toEqual([
+    expect(responseSchema.parse({
+      items: [{
+        id: "item-1",
+        parentId: null,
+        type: "file",
+        name: "shared.txt",
+        size: "12",
+        mimeType: "text/plain",
+        storageStatus: "active",
+        shared: true,
+        activeShareId: "share-1",
+        createdAt: "2026-06-07T12:00:00.000Z",
+        updatedAt: "2026-06-07T12:00:00.000Z",
+      }],
+      page: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+    }).items).toEqual([
       expect.objectContaining({
         activeShareId: "share-1",
         shared: true,
       }),
     ])
+  })
+
+  it("accepts drive item list pagination input", async () => {
+    const requestSchema = accountIpcModule.methods.listDriveItems.request
+    expect(requestSchema).toBeDefined()
+    if (!requestSchema) throw new Error("expected drive item list request schema")
+
+    expect(requestSchema.parse({ parentId: "folder-1", offset: 100, limit: 50 })).toEqual({
+      parentId: "folder-1",
+      offset: 100,
+      limit: 50,
+    })
+
+    await accountIpcModule.methods.listDriveItems.handler({} as IpcHandlerContext, {
+      parentId: "folder-1",
+      offset: 100,
+      limit: 50,
+    })
+
+    expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      offset: 100,
+      limit: 50,
+    })
   })
 
   it("passes drive access settings through share handlers", async () => {

@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
   },
   driveApi: {
     prepareUpload: vi.fn(),
+    prepareFolderUpload: vi.fn(),
     completeUpload: vi.fn(),
     cancelUpload: vi.fn(),
   },
@@ -57,18 +58,58 @@ describe('uploadDriveFiles', () => {
     expect(driveApi.cancelUpload).not.toHaveBeenCalled()
   })
 
-  it('skips folder-like files and never calls prepare for them', async () => {
+  it('uploads folder files through folder prepare, PUT, and complete', async () => {
     const folderFile = new File(['x'], 'nested.md', { type: 'text/markdown' })
-    Object.defineProperty(folderFile, 'webkitRelativePath', { value: 'Folder/nested.md' })
+    Object.defineProperty(folderFile, 'webkitRelativePath', { value: 'Project/docs/nested.md' })
+    vi.mocked(driveApi.prepareFolderUpload).mockResolvedValue({
+      root: {} as never,
+      rootCreated: true,
+      entries: [{
+        relativePath: 'docs/nested.md',
+        sessionId: 'session-folder',
+        item: {} as never,
+        upload: {
+          method: 'PUT',
+          url: 'https://upload.example/folder',
+          expiresAt: '2026-06-29T00:00:00.000Z',
+          headers: { 'content-type': 'text/markdown' },
+        },
+      }],
+    })
+    vi.mocked(driveApi.completeUpload).mockResolvedValue({} as never)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
 
     const result = await uploadDriveFiles({ parentId: null, files: [folderFile] })
 
-    expect(result).toEqual({
-      completed: 0,
-      failed: 0,
-      skipped: 1,
-      message: '不支持文件夹上传',
+    expect(result).toEqual({ completed: 1, failed: 0, skipped: 0 })
+    expect(driveApi.prepareFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: 'Project',
+      directories: [{ relativePath: 'docs' }],
+      files: [{
+        relativePath: 'docs/nested.md',
+        size: String(folderFile.size),
+        mimeType: 'text/markdown',
+      }],
     })
+    expect(driveApi.prepareUpload).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith('https://upload.example/folder', {
+      method: 'PUT',
+      headers: { 'content-type': 'text/markdown' },
+      body: folderFile,
+    })
+    expect(driveApi.completeUpload).toHaveBeenCalledWith('session-folder')
+    expect(driveApi.cancelUpload).not.toHaveBeenCalled()
+  })
+
+  it('keeps folder prepare failures scoped to the selected folder files', async () => {
+    const folderFile = new File(['x'], 'nested.md', { type: 'text/markdown' })
+    Object.defineProperty(folderFile, 'webkitRelativePath', { value: 'Project/nested.md' })
+    vi.mocked(driveApi.prepareFolderUpload).mockRejectedValue(new ApiError('目录名不可用', 400))
+
+    const result = await uploadDriveFiles({ parentId: null, files: [folderFile] })
+
+    expect(result).toEqual({ completed: 0, failed: 1, skipped: 0, message: '目录名不可用' })
     expect(driveApi.prepareUpload).not.toHaveBeenCalled()
   })
 

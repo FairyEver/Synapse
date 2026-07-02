@@ -69,6 +69,17 @@ export const DRIVE_SYNC_OPERATION_STATUSES = [
   "error",
 ] as const
 export type DriveSyncOperationStatus = typeof DRIVE_SYNC_OPERATION_STATUSES[number]
+export const DRIVE_SYNC_OPERATION_KINDS = [
+  "download",
+  "upload",
+  "delete_local",
+  "delete_remote",
+  "move_local",
+  "move_remote",
+  "scan",
+  "resync",
+] as const
+export type DriveSyncOperationKind = typeof DRIVE_SYNC_OPERATION_KINDS[number]
 export const DRIVE_SYNC_INITIAL_DIRECTIONS = ["remote_to_local", "local_to_remote", "bind_existing"] as const
 export type DriveSyncInitialDirection = typeof DRIVE_SYNC_INITIAL_DIRECTIONS[number]
 export const DRIVE_SYNC_BINDING_PREVIEW_STATUSES = ["ready", "blocked", "warning"] as const
@@ -144,6 +155,17 @@ export interface DriveItemDto {
   readonly updatedAt: string
 }
 
+export interface DriveItemListInput {
+  readonly parentId?: string | null
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DriveItemListPageDto {
+  readonly items: readonly DriveItemDto[]
+  readonly page: DriveBrowserChildrenPageDto
+}
+
 export interface DriveChangeDto {
   readonly id: string
   readonly sequence: string
@@ -197,6 +219,7 @@ export interface DriveSyncConflictDto {
 export interface DriveSyncOperationDto {
   readonly id: string
   readonly bindingId: string
+  readonly kind: DriveSyncOperationKind
   readonly relativePath: string
   readonly status: DriveSyncOperationStatus
   readonly message: string | null
@@ -273,6 +296,10 @@ export interface DriveFolderUploadPrepareFileInput {
   readonly relativePath: string
   readonly size: string
   readonly mimeType?: string | null
+}
+
+export interface DriveFolderUploadPrepareDirectoryInput {
+  readonly relativePath: string
 }
 
 export interface DriveFolderUploadPrepareResult {
@@ -376,6 +403,7 @@ export interface DriveSiteDto {
   readonly urlWithPassword: string
   readonly passwordEnabled: boolean
   readonly password: string | null
+  readonly expiresIn: DriveAccessExpiresIn
   readonly expiresAt: string | null
   readonly sourceFolderItemId: string | null
   readonly sourceFolderName: string | null
@@ -1062,6 +1090,7 @@ function maskDriveBrowserPath(value: string): string {
     .replace(/\/console\/drive\/items\/[^/?#]+/u, "/console/drive/items/***")
     .replace(/\/share\/[^/?#]+/u, "/share/***")
     .replace(/(\/share\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
+    .replace(/\/sites\/[^/?#]+/u, "/sites/***")
     .replace(/\/files\/[^/?#]+/u, "/files/***")
 }
 

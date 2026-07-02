@@ -303,6 +303,7 @@ export class DriveLifecycleService {
         hiddenAt: null,
         hiddenBy: null,
       }, root.lifecycleStatus)
+      await enableDriveSharesForItems(tx, itemIds, root.trashedAt)
       const restoredRoot = await tx.driveItem.update({
         where: { id: root.id },
         data: { parentId, name, updatedAt: restoredAt },
@@ -572,6 +573,22 @@ async function disableDriveSharesForItems(
   await tx.driveShare.updateMany({
     where: { itemId: { in: [...itemIds] }, enabled: true },
     data: { enabled: false, disabledAt },
+  })
+}
+
+async function enableDriveSharesForItems(
+  tx: Prisma.TransactionClient,
+  itemIds: readonly string[],
+  disabledAt: Date | null,
+): Promise<void> {
+  if (itemIds.length === 0) return
+  await tx.driveShare.updateMany({
+    where: {
+      itemId: { in: [...itemIds] },
+      enabled: false,
+      ...(disabledAt ? { disabledAt } : {}),
+    },
+    data: { enabled: true, disabledAt: null },
   })
 }
 

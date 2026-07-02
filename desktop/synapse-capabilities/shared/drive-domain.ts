@@ -18,10 +18,10 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
   { id: "app.drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
   { id: "app.drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
-  { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version to a local path.", mutates: true },
-  { id: "app.drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a historical Synapse Drive file version as the current version.", mutates: true },
-  { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current historical Synapse Drive file version.", mutates: true, risk: "high" },
-  { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
+  { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version that is not pending cleanup to a local path.", mutates: true },
+  { id: "app.drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a non-current Synapse Drive file version that is not pending cleanup as the current version.", mutates: true },
+  { id: "app.drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current Synapse Drive file version that is not pending cleanup.", mutates: true, risk: "high" },
+  { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a non-current Synapse Drive file version that is not pending cleanup.", mutates: true },
   { id: "app.drive.link.resolve" as CapabilityId, title: "Resolve Drive link", description: "Resolve a Synapse Drive /share, /sites, or /files URL for Agent consumption.", mutates: false },
   { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
   { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link.", mutates: false },
@@ -35,6 +35,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.site.list" as CapabilityId, title: "List Drive sites", description: "List current user's Drive-published static sites.", mutates: false },
   { id: "app.drive.site.update_access" as CapabilityId, title: "Update Drive site access", description: "Update access mode and expiry settings for a Drive-published site without changing Drive shares.", mutates: true },
   { id: "app.drive.site.disable" as CapabilityId, title: "Disable Drive site", description: "Disable public access to a Drive-published site while keeping its record and deployment.", mutates: true },
+  { id: "app.drive.site.enable" as CapabilityId, title: "Enable Drive site", description: "Restore public access to a disabled Drive-published site.", mutates: true },
   { id: "app.drive.site.delete" as CapabilityId, title: "Delete Drive site", description: "Delete a Drive-published site and make its /sites/<siteId>/ URL inaccessible.", mutates: true, risk: "high" },
   { id: "app.drive.site.republish" as CapabilityId, title: "Republish Drive site", description: "Copy the remembered source folder into a new site deployment and switch only after success.", mutates: true },
   { id: "app.drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
@@ -103,16 +104,18 @@ const accessSettingsProperties = {
   accessMode: { type: "string", enum: driveShareAccessModeValues, description: "Share permission. link_read lets link holders read; link_edit lets link holders edit supported text files only after signing in; specified_users_edit lets only listed emails edit." },
   editorEmails: { type: "array", items: { type: "string" }, description: "Editor email list for specified_users_edit. Leave empty for other access modes." },
 }
+const sitePasswordField = stringField("Optional custom site password. Used only when accessMode is password. MCP responses never return site passwords; pass a custom value when the user needs a known password.")
 
 export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryAndLegacyMcpTools([
     {
       name: "drive_item_list",
-      description: "List Synapse Drive files and folders. parentId defaults to root.",
+      description: "List Synapse Drive files and folders with pagination. parentId defaults to root.",
       inputSchema: {
         type: "object",
         properties: {
           parentId: optionalParentId,
+          ...pageInputProperties,
         },
       },
     },
@@ -256,7 +259,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_download_create",
-      description: "Download a specific Synapse Drive file version to a local path. This writes to the local filesystem and requires fs.write permission.",
+      description: "Download a specific Synapse Drive file version that is not pending cleanup to a local path. This writes to the local filesystem and requires fs.write permission.",
       inputSchema: {
         type: "object",
         properties: {
@@ -269,7 +272,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_restore",
-      description: "Restore a historical Synapse Drive file version as the current version.",
+      description: "Restore a non-current Synapse Drive file version that is not pending cleanup as the current version.",
       inputSchema: {
         type: "object",
         properties: {
@@ -281,7 +284,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_delete",
-      description: "Delete a non-current historical Synapse Drive file version. Current versions cannot be deleted with this tool.",
+      description: "Delete a non-current Synapse Drive file version that is not pending cleanup. Current versions cannot be deleted with this tool.",
       inputSchema: {
         type: "object",
         properties: {
@@ -293,7 +296,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_pin_update",
-      description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.",
+      description: "Keep or unkeep a non-current Synapse Drive file version that is not pending cleanup.",
       inputSchema: {
         type: "object",
         properties: {
@@ -417,7 +420,8 @@ export function buildDriveTools(): McpToolDefinition[] {
           sourceFolderItemId: stringField("Drive folder item id to copy into the site deployment."),
           name: stringField("Site display name."),
           entryPath: stringField("Optional HTML entry path inside the folder. Defaults to index.html when available."),
-          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a generated password." },
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: sitePasswordField,
           expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
         },
         required: ["sourceFolderItemId", "name", "accessMode", "expiresIn"],
@@ -437,12 +441,13 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_site_update_access",
-      description: "Update a Drive site access mode and expiry without republishing files or changing Drive shares. Password mode generates a new password.",
+      description: "Update a Drive site access mode and expiry without republishing files or changing Drive shares.",
       inputSchema: {
         type: "object",
         properties: {
           siteId: stringField("Public site id from /sites/<siteId>/."),
-          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a generated password." },
+          accessMode: { type: "string", enum: driveSiteAccessModeValues, description: "public for open access, password to require a password." },
+          password: sitePasswordField,
           expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Site expiration. Use forever for no expiry." },
         },
         required: ["siteId", "accessMode", "expiresIn"],
@@ -451,6 +456,17 @@ export function buildDriveTools(): McpToolDefinition[] {
     {
       name: "drive_site_disable",
       description: "Disable public access to a Drive-published site while keeping its record and deployment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteId: stringField("Public site id from /sites/<siteId>/."),
+        },
+        required: ["siteId"],
+      },
+    },
+    {
+      name: "drive_site_enable",
+      description: "Restore public access to a disabled Drive-published site.",
       inputSchema: {
         type: "object",
         properties: {

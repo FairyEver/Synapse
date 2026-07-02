@@ -56,7 +56,7 @@ describe("drive sync remote poller", () => {
     expect(operations).toHaveLength(2)
   })
 
-  it("emits one resync operation and advances cursor when the server requires resync", async () => {
+  it("emits one resync operation without advancing cursor when the server requires resync", async () => {
     const accountService = createAccountService([
       page({ items: [], nextCursor: "50", resyncRequired: true }),
     ])
@@ -75,7 +75,7 @@ describe("drive sync remote poller", () => {
     expect(operations).toEqual([
       expect.objectContaining({ kind: "resync", relativePath: "", driveItemId: "drive-root" }),
     ])
-    expect(updateCursor).toHaveBeenCalledWith("binding-1", "50")
+    expect(updateCursor).not.toHaveBeenCalled()
   })
 
   it("deduplicates repeated remote change ids in one polling pass", async () => {

@@ -628,6 +628,26 @@ export class DrivePublicAssetService {
     return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId), resolveDtoPublicAppUrl(auditContext))
   }
 
+  async cleanupImportedAsset(userId: string, assetId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
+    const asset = await this.requireOwnedAsset(userId, assetId)
+    const lifecycle = this.lifecycleService()
+    await lifecycle.trashItem({
+      userId,
+      itemId: asset.itemId,
+      actorId: userId,
+      ipAddress: auditContext.ipAddress ?? "system",
+      allowPublicAsset: true,
+    })
+    await lifecycle.hideTrashedItem({
+      userId,
+      itemId: asset.itemId,
+      actorId: userId,
+      ipAddress: auditContext.ipAddress ?? "system",
+      allowPublicAsset: true,
+    })
+    return { ok: true }
+  }
+
   async openAssetDownload(userId: string, assetId: string) {
     const asset = await this.requireOwnedAsset(userId, assetId)
     if (asset.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active || asset.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) {

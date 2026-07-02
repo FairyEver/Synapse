@@ -13,6 +13,8 @@ import type {
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -59,6 +61,7 @@ import {
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
+  readonly listDriveItemsPage: (input: DriveItemListInput) => Promise<DriveItemListPageDto>
   readonly getDriveItem: (itemId: string) => Promise<DriveItemDto>
   readonly prepareDriveUpload: (input: {
     readonly parentId?: string | null
@@ -90,6 +93,7 @@ type DriveAccountServicePort = {
   readonly listDriveSites: (input?: DriveSiteListInput) => Promise<DriveSiteListPageDto>
   readonly updateDriveSiteAccess: (input: { readonly siteId: string } & DriveSiteAccessUpdateInput) => Promise<DriveSiteDto>
   readonly disableDriveSite: (siteId: string) => Promise<DriveSiteDto>
+  readonly enableDriveSite: (siteId: string) => Promise<DriveSiteDto>
   readonly deleteDriveSite: (siteId: string) => Promise<{ ok: true }>
   readonly republishDriveSite: (input: { readonly siteId: string; readonly entryPath?: string | null }) => Promise<DriveSiteDto>
   readonly getDriveItemPreview: (input: {
@@ -194,8 +198,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.item.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const parentId = optionalNullableString(params.parentId)
-            const items = await deps.accountService.listDriveItems(parentId)
-            return { ok: true, data: items, total: items.length }
+            const page = await deps.accountService.listDriveItemsPage({
+              parentId,
+              offset: optionalNumber(params.offset),
+              limit: optionalNumber(params.limit),
+            })
+            return { ok: true, data: page, total: page.items.length }
           })
         case "drive.item.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -376,22 +384,27 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.site.create":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params)),
+            data: sanitizeDriveSite(await deps.accountService.createDriveSite(parseDriveSiteCreateInput(params))),
           }))
         case "drive.site.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
-            const sites = await deps.accountService.listDriveSites(parseDriveSiteListInput(params))
+            const sites = sanitizeDriveSiteList(await deps.accountService.listDriveSites(parseDriveSiteListInput(params)))
             return { ok: true, data: sites, total: sites.total }
           })
         case "drive.site.update_access":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params)),
+            data: sanitizeDriveSite(await deps.accountService.updateDriveSiteAccess(parseDriveSiteAccessUpdateInput(params))),
           }))
         case "drive.site.disable":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.disableDriveSite(requireString(params, "siteId")),
+            data: sanitizeDriveSite(await deps.accountService.disableDriveSite(requireString(params, "siteId"))),
+          }))
+        case "drive.site.enable":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: sanitizeDriveSite(await deps.accountService.enableDriveSite(requireString(params, "siteId"))),
           }))
         case "drive.site.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
@@ -401,10 +414,10 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.site.republish":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.republishDriveSite({
+            data: sanitizeDriveSite(await deps.accountService.republishDriveSite({
               siteId: requireString(params, "siteId"),
               entryPath: optionalNullableString(params.entryPath),
-            }),
+            })),
           }))
         case "drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -627,11 +640,13 @@ async function uploadPublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
+  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  if (!mimeType.ok) return { ok: false, error: mimeType.error }
   const result = await deps.accountService.uploadDrivePublicAssets({
     files: [{
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
+      mimeType: mimeType.value,
     }],
   })
   const first = result.results[0]
@@ -656,13 +671,15 @@ async function replacePublicAsset(
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
+  const mimeType = await resolvePublicAssetImageMimeType(path.basename(filePath), optionalString(params.mimeType))
+  if (!mimeType.ok) return { ok: false, error: mimeType.error }
   return {
     ok: true,
     data: await deps.accountService.replaceDrivePublicAssetFile({
       assetId,
       path: filePath,
       name,
-      mimeType: await resolvePublicAssetMimeType(path.basename(filePath), optionalString(params.mimeType)),
+      mimeType: mimeType.value,
     }),
   }
 }
@@ -675,9 +692,22 @@ async function requireLocalUploadFile(fileSystem: FileSystemPort, filePath: stri
 }
 
 async function resolvePublicAssetMimeType(name: string, mimeType?: string): Promise<string | null> {
-  if (mimeType) return mimeType
+  if (mimeType) return mimeType.trim().toLowerCase()
   const { inferDrivePublicAssetMimeType } = await import("@synapse/shared")
   return inferDrivePublicAssetMimeType(name)
+}
+
+async function resolvePublicAssetImageMimeType(name: string, mimeType?: string): Promise<
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly error: string }
+> {
+  const shared = await import("@synapse/shared")
+  const resolved = await resolvePublicAssetMimeType(name, mimeType)
+  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+  if (!resolved || !supportedMimeTypes.has(resolved)) {
+    return { ok: false, error: shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE }
+  }
+  return { ok: true, value: resolved }
 }
 
 async function putPreparedUpload(
@@ -944,6 +974,21 @@ function sanitizeDriveShareList(page: DriveShareListPageDto): DriveShareListPage
   }
 }
 
+function sanitizeDriveSiteList(page: DriveSiteListPageDto): DriveSiteListPageDto {
+  return {
+    ...page,
+    items: page.items.map(sanitizeDriveSite),
+  }
+}
+
+function sanitizeDriveSite(site: DriveSiteDto): DriveSiteDto {
+  return {
+    ...site,
+    urlWithPassword: site.url,
+    password: null,
+  }
+}
+
 async function authorizeDriveMutation(
   deps: DriveCapabilityDispatcherDeps,
   security: DriveMutationSecurity,
@@ -1135,6 +1180,7 @@ function parseDriveSiteCreateInput(params: Record<string, unknown>): DriveSiteCr
     name: requireString(params, "name"),
     entryPath: optionalNullableString(params.entryPath),
     accessMode,
+    password: optionalNullableString(params.password),
     expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
   }
 }
@@ -1160,6 +1206,7 @@ function parseDriveSiteAccessUpdateInput(
   return {
     siteId: requireString(params, "siteId"),
     accessMode,
+    password: optionalNullableString(params.password),
     expiresIn: requireDriveAccessExpiresIn(params.expiresIn),
   }
 }
@@ -1211,8 +1258,16 @@ function parseDriveLinkDownloadFileInput(params: Record<string, unknown>): Drive
     ...parseDriveLinkResolveInput(params),
     path: optionalString(params.path),
     itemId: optionalString(params.itemId),
-    outputPath: optionalString(params.outputPath),
+    outputPath: optionalAbsoluteOutputPath(params),
   }
+}
+
+function optionalAbsoluteOutputPath(params: Record<string, unknown>): string | undefined {
+  const outputPath = optionalString(params.outputPath)
+  if (outputPath !== undefined && !path.isAbsolute(outputPath)) {
+    throw new Error("Missing or invalid 'outputPath': expected absolute local output path")
+  }
+  return outputPath
 }
 
 function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterializeInput["scope"] {

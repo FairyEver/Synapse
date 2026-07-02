@@ -27,7 +27,7 @@ import { DriveCodeRenderer } from './code-renderer'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
-import { createMarkdownAnnotationTargetFromSelection, getMarkdownRenderedText } from './markdown-annotation-target'
+import { createMarkdownAnnotationTargetFromSelection } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -145,6 +145,7 @@ export function DriveMarkdownRenderer({
     }),
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
+  const commentCount = useMemo(() => countMarkdownComments(railThreads), [railThreads])
 
   const measureAnnotationLayout = useCallback(() => {
     const root = bodyRef.current
@@ -155,13 +156,14 @@ export function DriveMarkdownRenderer({
       const nextBaseOffset = Math.round(rootRect.top - layoutRect.top + (documentScrollRef.current?.scrollTop ?? 0))
       setCommentAnchorBaseOffset((current) => current === nextBaseOffset ? current : nextBaseOffset)
     }
-    const renderedText = getMarkdownRenderedText(root)
+    const renderedTextSegments = collectRenderedTextSegments(root)
+    const renderedText = getRenderedTextFromSegments(renderedTextSegments)
     const nextAnchors: Record<string, number> = {}
     const nextRects: MarkdownAnnotationOverlayRect[] = []
 
     for (const item of annotated.resolved) {
       if (item.anchorStatus === 'orphaned' || !item.range) continue
-      const rects = measureRenderedTextRange(root, item.range, rootRect)
+      const rects = measureRenderedTextRange(root, renderedTextSegments, item.range, rootRect)
       if (rects.length === 0) continue
       nextAnchors[item.threadId] = rects[0].top
       rects.forEach((rect, index) => {
@@ -177,7 +179,7 @@ export function DriveMarkdownRenderer({
     if (pendingTarget) {
       const pending = resolveMarkdownAnnotationTextRange(pendingTarget, renderedText)
       if (pending.range) {
-        measureRenderedTextRange(root, pending.range, rootRect).forEach((rect, index) => {
+        measureRenderedTextRange(root, renderedTextSegments, pending.range, rootRect).forEach((rect, index) => {
           nextRects.push({
             key: `pending-${index}`,
             kind: 'pending',
@@ -294,7 +296,7 @@ export function DriveMarkdownRenderer({
         {
           kind: 'toggle',
           id: 'markdown-comments',
-          label: `评论 ${annotations.threads.length}`,
+          label: `评论 ${commentCount}`,
           icon: MessageSquare,
           pressed: commentsOpen,
           onPressedChange: setCommentPanelOpen,
@@ -304,8 +306,8 @@ export function DriveMarkdownRenderer({
     if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     return items
   }, [
-    annotations.threads.length,
     annotationsEnabled,
+    commentCount,
     commentsOpen,
     imageSources.toolbarItem,
     outline.length,
@@ -610,6 +612,10 @@ function driveMarkdownImageSourceContextFromAnnotation(
   return { context: 'owner', itemId: current.id }
 }
 
+function countMarkdownComments(threads: readonly MarkdownCommentsRailThread[]): number {
+  return threads.reduce((total, { thread }) => total + thread.comments.length, 0)
+}
+
 function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
   if (!element) return
   const offset = Math.max(0, Math.round(scrollTop))
@@ -625,12 +631,20 @@ function getSelectionRect(range: Range): DOMRect | null {
   return rect.width > 0 || rect.height > 0 ? rect : null
 }
 
+type RenderedTextSegment = {
+  readonly node: Text
+  readonly text: string
+  readonly start: number
+  readonly end: number
+}
+
 function measureRenderedTextRange(
   root: HTMLElement,
+  segments: readonly RenderedTextSegment[],
   range: { readonly start: number; readonly end: number },
   rootRect: DOMRect,
 ): Array<Omit<MarkdownAnnotationOverlayRect, 'key' | 'kind' | 'threadId'>> {
-  const domRange = createRenderedTextRange(root, range.start, range.end)
+  const domRange = createRenderedTextRange(root, segments, range.start, range.end)
   if (!domRange) return []
   const rects = typeof domRange.getClientRects === 'function'
     ? Array.from(domRange.getClientRects())
@@ -645,9 +659,13 @@ function measureRenderedTextRange(
     }))
 }
 
-function createRenderedTextRange(root: HTMLElement, start: number, end: number): Range | null {
+function createRenderedTextRange(
+  root: HTMLElement,
+  segments: readonly RenderedTextSegment[],
+  start: number,
+  end: number,
+): Range | null {
   if (start >= end) return null
-  const segments = collectRenderedTextSegments(root)
   const startPoint = findRenderedTextPoint(segments, start)
   const endPoint = findRenderedTextPoint(segments, end)
   if (!startPoint || !endPoint) return null
@@ -657,23 +675,31 @@ function createRenderedTextRange(root: HTMLElement, start: number, end: number):
   return range
 }
 
-function collectRenderedTextSegments(root: HTMLElement): Array<{ readonly node: Text; readonly start: number; readonly end: number }> {
-  const segments: Array<{ readonly node: Text; readonly start: number; readonly end: number }> = []
+function collectRenderedTextSegments(root: HTMLElement): RenderedTextSegment[] {
+  const segments: RenderedTextSegment[] = []
   let offset = 0
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return isMarkdownAnnotationMarkerText(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    },
+  })
   let current = walker.nextNode()
   while (current) {
     const text = current.textContent ?? ''
     const length = text.length
-    segments.push({ node: current as Text, start: offset, end: offset + length })
+    segments.push({ node: current as Text, text, start: offset, end: offset + length })
     offset += length
     current = walker.nextNode()
   }
   return segments
 }
 
+function getRenderedTextFromSegments(segments: readonly RenderedTextSegment[]): string {
+  return segments.map((segment) => segment.text).join('')
+}
+
 function findRenderedTextPoint(
-  segments: readonly { readonly node: Text; readonly start: number; readonly end: number }[],
+  segments: readonly RenderedTextSegment[],
   offset: number,
 ): { readonly node: Text; readonly offset: number } | null {
   for (const segment of segments) {
@@ -682,6 +708,11 @@ function findRenderedTextPoint(
     return { node: segment.node, offset: Math.max(0, offset - segment.start) }
   }
   return null
+}
+
+function isMarkdownAnnotationMarkerText(node: Node): boolean {
+  const parent = node.parentElement
+  return Boolean(parent?.closest('[data-drive-annotation-marker="true"]'))
 }
 
 function isUsableOverlayRect(rect: DOMRect, rootRect: DOMRect): boolean {

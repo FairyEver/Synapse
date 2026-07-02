@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveItemDto,
+  type DriveItemListPageDto,
   type DrivePublicAssetDto,
   type DrivePublicAssetListPageDto,
   type DrivePublicLinksPageDto,
@@ -55,6 +56,7 @@ const mocks = vi.hoisted(() => ({
   preflightDriveSite: vi.fn(),
   renameDriveItem: vi.fn(),
   createDriveSite: vi.fn(),
+  updateDriveSiteAccess: vi.fn(),
   shareDriveItem: vi.fn(),
   uploadDriveLocalItems: vi.fn(),
   toast: vi.fn(),
@@ -131,6 +133,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       preflightDriveSite: mocks.preflightDriveSite,
       renameDriveItem: mocks.renameDriveItem,
       createDriveSite: mocks.createDriveSite,
+      updateDriveSiteAccess: mocks.updateDriveSiteAccess,
       shareDriveItem: mocks.shareDriveItem,
       uploadDriveLocalItems: mocks.uploadDriveLocalItems,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
@@ -209,6 +212,7 @@ beforeEach(() => {
   })
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
   mocks.createDriveSite.mockResolvedValue(createDriveSite())
+  mocks.updateDriveSiteAccess.mockResolvedValue(createDriveSite())
   mocks.shareDriveItem.mockResolvedValue({
     id: "share-row-1",
     shareId: "shr_test",
@@ -295,6 +299,33 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("公开素材")
     expect(document.body.textContent).not.toContain("回收站")
     expect(document.body.textContent).toContain("inside.txt")
+  })
+
+  it("loads additional drive item pages on demand", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce(createDriveItemPage(
+        [createDriveItem({ id: "file-1", name: "第一页.txt", type: "file" })],
+        { offset: 0, limit: 100, hasMore: true, nextOffset: 100 },
+      ))
+      .mockResolvedValueOnce(createDriveItemPage(
+        [createDriveItem({ id: "file-2", name: "第二页.txt", type: "file" })],
+        { offset: 100, limit: 100, hasMore: false, nextOffset: null },
+      ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("第一页.txt")
+    expect(document.body.textContent).not.toContain("第二页.txt")
+    expect(queryExactButton("加载更多")).not.toBeNull()
+
+    await clickButtonText("加载更多")
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null, offset: 100, limit: 100 })
+    expect(document.body.textContent).toContain("第一页.txt")
+    expect(document.body.textContent).toContain("第二页.txt")
+    expect(queryExactButton("加载更多")).toBeNull()
   })
 
   it("opens system entries without normal drive context actions", async () => {
@@ -403,6 +434,7 @@ describe("DriveModule", () => {
       createDriveSite({
         name: "001",
         accessMode: "password",
+        expiresIn: "3d",
         expiresAt: "2026-06-26T06:04:00.000Z",
         totalBytes: "26522",
         url: "https://synapse.d2.pub/sites/site_AZYoLz4O/",
@@ -429,6 +461,33 @@ describe("DriveModule", () => {
     expect(dialog.textContent).toContain("25.9 KB")
     expect(queryButtonByLabel("复制 001")).not.toBeNull()
     expect(queryButtonByLabel("打开 001")).not.toBeNull()
+  })
+
+  it("preserves the current site expiration option when saving access settings", async () => {
+    mocks.listDriveSites.mockResolvedValue(createDriveSitePage([
+      createDriveSite({
+        name: "001",
+        accessMode: "password",
+        passwordEnabled: true,
+        expiresIn: "1y",
+        expiresAt: "2027-06-23T00:00:00.000Z",
+      }),
+    ]))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("站点")
+    await flushAct()
+    await openRowMenu("001")
+    await clickText("访问设置")
+    await clickButtonText("保存")
+
+    expect(mocks.updateDriveSiteAccess).toHaveBeenCalledWith({
+      siteId: "site_abc",
+      accessMode: "password",
+      expiresIn: "1y",
+    })
   })
 
   it("groups cloud drive actions in the top toolbar", async () => {
@@ -562,6 +621,7 @@ describe("DriveModule", () => {
         operations: [{
           id: "operation-1",
           bindingId: "binding-1",
+          kind: "download",
           relativePath: "spec.md",
           status: "succeeded",
           message: null,
@@ -584,13 +644,15 @@ describe("DriveModule", () => {
     if (!dialogHeader) throw new Error("Drive sync dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "全部",
-      "同步中",
+      "已启用",
       "有冲突",
       "已暂停",
       "错误",
     ])
     expect(dialog.textContent).toContain("Docs")
     expect(dialog.textContent).toContain("/Users/me/Docs")
+    expect(dialog.textContent).toContain("已启用")
+    expect(dialog.textContent).not.toContain("同步中")
     expect(dialog.textContent).toContain("1 个冲突")
     expect(dialog.textContent).toContain("1 条同步记录")
     expect(dialog.textContent).not.toContain("排除规则")
@@ -625,6 +687,7 @@ describe("DriveModule", () => {
           {
             id: "operation-1",
             bindingId: "binding-1",
+            kind: "upload",
             relativePath: "docs-operation.md",
             status: "succeeded",
             message: null,
@@ -633,6 +696,7 @@ describe("DriveModule", () => {
           {
             id: "operation-2",
             bindingId: "binding-2",
+            kind: "download",
             relativePath: "notes-operation.md",
             status: "succeeded",
             message: null,
@@ -655,8 +719,49 @@ describe("DriveModule", () => {
     expect(detailDialog.textContent).toContain("同步记录")
     expect(detailDialog.textContent).toContain("docs-conflict.md")
     expect(detailDialog.textContent).toContain("docs-operation.md")
+    expect(detailDialog.textContent).toContain("上传")
     expect(detailDialog.textContent).not.toContain("notes-conflict.md")
     expect(detailDialog.textContent).not.toContain("notes-operation.md")
+  })
+
+  it("offers confirm delete for delete-modify drive sync conflicts", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1, conflictCount: 2 },
+      {
+        bindings: [createDriveSyncBinding({ status: "conflict" })],
+        conflicts: [
+          {
+            id: "conflict-delete",
+            bindingId: "binding-1",
+            relativePath: "deleted-spec.md",
+            type: "delete_vs_modify",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+          {
+            id: "conflict-edit",
+            bindingId: "binding-1",
+            relativePath: "edited-spec.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          },
+        ],
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：2 个冲突")
+    await clickButtonByLabel("处理同步冲突 Docs")
+
+    expect(rowButtonTexts("deleted-spec.md")).toEqual(["确认删除", "保留两份", "稍后"])
+    expect(rowButtonTexts("edited-spec.md")).toEqual(["用本地", "用云端", "保留两份", "稍后"])
+
+    await clickRowButtonText("deleted-spec.md", "确认删除")
+
+    expect(mocks.resolveDriveSyncConflict).toHaveBeenCalledWith({
+      conflictId: "conflict-delete",
+      action: "confirm_delete",
+    })
   })
 
   it("keeps the drive sync detail close button inside the dialog header", async () => {
@@ -710,6 +815,40 @@ describe("DriveModule", () => {
     expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
   })
 
+  it("disables binding sync actions while an action is running", async () => {
+    const rescan = createDeferred<void>()
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+    mocks.rescanDriveSyncBinding.mockReturnValueOnce(rescan.promise)
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("更多同步操作 Docs")
+    await clickMenuItemText("检查本地变更")
+
+    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledTimes(1)
+    expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(true)
+    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(true)
+
+    await act(async () => {
+      rescan.resolve(undefined)
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(getButtonByLabel("查看同步详情 Docs").disabled).toBe(false)
+    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(false)
+  })
+
   it("refreshes the sync snapshot after failed secondary sync actions", async () => {
     mocks.getDriveSyncSnapshot
       .mockResolvedValueOnce(createDriveSyncSnapshot(
@@ -733,6 +872,54 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("本地路径不存在。")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地路径不存在。")
     expect(getButtonByLabel("重试同步 Docs").textContent).toContain("重试同步")
+  })
+
+  it("does not show a success toast when a manual sync action records an error", async () => {
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { errorCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "error", lastError: "上传失败。" })] },
+      ))
+    mocks.rescanDriveSyncBinding.mockResolvedValueOnce(undefined)
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("更多同步操作 Docs")
+    await clickMenuItemText("检查本地变更")
+
+    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(mocks.toast).toHaveBeenCalledWith("上传失败。")
+    expect(mocks.toast).not.toHaveBeenCalledWith("已检查本地变更")
+    expect(getButtonByLabel("重试同步 Docs").textContent).toContain("重试同步")
+  })
+
+  it("runs local and remote sync checks when retrying an error binding", async () => {
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { errorCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "error", lastError: "上传失败。" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "active", lastError: null })] },
+      ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个错误")
+    await clickButtonByLabel("重试同步 Docs")
+
+    expect(mocks.resumeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.pollDriveSyncRemoteChanges).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(mocks.toast).toHaveBeenCalledWith("已重试同步")
   })
 
   it("refreshes the sync snapshot after failed retry actions", async () => {
@@ -1843,6 +2030,7 @@ describe("DriveModule", () => {
       items: [{
         kind: "folder",
         folderName: "项目A",
+        directories: [{ relativePath: "docs" }],
         files: [
           { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
           { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
@@ -1914,12 +2102,45 @@ describe("DriveModule", () => {
         {
           kind: "folder",
           folderName: "项目A",
+          directories: [{ relativePath: "docs" }],
           files: [
             { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
             { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
           ],
         },
       ],
+    })
+  })
+
+  it("preserves empty directories when dropping folders", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [
+        createDirectoryTransferItem("项目A", [
+          createDirectoryEntry("empty", []),
+          createDirectoryEntry("nested", [
+            createDirectoryEntry("leaf", []),
+          ]),
+        ]),
+      ],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
     })
   })
 
@@ -1986,6 +2207,39 @@ describe("DriveModule", () => {
     await clickRowButtonText("shared.txt", "取消分享")
 
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
+  it("ignores duplicate cancel-share clicks from the file row", async () => {
+    const disableShare = createDeferred<{ readonly ok: true }>()
+    mocks.disableDriveShare.mockReturnValueOnce(disableShare.promise)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({
+        id: "file-1",
+        name: "shared.txt",
+        type: "file",
+        shared: true,
+        activeShareId: "share-row-1",
+        activeShare: createDriveActiveShare({ expiresAt: driveShareExpiresInDays(3), passwordEnabled: true }),
+      }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = rowButton("shared.txt", "取消分享")
+    if (!button) throw new Error("Cancel share button not found")
+    await act(async () => {
+      button.click()
+      button.click()
+      await flushPromises()
+    })
+
+    expect(mocks.disableDriveShare).toHaveBeenCalledTimes(1)
+    expect(button.disabled).toBe(true)
+
+    disableShare.resolve({ ok: true })
+    await flushAct()
+
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
@@ -2449,6 +2703,33 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
+  it("ignores duplicate cancel-share clicks from the public links dialog", async () => {
+    const disableShare = createDeferred<{ readonly ok: true }>()
+    mocks.disableDriveShare.mockReturnValueOnce(disableShare.promise)
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
+      createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+    ]))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("我的分享")
+    await flushAct()
+    const button = getButtonByLabel("取消分享 report.txt")
+    await act(async () => {
+      button.click()
+      button.click()
+      await flushPromises()
+    })
+
+    expect(mocks.disableDriveShare).toHaveBeenCalledTimes(1)
+    expect(button.disabled).toBe(true)
+
+    disableShare.resolve({ ok: true })
+    await flushAct()
+
+    expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
   it("refreshes the main list after disabling a share from the public links dialog", async () => {
     let driveItems = [
       createDriveItem({
@@ -2581,6 +2862,36 @@ describe("DriveModule", () => {
     await clickText("移动")
 
     expect(mocks.moveDriveItem).toHaveBeenCalledWith({ itemId: "file-1", parentId: "folder-2" })
+  })
+
+  it("loads additional move target folders on demand", async () => {
+    mocks.listDriveItems.mockImplementation(async (input: { parentId?: string | null; offset?: number; limit?: number } = {}) => {
+      if ((input.parentId ?? null) === null && input.offset === 100) {
+        return createDriveItemPage([
+          createDriveItem({ id: "folder-2", name: "第二页目录", type: "folder" }),
+        ], { offset: 100, limit: 100, hasMore: false, nextOffset: null })
+      }
+      return createDriveItemPage([
+        createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+        createDriveItem({ id: "folder-1", name: "第一页目录", type: "folder" }),
+      ], { offset: 0, limit: 100, hasMore: true, nextOffset: 100 })
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openFirstMenu()
+    await clickText("移动")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("第一页目录")
+    expect(document.body.textContent).not.toContain("第二页目录")
+
+    await clickButtonByLabel("加载更多 根目录")
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null, offset: 100, limit: 100 })
+    expect(document.body.textContent).toContain("第二页目录")
   })
 
   it("moves an item to the root folder by default", async () => {
@@ -3036,6 +3347,22 @@ function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
   }
 }
 
+function createDriveItemPage(
+  items: readonly DriveItemDto[],
+  page: Partial<DriveItemListPageDto["page"]> = {},
+): DriveItemListPageDto {
+  return {
+    items,
+    page: {
+      offset: 0,
+      limit: 100,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
+  }
+}
+
 function createDriveActiveShare(overrides: Partial<NonNullable<DriveItemDto["activeShare"]>> = {}): NonNullable<DriveItemDto["activeShare"]> {
   return {
     accessMode: "link_read",
@@ -3082,6 +3409,7 @@ function createDriveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     urlWithPassword: "https://synapse.test/sites/site_abc/",
     passwordEnabled: false,
     password: null,
+    expiresIn: "forever",
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "原型",

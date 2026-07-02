@@ -335,6 +335,36 @@ describe("AccountService", () => {
     expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
   })
 
+  it("materializes a single-file Drive share when the link has no child listing", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
+      items: [],
+      page: { hasMore: false, nextOffset: null },
+    })
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "share",
+      access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+      root: { name: "需求说明.md", type: "file", previewKind: "markdown" },
+      ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+    })
+    const readDriveLinkText = vi.spyOn(service, "readDriveLinkText").mockResolvedValueOnce({
+      path: "需求说明.md",
+      mimeType: "text/markdown",
+      previewKind: "markdown",
+      text: "# 单文件\n正文",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+
+    const result = await service.materializeDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret", scope: "text" })
+
+    expect(readDriveLinkText).toHaveBeenCalledWith({ url: "https://synapse.test/share/shr_123", password: "secret" })
+    expect(result.entryPath).toContain("需求说明.md")
+    expect(result.files).toEqual([{ relativePath: "需求说明.md", kind: "markdown", size: "18" }])
+    await expect(readFile(result.entryPath!, "utf8")).resolves.toBe("# 单文件\n正文")
+  })
+
   it("downloads Drive link files through the link-intake download endpoint", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-link-download-"))
     const outputPath = path.join(dir, "sample-data.json")
@@ -447,6 +477,33 @@ describe("AccountService", () => {
 
     expect(result.files).toEqual([{ relativePath: "assets/logo.png", kind: "image", size: "7" }])
     await expect(readFile(path.join(result.localRootPath, "content", "assets", "logo.png"), "utf8")).resolves.toBe("pngdata")
+  })
+
+  it("materializes public asset links without listing a directory", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink")
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "public_asset",
+      access: { status: "ok", canRead: true, canList: false, canReadText: false, canDownload: true },
+      root: { name: "logo.png", type: "asset", previewKind: "image" },
+      ref: { kind: "public_asset", shareId: null, itemId: null, siteId: null, path: null, assetId: "asset-logo" },
+    })
+    vi.spyOn(service, "downloadDriveLinkFile").mockImplementation(async (input) => {
+      if (!input.outputPath) throw new Error("outputPath required")
+      await writeFile(input.outputPath, "pngdata")
+      return { localPath: input.outputPath, mimeType: "image/png", size: "7" }
+    })
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/files/asset-logo",
+      scope: "all",
+      maxBytes: 1024,
+    })
+
+    expect(listDriveLink).not.toHaveBeenCalled()
+    expect(result.files).toEqual([{ relativePath: "logo.png", kind: "image", size: "7" }])
+    await expect(readFile(path.join(result.localRootPath, "content", "logo.png"), "utf8")).resolves.toBe("pngdata")
   })
 
   it("rejects local files over the shared single file limit before preparing upload", async () => {
@@ -612,6 +669,40 @@ describe("AccountService", () => {
         { relativePath: "docs/b.md", size: "4", mimeType: null },
       ],
     })
+  })
+
+  it("keeps empty directory entries in local folder uploads", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      rootCreated: true,
+      entries: [],
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(driveItem())
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        directories: [
+          { relativePath: "empty" },
+          { relativePath: "nested/leaf" },
+        ],
+        files: [],
+      }],
+    })).resolves.toEqual({ completed: 0, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "项目A",
+      directories: [
+        { relativePath: "empty" },
+        { relativePath: "nested/leaf" },
+      ],
+      files: [],
+    })
+    expect(service.completeDriveUpload).not.toHaveBeenCalled()
   })
 
   it("cleans up a newly prepared folder root when every local folder upload fails", async () => {
@@ -885,6 +976,37 @@ describe("AccountService", () => {
     expect(requestAuthenticatedJson).not.toHaveBeenCalled()
   })
 
+  it("rejects unsupported local public asset uploads and replacements before prepare", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-unsupported-"))
+    const uploadPath = path.join(dir, "note.pdf")
+    const replacePath = path.join(dir, "vector.svg")
+    await writeFile(uploadPath, "pdf")
+    await writeFile(replacePath, "<svg />")
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+
+    await expect(service.uploadDrivePublicAssets({
+      files: [{ path: uploadPath, name: "note.pdf", mimeType: null }],
+    })).resolves.toEqual({
+      results: [{
+        status: "rejected",
+        fileName: "note.pdf",
+        message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+      }],
+    })
+
+    await expect(service.replaceDrivePublicAssetFile({
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      path: replacePath,
+      name: "vector.svg",
+      mimeType: "image/svg+xml",
+    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
+
+    expect(requestAuthenticatedJson).not.toHaveBeenCalled()
+  })
+
   it("cancels binary public asset uploads when PUT fails after prepare", async () => {
     const bytes = new TextEncoder().encode("hello").buffer
     const fetch = vi.fn(async () => textResponse("upload failed", 500)) as unknown as typeof globalThis.fetch
@@ -993,24 +1115,24 @@ describe("AccountService", () => {
     )
   })
 
-  it("lists public assets and trash with pagination-only query parameters", async () => {
+  it("lists public assets and trash with search query parameters", async () => {
     const { service } = await createTestAccountService()
     const page = { items: [], total: 0, page: { offset: 0, limit: 50, hasMore: false, nextOffset: null } }
     const getAuthenticatedJson = vi.spyOn(service as unknown as {
       getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
     }, "getAuthenticatedJson").mockResolvedValue(page)
 
-    await expect(service.listDrivePublicAssets({ offset: 0, limit: 50 })).resolves.toEqual(page)
-    await expect(service.listDriveTrash({ offset: 50, limit: 50 })).resolves.toEqual(page)
+    await expect(service.listDrivePublicAssets({ offset: 0, limit: 50, search: "logo" })).resolves.toEqual(page)
+    await expect(service.listDriveTrash({ offset: 50, limit: 50, search: "old report" })).resolves.toEqual(page)
 
     expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
       1,
-      expectedApiUrl("/drive/public-assets?offset=0&limit=50"),
+      expectedApiUrl("/drive/public-assets?offset=0&limit=50&search=logo"),
       "公开素材加载失败。",
     )
     expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
       2,
-      expectedApiUrl("/drive/trash?offset=50&limit=50"),
+      expectedApiUrl("/drive/trash?offset=50&limit=50&search=old+report"),
       "回收站加载失败。",
     )
   })
@@ -2119,6 +2241,32 @@ describe("AccountService", () => {
     })
   })
 
+  it("requests paged Drive item lists with parent and page parameters", async () => {
+    const page = {
+      items: [driveItem({ id: "drive-1" })],
+      page: { offset: 20, limit: 10, hasMore: false, nextOffset: null },
+    }
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      if (String(url).endsWith("/drive/items?parentId=folder-1&offset=20&limit=10")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse(page)
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    await expect(service.listDriveItemsPage({ parentId: "folder-1", offset: 20, limit: 10 })).resolves.toEqual(page)
+  })
+
   it("refreshes and retries account webhook list when the access token expires", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({
@@ -2215,9 +2363,12 @@ describe("AccountService", () => {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
         return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
       }
-      if (String(url).endsWith("/drive/items")) {
+      if (String(url).endsWith("/drive/items?offset=0")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse([driveItem({ id: "drive-1" })])
+        return jsonResponse({
+          items: [driveItem({ id: "drive-1" })],
+          page: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+        })
       }
       if (String(url).endsWith("/drive/usage")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })

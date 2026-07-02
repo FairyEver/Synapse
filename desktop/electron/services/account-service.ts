@@ -39,6 +39,8 @@ import type {
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -191,8 +193,18 @@ function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
   return query ? `?${query}` : ""
 }
 
-function drivePageQuery(input?: { readonly offset?: number; readonly limit?: number }): string {
+function drivePageQuery(input?: DrivePublicLinksPageInput): string {
   const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  if (input?.search) params.set("search", input.search)
+  const query = params.toString()
+  return query ? `?${query}` : ""
+}
+
+function driveItemListQuery(input?: DriveItemListInput): string {
+  const params = new URLSearchParams()
+  if (input?.parentId) params.set("parentId", input.parentId)
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
   if (input?.limit !== undefined) params.set("limit", String(input.limit))
   const query = params.toString()
@@ -510,8 +522,13 @@ export class AccountService {
   }
 
   async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
-    const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""
-    return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
+    const page = await this.listDriveItemsPage({ parentId, offset: 0 })
+    return [...page.items]
+  }
+
+  async listDriveItemsPage(input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {
+    const query = driveItemListQuery({ ...input, offset: input.offset ?? 0 })
+    return this.getAuthenticatedJson<DriveItemListPageDto>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
   }
 
   async getDriveItem(itemId: string): Promise<DriveItemDto> {
@@ -594,6 +611,84 @@ export class AccountService {
     const maxBytes = input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES
     const queue: Array<{ readonly itemId?: string; readonly path?: string; readonly prefix: string }> = [{ prefix: "" }]
     let maxFilesReached = false
+    let listedEntryCount = 0
+    const finish = async (): Promise<DriveLinkMaterializeDto> => {
+      if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
+      const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
+      const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
+      const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
+      await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+      return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
+    }
+    const materializeRootFile = async (): Promise<void> => {
+      const resolved = await this.resolveDriveLink(baseInput)
+      if (resolved.root.type !== "file") return
+      const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
+      if (files.length >= maxFiles) {
+        skipped.push({ path: relativePath, reason: "max-files" })
+        maxFilesReached = true
+        return
+      }
+      const outputPath = path.join(root.contentPath, relativePath)
+      if (isDriveLinkTextPreview(resolved.root.previewKind)) {
+        const text = await this.readDriveLinkText(baseInput)
+        const bytes = Buffer.byteLength(text.text, "utf8")
+        if (totalBytes + bytes > maxBytes) {
+          skipped.push({ path: relativePath, reason: "max-bytes" })
+          return
+        }
+        await mkdir(path.dirname(outputPath), { recursive: true })
+        await writeFile(outputPath, text.text, "utf8")
+        totalBytes += bytes
+        files.push({ relativePath, kind: driveLinkFileKind(text.previewKind, text.mimeType), size: String(bytes) })
+        return
+      }
+      if (scope !== "all" && scope !== "entry") {
+        skipped.push({ path: relativePath, reason: "not-text" })
+        return
+      }
+      await mkdir(path.dirname(outputPath), { recursive: true })
+      const downloaded = await this.downloadDriveLinkFile({
+        ...baseInput,
+        outputPath,
+      })
+      const actualSize = Number(downloaded.size)
+      if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
+        await rm(outputPath, { force: true })
+        skipped.push({ path: relativePath, reason: "max-bytes" })
+        return
+      }
+      totalBytes += Number.isFinite(actualSize) ? actualSize : 0
+      files.push({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+    }
+
+    if (isPublicAssetDriveLink(input.url)) {
+      const resolved = await this.resolveDriveLink(baseInput)
+      const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
+      if (files.length >= maxFiles) {
+        skipped.push({ path: relativePath, reason: "max-files" })
+        maxFilesReached = true
+        return finish()
+      }
+      if (scope !== "all") {
+        skipped.push({ path: relativePath, reason: "not-text" })
+        return finish()
+      }
+      const outputPath = path.join(root.contentPath, relativePath)
+      await mkdir(path.dirname(outputPath), { recursive: true })
+      const downloaded = await this.downloadDriveLinkFile({
+        ...baseInput,
+        outputPath,
+      })
+      const actualSize = Number(downloaded.size)
+      if (Number.isFinite(actualSize) && actualSize > maxBytes) {
+        await rm(outputPath, { force: true })
+        skipped.push({ path: relativePath, reason: "max-bytes" })
+        return finish()
+      }
+      files.push({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+      return finish()
+    }
 
     while (queue.length > 0 && !maxFilesReached) {
       const current = queue.shift()!
@@ -605,6 +700,7 @@ export class AccountService {
           path: current.path,
           offset,
         })
+        listedEntryCount += page.items.length
         for (const item of page.items) {
           const relativePath = safeDriveLinkOutputPath(joinDriveLinkRelativePath(current.prefix, item.path || item.name))
           if (item.type === "folder") {
@@ -664,12 +760,11 @@ export class AccountService {
       } while (offset !== undefined && !maxFilesReached)
     }
 
-    if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
-    const entry = files.find((file) => file.relativePath.toLowerCase() === "index.html") ?? files[0]
-    const entryPath = entry ? path.join(root.contentPath, entry.relativePath) : null
-    const manifest = { sourceUrl: driveLinkManifestSourceUrl(input.url), fetchedAt: new Date().toISOString(), scope: input.scope ?? "text", files, skipped, warnings }
-    await writeFile(root.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
-    return { localRootPath: root.rootPath, manifestPath: root.manifestPath, entryPath, files, skipped, warnings }
+    if (listedEntryCount === 0 && files.length === 0 && skipped.length === 0) {
+      await materializeRootFile()
+    }
+
+    return finish()
   }
 
   async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
@@ -755,11 +850,13 @@ export class AccountService {
   async prepareDriveFolderUpload(input: {
     parentId?: string | null
     folderName: string
+    directories?: Array<{ relativePath: string }>
     files: Array<{ relativePath: string; size: string; mimeType?: string | null }>
   }): Promise<DriveFolderUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveFolderUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/folder/prepare`, {
       parentId: input.parentId ?? null,
       folderName: input.folderName,
+      ...(input.directories ? { directories: input.directories.map((directory) => ({ relativePath: directory.relativePath })) } : {}),
       files: input.files.map((file) => ({
         relativePath: file.relativePath,
         size: file.size,
@@ -946,6 +1043,29 @@ export class AccountService {
     const seenRelativePaths = new Set<string>()
     let skipped = 0
 
+    const directories: Array<{ relativePath: string }> = []
+    const seenDirectoryPaths = new Set<string>()
+    for (const directory of item.directories ?? []) {
+      if (!isSafeDriveRelativePath(directory.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "invalid-directory-relative-path",
+        })
+        continue
+      }
+      if (seenDirectoryPaths.has(directory.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "duplicate-directory-relative-path",
+        })
+        continue
+      }
+      seenDirectoryPaths.add(directory.relativePath)
+      directories.push({ relativePath: directory.relativePath })
+    }
+
     for (const file of item.files) {
       if (!isSafeDriveRelativePath(file.relativePath)) {
         skipped += 1
@@ -982,7 +1102,7 @@ export class AccountService {
       })
     }
 
-    if (files.length === 0) return { completed: 0, failed: 0, skipped }
+    if (files.length === 0 && item.files.length > 0 && directories.length === 0) return { completed: 0, failed: 0, skipped }
     const uploadLimits = await getDriveUploadLimits()
     if (files.some((file) => file.sizeBytes > uploadLimits.maxFileBytes)) {
       return { completed: 0, failed: files.length, skipped, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
@@ -993,6 +1113,7 @@ export class AccountService {
       prepared = await this.prepareDriveFolderUpload({
         parentId,
         folderName: item.folderName,
+        ...(directories.length > 0 ? { directories } : {}),
         files: files.map((file) => ({
           relativePath: file.relativePath,
           size: file.size,
@@ -1132,7 +1253,7 @@ export class AccountService {
     return withCurrentDriveShareUrl(share)
   }
 
-  async listDrivePublicAssets(input?: { readonly offset?: number; readonly limit?: number }): Promise<DrivePublicAssetListPageDto> {
+  async listDrivePublicAssets(input?: DrivePublicLinksPageInput): Promise<DrivePublicAssetListPageDto> {
     return this.getAuthenticatedJson<DrivePublicAssetListPageDto>(
       `${apiBaseUrl()}/drive/public-assets${drivePageQuery(input)}`,
       "公开素材加载失败。",
@@ -1172,11 +1293,7 @@ export class AccountService {
     if (bytes.byteLength > uploadLimits.maxFileBytes) {
       throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
     }
-    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
-    if (!mimeType || !mimeType.startsWith("image/")) {
-      const shared = await sharedUrlsPromise
-      throw new Error(shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
-    }
+    const mimeType = await resolveDrivePublicAssetImageMimeType(input.name, input.mimeType)
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
       `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,
@@ -1219,7 +1336,7 @@ export class AccountService {
     if (!fileStat?.isFile()) throw new Error("文件不可用。")
     const uploadLimits = await getDriveUploadLimits()
     if (fileStat.size > uploadLimits.maxFileBytes) throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
-    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
+    const mimeType = await resolveDrivePublicAssetImageMimeType(input.name, input.mimeType)
 
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
@@ -1342,7 +1459,7 @@ export class AccountService {
     ))
   }
 
-  async listDriveTrash(input?: { readonly offset?: number; readonly limit?: number }): Promise<DriveTrashListPageDto> {
+  async listDriveTrash(input?: DrivePublicLinksPageInput): Promise<DriveTrashListPageDto> {
     return this.getAuthenticatedJson<DriveTrashListPageDto>(
       `${apiBaseUrl()}/drive/trash${drivePageQuery(input)}`,
       "回收站加载失败。",
@@ -1379,7 +1496,16 @@ export class AccountService {
     }
 
     let prepared: DriveUploadPrepareResult
-    const mimeType = await resolveDrivePublicAssetMimeType(file.name, file.mimeType)
+    let mimeType: string
+    try {
+      mimeType = await resolveDrivePublicAssetImageMimeType(file.name, file.mimeType)
+    } catch (error) {
+      return {
+        status: "rejected",
+        fileName: file.name,
+        message: error instanceof Error && error.message.trim() ? error.message : localUploadErrorMessage(error),
+      }
+    }
     try {
       prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
         "POST",
@@ -2197,6 +2323,14 @@ function joinDriveLinkRelativePath(prefix: string, childPath: string): string {
   return [prefix, childPath].filter(Boolean).join("/")
 }
 
+function isPublicAssetDriveLink(value: string): boolean {
+  try {
+    return new URL(value).pathname.startsWith("/files/")
+  } catch {
+    return /(^|\/)files\/[^/?#]+/u.test(value)
+  }
+}
+
 function parseDriveLinkSize(value: string): number | null {
   if (!/^\d+$/u.test(value)) return null
   const parsed = Number(value)
@@ -2267,9 +2401,19 @@ async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; 
 
 async function resolveDrivePublicAssetMimeType(name: string, mimeType?: string | null): Promise<string | null> {
   const normalized = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : null
-  if (normalized) return normalized
+  if (normalized) return normalized.toLowerCase()
   const shared = await sharedUrlsPromise
   return shared.inferDrivePublicAssetMimeType(name)
+}
+
+async function resolveDrivePublicAssetImageMimeType(name: string, mimeType?: string | null): Promise<string> {
+  const shared = await sharedUrlsPromise
+  const resolved = await resolveDrivePublicAssetMimeType(name, mimeType)
+  const supportedMimeTypes = new Set<string>(Object.values(shared.DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
+  if (!resolved || !supportedMimeTypes.has(resolved)) {
+    throw new Error(shared.DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE)
+  }
+  return resolved
 }
 
 function driveMaxFileSizeMessage(label: string): string {

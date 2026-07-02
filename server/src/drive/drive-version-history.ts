@@ -121,26 +121,36 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
   const maxCount = input.maxCount ?? DRIVE_FILE_VERSION_MAX_COUNT
   const retentionDays = input.retentionDays ?? DRIVE_FILE_VERSION_RETENTION_DAYS
   const cutoff = new Date(input.now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
-  const versions = await tx.driveFileVersion.findMany({
-    where: { itemId: input.itemId, deletedAt: null },
-    orderBy: { versionNumber: "desc" },
+  const baseWhere = { itemId: input.itemId, deletedAt: null } satisfies Prisma.DriveFileVersionWhereInput
+  const protectedFilters: Prisma.DriveFileVersionWhereInput[] = [{ isPinned: true }]
+  if (input.currentStorageKey) protectedFilters.push({ storageKey: input.currentStorageKey })
+  const protectedCount = await tx.driveFileVersion.count({
+    where: { ...baseWhere, OR: protectedFilters },
   })
-  const protectedIds = new Set(
-    versions
-      .filter((version) => version.storageKey === input.currentStorageKey || version.isPinned)
-      .map((version) => version.id),
-  )
-  let remainingKeepSlots = Math.max(maxCount - protectedIds.size, 0)
-  const candidates: Array<{ readonly id: string; readonly storageKey: string; readonly size: bigint }> = []
-  for (const version of versions) {
-    if (protectedIds.has(version.id)) continue
-    if (version.createdAt >= cutoff && remainingKeepSlots > 0) {
-      remainingKeepSlots -= 1
-      continue
-    }
-    candidates.push({ id: version.id, storageKey: version.storageKey, size: version.size })
+  const remainingKeepSlots = Math.max(maxCount - protectedCount, 0)
+  const unprotectedWhere = {
+    ...baseWhere,
+    isPinned: false,
+    ...(input.currentStorageKey ? { storageKey: { not: input.currentStorageKey } } : {}),
+  } satisfies Prisma.DriveFileVersionWhereInput
+  const candidateSelect = { id: true, storageKey: true, size: true } satisfies Prisma.DriveFileVersionSelect
+  const candidates = new Map<string, { readonly id: string; readonly storageKey: string; readonly size: bigint }>()
+  if (remainingKeepSlots > 0) {
+    const expiredVersions = await tx.driveFileVersion.findMany({
+      where: { ...unprotectedWhere, createdAt: { lt: cutoff } },
+      select: candidateSelect,
+      orderBy: { versionNumber: "desc" },
+    })
+    for (const version of expiredVersions) candidates.set(version.id, version)
   }
-  return candidates
+  const overflowVersions = await tx.driveFileVersion.findMany({
+    where: unprotectedWhere,
+    select: candidateSelect,
+    orderBy: { versionNumber: "desc" },
+    skip: remainingKeepSlots,
+  })
+  for (const version of overflowVersions) candidates.set(version.id, version)
+  return [...candidates.values()]
 }
 
 function normalizeDriveFileVersionSource(value: string): DriveFileVersionSource {

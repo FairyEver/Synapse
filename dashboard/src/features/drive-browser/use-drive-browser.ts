@@ -258,10 +258,17 @@ function snapshotAfterTextSave(
         }
       : snapshot.edit,
     preview: snapshot.preview && isEditableTextPreviewKind(snapshot.preview.kind)
-      ? {
-          ...snapshot.preview,
-          text,
-        }
+      ? snapshot.preview.kind === 'markdown'
+        ? {
+            ...snapshot.preview,
+            text,
+            html: null,
+            outline: null,
+          }
+        : {
+            ...snapshot.preview,
+            text,
+          }
       : snapshot.preview,
   }
 }
@@ -353,8 +360,20 @@ function mergeDriveBrowserSnapshots(
 ): DriveBrowserSnapshotDto {
   return {
     ...next,
-    children: [...current.children, ...next.children],
+    children: mergeDriveBrowserChildren(current.children, next.children),
   }
+}
+
+function mergeDriveBrowserChildren(
+  currentChildren: DriveBrowserSnapshotDto['children'],
+  nextChildren: DriveBrowserSnapshotDto['children']
+): DriveBrowserSnapshotDto['children'] {
+  const seenIds = new Set<string>()
+  return [...currentChildren, ...nextChildren].filter((child) => {
+    if (seenIds.has(child.id)) return false
+    seenIds.add(child.id)
+    return true
+  })
 }
 
 function driveBrowserChildrenPageKey(snapshot: DriveBrowserSnapshotDto): string {

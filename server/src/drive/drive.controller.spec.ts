@@ -37,6 +37,7 @@ describe("DriveController", () => {
   const originalAppPublicUrl = process.env.APP_PUBLIC_URL
   const drive = {
     listItems: vi.fn(),
+    listItemsPage: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
     listTrash: vi.fn(),
@@ -109,6 +110,7 @@ describe("DriveController", () => {
 
   beforeEach(async () => {
     drive.listItems.mockReset()
+    drive.listItemsPage.mockReset()
     drive.prepareFolderUpload.mockReset()
     drive.deleteItem.mockReset()
     drive.listTrash.mockReset()
@@ -243,6 +245,49 @@ describe("DriveController", () => {
     }
   })
 
+  it("keeps legacy Drive item list responses and supports paged item lists", async () => {
+    drive.listItems.mockResolvedValue([{ id: "legacy-item" }])
+    drive.listItemsPage.mockResolvedValue({
+      items: [{ id: "paged-item" }],
+      page: { offset: 20, limit: 10, hasMore: false, nextOffset: null },
+    })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const legacyResponse = await request(userApp.getHttpServer())
+        .get("/api/drive/items?parentId=folder-1")
+        .expect(200)
+      expect(legacyResponse.body).toEqual([{ id: "legacy-item" }])
+      expect(drive.listItems).toHaveBeenCalledWith("user-1", "folder-1")
+      expect(drive.listItemsPage).not.toHaveBeenCalled()
+
+      const pagedResponse = await request(userApp.getHttpServer())
+        .get("/api/drive/items?parentId=folder-1&offset=20&limit=10")
+        .expect(200)
+      expect(pagedResponse.body).toEqual({
+        items: [{ id: "paged-item" }],
+        page: { offset: 20, limit: 10, hasMore: false, nextOffset: null },
+      })
+      expect(drive.listItemsPage).toHaveBeenCalledWith("user-1", "folder-1", { offset: 20, limit: 10 })
+    } finally {
+      await userApp.close()
+    }
+  })
+
   it("requires user auth for owner direct file responses", async () => {
     await request(app!.getHttpServer()).get("/drive/items/root-1/download").expect(401)
   })
@@ -346,6 +391,7 @@ describe("DriveController", () => {
   it("serves nested static site assets from the copied deployment", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
+      site: createDriveSite({ accessMode: "public" }),
       asset: {
         storageKey: "drive-sites/site_public/dep-1/assets/app.css",
         relativePath: "assets/app.css",
@@ -357,12 +403,14 @@ describe("DriveController", () => {
 
     const response = await request(app!.getHttpServer()).get("/sites/site_public/assets/app.css").expect(200)
     expect(response.headers["content-type"]).toContain("text/css")
+    expect(response.headers["cache-control"]).toBe("public, max-age=300")
     expect(response.text).toBe("body{}")
   })
 
   it("serves the static site root without a redirect loop", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
+      site: createDriveSite({ accessMode: "public" }),
       asset: {
         storageKey: "drive-sites/site_public/dep-1/index.html",
         relativePath: "index.html",
@@ -376,6 +424,27 @@ describe("DriveController", () => {
     expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "" })
     expect(response.headers["content-type"]).toContain("text/html")
     expect(response.text).toBe("<h1>Home</h1>")
+  })
+
+  it("prevents shared caching for protected static site assets", async () => {
+    sites.resolvePublicSite.mockResolvedValue({
+      status: "ok",
+      site: createDriveSite({ siteId: "site_secret", accessMode: "password" }),
+      asset: {
+        storageKey: "drive-sites/site_secret/dep-1/assets/app.js",
+        relativePath: "assets/app.js",
+        contentType: "text/javascript",
+        size: 17n,
+      },
+    })
+    storage.getObjectStream.mockResolvedValue({ stream: Readable.from("console.log(1)"), size: 14n, contentType: "text/javascript" })
+
+    const response = await request(app!.getHttpServer()).get("/sites/site_secret/assets/app.js").expect(200)
+
+    expect(response.headers["content-type"]).toContain("text/javascript")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.text).toBe("console.log(1)")
   })
 
   it("accepts password query links for protected static sites", async () => {
@@ -485,11 +554,28 @@ describe("DriveController", () => {
       await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/thread-1").expect(200)
 
       expect(annotations.listOwnerAnnotations).toHaveBeenCalledWith("user-1", "item-1")
-      expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", expect.objectContaining({ body: "Comment body" }))
-      expect(annotations.replyOwnerAnnotation).toHaveBeenCalledWith("user-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply body" })
-      expect(annotations.updateOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", { body: "Updated body" })
-      expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1")
-      expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1")
+      expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        expect.objectContaining({ body: "Comment body" }),
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.replyOwnerAnnotation).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        "thread-1",
+        { parentCommentId: null, body: "Reply body" },
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.updateOwnerComment).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        "comment-1",
+        { body: "Updated body" },
+        expect.objectContaining({ ipAddress: expect.any(String) }),
+      )
+      expect(annotations.deleteOwnerComment).toHaveBeenCalledWith("user-1", "item-1", "comment-1", expect.objectContaining({ ipAddress: expect.any(String) }))
+      expect(annotations.deleteOwnerThread).toHaveBeenCalledWith("user-1", "item-1", "thread-1", expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -1169,6 +1255,7 @@ describe("DriveController", () => {
         itemId: "file-1",
         cookie: "file-cookie",
         body: expect.objectContaining({ body: "Comment body" }),
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
       expect(annotations.replyShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
         actorUserId: "user-1",
@@ -1176,14 +1263,22 @@ describe("DriveController", () => {
         itemId: "file-1",
         threadId: "thread-1",
         body: { parentCommentId: "comment-1", body: "Reply body" },
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
       expect(annotations.updateShareComment).toHaveBeenCalledWith(expect.objectContaining({
         actorUserId: "user-1",
         commentId: "comment-1",
         body: { body: "Updated body" },
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
-      expect(annotations.deleteShareComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: "comment-1" }))
-      expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({ threadId: "thread-1" }))
+      expect(annotations.deleteShareComment).toHaveBeenCalledWith(expect.objectContaining({
+        commentId: "comment-1",
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      }))
+      expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({
+        threadId: "thread-1",
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      }))
     } finally {
       await shareApp.close()
     }
@@ -1611,7 +1706,10 @@ describe("DriveController", () => {
     drive.openShareBrowserItemDownload.mockResolvedValue({
       kind: "zip",
       filename: "资料.zip",
-      entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+      entries: [
+        { path: "empty/", storageKey: null },
+        { path: "brief.txt", storageKey: "drive/file-1" },
+      ],
     })
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
@@ -1628,6 +1726,7 @@ describe("DriveController", () => {
       cookie: undefined,
       password: undefined,
     })
+    expect(storage.getObjectStream).toHaveBeenCalledTimes(1)
     expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -1652,7 +1751,10 @@ describe("DriveController", () => {
       drive.openOwnerBrowserItemDownload.mockResolvedValue({
         kind: "zip",
         filename: "项目资料.zip",
-        entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+        entries: [
+          { path: "empty/", storageKey: null },
+          { path: "brief.txt", storageKey: "drive/file-1" },
+        ],
       })
 
       const response = await request(userApp.getHttpServer()).get("/drive/items/folder-2/download").expect(200)
@@ -1665,6 +1767,8 @@ describe("DriveController", () => {
         userId: "user-1",
         itemId: "folder-2",
       })
+      expect(storage.getObjectStream).toHaveBeenCalledTimes(1)
+      expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
     } finally {
       await userApp.close()
     }

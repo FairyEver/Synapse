@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable, Logger } from "@nestjs/common"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   parseDrivePublicAssetUrl,
@@ -9,10 +9,13 @@ import {
   type DriveDocumentImageSource,
   type DriveDocumentImageSourcesDto,
 } from "@synapse/shared"
+import { formatAuditError } from "../common/audit-error"
 import { extractDriveMarkdownImages, normalizeDriveMarkdownImageSrc, replaceDriveMarkdownImageSources } from "./drive-document-image-parser"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveService } from "./drive.service"
+
+const DRIVE_DOCUMENT_IMAGE_SCAN_MAX_SOURCES = DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES
 
 export interface DriveMarkdownImageDocument {
   readonly itemId: string
@@ -47,6 +50,7 @@ export interface DriveDocumentImageDrivePort {
 
 @Injectable()
 export class DriveDocumentImageService {
+  private readonly logger = new Logger(DriveDocumentImageService.name)
   private readonly drive: DriveDocumentImageDrivePort
   private readonly publicAssets: DrivePublicAssetService
   private readonly fetcher: DriveRemoteImageFetcher
@@ -133,7 +137,9 @@ export class DriveDocumentImageService {
     readonly actorUserId: string
   }): Promise<DriveDocumentImageSourcesDto> {
     const sources: DriveDocumentImageSource[] = []
-    for (const image of extractDriveMarkdownImages(input.document.markdown)) {
+    const images = extractDriveMarkdownImages(input.document.markdown)
+      .slice(0, DRIVE_DOCUMENT_IMAGE_SCAN_MAX_SOURCES)
+    for (const image of images) {
       sources.push(await this.classifySource({
         source: image,
         documentOwnerId: input.document.ownerId,
@@ -267,15 +273,26 @@ export class DriveDocumentImageService {
     let versionId = input.document.versionId
     let replacedOccurrenceCount = 0
     if (imported.length > 0) {
-      const replaced = replaceDriveMarkdownImageSources(input.document.markdown, replacements)
-      replacedOccurrenceCount = replaced.replacedOccurrenceCount
-      if (replacedOccurrenceCount > 0) {
-        const saved = await this.drive.updateOwnerFileText(input.actorUserId, input.document.itemId, {
-          contentType: "text",
-          text: replaced.markdown,
-          baseVersionId: input.body.baseVersionId,
-        }, input.auditContext)
-        versionId = saved.version.id
+      try {
+        const replaced = replaceDriveMarkdownImageSources(input.document.markdown, replacements)
+        replacedOccurrenceCount = replaced.replacedOccurrenceCount
+        if (replacedOccurrenceCount > 0) {
+          const saved = await this.drive.updateOwnerFileText(input.actorUserId, input.document.itemId, {
+            contentType: "text",
+            text: replaced.markdown,
+            baseVersionId: input.body.baseVersionId,
+          }, input.auditContext)
+          versionId = saved.version.id
+        }
+      } catch (error) {
+        await this.cleanupImportedDocumentImageAssetsSafely({
+          actorUserId: input.actorUserId,
+          itemId: input.document.itemId,
+          imported,
+          auditContext: input.auditContext,
+          cause: error,
+        })
+        throw error
       }
     }
 
@@ -290,6 +307,36 @@ export class DriveDocumentImageService {
         replacedOccurrenceCount,
       },
     }
+  }
+
+  private async cleanupImportedDocumentImageAssetsSafely(input: {
+    readonly actorUserId: string
+    readonly itemId: string
+    readonly imported: readonly DriveDocumentImageImportResult["imported"][number][]
+    readonly auditContext?: { readonly ipAddress?: string }
+    readonly cause: unknown
+  }): Promise<void> {
+    let failedCleanupCount = 0
+    for (const asset of input.imported) {
+      try {
+        await this.publicAssets.cleanupImportedAsset(input.actorUserId, asset.assetId, input.auditContext)
+      } catch (error) {
+        failedCleanupCount += 1
+        this.logger.warn({
+          itemId: input.itemId,
+          assetId: asset.assetId,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: formatAuditError(error),
+        }, "Failed to cleanup imported document image asset")
+      }
+    }
+    this.logger.warn({
+      itemId: input.itemId,
+      importedAssetCount: input.imported.length,
+      failedCleanupCount,
+      errorName: input.cause instanceof Error ? input.cause.name : typeof input.cause,
+      errorMessage: formatAuditError(input.cause),
+    }, "Drive document image import save failed after public assets were created")
   }
 
   private async importSourceImage(input: {

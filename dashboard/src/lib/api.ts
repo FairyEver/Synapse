@@ -40,6 +40,9 @@ import type {
   DriveSiteListPageDto,
   DriveSitePreflightDto,
   DriveTrashListPageDto,
+  DriveFolderUploadPrepareDirectoryInput,
+  DriveFolderUploadPrepareFileInput,
+  DriveFolderUploadPrepareResult,
   DriveUploadPrepareResult,
   DriveUsageDto,
   SkillRepositoryDeleteResultDto,
@@ -488,6 +491,7 @@ function isProtectedDriveApiPath(path: string) {
 
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/image-sources(?:/import)?(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
 }
 
@@ -1053,6 +1057,21 @@ export const driveApi = {
         name: input.name,
         size: input.size,
         mimeType: input.mimeType ?? null,
+      }),
+    }),
+  prepareFolderUpload: (input: {
+    readonly parentId?: string | null
+    readonly folderName: string
+    readonly directories?: readonly DriveFolderUploadPrepareDirectoryInput[]
+    readonly files: readonly DriveFolderUploadPrepareFileInput[]
+  }) =>
+    request<DriveFolderUploadPrepareResult>(`${driveApiBasePath}/uploads/folder/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({
+        parentId: input.parentId ?? null,
+        folderName: input.folderName,
+        directories: input.directories ?? [],
+        files: input.files,
       }),
     }),
   completeUpload: (sessionId: string) =>

@@ -35,6 +35,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_site_list`
 - `app_drive_site_update_access`
 - `app_drive_site_disable`
+- `app_drive_site_enable`
 - `app_drive_site_delete`
 - `app_drive_site_republish`
 - `app_drive_usage_get`
@@ -75,8 +76,9 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 ## Default Flow
 
 1. If the user did not specify a target folder, omit `parentId` so the file or folder is uploaded to the Drive root directory.
-2. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
-3. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
+2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false.
+3. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
+4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
    - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
 4. To open or preview an item for the owner, call `app_drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
@@ -95,20 +97,21 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 11. If the user asks to publish a Drive folder as a static website, folder site, multi-page HTML prototype, or product prototype site, call `app_drive_site_create`. Sites use `/sites/<siteId>/`, copy the folder at publish time, and do not grant Drive browse or edit access.
    - Use `sourceFolderItemId`, `name`, `accessMode`, and `expiresIn`.
    - Set `entryPath` only when the homepage is not the default `index.html`.
-   - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Do not provide a password value; Synapse generates it and returns it in the result.
-   - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.
+   - Use `accessMode: "public"` for open sites or `accessMode: "password"` when the user asks for a password. Pass `password` only when the user provides a custom site password. Site MCP results never return passwords, so ask for a custom password when the user needs a known value.
+   - Use `app_drive_site_list`, `app_drive_site_update_access`, `app_drive_site_disable`, `app_drive_site_enable`, `app_drive_site_delete`, and `app_drive_site_republish` for existing site management.
+   - Site tools return `password: null` and `urlWithPassword` equal to `url`; do not infer or reveal site passwords from tool results.
 12. If a folder needs to exist first, call `app_drive_folder_create`, then pass the returned folder id as `parentId`.
 13. To organize the user's Drive, call `app_drive_stats_get` and `app_drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
 14. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `app_drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
 15. Use `app_drive_folder_path_ensure` to create or reuse target category folders, then call `app_drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
 16. Apply organization changes only with `app_drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
-17. For file history, call `app_drive_file_version_list` first. Use `app_drive_file_version_restore` only when the user wants that version to become current, `app_drive_file_version_delete` only for non-current versions the user wants removed, and `app_drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
+17. For file history, call `app_drive_file_version_list` first. Use `app_drive_file_version_restore` only when the user wants that version to become current, `app_drive_file_version_delete` only for non-current versions the user wants removed, and `app_drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup. Skip versions marked `deletePending` or shown as pending cleanup; they cannot be downloaded, restored, pinned, or deleted again until cleanup retry finishes.
 18. Use `app_drive_trash_list` to inspect user-visible trash. Restore rows from that list with `app_drive_item_restore`; pass `kind` and `assetId` when the row kind is `public_asset`. Use `app_drive_direct_link_restore` only when the user directly provides a public asset id. Use `app_drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
 19. Report the final item name, item id, share URL, public asset URL, or site URL when one was created.
 
 ## Safety
 
-Never reveal COS AK, SK, Authorization headers, local secrets, share passwords from list results, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
+Never reveal COS AK, SK, Authorization headers, local secrets, share or site passwords from list results, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
 
 Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 
@@ -122,7 +125,7 @@ Sites use `/sites/<siteId>/` and are read-only static snapshots copied from a Dr
 
 Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 
-File versions are full-copy history for owned Drive files. Public share links always point to the current file and do not expose version history. Restoring a version creates a new current version; deleting a historical version cannot be undone.
+File versions are full-copy history for owned Drive files. Public share links always point to the current file and do not expose version history. Restoring a version creates a new current version; deleting a historical version cannot be undone. Versions marked `deletePending` are cleanup placeholders and are not actionable.
 
 Public asset access logs are admin-only and are not available through MCP. Do not invent or request access-log tools.
 
@@ -139,6 +142,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "重新发布站点": call `app_drive_site_republish`.
 - "管理站点": call `app_drive_site_list`.
 - "停用站点": call `app_drive_site_disable`.
+- "启用站点": call `app_drive_site_enable`.
 - "删除站点": call `app_drive_site_delete`.
 - "把这个目录传到云盘": call `app_drive_folder_upload`.
 - "打开/预览这个文件": call `app_drive_item_preview_get`.

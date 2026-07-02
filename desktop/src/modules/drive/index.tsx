@@ -16,6 +16,7 @@ import {
   type DriveAccessSettingsInput,
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
+  type DriveItemListPageDto,
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
@@ -122,6 +123,8 @@ type DrivePathEntry = {
   readonly name: string
 }
 
+type DriveItemListBridgeResult = DriveItemListPageDto | DriveItemDto[]
+
 type NameDialogState =
   | { readonly mode: "create"; readonly item: null; readonly value: string }
   | { readonly mode: "rename"; readonly item: DriveItemDto; readonly value: string }
@@ -131,6 +134,9 @@ type DriveMoveTreeBranch = {
   readonly folders: readonly DriveItemDto[]
   readonly loaded: boolean
   readonly loading: boolean
+  readonly loadingMore: boolean
+  readonly loadMoreError: string | null
+  readonly page: DriveBrowserChildrenPageDto
 }
 
 type DriveLoadError =
@@ -171,6 +177,7 @@ type DriveStatusBadge = {
 
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
+const DRIVE_ITEMS_PAGE_SIZE = 100
 const DRIVE_PUBLIC_LINKS_PAGE_SIZE = 20
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
@@ -202,6 +209,55 @@ function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
+function createDriveItemsPage(items: readonly DriveItemDto[] = []): DriveItemListPageDto {
+  return {
+    items,
+    page: {
+      offset: 0,
+      limit: Math.max(items.length, DRIVE_ITEMS_PAGE_SIZE),
+      hasMore: false,
+      nextOffset: null,
+    },
+  }
+}
+
+function normalizeDriveItemsPage(result: DriveItemListBridgeResult): DriveItemListPageDto {
+  return Array.isArray(result) ? createDriveItemsPage(result) : result
+}
+
+function appendDriveItems(current: readonly DriveItemDto[], nextItems: readonly DriveItemDto[]): DriveItemDto[] {
+  const seenIds = new Set(current.map((item) => item.id))
+  return [
+    ...current,
+    ...nextItems.filter((item) => {
+      if (seenIds.has(item.id)) return false
+      seenIds.add(item.id)
+      return true
+    }),
+  ]
+}
+
+function driveFoldersFromPage(page: DriveItemListPageDto): DriveItemDto[] {
+  return page.items.filter((item) => item.type === "folder")
+}
+
+function useBusyIdSet() {
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
+  const busyIdsRef = useRef<Set<string>>(new Set())
+  const setBusyId = useCallback((id: string, busy: boolean) => {
+    const nextIds = new Set(busyIdsRef.current)
+    if (busy) {
+      nextIds.add(id)
+    } else {
+      nextIds.delete(id)
+    }
+    busyIdsRef.current = nextIds
+    setBusyIds(nextIds)
+  }, [])
+
+  return { busyIds, busyIdsRef, setBusyId }
+}
+
 function DriveModule() {
   return (
     <DriveRendererActionsProvider>
@@ -214,6 +270,9 @@ function DriveModuleContent() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
   const { actions: rendererActions } = useDriveRendererActions()
   const [items, setItems] = useState<DriveItemDto[]>([])
+  const [itemsPage, setItemsPage] = useState<DriveBrowserChildrenPageDto>(() => createDriveItemsPage().page)
+  const [loadingMoreItems, setLoadingMoreItems] = useState(false)
+  const [loadMoreItemsError, setLoadMoreItemsError] = useState<string | null>(null)
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [activeView, setActiveView] = useState<DriveActiveView>("files")
   const [loading, setLoading] = useState(false)
@@ -229,6 +288,11 @@ function DriveModuleContent() {
   const [sitesOpen, setSitesOpen] = useState(false)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
+  const {
+    busyIds: disablingShareIds,
+    busyIdsRef: disablingShareIdsRef,
+    setBusyId: setDisablingShareId,
+  } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
@@ -255,12 +319,15 @@ function DriveModuleContent() {
     const requestParentId = parentId
     const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(true)
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     setError(null)
     try {
       const bridge = requireSynapseBridge()
-      const nextItems = await bridge.account.listDriveItems({ parentId: requestParentId })
+      const nextPage = normalizeDriveItemsPage(await bridge.account.listDriveItems({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
     } catch (rawError) {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
@@ -289,9 +356,37 @@ function DriveModuleContent() {
     ])
   }, [loadDriveUsage, loadItems])
 
+  const loadMoreItems = useCallback(async () => {
+    if (!accountAuthenticated || loadingMoreItems || !itemsPage.hasMore || itemsPage.nextOffset === null) return
+    const requestParentId = parentId
+    const requestId = driveItemsLoadRequestIdRef.current
+    setLoadingMoreItems(true)
+    setLoadMoreItemsError(null)
+    try {
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId: requestParentId,
+        offset: itemsPage.nextOffset,
+        limit: itemsPage.limit || DRIVE_ITEMS_PAGE_SIZE,
+      }))
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
+      setItems((current) => appendDriveItems(current, nextPage.items))
+      setItemsPage(nextPage.page)
+    } catch (rawError) {
+      if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
+      setLoadMoreItemsError(errorMessage(rawError, "加载更多失败"))
+    } finally {
+      if (driveItemsLoadRequestIdRef.current === requestId && currentParentIdRef.current === requestParentId) {
+        setLoadingMoreItems(false)
+      }
+    }
+  }, [accountAuthenticated, itemsPage, loadingMoreItems, parentId])
+
   useEffect(() => {
     if (!accountAuthenticated) {
       setItems([])
+      setItemsPage(createDriveItemsPage().page)
+      setLoadingMoreItems(false)
+      setLoadMoreItemsError(null)
       setUsageState({ status: "idle", usage: null })
       setSyncSnapshot(null)
       setLoading(false)
@@ -337,13 +432,16 @@ function DriveModuleContent() {
     if (openingFolderId !== null) return
     const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(false)
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     setOpeningFolderId(item.id)
     setError(null)
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: item.id }))
       if (driveItemsLoadRequestIdRef.current !== requestId) return
       prefetchedParentIdRef.current = item.id
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
       setPath((current) => {
         currentParentIdRef.current = item.id
         return [...current, { id: item.id, name: item.name }]
@@ -385,11 +483,14 @@ function DriveModuleContent() {
     if (!accountAuthenticated) return
     const requestParentId = currentParentIdRef.current
     const requestId = ++driveItemsLoadRequestIdRef.current
+    setLoadingMoreItems(false)
+    setLoadMoreItemsError(null)
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({ parentId: requestParentId }))
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(null)
-      setItems(nextItems)
+      setItems([...nextPage.items])
+      setItemsPage(nextPage.page)
     } catch (rawError) {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
@@ -583,15 +684,19 @@ function DriveModuleContent() {
   }, [accessSettingsTarget, loadItems])
 
   const handleDisableShare = useCallback(async (item: DriveItemDto) => {
-    if (!item.activeShareId) return
+    const shareId = item.activeShareId
+    if (!shareId || disablingShareIdsRef.current.has(shareId)) return
+    setDisablingShareId(shareId, true)
     try {
-      await requireSynapseBridge().account.disableDriveShare({ shareId: item.activeShareId })
+      await requireSynapseBridge().account.disableDriveShare({ shareId })
       toast("已取消分享")
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "取消分享失败"))
+    } finally {
+      setDisablingShareId(shareId, false)
     }
-  }, [loadItems])
+  }, [disablingShareIdsRef, loadItems, setDisablingShareId])
 
   const activePath: readonly DrivePathEntry[] = (() => {
     if (activeView === "public-assets") {
@@ -737,12 +842,16 @@ function DriveModuleContent() {
     return (
       <DriveFileList
         items={items}
+        itemsPage={itemsPage}
         systemEntries={driveRootSystemEntries(parentId)}
         loading={loading}
+        loadingMoreItems={loadingMoreItems}
+        loadMoreItemsError={loadMoreItemsError}
         openingFolderId={openingFolderId}
         path={path}
         onOpenFolder={openFolder}
         onOpenSystemEntry={openSystemEntry}
+        onLoadMoreItems={loadMoreItems}
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
@@ -752,6 +861,7 @@ function DriveModuleContent() {
         onOpenSyncBinding={(item, drivePathHint) => setSyncDialog({ mode: "bind", item, drivePathHint })}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
+        disablingShareIds={disablingShareIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
       />
@@ -946,21 +1056,30 @@ function DriveMoveTargetTree({
       ...current,
       [key]: {
         error: null,
-        folders: current[key]?.folders ?? [],
+        folders: force ? [] : current[key]?.folders ?? [],
         loaded: false,
         loading: true,
+        loadingMore: false,
+        loadMoreError: null,
+        page: createDriveItemsPage().page,
       },
     }))
 
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId })
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId,
+        limit: DRIVE_ITEMS_PAGE_SIZE,
+      }))
       setBranches((current) => ({
         ...current,
         [key]: {
           error: null,
-          folders: nextItems.filter((item) => item.type === "folder"),
+          folders: driveFoldersFromPage(nextPage),
           loaded: true,
           loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: nextPage.page,
         },
       }))
     } catch (rawError) {
@@ -971,6 +1090,53 @@ function DriveMoveTargetTree({
           folders: current[key]?.folders ?? [],
           loaded: false,
           loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: current[key]?.page ?? createDriveItemsPage().page,
+        },
+      }))
+    }
+  }, [branches])
+
+  const loadMoreFolders = useCallback(async (parentId: string | null) => {
+    const key = driveMoveTreeKey(parentId)
+    const existing = branches[key]
+    if (!existing || existing.loading || existing.loadingMore || !existing.page.hasMore || existing.page.nextOffset === null) return
+
+    setBranches((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        loadingMore: true,
+        loadMoreError: null,
+      },
+    }))
+
+    try {
+      const nextPage = normalizeDriveItemsPage(await requireSynapseBridge().account.listDriveItems({
+        parentId,
+        offset: existing.page.nextOffset,
+        limit: existing.page.limit || DRIVE_ITEMS_PAGE_SIZE,
+      }))
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          error: null,
+          folders: appendDriveItems(current[key]?.folders ?? [], driveFoldersFromPage(nextPage)),
+          loaded: true,
+          loading: false,
+          loadingMore: false,
+          loadMoreError: null,
+          page: nextPage.page,
+        },
+      }))
+    } catch (rawError) {
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          ...current[key],
+          loadingMore: false,
+          loadMoreError: errorMessage(rawError, "加载更多失败"),
         },
       }))
     }
@@ -1011,6 +1177,8 @@ function DriveMoveTargetTree({
           disabledFolderId={disabledFolderId}
           expandedIds={expandedIds}
           loadFolders={loadFolders}
+          loadMoreFolders={loadMoreFolders}
+          onLoadMore={() => { void loadMoreFolders(null) }}
           onRetry={() => { void loadFolders(null, true) }}
           onSelect={onSelect}
           onToggle={toggleFolder}
@@ -1053,6 +1221,8 @@ function DriveMoveTreeChildren({
   disabledFolderId,
   expandedIds,
   loadFolders,
+  loadMoreFolders,
+  onLoadMore,
   onRetry,
   onSelect,
   onToggle,
@@ -1064,6 +1234,8 @@ function DriveMoveTreeChildren({
   readonly disabledFolderId: string | null
   readonly expandedIds: ReadonlySet<string>
   readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly loadMoreFolders: (parentId: string | null) => Promise<void>
+  readonly onLoadMore: () => void
   readonly onRetry: () => void
   readonly onSelect: (parentId: string) => void
   readonly onToggle: (folder: DriveItemDto) => void
@@ -1090,7 +1262,8 @@ function DriveMoveTreeChildren({
   }
 
   const folders = branch?.folders ?? []
-  if (folders.length === 0) {
+  const hasMore = branch?.page.hasMore ?? false
+  if (folders.length === 0 && !hasMore) {
     return (
       <div className="px-3 py-2 text-sm text-muted-foreground">
         暂无文件夹
@@ -1108,11 +1281,30 @@ function DriveMoveTreeChildren({
           expandedIds={expandedIds}
           folder={folder}
           loadFolders={loadFolders}
+          loadMoreFolders={loadMoreFolders}
           onSelect={onSelect}
           onToggle={onToggle}
           selectedParentId={selectedParentId}
         />
       ))}
+      {branch?.loadMoreError ? (
+        <div className="px-3 py-1 text-sm text-destructive">{branch.loadMoreError}</div>
+      ) : null}
+      {hasMore ? (
+        <div className="px-3 py-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={branch?.loadingMore ?? false}
+            aria-label={`加载更多 ${parentName}`}
+            onClick={onLoadMore}
+          >
+            {branch?.loadingMore ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+            {branch?.loadingMore ? "加载中" : "加载更多"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1123,6 +1315,7 @@ function DriveMoveTreeFolder({
   expandedIds,
   folder,
   loadFolders,
+  loadMoreFolders,
   onSelect,
   onToggle,
   selectedParentId,
@@ -1132,6 +1325,7 @@ function DriveMoveTreeFolder({
   readonly expandedIds: ReadonlySet<string>
   readonly folder: DriveItemDto
   readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly loadMoreFolders: (parentId: string | null) => Promise<void>
   readonly onSelect: (parentId: string) => void
   readonly onToggle: (folder: DriveItemDto) => void
   readonly selectedParentId: string
@@ -1168,6 +1362,8 @@ function DriveMoveTreeFolder({
             disabledFolderId={disabledFolderId}
             expandedIds={expandedIds}
             loadFolders={loadFolders}
+            loadMoreFolders={loadMoreFolders}
+            onLoadMore={() => { void loadMoreFolders(folder.id) }}
             onRetry={() => { void loadFolders(folder.id, true) }}
             onSelect={onSelect}
             onToggle={onToggle}
@@ -1210,12 +1406,16 @@ function DriveMoveTreeSelectButton({
 
 function DriveFileList({
   items,
+  itemsPage,
   systemEntries,
   loading,
+  loadingMoreItems,
+  loadMoreItemsError,
   openingFolderId,
   path,
   onOpenFolder,
   onOpenSystemEntry,
+  onLoadMoreItems,
   onRename,
   onMove,
   onDelete,
@@ -1225,16 +1425,21 @@ function DriveFileList({
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
+  disablingShareIds,
   onUploadDroppedFiles,
   uploadDisabled,
 }: {
   readonly items: readonly DriveItemDto[]
+  readonly itemsPage: DriveBrowserChildrenPageDto
   readonly systemEntries: readonly DriveSystemEntry[]
   readonly loading: boolean
+  readonly loadingMoreItems: boolean
+  readonly loadMoreItemsError: string | null
   readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onOpenSystemEntry: (entry: DriveSystemEntry) => void
+  readonly onLoadMoreItems: () => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
@@ -1244,6 +1449,7 @@ function DriveFileList({
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly disablingShareIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly uploadDisabled: boolean
 }) {
@@ -1326,10 +1532,30 @@ function DriveFileList({
                   onOpenSyncBinding={onOpenSyncBinding}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
+                  disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
                 />
               ))}
             </TableBody>
           </Table>
+          {itemsPage.hasMore || loadMoreItemsError ? (
+            <div className="flex flex-col items-center gap-2 border-t px-3 py-3">
+              {loadMoreItemsError ? (
+                <div className="text-sm text-destructive">{loadMoreItemsError}</div>
+              ) : null}
+              {itemsPage.hasMore ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingMoreItems}
+                  onClick={onLoadMoreItems}
+                >
+                  {loadingMoreItems ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                  {loadingMoreItems ? "加载中" : "加载更多"}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </ModuleContentPanel>
       )}
       {dragActive ? (
@@ -1666,6 +1892,7 @@ function DriveFileListRow({
   onOpenSyncBinding,
   onOpenShareDetails,
   onDisableShare,
+  disablingShare,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -1680,6 +1907,7 @@ function DriveFileListRow({
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly disablingShare: boolean
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -1786,7 +2014,8 @@ function DriveFileListRow({
           onPointerDown={(event) => event.stopPropagation()}
         >
           {hasActiveShare ? (
-            <Button type="button" variant="ghost" size="xs" disabled={!canShare} onClick={() => onDisableShare(item)}>
+            <Button type="button" variant="ghost" size="xs" disabled={!canShare || disablingShare} onClick={() => onDisableShare(item)}>
+              {disablingShare ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
               取消分享
             </Button>
           ) : (
@@ -2119,6 +2348,11 @@ function DrivePublicLinksDialog({
 }) {
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
   const [shareFilter, setShareFilter] = useState<DrivePublicLinkFilter>("file")
+  const {
+    busyIds: disablingShareIds,
+    busyIdsRef: disablingShareIdsRef,
+    setBusyId: setDisablingShareId,
+  } = useBusyIdSet()
   const shareLoadGenerationRef = useRef(0)
   const visibleShares = shareState.items.filter((item) => item.itemType === shareFilter)
 
@@ -2170,6 +2404,20 @@ function DrivePublicLinksDialog({
     await onDriveItemsChanged()
   }, [loadShares, onDriveItemsChanged])
 
+  const handleDisableShare = useCallback(async (shareId: string) => {
+    if (disablingShareIdsRef.current.has(shareId)) return
+    setDisablingShareId(shareId, true)
+    try {
+      await requireSynapseBridge().account.disableDriveShare({ shareId })
+      toast("已取消分享")
+      await reloadAfterPublicLinkChange()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "取消分享失败"))
+    } finally {
+      setDisablingShareId(shareId, false)
+    }
+  }, [disablingShareIdsRef, reloadAfterPublicLinkChange, setDisablingShareId])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -2210,7 +2458,8 @@ function DrivePublicLinksDialog({
                       await loadShares({ offset: shareState.page.nextOffset, append: true, generation: shareLoadGenerationRef.current })
                     }}
                     onRetry={loadShares}
-                    onReload={reloadAfterPublicLinkChange}
+                    onDisableShare={handleDisableShare}
+                    disablingShareIds={disablingShareIds}
                   />
                 </div>
               </ScrollArea>
@@ -2234,7 +2483,8 @@ function DrivePublicLinkList({
   shares,
   onLoadMore,
   onRetry,
-  onReload,
+  onDisableShare,
+  disablingShareIds,
 }: {
   readonly emptyTitle: string
   readonly error: string | null
@@ -2244,7 +2494,8 @@ function DrivePublicLinkList({
   readonly shares: readonly DriveShareListItemDto[]
   readonly onLoadMore: () => Promise<void>
   readonly onRetry: () => Promise<void>
-  readonly onReload: () => Promise<void>
+  readonly onDisableShare: (shareId: string) => void
+  readonly disablingShareIds: ReadonlySet<string>
 }) {
   if (loading) return <DrivePublicLinkTableSkeleton />
   if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
@@ -2252,7 +2503,14 @@ function DrivePublicLinkList({
 
   return (
     <div className="grid gap-3">
-      <DriveShareList error={null} items={shares} loading={false} onReload={onReload} />
+      <DriveShareList
+        error={null}
+        items={shares}
+        loading={false}
+        onReload={onRetry}
+        onDisableShare={onDisableShare}
+        disablingShareIds={disablingShareIds}
+      />
       {page?.hasMore ? (
         <div className="flex justify-center pt-1">
           <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
@@ -2278,11 +2536,13 @@ function DrivePublicLinkTableHeader() {
 }
 
 function DriveShareActions({
+  disablingShare,
   item,
-  onReload,
+  onDisableShare,
 }: {
+  readonly disablingShare: boolean
   readonly item: DriveShareListItemDto
-  readonly onReload: () => Promise<void>
+  readonly onDisableShare: (shareId: string) => void
 }) {
   const password = item.password
   return (
@@ -2317,9 +2577,10 @@ function DriveShareActions({
       <DriveIconAction
         label={`取消分享 ${item.itemName}`}
         tooltip="取消分享"
-        onClick={() => { void disableDriveShare(item.id, onReload) }}
+        disabled={disablingShare}
+        onClick={() => onDisableShare(item.id)}
       >
-        <X />
+        {disablingShare ? <LoaderCircle className="animate-spin" /> : <X />}
       </DriveIconAction>
     </div>
   )
@@ -2327,11 +2588,13 @@ function DriveShareActions({
 
 function DriveIconAction({
   children,
+  disabled = false,
   label,
   onClick,
   tooltip,
 }: {
   readonly children: ReactNode
+  readonly disabled?: boolean
   readonly label: string
   readonly onClick: () => void
   readonly tooltip: string
@@ -2344,6 +2607,7 @@ function DriveIconAction({
           variant="ghost"
           size="icon-sm"
           aria-label={label}
+          disabled={disabled}
           onClick={onClick}
         >
           {children}
@@ -2507,11 +2771,15 @@ function DriveShareList({
   error,
   items,
   loading,
+  disablingShareIds,
+  onDisableShare,
   onReload,
 }: {
   readonly error: string | null
   readonly items: readonly DriveShareListItemDto[]
   readonly loading: boolean
+  readonly disablingShareIds: ReadonlySet<string>
+  readonly onDisableShare: (shareId: string) => void
   readonly onReload: () => Promise<void>
 }) {
   if (loading) return <DriveShareTableSkeleton />
@@ -2551,7 +2819,11 @@ function DriveShareList({
               </div>
             </TableCell>
             <TableCell className="align-top">
-              <DriveShareActions item={item} onReload={onReload} />
+              <DriveShareActions
+                disablingShare={disablingShareIds.has(item.id)}
+                item={item}
+                onDisableShare={onDisableShare}
+              />
             </TableCell>
           </TableRow>
         ))}
@@ -2669,7 +2941,7 @@ function buildDriveLocalFileItems(files: readonly File[]): { readonly items: Dri
 
 async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Promise<{ readonly items: DriveLocalUploadItem[]; readonly skipped: number }> {
   assertDriveLocalUploadFileCapacity(files.length)
-  const folders = new Map<string, DriveLocalUploadFolderItem["files"]>()
+  const folders = new Map<string, { readonly files: DriveLocalUploadFolderItem["files"]; readonly directories: Set<string> }>()
   let skipped = 0
 
   for (const file of files) {
@@ -2687,20 +2959,24 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
       continue
     }
     const fileRelativePath = rest.join("/") || file.name
-    const folderFiles = folders.get(folderName) ?? []
-    folderFiles.push({
+    const folder = folders.get(folderName) ?? { files: [], directories: new Set<string>() }
+    for (const directory of parentDirectoryPaths(fileRelativePath)) {
+      folder.directories.add(directory)
+    }
+    folder.files.push({
       path,
       relativePath: fileRelativePath,
       mimeType: file.type || null,
     })
-    folders.set(folderName, folderFiles)
+    folders.set(folderName, folder)
   }
 
   return {
-    items: Array.from(folders.entries()).map(([folderName, folderFiles]) => ({
+    items: Array.from(folders.entries()).map(([folderName, folder]) => ({
       kind: "folder",
       folderName,
-      files: folderFiles,
+      directories: Array.from(folder.directories).map((relativePath) => ({ relativePath })),
+      files: folder.files,
     })),
     skipped,
   }
@@ -2718,11 +2994,21 @@ function driveLocalFileItemFromFile(file: File): DriveLocalUploadItem | null {
 }
 
 async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles: number): Promise<{ readonly item: DriveLocalUploadItem | null; readonly skipped: number }> {
-  const files = await filesFromDirectoryEntry(entry, maxFiles)
+  const folder = await folderSnapshotFromDirectoryEntry(entry, maxFiles)
   const uploadFiles: DriveLocalUploadFolderItem["files"] = []
+  const uploadDirectories: NonNullable<DriveLocalUploadFolderItem["directories"]> = []
   let skipped = 0
 
-  for (const file of files) {
+  for (const directory of folder.directories) {
+    const relativePath = normalizeSlashRelativePath(directory)
+    if (!relativePath) {
+      skipped += 1
+      continue
+    }
+    uploadDirectories.push({ relativePath })
+  }
+
+  for (const file of folder.files) {
     const path = requireSynapseBridge().account.filePathForDroppedFile(file.file)
     const relativePath = normalizeSlashRelativePath(file.relativePath)
     if (!path || !relativePath) {
@@ -2736,36 +3022,40 @@ async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDire
     })
   }
 
-  if (uploadFiles.length === 0) return { item: null, skipped }
   return {
     item: {
       kind: "folder",
       folderName: entry.name,
+      directories: uploadDirectories,
       files: uploadFiles,
     },
     skipped,
   }
 }
 
-async function filesFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles = DRIVE_LOCAL_UPLOAD_MAX_FILES): Promise<DriveDirectoryFile[]> {
+async function folderSnapshotFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles = DRIVE_LOCAL_UPLOAD_MAX_FILES): Promise<{ readonly files: DriveDirectoryFile[]; readonly directories: string[] }> {
   const files: DriveDirectoryFile[] = []
+  const directories: string[] = []
   await collectFilesFromDirectoryEntry({
+    directories,
     entry,
     files,
     maxFiles,
     prefix: "",
     depth: 0,
   })
-  return files
+  return { files, directories }
 }
 
 async function collectFilesFromDirectoryEntry({
+  directories,
   entry,
   files,
   maxFiles,
   prefix,
   depth,
 }: {
+  readonly directories: string[]
   readonly entry: DriveFileSystemDirectoryEntry
   readonly files: DriveDirectoryFile[]
   readonly maxFiles: number
@@ -2789,11 +3079,14 @@ async function collectFilesFromDirectoryEntry({
         continue
       }
       if (isDriveDirectoryEntry(child)) {
+        const relativePath = `${prefix}${child.name}`
+        directories.push(relativePath)
         await collectFilesFromDirectoryEntry({
+          directories,
           entry: child,
           files,
           maxFiles,
-          prefix: `${prefix}${child.name}/`,
+          prefix: `${relativePath}/`,
           depth: depth + 1,
         })
       }
@@ -2845,6 +3138,11 @@ function normalizeSlashRelativePath(value: string): string | null {
   if (parts.length === 0) return null
   if (parts.some((part) => part === "." || part === "..")) return null
   return parts.join("/")
+}
+
+function parentDirectoryPaths(relativePath: string): string[] {
+  const parts = relativePath.split("/").filter(Boolean)
+  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/"))
 }
 
 function assertDriveLocalUploadFileCapacity(fileCount: number): void {
@@ -2944,16 +3242,6 @@ async function openDriveUrl(url: string): Promise<void> {
     await requireSynapseBridge().shell.openExternal(url)
   } catch (rawError) {
     toast(errorMessage(rawError, "打开失败"))
-  }
-}
-
-async function disableDriveShare(shareId: string, onReload: () => Promise<void>): Promise<void> {
-  try {
-    await requireSynapseBridge().account.disableDriveShare({ shareId })
-    toast("已取消分享")
-    await onReload()
-  } catch (rawError) {
-    toast(errorMessage(rawError, "取消分享失败"))
   }
 }
 
@@ -3081,7 +3369,11 @@ function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLoca
 }
 
 function countDriveLocalUploadItems(items: readonly DriveLocalUploadItem[]): number {
-  return items.reduce((count, item) => count + (item.kind === "folder" ? item.files.length : 1), 0)
+  return items.reduce((count, item) => {
+    if (item.kind !== "folder") return count + 1
+    const childCount = item.files.length + (item.directories?.length ?? 0)
+    return count + Math.max(1, childCount)
+  }, 0)
 }
 
 function driveLoadError(error: unknown): DriveLoadError {

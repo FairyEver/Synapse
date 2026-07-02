@@ -4,7 +4,7 @@ import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@syn
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { createDefaultDriveSyncExcludeRules, parseGitignoreForDriveSync } from "./drive-sync-excludes"
 import { inspectDriveSyncLocalPath } from "./drive-sync-local-snapshot"
-import { normalizeLocalPath } from "./drive-sync-paths"
+import { localPathIdentitiesOverlap, normalizeLocalPath } from "./drive-sync-paths"
 
 export async function previewDriveSyncBinding(input: {
   readonly driveItemId: string
@@ -20,13 +20,13 @@ export async function previewDriveSyncBinding(input: {
   const localPath = normalizeLocalPath(input.localPath)
   const rules = createDefaultDriveSyncExcludeRules()
   const local = await inspectDriveSyncLocalPath(localPath)
-  const duplicateReason = findDuplicateBindingReason(localPath, input.driveItemId, input.activeBindings)
+  const duplicateReason = await findDuplicateBindingReason(localPath, input.driveItemId, input.activeBindings)
   if (duplicateReason) {
     return blocked(localPath, local.kind, local.empty, duplicateReason, rules.importedGitignore)
   }
 
   const importedGitignoreRules = input.importGitignore && local.kind === "folder"
-    ? await readGitignoreRules(localPath)
+    ? await readDriveSyncGitignoreRules(localPath)
     : []
 
   if (input.kind === "file") {
@@ -134,24 +134,22 @@ function blocked(
   }
 }
 
-function findDuplicateBindingReason(
+async function findDuplicateBindingReason(
   localPath: string,
   driveItemId: string,
   activeBindings: readonly DriveSyncBindingEntryV1[],
-): string | null {
+): Promise<string | null> {
   const active = activeBindings.filter((binding) => binding.status !== "removed")
   if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
-  const local = normalizeLocalPath(localPath)
   for (const binding of active) {
-    const bound = normalizeLocalPath(binding.localPath)
-    if (local === bound || local.startsWith(`${bound}${path.sep}`) || bound.startsWith(`${local}${path.sep}`)) {
+    if (await localPathIdentitiesOverlap(binding.localPath, localPath)) {
       return "本地路径已绑定。"
     }
   }
   return null
 }
 
-async function readGitignoreRules(localPath: string): Promise<readonly string[]> {
+export async function readDriveSyncGitignoreRules(localPath: string): Promise<readonly string[]> {
   try {
     return parseGitignoreForDriveSync(await readFile(path.join(localPath, ".gitignore"), "utf8"))
   } catch (error) {

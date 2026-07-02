@@ -54,11 +54,14 @@ const prepareUploadSchema = z.object({
 const prepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   folderName: z.string().min(1).max(255),
+  directories: z.array(z.object({
+    relativePath: z.string().min(1).max(1024),
+  }).strict()).max(1000).optional(),
   files: z.array(z.object({
     relativePath: z.string().min(1).max(1024),
     size: z.string().regex(/^\d+$/u),
     mimeType: z.string().trim().max(255).nullable().optional(),
-  }).strict()).min(1).max(1000),
+  }).strict()).max(1000),
 }).strict()
 
 const folderSchema = z.object({
@@ -322,7 +325,20 @@ export class DriveUserController {
   }
 
   @Get("/items")
-  listItems(@Query("parentId") parentId: string | undefined, @Req() request: AuthenticatedUserRequest) {
+  listItems(
+    @Query("parentId") parentId: string | undefined,
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsedOffset = parseOptionalNonNegativeInteger(offset, "offset")
+    const parsedLimit = parseOptionalNonNegativeInteger(limit, "limit")
+    if (parsedOffset !== undefined || parsedLimit !== undefined) {
+      return this.drive.listItemsPage(request.user!.id, parentId ?? null, {
+        offset: parsedOffset,
+        limit: parsedLimit,
+      })
+    }
     return this.drive.listItems(request.user!.id, parentId ?? null)
   }
 
@@ -427,6 +443,7 @@ export class DriveUserController {
     return this.drive.prepareFolderUpload(request.user!.id, {
       parentId: parsed.parentId ?? null,
       folderName: parsed.folderName,
+      directories: parsed.directories ?? [],
       files: parsed.files.map((file) => ({
         relativePath: file.relativePath,
         size: file.size,
@@ -593,6 +610,7 @@ export class DriveUserController {
       request.user!.id,
       itemId,
       parseDriveAnnotationCreateBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -608,6 +626,7 @@ export class DriveUserController {
       itemId,
       threadId,
       parseDriveAnnotationReplyBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -623,6 +642,7 @@ export class DriveUserController {
       itemId,
       commentId,
       parseDriveAnnotationCommentUpdateBody(body),
+      driveAuditContext(request),
     )
   }
 
@@ -632,7 +652,7 @@ export class DriveUserController {
     @Param("commentId") commentId: string,
     @Req() request: AuthenticatedUserRequest,
   ) {
-    return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId)
+    return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId, driveAuditContext(request))
   }
 
   @Delete("/browser/owner/items/:itemId/annotations/:threadId")
@@ -641,7 +661,7 @@ export class DriveUserController {
     @Param("threadId") threadId: string,
     @Req() request: AuthenticatedUserRequest,
   ) {
-    return requireDriveAnnotationService(this.annotations).deleteOwnerThread(request.user!.id, itemId, threadId)
+    return requireDriveAnnotationService(this.annotations).deleteOwnerThread(request.user!.id, itemId, threadId, driveAuditContext(request))
   }
 
   @Patch("/browser/owner/items/:itemId/content")
@@ -1097,7 +1117,8 @@ export class DrivePublicController {
     }
     const object = await this.storage.getObjectStream({ key: access.asset.storageKey })
     response.setHeader("Content-Type", driveSiteContentType(access.asset.relativePath, object.contentType ?? access.asset.contentType))
-    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath))
+    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath, { accessMode: access.site.accessMode }))
+    if (access.site.accessMode === "password") response.setHeader("Vary", "Cookie")
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())
     await pipeline(object.stream as Readable, response)
@@ -1164,6 +1185,7 @@ export class DrivePublicController {
       shareId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCreateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1181,6 +1203,7 @@ export class DrivePublicController {
       itemId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCreateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1198,6 +1221,7 @@ export class DrivePublicController {
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationReplyBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1217,6 +1241,7 @@ export class DrivePublicController {
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationReplyBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1234,6 +1259,7 @@ export class DrivePublicController {
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCommentUpdateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1253,6 +1279,7 @@ export class DrivePublicController {
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCommentUpdateBody(body),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1268,6 +1295,7 @@ export class DrivePublicController {
       shareId,
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1285,6 +1313,7 @@ export class DrivePublicController {
       itemId,
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1300,6 +1329,7 @@ export class DrivePublicController {
       shareId,
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1317,6 +1347,7 @@ export class DrivePublicController {
       itemId,
       threadId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
     })
   }
 
@@ -1956,7 +1987,7 @@ function decodeCookieValue(value: string): string | undefined {
 async function sendDriveZip(
   response: Response,
   filename: string,
-  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }>,
+  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }>,
   storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
@@ -1968,6 +1999,10 @@ async function sendDriveZip(
   archive.pipe(response)
   try {
     for await (const entry of entries) {
+      if (entry.storageKey === null) {
+        archive.append(Buffer.alloc(0), { name: ensureDriveZipDirectoryPath(entry.path) })
+        continue
+      }
       const object = await storage.getObjectStream({ key: entry.storageKey })
       archive.append(object.stream as unknown as Readable, { name: entry.path })
     }
@@ -1980,6 +2015,10 @@ async function sendDriveZip(
     response.destroy(error instanceof Error ? error : new Error("Drive zip stream failed."))
     throw error
   }
+}
+
+function ensureDriveZipDirectoryPath(path: string): string {
+  return path.endsWith("/") ? path : `${path}/`
 }
 
 async function sendDriveFileDownload(response: Response, download: {
@@ -1998,7 +2037,7 @@ async function sendDriveTransfer(
   response: Response,
   transfer:
     | ({ readonly kind: "file" } & Parameters<typeof sendDriveFileDownload>[1])
-    | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string }> },
+    | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }> },
   storage: DriveStoragePort,
 ): Promise<void> {
   if (transfer.kind === "zip") {

@@ -11,6 +11,14 @@ List files and folders under a parent folder.
 Input:
 
 - `parentId` optional: folder item id. Omit or pass `null` for Drive root.
+- `offset` optional: pagination offset. Defaults to `0`.
+- `limit` optional: page size. Defaults to the service page size.
+
+Output:
+
+- `items`: page of files and folders.
+- `page.hasMore`: whether another page exists.
+- `page.nextOffset`: pass this as `offset` for the next page when `hasMore` is true.
 
 ### `app_drive_item_get`
 
@@ -129,7 +137,7 @@ Input:
 
 Output includes `linkType`, `access`, `root`, and `ref`. When `access.status` is `password_required`, `root.type` may be `protected` and the real file/folder shape is intentionally hidden until a valid password is supplied.
 
-Raw MCP or Codex `--json` event streams may include tool arguments. Do not save or quote logs that contain share passwords.
+Raw MCP or Codex `--json` event streams may include tool arguments. Do not save or quote logs that contain share or site passwords.
 
 ### `app_drive_link_list`
 
@@ -180,7 +188,7 @@ Input:
 - `password` optional.
 - `path` optional.
 - `itemId` optional.
-- `outputPath` optional.
+- `outputPath` optional: absolute local output path.
 
 Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache.
 
@@ -233,15 +241,16 @@ Input:
 - `sourceFolderItemId` required: Drive folder item id to copy.
 - `name` required: site display name.
 - `entryPath` optional: HTML entry path inside the folder. Omit when the homepage is `index.html`.
-- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
+- `accessMode` required: `public` or `password`.
+- `password` optional: custom site password. Use only with `accessMode: "password"`. MCP responses never return site passwords; ask for or pass a custom password when the user needs a known value.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 Output:
 
 - `siteId`: public id used in `/sites/<siteId>/`.
 - `url`: public site URL.
-- `urlWithPassword`: public site URL with password query when password mode is enabled.
-- `password`: generated password, or `null` for public sites.
+- `urlWithPassword`: same as `url` in MCP responses.
+- `password`: always `null` in MCP responses.
 
 ### `app_drive_site_list`
 
@@ -254,19 +263,32 @@ Input:
 - `search` optional: match site name, site id, source folder, or entry path.
 - `status` optional: `active`, `disabled`, `expired`, `deleted`, `failed`, or `all`.
 
+Output:
+
+- Returns published site metadata. Site tool results never include passwords: `password` is `null`, and `urlWithPassword` is the same as `url`.
+
 ### `app_drive_site_update_access`
 
-Update site access mode and expiry without republishing files. Password mode generates a new password.
+Update site access mode and expiry without republishing files.
 
 Input:
 
 - `siteId` required.
-- `accessMode` required: `public` or `password`. Password mode generates the password automatically.
+- `accessMode` required: `public` or `password`.
+- `password` optional: custom site password. Use only with `accessMode: "password"`. MCP responses never return site passwords; ask for or pass a custom password when the user needs a known value.
 - `expiresIn` required: `3d`, `7d`, `30d`, `1y`, or `forever`.
 
 ### `app_drive_site_disable`
 
 Disable public access to a site while keeping its record and deployment.
+
+Input:
+
+- `siteId` required.
+
+### `app_drive_site_enable`
+
+Restore public access to a disabled site.
 
 Input:
 
@@ -305,7 +327,7 @@ Input:
 
 ### `app_drive_file_version_download_create`
 
-Download a specific Drive file version to a local path. This writes to local filesystem and requires write permission.
+Download a specific Drive file version that is not pending cleanup to a local path. This writes to local filesystem and requires write permission.
 
 Input:
 
@@ -315,7 +337,7 @@ Input:
 
 ### `app_drive_file_version_restore`
 
-Restore a historical version as the current file version.
+Restore a non-current historical version that is not pending cleanup as the current file version.
 
 Input:
 
@@ -324,7 +346,7 @@ Input:
 
 ### `app_drive_file_version_delete`
 
-Delete a non-current historical file version. Current versions cannot be deleted.
+Delete a non-current historical file version that is not pending cleanup. Current versions cannot be deleted.
 
 Input:
 
@@ -333,7 +355,7 @@ Input:
 
 ### `app_drive_file_version_pin_update`
 
-Keep or unkeep a historical file version during automatic cleanup.
+Keep or unkeep a non-current historical file version that is not pending cleanup.
 
 Input:
 
@@ -501,6 +523,6 @@ Input:
 ## Safety Notes
 
 - Public asset access logs are admin-only and are not available through MCP.
-- Do not reveal COS AK, SK, Authorization headers, local secrets, share passwords from list results, or presigned upload URLs.
+- Do not reveal COS AK, SK, Authorization headers, local secrets, share or site passwords from list results, or presigned upload URLs.
 - Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 - Use `app_drive_reorganization_preview` before `app_drive_reorganization_apply`; apply only with the returned `planId`.

@@ -81,6 +81,7 @@ type DriveSiteRecord = {
   readonly accessMode: string
   readonly passwordHash: string | null
   readonly passwordEncrypted: string | null
+  readonly expiresIn: string
   readonly expiresAt: Date | null
   readonly currentDeploymentId: string | null
   readonly sourceFolderItemId: string | null
@@ -161,6 +162,7 @@ export class DriveSiteService {
         accessMode: input.accessMode,
         passwordHash: passwordMaterial.passwordHash,
         passwordEncrypted: passwordMaterial.passwordEncrypted,
+        expiresIn: input.expiresIn,
         expiresAt: expiresAtFromInput(input.expiresIn),
         sourceFolderItemId: snapshot.sourceFolderItemId,
         sourceFolderName: snapshot.sourceFolderName,
@@ -172,15 +174,20 @@ export class DriveSiteService {
 
   async listSites(userId: string, publicAppUrl: string, input: DriveSiteListInput = {}): Promise<DriveSiteListPageDto> {
     const page = normalizeSiteListPage(input)
+    const statusWhere = siteListStatusWhere(input.status, new Date())
+    const search = input.search?.trim()
+    const matchingDeploymentIds = search ? await this.currentDeploymentIdsMatchingEntryPath(userId, search) : []
     const where: Prisma.DriveSiteWhereInput = {
       userId,
       deletedAt: null,
-      ...(input.status && input.status !== "all" && input.status !== "expired" ? { status: input.status } : {}),
-      ...(input.search?.trim()
+      ...(statusWhere ? { AND: [statusWhere] } : {}),
+      ...(search
         ? {
           OR: [
-            { name: { contains: input.search.trim(), mode: "insensitive" } },
-            { siteId: { contains: input.search.trim(), mode: "insensitive" } },
+            { name: { contains: search, mode: "insensitive" } },
+            { siteId: { contains: search, mode: "insensitive" } },
+            { sourceFolderName: { contains: search, mode: "insensitive" } },
+            ...(matchingDeploymentIds.length > 0 ? [{ currentDeploymentId: { in: matchingDeploymentIds } }] : []),
           ],
         }
         : {}),
@@ -197,7 +204,6 @@ export class DriveSiteService {
     const deployments = await this.currentDeploymentsForSites(sites)
     const items = sites.slice(0, page.limit)
       .map((site) => this.toDto(site, publicAppUrl, deployments.get(site.currentDeploymentId ?? "")))
-      .filter((site) => !input.status || input.status === "all" || site.status === input.status)
     return {
       items,
       total,
@@ -210,6 +216,17 @@ export class DriveSiteService {
     }
   }
 
+  private async currentDeploymentIdsMatchingEntryPath(userId: string, search: string): Promise<string[]> {
+    const deployments = await this.prisma.driveSiteDeployment.findMany({
+      where: {
+        entryPath: { contains: search, mode: "insensitive" },
+        driveSite: { userId, deletedAt: null },
+      },
+      select: { id: true },
+    })
+    return deployments.map((deployment) => deployment.id)
+  }
+
   async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
     await this.requireOwnedSite(userId, siteId)
     const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
@@ -219,6 +236,7 @@ export class DriveSiteService {
         accessMode: input.accessMode,
         passwordHash: passwordMaterial.passwordHash,
         passwordEncrypted: passwordMaterial.passwordEncrypted,
+        expiresIn: input.expiresIn,
         expiresAt: expiresAtFromInput(input.expiresIn),
       },
     })
@@ -235,10 +253,14 @@ export class DriveSiteService {
   }
 
   async enableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
-    await this.requireOwnedSite(userId, siteId)
+    const site = await this.requireOwnedSite(userId, siteId)
     await this.prisma.driveSite.update({
       where: { siteId },
-      data: { status: DRIVE_SITE_STATUS.active, disabledAt: null },
+      data: {
+        status: DRIVE_SITE_STATUS.active,
+        disabledAt: null,
+        expiresAt: expiresAtFromInput(site.expiresIn as DriveAccessExpiresIn),
+      },
     })
     return this.getSiteDto(userId, siteId, publicAppUrl)
   }
@@ -292,7 +314,9 @@ export class DriveSiteService {
     const assets = await this.prisma.driveSiteAsset.findMany({
       where: {
         deploymentId: context.deployment.id,
-        ...(pathFilter ? { relativePath: { startsWith: pathFilter } } : {}),
+        ...(pathFilter
+          ? { OR: [{ relativePath: prefix }, { relativePath: { startsWith: pathFilter } }] }
+          : {}),
       },
       orderBy: [{ relativePath: "asc" }, { id: "asc" }],
       skip: page.offset,
@@ -549,6 +573,26 @@ function normalizeSiteListPage(input: DriveSiteListInput): { readonly offset: nu
   const offset = Number.isInteger(input.offset) && input.offset! >= 0 ? input.offset! : 0
   const requestedLimit = Number.isInteger(input.limit) && input.limit! > 0 ? input.limit! : DRIVE_SITE_DEFAULT_PAGE_SIZE
   return { offset, limit: Math.min(requestedLimit, DRIVE_SITE_MAX_PAGE_SIZE) }
+}
+
+function siteListStatusWhere(
+  status: DriveSiteListInput["status"] | undefined,
+  now: Date,
+): Prisma.DriveSiteWhereInput | null {
+  if (!status || status === "all") return null
+  if (status === "expired") {
+    return { status: DRIVE_SITE_STATUS.active, expiresAt: { lte: now } }
+  }
+  if (status === "active") {
+    return {
+      status: DRIVE_SITE_STATUS.active,
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: now } },
+      ],
+    }
+  }
+  return { status }
 }
 
 function expiresAtFromInput(expiresIn: DriveAccessExpiresIn): Date | null {

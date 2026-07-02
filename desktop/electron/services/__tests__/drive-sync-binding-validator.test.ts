@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -155,6 +155,42 @@ describe("drive sync binding validator", () => {
       remoteExists: true,
       activeBindings,
     })).resolves.toMatchObject({ status: "blocked", reason: "云盘条目已绑定。" })
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-2",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: path.join(tempDir, "BOUND"),
+      remoteExists: true,
+      activeBindings,
+    })).resolves.toMatchObject({ status: "blocked", reason: "本地路径已绑定。" })
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-3",
+      driveItemName: "Nested",
+      kind: "folder",
+      localPath: path.join(tempDir, "bound", "Nested"),
+      remoteExists: true,
+      activeBindings,
+    })).resolves.toMatchObject({ status: "blocked", reason: "本地路径已绑定。" })
+  })
+
+  it("blocks symlink aliases that resolve to an already bound local folder", async () => {
+    const targetFolder = path.join(tempDir, "bound")
+    const aliasFolder = path.join(tempDir, "bound-alias")
+    await mkdir(targetFolder)
+    await symlink(targetFolder, aliasFolder, "dir")
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-2",
+      driveItemName: "Alias",
+      kind: "folder",
+      localPath: aliasFolder,
+      remoteExists: true,
+      directionHint: "bind_existing",
+      activeBindings: [createBinding({ driveItemId: "folder-1", localPath: targetFolder })],
+    })).resolves.toMatchObject({
+      status: "blocked",
+      reason: "本地路径已绑定。",
+    })
   })
 
   it("copies gitignore rules once when requested", async () => {

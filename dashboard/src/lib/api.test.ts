@@ -587,10 +587,25 @@ describe('driveBrowserApi', () => {
       })).rejects.toMatchObject({ status: 401 })
       expect(authExpired).toHaveBeenCalledOnce()
 
+      authExpired.mockClear()
+      await expect(driveBrowserApi.scanShareImageSources('shr/id')).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+
+      authExpired.mockClear()
+      await expect(driveBrowserApi.importShareImageSources('shr/id', 'child/id', {
+        baseVersionId: 'version-1',
+        sources: [{ src: 'https://example.test/image.png' }],
+      })).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid', 401)).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/access', 401)).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401)).toBe(true)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/content', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources/import', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources/import', 401)).toBe(true)
     } finally {
       unsubscribe()
     }

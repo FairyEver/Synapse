@@ -106,6 +106,7 @@ describe('DriveConsolePage', () => {
     await render(<DriveConsolePage />)
 
     expect(document.body.textContent).toContain('上传文件')
+    expect(document.body.textContent).toContain('上传文件夹')
     expect(document.body.textContent).toContain('新建文件夹')
     expect(document.body.textContent).toContain('我的分享')
     expect(document.body.textContent).toContain('站点')
@@ -138,6 +139,20 @@ describe('DriveConsolePage', () => {
     expect(main?.className).not.toContain('px-4')
     expect(reader?.className).toContain('h-full')
     expect(reader?.className).not.toContain('h-svh')
+  })
+
+  it('uses injected client navigation for file rows and preview actions', async () => {
+    const onNavigate = vi.fn()
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsolePage onNavigate={onNavigate} />)
+
+    await click(rowWithText('文档'))
+    expect(onNavigate).toHaveBeenCalledWith('/console/drive/folders/folder-1')
+
+    await click(button('预览'))
+    expect(onNavigate).toHaveBeenCalledWith('/console/drive/folders/folder-1')
   })
 
   it('creates folders in the root folder and refreshes', async () => {
@@ -251,6 +266,38 @@ describe('DriveConsolePage', () => {
     Object.defineProperty(fileInput, 'files', { value: [file], configurable: true })
     await act(async () => {
       fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('uploads selected folders to the current folder and refreshes', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(uploadDriveFiles).mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
+    await render(<DriveConsolePage />)
+
+    const inputs = document.querySelectorAll('input[type="file"]')
+    const folderInput = inputs.item(1)
+    if (!(folderInput instanceof HTMLInputElement)) throw new Error('missing folder input')
+    expect(folderInput.hasAttribute('webkitdirectory')).toBe(true)
+    const file = new File(['hello'], 'notes.md', { type: 'text/markdown' })
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'Project/notes.md' })
+    Object.defineProperty(folderInput, 'files', { value: [file], configurable: true })
+    await act(async () => {
+      folderInput.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
     expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
@@ -571,6 +618,12 @@ function lastButton(text: string) {
 function tabTrigger(text: string) {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-slot="tabs-trigger"]'))
     .find((item) => item.textContent?.trim() === text)
+    ?? null
+}
+
+function rowWithText(text: string) {
+  return Array.from(document.querySelectorAll<HTMLTableRowElement>('tr'))
+    .find((row) => row.textContent?.includes(text))
     ?? null
 }
 

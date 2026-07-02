@@ -11,6 +11,9 @@ function RouteComponent() {
   const { shareId } = Route.useParams()
   const { password } = Route.useSearch()
   const navigate = Route.useNavigate()
+  const handleDriveNavigate = useCallback((href: string) => {
+    void navigate({ href })
+  }, [navigate])
   const clearPasswordSearch = useCallback(() => {
     void navigate({
       replace: true,
@@ -24,6 +27,7 @@ function RouteComponent() {
       shareId={shareId}
       initialPassword={password}
       onInitialPasswordConsumed={clearPasswordSearch}
+      onNavigate={handleDriveNavigate}
     />
   )
 }

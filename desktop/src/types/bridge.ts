@@ -104,6 +104,8 @@ import type {
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveLinkDownloadFileDto,
   DriveLinkDownloadFileInput,
   DriveLinkListDto,
@@ -147,6 +149,9 @@ export type DriveLocalUploadFileItem = {
 export type DriveLocalUploadFolderItem = {
   readonly kind: "folder"
   readonly folderName: string
+  readonly directories?: Array<{
+    readonly relativePath: string
+  }>
   readonly files: Array<{
     readonly path: string
     readonly relativePath: string
@@ -1044,7 +1049,7 @@ export type SynapseBridge = {
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
-    listDriveItems: (input: { parentId?: string | null }) => Promise<DriveItemDto[]>
+    listDriveItems: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
     prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
@@ -1072,7 +1077,7 @@ export type SynapseBridge = {
     getDriveUsage: () => Promise<DriveUsageDto>
     getDriveShare: (input: { shareId: string }) => Promise<DriveShareListItemDto>
     listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
-    listDrivePublicAssets: (input?: { offset?: number; limit?: number }) => Promise<DrivePublicAssetListPageDto>
+    listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
     getDrivePublicAsset: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
     uploadDrivePublicAssets: (input: DrivePublicAssetUploadRequest) => Promise<DrivePublicAssetUploadResult>
     uploadDrivePublicAssetBinary: (input: DrivePublicAssetBinaryUploadRequest) => Promise<DrivePublicAssetDto>
@@ -1090,7 +1095,7 @@ export type SynapseBridge = {
     enableDriveSite: (input: { siteId: string }) => Promise<DriveSiteDto>
     deleteDriveSite: (input: { siteId: string }) => Promise<{ ok: true }>
     republishDriveSite: (input: { siteId: string; entryPath?: string | null }) => Promise<DriveSiteDto>
-    listDriveTrash: (input?: { offset?: number; limit?: number }) => Promise<DriveTrashListPageDto>
+    listDriveTrash: (input?: DrivePublicLinksPageInput) => Promise<DriveTrashListPageDto>
     restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
     deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void

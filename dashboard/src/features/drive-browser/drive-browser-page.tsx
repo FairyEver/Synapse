@@ -14,6 +14,7 @@ import { DriveFinder } from './finder/drive-finder'
 import { DriveRendererShell } from './renderers/drive-renderer-shell'
 import type { DriveRendererEditContext } from './renderers/drive-renderer-shell'
 import type { DriveRendererId } from './renderers/drive-renderer-registry'
+import type { DriveBrowserNavigate } from './shared/drive-navigation'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
 import type { DriveAnnotationContext } from './use-drive-annotations'
 import { useDriveBrowser } from './use-drive-browser'
@@ -23,6 +24,7 @@ export type DriveBrowserPageProps =
       context: 'owner'
       surface: DriveBrowserSurface
       itemId: string
+      onNavigate?: DriveBrowserNavigate
     }
   | {
       context: 'share'
@@ -30,6 +32,7 @@ export type DriveBrowserPageProps =
       itemId?: string
       initialPassword?: string
       onInitialPasswordConsumed?: () => void
+      onNavigate?: DriveBrowserNavigate
     }
 
 type DriveBrowserLayoutMode = 'auto' | 'fixed'
@@ -96,6 +99,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
           loadMoreChildrenError={state.loadMoreChildrenError}
           editContext={state}
           annotationContext={annotationContext}
+          onNavigate={props.onNavigate}
         />
       ) : null}
     </div>
@@ -140,6 +144,7 @@ export function DriveBrowserView({
   loadMoreChildrenError = null,
   editContext,
   annotationContext,
+  onNavigate,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly layoutMode?: DriveBrowserLayoutMode
@@ -148,6 +153,7 @@ export function DriveBrowserView({
   readonly loadMoreChildrenError?: string | null
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
+  readonly onNavigate?: DriveBrowserNavigate
 }) {
   void layoutMode
   return (
@@ -159,6 +165,7 @@ export function DriveBrowserView({
       loadMoreChildrenError={loadMoreChildrenError}
       editContext={editContext}
       annotationContext={annotationContext}
+      onNavigate={onNavigate}
     />
   )
 }

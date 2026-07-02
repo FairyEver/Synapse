@@ -1,6 +1,6 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
-import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DrivePublicAssetDto, type DriveSiteDto, type DriveSiteListPageDto, type DriveTrashListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveSiteListPageDto, type DriveTrashListPageDto } from "@synapse/shared"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
@@ -12,7 +12,7 @@ import {
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
 type DriveAuditSink = NonNullable<DriveDispatcherDeps["auditSink"]>
-type DriveItem = Awaited<ReturnType<DriveAccountService["listDriveItems"]>>[number]
+type DriveItem = DriveItemDto
 
 describe("createDriveCapabilityDispatcher", () => {
   it("exposes access settings on share creation", () => {
@@ -25,10 +25,30 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("exposes custom password fields on site access tools", () => {
+    const siteCreateTool = buildDriveTools().find((tool) => tool.name === "drive_site_create")
+    const siteUpdateTool = buildDriveTools().find((tool) => tool.name === "drive_site_update_access")
+    expect(siteCreateTool?.inputSchema.properties).toMatchObject({
+      password: { type: "string", description: expect.stringContaining("custom site password") },
+    })
+    expect(siteUpdateTool?.inputSchema.properties).toMatchObject({
+      password: { type: "string", description: expect.stringContaining("custom site password") },
+    })
+  })
+
   it("exposes item id on item deletion", () => {
     const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
     expect(deleteTool?.inputSchema.properties).toEqual({
       itemId: { type: "string", description: expect.any(String) },
+    })
+  })
+
+  it("exposes pagination on item list", () => {
+    const listTool = buildDriveTools().find((tool) => tool.name === "drive_item_list")
+    expect(listTool?.inputSchema.properties).toMatchObject({
+      parentId: expect.any(Object),
+      offset: { type: "number" },
+      limit: { type: "number" },
     })
   })
 
@@ -74,6 +94,7 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_site_list",
       "drive_site_update_access",
       "drive_site_disable",
+      "drive_site_enable",
       "drive_site_delete",
       "drive_site_republish",
       "drive_usage_get",
@@ -101,17 +122,22 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("lists Drive items under root by default", async () => {
+    const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
     const accountService = createAccountService({
-      listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
+      listDriveItemsPage: vi.fn(async () => page),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
     await expect(dispatcher.dispatch("drive.item.list", {}, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: [driveItem({ id: "item-1", name: "a.txt" })],
+      data: page,
       total: 1,
     })
-    expect(accountService.listDriveItems).toHaveBeenCalledWith(null)
+    expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
+      parentId: null,
+      offset: undefined,
+      limit: undefined,
+    })
   })
 
   it("routes Drive organization reads and path ensure without reading file contents in bulk", async () => {
@@ -245,8 +271,9 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("authorizes and audits Drive item reads", async () => {
+    const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
     const accountService = createAccountService({
-      listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
+      listDriveItemsPage: vi.fn(async () => page),
     })
     const auditSink = createAuditSink()
     const permissionGuard = {
@@ -257,9 +284,16 @@ describe("createDriveCapabilityDispatcher", () => {
 
     await expect(dispatcher.dispatch("drive.item.list", {
       parentId: "folder-1",
+      offset: 20,
+      limit: 10,
     }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })).resolves.toMatchObject({
       ok: true,
       total: 1,
+    })
+    expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      offset: 20,
+      limit: 10,
     })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -420,7 +454,13 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("dispatches Drive site creation separately from share creation", async () => {
-    const site = driveSite({ siteId: "site_public" })
+    const site = driveSite({
+      siteId: "site_public",
+      accessMode: "password",
+      urlWithPassword: "https://synapse.test/sites/site_public/?password=site-secret",
+      passwordEnabled: true,
+      password: "site-secret",
+    })
     const createDriveSite = vi.fn(async () => site)
     const shareDriveItem = vi.fn()
     const accountService = createAccountService({ createDriveSite, shareDriveItem })
@@ -429,56 +469,93 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.site.create", {
       sourceFolderItemId: "folder-1",
       name: "产品原型",
-      accessMode: "public",
+      accessMode: "password",
+      password: "site-secret",
       expiresIn: "forever",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: site })
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        ...site,
+        urlWithPassword: site.url,
+        password: null,
+      },
+    })
 
     expect(createDriveSite).toHaveBeenCalledWith({
       sourceFolderItemId: "folder-1",
       name: "产品原型",
       entryPath: null,
-      accessMode: "public",
+      accessMode: "password",
+      password: "site-secret",
       expiresIn: "forever",
     })
     expect(shareDriveItem).not.toHaveBeenCalled()
   })
 
   it("routes Drive site management tools", async () => {
-    const site = driveSite({ siteId: "site_public" })
+    const site = driveSite({
+      siteId: "site_public",
+      accessMode: "password",
+      urlWithPassword: "https://synapse.test/sites/site_public/?password=secret",
+      passwordEnabled: true,
+      password: "secret",
+    })
+    const sanitizedSite = {
+      ...site,
+      urlWithPassword: site.url,
+      password: null,
+    }
     const listPage: DriveSiteListPageDto = { items: [site], total: 1, page: drivePage() }
     const listDriveSites = vi.fn(async () => listPage)
-    const updateDriveSiteAccess = vi.fn(async () => driveSite({ siteId: "site_public", accessMode: "password" }))
-    const disableDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", status: "disabled" }))
+    const updateDriveSiteAccess = vi.fn(async () => site)
+    const disableDriveSite = vi.fn(async () => ({ ...site, status: "disabled" as const }))
+    const enableDriveSite = vi.fn(async () => site)
     const deleteDriveSite = vi.fn(async () => ({ ok: true as const }))
-    const republishDriveSite = vi.fn(async () => driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
+    const republishDriveSite = vi.fn(async () => ({ ...site, lastPublishedAt: "2026-06-23T00:00:00.000Z" }))
     const accountService = createAccountService({
       listDriveSites,
       updateDriveSiteAccess,
       disableDriveSite,
+      enableDriveSite,
       deleteDriveSite,
       republishDriveSite,
     })
-    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
 
     await expect(dispatcher.dispatch("drive.site.list", {
       offset: 2,
       limit: 5,
       search: "原型",
       status: "active",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: listPage, total: 1 })
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        ...listPage,
+        items: [sanitizedSite],
+      },
+      total: 1,
+    })
     await expect(dispatcher.dispatch("drive.site.update_access", {
       siteId: "site_public",
       accessMode: "password",
+      password: "new-secret",
       expiresIn: "7d",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", accessMode: "password" }),
+      data: sanitizedSite,
     })
     await expect(dispatcher.dispatch("drive.site.disable", {
       siteId: "site_public",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", status: "disabled" }),
+      data: { ...sanitizedSite, status: "disabled" },
+    })
+    await expect(dispatcher.dispatch("drive.site.enable", {
+      siteId: "site_public",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: sanitizedSite,
     })
     await expect(dispatcher.dispatch("drive.site.delete", {
       siteId: "site_public",
@@ -488,18 +565,21 @@ describe("createDriveCapabilityDispatcher", () => {
       entryPath: "pages/home.html",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: driveSite({ siteId: "site_public", lastPublishedAt: "2026-06-23T00:00:00.000Z" }),
+      data: { ...sanitizedSite, lastPublishedAt: "2026-06-23T00:00:00.000Z" },
     })
 
     expect(listDriveSites).toHaveBeenCalledWith({ offset: 2, limit: 5, search: "原型", status: "active" })
     expect(updateDriveSiteAccess).toHaveBeenCalledWith({
       siteId: "site_public",
       accessMode: "password",
+      password: "new-secret",
       expiresIn: "7d",
     })
     expect(disableDriveSite).toHaveBeenCalledWith("site_public")
+    expect(enableDriveSite).toHaveBeenCalledWith("site_public")
     expect(deleteDriveSite).toHaveBeenCalledWith("site_public")
     expect(republishDriveSite).toHaveBeenCalledWith({ siteId: "site_public", entryPath: "pages/home.html" })
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
   })
 
   it("uploads a public asset through the account helper after authorizing local file read", async () => {
@@ -547,12 +627,41 @@ describe("createDriveCapabilityDispatcher", () => {
     })
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
-      filePath: "/tmp/logo.txt",
+      filePath: "/tmp/logo.png",
+      name: "logo.txt",
     }, { source: "mcp-stdio" })).resolves.toEqual({
       ok: false,
       error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
       data: { status: "rejected", fileName: "logo.txt", message: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE },
     })
+  })
+
+  it("rejects unsupported public asset image formats before calling account helpers", async () => {
+    const uploadDrivePublicAssets = vi.fn()
+    const replaceDrivePublicAssetFile = vi.fn()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService: createAccountService({ uploadDrivePublicAssets, replaceDrivePublicAssetFile }),
+      fileSystem: regularFileSystemForTest(),
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.upload", {
+      filePath: "/tmp/logo.pdf",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+    })
+
+    await expect(dispatcher.dispatch("drive.direct_link.update", {
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      filePath: "/tmp/logo.svg",
+      mimeType: "image/svg+xml",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: false,
+      error: DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE,
+    })
+
+    expect(uploadDrivePublicAssets).not.toHaveBeenCalled()
+    expect(replaceDrivePublicAssetFile).not.toHaveBeenCalled()
   })
 
   it("rejects public asset upload and replacement when the local file is a symbolic link", async () => {
@@ -860,6 +969,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
+      downloadDriveLinkFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const })),
     })
     const permissionGuard = {
@@ -877,6 +987,10 @@ describe("createDriveCapabilityDispatcher", () => {
         params: { itemId: "item-1", versionId: "version-1", outputPath: "report-v1.md" },
       },
       {
+        action: "drive.link.download_file",
+        params: { url: "https://synapse.local/share/link-1", outputPath: "downloads/shared-report.md" },
+      },
+      {
         action: "drive.folder_zip.create",
         params: { itemId: "folder-1", outputPath: "project.zip" },
       },
@@ -890,6 +1004,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({ action: "fs.write.outside-userdata" }))
     expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFileVersion).not.toHaveBeenCalled()
+    expect(accountService.downloadDriveLinkFile).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFolderZip).not.toHaveBeenCalled()
   })
 
@@ -1567,6 +1682,7 @@ describe("createDriveCapabilityDispatcher", () => {
 function createAccountService(overrides: Partial<DriveAccountService> & Record<string, unknown> = {}): DriveAccountService {
   return {
     listDriveItems: vi.fn(async () => []),
+    listDriveItemsPage: vi.fn(async () => ({ items: [], page: drivePage() })),
     prepareDriveUpload: vi.fn(async () => ({
       sessionId: "session-1",
       item: { id: "item-1", name: "report.md" },
@@ -1591,6 +1707,7 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     listDriveSites: vi.fn(),
     updateDriveSiteAccess: vi.fn(),
     disableDriveSite: vi.fn(),
+    enableDriveSite: vi.fn(),
     deleteDriveSite: vi.fn(),
     republishDriveSite: vi.fn(),
     getDriveUsage: vi.fn(),
@@ -1710,6 +1827,7 @@ function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     urlWithPassword: "https://synapse.test/sites/site_public/",
     passwordEnabled: false,
     password: null,
+    expiresIn: "forever",
     expiresAt: null,
     sourceFolderItemId: "folder-1",
     sourceFolderName: "产品原型",

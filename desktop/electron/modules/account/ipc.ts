@@ -160,6 +160,7 @@ const drivePublicLinksPageInputSchema = z.object({
 const drivePageInputSchema = z.object({
   offset: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().optional(),
+  search: z.string().optional(),
 }).strict().optional()
 
 const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
@@ -403,7 +404,11 @@ const driveUsageSchema = z.object({
   quotaBytes: z.string(),
 })
 
-const driveParentSchema = z.object({ parentId: z.string().nullable().optional() })
+const driveItemListInputSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+}).strict().optional()
 const driveSiteIdSchema = z.object({ siteId: z.string().min(1) })
 const driveSitePreflightSchema = z.object({ sourceFolderItemId: z.string().min(1) })
 const driveSiteCreateSchema = z.object({
@@ -437,6 +442,7 @@ const drivePrepareUploadSchema = z.object({
 const drivePrepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   folderName: z.string(),
+  directories: z.array(z.object({ relativePath: z.string() })).optional(),
   files: z.array(z.object({
     relativePath: z.string(),
     size: z.string(),
@@ -507,11 +513,14 @@ const driveLocalUploadFileItemSchema = z.object({
 const driveLocalUploadFolderItemSchema = z.object({
   kind: z.literal("folder"),
   folderName: z.string().min(1),
+  directories: z.array(z.object({
+    relativePath: driveLocalUploadRelativePathSchema,
+  })).max(DRIVE_LOCAL_UPLOAD_MAX_FILES).optional(),
   files: z.array(z.object({
     path: z.string().min(1),
     relativePath: driveLocalUploadRelativePathSchema,
     mimeType: z.string().nullable().optional(),
-  })).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
+  })).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
 })
 
 const driveLocalUploadRequestSchema = z.object({
@@ -870,12 +879,9 @@ export const accountIpcModule: IpcModule = {
     listDriveItems: {
       kind: "invoke",
       channel: "synapse:account:drive:items:list",
-      request: driveParentSchema,
-      response: z.array(driveItemSchema),
-      handler: async (_ctx, input) => {
-        const parsed = driveParentSchema.parse(input)
-        return accountService.listDriveItems(parsed.parentId ?? null)
-      },
+      request: driveItemListInputSchema,
+      response: drivePublicLinksPageSchema(driveItemSchema),
+      handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
     },
     prepareDriveUpload: {
       kind: "invoke",

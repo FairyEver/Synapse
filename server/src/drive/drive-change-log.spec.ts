@@ -110,4 +110,31 @@ describe("DriveChangeLogService", () => {
       resyncRequired: false,
     })
   })
+
+  it("returns the current cursor without replaying historical changes", async () => {
+    const prisma = {
+      driveItem: {
+        findMany: vi.fn(),
+      },
+      driveChange: {
+        findFirst: vi.fn(async () => ({ sequence: 42n })),
+        findMany: vi.fn(),
+      },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await expect(service.list("user-1", { cursor: "latest", limit: 1 })).resolves.toEqual({
+      items: [],
+      nextCursor: "42",
+      hasMore: false,
+      resyncRequired: false,
+    })
+    expect(prisma.driveChange.findFirst).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    })
+    expect(prisma.driveChange.findMany).not.toHaveBeenCalled()
+    expect(prisma.driveItem.findMany).not.toHaveBeenCalled()
+  })
 })
