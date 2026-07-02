@@ -206,6 +206,42 @@ describe('toDriveBrowserQueryKey', () => {
     })
   })
 
+  it('deduplicates overlapping children when loading the next page', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    const firstSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-1'), createChild('file-2')],
+      childrenPage: { hasMore: true, limit: 50, nextOffset: 50 },
+    })
+    const nextSnapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder-1', type: 'folder' },
+      children: [createChild('file-2'), createChild('file-3')],
+      childrenPage: { hasMore: false, limit: 50, nextOffset: null },
+    })
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(firstSnapshot)
+      .mockResolvedValueOnce(nextSnapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'folder-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      hook.result.current.loadMoreChildren?.()
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.children.map((child) => child.id) : [])
+        .toEqual(['file-1', 'file-2', 'file-3'])
+    })
+  })
+
   it('ignores stale successful load-more responses after the browser target changes', async () => {
     vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
     const staleLoadMore = createDeferred<DriveBrowserSnapshotDto>()
