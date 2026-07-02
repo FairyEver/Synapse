@@ -32,6 +32,39 @@ describe("DriveAnnotationService", () => {
     expect(result[0]?.permissions.canDelete).toBe(true)
   })
 
+  it("hides threads after every comment is deleted", async () => {
+    const deletedAt = new Date("2026-06-22T00:00:00.000Z")
+    prisma.driveAnnotationThread.findMany.mockResolvedValueOnce([
+      threadRecord({
+        comments: [
+          commentRecord({ id: "comment-parent", deletedAt }),
+          commentRecord({ id: "comment-reply", parentCommentId: "comment-parent", deletedAt }),
+        ],
+      }),
+    ])
+
+    await expect(service.listOwnerAnnotations("owner-1", "item-1")).resolves.toEqual([])
+  })
+
+  it("keeps deleted parent comments when visible replies remain", async () => {
+    const deletedAt = new Date("2026-06-22T00:00:00.000Z")
+    prisma.driveAnnotationThread.findMany.mockResolvedValueOnce([
+      threadRecord({
+        comments: [
+          commentRecord({ id: "comment-parent", deletedAt }),
+          commentRecord({ id: "comment-reply", parentCommentId: "comment-parent" }),
+        ],
+      }),
+    ])
+
+    const result = await service.listOwnerAnnotations("owner-1", "item-1")
+
+    expect(result[0]?.comments.map((comment) => ({ id: comment.id, deleted: comment.deleted }))).toEqual([
+      { id: "comment-parent", deleted: true },
+      { id: "comment-reply", deleted: false },
+    ])
+  })
+
   it("creates a thread plus first comment for .md files", async () => {
     const result = await service.createOwnerAnnotation("owner-1", "item-1", createInput({ baseVersionId: "version-1" }))
 
@@ -335,7 +368,7 @@ function shareSnapshot(input: { readonly canEdit?: boolean; readonly canComment?
   }
 }
 
-function threadRecord() {
+function threadRecord(input: { readonly comments?: readonly ReturnType<typeof commentRecord>[] } = {}) {
   const createdAt = new Date("2026-06-21T00:00:00.000Z")
   return {
     id: "thread-1",
@@ -349,24 +382,30 @@ function threadRecord() {
     createdAt,
     updatedAt: createdAt,
     deletedAt: null,
-    comments: [commentRecord()],
+    comments: input.comments ?? [commentRecord()],
   }
 }
 
-function commentRecord(input: { readonly body?: string; readonly createdByUserId?: string } = {}) {
+function commentRecord(input: {
+  readonly id?: string
+  readonly parentCommentId?: string | null
+  readonly body?: string
+  readonly createdByUserId?: string
+  readonly deletedAt?: Date | null
+} = {}) {
   const createdAt = new Date("2026-06-21T00:00:00.000Z")
   const createdByUserId = input.createdByUserId ?? "reader-1"
   return {
-    id: "comment-1",
+    id: input.id ?? "comment-1",
     threadId: "thread-1",
-    parentCommentId: null,
+    parentCommentId: input.parentCommentId ?? null,
     body: input.body ?? "Comment body",
     createdByUserId,
     createdByUser: { id: createdByUserId, email: `${createdByUserId}@example.com`, displayName: "Reader" },
     createdAt,
     updatedAt: createdAt,
     editedAt: null,
-    deletedAt: null,
+    deletedAt: input.deletedAt ?? null,
   }
 }
 

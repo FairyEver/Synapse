@@ -381,8 +381,20 @@ function toThreadDto(
 }
 
 function visibleComments(comments: readonly AnnotationCommentRecord[]): readonly AnnotationCommentRecord[] {
-  const parentIds = new Set(comments.map((comment) => comment.parentCommentId).filter((id): id is string => Boolean(id)))
-  return comments.filter((comment) => !comment.deletedAt || parentIds.has(comment.id))
+  const byId = new Map(comments.map((comment) => [comment.id, comment]))
+  const visibleIds = new Set(comments.filter((comment) => !comment.deletedAt).map((comment) => comment.id))
+  for (const comment of comments) {
+    if (!visibleIds.has(comment.id)) continue
+    let parentCommentId = comment.parentCommentId
+    while (parentCommentId) {
+      if (visibleIds.has(parentCommentId)) break
+      const parent = byId.get(parentCommentId)
+      if (!parent) break
+      visibleIds.add(parent.id)
+      parentCommentId = parent.parentCommentId
+    }
+  }
+  return comments.filter((comment) => visibleIds.has(comment.id))
 }
 
 function toCommentDto(
