@@ -1276,12 +1276,7 @@ export class AccountService {
 
     try {
       await this.putPreparedUploadFromBuffer(prepared.upload, bytes)
-      return await this.requestAuthenticatedJson<DrivePublicAssetDto>(
-        "POST",
-        `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
-        undefined,
-        "上传确认失败。",
-      )
+      return await this.completeDrivePublicAssetUploadWithRetry(prepared.sessionId)
     } catch (error) {
       await this.cancelDrivePublicAssetUpload(prepared.sessionId)
       throw error
@@ -1320,12 +1315,7 @@ export class AccountService {
 
     try {
       await this.putPreparedUploadFromPath(prepared.upload, input.path, fileStat.size)
-      return await this.requestAuthenticatedJson<DrivePublicAssetDto>(
-        "POST",
-        `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(input.assetId)}/replace/${encodeURIComponent(prepared.sessionId)}/complete`,
-        undefined,
-        "替换确认失败。",
-      )
+      return await this.completeDrivePublicAssetReplaceWithRetry(input.assetId, prepared.sessionId)
     } catch (error) {
       await this.cancelDrivePublicAssetReplace(input.assetId, prepared.sessionId)
       throw error
@@ -1492,12 +1482,7 @@ export class AccountService {
 
     try {
       await this.putPreparedUploadFromPath(prepared.upload, file.path, fileStat.size)
-      const asset = await this.requestAuthenticatedJson<DrivePublicAssetDto>(
-        "POST",
-        `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
-        undefined,
-        "上传确认失败。",
-      )
+      const asset = await this.completeDrivePublicAssetUploadWithRetry(prepared.sessionId)
       return { status: "fulfilled", fileName: file.name, asset }
     } catch (error) {
       await this.cancelDrivePublicAssetUpload(prepared.sessionId)
@@ -1517,6 +1502,48 @@ export class AccountService {
         errorName: error instanceof Error ? error.name : typeof error,
       })
     })
+  }
+
+  private async completeDrivePublicAssetUpload(sessionId: string): Promise<DrivePublicAssetDto> {
+    return this.requestAuthenticatedJson<DrivePublicAssetDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/uploads/${encodeURIComponent(sessionId)}/complete`,
+      undefined,
+      "上传确认失败。",
+    )
+  }
+
+  private async completeDrivePublicAssetUploadWithRetry(sessionId: string): Promise<DrivePublicAssetDto> {
+    try {
+      return await this.completeDrivePublicAssetUpload(sessionId)
+    } catch (firstError) {
+      try {
+        return await this.completeDrivePublicAssetUpload(sessionId)
+      } catch {
+        throw firstError
+      }
+    }
+  }
+
+  private async completeDrivePublicAssetReplace(assetId: string, sessionId: string): Promise<DrivePublicAssetDto> {
+    return this.requestAuthenticatedJson<DrivePublicAssetDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(assetId)}/replace/${encodeURIComponent(sessionId)}/complete`,
+      undefined,
+      "替换确认失败。",
+    )
+  }
+
+  private async completeDrivePublicAssetReplaceWithRetry(assetId: string, sessionId: string): Promise<DrivePublicAssetDto> {
+    try {
+      return await this.completeDrivePublicAssetReplace(assetId, sessionId)
+    } catch (firstError) {
+      try {
+        return await this.completeDrivePublicAssetReplace(assetId, sessionId)
+      } catch {
+        throw firstError
+      }
+    }
   }
 
   private async cancelDrivePublicAssetReplace(assetId: string, sessionId: string): Promise<void> {

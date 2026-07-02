@@ -960,6 +960,40 @@ describe("AccountService", () => {
     )
   })
 
+  it("retries binary public asset completion before reporting failure", async () => {
+    const bytes = new TextEncoder().encode("hello").buffer
+    const asset = drivePublicAsset({ name: "logo.png", size: "5", mimeType: "image/png" })
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce(preparedFile("upload-session", "https://upload.example.test/public-asset-binary"))
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(asset)
+
+    await expect(service.uploadDrivePublicAssetBinary({
+      name: "logo.png",
+      mimeType: "image/png",
+      data: bytes,
+    })).resolves.toEqual(asset)
+
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      2,
+      "POST",
+      expectedApiUrl("/drive/public-assets/uploads/upload-session/complete"),
+      undefined,
+      "上传确认失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      3,
+      "POST",
+      expectedApiUrl("/drive/public-assets/uploads/upload-session/complete"),
+      undefined,
+      "上传确认失败。",
+    )
+  })
+
   it("rejects unsupported binary public asset uploads before prepare", async () => {
     const bytes = new TextEncoder().encode("plain text").buffer
     const { service } = await createTestAccountService()
@@ -1317,6 +1351,45 @@ describe("AccountService", () => {
       expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/public-replace-failed/cancel`),
       undefined,
       "替换取消失败。",
+    )
+  })
+
+  it("retries public asset replacement completion before reporting failure", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-public-asset-replace-retry-"))
+    const replacePath = path.join(dir, "replacement.png")
+    await writeFile(replacePath, "replacement")
+    const asset = drivePublicAsset()
+    const { service } = await createTestAccountService()
+    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce(preparedFile("replace-session", "https://upload.example.test/public-replace"))
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(asset)
+    vi.spyOn(service as unknown as {
+      putPreparedUploadFromPath: (...args: unknown[]) => Promise<void>
+    }, "putPreparedUploadFromPath").mockResolvedValue(undefined)
+
+    await expect(service.replaceDrivePublicAssetFile({
+      assetId: asset.assetId,
+      path: replacePath,
+      name: "replacement.png",
+      mimeType: "image/png",
+    })).resolves.toEqual(asset)
+
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      2,
+      "POST",
+      expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/replace-session/complete`),
+      undefined,
+      "替换确认失败。",
+    )
+    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
+      3,
+      "POST",
+      expectedApiUrl(`/drive/public-assets/${encodeURIComponent(asset.assetId)}/replace/replace-session/complete`),
+      undefined,
+      "替换确认失败。",
     )
   })
 
