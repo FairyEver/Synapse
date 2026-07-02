@@ -53,7 +53,7 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
   readonly label: string
 }> = [
   { value: "all", label: "全部" },
-  { value: "active", label: "同步中" },
+  { value: "active", label: "已启用" },
   { value: "conflict", label: "有冲突" },
   { value: "paused", label: "已暂停" },
   { value: "error", label: "错误" },
@@ -833,7 +833,7 @@ function formatDirection(direction: DriveSyncBindingPreviewDto["direction"]): st
 }
 
 function formatBindingStatus(status: DriveSyncBindingDto["status"]): string {
-  if (status === "active") return "同步中"
+  if (status === "active") return "已启用"
   if (status === "paused") return "已暂停"
   if (status === "conflict") return "有冲突"
   if (status === "error") return "错误"

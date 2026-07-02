@@ -643,13 +643,15 @@ describe("DriveModule", () => {
     if (!dialogHeader) throw new Error("Drive sync dialog header not found")
     expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual([
       "全部",
-      "同步中",
+      "已启用",
       "有冲突",
       "已暂停",
       "错误",
     ])
     expect(dialog.textContent).toContain("Docs")
     expect(dialog.textContent).toContain("/Users/me/Docs")
+    expect(dialog.textContent).toContain("已启用")
+    expect(dialog.textContent).not.toContain("同步中")
     expect(dialog.textContent).toContain("1 个冲突")
     expect(dialog.textContent).toContain("1 条同步记录")
     expect(dialog.textContent).not.toContain("排除规则")
