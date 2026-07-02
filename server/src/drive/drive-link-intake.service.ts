@@ -114,14 +114,14 @@ export class DriveLinkIntakeService {
   constructor(private readonly deps: DriveLinkIntakeDeps) {}
 
   async resolve(input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
-    const parsed = parseDriveLinkUrl(input.url)
+    const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
     if (parsed.linkType === "share") return this.resolveShare(parsed, input)
     if (parsed.linkType === "site") return this.resolveSite(parsed, input)
     return this.resolvePublicAsset(parsed)
   }
 
   async list(input: DriveLinkListInput): Promise<DriveLinkListDto> {
-    const parsed = parseDriveLinkUrl(input.url)
+    const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
     if (parsed.linkType === "public_asset") {
       throw new BadRequestException("公开素材链接没有目录。")
     }
@@ -160,7 +160,7 @@ export class DriveLinkIntakeService {
   }
 
   async readText(input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
-    const parsed = parseDriveLinkUrl(input.url)
+    const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
     if (parsed.linkType === "public_asset") {
       throw new BadRequestException("该链接不是可读取的文本内容。")
     }
@@ -174,7 +174,7 @@ export class DriveLinkIntakeService {
     readonly size?: bigint
     readonly contentType?: string | null
   }> {
-    const parsed = parseDriveLinkUrl(input.url)
+    const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
     if (parsed.linkType === "public_asset") {
       const access = await this.deps.publicAssets.resolvePublicAsset(parsed.assetId, {})
       if (access.status !== "ok") throw new NotFoundException("公开素材不存在。")
@@ -354,7 +354,7 @@ export class DriveLinkIntakeService {
   }
 }
 
-function parseDriveLinkUrl(value: string): ParsedDriveLink {
+function parseDriveLinkUrl(value: string, publicAppUrl: string): ParsedDriveLink {
   let url: URL
   try {
     url = new URL(value)
@@ -362,6 +362,7 @@ function parseDriveLinkUrl(value: string): ParsedDriveLink {
     throw new BadRequestException("云盘链接无效。")
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new BadRequestException("云盘链接无效。")
+  if (!hasSynapsePublicOrigin(url, publicAppUrl)) throw new BadRequestException("仅支持当前 Synapse 公共地址的云盘链接。")
 
   const segments = url.pathname.split("/").filter(Boolean).map((segment) => {
     try {
@@ -380,6 +381,14 @@ function parseDriveLinkUrl(value: string): ParsedDriveLink {
     return { linkType: "public_asset", assetId: segments[1] }
   }
   throw new BadRequestException("仅支持 Synapse 云盘 /share、/sites 和 /files 链接。")
+}
+
+function hasSynapsePublicOrigin(url: URL, publicAppUrl: string): boolean {
+  try {
+    return url.origin === new URL(publicAppUrl).origin
+  } catch {
+    return false
+  }
 }
 
 function toDriveLinkEntry(item: DriveBrowserItemDto): DriveLinkEntryDto {

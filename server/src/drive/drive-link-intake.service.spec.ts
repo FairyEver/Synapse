@@ -121,6 +121,23 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("rejects drive-shaped links from other origins before resolving content", async () => {
+    const { service, drive, sites, publicAssets } = createService()
+    const url = "https://example.com/share/shr_123"
+
+    await expect(service.resolve({ url })).rejects.toThrow("仅支持当前 Synapse 公共地址的云盘链接。")
+    await expect(service.list({ url })).rejects.toThrow("仅支持当前 Synapse 公共地址的云盘链接。")
+    await expect(service.readText({ url })).rejects.toThrow("仅支持当前 Synapse 公共地址的云盘链接。")
+    await expect((service as unknown as {
+      openDownload: (input: { readonly url: string }) => Promise<unknown>
+    }).openDownload({ url })).rejects.toThrow("仅支持当前 Synapse 公共地址的云盘链接。")
+
+    expect(drive.resolvePublicShareAccess).not.toHaveBeenCalled()
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+    expect(sites.resolvePublicSite).not.toHaveBeenCalled()
+    expect(publicAssets.resolvePublicAsset).not.toHaveBeenCalled()
+  })
+
   it("resolves direct share child links from the target item snapshot", async () => {
     const { service, drive } = createService()
     drive.resolvePublicShareAccess.mockResolvedValueOnce({
