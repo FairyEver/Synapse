@@ -1314,6 +1314,50 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("creates a Drive folder when an MCP folder upload points to an empty local directory", async () => {
+    const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
+    const accountService = createAccountService({
+      createDriveFolder: vi.fn(async () => root),
+    })
+    const fetchImpl = vi.fn()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem: {
+        lstat: vi.fn(async () => statLikeForTest({
+          isFile: false,
+          isDirectory: true,
+          size: 0,
+        })),
+        stat: vi.fn(),
+        createReadStream: vi.fn(),
+        readdir: vi.fn(async () => []),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: fetchImpl,
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project",
+      parentId: "drive-root",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        root,
+        rootCreated: true,
+        completed: 0,
+        failed: 0,
+        failures: [],
+        cleanupRootDeleted: false,
+        cleanupRootDeleteFailed: false,
+      },
+    })
+    expect(accountService.createDriveFolder).toHaveBeenCalledWith({
+      parentId: "drive-root",
+      name: "project",
+    })
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it("rejects relative MCP folder upload paths before permission checks", async () => {
     const accountService = createAccountService()
     const permissionGuard = {

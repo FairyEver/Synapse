@@ -547,7 +547,24 @@ async function uploadFolder(
   if (!folderStat.isDirectory()) throw new Error("folderPath must point to a directory.")
 
   const entries = await listLocalFiles(fileSystem, folderPath)
-  if (entries.length === 0) throw new Error("Folder is empty.")
+  if (entries.length === 0) {
+    const root = await deps.accountService.createDriveFolder({
+      parentId: optionalNullableString(params.parentId),
+      name: optionalString(params.folderName) ?? path.basename(folderPath),
+    })
+    return {
+      ok: true,
+      data: {
+        root,
+        rootCreated: true,
+        completed: 0,
+        failed: 0,
+        failures: [],
+        cleanupRootDeleted: false,
+        cleanupRootDeleteFailed: false,
+      },
+    }
+  }
 
   const prepared = await deps.accountService.prepareDriveFolderUpload({
     parentId: optionalNullableString(params.parentId),
