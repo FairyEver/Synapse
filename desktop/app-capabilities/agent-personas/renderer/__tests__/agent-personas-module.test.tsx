@@ -378,10 +378,14 @@ describe("AgentPersonasModule", () => {
     await clickButtonByLabel("配置模型：中英翻译")
 
     expect(document.body.textContent).toContain("配置模型")
-    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-name")?.readOnly).toBe(true)
-    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-description")?.readOnly).toBe(true)
-    expect(document.body.querySelector<HTMLTextAreaElement>("#agent-persona-system-prompt")?.readOnly).toBe(true)
-    expect(document.body.querySelector<HTMLInputElement>("#agent-persona-tool-policy-readonly")?.value).toBe("禁用全部工具")
+    expect(document.body.textContent).toContain("中英翻译")
+    expect(document.body.textContent).toContain("在中文和英文之间互译，保留原意、语气和格式。")
+    expect(document.body.textContent).toContain("你是中英翻译智能体。")
+    expect(document.body.textContent).toContain("禁用全部工具")
+    expect(document.body.querySelector("#agent-persona-name")).toBeNull()
+    expect(document.body.querySelector("#agent-persona-description")).toBeNull()
+    expect(document.body.querySelector("#agent-persona-system-prompt")).toBeNull()
+    expect(document.body.querySelector("#agent-persona-tool-policy-readonly")).toBeNull()
 
     await clickButton("未指定")
     await clickButton("选择 Sonnet 模型")
@@ -390,7 +394,6 @@ describe("AgentPersonasModule", () => {
     expect(bridge.updateBuiltinModel).toHaveBeenCalledWith({
       id: "builtin-zh-en-translator",
       providerModel: { providerId: "claude", modelTier: "sonnet" },
-      toolPolicy: { mode: "disabled" },
     })
     expect(bridge.update).not.toHaveBeenCalled()
   })

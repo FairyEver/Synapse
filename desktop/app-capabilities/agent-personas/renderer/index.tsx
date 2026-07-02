@@ -52,6 +52,7 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldTitle,
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "../../../src/components/ui/native-select"
@@ -206,7 +207,7 @@ export function AgentPersonasModule() {
       return
     }
 
-    const errors = validateForm(form)
+    const errors = form.mode === "configureBuiltinModel" ? {} : validateForm(form)
     if (Object.keys(errors).length > 0) {
       setForm((current) => ({ ...current, errors }))
       return
@@ -214,6 +215,19 @@ export function AgentPersonasModule() {
 
     try {
       setSaving(true)
+      if (form.mode === "configureBuiltinModel" && form.item) {
+        const saved = await agentPersonasBridge.updateBuiltinModel({
+          id: form.item.id,
+          providerModel: form.providerModel
+            ? { providerId: form.providerModel.providerId, modelTier: form.providerModel.modelTier }
+            : null,
+        })
+        setListResult((current) => ({ ...current, items: mergeItem(current.items, saved) }))
+        toast.success("已保存")
+        closeForm()
+        return
+      }
+
       const input = {
         name: form.name,
         description: form.description,
@@ -223,13 +237,7 @@ export function AgentPersonasModule() {
           : null,
         toolPolicy: formToolPolicy(form),
       }
-      const saved = form.mode === "configureBuiltinModel" && form.item
-        ? await agentPersonasBridge.updateBuiltinModel({
-          id: form.item.id,
-          providerModel: input.providerModel,
-          toolPolicy: input.toolPolicy,
-        })
-        : form.mode === "edit" && form.item
+      const saved = form.mode === "edit" && form.item
         ? await agentPersonasBridge.update({ id: form.item.id, ...input })
         : await agentPersonasBridge.create(input)
 
@@ -499,15 +507,19 @@ function AgentPersonaDialog({
   readonly open: boolean
   readonly saving: boolean
 }) {
-  const isTextReadonly = form.mode === "configureBuiltinModel"
+  const isBuiltinModelMode = form.mode === "configureBuiltinModel"
   const title = form.mode === "edit"
     ? "编辑智能体"
-    : form.mode === "configureBuiltinModel"
+    : isBuiltinModelMode
       ? "配置模型"
       : "新增智能体"
-  const saveLabel = form.mode === "configureBuiltinModel" ? "保存模型" : "保存智能体"
+  const saveLabel = isBuiltinModelMode ? "保存模型" : "保存智能体"
   const modelLabel = useProviderModelLabel(form.providerModel)
   const modelDisplay = form.providerModel ? modelLabel || form.providerModel.providerId : "未指定"
+  const toolPolicy = {
+    mode: form.toolPolicyMode,
+    allowedTools: form.allowedTools,
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -519,63 +531,73 @@ function AgentPersonaDialog({
           </DialogHeader>
           <FieldGroup className="gap-4">
             <div className="grid gap-4 md:grid-cols-2" data-agent-persona-basic-grid>
-              <Field data-invalid={Boolean(form.errors.name) || undefined}>
-                <FieldLabel htmlFor="agent-persona-name">名称</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id="agent-persona-name"
-                    value={form.name}
-                    disabled={saving}
-                    readOnly={isTextReadonly}
-                    aria-invalid={Boolean(form.errors.name)}
-                    onChange={(event) => onFormChange((current) => ({
-                      ...current,
-                      name: event.target.value,
-                      errors: { ...current.errors, name: undefined, form: undefined },
-                    }))}
-                    autoFocus={!isTextReadonly}
-                  />
-                  {form.errors.name ? <FieldError>{form.errors.name}</FieldError> : null}
-                </FieldContent>
-              </Field>
-              <Field data-invalid={Boolean(form.errors.description) || undefined}>
-                <FieldLabel htmlFor="agent-persona-description">简介</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id="agent-persona-description"
-                    value={form.description}
-                    disabled={saving}
-                    readOnly={isTextReadonly}
-                    aria-invalid={Boolean(form.errors.description)}
-                    onChange={(event) => onFormChange((current) => ({
-                      ...current,
-                      description: event.target.value,
-                      errors: { ...current.errors, description: undefined, form: undefined },
-                    }))}
-                  />
-                  {form.errors.description ? <FieldError>{form.errors.description}</FieldError> : null}
-                </FieldContent>
-              </Field>
+              {isBuiltinModelMode ? (
+                <>
+                  <AgentPersonaStaticField label="名称" value={form.name} />
+                  <AgentPersonaStaticField label="简介" value={form.description} />
+                </>
+              ) : (
+                <>
+                  <Field data-invalid={Boolean(form.errors.name) || undefined}>
+                    <FieldLabel htmlFor="agent-persona-name">名称</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        id="agent-persona-name"
+                        value={form.name}
+                        disabled={saving}
+                        aria-invalid={Boolean(form.errors.name)}
+                        onChange={(event) => onFormChange((current) => ({
+                          ...current,
+                          name: event.target.value,
+                          errors: { ...current.errors, name: undefined, form: undefined },
+                        }))}
+                        autoFocus
+                      />
+                      {form.errors.name ? <FieldError>{form.errors.name}</FieldError> : null}
+                    </FieldContent>
+                  </Field>
+                  <Field data-invalid={Boolean(form.errors.description) || undefined}>
+                    <FieldLabel htmlFor="agent-persona-description">简介</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        id="agent-persona-description"
+                        value={form.description}
+                        disabled={saving}
+                        aria-invalid={Boolean(form.errors.description)}
+                        onChange={(event) => onFormChange((current) => ({
+                          ...current,
+                          description: event.target.value,
+                          errors: { ...current.errors, description: undefined, form: undefined },
+                        }))}
+                      />
+                      {form.errors.description ? <FieldError>{form.errors.description}</FieldError> : null}
+                    </FieldContent>
+                  </Field>
+                </>
+              )}
             </div>
-            <Field data-invalid={Boolean(form.errors.systemPrompt) || undefined}>
-              <FieldLabel htmlFor="agent-persona-system-prompt">系统提示词</FieldLabel>
-              <FieldContent>
-                <Textarea
-                  id="agent-persona-system-prompt"
-                  value={form.systemPrompt}
-                  disabled={saving}
-                  readOnly={isTextReadonly}
-                  className="min-h-40 resize-y"
-                  aria-invalid={Boolean(form.errors.systemPrompt)}
-                  onChange={(event) => onFormChange((current) => ({
-                    ...current,
-                    systemPrompt: event.target.value,
-                    errors: { ...current.errors, systemPrompt: undefined, form: undefined },
-                  }))}
-                />
-                {form.errors.systemPrompt ? <FieldError>{form.errors.systemPrompt}</FieldError> : null}
-              </FieldContent>
-            </Field>
+            {isBuiltinModelMode ? (
+              <AgentPersonaStaticField label="系统提示词" value={form.systemPrompt} multiline />
+            ) : (
+              <Field data-invalid={Boolean(form.errors.systemPrompt) || undefined}>
+                <FieldLabel htmlFor="agent-persona-system-prompt">系统提示词</FieldLabel>
+                <FieldContent>
+                  <Textarea
+                    id="agent-persona-system-prompt"
+                    value={form.systemPrompt}
+                    disabled={saving}
+                    className="min-h-40 resize-y"
+                    aria-invalid={Boolean(form.errors.systemPrompt)}
+                    onChange={(event) => onFormChange((current) => ({
+                      ...current,
+                      systemPrompt: event.target.value,
+                      errors: { ...current.errors, systemPrompt: undefined, form: undefined },
+                    }))}
+                  />
+                  {form.errors.systemPrompt ? <FieldError>{form.errors.systemPrompt}</FieldError> : null}
+                </FieldContent>
+              </Field>
+            )}
             <div className="grid gap-4 md:grid-cols-2" data-agent-persona-options-grid>
               <Field>
                 <FieldLabel>模型</FieldLabel>
@@ -608,12 +630,15 @@ function AgentPersonaDialog({
                   </div>
                 </FieldContent>
               </Field>
-              <AgentPersonaToolPolicyField
-                form={form}
-                saving={saving}
-                readonly={isTextReadonly}
-                onFormChange={onFormChange}
-              />
+              {isBuiltinModelMode ? (
+                <AgentPersonaStaticField label="工具能力" value={toolPolicyLabel(toolPolicy)} />
+              ) : (
+                <AgentPersonaToolPolicyField
+                  form={form}
+                  saving={saving}
+                  onFormChange={onFormChange}
+                />
+              )}
             </div>
             {form.errors.form ? <FieldError>{form.errors.form}</FieldError> : null}
           </FieldGroup>
@@ -638,36 +663,39 @@ function AgentPersonaDialog({
   )
 }
 
+function AgentPersonaStaticField({
+  label,
+  multiline = false,
+  value,
+}: {
+  readonly label: string
+  readonly multiline?: boolean
+  readonly value: string
+}) {
+  return (
+    <Field>
+      <FieldTitle>{label}</FieldTitle>
+      <FieldContent>
+        <p className={multiline
+          ? "min-h-28 whitespace-pre-wrap break-words py-1 text-sm leading-6 text-foreground"
+          : "min-h-8 truncate py-1 text-sm leading-6 text-foreground"}
+        >
+          {value}
+        </p>
+      </FieldContent>
+    </Field>
+  )
+}
+
 function AgentPersonaToolPolicyField({
   form,
   onFormChange,
-  readonly,
   saving,
 }: {
   readonly form: AgentPersonaFormState
   readonly onFormChange: Dispatch<SetStateAction<AgentPersonaFormState>>
-  readonly readonly: boolean
   readonly saving: boolean
 }) {
-  if (readonly) {
-    return (
-      <Field>
-        <FieldLabel htmlFor="agent-persona-tool-policy-readonly">工具能力</FieldLabel>
-        <FieldContent>
-          <Input
-            id="agent-persona-tool-policy-readonly"
-            value={toolPolicyLabel({
-              mode: form.toolPolicyMode,
-              allowedTools: form.allowedTools,
-            })}
-            readOnly
-            disabled={saving}
-          />
-        </FieldContent>
-      </Field>
-    )
-  }
-
   return (
     <>
       <Field>
