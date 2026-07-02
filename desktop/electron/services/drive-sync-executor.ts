@@ -379,7 +379,8 @@ async function parentRemoteId(deps: DriveSyncExecutorDeps): Promise<string | nul
   }
   const parentBaseline = (await deps.baselineStore.listByBinding(deps.binding.id))
     .find((entry) => entry.relativePath === parentPath && entry.deletedAt === null)
-  return parentBaseline?.remoteItemId ?? deps.binding.driveItemId
+  if (!parentBaseline) throw new Error("云盘父文件夹尚未同步，已停止上传子项。")
+  return parentBaseline.remoteItemId
 }
 
 function parentRelativePath(relativePath: string): string | null {

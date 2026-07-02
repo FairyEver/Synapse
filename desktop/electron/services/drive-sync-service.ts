@@ -1326,10 +1326,19 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     operations: readonly DriveSyncPlannedOperation[],
     options: { readonly throwOnError?: boolean } = {},
   ): Promise<void> {
+    const failedBindingIds = new Set<string>()
     for (const operation of operations) {
+      if (!options.throwOnError && failedBindingIds.has(operation.bindingId)) continue
       const binding = await requireBinding(operation.bindingId)
+      if (!options.throwOnError && binding.status !== "active") {
+        failedBindingIds.add(operation.bindingId)
+        continue
+      }
       const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
-      if (!rootReady) continue
+      if (!rootReady) {
+        failedBindingIds.add(operation.bindingId)
+        continue
+      }
       if (operation.kind === "resync") {
         await recordOperation({
           bindingId: operation.bindingId,
@@ -1342,6 +1351,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           message: REMOTE_RESYNC_REQUIRED_ERROR,
         })
         await markBindingError(operation.bindingId, REMOTE_RESYNC_REQUIRED_ERROR, { emitChanged: true })
+        failedBindingIds.add(operation.bindingId)
         if (options.throwOnError) throw new Error(REMOTE_RESYNC_REQUIRED_ERROR)
         continue
       }
@@ -1358,6 +1368,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         })
       } catch (error) {
         await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
+        failedBindingIds.add(operation.bindingId)
         if (options.throwOnError) throw error
       }
     }

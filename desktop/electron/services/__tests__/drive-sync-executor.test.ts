@@ -621,6 +621,40 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("rejects nested uploads when the parent folder baseline is missing", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const records: unknown[] = []
+    const localPath = path.join(tempDir, "Project", "spec.md")
+    await mkdir(path.dirname(localPath), { recursive: true })
+    await writeFile(localPath, "spec", "utf8")
+    const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+
+    await expect(executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "upload",
+        driveItemId: null,
+        relativePath: "Project/spec.md",
+        localPath,
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService: createAccountService({ uploadDriveLocalItems }),
+      recordOperation: async (record) => { records.push(record) },
+      trashLocalPath: vi.fn(),
+    })).rejects.toThrow("云盘父文件夹尚未同步，已停止上传子项。")
+
+    expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+    await expect(namespace.list()).resolves.toEqual([])
+    expect(records).toEqual([
+      expect.objectContaining({
+        kind: "upload",
+        status: "error",
+        relativePath: "Project/spec.md",
+        message: "云盘父文件夹尚未同步，已停止上传子项。",
+      }),
+    ])
+  })
+
   it("records failed operations without updating baseline", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const records: unknown[] = []

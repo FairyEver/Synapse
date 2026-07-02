@@ -1577,6 +1577,65 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("stops watcher folder creation batches after a parent upload fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const createDriveFolder = vi.fn(async () => {
+        throw new Error("父目录创建失败。")
+      })
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const harness = createHarness({
+        watch,
+        accountService: {
+          createDriveFolder,
+          uploadDriveLocalItems,
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+
+      await mkdir(path.join(tempDir, "Project"), { recursive: true })
+      await writeFile(path.join(tempDir, "Project", "spec.md"), "spec", "utf8")
+      rawEvent?.("rename", "Project")
+
+      await waitForExpect(async () => {
+        expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Project" })
+        await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+          status: "error",
+          lastError: "父目录创建失败。",
+        })
+      }, 1000)
+      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+      await expect(harness.baseline.list()).resolves.toEqual([])
+      const operations = await harness.operations.list()
+      expect(operations).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          bindingId: binding.id,
+          kind: "upload",
+          status: "error",
+          relativePath: "Project",
+          message: "父目录创建失败。",
+        }),
+      ]))
+      expect(operations).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ bindingId: binding.id, relativePath: "Project/spec.md" }),
+      ]))
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps missing folder roots in error when checking local changes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
