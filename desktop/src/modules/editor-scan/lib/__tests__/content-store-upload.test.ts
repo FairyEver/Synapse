@@ -17,7 +17,7 @@ describe("content store upload helpers", () => {
     expect(canUploadSkillToContentStore({ ...ruleItem(), type: "prompt" } as unknown as ScanItemForDetail)).toBe(false)
 
     expect(getUploadSkillToContentStoreDisabledReason(skillItem({ path: "" }))).toBe("本地路径为空")
-    expect(getUploadSkillToContentStoreDisabledReason(ruleItem())).toBe("只有 Skill 可以发布到商店")
+    expect(getUploadSkillToContentStoreDisabledReason(ruleItem())).toBe("只有 Skill 可以上传到 Skill Repository")
   })
 
   it("builds IPC payloads without UI state", () => {
@@ -32,11 +32,11 @@ describe("content store upload helpers", () => {
   })
 
   it("throws disabled reasons when building invalid upload payloads", () => {
-    expect(() => buildUploadSkillDraftRequest(ruleItem())).toThrow("只有 Skill 可以发布到商店")
+    expect(() => buildUploadSkillDraftRequest(ruleItem())).toThrow("只有 Skill 可以上传到 Skill Repository")
   })
 
   it("builds concise result messages", () => {
-    expect(buildUploadSkillDraftSuccessMessage()).toBe("草稿已保存。")
+    expect(buildUploadSkillDraftSuccessMessage()).toBe("Skill 仓库已保存。")
     expect(buildUploadSkillDraftErrorMessage(new Error("账号未登录。"))).toBe("请先登录账号。")
     expect(buildUploadSkillDraftErrorMessage(new Error("SKILL.md 是必需文件。"))).toBe("SKILL.md 是必需文件。")
   })

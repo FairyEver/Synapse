@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { GUARDS_METADATA } from "@nestjs/common/constants"
 import { AdminController } from "./admin.controller"
+import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { maxBulkInvitationDeleteIds, type AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
 import type { LiveDeviceService } from "../live/live-device.service"
@@ -40,6 +42,10 @@ describe("AdminController", () => {
     await expect(controller.getSystemOverview()).resolves.toMatchObject({
       counts: { auditLogs: 3 },
     })
+  })
+
+  it("keeps admin routes behind the admin auth guard", () => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, AdminController)).toContain(AdminAuthGuard)
   })
 
   it("passes audit log filters to the audit service", async () => {
@@ -194,6 +200,42 @@ describe("AdminController", () => {
       detail: { page: 2, pageSize: 10 },
       ipAddress: "203.0.113.10",
     }))
+  })
+
+  it("lists skill repositories for administrators and records audit metadata", async () => {
+    const listSkillRepositories = vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const controller = createController({ listSkillRepositories } as never, { record })
+
+    await expect(controller.listSkillRepositories(
+      { page: "2", pageSize: "10", sortBy: "updatedAt", sortOrder: "desc", status: "removed", query: " demo " },
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.77" } as never,
+    )).resolves.toEqual({ data: [], total: 0, page: 2, pageSize: 10 })
+
+    expect(listSkillRepositories).toHaveBeenCalledWith(
+      { page: 2, pageSize: 10, sortBy: "updatedAt", sortOrder: "desc" },
+      { status: "removed", query: "demo" },
+    )
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.skill_repositories.list",
+      targetType: "skill_repository",
+      targetId: "list",
+      detail: { page: 2, pageSize: 10, status: "removed", query: "demo" },
+      ipAddress: "203.0.113.77",
+    }))
+  })
+
+  it("defaults admin skill repository lists to active status", async () => {
+    const listSkillRepositories = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const controller = createController({ listSkillRepositories } as never)
+
+    await controller.listSkillRepositories({ status: "bad" }, {} as never)
+
+    expect(listSkillRepositories).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 20 }),
+      { status: "active", query: undefined },
+    )
   })
 
   it("keeps exported audit log responses when audit writes fail after send", async () => {
@@ -420,6 +462,30 @@ describe("AdminController", () => {
       .resolves
       .toEqual({ ok: true, count: 2 })
     expect(deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30")
+  })
+
+  it("marks skill repositories removed through the service", async () => {
+    const setSkillRepositoryRemoved = vi.fn().mockResolvedValue({ id: "repo-1", status: "removed" })
+    const controller = createController({ setSkillRepositoryRemoved } as never)
+
+    await expect(controller.setSkillRepositoryRemoved(
+      "repo-1",
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.78" } as never,
+    )).resolves.toEqual({ id: "repo-1", status: "removed" })
+
+    expect(setSkillRepositoryRemoved).toHaveBeenCalledWith("repo-1", true, "admin@example.com", "203.0.113.78")
+  })
+
+  it("restores skill repositories through the service", async () => {
+    const setSkillRepositoryRemoved = vi.fn().mockResolvedValue({ id: "repo-1", status: "active" })
+    const controller = createController({ setSkillRepositoryRemoved } as never)
+
+    await expect(controller.restoreSkillRepository(
+      "repo-1",
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.79" } as never,
+    )).resolves.toEqual({ id: "repo-1", status: "active" })
+
+    expect(setSkillRepositoryRemoved).toHaveBeenCalledWith("repo-1", false, "admin@example.com", "203.0.113.79")
   })
 
   it("rejects empty bulk invitation deletion", async () => {

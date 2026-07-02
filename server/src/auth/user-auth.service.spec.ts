@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { Logger, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
+import { BadRequestException, Logger, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
@@ -14,9 +14,14 @@ function createPrismaMock() {
     },
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
+      findUniqueOrThrow: vi.fn(),
       create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
       update: vi.fn().mockResolvedValue({ id: "user-1" }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    userHandleRedirect: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
@@ -47,6 +52,10 @@ function createPrismaMock() {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+    },
+    userHandleRedirect: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
@@ -1380,6 +1389,7 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       displayName: "Ada",
+      handle: "ada",
       memberships: [
         {
           id: "membership-1",
@@ -1396,7 +1406,7 @@ describe("UserAuthService", () => {
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active", displayName: "Ada" },
+      user: { id: "user-1", email: "u@example.com", status: "active", displayName: "Ada", handle: "ada" },
       teams: [
         {
           id: "team-1",
@@ -1422,6 +1432,7 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         displayName: true,
+        handle: true,
         memberships: {
           select: {
             id: true,
@@ -1436,11 +1447,19 @@ describe("UserAuthService", () => {
 
   it("updates the current user display name", async () => {
     const prisma = createPrismaMock()
-    prisma.user.update.mockResolvedValue({
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Grace",
+      handle: "grace",
+    })
+    prisma.__tx.user.update.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
       displayName: "Grace Hopper",
+      handle: "grace",
       memberships: [],
     })
     const auditLog = { record: vi.fn() }
@@ -1454,11 +1473,22 @@ describe("UserAuthService", () => {
         email: "u@example.com",
         status: "active",
         displayName: "Grace Hopper",
+        handle: "grace",
       },
       teams: [],
     })
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
+    expect(prisma.__tx.user.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        displayName: true,
+        handle: true,
+      },
+    })
+    expect(prisma.__tx.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
       data: { displayName: "Grace Hopper" },
       select: {
@@ -1466,6 +1496,80 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         displayName: true,
+        handle: true,
+        memberships: {
+          select: {
+            id: true,
+            role: true,
+            team: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+    expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["displayName"] },
+      ipAddress: "203.0.113.80",
+    })
+  })
+
+  it("sets normalized handles and reserves the previous handle when renamed", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "old-name",
+    })
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
+    prisma.__tx.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "new-name",
+      memberships: [],
+    })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.updateMyProfile("user-1", {
+      handle: " New-Name ",
+    }, "203.0.113.81")).resolves.toEqual({
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+        displayName: "Liyang",
+        handle: "new-name",
+      },
+      teams: [],
+    })
+
+    expect(prisma.__tx.userHandleRedirect.findUnique).toHaveBeenCalledWith({
+      where: { oldHandle: "new-name" },
+      select: { userId: true },
+    })
+    expect(prisma.__tx.userHandleRedirect.upsert).toHaveBeenCalledWith({
+      where: { oldHandle: "old-name" },
+      create: { userId: "user-1", oldHandle: "old-name" },
+      update: { userId: "user-1" },
+    })
+    expect(prisma.__tx.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { handle: "new-name" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        displayName: true,
+        handle: true,
         memberships: {
           select: {
             id: true,
@@ -1481,19 +1585,146 @@ describe("UserAuthService", () => {
       action: "user.profile.update",
       targetType: "user",
       targetId: "user-1",
-      detail: { fields: ["displayName"] },
-      ipAddress: "203.0.113.80",
+      detail: { fields: ["handle"] },
+      ipAddress: "203.0.113.81",
     })
+  })
+
+  it("updates display name and handle audit fields together", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "old-name",
+    })
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
+    prisma.__tx.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Li Yang",
+      handle: "new-name",
+      memberships: [],
+    })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.updateMyProfile("user-1", {
+      displayName: " Li Yang ",
+      handle: " New-Name ",
+    }, "203.0.113.82")).resolves.toEqual({
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+        displayName: "Li Yang",
+        handle: "new-name",
+      },
+      teams: [],
+    })
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["displayName", "handle"] },
+      ipAddress: "203.0.113.82",
+    })
+  })
+
+  it("rejects handles reserved by another user", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "liyang",
+    })
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue({ userId: "user-2" })
+    const service = createService(prisma)
+
+    const result = service.updateMyProfile("user-1", {
+      handle: "Taken",
+    })
+    await expect(result).rejects.toThrow(BadRequestException)
+    await expect(result).rejects.toThrow("用户名已被保留。")
+
+    expect(prisma.__tx.userHandleRedirect.findUnique).toHaveBeenCalledWith({
+      where: { oldHandle: "taken" },
+      select: { userId: true },
+    })
+    expect(prisma.__tx.user.update).not.toHaveBeenCalled()
+    expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejects handles already used by another user", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "liyang",
+    })
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
+    prisma.__tx.user.findUnique.mockResolvedValue({ id: "user-2" })
+    const service = createService(prisma)
+
+    const result = service.updateMyProfile("user-1", {
+      handle: "Taken",
+    })
+    await expect(result).rejects.toThrow(BadRequestException)
+    await expect(result).rejects.toThrow("用户名已被使用。")
+
+    expect(prisma.__tx.user.findUnique).toHaveBeenCalledWith({
+      where: { handle: "taken" },
+      select: { id: true },
+    })
+    expect(prisma.__tx.user.update).not.toHaveBeenCalled()
+    expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
+  })
+
+  it("maps handle update unique races to username errors", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Liyang",
+      handle: "liyang",
+    })
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
+    prisma.__tx.user.findUnique.mockResolvedValue(null)
+    prisma.__tx.user.update.mockRejectedValue(createUniqueConstraintError())
+    const service = createService(prisma)
+
+    const result = service.updateMyProfile("user-1", {
+      handle: "Taken",
+    })
+    await expect(result).rejects.toThrow(BadRequestException)
+    await expect(result).rejects.toThrow("用户名已被使用。")
   })
 
   it("returns the updated profile when profile audit logging fails", async () => {
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const prisma = createPrismaMock()
-    prisma.user.update.mockResolvedValue({
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Grace",
+      handle: "grace",
+    })
+    prisma.__tx.user.update.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
       displayName: "Grace Hopper",
+      handle: "grace",
       memberships: [],
     })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
@@ -1508,6 +1739,7 @@ describe("UserAuthService", () => {
           email: "u@example.com",
           status: "active",
           displayName: "Grace Hopper",
+          handle: "grace",
         },
         teams: [],
       })

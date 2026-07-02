@@ -144,11 +144,11 @@ const uploadSkillDraftToContentStoreRequestSchema = z.object({
 type UploadSkillDraftToContentStoreRequest = z.infer<typeof uploadSkillDraftToContentStoreRequestSchema>
 
 const uploadSkillDraftToContentStoreResultSchema = z.object({
-  draftId: z.string(),
-  itemId: z.string(),
-  revision: z.number().int().nonnegative(),
-  consoleEditUrl: z.string(),
-  dashboardEditUrl: z.string(),
+  draftId: z.string().min(1),
+  itemId: z.string().min(1),
+  revision: z.number().int().positive(),
+  consoleEditUrl: z.string().url(),
+  dashboardEditUrl: z.string().url(),
 })
 
 export const editorScanIpcModule: IpcModule = {
@@ -222,7 +222,7 @@ export const editorScanIpcModule: IpcModule = {
       response: uploadSkillDraftToContentStoreResultSchema,
       handler: async (ctx, request: UploadSkillDraftToContentStoreRequest) => {
         if (request.itemType !== "skill") {
-          throw new Error("只有 Skill 可以发布到商店。")
+          throw new Error("只有 Skill 可以上传到 Skill Repository。")
         }
         const security = {
           actor: { kind: "user" } as const,

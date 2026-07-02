@@ -1,5 +1,7 @@
 import { parseContentStoreInstallProtocolUrl } from "../../src/lib/content-store-install-window"
+import { parseSkillRepositoryInstallProtocolUrl } from "../../src/lib/skill-repository-install-window"
 import type { SynapseContentStoreInstallWindowRequest } from "../../src/types/content-store-install"
+import type { SynapseSkillRepositoryInstallWindowRequest } from "../../src/types/skill-repository-install"
 
 type ProtocolRouterLogger = {
   warn: (message: string, meta?: unknown) => void
@@ -10,6 +12,7 @@ type ProtocolUrlRouterDeps = {
   handleAuthCallback: (url: string) => Promise<unknown>
   logger: ProtocolRouterLogger
   openInstallWindow: (request: SynapseContentStoreInstallWindowRequest) => Promise<void>
+  openSkillRepositoryInstallWindow: (request: SynapseSkillRepositoryInstallWindowRequest) => Promise<void>
 }
 
 function isSynapseProtocolUrl(rawUrl: string): boolean {
@@ -48,6 +51,19 @@ function isContentInstallUrlCandidate(rawUrl: string): boolean {
   }
 }
 
+function isSkillRepositoryInstallUrlCandidate(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl)
+    return parsed.protocol === "synapse:" && parsed.hostname === "skill-install"
+  } catch {
+    return (
+      rawUrl === "synapse://skill-install"
+      || rawUrl.startsWith("synapse://skill-install?")
+      || rawUrl.startsWith("synapse://skill-install/")
+    )
+  }
+}
+
 function shouldFocusMainForSecondInstance(argv: string[]): boolean {
   return !argv.some(isSynapseProtocolUrl)
 }
@@ -80,9 +96,22 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
       return 0
     }
 
+    const skillInstallRequest = parseSkillRepositoryInstallProtocolUrl(url)
+    if (skillInstallRequest) {
+      try {
+        await deps.openSkillRepositoryInstallWindow(skillInstallRequest)
+      } catch (error) {
+        deps.logger.warn("Failed to open skill repository install window.", { error })
+        deps.focusMainWindow()
+      }
+      return 0
+    }
+
     deps.logger.warn(
       isContentInstallUrlCandidate(url)
         ? "Ignored invalid content store install URL."
+        : isSkillRepositoryInstallUrlCandidate(url)
+          ? "Ignored invalid skill repository install URL."
         : "Ignored unknown synapse protocol URL.",
     )
     deps.focusMainWindow()
@@ -125,7 +154,10 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
 
   function shouldCreateMainWindowBeforeStart(): boolean {
     if (pendingUrls.length === 0) return true
-    return pendingUrls.some((url) => !parseContentStoreInstallProtocolUrl(url))
+    return pendingUrls.some((url) => (
+      !parseContentStoreInstallProtocolUrl(url)
+      && !parseSkillRepositoryInstallProtocolUrl(url)
+    ))
   }
 
   return {

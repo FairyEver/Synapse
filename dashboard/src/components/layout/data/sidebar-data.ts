@@ -21,7 +21,12 @@ const adminNavGroup = {
   title: '管理',
   items: [
     {
-      title: '内容商店',
+      title: 'Skill 仓库',
+      url: '/skill-repositories/admin',
+      icon: FolderKanban,
+    },
+    {
+      title: 'Legacy Content Store',
       url: '/content-store-admin',
       icon: Store,
     },
@@ -82,14 +87,14 @@ const userAccountNavGroup = {
   title: '账户',
   items: [
     {
-      title: '内容商店',
-      url: '/content-store',
-      icon: Store,
+      title: '我的 Skills',
+      url: '/skill-repositories',
+      icon: FolderKanban,
     },
     {
-      title: '我的内容',
-      url: '/my-content',
-      icon: FolderKanban,
+      title: '探索 Skills',
+      url: '/skill-repositories/explore',
+      icon: Store,
     },
     {
       title: '网盘',

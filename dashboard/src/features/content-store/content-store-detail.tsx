@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ContentStoreDetailDto, ContentStoreFileDto } from '@synapse/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import { Header } from '@/components/layout/header'
@@ -39,9 +39,14 @@ export default function ContentStoreDetailPage({
   contentId,
 }: ContentStoreDetailPageProps) {
   const navigate = useNavigate()
+  const legacyRouteQuery = useQuery({
+    queryKey: ['legacy-content-store-route', contentId],
+    queryFn: () => dashboardApi.resolveLegacyContentStoreRoute(contentId),
+  })
   const detailQuery = useQuery({
     queryKey: ['content-store-detail', contentId],
     queryFn: () => dashboardApi.getContentStoreDetail(contentId),
+    enabled: legacyRouteQuery.data?.status === 'not_found' || legacyRouteQuery.isError,
   })
 
   const installMutation = useMutation({
@@ -70,7 +75,35 @@ export default function ContentStoreDetailPage({
     onError: (error) => toast.error(getErrorMessage(error, '复制失败')),
   })
 
-  if (detailQuery.isLoading) {
+  useEffect(() => {
+    if (legacyRouteQuery.data?.status !== 'migrated') return
+    void navigate({
+      to: '/skill-repositories/$repositoryId',
+      params: { repositoryId: legacyRouteQuery.data.repositoryId },
+      replace: true,
+    })
+  }, [legacyRouteQuery.data, navigate])
+
+  if (legacyRouteQuery.data?.status === 'retired') {
+    return (
+      <>
+        <Header fixed>
+          <h1 className='text-lg font-semibold'>内容已停止维护</h1>
+        </Header>
+        <Main>
+          <div className='mx-auto flex w-full max-w-2xl flex-col gap-3 py-8'>
+            <h1 className='text-xl font-semibold tracking-tight'>内容已停止维护</h1>
+            <p className='text-sm text-muted-foreground'>{legacyRouteQuery.data.message}</p>
+            <Button variant='outline' className='w-fit' asChild>
+              <Link to='/skill-repositories/explore'>探索 Skills</Link>
+            </Button>
+          </div>
+        </Main>
+      </>
+    )
+  }
+
+  if (legacyRouteQuery.isLoading || legacyRouteQuery.data?.status === 'migrated' || detailQuery.isLoading) {
     return (
       <>
         <Header fixed>

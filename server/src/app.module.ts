@@ -16,6 +16,7 @@ import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { LiveModule } from "./live/live.module"
 import { PrismaModule } from "./prisma/prisma.module"
+import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
@@ -69,6 +70,7 @@ type RequestLogObject = {
     DashboardModule,
     AgentPersonasModule,
     ContentStoreModule,
+    SkillRepositoryModule,
     DriveModule,
     AdminModule,
     BackupModule,

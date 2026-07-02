@@ -71,6 +71,11 @@ function createPrismaMock(counts: {
       findUnique: vi.fn().mockResolvedValue({ id: "team-1" }),
     },
     invitation: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
+    skillRepository: {
+      count: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+    },
   }
   return prisma
 }
@@ -90,6 +95,28 @@ function createInvitationRow(overrides: {
     createdByUser: null,
     createdAt: new Date("2026-06-15T10:00:00.000Z"),
     team: { name: "Core Team" },
+  }
+}
+
+function createAdminSkillRepositoryRow(overrides: Partial<{
+  readonly id: string
+  readonly name: string
+  readonly title: string
+  readonly visibility: string
+  readonly status: string
+  readonly legacyInstallCount: number
+  readonly owner: { readonly id: string; readonly handle: string | null; readonly displayName: string | null }
+  readonly updatedAt: Date
+}> = {}) {
+  return {
+    id: overrides.id ?? "repo-1",
+    name: overrides.name ?? "demo",
+    title: overrides.title ?? "Demo",
+    visibility: overrides.visibility ?? "public",
+    status: overrides.status ?? "active",
+    legacyInstallCount: overrides.legacyInstallCount ?? 3,
+    owner: overrides.owner ?? { id: "user-1", handle: "alice", displayName: "Alice" },
+    updatedAt: overrides.updatedAt ?? new Date("2026-07-01T00:00:00.000Z"),
   }
 }
 
@@ -512,6 +539,123 @@ describe("AdminService", () => {
       expect.objectContaining({ id: "expired", status: "expired" }),
       expect.objectContaining({ id: "used", status: "used" }),
     ])
+  })
+
+  it("lists public active skill repositories for administrators", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockImplementationOnce((input: unknown) => Promise.all(input as Array<Promise<unknown>>))
+    prisma.skillRepository.findMany.mockResolvedValue([createAdminSkillRepositoryRow()])
+    prisma.skillRepository.count.mockResolvedValue(1)
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    const result = await service.listSkillRepositories({ page: 2, pageSize: 10, sortBy: "updatedAt", sortOrder: "desc" })
+
+    expect(prisma.skillRepository.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        visibility: "public",
+        status: "active",
+      },
+      select: expect.objectContaining({
+        id: true,
+        name: true,
+        title: true,
+        visibility: true,
+        status: true,
+        legacyInstallCount: true,
+        owner: { select: { id: true, handle: true, displayName: true } },
+        updatedAt: true,
+      }),
+    }))
+    expect(result).toMatchObject({
+      total: 1,
+      page: 2,
+      pageSize: 10,
+      data: [
+        {
+          id: "repo-1",
+          owner: { handle: "alice" },
+          legacyInstallCount: 3,
+        },
+      ],
+    })
+  })
+
+  it("filters admin skill repositories by removed status and query", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockImplementationOnce((input: unknown) => Promise.all(input as Array<Promise<unknown>>))
+    prisma.skillRepository.findMany.mockResolvedValue([])
+    prisma.skillRepository.count.mockResolvedValue(0)
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.listSkillRepositories(undefined, { status: "removed", query: "  demo  " })
+
+    expect(prisma.skillRepository.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        visibility: "public",
+        status: "removed",
+        OR: [
+          { name: { contains: "demo", mode: "insensitive" } },
+          { title: { contains: "demo", mode: "insensitive" } },
+          { owner: { handle: { contains: "demo", mode: "insensitive" } } },
+        ],
+      },
+    }))
+  })
+
+  it("marks a skill repository removed and records an audit log", async () => {
+    const prisma = createPrismaMock()
+    prisma.skillRepository.update.mockResolvedValue(createAdminSkillRepositoryRow({ status: "removed" }))
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.setSkillRepositoryRemoved("repo-1", true, "admin@example.com", "203.0.113.70"))
+      .resolves
+      .toMatchObject({ id: "repo-1", status: "removed" })
+
+    expect(prisma.skillRepository.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "repo-1" },
+      data: { status: "removed" },
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.skill_repository.remove",
+      targetType: "skill_repository",
+      targetId: "repo-1",
+      detail: { status: "removed" },
+      ipAddress: "203.0.113.70",
+    })
+  })
+
+  it("restores a removed skill repository and records an audit log", async () => {
+    const prisma = createPrismaMock()
+    prisma.skillRepository.update.mockResolvedValue(createAdminSkillRepositoryRow({ status: "active" }))
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.setSkillRepositoryRemoved("repo-1", false, "admin@example.com", "203.0.113.71"))
+      .resolves
+      .toMatchObject({ id: "repo-1", status: "active" })
+
+    expect(prisma.skillRepository.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "repo-1" },
+      data: { status: "active" },
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.skill_repository.restore",
+      detail: { status: "active" },
+    }))
+  })
+
+  it("reports missing skill repositories when moderating", async () => {
+    const prisma = createPrismaMock()
+    prisma.skillRepository.update.mockRejectedValue(createNotFoundError())
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.setSkillRepositoryRemoved("missing-repo", true))
+      .rejects
+      .toThrow("Skill 仓库不存在。")
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("creates admin team invitations and records an audit log", async () => {

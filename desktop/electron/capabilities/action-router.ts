@@ -22,6 +22,7 @@ export type SynapseActionRouterDeps = {
   readonly driveDispatch: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
+  readonly skillRepositoryDispatch?: DomainDispatch
   readonly variableDispatch: DomainDispatch
   readonly workflowDispatch: DomainDispatch
 }
@@ -38,6 +39,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "drive") return deps.driveDispatch(dispatchAction, params, context)
       if (domainId === "model_price") return deps.modelPriceDispatch(dispatchAction, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(dispatchAction, params, context)
+      if (domainId === "skill_repository") {
+        if (!deps.skillRepositoryDispatch) throw new Error("Skill repository dispatcher is not configured")
+        return deps.skillRepositoryDispatch(dispatchAction, params, context)
+      }
       if (domainId === "variable") return deps.variableDispatch(dispatchAction, params, context)
       if (domainId === "workflow") return deps.workflowDispatch(dispatchAction, params, context)
       throw new Error(`Unknown action: ${action}`)
@@ -79,6 +84,8 @@ function legacyDispatchAction(action: string, domainId: string | null): string {
       return action.replace("app.model_price.", "model_price.")
     case "repository":
       return action.replace("app.settings.repository.", "repository.")
+    case "skill_repository":
+      return action
     case "variable":
       return action.replace("app.settings.variable.", "variable.")
     case "workflow":

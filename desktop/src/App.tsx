@@ -35,8 +35,10 @@ import { parseAgentConversationWindowRequest } from "@/lib/agent-conversation-wi
 import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
 import { parseContentStoreInstallWindowRequest } from "@/lib/content-store-install-window"
 import { parseContentWindowRequest } from "@/lib/content-window"
+import { parseSkillRepositoryInstallWindowRequest } from "@/lib/skill-repository-install-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
+import { SkillRepositoryInstallWindowPage } from "@/modules/skill-repository-install"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
 import {
   resolveDefaultDockAppId,
@@ -296,12 +298,15 @@ function App() {
     useState<ReturnType<typeof parseAgentConversationWindowRequest>>(null)
   const [ccConversationWindowRequest, setCcConversationWindowRequest] = useState<ReturnType<typeof parseCcConversationWindowRequest>>(null)
   const [contentStoreInstallWindowRequest, setContentStoreInstallWindowRequest] = useState<ReturnType<typeof parseContentStoreInstallWindowRequest>>(null)
+  const [skillRepositoryInstallWindowRequest, setSkillRepositoryInstallWindowRequest] =
+    useState<ReturnType<typeof parseSkillRepositoryInstallWindowRequest>>(null)
   const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
 
   useEffect(() => {
     setAgentConversationWindowRequest(parseAgentConversationWindowRequest(window.location.search))
     setCcConversationWindowRequest(parseCcConversationWindowRequest(window.location.search))
     setContentStoreInstallWindowRequest(parseContentStoreInstallWindowRequest(window.location.search))
+    setSkillRepositoryInstallWindowRequest(parseSkillRepositoryInstallWindowRequest(window.location.search))
     setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
   }, [])
 
@@ -340,6 +345,16 @@ function App() {
       <IdentityGate>
         <ErrorBoundary fallbackTitle="安装窗口出现问题">
           <ContentStoreInstallWindowPage request={contentStoreInstallWindowRequest} />
+        </ErrorBoundary>
+      </IdentityGate>
+    )
+  }
+
+  if (skillRepositoryInstallWindowRequest) {
+    return (
+      <IdentityGate>
+        <ErrorBoundary fallbackTitle="安装窗口出现问题">
+          <SkillRepositoryInstallWindowPage request={skillRepositoryInstallWindowRequest} />
         </ErrorBoundary>
       </IdentityGate>
     )

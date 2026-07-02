@@ -6,7 +6,7 @@ export const webhookRawBodyLimit = "256kb"
 
 export function registerHttpBodyParsers(app: NestExpressApplication): void {
   app.useBodyParser("raw", { type: isWebhookRawBodyRequest, limit: webhookRawBodyLimit })
-  app.useBodyParser("json", { type: isContentStoreLargeJsonBodyRequest, limit: contentStoreJsonBodyLimit })
+  app.useBodyParser("json", { type: isLargeJsonBodyRequest, limit: contentStoreJsonBodyLimit })
   app.useBodyParser("json", { limit: httpJsonBodyLimit })
   app.useBodyParser("urlencoded", { extended: true, limit: httpJsonBodyLimit })
 }
@@ -19,4 +19,13 @@ export function isContentStoreLargeJsonBodyRequest(request: { readonly url?: str
   const pathname = request.url?.split("?")[0] ?? ""
   return pathname === "/api/content-store/drafts"
     || /^\/api\/content-store\/items\/[^/]+\/draft$/u.test(pathname)
+}
+
+export function isSkillRepositoryLargeJsonBodyRequest(request: { readonly url?: string }): boolean {
+  const pathname = request.url?.split("?")[0] ?? ""
+  return pathname === "/api/skill-repositories/import"
+}
+
+export function isLargeJsonBodyRequest(request: { readonly url?: string }): boolean {
+  return isContentStoreLargeJsonBodyRequest(request) || isSkillRepositoryLargeJsonBodyRequest(request)
 }

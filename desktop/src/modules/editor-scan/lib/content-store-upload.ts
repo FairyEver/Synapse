@@ -9,7 +9,7 @@ type UploadSkillDraftContext = {
 
 function getUploadSkillToContentStoreDisabledReason(item: ScanItemForDetail | null): string | null {
   if (!item) return "未选择内容"
-  if (item.type !== "skill") return "只有 Skill 可以发布到商店"
+  if (item.type !== "skill") return "只有 Skill 可以上传到 Skill Repository"
   if (!item.path?.trim()) return "本地路径为空"
   return null
 }
@@ -38,7 +38,7 @@ function buildUploadSkillDraftRequest(
 }
 
 function buildUploadSkillDraftSuccessMessage(): string {
-  return "草稿已保存。"
+  return "Skill 仓库已保存。"
 }
 
 function buildUploadSkillDraftErrorMessage(error: unknown): string {

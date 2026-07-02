@@ -13,6 +13,10 @@ type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 type TeamListFilters = {
   readonly search?: string
 }
+type SkillRepositoryAdminListFilters = {
+  readonly status?: "active" | "removed"
+  readonly query?: string
+}
 const invitationDays = 7
 export const maxBulkInvitationDeleteIds = 100
 const bulkInvitationDeleteAuditSampleSize = 10
@@ -44,7 +48,19 @@ const adminTeamSelect = {
   updatedAt: true,
 } as const
 
+const adminSkillRepositorySelect = {
+  id: true,
+  name: true,
+  title: true,
+  visibility: true,
+  status: true,
+  legacyInstallCount: true,
+  owner: { select: { id: true, handle: true, displayName: true } },
+  updatedAt: true,
+} as const
+
 type AdminTeamRecord = Prisma.TeamGetPayload<{ select: typeof adminTeamSelect }>
+type AdminSkillRepositoryRecord = Prisma.SkillRepositoryGetPayload<{ select: typeof adminSkillRepositorySelect }>
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
@@ -408,6 +424,59 @@ export class AdminService {
     }
   }
 
+  async listSkillRepositories(
+    pagination?: PaginationQuery,
+    filters: SkillRepositoryAdminListFilters = {},
+  ): Promise<PaginatedResponse<unknown>> {
+    const page = pagination ?? parsePagination({})
+    const query = filters.query?.trim()
+    const where: Prisma.SkillRepositoryWhereInput = {
+      visibility: "public",
+      status: filters.status ?? "active",
+      ...(query ? {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { title: { contains: query, mode: "insensitive" } },
+          { owner: { handle: { contains: query, mode: "insensitive" } } },
+        ],
+      } : {}),
+    }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.skillRepository.findMany({
+        ...toPrismaArgs(page),
+        where,
+        select: adminSkillRepositorySelect,
+      }),
+      this.prisma.skillRepository.count({ where }),
+    ])
+    return {
+      data: (data as AdminSkillRepositoryRecord[]).map(toAdminSkillRepositoryRow),
+      total,
+      page: page.page,
+      pageSize: page.pageSize,
+    }
+  }
+
+  async setSkillRepositoryRemoved(id: string, removed: boolean, actorEmail = "system", ipAddress = "system") {
+    const repository = await this.prisma.skillRepository.update({
+      where: { id },
+      data: { status: removed ? "removed" : "active" },
+      select: adminSkillRepositorySelect,
+    }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("Skill 仓库不存在。")
+      throw error
+    })
+    await this.recordServiceManagedAuditSafely({
+      adminEmail: actorEmail,
+      action: removed ? "admin.skill_repository.remove" : "admin.skill_repository.restore",
+      targetType: "skill_repository",
+      targetId: id,
+      detail: { status: repository.status },
+      ipAddress,
+    })
+    return toAdminSkillRepositoryRow(repository as AdminSkillRepositoryRecord)
+  }
+
   private async recordServiceManagedAuditSafely(input: AuditRecordInput): Promise<void> {
     try {
       await this.auditLog?.record(input)
@@ -440,6 +509,19 @@ function toAdminTeamListRow(team: AdminTeamRecord) {
   return {
     ...row,
     memberCount: _count.memberships,
+  }
+}
+
+function toAdminSkillRepositoryRow(repository: AdminSkillRepositoryRecord) {
+  return {
+    id: repository.id,
+    name: repository.name,
+    title: repository.title,
+    visibility: repository.visibility,
+    status: repository.status,
+    legacyInstallCount: repository.legacyInstallCount,
+    owner: repository.owner,
+    updatedAt: repository.updatedAt,
   }
 }
 

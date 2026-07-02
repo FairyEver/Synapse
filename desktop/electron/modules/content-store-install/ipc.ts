@@ -4,7 +4,7 @@ import type { IpcModule } from "../../runtime/ipc/types"
 import { contentInstallService } from "../../services/content-install-service"
 import { contentStoreInstallService } from "../../services/content-store-install-service"
 
-contentInstallService.setPreparedSourceProvider(contentStoreInstallService)
+contentInstallService.addPreparedSourceProvider(contentStoreInstallService)
 
 const sessionRequestSchema = z.object({
   sessionId: z.string().min(1),

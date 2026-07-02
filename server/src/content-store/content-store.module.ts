@@ -20,6 +20,6 @@ import { CosContentStoreStorage, LocalContentStoreStorage, shouldUseCosContentSt
       inject: [CosContentStoreStorage, LocalContentStoreStorage],
     },
   ],
-  exports: [ContentStoreService],
+  exports: [ContentStoreService, CONTENT_STORE_STORAGE_PORT],
 })
 export class ContentStoreModule {}

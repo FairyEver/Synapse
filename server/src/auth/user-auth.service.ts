@@ -16,6 +16,7 @@ import {
   DESKTOP_PKCE_CHALLENGE_METHOD,
   DESKTOP_REDIRECT_URI,
   buildPasswordResetUrl as buildSharedPasswordResetUrl,
+  normalizeUserHandle,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
@@ -49,7 +50,7 @@ export interface UserMeTeam {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status" | "displayName">
+  readonly user: Pick<User, "id" | "email" | "status" | "displayName" | "handle">
   readonly teams: readonly UserMeTeam[]
 }
 
@@ -155,11 +156,21 @@ function normalizeDisplayName(value: string): string {
   return displayName
 }
 
+function normalizeProfileHandle(value: string): string {
+  try {
+    return normalizeUserHandle(value)
+  } catch (error) {
+    if (error instanceof Error) throw new BadRequestException(error.message)
+    throw error
+  }
+}
+
 function toUserMeResponse(user: {
   readonly id: string
   readonly email: string
   readonly status: User["status"]
   readonly displayName: string | null
+  readonly handle: string | null
   readonly memberships: ReadonlyArray<{
     readonly id: string
     readonly role: TeamRole
@@ -172,6 +183,7 @@ function toUserMeResponse(user: {
       email: user.email,
       status: user.status,
       displayName: user.displayName,
+      handle: user.handle,
     },
     teams: user.memberships.map((membership) => ({
       id: membership.team.id,
@@ -695,6 +707,7 @@ export class UserAuthService {
         email: true,
         status: true,
         displayName: true,
+        handle: true,
         memberships: {
           select: {
             id: true,
@@ -711,32 +724,93 @@ export class UserAuthService {
 
   async updateMyProfile(
     userId: string,
-    input: { readonly displayName: string },
+    input: { readonly displayName?: string; readonly handle?: string },
     ipAddress = "system",
   ): Promise<UserMeResponse> {
-    const displayName = normalizeDisplayName(input.displayName)
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { displayName },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        displayName: true,
-        memberships: {
+    if (input.displayName === undefined && input.handle === undefined) {
+      throw new BadRequestException("profile update is empty.")
+    }
+    const auditFields: string[] = []
+    if (input.displayName !== undefined) auditFields.push("displayName")
+    if (input.handle !== undefined) auditFields.push("handle")
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          displayName: true,
+          handle: true,
+        },
+      })
+      const data: Prisma.UserUpdateInput = {}
+
+      if (input.displayName !== undefined) {
+        data.displayName = normalizeDisplayName(input.displayName)
+      }
+
+      if (input.handle !== undefined) {
+        const nextHandle = normalizeProfileHandle(input.handle)
+        if (nextHandle !== current.handle) {
+          const reserved = await tx.userHandleRedirect.findUnique({
+            where: { oldHandle: nextHandle },
+            select: { userId: true },
+          })
+          if (reserved && reserved.userId !== userId) {
+            throw new BadRequestException("用户名已被保留。")
+          }
+          const existingUser = await tx.user.findUnique({
+            where: { handle: nextHandle },
+            select: { id: true },
+          })
+          if (existingUser && existingUser.id !== userId) {
+            throw new BadRequestException("用户名已被使用。")
+          }
+          if (current.handle) {
+            await tx.userHandleRedirect.upsert({
+              where: { oldHandle: current.handle },
+              create: { userId, oldHandle: current.handle },
+              update: { userId },
+            })
+          }
+          data.handle = nextHandle
+        }
+      }
+
+      try {
+        return await tx.user.update({
+          where: { id: userId },
+          data,
           select: {
             id: true,
-            role: true,
-            team: { select: { id: true, name: true } },
+            email: true,
+            status: true,
+            displayName: true,
+            handle: true,
+            memberships: {
+              select: {
+                id: true,
+                role: true,
+                team: { select: { id: true, name: true } },
+              },
+              orderBy: { createdAt: "asc" },
+            },
           },
-          orderBy: { createdAt: "asc" },
-        },
-      },
+        })
+      } catch (error) {
+        if (data.handle !== undefined && isUniqueConstraintError(error)) {
+          throw new BadRequestException("用户名已被使用。")
+        }
+        throw error
+      }
     })
 
     await this.recordUserProfileUpdateAuditSafely({
       adminEmail: user.email,
       targetId: user.id,
+      fields: auditFields,
       ipAddress,
     })
 
@@ -826,6 +900,7 @@ export class UserAuthService {
   private async recordUserProfileUpdateAuditSafely(input: {
     readonly adminEmail: string
     readonly targetId: string
+    readonly fields: readonly string[]
     readonly ipAddress: string
   }): Promise<void> {
     try {
@@ -834,7 +909,7 @@ export class UserAuthService {
         action: "user.profile.update",
         targetType: "user",
         targetId: input.targetId,
-        detail: { fields: ["displayName"] },
+        detail: { fields: input.fields },
         ipAddress: input.ipAddress,
       })
     } catch (error) {
