@@ -271,6 +271,23 @@ describe("DriveSiteService", () => {
     })
   })
 
+  it("rejects enabling failed sites without an active deployment", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({
+        siteId: "site_failed",
+        status: "failed",
+        currentDeploymentId: null,
+      })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.enableSite("user-1", "site_failed", "https://synapse.test"))
+      .rejects.toThrow("站点需要重新发布。")
+    await expect(service.resolvePublicSite("site_failed", { cookie: null }))
+      .resolves.toMatchObject({ status: "disabled" })
+  })
+
   it("generates a readable password when legacy protected site access is saved without one", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({

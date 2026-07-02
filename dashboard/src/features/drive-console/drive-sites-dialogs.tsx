@@ -186,9 +186,9 @@ export function DriveSitesDialog({
                   </Button>
                   {site.status === 'active' ? (
                     <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.disableSite(site.siteId), '停用失败') }}>停用</Button>
-                  ) : (
+                  ) : site.status !== 'failed' ? (
                     <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.enableSite(site.siteId), '启用失败') }}>启用</Button>
-                  )}
+                  ) : null}
                   <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => setDeleteTarget(site)}>删除</Button>
                 </div>
               </div>

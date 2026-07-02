@@ -268,6 +268,22 @@ describe('Drive site dialogs', () => {
     expect(driveApi.deleteSite).toHaveBeenCalledWith('site-1')
   })
 
+  it('does not offer enable for failed sites without a deployment', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue({
+      items: [{ id: 'db-1', siteId: 'site-failed', name: 'Broken', status: 'failed', accessMode: 'public', url: '/sites/site-failed', urlWithPassword: '/sites/site-failed', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: null, fileCount: 0, totalBytes: '0', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: null }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    render(<DriveSitesDialog open onOpenChange={() => undefined} />)
+    await flush()
+
+    expect(document.body.textContent).toContain('Broken')
+    expect(() => textButton('启用')).toThrow()
+    await click(textButton('重发'))
+    expect(driveApi.enableSite).not.toHaveBeenCalled()
+    expect(driveApi.republishSite).toHaveBeenCalledWith('site-failed', { entryPath: null })
+  })
+
   it('shows password site links with access credentials', async () => {
     vi.mocked(driveApi.listSites).mockResolvedValue({
       items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'password', url: '/sites/site-1', urlWithPassword: '/sites/site-1?password=SitePw1', passwordEnabled: true, password: 'SitePw1', expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],

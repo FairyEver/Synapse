@@ -254,6 +254,9 @@ export class DriveSiteService {
 
   async enableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
     const site = await this.requireOwnedSite(userId, siteId)
+    if (site.status === DRIVE_SITE_STATUS.failed || !site.currentDeploymentId) {
+      throw new BadRequestException("站点需要重新发布。")
+    }
     await this.prisma.driveSite.update({
       where: { siteId },
       data: {
