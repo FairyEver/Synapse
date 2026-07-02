@@ -816,6 +816,7 @@ function DriveSyncOperationTable({ operations }: { readonly operations: NonNulla
       <TableHeader>
         <TableRow>
           <TableHead>路径</TableHead>
+          <TableHead className="w-24">操作</TableHead>
           <TableHead className="w-28">状态</TableHead>
           <TableHead className="w-48 text-right">时间</TableHead>
         </TableRow>
@@ -824,6 +825,7 @@ function DriveSyncOperationTable({ operations }: { readonly operations: NonNulla
         {operations.map((operation) => (
           <TableRow key={operation.id}>
             <TableCell className="truncate">{operation.relativePath || "/"}</TableCell>
+            <TableCell>{formatOperationKind(operation.kind)}</TableCell>
             <TableCell>
               <div className="truncate">{operation.message ?? formatOperationStatus(operation.status)}</div>
               {operation.message ? <div className="truncate text-xs text-muted-foreground">{formatOperationStatus(operation.status)}</div> : null}
@@ -938,6 +940,18 @@ function formatOperationStatus(status: DriveSyncSnapshotDto["operations"][number
   if (status === "conflict") return "有冲突"
   if (status === "error") return "失败"
   return status
+}
+
+function formatOperationKind(kind: DriveSyncSnapshotDto["operations"][number]["kind"]): string {
+  if (kind === "download") return "下载"
+  if (kind === "upload") return "上传"
+  if (kind === "delete_local") return "删除本地"
+  if (kind === "delete_remote") return "删除云端"
+  if (kind === "move_local") return "移动本地"
+  if (kind === "move_remote") return "移动云端"
+  if (kind === "scan") return "扫描"
+  if (kind === "resync") return "重新同步"
+  return kind
 }
 
 function formatConflictType(type: string): string {

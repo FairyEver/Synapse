@@ -621,6 +621,7 @@ describe("DriveModule", () => {
         operations: [{
           id: "operation-1",
           bindingId: "binding-1",
+          kind: "download",
           relativePath: "spec.md",
           status: "succeeded",
           message: null,
@@ -686,6 +687,7 @@ describe("DriveModule", () => {
           {
             id: "operation-1",
             bindingId: "binding-1",
+            kind: "upload",
             relativePath: "docs-operation.md",
             status: "succeeded",
             message: null,
@@ -694,6 +696,7 @@ describe("DriveModule", () => {
           {
             id: "operation-2",
             bindingId: "binding-2",
+            kind: "download",
             relativePath: "notes-operation.md",
             status: "succeeded",
             message: null,
@@ -716,6 +719,7 @@ describe("DriveModule", () => {
     expect(detailDialog.textContent).toContain("同步记录")
     expect(detailDialog.textContent).toContain("docs-conflict.md")
     expect(detailDialog.textContent).toContain("docs-operation.md")
+    expect(detailDialog.textContent).toContain("上传")
     expect(detailDialog.textContent).not.toContain("notes-conflict.md")
     expect(detailDialog.textContent).not.toContain("notes-operation.md")
   })

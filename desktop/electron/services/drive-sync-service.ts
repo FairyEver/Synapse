@@ -1813,6 +1813,7 @@ function toOperationDto(entry: DriveSyncOperationEntryV1): DriveSyncOperationDto
   return {
     id: entry.id,
     bindingId: entry.bindingId,
+    kind: entry.kind,
     relativePath: entry.relativePath,
     status: entry.status,
     message: sanitizeNullableDriveSyncMessage(entry.message),

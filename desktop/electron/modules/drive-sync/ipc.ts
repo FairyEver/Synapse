@@ -11,8 +11,10 @@ const driveSyncBindingPreviewStatusSchema = z.enum(["ready", "blocked", "warning
 const driveSyncConflictResolutionSchema = z.enum(["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"])
 const driveSyncBindingStatuses = ["active", "paused", "conflict", "error", "removed"] as const
 const driveSyncOperationStatuses = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"] as const
+const driveSyncOperationKinds = ["download", "upload", "delete_local", "delete_remote", "move_local", "move_remote", "scan", "resync"] as const
 const bindingStatusSchema = z.enum(driveSyncBindingStatuses)
 const operationStatusSchema = z.enum(driveSyncOperationStatuses)
+const operationKindSchema = z.enum(driveSyncOperationKinds)
 const driveSyncExcludeRulesSchema = z.object({
   forced: z.array(z.string()),
   defaults: z.array(z.string()),
@@ -46,6 +48,7 @@ const driveSyncConflictSchema = z.object({
 const driveSyncOperationSchema = z.object({
   id: z.string().min(1),
   bindingId: z.string().min(1),
+  kind: operationKindSchema,
   relativePath: z.string(),
   status: operationStatusSchema,
   message: z.string().nullable(),

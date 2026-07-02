@@ -526,6 +526,7 @@ describe("DriveSyncService", () => {
       remotePathHint: "/产品文档/spec.md",
       message: null,
     })
+    expect(operation).toMatchObject({ kind: "download" })
     const conflict = await service.recordConflict({
       bindingId: binding.id,
       driveItemId: "drive-item-1",
