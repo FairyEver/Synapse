@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { DRIVE_SITE_MAX_FILES } from "@synapse/shared"
 import { verifyPassword } from "../auth/password"
 import { DriveSiteService } from "./drive-site.service"
 
@@ -120,6 +121,18 @@ describe("DriveSiteService", () => {
     expect(result.passwordEnabled).toBe(false)
     expect(result.password).toBeNull()
     expect(result.urlWithPassword).toBe(result.url)
+  })
+
+  it("rejects site preflight when empty folders exceed publish limits", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      items: Array.from({ length: DRIVE_SITE_MAX_FILES + 1 }, (_, index) =>
+        createItem({ id: `empty-folder-${index}`, type: "folder", name: `empty-${index}`, parentId: "folder-1" })),
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.preflightSite("user-1", "folder-1"))
+      .rejects.toThrow("站点文件夹数量超出限制。")
   })
 
   it("filters expired site status before pagination", async () => {
@@ -393,6 +406,7 @@ type MemoryDeployment = ReturnType<typeof createDeploymentRecord>
 type MemoryAsset = ReturnType<typeof createAssetRecord>
 
 function createMemoryPrisma(seed: {
+  readonly items?: Array<ReturnType<typeof createItem>>
   readonly sites?: MemorySite[]
   readonly deployments?: MemoryDeployment[]
   readonly assets?: MemoryAsset[]
@@ -404,6 +418,7 @@ function createMemoryPrisma(seed: {
     createItem({ id: "assets", type: "folder", name: "assets", parentId: "folder-1" }),
     createItem({ id: "app", name: "app.js", parentId: "assets", storageKey: "drive/app", mimeType: "text/javascript", size: 10n }),
     createItem({ id: "logo", name: "logo.png", parentId: "assets", storageKey: "drive/logo", mimeType: "image/png", size: 30n }),
+    ...(seed.items ?? []),
   ]
   const sites: MemorySite[] = [...(seed.sites ?? [])]
   const deployments: MemoryDeployment[] = [...(seed.deployments ?? [])]
@@ -419,8 +434,12 @@ function createMemoryPrisma(seed: {
           && item.userId === args.where.userId
         )) ?? null
       },
-      async findMany(args: { readonly where: { readonly parentId?: string; readonly userId?: string } }) {
-        return items.filter((item) => item.parentId === args.where.parentId && item.userId === args.where.userId)
+      async findMany(args: { readonly where: { readonly parentId?: string | { readonly in: readonly string[] }; readonly userId?: string } }) {
+        const parentIds = typeof args.where.parentId === "object" ? new Set(args.where.parentId.in) : null
+        return items.filter((item) => (
+          (parentIds ? parentIds.has(item.parentId ?? "") : item.parentId === args.where.parentId)
+          && item.userId === args.where.userId
+        ))
       },
     },
     driveSite: {

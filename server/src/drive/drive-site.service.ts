@@ -127,6 +127,10 @@ export type DrivePublicSiteAssetListResult =
     readonly page: { readonly hasMore: boolean; readonly nextOffset: number | null }
   }
 
+const DRIVE_SITE_MAX_FOLDERS = DRIVE_SITE_MAX_FILES
+const DRIVE_SITE_MAX_DEPTH = 32
+const DRIVE_SITE_SNAPSHOT_PARENT_BATCH_SIZE = 100
+
 @Injectable()
 export class DriveSiteService {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
@@ -479,24 +483,32 @@ export class DriveSiteService {
     const files: DriveSiteSnapshotFile[] = []
     const htmlFiles: string[] = []
     const seen = new Set<string>()
-    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: root.id, prefix: "" }]
+    const queue: Array<{ readonly parentId: string; readonly prefix: string; readonly depth: number }> = [{ parentId: root.id, prefix: "", depth: 0 }]
     let totalBytes = 0n
+    let folderCount = 0
     let includesJavaScript = false
     while (queue.length > 0) {
-      const current = queue.shift()!
+      const batch = queue.splice(0, DRIVE_SITE_SNAPSHOT_PARENT_BATCH_SIZE)
+      const folderById = new Map(batch.map((folder) => [folder.parentId, folder]))
       const children = await db.driveItem.findMany({
         where: {
           userId,
-          parentId: current.parentId,
+          parentId: { in: batch.map((folder) => folder.parentId) },
           lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
           deletedAt: null,
         },
-        orderBy: [{ type: "desc" }, { name: "asc" }, { id: "asc" }],
+        orderBy: [{ parentId: "asc" }, { type: "desc" }, { name: "asc" }, { id: "asc" }],
       }) as DriveSiteSourceItem[]
       for (const child of children) {
+        const current = child.parentId ? folderById.get(child.parentId) : null
+        if (!current) continue
         const relativePath = normalizeDriveSiteRelativePath(`${current.prefix}${child.name}`)
         if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: `${relativePath}/` })
+          const nextDepth = current.depth + 1
+          if (nextDepth > DRIVE_SITE_MAX_DEPTH) throw new BadRequestException("站点文件夹层级超出限制。")
+          folderCount += 1
+          if (folderCount > DRIVE_SITE_MAX_FOLDERS) throw new BadRequestException("站点文件夹数量超出限制。")
+          queue.push({ parentId: child.id, prefix: `${relativePath}/`, depth: nextDepth })
           continue
         }
         if (child.type !== DRIVE_ITEM_TYPE.file) continue
