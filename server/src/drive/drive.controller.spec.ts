@@ -346,6 +346,7 @@ describe("DriveController", () => {
   it("serves nested static site assets from the copied deployment", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
+      site: createDriveSite({ accessMode: "public" }),
       asset: {
         storageKey: "drive-sites/site_public/dep-1/assets/app.css",
         relativePath: "assets/app.css",
@@ -357,12 +358,14 @@ describe("DriveController", () => {
 
     const response = await request(app!.getHttpServer()).get("/sites/site_public/assets/app.css").expect(200)
     expect(response.headers["content-type"]).toContain("text/css")
+    expect(response.headers["cache-control"]).toBe("public, max-age=300")
     expect(response.text).toBe("body{}")
   })
 
   it("serves the static site root without a redirect loop", async () => {
     sites.resolvePublicSite.mockResolvedValue({
       status: "ok",
+      site: createDriveSite({ accessMode: "public" }),
       asset: {
         storageKey: "drive-sites/site_public/dep-1/index.html",
         relativePath: "index.html",
@@ -376,6 +379,27 @@ describe("DriveController", () => {
     expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_public", { cookie: null, relativePath: "" })
     expect(response.headers["content-type"]).toContain("text/html")
     expect(response.text).toBe("<h1>Home</h1>")
+  })
+
+  it("prevents shared caching for protected static site assets", async () => {
+    sites.resolvePublicSite.mockResolvedValue({
+      status: "ok",
+      site: createDriveSite({ siteId: "site_secret", accessMode: "password" }),
+      asset: {
+        storageKey: "drive-sites/site_secret/dep-1/assets/app.js",
+        relativePath: "assets/app.js",
+        contentType: "text/javascript",
+        size: 17n,
+      },
+    })
+    storage.getObjectStream.mockResolvedValue({ stream: Readable.from("console.log(1)"), size: 14n, contentType: "text/javascript" })
+
+    const response = await request(app!.getHttpServer()).get("/sites/site_secret/assets/app.js").expect(200)
+
+    expect(response.headers["content-type"]).toContain("text/javascript")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.text).toBe("console.log(1)")
   })
 
   it("accepts password query links for protected static sites", async () => {

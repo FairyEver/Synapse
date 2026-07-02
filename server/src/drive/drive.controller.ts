@@ -1101,7 +1101,8 @@ export class DrivePublicController {
     }
     const object = await this.storage.getObjectStream({ key: access.asset.storageKey })
     response.setHeader("Content-Type", driveSiteContentType(access.asset.relativePath, object.contentType ?? access.asset.contentType))
-    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath))
+    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath, { accessMode: access.site.accessMode }))
+    if (access.site.accessMode === "password") response.setHeader("Vary", "Cookie")
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())
     await pipeline(object.stream as Readable, response)
