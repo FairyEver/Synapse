@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   isBackupCosConfigured,
-  isContentStoreCosConfigured,
+  isSkillRepositoryCosConfigured,
   isDriveCosConfigured,
   isPlatformMediaCosConfigured,
   loadEnv,
@@ -18,7 +18,7 @@ describe("loadEnv", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+      SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
       PORT: "3000",
     })
 
@@ -27,7 +27,7 @@ describe("loadEnv", () => {
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.appPublicUrl).toBe("https://synapse.test")
     expect(env.driveLocalRoot).toBe("/app/data/drive")
-    expect(env.contentStoreLocalRoot).toBe("/app/data/content-store")
+    expect(env.skillRepositoryLocalRoot).toBe("/app/data/skill-repository")
     expect(env.trustProxy).toBe(false)
   })
 
@@ -68,7 +68,7 @@ describe("loadEnv", () => {
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test/api/",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-        SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+        SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
       }),
     ).toThrow("APP_PUBLIC_URL")
   })
@@ -83,7 +83,7 @@ describe("loadEnv", () => {
         ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test",
-        SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+        SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
       }),
     ).toThrow("SYNAPSE_DRIVE_LOCAL_ROOT")
   })
@@ -101,14 +101,14 @@ describe("loadEnv", () => {
       DRIVE_COS_SECRET_KEY: "drive-secret-key",
       DRIVE_COS_BUCKET: "drive-bucket",
       DRIVE_COS_REGION: "ap-beijing",
-      SYNAPSE_CONTENT_STORE_LOCAL_ROOT: "/app/data/content-store",
+      SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: "/app/data/skill-repository",
     })
 
     expect(isDriveCosConfigured(env)).toBe(true)
     expect(env.driveLocalRoot).toBeUndefined()
   })
 
-  it("rejects production Content Store storage without COS or explicit local root", () => {
+  it("rejects production Skill Repository storage without COS or explicit local root", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
@@ -120,10 +120,10 @@ describe("loadEnv", () => {
         APP_PUBLIC_URL: "https://synapse.test",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
       }),
-    ).toThrow("SYNAPSE_CONTENT_STORE_LOCAL_ROOT")
+    ).toThrow("SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT")
   })
 
-  it("allows production Content Store storage with complete COS settings", () => {
+  it("allows production Skill Repository storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
@@ -133,14 +133,14 @@ describe("loadEnv", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
-      CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
-      CONTENT_STORE_COS_BUCKET: "content-store-bucket",
-      CONTENT_STORE_COS_REGION: "ap-beijing",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
     })
 
-    expect(isContentStoreCosConfigured(env)).toBe(true)
-    expect(env.contentStoreLocalRoot).toBeUndefined()
+    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
+    expect(env.skillRepositoryLocalRoot).toBeUndefined()
   })
 
   it("rejects missing required settings", () => {
@@ -201,22 +201,22 @@ describe("loadEnv", () => {
     expect(isBackupCosConfigured(env)).toBe(true)
   })
 
-  it("loads Content Store COS settings independently", () => {
+  it("loads Skill Repository COS settings independently", () => {
     const env = loadEnv({
       ...baseEnv,
-      CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
-      CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
-      CONTENT_STORE_COS_BUCKET: "content-store-bucket",
-      CONTENT_STORE_COS_REGION: "ap-beijing",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       DRIVE_COS_SECRET_ID: "drive-secret-id",
       DRIVE_COS_SECRET_KEY: "drive-secret-key",
       DRIVE_COS_BUCKET: "drive-bucket",
       DRIVE_COS_REGION: "ap-guangzhou",
     })
 
-    expect(env.contentStoreCosBucket).toBe("content-store-bucket")
+    expect(env.skillRepositoryCosBucket).toBe("skill-repository-bucket")
     expect(env.driveCosBucket).toBe("drive-bucket")
-    expect(isContentStoreCosConfigured(env)).toBe(true)
+    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
     expect(isDriveCosConfigured(env)).toBe(true)
   })
 
@@ -250,13 +250,13 @@ describe("loadEnv", () => {
       missing: "DRIVE_COS_REGION",
     },
     {
-      name: "Content Store",
+      name: "Skill Repository",
       values: {
-        CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
-        CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
-        CONTENT_STORE_COS_REGION: "ap-beijing",
+        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       },
-      missing: "CONTENT_STORE_COS_BUCKET",
+      missing: "SKILL_REPOSITORY_COS_BUCKET",
     },
     {
       name: "Backup",
@@ -309,7 +309,7 @@ describe("loadEnv", () => {
 
     expect(isDriveCosConfigured(env)).toBe(false)
     expect(isBackupCosConfigured(env)).toBe(false)
-    expect(isContentStoreCosConfigured(env)).toBe(false)
+    expect(isSkillRepositoryCosConfigured(env)).toBe(false)
     expect(isPlatformMediaCosConfigured(env)).toBe(false)
   })
 })

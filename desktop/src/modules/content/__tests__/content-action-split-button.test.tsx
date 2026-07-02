@@ -112,7 +112,7 @@ describe("ContentActionSplitButton", () => {
       const html = renderToStaticMarkup(
         <ContentActionSplitButton item={createContentItem(contentType)} />,
       )
-      const installMenuStart = html.indexOf('data-track="content-install-menu"')
+      const installMenuStart = html.indexOf('data-track="editor-install-menu"')
       const overflowMenuStart = html.indexOf('data-track="content-actions-menu"')
 
       expect(installMenuStart).toBe(-1)

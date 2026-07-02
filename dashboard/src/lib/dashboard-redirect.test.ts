@@ -10,10 +10,10 @@ import {
 describe('buildDashboardRedirectPath', () => {
   it('keeps search and hash from the current location', () => {
     expect(buildDashboardRedirectPath({
-      pathname: '/console/content-store/install',
-      search: '?session=install_123',
+      pathname: '/console/skill-repositories/repo-1',
+      search: '?tab=files',
       hash: '#retry',
-    })).toBe('/console/content-store/install?session=install_123#retry')
+    })).toBe('/console/skill-repositories/repo-1?tab=files#retry')
   })
 })
 

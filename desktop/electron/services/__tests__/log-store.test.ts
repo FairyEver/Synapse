@@ -54,23 +54,23 @@ describe("logStore", () => {
     expect(entry.details).not.toContain("inline-token")
   })
 
-  it("redacts content store install session IDs from structured log details", () => {
+  it("redacts install session IDs from structured log details", () => {
     const entry = logStore.write({
       source: "main",
       level: "warn",
-      category: "content-store-install",
-      message: "contentStoreInstallSessionId=inline-install-session",
+      category: "skill-repository-install",
+      message: "skillRepositoryInstallSessionId=inline-install-session",
       details: {
         sessionId: "install-session-secret",
         installSessionId: "install-session-secret-2",
-        contentStoreInstallSessionId: "install-session-secret-3",
+        skillRepositoryInstallSessionId: "install-session-secret-3",
         nested: {
           note: "sessionId=inline-session installSessionId=inline-install",
         },
       },
     })
 
-    expect(entry.message).toContain("contentStoreInstallSessionId=[redacted]")
+    expect(entry.message).toContain("skillRepositoryInstallSessionId=[redacted]")
     expect(entry.details).toContain("[redacted]")
     expect(entry.message).not.toContain("inline-install-session")
     expect(entry.details).not.toContain("install-session-secret")

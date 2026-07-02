@@ -37,7 +37,7 @@ const REDACTED_LOG_KEY_VALUE = "[key]"
 const AUTHORIZATION_LOG_PATTERN =
   /\b(authorization)(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi
 const SENSITIVE_LOG_ASSIGNMENT_PATTERN =
-  /\b(session[_-]?key|sourceSessionKey|targetSessionKey|session[_-]?id|installSessionId|contentStoreInstallSessionId|token|secret|api[-_]?key|authorization|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
+  /\b(session[_-]?key|sourceSessionKey|targetSessionKey|session[_-]?id|installSessionId|skillRepositoryInstallSessionId|token|secret|api[-_]?key|authorization|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_LOG_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const PLATFORM_LOG_TOKEN_PATTERN =
   /\b(?:github_pat_[A-Za-z0-9_]{8,}|ghp_[A-Za-z0-9_]{8,}|glpat-[A-Za-z0-9_-]{8,})\b/g
@@ -63,7 +63,7 @@ function isSensitiveLogKey(key: string): boolean {
   if (
     normalized === "sessionid"
     || normalized === "installsessionid"
-    || normalized === "contentstoreinstallsessionid"
+    || normalized === "skillrepositoryinstallsessionid"
   ) return true
   return /^(token|secret|apikey|authorization|cookie|password|credential)$/.test(normalized)
 }

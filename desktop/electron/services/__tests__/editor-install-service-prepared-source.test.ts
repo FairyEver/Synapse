@@ -1,0 +1,225 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  getContent: vi.fn(),
+  getSkillDetail: vi.fn(),
+  getGlobalRulesPath: vi.fn(),
+  prepareRuleFileContent: vi.fn(),
+  prepareSkillDirectory: vi.fn(),
+  resolveTarget: vi.fn(),
+}))
+
+vi.mock("electron", () => ({
+  app: {
+    getPath: (name: string) => path.join(os.tmpdir(), `synapse-prepared-source-${name}`),
+  },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}))
+
+vi.mock("../content-service", () => ({
+  contentService: {
+    getContent: mocks.getContent,
+    getSkillDetail: mocks.getSkillDetail,
+  },
+}))
+
+vi.mock("../editor-adapter-service", () => ({
+  editorAdapterService: {
+    resolveTarget: mocks.resolveTarget,
+  },
+}))
+
+vi.mock("../editor-adapters", () => ({
+  editorAdapterById: new Map([
+    ["test-editor", {
+      getScanPathConfig: () => ({
+        detectionDir: os.tmpdir(),
+        globalRulesPath: mocks.getGlobalRulesPath(),
+        globalSkillsPath: null,
+        projectPaths: (projectPath: string) => ({
+          rulesPath: path.join(projectPath, "rules"),
+          skillsPath: path.join(projectPath, "skills"),
+        }),
+        rulesSupported: true,
+      }),
+    }],
+  ]),
+}))
+
+vi.mock("../definitions/generated/main-registry", () => ({
+  editorInstallStrategyById: new Map([
+    ["test-editor", {
+      prepareRuleFileContent: mocks.prepareRuleFileContent,
+      prepareSkillDirectory: mocks.prepareSkillDirectory,
+    }],
+  ]),
+}))
+
+vi.mock("../config-store", () => ({
+  configStore: {
+    load: vi.fn(async () => ({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { projects: [] },
+    })),
+  },
+}))
+
+import { EditorInstallService } from "../editor-install-service"
+
+const tempRoots: string[] = []
+
+async function createTempRoot(): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "synapse-prepared-install-"))
+  tempRoots.push(root)
+  return root
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.getGlobalRulesPath.mockReturnValue(null)
+})
+
+afterEach(async () => {
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })))
+})
+
+describe("EditorInstallService prepared source", () => {
+  it("reads a prepared Rule while preserving the existing editor install strategy", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "rules", "store-rule.md")
+    mocks.getGlobalRulesPath.mockReturnValue(path.join(root, "rules"))
+    const provider = {
+      readPreparedRule: vi.fn().mockResolvedValue("# Store Rule\n"),
+      readPreparedSkill: vi.fn(),
+      beginPreparedInstall: vi.fn(),
+      endPreparedInstall: vi.fn(),
+      copyPreparedSkillAttachment: vi.fn(),
+      markPreparedInstalled: vi.fn(),
+    }
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor",
+      label: "Test Editor",
+      scope: "global",
+      contentType: "rule",
+      message: null,
+      status: "ready",
+      targetKind: "file",
+      targetPath,
+      targetExists: false,
+    })
+    mocks.prepareRuleFileContent.mockResolvedValue("---\ninstalled: true\n---\n# Store Rule\n")
+    const service = new EditorInstallService({ preparedSourceProvider: provider })
+
+    await service.installToEditor({
+      editorId: "test-editor",
+      scope: "global",
+      contentType: "rule",
+      contentId: "content-1",
+      preparedSourceId: "prepared-1",
+    })
+
+    expect(provider.readPreparedRule).toHaveBeenCalledWith("prepared-1", "content-1")
+    expect(mocks.getContent).not.toHaveBeenCalled()
+    expect(mocks.prepareRuleFileContent).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        contentId: "content-1",
+        contentType: "rule",
+      }),
+      ruleBody: "# Store Rule\n",
+    }))
+    await expect(readFile(targetPath, "utf8")).resolves.toBe("---\ninstalled: true\n---\n# Store Rule\n")
+  })
+
+  it("installs a validated prepared Skill through the editor strategy and atomic replacement path", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "store-skill")
+    const provider = {
+      readPreparedRule: vi.fn(),
+      readPreparedSkill: vi.fn().mockResolvedValue({
+        id: "content-1",
+        type: "skill",
+        title: "Store Skill",
+        description: "",
+        category: "skill-repository",
+        icon: "",
+        iconBg: "",
+        createdBy: "skill-repository",
+        createdByDisplayName: "Skill Repository",
+        createdAt: "1970-01-01T00:00:00.000Z",
+        modifiedBy: "skill-repository",
+        modifiedByDisplayName: "Skill Repository",
+        modifiedAt: "1970-01-01T00:00:00.000Z",
+        deleted: false,
+        latestHistoryDirname: "version-1",
+        attachmentCount: 1,
+        content: "# Store Skill\n",
+        attachments: [{ originalName: "assets/icon.bin", sha256: "a".repeat(64), size: 4 }],
+      }),
+      beginPreparedInstall: vi.fn(),
+      endPreparedInstall: vi.fn(),
+      copyPreparedSkillAttachment: vi.fn(async (
+        _sourceId: string,
+        _contentId: string,
+        _relativePath: string,
+        attachmentTargetPath: string,
+      ) => {
+        await mkdir(path.dirname(attachmentTargetPath), { recursive: true })
+        await writeFile(attachmentTargetPath, "icon")
+      }),
+      markPreparedInstalled: vi.fn(),
+    }
+    mocks.prepareSkillDirectory.mockImplementation(async ({
+      copyAttachment,
+      detail,
+      stagingDirectoryPath,
+      writeTextFile,
+    }) => {
+      await writeTextFile(path.join(stagingDirectoryPath, "SKILL.md"), `prepared\n${detail.content}`)
+      await copyAttachment(detail.attachments[0]!, path.join(stagingDirectoryPath, "references", "icon.bin"))
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor",
+      label: "Test Editor",
+      scope: "global",
+      contentType: "skill",
+      message: null,
+      status: "ready",
+      targetKind: "directory",
+      targetPath,
+      targetExists: false,
+    })
+    const service = new EditorInstallService({ preparedSourceProvider: provider })
+
+    await service.installToEditor({
+      editorId: "test-editor",
+      scope: "global",
+      contentType: "skill",
+      contentId: "content-1",
+      preparedSourceId: "prepared-1",
+    })
+
+    expect(provider.readPreparedSkill).toHaveBeenCalledWith("prepared-1", "content-1")
+    expect(mocks.getSkillDetail).not.toHaveBeenCalled()
+    expect(mocks.prepareSkillDirectory).toHaveBeenCalled()
+    expect(provider.copyPreparedSkillAttachment).toHaveBeenCalledWith(
+      "prepared-1",
+      "content-1",
+      "assets/icon.bin",
+      expect.stringContaining(path.join("references", "icon.bin")),
+    )
+    expect(provider.markPreparedInstalled).toHaveBeenCalledWith("prepared-1", "content-1")
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("prepared\n# Store Skill\n")
+    await expect(readFile(path.join(targetPath, "references", "icon.bin"), "utf8")).resolves.toBe("icon")
+  })
+})

@@ -183,9 +183,6 @@ Returns a short-lived install session:
 
 Use `deepLinkUrl` to open Synapse Desktop installation. The URL is short-lived and installs the latest repository content packaged for that session.
 
-## Legacy Content Store Compatibility
-
-Legacy Content Store Skill data may be migrated by the web console. Skill Repository tools operate on the new repository ids. Old Prompt and Rule cloud-store items are not Skill Repository resources.
 
 ## Common Errors
 

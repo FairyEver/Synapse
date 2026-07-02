@@ -308,8 +308,6 @@ function repositoryDetail(overrides: Partial<SkillRepositoryDetailDto> = {}): Sk
     status: "active",
     owner: { id: "user-1", handle: "liyang", displayName: "liyang" },
     forkedFromRepositoryId: null,
-    legacyContentStoreItemId: null,
-    legacyInstallCount: 0,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
     lastSyncedAt: "2026-07-01T00:00:00.000Z",

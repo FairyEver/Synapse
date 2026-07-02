@@ -7,7 +7,7 @@ import type {
 } from "../../../src/types/installers"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
-import { contentInstallService } from "../../services/content-install-service"
+import { editorInstallService } from "../../services/editor-install-service"
 import { installerSourceService } from "../../services/installer-source-service"
 import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { createMainLogger } from "../../services/log-store"
@@ -106,7 +106,7 @@ export const installersIpcModule: IpcModule = {
       channel: "synapse:installers:install-source-to-editor",
       request: installSourceToEditorSchema,
       handler: async (ctx, payload: SynapseInstallSourceToEditorPayload) => {
-        const result = await contentInstallService.installSourceToEditor(payload, {
+        const result = await editorInstallService.installSourceToEditor(payload, {
           actor: { kind: "user" },
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),

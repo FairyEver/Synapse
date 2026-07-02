@@ -21,7 +21,6 @@ export const skillRepositoryErrorCodes = [
   "SKILL_REPOSITORY_FILE_CONFLICT",
   "SKILL_REPOSITORY_PROTECTED_ROOT_FILE",
   "SKILL_REPOSITORY_INSTALL_SESSION_NOT_FOUND",
-  "SKILL_REPOSITORY_LEGACY_FORK_SOURCE_MISSING",
 ] as const
 
 export type SkillRepositoryErrorCode = (typeof skillRepositoryErrorCodes)[number]
@@ -52,8 +51,6 @@ export interface SkillRepositoryItemDto {
   readonly status: SkillRepositoryStatus
   readonly owner: SkillRepositoryOwnerDto
   readonly forkedFromRepositoryId: string | null
-  readonly legacyContentStoreItemId: string | null
-  readonly legacyInstallCount: number
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastSyncedAt: string | null
@@ -187,49 +184,6 @@ export interface SkillRepositoryInstallManifest {
   readonly mainFile: "content/SKILL.md"
   readonly files: readonly SkillRepositoryInstallManifestFile[]
 }
-
-export type SkillRepositoryLegacyMigrationSkippedReason =
-  | "not_skill"
-  | "removed"
-  | "missing_source"
-  | "invalid_skill"
-
-export interface SkillRepositoryLegacyMigrationSkippedDto {
-  readonly contentStoreItemId: string
-  readonly reason: SkillRepositoryLegacyMigrationSkippedReason
-  readonly message?: string
-}
-
-export interface SkillRepositoryLegacyMigrationWarningDto {
-  readonly contentStoreItemId: string
-  readonly code: SkillRepositoryErrorCode
-  readonly message: string
-}
-
-export interface SkillRepositoryLegacyMigrationResultDto {
-  readonly scanned: number
-  readonly migrated: number
-  readonly alreadyMigrated: number
-  readonly skipped: readonly SkillRepositoryLegacyMigrationSkippedDto[]
-  readonly warnings: readonly SkillRepositoryLegacyMigrationWarningDto[]
-}
-
-export type SkillRepositoryLegacyContentRouteDto =
-  | {
-      readonly status: "migrated"
-      readonly repositoryId: string
-      readonly managementUrl: string
-      readonly publicUrl: string | null
-    }
-  | {
-      readonly status: "retired"
-      readonly contentType: "rule" | "prompt"
-      readonly message: string
-    }
-  | {
-      readonly status: "not_found"
-      readonly message: string
-    }
 
 const namePattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u
 const nameBoundaryPattern = /^[a-z0-9].*[a-z0-9]$|^[a-z0-9]$/u

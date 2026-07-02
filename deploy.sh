@@ -15,17 +15,17 @@ GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_
 ONLINE_BACKUP_FILE="$BACKUP_DIR/synapse-online-before-deploy-${DEPLOY_ID}.sql"
 FINAL_BACKUP_FILE="$BACKUP_DIR/synapse-final-before-switch-${DEPLOY_ID}.sql"
 DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"
-CONTENT_STORE_BACKUP_FILE="$BACKUP_DIR/content-store/synapse-content-store-final-before-switch-${DEPLOY_ID}.tar.gz"
+SKILL_REPOSITORY_BACKUP_FILE="$BACKUP_DIR/skill-repository/synapse-skill-repository-final-before-switch-${DEPLOY_ID}.tar.gz"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
 DRIVE_BACKUP_STATUS_FILE=$(mktemp)
-CONTENT_STORE_BACKUP_STATUS_FILE=$(mktemp)
+SKILL_REPOSITORY_BACKUP_STATUS_FILE=$(mktemp)
 TOTAL_STEPS=19
 TOTAL_START=$(date +%s)
 
 cleanup() {
   rm -f "$APPLIED_MIGRATIONS_FILE"
   rm -f "$DRIVE_BACKUP_STATUS_FILE"
-  rm -f "$CONTENT_STORE_BACKUP_STATUS_FILE"
+  rm -f "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"
 }
 
 trap cleanup EXIT
@@ -380,35 +380,35 @@ printf "drive backup saved: %s\n" "$DRIVE_BACKUP_FILE"
 REMOTE_SCRIPT
 }
 
-backup_remote_content_store_fallback() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && CONTENT_STORE_BACKUP_FILE='$CONTENT_STORE_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT' | tee "$CONTENT_STORE_BACKUP_STATUS_FILE"
+backup_remote_skill_repository_fallback() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SKILL_REPOSITORY_BACKUP_FILE='$SKILL_REPOSITORY_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT' | tee "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"
 set -euo pipefail
 
 read_env_value() {
   sed -n "s/^${1}=//p" .env | tail -n 1
 }
 
-content_store_cos_secret_id=$(read_env_value CONTENT_STORE_COS_SECRET_ID)
-content_store_cos_secret_key=$(read_env_value CONTENT_STORE_COS_SECRET_KEY)
-content_store_cos_bucket=$(read_env_value CONTENT_STORE_COS_BUCKET)
-content_store_cos_region=$(read_env_value CONTENT_STORE_COS_REGION)
+skill_repository_cos_secret_id=$(read_env_value SKILL_REPOSITORY_COS_SECRET_ID)
+skill_repository_cos_secret_key=$(read_env_value SKILL_REPOSITORY_COS_SECRET_KEY)
+skill_repository_cos_bucket=$(read_env_value SKILL_REPOSITORY_COS_BUCKET)
+skill_repository_cos_region=$(read_env_value SKILL_REPOSITORY_COS_REGION)
 
-if [ -n "$content_store_cos_secret_id" ] && [ -n "$content_store_cos_secret_key" ] && [ -n "$content_store_cos_bucket" ] && [ -n "$content_store_cos_region" ]; then
-  echo "content store backup skipped: COS storage is configured"
+if [ -n "$skill_repository_cos_secret_id" ] && [ -n "$skill_repository_cos_secret_key" ] && [ -n "$skill_repository_cos_bucket" ] && [ -n "$skill_repository_cos_region" ]; then
+  echo "skill repository backup skipped: COS storage is configured"
   exit 0
 fi
 
-if [ ! -d data/content-store ]; then
-  echo "content store backup skipped: local content-store directory not found"
+if [ ! -d data/skill-repository ]; then
+  echo "skill repository backup skipped: local skill-repository directory not found"
   exit 0
 fi
 
-mkdir -p "$(dirname "$CONTENT_STORE_BACKUP_FILE")"
-tar -czf "$CONTENT_STORE_BACKUP_FILE" -C data content-store
-test -s "$CONTENT_STORE_BACKUP_FILE"
-chmod 600 "$CONTENT_STORE_BACKUP_FILE"
+mkdir -p "$(dirname "$SKILL_REPOSITORY_BACKUP_FILE")"
+tar -czf "$SKILL_REPOSITORY_BACKUP_FILE" -C data skill-repository
+test -s "$SKILL_REPOSITORY_BACKUP_FILE"
+chmod 600 "$SKILL_REPOSITORY_BACKUP_FILE"
 
-printf "content store backup saved: %s\n" "$CONTENT_STORE_BACKUP_FILE"
+printf "skill repository backup saved: %s\n" "$SKILL_REPOSITORY_BACKUP_FILE"
 REMOTE_SCRIPT
 }
 
@@ -457,13 +457,13 @@ drive_backup_summary() {
   fi
 }
 
-content_store_backup_summary() {
-  if grep -q "content store backup saved" "$CONTENT_STORE_BACKUP_STATUS_FILE"; then
-    echo "$CONTENT_STORE_BACKUP_FILE"
-  elif grep -q "COS storage is configured" "$CONTENT_STORE_BACKUP_STATUS_FILE"; then
+skill_repository_backup_summary() {
+  if grep -q "skill repository backup saved" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
+    echo "$SKILL_REPOSITORY_BACKUP_FILE"
+  elif grep -q "COS storage is configured" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
     echo "skipped (COS storage is configured)"
-  elif grep -q "local content-store directory not found" "$CONTENT_STORE_BACKUP_STATUS_FILE"; then
-    echo "skipped (local content-store directory not found)"
+  elif grep -q "local skill-repository directory not found" "$SKILL_REPOSITORY_BACKUP_STATUS_FILE"; then
+    echo "skipped (local skill-repository directory not found)"
   else
     echo "not available"
   fi
@@ -475,7 +475,7 @@ print_deployment_artifacts() {
   echo "在线预演备份: $ONLINE_BACKUP_FILE"
   echo "最终切换前备份: $FINAL_BACKUP_FILE"
   echo "本地 Drive 备份: $(drive_backup_summary)"
-  echo "Content Store 本地备份: $(content_store_backup_summary)"
+  echo "Skill Repository 本地备份: $(skill_repository_backup_summary)"
   echo "回滚服务镜像: synapse-server:$ROLLBACK_IMAGE_TAG"
 }
 
@@ -705,9 +705,9 @@ step 15 "恢复验证最终数据库备份" \
 step 16 "备份本地 Drive 数据" \
   backup_remote_drive_fallback
 
-# [17/19] 备份本地 Content Store fallback 数据
-step 17 "备份本地 Content Store 数据" \
-  backup_remote_content_store_fallback
+# [17/19] 备份本地 Skill Repository fallback 数据
+step 17 "备份本地 Skill Repository 数据" \
+  backup_remote_skill_repository_fallback
 
 # [18/19] 启动新服务
 step 18 "启动新服务" \

@@ -12,7 +12,7 @@ type RendererLogger = {
 type RendererLogBridge = NonNullable<Window["synapse"]>["log"]
 
 const SENSITIVE_LOG_FIELD_PATTERN =
-  /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization|session[-_]?key|session[-_]?id|install[-_]?session[-_]?id|content[-_]?store[-_]?install[-_]?session[-_]?id)/i
+  /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization|session[-_]?key|session[-_]?id|install[-_]?session[-_]?id|skill[-_]?repository[-_]?install[-_]?session[-_]?id)/i
 const CONTENT_LOG_FIELD_PATTERN = /^(details|prompt|message|content|body|text|reason|error|errors|stack)$/i
 const PATH_LOG_FIELD_PATTERN =
   /(^|[-_ ])(path|dir|directory|folder|file)([-_ ]|$)|(^|[-_ ])file[-_ ]?name([-_ ]|$)|(base|source|target|export|workspace)[-_ ]?(dir|directory|folder|path)/i

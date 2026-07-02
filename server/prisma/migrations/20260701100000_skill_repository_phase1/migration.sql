@@ -22,8 +22,6 @@ CREATE TABLE "SkillRepository" (
   "status" VARCHAR(16) NOT NULL DEFAULT 'active',
   "forkedFromRepositoryId" TEXT,
   "lastSyncedAt" TIMESTAMP(3),
-  "legacyContentStoreItemId" TEXT,
-  "legacyInstallCount" INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SkillRepository_pkey" PRIMARY KEY ("id"),
@@ -34,8 +32,6 @@ CREATE UNIQUE INDEX "SkillRepository_ownerUserId_name_key" ON "SkillRepository"(
 CREATE INDEX "SkillRepository_visibility_status_updatedAt_idx" ON "SkillRepository"("visibility", "status", "updatedAt");
 CREATE INDEX "SkillRepository_ownerUserId_updatedAt_idx" ON "SkillRepository"("ownerUserId", "updatedAt");
 CREATE INDEX "SkillRepository_forkedFromRepositoryId_idx" ON "SkillRepository"("forkedFromRepositoryId");
-CREATE INDEX "SkillRepository_legacyContentStoreItemId_idx" ON "SkillRepository"("legacyContentStoreItemId");
-
 CREATE TABLE "SkillRepositoryNameRedirect" (
   "id" TEXT NOT NULL,
   "ownerUserId" TEXT NOT NULL,

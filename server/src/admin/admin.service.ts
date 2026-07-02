@@ -54,7 +54,6 @@ const adminSkillRepositorySelect = {
   title: true,
   visibility: true,
   status: true,
-  legacyInstallCount: true,
   owner: { select: { id: true, handle: true, displayName: true } },
   updatedAt: true,
 } as const
@@ -519,7 +518,6 @@ function toAdminSkillRepositoryRow(repository: AdminSkillRepositoryRecord) {
     title: repository.title,
     visibility: repository.visibility,
     status: repository.status,
-    legacyInstallCount: repository.legacyInstallCount,
     owner: repository.owner,
     updatedAt: repository.updatedAt,
   }

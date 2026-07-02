@@ -24,16 +24,16 @@ import {
   parseContentLength,
   readZipEntries,
   sha256,
-  type ContentStoreInstallLimits,
+  type InstallPackageLimits,
   type ZipEntry,
-} from "./content-store-install-service"
-import type { PreparedContentInstallSourceProvider } from "./content-install-service"
+} from "./install-package-utils"
+import type { PreparedContentInstallSourceProvider } from "./editor-install-service"
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.skill-repository-install")
 
-const DEFAULT_LIMITS: ContentStoreInstallLimits = {
+const DEFAULT_LIMITS: InstallPackageLimits = {
   maxCompressedBytes: 64 * 1024 * 1024,
   maxEntries: 512,
   maxFileBytes: 32 * 1024 * 1024,
@@ -92,7 +92,7 @@ type SkillRepositoryInstallServiceDeps = {
   readonly accountService?: SkillRepositoryInstallAccountPort
   readonly clientIdStore?: SkillRepositoryInstallClientIdPort
   readonly createId?: () => string
-  readonly limits?: ContentStoreInstallLimits
+  readonly limits?: InstallPackageLimits
   readonly tempRoot?: string
 }
 
@@ -107,7 +107,7 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
   private readonly account: SkillRepositoryInstallAccountPort
   private readonly clientIdStore: SkillRepositoryInstallClientIdPort
   private readonly createId: () => string
-  private readonly limits: ContentStoreInstallLimits
+  private readonly limits: InstallPackageLimits
   private readonly tempRoot: string
   private readonly preparedById = new Map<string, PreparedInstall>()
   private readonly sourceIdBySession = new Map<string, string>()
@@ -392,7 +392,7 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
 function validateManifest(
   entries: Map<string, ZipEntry>,
   session: SynapseSkillRepositoryInstallSession,
-  limits: ContentStoreInstallLimits,
+  limits: InstallPackageLimits,
 ): SkillRepositoryInstallManifest {
   const manifestEntry = entries.get("manifest.json")
   if (!manifestEntry) throw new Error("skill repository package manifest is missing")

@@ -10,8 +10,8 @@ import {
   skillRepositoryRootFilePath,
   type SkillRepositoryInstallManifest,
 } from "@synapse/shared"
-import type { ContentStoreStoragePort } from "../content-store/content-store-storage"
 import { normalizeSkillRepositoryPath } from "./skill-repository-file-rules"
+import type { SkillRepositoryStoragePort } from "./skill-repository-storage"
 
 export interface SkillRepositoryInstallPackageRepository {
   readonly id: string
@@ -34,7 +34,7 @@ export interface SkillRepositoryInstallPackageFile {
 export async function buildSkillRepositoryInstallPackage(input: {
   readonly repository: SkillRepositoryInstallPackageRepository
   readonly files: readonly SkillRepositoryInstallPackageFile[]
-  readonly storage: ContentStoreStoragePort
+  readonly storage: SkillRepositoryStoragePort
 }): Promise<{
   readonly packageBuffer: Buffer
   readonly packageSha256: string

@@ -72,7 +72,7 @@ vi.mock("../config-store", () => ({
   },
 }))
 
-import { ContentInstallService } from "../content-install-service"
+import { EditorInstallService } from "../editor-install-service"
 import { installerSourceService } from "../installer-source-service"
 
 const tempRoots: string[] = []
@@ -113,7 +113,7 @@ describe("EditorInstallCore installer source", () => {
       name: "team.rule",
       body: "# Team Rule",
     })
-    const service = new ContentInstallService()
+    const service = new EditorInstallService()
 
     await service.installSourceToEditor({
       editorId: "test-editor" as never,

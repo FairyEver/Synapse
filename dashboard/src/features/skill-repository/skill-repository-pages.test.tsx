@@ -196,8 +196,6 @@ function repositoryItem(overrides: Partial<SkillRepositoryItemDto> = {}): SkillR
     status: 'active',
     owner: { id: 'user-1', handle: 'alice', displayName: 'Alice' },
     forkedFromRepositoryId: null,
-    legacyContentStoreItemId: null,
-    legacyInstallCount: 0,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-02T00:00:00.000Z',
     lastSyncedAt: '2026-07-02T00:00:00.000Z',

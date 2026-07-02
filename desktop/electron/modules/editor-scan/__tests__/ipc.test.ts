@@ -4,15 +4,15 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 
 const mocks = vi.hoisted(() => ({
   uploadService: {
-    uploadSkillDraftToContentStore: vi.fn(),
+    importLocal: vi.fn(),
   },
   editorScanService: {
     assertTrustedEditorReadTarget: vi.fn(),
   },
 }))
 
-vi.mock("../../../services/content-store-upload-service", () => ({
-  contentStoreUploadService: mocks.uploadService,
+vi.mock("../../../services/skill-repository-upload-service", () => ({
+  skillRepositoryUploadService: mocks.uploadService,
 }))
 
 vi.mock("../../../services/editor-scan-service", () => ({
@@ -29,20 +29,20 @@ import { editorScanIpcModule } from "../ipc"
 describe("editorScanIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.uploadService.uploadSkillDraftToContentStore.mockResolvedValue({
-      draftId: "repo-1",
-      itemId: "repo-1",
-      revision: 1,
-      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
-      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+    mocks.uploadService.importLocal.mockResolvedValue({
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      identityWritten: true,
     })
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
   })
 
-  it("uploads scanned Skills through the compatibility channel", async () => {
+  it("uploads scanned Skills through the Skill Repository channel", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "skill",
       itemPath: "/tmp/skills/review",
       itemName: "review",
@@ -50,21 +50,18 @@ describe("editorScanIpcModule", () => {
       scope: "project",
       projectPath: "/tmp/project",
     })).resolves.toEqual({
-      draftId: "repo-1",
-      itemId: "repo-1",
-      revision: 1,
-      consoleEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
-      dashboardEditUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      repositoryId: "repo-1",
+      name: "review",
+      owner: "alice",
+      managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
+      identityWritten: true,
     })
 
-    expect(mocks.uploadService.uploadSkillDraftToContentStore).toHaveBeenCalledWith(
+    expect(mocks.uploadService.importLocal).toHaveBeenCalledWith(
       {
-        itemType: "skill",
-        itemPath: "/tmp/skills/review",
-        itemName: "review",
-        editorId: "claude-code",
-        scope: "project",
-        projectPath: "/tmp/project",
+        sourceDirectoryPath: "/tmp/skills/review",
+        name: "review",
+        openInBrowser: false,
       },
       {
         actor: { kind: "user" },
@@ -82,7 +79,7 @@ describe("editorScanIpcModule", () => {
       {
         contentType: "skill",
         itemName: "review",
-        operation: "upload-skill-draft-to-content-store",
+        operation: "upload-skill-to-skill-repository",
       },
       "skill",
     )
@@ -94,7 +91,7 @@ describe("editorScanIpcModule", () => {
       new Error("扫描项不在当前编辑器扫描范围内。"),
     )
 
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "skill",
       itemPath: "/tmp/outside/review",
       itemName: "review",
@@ -103,20 +100,20 @@ describe("editorScanIpcModule", () => {
       projectPath: "/tmp/project",
     })).rejects.toThrow("扫描项不在当前编辑器扫描范围内。")
 
-    expect(mocks.uploadService.uploadSkillDraftToContentStore).not.toHaveBeenCalled()
+    expect(mocks.uploadService.importLocal).not.toHaveBeenCalled()
   })
 
   it("rejects Rule and Prompt uploads before calling the service", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "rule",
       itemPath: "/tmp/rules/review.md",
       itemName: "review",
       editorId: "claude-code",
       scope: "global",
     })).rejects.toThrow("只有 Skill 可以上传到 Skill Repository。")
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "prompt",
       itemPath: "/tmp/prompts/review.md",
       itemName: "review",
@@ -124,13 +121,13 @@ describe("editorScanIpcModule", () => {
       scope: "global",
     })).rejects.toThrow("只有 Skill 可以上传到 Skill Repository。")
 
-    expect(mocks.uploadService.uploadSkillDraftToContentStore).not.toHaveBeenCalled()
+    expect(mocks.uploadService.importLocal).not.toHaveBeenCalled()
   })
 
   it("rejects invalid upload payloads", async () => {
     const harness = createHarness()
 
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "skill",
       itemPath: "",
       itemName: "review",
@@ -138,14 +135,14 @@ describe("editorScanIpcModule", () => {
       scope: "global",
     })).rejects.toThrow()
 
-    expect(mocks.uploadService.uploadSkillDraftToContentStore).not.toHaveBeenCalled()
+    expect(mocks.uploadService.importLocal).not.toHaveBeenCalled()
   })
 
   it("propagates unauthenticated upload failures", async () => {
     const harness = createHarness()
-    mocks.uploadService.uploadSkillDraftToContentStore.mockRejectedValueOnce(new Error("账号未登录。"))
+    mocks.uploadService.importLocal.mockRejectedValueOnce(new Error("账号未登录。"))
 
-    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
       itemType: "skill",
       itemPath: "/tmp/skills/review",
       itemName: "review",

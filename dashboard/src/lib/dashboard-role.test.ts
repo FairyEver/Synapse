@@ -23,9 +23,6 @@ describe('dashboard role routing', () => {
     expect(resolveDashboardRedirectForRole('user', '/devices')).toBe(
       '/settings'
     )
-    expect(
-      resolveDashboardRedirectForRole('user', '/content-store-admin?page=2')
-    ).toBe('/settings')
     expect(resolveDashboardRedirectForRole('user', '/settings')).toBe(
       '/settings'
     )
@@ -34,6 +31,6 @@ describe('dashboard role routing', () => {
   it('recognizes current administrator route entries', () => {
     expect(isDashboardAdminPath('/admin-drive')).toBe(true)
     expect(isDashboardAdminPath('/devices')).toBe(true)
-    expect(isDashboardAdminPath('/content-store-admin')).toBe(true)
+    expect(isDashboardAdminPath('/skill-repositories/admin')).toBe(true)
   })
 })

@@ -4,8 +4,8 @@ import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { SkillRepositoryService } from "./skill-repository.service"
-import type { ContentStoreStoragePort } from "../content-store/content-store-storage"
 import { normalizeSkillRepositoryPath } from "./skill-repository-file-rules"
+import type { SkillRepositoryStoragePort } from "./skill-repository-storage"
 
 vi.mock("node:crypto", async () => {
   const actual = await vi.importActual<typeof import("node:crypto")>("node:crypto")
@@ -25,7 +25,7 @@ describe("SkillRepositoryService", () => {
     prisma = createPrismaMock()
     storage = createStorageMock()
     prisma.$transaction.mockImplementation(async (callback: TransactionInput) => callback(prisma))
-    service = new SkillRepositoryService(prisma as unknown as PrismaService, storage as unknown as ContentStoreStoragePort)
+    service = new SkillRepositoryService(prisma as unknown as PrismaService, storage as unknown as SkillRepositoryStoragePort)
   })
 
   it("imports a private repository from a packaged Skill file tree", async () => {
@@ -418,7 +418,6 @@ describe("SkillRepositoryService", () => {
     expect(result.map((repo) => repo.id)).toEqual(["repo-new", "repo-old"])
     expect(result[0]).toMatchObject({
       owner: { id: "user-1", handle: "alice", displayName: "Alice" },
-      legacyInstallCount: 3,
     })
   })
 
@@ -804,8 +803,6 @@ function repositoryRow(overrides: Record<string, unknown> = {}) {
     visibility: "private",
     status: "active",
     forkedFromRepositoryId: null,
-    legacyContentStoreItemId: null,
-    legacyInstallCount: 3,
     createdAt: new Date("2026-06-01T00:00:00.000Z"),
     updatedAt: new Date("2026-06-02T00:00:00.000Z"),
     lastSyncedAt: new Date("2026-06-02T00:00:00.000Z"),

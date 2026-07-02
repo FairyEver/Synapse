@@ -74,41 +74,6 @@ describe("SkillRepositoryController", () => {
     expect(service.listMine).toHaveBeenCalledWith("user-1")
   })
 
-  it("passes authenticated user id to the legacy Content Store migration service", async () => {
-    const service = createService()
-    const migration = {
-      migrateOwnerSkills: vi.fn().mockResolvedValue({ migrated: 1 }),
-    }
-    const controller = new SkillRepositoryController(service as never, migration as never)
-
-    await controller.migrateLegacyContentStoreSkills(request("user-1"))
-
-    expect(migration.migrateOwnerSkills).toHaveBeenCalledWith("user-1")
-  })
-
-  it("passes legacy Content Store route lookup to the service with the public app URL", async () => {
-    const originalPublicAppUrl = process.env.APP_PUBLIC_URL
-    process.env.APP_PUBLIC_URL = "https://synapse.example"
-    const service = createService()
-    const controller = new SkillRepositoryController(service as never)
-
-    try {
-      await controller.resolveLegacyContentRoute("content-1", request("user-1"))
-    } finally {
-      if (originalPublicAppUrl === undefined) {
-        delete process.env.APP_PUBLIC_URL
-      } else {
-        process.env.APP_PUBLIC_URL = originalPublicAppUrl
-      }
-    }
-
-    expect(service.resolveLegacyContentRoute).toHaveBeenCalledWith(
-      "user-1",
-      "content-1",
-      "https://synapse.example",
-    )
-  })
-
   it("passes authenticated user id and repository id to getMine", async () => {
     const service = createService()
     const controller = new SkillRepositoryController(service as never)

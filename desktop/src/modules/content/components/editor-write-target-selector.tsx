@@ -337,13 +337,13 @@ function EditorWriteTargetSelector({
       {scope === "project" ? (
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="content-install-project">项目目录</Label>
+            <Label htmlFor="editor-install-project">项目目录</Label>
             <Select
               data-track="install-project-select"
               value={projectSelection}
               onValueChange={setProjectSelection}
             >
-              <SelectTrigger id="content-install-project" className="w-full">
+              <SelectTrigger id="editor-install-project" className="w-full">
                 <SelectValue placeholder="选择一个项目" />
               </SelectTrigger>
               <SelectContent>
@@ -359,10 +359,10 @@ function EditorWriteTargetSelector({
 
           {projectSelection === CUSTOM_PROJECT_OPTION ? (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="content-install-project-path">目录路径</Label>
+              <Label htmlFor="editor-install-project-path">目录路径</Label>
               <div className="flex gap-2">
                 <Input
-                  id="content-install-project-path"
+                  id="editor-install-project-path"
                   value={customProjectPath}
                   onChange={(event) => setCustomProjectPath(event.target.value)}
                   placeholder="/path/to/project"

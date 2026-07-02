@@ -90,11 +90,6 @@ export const IPC_CHANNELS = {
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
     "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
-  "content-store-install": {
-    "resolve": "synapse:content-store-install:resolve",
-    "prepare": "synapse:content-store-install:prepare",
-    "recordComplete": "synapse:content-store-install:record-complete",
-  },
   "skill-repository-install": {
     "resolve": "synapse:skill-repository-install:resolve",
     "prepare": "synapse:skill-repository-install:prepare",
@@ -136,7 +131,7 @@ export const IPC_CHANNELS = {
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
     "trashItem": "synapse:editor-scan:trash-item",
-    "uploadSkillDraftToContentStore": "synapse:editor-scan:upload-skill-draft-to-content-store",
+    "uploadSkillToSkillRepository": "synapse:editor-scan:upload-skill-to-skill-repository",
   },
   "editor-copy": {
     "resolveTarget": "synapse:editor-copy:resolve-target",

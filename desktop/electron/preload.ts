@@ -74,11 +74,6 @@ const IPC_CHANNELS = {
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
     "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
-  "content-store-install": {
-    "resolve": "synapse:content-store-install:resolve",
-    "prepare": "synapse:content-store-install:prepare",
-    "recordComplete": "synapse:content-store-install:record-complete",
-  },
   "skill-repository-install": {
     "resolve": "synapse:skill-repository-install:resolve",
     "prepare": "synapse:skill-repository-install:prepare",
@@ -120,7 +115,7 @@ const IPC_CHANNELS = {
     "listSkillFiles": "synapse:editor-scan:list-skill-files",
     "prepareQuickPublishDraft": "synapse:editor-scan:prepare-quick-publish-draft",
     "trashItem": "synapse:editor-scan:trash-item",
-    "uploadSkillDraftToContentStore": "synapse:editor-scan:upload-skill-draft-to-content-store",
+    "uploadSkillToSkillRepository": "synapse:editor-scan:upload-skill-to-skill-repository",
   },
   "editor-copy": {
     "resolveTarget": "synapse:editor-copy:resolve-target",
@@ -1148,12 +1143,6 @@ const synapseBridge: SynapseBridge = {
     readIconImage: invoke(IPC_CHANNELS.content.readIconImage),
     resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
   },
-  contentStoreInstall: {
-    resolve: (sessionId) => invoke(IPC_CHANNELS["content-store-install"].resolve)({ sessionId }),
-    prepare: (sessionId) => invoke(IPC_CHANNELS["content-store-install"].prepare)({ sessionId }),
-    recordComplete: (sessionId) =>
-      invoke(IPC_CHANNELS["content-store-install"].recordComplete)({ sessionId }),
-  },
   skillRepositoryInstall: {
     resolve: (sessionId) => invoke(IPC_CHANNELS["skill-repository-install"].resolve)({ sessionId }),
     prepare: (sessionId) => invoke(IPC_CHANNELS["skill-repository-install"].prepare)({ sessionId }),
@@ -1206,8 +1195,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].prepareQuickPublishDraft)(request),
     trashItem: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].trashItem)(request),
-    uploadSkillDraftToContentStore: (request) =>
-      invoke(IPC_CHANNELS["editor-scan"].uploadSkillDraftToContentStore)(request),
+    uploadSkillToSkillRepository: (request) =>
+      invoke(IPC_CHANNELS["editor-scan"].uploadSkillToSkillRepository)(request),
   },
   editorCopy: {
     resolveTarget: invoke(IPC_CHANNELS["editor-copy"].resolveTarget),

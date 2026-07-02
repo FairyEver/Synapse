@@ -176,7 +176,6 @@ function repositoryRow(overrides: Partial<AdminSkillRepositoryRow> = {}): AdminS
     title: 'Deploy Helper',
     visibility: 'public',
     status: 'active',
-    legacyInstallCount: 5,
     owner: { id: 'user-1', handle: 'alice', displayName: 'Alice' },
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,

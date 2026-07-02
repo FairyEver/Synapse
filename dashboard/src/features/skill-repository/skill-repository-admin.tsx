@@ -124,17 +124,6 @@ export default function SkillRepositoryAdminPage({
         ),
       },
       {
-        accessorKey: 'legacyInstallCount',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title='旧安装量' />
-        ),
-        cell: ({ row }) => row.original.legacyInstallCount,
-        meta: {
-          thClassName: 'text-right',
-          tdClassName: 'text-right',
-        },
-      },
-      {
         accessorKey: 'updatedAt',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='更新时间' />

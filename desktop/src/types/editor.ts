@@ -25,7 +25,7 @@ export type SynapseResolveEditorTargetPayload = {
   contentType: SynapseContentType
   contentId: string
   /**
-   * Opaque main-process handle for a validated Content Store package.
+   * Opaque main-process handle for a validated install package.
    * Renderer never receives the underlying temporary path or package bytes.
    */
   preparedSourceId?: string

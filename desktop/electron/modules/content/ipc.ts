@@ -36,7 +36,7 @@ import type {
 } from "../../../src/types/editor"
 import { configStore } from "../../services/config-store"
 import { contentDownloadService } from "../../services/content-download-service"
-import { contentInstallService } from "../../services/content-install-service"
+import { editorInstallService } from "../../services/editor-install-service"
 import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { contentService } from "../../services/content-service"
 import { contentSubmissionService } from "../../services/content-submission-service"
@@ -731,7 +731,7 @@ export const contentIpcModule: IpcModule = {
       request: resolveEditorTargetPayloadSchema,
       response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseResolveEditorTargetPayload) => {
-        return contentInstallService.resolveEditorInstallTarget(payload)
+        return editorInstallService.resolveEditorInstallTarget(payload)
       },
     },
     installToEditor: {
@@ -741,7 +741,7 @@ export const contentIpcModule: IpcModule = {
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
         logger.info(`Handling content.installToEditor request. contentType: ${payload.contentType}, contentId: ${payload.contentId}, editorId: ${payload.editorId}, scope: ${payload.scope}`)
-        const result = await contentInstallService.installToEditor(payload, {
+        const result = await editorInstallService.installToEditor(payload, {
           actor: { kind: "user" },
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
@@ -762,7 +762,7 @@ export const contentIpcModule: IpcModule = {
       request: readEditorInstallFormValuesPayloadSchema,
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
-        return contentInstallService.readEditorInstallFormValues(payload, {
+        return editorInstallService.readEditorInstallFormValues(payload, {
           actor: { kind: "user" },
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),

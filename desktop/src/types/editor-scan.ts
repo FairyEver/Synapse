@@ -136,7 +136,7 @@ export type EditorScanTrashResult = {
   path: string
 }
 
-export type EditorScanContentStoreUploadRequest = {
+export type EditorScanSkillRepositoryUploadRequest = {
   itemType: "skill"
   itemPath: string
   itemName: string
@@ -145,11 +145,11 @@ export type EditorScanContentStoreUploadRequest = {
   projectPath?: string | null
 }
 
-export type EditorScanContentStoreUploadResult = {
-  draftId: string
-  itemId: string
-  revision: number
-  consoleEditUrl: string
-  /** @deprecated Use consoleEditUrl. */
-  dashboardEditUrl: string
+export type EditorScanSkillRepositoryUploadResult = {
+  repositoryId: string
+  name: string
+  owner: string | null
+  managementUrl: string
+  identityWritten: boolean
+  identityWriteError?: string
 }

@@ -1,10 +1,10 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
-import { contentInstallService } from "../../services/content-install-service"
+import { editorInstallService } from "../../services/editor-install-service"
 import { skillRepositoryInstallService } from "../../services/skill-repository-install-service"
 
-contentInstallService.addPreparedSourceProvider(skillRepositoryInstallService)
+editorInstallService.addPreparedSourceProvider(skillRepositoryInstallService)
 
 const sessionRequestSchema = z.object({
   sessionId: z.string().min(1),

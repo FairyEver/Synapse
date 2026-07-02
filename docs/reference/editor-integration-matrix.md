@@ -201,7 +201,7 @@ Cursor 官方文档当前的要求：
 - `name` 必填
 - `description` 必填
 
-关于 `name` 是否必须和父目录名称一致：官方文档无此强制规定，属于社区建议。Synapse 选择让两者保持一致（`content-install-service.ts` 中用 `path.basename(target.targetPath)` 作为 frontmatter `name`），这是合理的防御性做法，但不是 Cursor 官方的硬性约束。
+关于 `name` 是否必须和父目录名称一致：官方文档无此强制规定，属于社区建议。Synapse 选择让两者保持一致（`editor-install-service.ts` 中用 `path.basename(target.targetPath)` 作为 frontmatter `name`），这是合理的防御性做法，但不是 Cursor 官方的硬性约束。
 
 参考文档：
 

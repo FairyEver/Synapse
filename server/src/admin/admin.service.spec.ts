@@ -104,7 +104,6 @@ function createAdminSkillRepositoryRow(overrides: Partial<{
   readonly title: string
   readonly visibility: string
   readonly status: string
-  readonly legacyInstallCount: number
   readonly owner: { readonly id: string; readonly handle: string | null; readonly displayName: string | null }
   readonly updatedAt: Date
 }> = {}) {
@@ -114,7 +113,6 @@ function createAdminSkillRepositoryRow(overrides: Partial<{
     title: overrides.title ?? "Demo",
     visibility: overrides.visibility ?? "public",
     status: overrides.status ?? "active",
-    legacyInstallCount: overrides.legacyInstallCount ?? 3,
     owner: overrides.owner ?? { id: "user-1", handle: "alice", displayName: "Alice" },
     updatedAt: overrides.updatedAt ?? new Date("2026-07-01T00:00:00.000Z"),
   }
@@ -561,7 +559,6 @@ describe("AdminService", () => {
         title: true,
         visibility: true,
         status: true,
-        legacyInstallCount: true,
         owner: { select: { id: true, handle: true, displayName: true } },
         updatedAt: true,
       }),
@@ -574,7 +571,6 @@ describe("AdminService", () => {
         {
           id: "repo-1",
           owner: { handle: "alice" },
-          legacyInstallCount: 3,
         },
       ],
     })

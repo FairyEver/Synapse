@@ -38,12 +38,12 @@ const cosConfigGroups = [
     fields: ["DRIVE_COS_SECRET_ID", "DRIVE_COS_SECRET_KEY", "DRIVE_COS_BUCKET", "DRIVE_COS_REGION"],
   },
   {
-    name: "CONTENT_STORE_COS",
+    name: "SKILL_REPOSITORY_COS",
     fields: [
-      "CONTENT_STORE_COS_SECRET_ID",
-      "CONTENT_STORE_COS_SECRET_KEY",
-      "CONTENT_STORE_COS_BUCKET",
-      "CONTENT_STORE_COS_REGION",
+      "SKILL_REPOSITORY_COS_SECRET_ID",
+      "SKILL_REPOSITORY_COS_SECRET_KEY",
+      "SKILL_REPOSITORY_COS_BUCKET",
+      "SKILL_REPOSITORY_COS_REGION",
     ],
   },
   {
@@ -80,11 +80,11 @@ const envSchema = z
     DRIVE_COS_BUCKET: optionalEnvString,
     DRIVE_COS_REGION: optionalEnvString,
     SYNAPSE_DRIVE_LOCAL_ROOT: optionalEnvString,
-    CONTENT_STORE_COS_SECRET_ID: optionalEnvString,
-    CONTENT_STORE_COS_SECRET_KEY: optionalEnvString,
-    CONTENT_STORE_COS_BUCKET: optionalEnvString,
-    CONTENT_STORE_COS_REGION: optionalEnvString,
-    SYNAPSE_CONTENT_STORE_LOCAL_ROOT: optionalEnvString,
+    SKILL_REPOSITORY_COS_SECRET_ID: optionalEnvString,
+    SKILL_REPOSITORY_COS_SECRET_KEY: optionalEnvString,
+    SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
+    SKILL_REPOSITORY_COS_REGION: optionalEnvString,
+    SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_ID: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_KEY: optionalEnvString,
     PLATFORM_MEDIA_COS_BUCKET: optionalEnvString,
@@ -127,11 +127,11 @@ const envSchema = z
   })
   .refine((env) => {
     if (env.NODE_ENV !== "production") return true
-    const hasContentStoreCos = !!(env.CONTENT_STORE_COS_SECRET_ID && env.CONTENT_STORE_COS_SECRET_KEY && env.CONTENT_STORE_COS_BUCKET && env.CONTENT_STORE_COS_REGION)
-    return hasContentStoreCos || !!env.SYNAPSE_CONTENT_STORE_LOCAL_ROOT
+    const hasSkillRepositoryCos = !!(env.SKILL_REPOSITORY_COS_SECRET_ID && env.SKILL_REPOSITORY_COS_SECRET_KEY && env.SKILL_REPOSITORY_COS_BUCKET && env.SKILL_REPOSITORY_COS_REGION)
+    return hasSkillRepositoryCos || !!env.SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT
   }, {
-    path: ["SYNAPSE_CONTENT_STORE_LOCAL_ROOT"],
-    message: "SYNAPSE_CONTENT_STORE_LOCAL_ROOT is required in production when Content Store COS is not configured",
+    path: ["SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT"],
+    message: "SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT is required in production when Skill Repository COS is not configured",
   })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
@@ -155,11 +155,11 @@ export interface ServerEnv {
   readonly driveCosBucket?: string
   readonly driveCosRegion?: string
   readonly driveLocalRoot?: string
-  readonly contentStoreCosSecretId?: string
-  readonly contentStoreCosSecretKey?: string
-  readonly contentStoreCosBucket?: string
-  readonly contentStoreCosRegion?: string
-  readonly contentStoreLocalRoot?: string
+  readonly skillRepositoryCosSecretId?: string
+  readonly skillRepositoryCosSecretKey?: string
+  readonly skillRepositoryCosBucket?: string
+  readonly skillRepositoryCosRegion?: string
+  readonly skillRepositoryLocalRoot?: string
   readonly platformMediaCosSecretId?: string
   readonly platformMediaCosSecretKey?: string
   readonly platformMediaCosBucket?: string
@@ -194,11 +194,11 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosBucket: result.data.DRIVE_COS_BUCKET,
     driveCosRegion: result.data.DRIVE_COS_REGION,
     driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
-    contentStoreCosSecretId: result.data.CONTENT_STORE_COS_SECRET_ID,
-    contentStoreCosSecretKey: result.data.CONTENT_STORE_COS_SECRET_KEY,
-    contentStoreCosBucket: result.data.CONTENT_STORE_COS_BUCKET,
-    contentStoreCosRegion: result.data.CONTENT_STORE_COS_REGION,
-    contentStoreLocalRoot: result.data.SYNAPSE_CONTENT_STORE_LOCAL_ROOT,
+    skillRepositoryCosSecretId: result.data.SKILL_REPOSITORY_COS_SECRET_ID,
+    skillRepositoryCosSecretKey: result.data.SKILL_REPOSITORY_COS_SECRET_KEY,
+    skillRepositoryCosBucket: result.data.SKILL_REPOSITORY_COS_BUCKET,
+    skillRepositoryCosRegion: result.data.SKILL_REPOSITORY_COS_REGION,
+    skillRepositoryLocalRoot: result.data.SYNAPSE_SKILL_REPOSITORY_LOCAL_ROOT,
     platformMediaCosSecretId: result.data.PLATFORM_MEDIA_COS_SECRET_ID,
     platformMediaCosSecretKey: result.data.PLATFORM_MEDIA_COS_SECRET_KEY,
     platformMediaCosBucket: result.data.PLATFORM_MEDIA_COS_BUCKET,
@@ -214,8 +214,8 @@ export function isDriveCosConfigured(env: ServerEnv): boolean {
   return !!(env.driveCosSecretId && env.driveCosSecretKey && env.driveCosBucket && env.driveCosRegion)
 }
 
-export function isContentStoreCosConfigured(env: ServerEnv): boolean {
-  return !!(env.contentStoreCosSecretId && env.contentStoreCosSecretKey && env.contentStoreCosBucket && env.contentStoreCosRegion)
+export function isSkillRepositoryCosConfigured(env: ServerEnv): boolean {
+  return !!(env.skillRepositoryCosSecretId && env.skillRepositoryCosSecretKey && env.skillRepositoryCosBucket && env.skillRepositoryCosRegion)
 }
 
 export function isPlatformMediaCosConfigured(env: ServerEnv): boolean {

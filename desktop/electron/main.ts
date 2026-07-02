@@ -23,7 +23,6 @@ import {
 } from "./bootstrap"
 import type { WindowManager } from "./runtime/window"
 import { accountService } from "./services/account-service"
-import { contentStoreInstallWindowService } from "./services/content-store-install-window-service"
 import { createMainLogger } from "./services/log-store"
 import { skillRepositoryInstallWindowService } from "./services/skill-repository-install-window-service"
 
@@ -45,7 +44,6 @@ const protocolRouter = createProtocolUrlRouter({
   focusMainWindow: focusOrCreateMainWindow,
   handleAuthCallback: (url) => accountService.handleAuthCallback(url),
   logger,
-  openInstallWindow: (request) => contentStoreInstallWindowService.open(request),
   openSkillRepositoryInstallWindow: (request) => skillRepositoryInstallWindowService.open(request),
 }, process.argv.filter(isSynapseProtocolUrl))
 

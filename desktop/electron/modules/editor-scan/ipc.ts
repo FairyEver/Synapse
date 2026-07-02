@@ -9,7 +9,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
-  EditorScanContentStoreUploadRequest,
+  EditorScanSkillRepositoryUploadRequest,
   EditorScanQuickPublishRequest,
   EditorScanTrashRequest,
 } from "../../../src/types/editor-scan"
@@ -21,7 +21,7 @@ import {
   prepareQuickPublishDraft,
   trashScanItem,
 } from "../../services/editor-scan-service"
-import { contentStoreUploadService } from "../../services/content-store-upload-service"
+import { skillRepositoryUploadService } from "../../services/skill-repository-upload-service"
 
 // Schemas
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
@@ -133,7 +133,7 @@ const trashResultSchema = z.object({
   path: z.string(),
 })
 
-const uploadSkillDraftToContentStoreRequestSchema = z.object({
+const uploadSkillToSkillRepositoryRequestSchema = z.object({
   itemType: z.enum(["skill", "rule", "prompt"]),
   itemPath: z.string().min(1),
   itemName: z.string().min(1),
@@ -141,14 +141,15 @@ const uploadSkillDraftToContentStoreRequestSchema = z.object({
   scope: z.enum(["global", "project"]),
   projectPath: z.string().nullable().optional(),
 }).strict()
-type UploadSkillDraftToContentStoreRequest = z.infer<typeof uploadSkillDraftToContentStoreRequestSchema>
+type UploadSkillToSkillRepositoryRequest = z.infer<typeof uploadSkillToSkillRepositoryRequestSchema>
 
-const uploadSkillDraftToContentStoreResultSchema = z.object({
-  draftId: z.string().min(1),
-  itemId: z.string().min(1),
-  revision: z.number().int().positive(),
-  consoleEditUrl: z.string().url(),
-  dashboardEditUrl: z.string().url(),
+const uploadSkillToSkillRepositoryResultSchema = z.object({
+  repositoryId: z.string().min(1),
+  name: z.string().min(1),
+  owner: z.string().nullable(),
+  managementUrl: z.string().url(),
+  identityWritten: z.boolean(),
+  identityWriteError: z.string().optional(),
 })
 
 export const editorScanIpcModule: IpcModule = {
@@ -215,12 +216,12 @@ export const editorScanIpcModule: IpcModule = {
         })
       },
     },
-    uploadSkillDraftToContentStore: {
+    uploadSkillToSkillRepository: {
       kind: "invoke",
-      channel: "synapse:editor-scan:upload-skill-draft-to-content-store",
-      request: uploadSkillDraftToContentStoreRequestSchema,
-      response: uploadSkillDraftToContentStoreResultSchema,
-      handler: async (ctx, request: UploadSkillDraftToContentStoreRequest) => {
+      channel: "synapse:editor-scan:upload-skill-to-skill-repository",
+      request: uploadSkillToSkillRepositoryRequestSchema,
+      response: uploadSkillToSkillRepositoryResultSchema,
+      handler: async (ctx, request: UploadSkillToSkillRepositoryRequest) => {
         if (request.itemType !== "skill") {
           throw new Error("只有 Skill 可以上传到 Skill Repository。")
         }
@@ -232,10 +233,14 @@ export const editorScanIpcModule: IpcModule = {
         await assertTrustedEditorReadTarget(security, request.itemPath, {
           contentType: request.itemType,
           itemName: request.itemName,
-          operation: "upload-skill-draft-to-content-store",
+          operation: "upload-skill-to-skill-repository",
         }, "skill")
-        return contentStoreUploadService.uploadSkillDraftToContentStore(
-          request as EditorScanContentStoreUploadRequest,
+        return skillRepositoryUploadService.importLocal(
+          {
+            sourceDirectoryPath: (request as EditorScanSkillRepositoryUploadRequest).itemPath,
+            name: (request as EditorScanSkillRepositoryUploadRequest).itemName,
+            openInBrowser: false,
+          },
           security,
         )
       },

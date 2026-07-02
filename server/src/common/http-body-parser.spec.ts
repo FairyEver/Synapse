@@ -27,11 +27,6 @@ class BodyParserTestController {
     return { size: body.value?.length ?? 0 }
   }
 
-  @Post("/api/content-store/drafts")
-  receiveContentStoreDraft(@Body() body: { readonly value?: string }) {
-    return { size: body.value?.length ?? 0 }
-  }
-
   @Post("/api/skill-repositories/import")
   receiveSkillRepositoryImport(@Body() body: { readonly value?: string }) {
     return { size: body.value?.length ?? 0 }
@@ -79,18 +74,6 @@ describe("HTTP body parser configuration", () => {
       .expect(413)
 
     expect(authLoginCalls).toBe(0)
-  })
-
-  it("keeps large JSON enabled for content store draft uploads", async () => {
-    const value = "x".repeat(2 * 1024 * 1024)
-
-    const response = await request(app.getHttpServer())
-      .post("/api/content-store/drafts")
-      .set("content-type", "application/json")
-      .send({ value })
-      .expect(201)
-
-    expect(response.body).toEqual({ size: value.length })
   })
 
   it("keeps large JSON enabled for Skill Repository imports", async () => {

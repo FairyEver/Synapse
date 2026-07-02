@@ -1,12 +1,4 @@
 import type {
-  ContentStoreDetailDto,
-  ContentStoreDraftDto,
-  ContentStoreInstallSessionDto,
-  ContentStoreItemDto,
-  ContentStoreModerationStatus,
-  ContentStoreType,
-  ContentStoreVersionDto,
-  ContentStoreVisibility,
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
   DriveAnnotationCommentDto,
@@ -55,8 +47,6 @@ import type {
   SkillRepositoryForkResultDto,
   SkillRepositoryInstallSessionDto,
   SkillRepositoryItemDto,
-  SkillRepositoryLegacyContentRouteDto,
-  SkillRepositoryLegacyMigrationResultDto,
   SkillRepositoryListResultDto,
   SkillRepositoryPublicListInput,
   SkillRepositoryPublicPathDto,
@@ -222,7 +212,6 @@ export type AdminSkillRepositoryRow = {
   title: string
   visibility: SkillRepositoryVisibility
   status: SkillRepositoryStatus
-  legacyInstallCount: number
   owner: {
     id: string
     handle: string | null
@@ -372,7 +361,6 @@ type RequestOptions = RequestInit
 const consoleApiBasePath = '/api/console'
 const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
-const contentStoreApiBasePath = '/api/content-store'
 const skillRepositoryApiBasePath = '/api/skill-repositories'
 const driveApiBasePath = '/api/drive'
 const driveBrowserApiBasePath = '/api/drive/browser'
@@ -460,7 +448,6 @@ export function shouldNotifyAuthExpired(path: string, status: number) {
     !path.startsWith(adminApiBasePath) &&
     !path.startsWith(consoleApiBasePath) &&
     !path.startsWith(legacyDashboardApiBasePath) &&
-    !path.startsWith(contentStoreApiBasePath) &&
     !path.startsWith(skillRepositoryApiBasePath) &&
     !isProtectedDriveApiPath(path)
   ) {
@@ -533,74 +520,6 @@ export type WebhookDeliveryHistoryQuery = PaginationOptions & {
   user?: string
 }
 
-export type ContentStoreListQuery = PaginationOptions & {
-  type?: ContentStoreType
-  query?: string
-}
-
-export type AdminContentStoreListQuery = ContentStoreListQuery & {
-  visibility?: ContentStoreVisibility
-  moderationStatus?: ContentStoreModerationStatus
-}
-
-export type AdminSkillRepositoryListQuery = PaginationOptions & {
-  status?: SkillRepositoryStatus
-  query?: string
-}
-
-export type CreateContentStoreInstallSessionInput = {
-  deepLinkBase?: string
-}
-
-export type ContentStoreDraftFileInput = {
-  path: string
-  contentBase64: string
-  mimeType?: string | null
-}
-
-export type CreateContentStoreDraftInput =
-  | {
-      type: 'skill'
-      title: string
-      description?: string | null
-      localSourceFingerprint?: string | null
-      files: ContentStoreDraftFileInput[]
-    }
-  | {
-      type: 'rule' | 'prompt'
-      title: string
-      description?: string | null
-      body: string
-    }
-
-export type SaveContentStoreDraftInput =
-  | {
-      type: 'skill'
-      baseRevision: number
-      title: string
-      description?: string | null
-      files: ContentStoreDraftFileInput[]
-    }
-  | {
-      type: 'rule' | 'prompt'
-      baseRevision: number
-      title: string
-      description?: string | null
-      body: string
-    }
-
-export type PublishContentStoreDraftInput = {
-  baseRevision: number
-}
-
-type ContentStoreVisibilityInput = {
-  visibility: ContentStoreVisibility
-}
-
-type ContentStoreBooleanInput = {
-  value: boolean
-}
-
 function paginationSuffix(options: PaginationOptions) {
   const query = new URLSearchParams()
   if (options.page) query.set('page', String(options.page))
@@ -609,19 +528,6 @@ function paginationSuffix(options: PaginationOptions) {
   if (options.sortOrder) query.set('sortOrder', options.sortOrder)
   const value = query.toString()
   return value ? `?${value}` : ''
-}
-
-function contentStoreQuerySuffix(options: AdminContentStoreListQuery = {}) {
-  return querySuffix({
-    page: options.page,
-    pageSize: options.pageSize,
-    sortBy: options.sortBy,
-    sortOrder: options.sortOrder,
-    type: options.type,
-    query: options.query,
-    visibility: options.visibility,
-    moderationStatus: options.moderationStatus,
-  })
 }
 
 function adminSkillRepositoryQuerySuffix(options: AdminSkillRepositoryListQuery = {}) {
@@ -812,87 +718,6 @@ export const dashboardApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  listContentStoreItems: (options: ContentStoreListQuery = {}) =>
-    request<PaginatedResponse<ContentStoreItemDto>>(
-      `${contentStoreApiBasePath}/items${contentStoreQuerySuffix(options)}`
-    ),
-  listMyContentStoreItems: (options: ContentStoreListQuery = {}) =>
-    request<PaginatedResponse<ContentStoreItemDto>>(
-      `${contentStoreApiBasePath}/mine${contentStoreQuerySuffix(options)}`
-    ),
-  getContentStoreDetail: (id: string) =>
-    request<ContentStoreDetailDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}`
-    ),
-  getContentStoreDraft: (id: string) =>
-    request<ContentStoreDraftDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/draft`
-    ),
-  createContentStoreDraft: (input: CreateContentStoreDraftInput) =>
-    request<ContentStoreDraftDto>(`${contentStoreApiBasePath}/drafts`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  saveContentStoreDraft: (id: string, input: SaveContentStoreDraftInput) =>
-    request<ContentStoreDraftDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/draft`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(input),
-      }
-    ),
-  publishContentStoreDraft: (
-    id: string,
-    input: PublishContentStoreDraftInput
-  ) =>
-    request<ContentStoreVersionDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/publish`,
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }
-    ),
-  copyContentStoreItem: (id: string) =>
-    request<ContentStoreItemDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/copy`,
-      { method: 'POST' }
-    ),
-  setContentStoreVisibility: (
-    id: string,
-    visibility: ContentStoreVisibility
-  ) =>
-    request<ContentStoreItemDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/visibility`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ visibility } satisfies ContentStoreVisibilityInput),
-      }
-    ),
-  deleteContentStoreItem: (id: string) =>
-    request<{ ok: true }>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}`,
-      { method: 'DELETE' }
-    ),
-  createContentStoreInstallSession: (
-    id: string,
-    input: CreateContentStoreInstallSessionInput = {}
-  ) =>
-    request<ContentStoreInstallSessionDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/install-sessions`,
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }
-    ),
-  migrateLegacyContentStoreSkills: () =>
-    request<SkillRepositoryLegacyMigrationResultDto>(
-      `${skillRepositoryApiBasePath}/legacy/content-store/migrate-skills`,
-      { method: 'POST' }
-    ),
-  resolveLegacyContentStoreRoute: (id: string) =>
-    request<SkillRepositoryLegacyContentRouteDto>(
-      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/legacy-route`
-    ),
   listMySkillRepositories: () =>
     request<SkillRepositoryItemDto[]>(`${skillRepositoryApiBasePath}/mine`),
   listPublicSkillRepositories: (options: SkillRepositoryPublicListInput = {}) =>
@@ -1533,30 +1358,6 @@ export const adminApi = {
     request<AdminSkillRepositoryRow>(
       `${adminApiBasePath}/skill-repositories/${encodeURIComponent(id)}/removed`,
       { method: 'DELETE' }
-    ),
-  listContentStoreItems: (options: AdminContentStoreListQuery = {}) =>
-    request<PaginatedResponse<ContentStoreItemDto>>(
-      `${adminApiBasePath}/content-store/items${contentStoreQuerySuffix(options)}`
-    ),
-  getContentStoreDetail: (id: string) =>
-    request<ContentStoreDetailDto>(
-      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}`
-    ),
-  setContentStoreFeatured: (id: string, value: boolean) =>
-    request<ContentStoreItemDto>(
-      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}/featured`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ value } satisfies ContentStoreBooleanInput),
-      }
-    ),
-  setContentStoreRemoved: (id: string, value: boolean) =>
-    request<ContentStoreItemDto>(
-      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}/removed`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ value } satisfies ContentStoreBooleanInput),
-      }
     ),
 }
 

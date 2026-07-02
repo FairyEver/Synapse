@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   prepareLocalSkillSource: vi.fn(),
 }))
 
-vi.mock("../../../services/content-install-service", () => ({
-  contentInstallService: {
+vi.mock("../../../services/editor-install-service", () => ({
+  editorInstallService: {
     installSourceToEditor: mocks.installSourceToEditor,
   },
 }))

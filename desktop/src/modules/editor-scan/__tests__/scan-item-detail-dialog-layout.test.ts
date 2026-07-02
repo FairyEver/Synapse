@@ -198,7 +198,7 @@ describe("scan item detail dialog layout", () => {
     expect(source).not.toMatch(/bridge\?\.shell\.showItemInFolder\([^)]*\)\.catch/)
   })
 
-  it("offers content store upload only through the Skill detail action", async () => {
+  it("offers Skill Repository upload only through the Skill detail action", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",
@@ -206,20 +206,20 @@ describe("scan item detail dialog layout", () => {
 
     expect(source).toContain("上传到 Skill Repository")
     expect(source).toContain('item.type === "skill"')
-    expect(source).toContain("getUploadSkillToContentStoreDisabledReason")
-    expect(source).toContain("handleUploadSkillToContentStore")
+    expect(source).toContain("getUploadSkillToSkillRepositoryDisabledReason")
+    expect(source).toContain("handleUploadSkillToSkillRepository")
   })
 
-  it("opens Synapse after uploading a content store Skill draft", async () => {
+  it("opens Synapse after uploading to Skill Repository", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",
     )
 
-    expect(source).toContain("bridge.editorScan.uploadSkillDraftToContentStore")
-    expect(source).toContain("buildUploadSkillDraftRequest(item)")
-    expect(source).toContain("bridge.shell.openExternal(result.consoleEditUrl ?? result.dashboardEditUrl)")
-    expect(source).toContain("setContentStoreEditUrl(result.consoleEditUrl ?? result.dashboardEditUrl)")
+    expect(source).toContain("bridge.editorScan.uploadSkillToSkillRepository")
+    expect(source).toContain("buildUploadSkillToSkillRepositoryRequest(item)")
+    expect(source).toContain("bridge.shell.openExternal(result.managementUrl)")
+    expect(source).toContain("setSkillRepositoryManagementUrl(result.managementUrl)")
     expect(source).toContain("复制链接")
   })
 })

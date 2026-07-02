@@ -472,27 +472,6 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps content store install methods to narrow IPC channels", async () => {
-    const bridge = await loadPreloadBridge()
-
-    await bridge.contentStoreInstall.resolve("session-1")
-    await bridge.contentStoreInstall.prepare("session-1")
-    await bridge.contentStoreInstall.recordComplete("session-1")
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:content-store-install:resolve",
-      { sessionId: "session-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:content-store-install:prepare",
-      { sessionId: "session-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:content-store-install:record-complete",
-      { sessionId: "session-1" },
-    )
-  })
-
   it("maps installer preparation methods to narrow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
@@ -536,10 +515,10 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps editor scan content store upload to the narrow IPC channel", async () => {
+  it("maps editor scan Skill Repository upload to the narrow IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.editorScan.uploadSkillDraftToContentStore({
+    await bridge.editorScan.uploadSkillToSkillRepository({
       itemType: "skill",
       itemPath: "/tmp/skills/review",
       itemName: "review",
@@ -549,7 +528,7 @@ describe("preload bridge", () => {
     })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:editor-scan:upload-skill-draft-to-content-store",
+      "synapse:editor-scan:upload-skill-to-skill-repository",
       {
         itemType: "skill",
         itemPath: "/tmp/skills/review",

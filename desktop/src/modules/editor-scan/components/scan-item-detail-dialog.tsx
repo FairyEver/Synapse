@@ -68,11 +68,11 @@ import {
   formatQuickPublishSourceLabel,
 } from "../lib/quick-publish"
 import {
-  buildUploadSkillDraftErrorMessage,
-  buildUploadSkillDraftRequest,
-  buildUploadSkillDraftSuccessMessage,
-  getUploadSkillToContentStoreDisabledReason,
-} from "../lib/content-store-upload"
+  buildUploadSkillToSkillRepositoryErrorMessage,
+  buildUploadSkillToSkillRepositoryRequest,
+  buildUploadSkillToSkillRepositorySuccessMessage,
+  getUploadSkillToSkillRepositoryDisabledReason,
+} from "../lib/skill-repository-upload"
 import { EditorCopyDialog } from "./editor-copy-dialog"
 
 const logger = createRendererLogger("editor-scan")
@@ -121,8 +121,8 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const [isReinstallBusy, setIsReinstallBusy] = useState(false)
   const [isPublishChoiceOpen, setIsPublishChoiceOpen] = useState(false)
   const [isOverwriteBusy, setIsOverwriteBusy] = useState(false)
-  const [isContentStoreUploadBusy, setIsContentStoreUploadBusy] = useState(false)
-  const [contentStoreEditUrl, setContentStoreEditUrl] = useState<string | null>(null)
+  const [isSkillRepositoryUploadBusy, setIsSkillRepositoryUploadBusy] = useState(false)
+  const [skillRepositoryManagementUrl, setSkillRepositoryManagementUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -137,8 +137,8 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       setIsReinstallBusy(false)
       setIsPublishChoiceOpen(false)
       setIsOverwriteBusy(false)
-      setIsContentStoreUploadBusy(false)
-      setContentStoreEditUrl(null)
+      setIsSkillRepositoryUploadBusy(false)
+      setSkillRepositoryManagementUrl(null)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -497,11 +497,11 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     await publishAsNew()
   }, [item, publishAsNew])
 
-  const handleUploadSkillToContentStore = useCallback(async () => {
+  const handleUploadSkillToSkillRepository = useCallback(async () => {
     if (!item) return
-    const disabled = getUploadSkillToContentStoreDisabledReason(item)
+    const disabled = getUploadSkillToSkillRepositoryDisabledReason(item)
     if (disabled) return
-    setIsContentStoreUploadBusy(true)
+    setIsSkillRepositoryUploadBusy(true)
     setQuickPublishError(null)
 
     try {
@@ -510,10 +510,10 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         throw new Error("当前窗口无法读取本地内容。")
       }
 
-      const result = await bridge.editorScan.uploadSkillDraftToContentStore(
-        buildUploadSkillDraftRequest(item),
+      const result = await bridge.editorScan.uploadSkillToSkillRepository(
+        buildUploadSkillToSkillRepositoryRequest(item),
       )
-      success(buildUploadSkillDraftSuccessMessage())
+      success(buildUploadSkillToSkillRepositorySuccessMessage())
       logger.info("Skill Repository upload completed from scan detail.", {
         editorId: item.editorId,
         itemType: item.type,
@@ -522,7 +522,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       })
 
       try {
-        await bridge.shell.openExternal(result.consoleEditUrl ?? result.dashboardEditUrl)
+        await bridge.shell.openExternal(result.managementUrl)
       } catch (openError) {
         logger.warn("Skill Repository management URL open failed.", {
           editorId: item.editorId,
@@ -531,7 +531,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
           pathBasename: logSafeItemPath(item.path),
           scope: item.scope,
         })
-        setContentStoreEditUrl(result.consoleEditUrl ?? result.dashboardEditUrl)
+        setSkillRepositoryManagementUrl(result.managementUrl)
         notifyError("无法打开 Synapse。")
       }
     } catch (error) {
@@ -542,9 +542,9 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         pathBasename: logSafeItemPath(item.path),
         scope: item.scope,
       })
-      setQuickPublishError(buildUploadSkillDraftErrorMessage(error))
+      setQuickPublishError(buildUploadSkillToSkillRepositoryErrorMessage(error))
     } finally {
-      setIsContentStoreUploadBusy(false)
+      setIsSkillRepositoryUploadBusy(false)
     }
   }, [item, notifyError, success])
 
@@ -552,7 +552,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
 
   const canReinstall = item.source === "synapse" && Boolean(item.synapseContentId)
   const canPublishToRepo = item.source === "synapse" && Boolean(item.synapseContentId)
-  const uploadSkillToStoreDisabledReason = getUploadSkillToContentStoreDisabledReason(item)
+  const uploadSkillToRepositoryDisabledReason = getUploadSkillToSkillRepositoryDisabledReason(item)
 
   const metaEntries = item.metadata
     ? Object.entries(item.metadata).filter(([, v]) => v)
@@ -663,16 +663,16 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       </AlertDialog>
 
       <AlertDialog
-        open={contentStoreEditUrl !== null}
+        open={skillRepositoryManagementUrl !== null}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setContentStoreEditUrl(null)
+          if (!nextOpen) setSkillRepositoryManagementUrl(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Skill 仓库已保存</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="block break-all">{contentStoreEditUrl}</span>
+              <span className="block break-all">{skillRepositoryManagementUrl}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -680,10 +680,10 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault()
-                if (contentStoreEditUrl) {
-                  void navigator.clipboard.writeText(contentStoreEditUrl).then(() => {
+                if (skillRepositoryManagementUrl) {
+                  void navigator.clipboard.writeText(skillRepositoryManagementUrl).then(() => {
                     success("已复制到剪贴板。")
-                    setContentStoreEditUrl(null)
+                    setSkillRepositoryManagementUrl(null)
                   }).catch(() => {
                     notifyError("复制失败。")
                   })
@@ -844,10 +844,10 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                   ) : null}
                   {item.type === "skill" ? (
                     <DropdownMenuItem
-                      disabled={isContentStoreUploadBusy || uploadSkillToStoreDisabledReason !== null}
-                      onSelect={() => void handleUploadSkillToContentStore()}
+                      disabled={isSkillRepositoryUploadBusy || uploadSkillToRepositoryDisabledReason !== null}
+                      onSelect={() => void handleUploadSkillToSkillRepository()}
                     >
-                      {isContentStoreUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                      {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
                       上传到 Skill Repository
                     </DropdownMenuItem>
                   ) : null}

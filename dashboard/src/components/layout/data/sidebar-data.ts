@@ -26,11 +26,6 @@ const adminNavGroup = {
       icon: FolderKanban,
     },
     {
-      title: 'Legacy Content Store',
-      url: '/content-store-admin',
-      icon: Store,
-    },
-    {
       title: '系统概览',
       url: '/system',
       icon: LayoutDashboard,

@@ -74,7 +74,6 @@ import type {
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
-  ContentStoreDraftDto,
   SkillRepositoryDetailDto,
   SkillRepositoryForkInput,
   SkillRepositoryForkResultDto,
@@ -138,18 +137,6 @@ type PaginatedAccountResponse<T> = {
 }
 
 type AccountExternalUrlOpener = (url: string) => Promise<void>
-
-type CreateContentStoreSkillDraftInput = {
-  readonly type: "skill"
-  readonly title: string
-  readonly description?: string | null
-  readonly localSourceFingerprint: string
-  readonly files: Array<{
-    readonly path: string
-    readonly contentBase64: string
-    readonly mimeType?: string | null
-  }>
-}
 
 type AccountServiceDeps = {
   namespace?: EncryptedJsonNamespace<PersistedAccount>
@@ -455,20 +442,6 @@ export class AccountService {
         return webhooks
       }
     }
-  }
-
-  async createContentStoreSkillDraft(input: CreateContentStoreSkillDraftInput): Promise<ContentStoreDraftDto> {
-    return this.requestAuthenticatedJson<ContentStoreDraftDto>("POST", `${apiBaseUrl()}/content-store/drafts`, {
-      type: "skill",
-      title: input.title,
-      description: input.description ?? null,
-      localSourceFingerprint: input.localSourceFingerprint,
-      files: input.files.map((file) => ({
-        path: file.path,
-        contentBase64: file.contentBase64,
-        mimeType: file.mimeType ?? null,
-      })),
-    }, "商店草稿保存失败。")
   }
 
   async listSkillRepositories(): Promise<SkillRepositoryItemDto[]> {

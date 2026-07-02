@@ -8,9 +8,9 @@ import {
 
 describe("isSynapseProtocolUrl", () => {
   it("accepts protocol arguments with case-insensitive schemes", () => {
-    expect(isSynapseProtocolUrl("synapse://content-install?session=session-1")).toBe(true)
+    expect(isSynapseProtocolUrl("synapse://skill-install?session=session-1")).toBe(true)
     expect(isSynapseProtocolUrl("Synapse://auth/desktop/callback?code=auth-code")).toBe(true)
-    expect(isSynapseProtocolUrl("SYNAPSE://content-install?session=session-1")).toBe(true)
+    expect(isSynapseProtocolUrl("SYNAPSE://skill-install?session=session-1")).toBe(true)
     expect(isSynapseProtocolUrl("/Electron")).toBe(false)
   })
 })
@@ -18,7 +18,6 @@ describe("isSynapseProtocolUrl", () => {
 describe("createProtocolUrlRouter", () => {
   it("routes auth callbacks and valid install URLs while draining multiple pending URLs", async () => {
     const handleAuthCallback = vi.fn(async () => undefined)
-    const openInstallWindow = vi.fn(async () => undefined)
     const openSkillRepositoryInstallWindow = vi.fn(async () => undefined)
     const focusMainWindow = vi.fn()
     const logger = createLogger()
@@ -26,22 +25,19 @@ describe("createProtocolUrlRouter", () => {
       focusMainWindow,
       handleAuthCallback,
       logger,
-      openInstallWindow,
       openSkillRepositoryInstallWindow,
     }, [
       "synapse://auth/desktop/callback?code=auth-code",
-      "synapse://content-install?session=session-1",
       "synapse://skill-install?session=skill-session-1",
-      "synapse://content-install?session=",
+      "synapse://skill-install?session=",
     ])
 
     const authCallbackCount = await router.start()
 
     expect(authCallbackCount).toBe(1)
     expect(handleAuthCallback).toHaveBeenCalledWith("synapse://auth/desktop/callback?code=auth-code")
-    expect(openInstallWindow).toHaveBeenCalledWith({ session: "session-1" })
     expect(openSkillRepositoryInstallWindow).toHaveBeenCalledWith({ session: "skill-session-1" })
-    expect(logger.warn).toHaveBeenCalledWith("Ignored invalid content store install URL.")
+    expect(logger.warn).toHaveBeenCalledWith("Ignored invalid skill repository install URL.")
     expect(focusMainWindow).toHaveBeenCalledTimes(2)
   })
 
@@ -53,13 +49,12 @@ describe("createProtocolUrlRouter", () => {
         calls.push("auth")
       }),
       logger: createLogger(),
-      openInstallWindow: vi.fn(async () => {
+      openSkillRepositoryInstallWindow: vi.fn(async () => {
         calls.push("install")
       }),
-      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
     }, [
       "synapse://auth/desktop/callback?code=auth-code",
-      "synapse://content-install?session=session-1",
+      "synapse://skill-install?session=session-1",
     ])
 
     const authCallbackCount = await router.start(async (handledAuthCallbacks) => {
@@ -82,11 +77,10 @@ describe("createProtocolUrlRouter", () => {
         calls.push("auth")
       }),
       logger: createLogger(),
-      openInstallWindow: vi.fn(async () => {
+      openSkillRepositoryInstallWindow: vi.fn(async () => {
         calls.push("install")
       }),
-      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
-    }, ["synapse://content-install?session=session-1"])
+    }, ["synapse://skill-install?session=session-1"])
 
     const startPromise = router.start(async () => {
       calls.push("prepare:start")
@@ -109,33 +103,31 @@ describe("createProtocolUrlRouter", () => {
       focusMainWindow,
       handleAuthCallback: vi.fn(async () => undefined),
       logger,
-      openInstallWindow: vi.fn(async () => undefined),
       openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
-    }, ["synapse://content-install/%", "synapse://skill-install/%", "synapse://unknown"])
+    }, ["synapse://skill-install/%", "synapse://unknown"])
 
     await router.start()
 
-    expect(logger.warn).toHaveBeenCalledTimes(3)
+    expect(logger.warn).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenCalledWith("Ignored invalid skill repository install URL.")
-    expect(focusMainWindow).toHaveBeenCalledTimes(3)
+    expect(focusMainWindow).toHaveBeenCalledTimes(2)
   })
 
   it("opens install URLs received after startup without focusing the main window", async () => {
-    const openInstallWindow = vi.fn(async () => undefined)
+    const openSkillRepositoryInstallWindow = vi.fn(async () => undefined)
     const focusMainWindow = vi.fn()
     const router = createProtocolUrlRouter({
       focusMainWindow,
       handleAuthCallback: vi.fn(async () => undefined),
       logger: createLogger(),
-      openInstallWindow,
-      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
+      openSkillRepositoryInstallWindow,
     })
 
     await router.start()
-    router.enqueue("synapse://content-install?session=session-2")
+    router.enqueue("synapse://skill-install?session=session-2")
     await router.drain()
 
-    expect(openInstallWindow).toHaveBeenCalledWith({ session: "session-2" })
+    expect(openSkillRepositoryInstallWindow).toHaveBeenCalledWith({ session: "session-2" })
     expect(focusMainWindow).not.toHaveBeenCalled()
   })
 
@@ -149,7 +141,6 @@ describe("createProtocolUrlRouter", () => {
         throw error
       }),
       logger,
-      openInstallWindow: vi.fn(async () => undefined),
       openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
     }, ["synapse://auth/desktop/callback?code=auth-code"])
 
@@ -164,24 +155,18 @@ describe("createProtocolUrlRouter", () => {
       focusMainWindow: vi.fn(),
       handleAuthCallback: vi.fn(async () => undefined),
       logger: createLogger(),
-      openInstallWindow: vi.fn(async () => undefined),
       openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
     }, initialUrls)
 
     expect(
-      createRouter(["synapse://content-install?session=session-1"]).shouldCreateMainWindowBeforeStart(),
+      createRouter(["synapse://skill-install?session=session-1"]).shouldCreateMainWindowBeforeStart(),
     ).toBe(false)
     expect(createRouter([
-      "synapse://content-install?session=session-1",
-      "synapse://content-install?session=session-2",
-    ]).shouldCreateMainWindowBeforeStart()).toBe(false)
-    expect(createRouter([
       "synapse://skill-install?session=session-1",
-      "synapse://content-install?session=session-2",
+      "synapse://skill-install?session=session-2",
     ]).shouldCreateMainWindowBeforeStart()).toBe(false)
     expect(createRouter([]).shouldCreateMainWindowBeforeStart()).toBe(true)
     expect(createRouter(["synapse://auth/desktop/callback?code=auth-code"]).shouldCreateMainWindowBeforeStart()).toBe(true)
-    expect(createRouter(["synapse://content-install?session="]).shouldCreateMainWindowBeforeStart()).toBe(true)
     expect(createRouter(["synapse://skill-install?session="]).shouldCreateMainWindowBeforeStart()).toBe(true)
     expect(createRouter(["synapse://unknown"]).shouldCreateMainWindowBeforeStart()).toBe(true)
   })
@@ -192,7 +177,7 @@ describe("shouldFocusMainForSecondInstance", () => {
     expect(shouldFocusMainForSecondInstance(["/Electron"])).toBe(true)
     expect(shouldFocusMainForSecondInstance([
       "/Electron",
-      "synapse://content-install?session=session-1",
+      "synapse://skill-install?session=session-1",
     ])).toBe(false)
     expect(shouldFocusMainForSecondInstance([
       "/Electron",
@@ -200,7 +185,7 @@ describe("shouldFocusMainForSecondInstance", () => {
     ])).toBe(false)
     expect(shouldFocusMainForSecondInstance([
       "/Electron",
-      "synapse://content-install?session=",
+      "synapse://skill-install?session=",
     ])).toBe(false)
     expect(shouldFocusMainForSecondInstance([
       "/Electron",

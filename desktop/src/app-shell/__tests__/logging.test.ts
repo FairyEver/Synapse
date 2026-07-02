@@ -67,13 +67,13 @@ describe("renderer logging", () => {
     expect(JSON.stringify(logWrite.mock.calls)).not.toContain("sk-secret")
   })
 
-  it("redacts content store install session IDs before writing renderer logs", () => {
-    const logger = createRendererLogger("content-store-install.window")
+  it("redacts install session IDs before writing renderer logs", () => {
+    const logger = createRendererLogger("skill-repository-install.window")
 
-    logger.error("Failed to prepare content store install.", {
+    logger.error("Failed to prepare Skill Repository install.", {
       sessionId: "install-session-secret",
       installSessionId: "install-session-secret-2",
-      contentStoreInstallSessionId: "install-session-secret-3",
+      skillRepositoryInstallSessionId: "install-session-secret-3",
       nested: {
         session_id: "install-session-secret-4",
       },
@@ -81,12 +81,12 @@ describe("renderer logging", () => {
 
     expect(logWrite).toHaveBeenCalledWith({
       level: "error",
-      category: "content-store-install.window",
-      message: "Failed to prepare content store install.",
+      category: "skill-repository-install.window",
+      message: "Failed to prepare Skill Repository install.",
       details: expect.objectContaining({
         sessionId: "[redacted]",
         installSessionId: "[redacted]",
-        contentStoreInstallSessionId: "[redacted]",
+        skillRepositoryInstallSessionId: "[redacted]",
         nested: {
           session_id: "[redacted]",
         },

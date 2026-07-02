@@ -32,7 +32,7 @@ const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
-const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name", "legacyInstallCount"] as const
+const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)

@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
     restoreContent: vi.fn(),
     updateContent: vi.fn(),
   },
-  contentInstallService: {
+  editorInstallService: {
     installToEditor: vi.fn(),
   },
   contentService: {
@@ -72,9 +72,9 @@ vi.mock("../../../services/content-download-service", () => ({
   contentDownloadService: { download: vi.fn() },
 }))
 
-vi.mock("../../../services/content-install-service", () => ({
-  contentInstallService: {
-    installToEditor: mocks.contentInstallService.installToEditor,
+vi.mock("../../../services/editor-install-service", () => ({
+  editorInstallService: {
+    installToEditor: mocks.editorInstallService.installToEditor,
     readEditorInstallFormValues: vi.fn(),
   },
 }))
@@ -184,7 +184,7 @@ describe("contentIpcModule sync ownership", () => {
       status: "saved",
       pendingPushCount: 1,
     })
-    mocks.contentInstallService.installToEditor.mockResolvedValue({ installed: true })
+    mocks.editorInstallService.installToEditor.mockResolvedValue({ installed: true })
     mocks.contentService.getAttachmentFile.mockResolvedValue({
       content: "export default {}",
       kind: "text",
@@ -753,7 +753,7 @@ describe("contentIpcModule sync ownership", () => {
     } as never)
 
     expect(result).toEqual({ installed: true })
-    expect(mocks.contentInstallService.installToEditor).toHaveBeenCalled()
+    expect(mocks.editorInstallService.installToEditor).toHaveBeenCalled()
     expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
     expect(getEvents("install-status.changed")).toHaveLength(0)
     expect(mocks.logger.warn).toHaveBeenCalledWith(

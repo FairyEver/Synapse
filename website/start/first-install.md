@@ -1,6 +1,6 @@
 # 安装第一个内容
 
-<!-- Sources: desktop/src/modules/content/components/content-install-dialog.tsx; desktop/electron/services/editor-install-service.ts; website/guide/editors.md -->
+<!-- Sources: desktop/src/modules/content/components/install-dialog.tsx; desktop/electron/services/editor-install-service.ts; website/guide/editors.md -->
 
 ## 选择内容类型
 

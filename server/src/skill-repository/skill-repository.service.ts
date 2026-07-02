@@ -22,7 +22,6 @@ import {
   type SkillRepositoryForkResultDto,
   type SkillRepositoryInstallSessionDto,
   type SkillRepositoryItemDto,
-  type SkillRepositoryLegacyContentRouteDto,
   type SkillRepositoryListResultDto,
   type SkillRepositoryPublicListInput,
   type SkillRepositoryPublicPathDto,
@@ -32,9 +31,8 @@ import {
   type SkillRepositoryUpdateInput,
   type SkillRepositoryVisibility,
 } from "@synapse/shared"
-import { CONTENT_STORE_STORAGE_PORT } from "../content-store/content-store.constants"
-import type { ContentStoreStoragePort } from "../content-store/content-store-storage"
 import { PrismaService } from "../prisma/prisma.service"
+import { SKILL_REPOSITORY_STORAGE_PORT } from "./skill-repository.constants"
 import {
   isSkillRepositoryRootPath,
   normalizeSkillRepositoryFile,
@@ -43,6 +41,7 @@ import {
   type NormalizedSkillRepositoryFile,
 } from "./skill-repository-file-rules"
 import { buildSkillRepositoryInstallPackage } from "./skill-repository-install-package"
+import type { SkillRepositoryStoragePort } from "./skill-repository-storage"
 import type { SkillRepositoryImportRequest } from "./skill-repository.types"
 
 const skillRepositoryInstallSessionTtlSeconds = 5 * 60
@@ -63,8 +62,6 @@ interface SkillRepositoryRow {
   readonly visibility: string
   readonly status: string
   readonly forkedFromRepositoryId: string | null
-  readonly legacyContentStoreItemId: string | null
-  readonly legacyInstallCount: number
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly lastSyncedAt: Date | null
@@ -108,19 +105,13 @@ interface SkillRepositoryInstallSessionRow {
   readonly repository: SkillRepositoryRow
 }
 
-interface LegacyContentStoreItemRouteRow {
-  readonly id: string
-  readonly type: string
-  readonly ownerUserId: string
-}
-
 @Injectable()
 export class SkillRepositoryService {
   private readonly logger = new Logger(SkillRepositoryService.name)
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CONTENT_STORE_STORAGE_PORT) private readonly storage: ContentStoreStoragePort,
+    @Inject(SKILL_REPOSITORY_STORAGE_PORT) private readonly storage: SkillRepositoryStoragePort,
   ) {}
 
   async importRepository(userId: string, input: SkillRepositoryImportRequest): Promise<SkillRepositoryDetailDto> {
@@ -240,43 +231,6 @@ export class SkillRepositoryService {
     }) as SkillRepositoryRow | null
     if (!repository) throw new NotFoundException("Skill 仓库不存在。")
     return repositoryDetailDto(repository)
-  }
-
-  async resolveLegacyContentRoute(
-    userId: string,
-    contentId: string,
-    publicAppUrl: string,
-  ): Promise<SkillRepositoryLegacyContentRouteDto> {
-    const item = await this.prisma.contentStoreItem.findUnique({
-      where: { id: contentId },
-      select: { id: true, type: true, ownerUserId: true },
-    }) as LegacyContentStoreItemRouteRow | null
-    if (!item) return { status: "not_found", message: "旧内容不存在。" }
-
-    if (item.type === "rule" || item.type === "prompt") {
-      return {
-        status: "retired",
-        contentType: item.type,
-        message: item.type === "rule" ? "云端 Rule 商店已停止维护。" : "云端 Prompt 商店已停止维护。",
-      }
-    }
-
-    const repository = await this.prisma.skillRepository.findUnique({
-      where: { legacyContentStoreItemId: contentId },
-      include: { owner: { select: { id: true, handle: true, displayName: true } } },
-    }) as SkillRepositoryRow | null
-    if (!repository || !canReadRepository(userId, repository)) {
-      return { status: "not_found", message: "旧 Skill 尚未迁移。" }
-    }
-
-    return {
-      status: "migrated",
-      repositoryId: repository.id,
-      managementUrl: buildSkillRepositoryManagementUrl(publicAppUrl, repository.id),
-      publicUrl: repository.visibility === "public" && repository.owner?.handle
-        ? buildSkillRepositoryPublicUrl(publicAppUrl, repository.owner.handle, repository.name)
-        : null,
-    }
   }
 
   async listPublic(input: SkillRepositoryPublicListInput = {}): Promise<SkillRepositoryListResultDto> {
@@ -1090,8 +1044,6 @@ function repositoryItemDto(repository: SkillRepositoryRow): SkillRepositoryItemD
       displayName: repository.owner?.displayName ?? null,
     },
     forkedFromRepositoryId: repository.forkedFromRepositoryId,
-    legacyContentStoreItemId: repository.legacyContentStoreItemId,
-    legacyInstallCount: repository.legacyInstallCount,
     createdAt: repository.createdAt.toISOString(),
     updatedAt: repository.updatedAt.toISOString(),
     lastSyncedAt: repository.lastSyncedAt?.toISOString() ?? null,

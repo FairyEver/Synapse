@@ -13,7 +13,7 @@ import type {
 import type { SynapseInstallerSource } from "@/types/installers"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
 import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installer-flow"
-import { ContentStoreInstallLoading } from "@/modules/content-store-install/content-store-install-loading"
+import { SkillRepositoryInstallLoading } from "./skill-repository-install-loading"
 import { useSkillRepositoryInstall } from "./use-skill-repository-install"
 
 function SkillRepositoryInstallWindowPage({ request }: { request: SynapseSkillRepositoryInstallWindowRequest }) {
@@ -83,7 +83,7 @@ function SkillRepositoryInstallWindowPage({ request }: { request: SynapseSkillRe
           {state.status === "loading" ? <Spinner className="size-5 text-muted-foreground" /> : null}
         </header>
 
-        {state.status === "loading" ? <ContentStoreInstallLoading /> : null}
+        {state.status === "loading" ? <SkillRepositoryInstallLoading /> : null}
 
         {state.status === "unauthenticated" ? (
           <InstallStateMessage

@@ -74,10 +74,6 @@ model User {
   driveAnnotationComments      DriveAnnotationComment[]
   publicAssets                 PublicAsset[]
   driveSites                   DriveSite[]
-  contentStoreItems            ContentStoreItem[]
-  contentStoreDrafts           ContentStoreDraft[]
-  contentStoreInstallSessions  ContentStoreInstallSession[]
-  contentStoreInstallEvents    ContentStoreInstallEvent[]
   userHandleRedirects          UserHandleRedirect[]
   skillRepositories            SkillRepository[]
   skillRepositoryInstallSessions SkillRepositoryInstallSession[]
@@ -690,126 +686,6 @@ model AuditLog {
   @@index([createdAt])
 }
 
-model ContentStoreItem {
-  id                     String                       @id @default(cuid())
-  type                   String                       @db.VarChar(16)
-  title                  String                       @db.VarChar(160)
-  description            String?
-  ownerUserId            String
-  owner                  User                         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  visibility             String                       @db.VarChar(16)
-  moderationStatus       String                       @db.VarChar(16)
-  featured               Boolean                      @default(false)
-  copiedFromContentId    String?
-  copiedFromVersionId    String?
-  localSourceFingerprint String?                      @db.VarChar(128)
-  latestVersionId        String?
-  createdAt              DateTime                     @default(now())
-  updatedAt              DateTime                     @updatedAt
-  versions               ContentStoreVersion[]
-  drafts                 ContentStoreDraft[]
-  installSessions        ContentStoreInstallSession[]
-  installEvents          ContentStoreInstallEvent[]
-
-  @@index([type, visibility, moderationStatus, featured, updatedAt])
-  @@index([ownerUserId, type, updatedAt])
-  @@index([ownerUserId, localSourceFingerprint])
-}
-
-model ContentStoreDraft {
-  id            String             @id @default(cuid())
-  itemId        String
-  item          ContentStoreItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  ownerUserId   String
-  owner         User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  baseVersionId String?
-  revision      Int                @default(1)
-  title         String             @db.VarChar(160)
-  description   String?
-  body          String?
-  files         ContentStoreFile[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-
-  @@unique([itemId])
-  @@index([ownerUserId, updatedAt])
-}
-
-model ContentStoreVersion {
-  id              String                       @id @default(cuid())
-  itemId          String
-  item            ContentStoreItem             @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  versionNumber   Int
-  title           String                       @db.VarChar(160)
-  description     String?
-  body            String?
-  packageKey      String?                      @unique
-  packageSha256   String?                      @db.VarChar(64)
-  packageSize     BigInt?
-  searchText      String
-  files           ContentStoreFile[]
-  installSessions ContentStoreInstallSession[]
-  installEvents   ContentStoreInstallEvent[]
-  createdAt       DateTime                     @default(now())
-
-  @@unique([id, itemId])
-  @@unique([itemId, versionNumber])
-  @@index([itemId, createdAt])
-}
-
-model ContentStoreFile {
-  id         String               @id @default(cuid())
-  draftId    String?
-  draft      ContentStoreDraft?   @relation(fields: [draftId], references: [id], onDelete: Cascade)
-  versionId  String?
-  version    ContentStoreVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  path       String               @db.VarChar(1024)
-  size       BigInt
-  sha256     String               @db.VarChar(64)
-  kind       String               @db.VarChar(16)
-  mimeType   String?              @db.VarChar(255)
-  storageKey String?
-  text       String?
-  createdAt  DateTime             @default(now())
-
-  @@unique([draftId, path])
-  @@unique([versionId, path])
-  @@index([sha256])
-}
-
-model ContentStoreInstallSession {
-  id         String              @id @default(cuid())
-  userId     String
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemId     String
-  item       ContentStoreItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  versionId  String
-  version    ContentStoreVersion @relation(fields: [versionId, itemId], references: [id, itemId], onDelete: Cascade)
-  type       String              @db.VarChar(16)
-  status     String              @db.VarChar(16)
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime            @default(now())
-
-  @@index([userId, status, expiresAt])
-  @@index([itemId, versionId])
-}
-
-model ContentStoreInstallEvent {
-  id               String              @id @default(cuid())
-  userId           String
-  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemId           String
-  item             ContentStoreItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  versionId        String
-  version          ContentStoreVersion @relation(fields: [versionId, itemId], references: [id, itemId], onDelete: Cascade)
-  clientInstanceId String              @db.VarChar(120)
-  createdAt        DateTime            @default(now())
-
-  @@unique([userId, itemId, versionId, clientInstanceId])
-  @@index([itemId, versionId])
-}
-
 model UserHandleRedirect {
   id        String   @id @default(cuid())
   userId    String
@@ -833,8 +709,6 @@ model SkillRepository {
   forkedFromRepository     SkillRepository?              @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
   forks                    SkillRepository[]             @relation("SkillRepositoryForks")
   lastSyncedAt             DateTime?
-  legacyContentStoreItemId String?                       @unique
-  legacyInstallCount       Int                           @default(0)
   createdAt                DateTime                      @default(now())
   updatedAt                DateTime                      @updatedAt
   files                    SkillRepositoryFile[]
@@ -847,7 +721,6 @@ model SkillRepository {
   @@index([visibility, status, updatedAt])
   @@index([ownerUserId, updatedAt])
   @@index([forkedFromRepositoryId])
-  @@index([legacyContentStoreItemId])
 }
 
 model SkillRepositoryNameRedirect {

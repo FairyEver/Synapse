@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, Optional, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
-import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
-import { SkillRepositoryLegacyMigrationService } from "./skill-repository-legacy-migration.service"
 import { SkillRepositoryService } from "./skill-repository.service"
 
 const fileSchema = z.object({
@@ -75,10 +73,7 @@ const installCompleteSchema = z.object({
 @UseGuards(UserAuthGuard)
 @Controller("/api/skill-repositories")
 export class SkillRepositoryController {
-  constructor(
-    private readonly service: SkillRepositoryService,
-    @Optional() private readonly legacyMigration?: SkillRepositoryLegacyMigrationService,
-  ) {}
+  constructor(private readonly service: SkillRepositoryService) {}
 
   @Get()
   listPublic(@Query() query: unknown) {
@@ -89,21 +84,6 @@ export class SkillRepositoryController {
   @Get("/mine")
   listMine(@Req() request: AuthenticatedUserRequest) {
     return this.service.listMine(request.user!.id)
-  }
-
-  @Post("/legacy/content-store/migrate-skills")
-  migrateLegacyContentStoreSkills(@Req() request: AuthenticatedUserRequest) {
-    if (!this.legacyMigration) throw new Error("Skill Repository legacy migration service is not configured.")
-    return this.legacyMigration.migrateOwnerSkills(request.user!.id)
-  }
-
-  @Get("/legacy/content-store/:contentId/route")
-  resolveLegacyContentRoute(@Param("contentId") contentId: string, @Req() request: AuthenticatedUserRequest) {
-    return this.service.resolveLegacyContentRoute(
-      request.user!.id,
-      contentId,
-      resolveRequestPublicAppUrl(request),
-    )
   }
 
   @Get("/by-path/:ownerHandle/:repositoryName")
@@ -288,8 +268,4 @@ function isStrictBase64(value: string): boolean {
 
 function safeDownloadFilename(value: string): string {
   return value.replace(/[^\x20-\x7E]|["\\;,\r\n]/gu, "_")
-}
-
-function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
-  return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }

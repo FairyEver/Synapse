@@ -142,7 +142,7 @@ describe("app event bootstrap", () => {
 
     attachSecondInstanceFocus({ current: window as never }, () => false)
     const handler = electronMock.app.on.mock.calls.find(([event]) => event === "second-instance")?.[1]
-    handler?.({}, ["/Electron", "synapse://content-install?session=session-1"])
+    handler?.({}, ["/Electron", "synapse://skill-install?session=session-1"])
 
     expect(window.focus).not.toHaveBeenCalled()
   })
@@ -155,11 +155,11 @@ describe("app event bootstrap", () => {
     handler?.({}, [
       "/Electron",
       "synapse://auth/desktop/callback?code=auth-code",
-      "synapse://content-install?session=session-1",
+      "synapse://skill-install?session=session-1",
     ])
 
     expect(handleUrl).toHaveBeenNthCalledWith(1, "synapse://auth/desktop/callback?code=auth-code")
-    expect(handleUrl).toHaveBeenNthCalledWith(2, "synapse://content-install?session=session-1")
+    expect(handleUrl).toHaveBeenNthCalledWith(2, "synapse://skill-install?session=session-1")
   })
 
   it("routes protocol URLs with case-insensitive schemes from a second-instance launch", () => {
@@ -170,11 +170,11 @@ describe("app event bootstrap", () => {
     handler?.({}, [
       "/Electron",
       "Synapse://auth/desktop/callback?code=auth-code",
-      "SYNAPSE://content-install?session=session-1",
+      "SYNAPSE://skill-install?session=session-1",
     ])
 
     expect(handleUrl).toHaveBeenNthCalledWith(1, "Synapse://auth/desktop/callback?code=auth-code")
-    expect(handleUrl).toHaveBeenNthCalledWith(2, "SYNAPSE://content-install?session=session-1")
+    expect(handleUrl).toHaveBeenNthCalledWith(2, "SYNAPSE://skill-install?session=session-1")
   })
 
   it("runs the show-or-create callback when the app is activated", () => {

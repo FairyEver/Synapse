@@ -46,11 +46,6 @@ If the server returns `USER_HANDLE_REQUIRED`, ask the user to set a username in 
 
 Public URLs use `/skills/<ownerHandle>/<repositoryName>`. If a user or repository is renamed, the web app can redirect old paths where the server still has redirect records.
 
-## Legacy Content Store
-
-Old cloud Content Store Skill links may redirect to Skill Repository after migration. Do not create new cloud Prompt or Rule store entries. For Skills, use `app_skill_repository_import_local` or `app_skill_repository_update_local`.
-
-If a user asks about an old Content Store Skill, prefer opening the migrated Skill Repository page. If a server response says the old item is a retired Prompt or Rule, explain that cloud Prompt/Rule sharing has been retired and do not try to migrate it into Skill Repository.
 
 Migrated legacy Skill copies can keep their fork source when the source Skill was also migrated. If the legacy source was not migrated, the copied Skill remains usable as an independent repository.
 
