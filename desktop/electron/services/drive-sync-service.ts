@@ -160,6 +160,8 @@ const LOCAL_ROOT_INACCESSIBLE_ERROR = "本地路径无法访问。"
 const REMOTE_ROOT_MISSING_ERROR = "云端同步根目录不存在。"
 const REMOTE_RESYNC_REQUIRED_ERROR = "远端变更记录已过期，需要重新建立同步绑定后再同步。"
 const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
+const SNAPSHOT_GLOBAL_OPERATION_LIMIT = 20
+const SNAPSHOT_BINDING_OPERATION_LIMIT = 20
 
 class TypedDriveSyncEventEmitter extends EventEmitter {
   override on<K extends keyof DriveSyncServiceEvents>(
@@ -205,9 +207,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       .filter((conflict) => conflict.status === "open")
       .sort(compareCreatedAsc)
       .map(toConflictDto)
-    const operations = (await deps.operations.list())
-      .sort(compareUpdatedDesc)
-      .slice(0, 20)
+    const operationEntries = (await deps.operations.list()).sort(compareUpdatedDesc)
+    const operations = selectSnapshotOperations(operationEntries, bindingEntries)
       .map(toOperationDto)
 
     return {
@@ -1797,6 +1798,28 @@ function toOperationDto(entry: DriveSyncOperationEntryV1): DriveSyncOperationDto
     message: sanitizeNullableDriveSyncMessage(entry.message),
     updatedAt: entry.updatedAt,
   }
+}
+
+function selectSnapshotOperations(
+  operationEntries: readonly DriveSyncOperationEntryV1[],
+  bindingEntries: readonly DriveSyncBindingEntryV1[],
+): readonly DriveSyncOperationEntryV1[] {
+  const bindingIds = new Set(bindingEntries.map((binding) => binding.id))
+  const selectedById = new Map<string, DriveSyncOperationEntryV1>()
+  for (const operation of operationEntries.slice(0, SNAPSHOT_GLOBAL_OPERATION_LIMIT)) {
+    selectedById.set(operation.id, operation)
+  }
+
+  const selectedCountByBinding = new Map<string, number>()
+  for (const operation of operationEntries) {
+    if (!bindingIds.has(operation.bindingId)) continue
+    const selectedCount = selectedCountByBinding.get(operation.bindingId) ?? 0
+    if (selectedCount >= SNAPSHOT_BINDING_OPERATION_LIMIT) continue
+    selectedById.set(operation.id, operation)
+    selectedCountByBinding.set(operation.bindingId, selectedCount + 1)
+  }
+
+  return Array.from(selectedById.values()).sort(compareUpdatedDesc)
 }
 
 function toConflictDto(entry: DriveSyncConflictEntryV1): DriveSyncConflictDto {

@@ -554,6 +554,72 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("keeps recent operations for each binding in snapshots", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const targetBinding = await service.createBinding({
+      driveItemId: "target-drive-item",
+      driveItemName: "Target Docs",
+      kind: "folder",
+      localPath: "/Users/me/target-docs",
+      deferWatcher: true,
+    })
+    const noisyBinding = await service.createBinding({
+      driveItemId: "noisy-drive-item",
+      driveItemName: "Noisy Docs",
+      kind: "folder",
+      localPath: "/Users/me/noisy-docs",
+      deferWatcher: true,
+    })
+    const createOperation = (
+      id: string,
+      bindingId: string,
+      relativePath: string,
+      updatedAt: string,
+    ): DriveSyncOperationEntryV1 => ({
+      id,
+      schemaVersion: 1,
+      bindingId,
+      kind: "download",
+      status: "succeeded",
+      driveItemId: null,
+      relativePath,
+      localPath: null,
+      remotePathHint: null,
+      message: null,
+      createdAt: updatedAt,
+      updatedAt,
+      startedAt: null,
+      completedAt: updatedAt,
+    })
+
+    await harness.operations.upsert(createOperation(
+      "target-operation",
+      targetBinding.id,
+      "target.md",
+      "2026-06-28T00:00:00.000Z",
+    ))
+    for (let index = 1; index <= 20; index += 1) {
+      const updatedAt = new Date(Date.UTC(2026, 5, 28, 0, index, 0)).toISOString()
+      await harness.operations.upsert(createOperation(
+        `noisy-operation-${index}`,
+        noisyBinding.id,
+        `noisy-${index}.md`,
+        updatedAt,
+      ))
+    }
+
+    const snapshot = await service.getSnapshot()
+
+    expect(snapshot.operations).toHaveLength(21)
+    expect(snapshot.operations.filter((operation) => operation.bindingId === targetBinding.id)).toEqual([
+      expect.objectContaining({
+        id: "target-operation",
+        relativePath: "target.md",
+      }),
+    ])
+  })
+
   it("redacts drive sync error messages before storing and exposing them", async () => {
     const harness = createHarness()
     const service = createDriveSyncService(harness.deps)
