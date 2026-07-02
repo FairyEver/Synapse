@@ -92,17 +92,15 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const binding = input.binding
     if (binding.kind === "file") return scanFileBinding(binding, input.baseline)
 
+    const activeBaseline = input.baseline.filter((entry) => entry.deletedAt === null)
+    const baselineByPath = new Map(activeBaseline.map((entry) => [entry.relativePath, entry] as const))
     const localEntries = await scanDriveSyncLocalTree({
       rootPath: binding.localPath,
       rules: binding.excludeRules,
       hashFiles: true,
+      hashCache: localSnapshotHashCache(activeBaseline),
     })
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry] as const))
-    const baselineByPath = new Map(
-      input.baseline
-        .filter((entry) => entry.deletedAt === null)
-        .map((entry) => [entry.relativePath, entry] as const),
-    )
     const changes: DriveSyncLocalChange[] = []
 
     for (const local of localEntries) {
@@ -250,6 +248,17 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     markSelfWrite,
     scanBinding,
   }
+}
+
+function localSnapshotHashCache(
+  baseline: readonly DriveSyncBaselineEntryV1[],
+): Map<string, { readonly kind: "file" | "folder"; readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null }> {
+  return new Map(baseline.map((entry) => [entry.relativePath, {
+    kind: entry.kind,
+    size: entry.localSize,
+    mtimeMs: entry.localMtimeMs,
+    hash: entry.localHash,
+  }] as const))
 }
 
 async function scanFileBinding(

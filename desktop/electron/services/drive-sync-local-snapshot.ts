@@ -14,6 +14,13 @@ export interface DriveSyncLocalSnapshotEntry {
   readonly hash: string | null
 }
 
+export interface DriveSyncLocalSnapshotHashCacheEntry {
+  readonly kind: "file" | "folder"
+  readonly size: number | null
+  readonly mtimeMs: number | null
+  readonly hash: string | null
+}
+
 export async function inspectDriveSyncLocalPath(
   targetPath: string,
 ): Promise<{ readonly kind: "missing" | "file" | "folder" | "other"; readonly empty: boolean | null }> {
@@ -35,6 +42,7 @@ export async function scanDriveSyncLocalTree(input: {
   readonly rootPath: string
   readonly rules: DriveSyncExcludeRulesDto
   readonly hashFiles?: boolean
+  readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
 }): Promise<readonly DriveSyncLocalSnapshotEntry[]> {
   const rootPath = path.resolve(input.rootPath)
   const result: DriveSyncLocalSnapshotEntry[] = []
@@ -62,7 +70,7 @@ export async function scanDriveSyncLocalTree(input: {
           kind: "file",
           size: stats.size,
           mtimeMs: stats.mtimeMs,
-          hash: input.hashFiles ? await hashDriveSyncFile(absolutePath) : null,
+          hash: await resolveDriveSyncFileHash(input, absolutePath, relativePath, stats.size, stats.mtimeMs),
         })
       }
     }
@@ -70,6 +78,29 @@ export async function scanDriveSyncLocalTree(input: {
 
   await walk(rootPath)
   return result.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+}
+
+async function resolveDriveSyncFileHash(
+  input: {
+    readonly hashFiles?: boolean
+    readonly hashCache?: ReadonlyMap<string, DriveSyncLocalSnapshotHashCacheEntry>
+  },
+  absolutePath: string,
+  relativePath: string,
+  size: number,
+  mtimeMs: number,
+): Promise<string | null> {
+  if (!input.hashFiles) return null
+  const cached = input.hashCache?.get(relativePath)
+  if (
+    cached?.kind === "file"
+    && cached.size === size
+    && cached.mtimeMs === mtimeMs
+    && cached.hash
+  ) {
+    return cached.hash
+  }
+  return hashDriveSyncFile(absolutePath)
 }
 
 export function hashDriveSyncFile(filePath: string): Promise<string> {

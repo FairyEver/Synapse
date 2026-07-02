@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, rm, unlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -88,6 +88,27 @@ describe("drive sync watcher", () => {
       expect.objectContaining({ relativePath: "new.md", kind: "created" }),
       expect.objectContaining({ relativePath: "old.md", kind: "deleted" }),
     ])
+  })
+
+  it("reuses baseline hashes for unchanged files during folder scans", async () => {
+    const filePath = path.join(tempDir, "unchanged.md")
+    await writeFile(filePath, "unchanged", "utf8")
+    const stats = await lstat(filePath)
+    const watcher = createDriveSyncWatcher({ onChanges: () => undefined })
+
+    const changes = await watcher.scanBinding({
+      binding: binding({ localPath: tempDir }),
+      baseline: [
+        baseline({
+          relativePath: "unchanged.md",
+          localHash: "sha256:cached",
+          localSize: stats.size,
+          localMtimeMs: stats.mtimeMs,
+        }),
+      ],
+    })
+
+    expect(changes).toEqual([])
   })
 
   it("detects delete events", async () => {
@@ -254,6 +275,8 @@ function binding(input: { readonly localPath: string }): DriveSyncBindingEntryV1
 function baseline(input: {
   readonly relativePath: string
   readonly localHash: string | null
+  readonly localSize?: number | null
+  readonly localMtimeMs?: number | null
 }): DriveSyncBaselineEntryV1 {
   return {
     id: `binding-1:${input.relativePath}`,
@@ -264,8 +287,8 @@ function baseline(input: {
     remoteItemId: `remote:${input.relativePath}`,
     remoteVersionId: null,
     remoteEtag: null,
-    localSize: null,
-    localMtimeMs: null,
+    localSize: input.localSize ?? null,
+    localMtimeMs: input.localMtimeMs ?? null,
     localHash: input.localHash,
     lastSyncedAt: "2026-06-28T00:00:00.000Z",
     deletedAt: null,
