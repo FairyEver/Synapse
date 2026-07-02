@@ -60,6 +60,7 @@ export function useDriveMarkdownImageSources({
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [importFailures, setImportFailures] = useState<readonly DriveDocumentImageImportFailure[]>([])
   const currentVersionId = edit?.currentVersionId ?? sources?.versionId ?? null
   const importableCount = sources?.summary.importable ?? 0
@@ -72,6 +73,7 @@ export function useDriveMarkdownImageSources({
     }
     setLoading(true)
     setError(null)
+    setNotice(null)
     setImportFailures([])
     try {
       setScanResult({ key: sourceCacheKey, sources: await scanImageSources(context) })
@@ -90,13 +92,24 @@ export function useDriveMarkdownImageSources({
     }
     setImporting(true)
     setError(null)
+    setNotice(null)
     setImportFailures([])
     try {
       const result = await importImageSources(context, body)
-      await editContext.reload()
-      await scan()
-      if (result.failed.length > 0 || result.summary.failedCount > 0) {
+      const hasFailures = result.failed.length > 0 || result.summary.failedCount > 0
+      let reloadFailed = false
+      try {
+        await editContext.reload()
+        await scan()
+      } catch {
+        setNotice('图片转存已完成，预览刷新失败，请手动刷新。')
+        reloadFailed = true
+      }
+      if (hasFailures) {
         setImportFailures(result.failed)
+        return
+      }
+      if (reloadFailed) {
         return
       }
       setOpen(false)
@@ -110,6 +123,7 @@ export function useDriveMarkdownImageSources({
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) {
       setImportFailures([])
+      setNotice(null)
       setOpen(false)
       return
     }
@@ -140,6 +154,7 @@ export function useDriveMarkdownImageSources({
         loading={loading}
         importing={importing}
         error={error}
+        notice={notice}
         importFailures={importFailures}
         canImport={canImport}
         onOpenChange={handleOpenChange}
@@ -178,6 +193,7 @@ function DriveMarkdownImageSourceDialog({
   loading,
   importing,
   error,
+  notice,
   importFailures,
   canImport,
   onOpenChange,
@@ -189,6 +205,7 @@ function DriveMarkdownImageSourceDialog({
   readonly loading: boolean
   readonly importing: boolean
   readonly error: string | null
+  readonly notice: string | null
   readonly importFailures: readonly DriveDocumentImageImportFailure[]
   readonly canImport: boolean
   readonly onOpenChange: (open: boolean) => void
@@ -215,6 +232,7 @@ function DriveMarkdownImageSourceDialog({
           </Button>
         </div>
         {error ? <p className='text-sm text-destructive'>{error}</p> : null}
+        {notice ? <p className='text-sm text-muted-foreground'>{notice}</p> : null}
         {importFailures.length > 0 ? (
           <div className='grid gap-1 rounded-md border p-2 text-sm text-destructive'>
             <div>部分图片转存失败：{importFailures.length}</div>
