@@ -1222,8 +1222,16 @@ function parseDriveLinkDownloadFileInput(params: Record<string, unknown>): Drive
     ...parseDriveLinkResolveInput(params),
     path: optionalString(params.path),
     itemId: optionalString(params.itemId),
-    outputPath: optionalString(params.outputPath),
+    outputPath: optionalAbsoluteOutputPath(params),
   }
+}
+
+function optionalAbsoluteOutputPath(params: Record<string, unknown>): string | undefined {
+  const outputPath = optionalString(params.outputPath)
+  if (outputPath !== undefined && !path.isAbsolute(outputPath)) {
+    throw new Error("Missing or invalid 'outputPath': expected absolute local output path")
+  }
+  return outputPath
 }
 
 function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterializeInput["scope"] {

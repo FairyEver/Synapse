@@ -877,6 +877,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
+      downloadDriveLinkFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const })),
     })
     const permissionGuard = {
@@ -894,6 +895,10 @@ describe("createDriveCapabilityDispatcher", () => {
         params: { itemId: "item-1", versionId: "version-1", outputPath: "report-v1.md" },
       },
       {
+        action: "drive.link.download_file",
+        params: { url: "https://synapse.local/share/link-1", outputPath: "downloads/shared-report.md" },
+      },
+      {
         action: "drive.folder_zip.create",
         params: { itemId: "folder-1", outputPath: "project.zip" },
       },
@@ -907,6 +912,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).not.toHaveBeenCalledWith(expect.objectContaining({ action: "fs.write.outside-userdata" }))
     expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFileVersion).not.toHaveBeenCalled()
+    expect(accountService.downloadDriveLinkFile).not.toHaveBeenCalled()
     expect(accountService.downloadDriveFolderZip).not.toHaveBeenCalled()
   })
 

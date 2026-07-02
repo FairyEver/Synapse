@@ -180,7 +180,7 @@ Input:
 - `password` optional.
 - `path` optional.
 - `itemId` optional.
-- `outputPath` optional.
+- `outputPath` optional: absolute local output path.
 
 Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache.
 
