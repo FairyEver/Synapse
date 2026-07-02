@@ -71,6 +71,7 @@ export function planDriveSyncLocalChanges(input: {
   for (const change of input.changes) {
     if (consumedMovePaths.has(change.relativePath)) continue
     if (isDriveSyncExcluded(change.relativePath, input.binding.excludeRules)) continue
+    if (input.binding.kind === "folder" && change.relativePath === "") continue
     const baseline = baselineByPath.get(change.relativePath)
     if (remoteChangedPaths.has(change.relativePath)) {
       conflicts.push(plannedConflict({

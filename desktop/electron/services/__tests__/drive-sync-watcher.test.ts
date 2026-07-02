@@ -111,6 +111,22 @@ describe("drive sync watcher", () => {
     ]])
   })
 
+  it("ignores folder watcher events without a filename", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+    })
+    watcher.reconcile([binding({ localPath: tempDir })])
+
+    fakeWatch.emit(tempDir, "change", null)
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([])
+  })
+
   it("requeues local changes when flush handling fails", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
     const errors: unknown[] = []
@@ -207,7 +223,7 @@ function createFakeWatch() {
   }
   return {
     watch,
-    emit(rootPath: string, eventType: string, filename: string) {
+    emit(rootPath: string, eventType: string, filename: string | Buffer | null) {
       listeners.get(rootPath)?.(eventType, filename)
     },
     emitError(rootPath: string, error: Error) {

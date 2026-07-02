@@ -276,7 +276,7 @@ function eventRelativePath(binding: DriveSyncBindingEntryV1, filename: string | 
     if (!filename) return ""
     return path.basename(String(filename)) === path.basename(binding.localPath) ? "" : null
   }
-  if (!filename) return ""
+  if (!filename) return null
   return toDriveSyncRelativePath(binding.localPath, path.join(binding.localPath, String(filename)))
 }
 

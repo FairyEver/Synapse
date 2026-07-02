@@ -38,6 +38,19 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("does not plan folder binding root changes as child operations", () => {
+    const result = planDriveSyncLocalChanges({
+      binding: binding(),
+      baseline: [baseline({ relativePath: "", remoteItemId: "remote-root", kind: "folder", localHash: null })],
+      changes: [
+        localChange({ relativePath: "", kind: "modified", localKind: "folder", localHash: null }),
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.conflicts).toEqual([])
+  })
+
   it("plans local file renames as remote moves when the hash is unchanged", () => {
     const result = planDriveSyncLocalChanges({
       binding: binding(),
