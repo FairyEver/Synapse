@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 import { formatDriveBrowserBytes } from './shared/drive-format'
 
 const versionPageSize = 100
+const versionWindowPageCount = 2
 const versionSkeletonRows = [0, 1, 2] as const
 
 type ConfirmTarget =
@@ -57,6 +58,7 @@ export function DriveFileVersionsDialog({
     queryFn: ({ pageParam }) => driveFileVersionsApi.list(itemId, { offset: pageParam, limit: versionPageSize }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.page.nextOffset ?? undefined,
+    maxPages: versionWindowPageCount,
     enabled: open,
   })
   const versions = versionsQuery.data?.pages.flatMap((page) => page.items) ?? []

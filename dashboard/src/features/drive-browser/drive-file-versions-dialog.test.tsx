@@ -64,6 +64,7 @@ describe('DriveFileVersionContent', () => {
     expect(source).toContain('getNextPageParam')
     expect(source).toContain('lastPage.page.nextOffset')
     expect(source).toContain('fetchNextPage')
+    expect(source).toContain('maxPages: versionWindowPageCount')
   })
 
   it('keeps version rows inside a bounded table frame', () => {
@@ -195,6 +196,33 @@ describe('DriveFileVersionContent', () => {
 
     expect(document.body.textContent).toContain('v2')
   })
+
+  it('caps loaded version rows after multiple history pages', async () => {
+    vi.mocked(driveFileVersionsApi.list)
+      .mockResolvedValueOnce(versionPage(300, 201, 100))
+      .mockResolvedValueOnce(versionPage(200, 101, 200))
+      .mockResolvedValueOnce(versionPage(100, 1, null))
+    renderVersionDialog()
+
+    await waitFor(() => {
+      expect(buttonByText('加载更多')).toBeTruthy()
+    })
+    await act(async () => {
+      buttonByText('加载更多')?.click()
+    })
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('v200')
+    })
+    await act(async () => {
+      buttonByText('加载更多')?.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('v99')
+      expect(document.querySelectorAll('tbody tr')).toHaveLength(200)
+    })
+    expect(document.body.textContent).not.toContain('v300')
+  })
 })
 
 function renderVersions(versions: readonly DriveFileVersionDto[]) {
@@ -292,5 +320,25 @@ function version(overrides: Partial<DriveFileVersionDto> = {}): DriveFileVersion
     createdAt: '2026-06-17T12:01:33.000Z',
     createdBy: null,
     ...overrides,
+  }
+}
+
+function versionPage(fromVersionNumber: number, toVersionNumber: number, nextOffset: number | null) {
+  const count = fromVersionNumber - toVersionNumber + 1
+  return {
+    items: Array.from({ length: count }, (_, index) => {
+      const versionNumber = fromVersionNumber - index
+      return version({
+        id: `version-${versionNumber}`,
+        versionNumber,
+        isCurrent: versionNumber === 300,
+      })
+    }),
+    page: {
+      limit: 100,
+      offset: 300 - fromVersionNumber,
+      nextOffset,
+      hasMore: nextOffset !== null,
+    },
   }
 }
