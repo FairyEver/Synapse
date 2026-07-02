@@ -1081,18 +1081,23 @@ export const driveBrowserApi = {
         }),
       }
     )
-    const uploadResponse = await fetch(prepared.upload.url, {
-      method: prepared.upload.method,
-      headers: prepared.upload.headers,
-      body: file,
-    })
-    if (!uploadResponse.ok) {
-      throw new ApiError(await readErrorMessage(uploadResponse), uploadResponse.status)
+    try {
+      const uploadResponse = await fetch(prepared.upload.url, {
+        method: prepared.upload.method,
+        headers: prepared.upload.headers,
+        body: file,
+      })
+      if (!uploadResponse.ok) {
+        throw new ApiError(await readErrorMessage(uploadResponse), uploadResponse.status)
+      }
+      return await request<DrivePublicAssetDto>(
+        `${driveApiBasePath}/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
+        { method: 'POST' }
+      )
+    } catch (error) {
+      await driveApi.cancelPublicAssetUpload(prepared.sessionId).catch(() => undefined)
+      throw error
     }
-    return request<DrivePublicAssetDto>(
-      `${driveApiBasePath}/public-assets/uploads/${encodeURIComponent(prepared.sessionId)}/complete`,
-      { method: 'POST' }
-    )
   },
 }
 

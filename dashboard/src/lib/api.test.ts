@@ -725,6 +725,61 @@ describe('driveApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(22, '/api/drive/public-assets/asset%2Fid/restore', expect.objectContaining({ credentials: 'include', method: 'POST' }))
   })
 
+  it('cancels prepared public asset uploads when browser transfer fails', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url === '/api/drive/public-assets/uploads/prepare') {
+        return new Response(JSON.stringify({
+          sessionId: 'session/id',
+          item: { id: 'item-1', name: 'logo.png' },
+          upload: {
+            method: 'PUT',
+            url: 'https://cos.example/upload?signature=secret',
+            expiresAt: '2026-06-07T00:00:00.000Z',
+            headers: { 'x-upload': '1' },
+          },
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+      if (url === 'https://cos.example/upload?signature=secret') {
+        return new Response(JSON.stringify({ message: '上传失败。' }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 500,
+        })
+      }
+      if (url === '/api/drive/public-assets/uploads/session%2Fid/cancel') {
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+      throw new Error(`Unexpected fetch ${url}`)
+    })
+
+    const file = new File(['image'], 'logo.png', { type: 'image/png' })
+
+    await expect(driveBrowserApi.uploadPublicAssetFile(file, {
+      name: 'logo.png',
+      mimeType: 'image/png',
+    })).rejects.toMatchObject({ status: 500 })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/drive/public-assets/uploads/prepare', expect.objectContaining({
+      credentials: 'include',
+      method: 'POST',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://cos.example/upload?signature=secret', expect.objectContaining({
+      method: 'PUT',
+      headers: { 'x-upload': '1' },
+      body: file,
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/drive/public-assets/uploads/session%2Fid/cancel', expect.objectContaining({
+      credentials: 'include',
+      method: 'POST',
+    }))
+  })
+
   it('notifies auth expiration for protected user Drive requests', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)
