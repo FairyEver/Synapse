@@ -186,6 +186,62 @@ describe("DriveSiteService", () => {
     expect(active.page).toMatchObject({ hasMore: false, nextOffset: null })
   })
 
+  it("searches sites by source folder name and current entry path before pagination", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [
+        createSiteRecord({
+          id: "site-row-entry",
+          siteId: "site_entry",
+          name: "Homepage",
+          sourceFolderName: "Marketing",
+          currentDeploymentId: "dep-entry",
+          updatedAt: new Date("2026-06-26T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-folder",
+          siteId: "site_folder",
+          name: "Portal",
+          sourceFolderName: "Docs Portal",
+          currentDeploymentId: "dep-folder",
+          updatedAt: new Date("2026-06-25T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-old-entry",
+          siteId: "site_old",
+          name: "Archive",
+          sourceFolderName: "Archive",
+          currentDeploymentId: "dep-current",
+          updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+        }),
+      ],
+      deployments: [
+        createDeploymentRecord({ id: "dep-entry", driveSiteId: "site-row-entry", entryPath: "docs/start.html" }),
+        createDeploymentRecord({ id: "dep-folder", driveSiteId: "site-row-folder", entryPath: "index.html" }),
+        createDeploymentRecord({ id: "dep-current", driveSiteId: "site-row-old-entry", entryPath: "index.html" }),
+        createDeploymentRecord({ id: "dep-old", driveSiteId: "site-row-old-entry", entryPath: "docs/old.html" }),
+      ],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.listSites("user-1", "https://synapse.test", {
+      search: "docs",
+      offset: 0,
+      limit: 1,
+    })
+    const oldDeploymentResult = await service.listSites("user-1", "https://synapse.test", {
+      search: "old.html",
+      offset: 0,
+      limit: 10,
+    })
+
+    expect(result.items.map((site) => site.siteId)).toEqual(["site_entry"])
+    expect(result.items[0]?.entryPath).toBe("docs/start.html")
+    expect(result.total).toBe(2)
+    expect(result.page).toMatchObject({ hasMore: true, nextOffset: 1 })
+    expect(oldDeploymentResult.items).toEqual([])
+  })
+
   it("renews an expired site when enabling it", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
@@ -413,8 +469,11 @@ function createMemoryPrisma(seed: {
       async findUnique(args: { readonly where: { readonly id: string } }) {
         return deployments.find((deployment) => deployment.id === args.where.id) ?? null
       },
-      async findMany() {
-        return deployments
+      async findMany(args: {
+        readonly where?: DeploymentWhere
+        readonly select?: unknown
+      } = {}) {
+        return deployments.filter((deployment) => matchesDeploymentWhere(deployment, args.where, sites))
       },
     },
     driveSiteAsset: {
@@ -468,11 +527,22 @@ type SiteWhere = {
   readonly AND?: readonly SiteWhere[]
   readonly OR?: readonly SiteWhere[]
   readonly userId?: string
+  readonly currentDeploymentId?: null | string | { readonly in: readonly string[] }
   readonly siteId?: string | { readonly contains: string; readonly mode?: string }
   readonly name?: { readonly contains: string; readonly mode?: string }
+  readonly sourceFolderName?: { readonly contains: string; readonly mode?: string }
   readonly status?: string
   readonly expiresAt?: null | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date }
   readonly deletedAt?: null | Date
+}
+
+type DeploymentWhere = {
+  readonly id?: string | { readonly in: readonly string[] }
+  readonly entryPath?: { readonly contains: string; readonly mode?: string }
+  readonly driveSite?: {
+    readonly userId?: string
+    readonly deletedAt?: null | Date
+  }
 }
 
 function matchesSiteWhere(site: MemorySite, where: SiteWhere = {}): boolean {
@@ -481,17 +551,45 @@ function matchesSiteWhere(site: MemorySite, where: SiteWhere = {}): boolean {
   if (where.userId !== undefined && site.userId !== where.userId) return false
   if (where.status !== undefined && site.status !== where.status) return false
   if ("deletedAt" in where && site.deletedAt !== where.deletedAt) return false
+  if ("currentDeploymentId" in where && !matchesNullableStringCondition(site.currentDeploymentId, where.currentDeploymentId)) return false
   if (where.siteId !== undefined && !matchesStringCondition(site.siteId, where.siteId)) return false
   if (where.name !== undefined && !matchesStringCondition(site.name, where.name)) return false
+  if (where.sourceFolderName !== undefined && !matchesNullableStringCondition(site.sourceFolderName, where.sourceFolderName)) return false
   if ("expiresAt" in where && !matchesDateCondition(site.expiresAt, where.expiresAt)) return false
   return true
 }
 
-function matchesStringCondition(value: string, condition: string | { readonly contains: string; readonly mode?: string }): boolean {
+function matchesDeploymentWhere(deployment: MemoryDeployment, where: DeploymentWhere = {}, sites: readonly MemorySite[]): boolean {
+  if (where.id !== undefined && !matchesStringCondition(deployment.id, where.id)) return false
+  if (where.entryPath !== undefined && !matchesStringCondition(deployment.entryPath, where.entryPath)) return false
+  if (where.driveSite) {
+    const site = sites.find((entry) => entry.id === deployment.driveSiteId)
+    if (!site) return false
+    if (where.driveSite.userId !== undefined && site.userId !== where.driveSite.userId) return false
+    if ("deletedAt" in where.driveSite && site.deletedAt !== where.driveSite.deletedAt) return false
+  }
+  return true
+}
+
+function matchesStringCondition(
+  value: string,
+  condition: string | { readonly contains: string; readonly mode?: string } | { readonly in: readonly string[] },
+): boolean {
   if (typeof condition === "string") return value === condition
+  if ("in" in condition) return condition.in.includes(value)
   const haystack = condition.mode === "insensitive" ? value.toLowerCase() : value
   const needle = condition.mode === "insensitive" ? condition.contains.toLowerCase() : condition.contains
   return haystack.includes(needle)
+}
+
+function matchesNullableStringCondition(
+  value: string | null,
+  condition: null | string | { readonly contains: string; readonly mode?: string } | { readonly in: readonly string[] } | undefined,
+): boolean {
+  if (condition === undefined) return true
+  if (condition === null) return value === null
+  if (value === null) return false
+  return matchesStringCondition(value, condition)
 }
 
 function matchesDateCondition(

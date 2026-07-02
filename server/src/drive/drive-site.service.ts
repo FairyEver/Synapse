@@ -175,15 +175,19 @@ export class DriveSiteService {
   async listSites(userId: string, publicAppUrl: string, input: DriveSiteListInput = {}): Promise<DriveSiteListPageDto> {
     const page = normalizeSiteListPage(input)
     const statusWhere = siteListStatusWhere(input.status, new Date())
+    const search = input.search?.trim()
+    const matchingDeploymentIds = search ? await this.currentDeploymentIdsMatchingEntryPath(userId, search) : []
     const where: Prisma.DriveSiteWhereInput = {
       userId,
       deletedAt: null,
       ...(statusWhere ? { AND: [statusWhere] } : {}),
-      ...(input.search?.trim()
+      ...(search
         ? {
           OR: [
-            { name: { contains: input.search.trim(), mode: "insensitive" } },
-            { siteId: { contains: input.search.trim(), mode: "insensitive" } },
+            { name: { contains: search, mode: "insensitive" } },
+            { siteId: { contains: search, mode: "insensitive" } },
+            { sourceFolderName: { contains: search, mode: "insensitive" } },
+            ...(matchingDeploymentIds.length > 0 ? [{ currentDeploymentId: { in: matchingDeploymentIds } }] : []),
           ],
         }
         : {}),
@@ -210,6 +214,17 @@ export class DriveSiteService {
         nextOffset: sites.length > page.limit ? page.offset + page.limit : null,
       },
     }
+  }
+
+  private async currentDeploymentIdsMatchingEntryPath(userId: string, search: string): Promise<string[]> {
+    const deployments = await this.prisma.driveSiteDeployment.findMany({
+      where: {
+        entryPath: { contains: search, mode: "insensitive" },
+        driveSite: { userId, deletedAt: null },
+      },
+      select: { id: true },
+    })
+    return deployments.map((deployment) => deployment.id)
   }
 
   async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
