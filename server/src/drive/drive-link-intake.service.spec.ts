@@ -121,6 +121,71 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("resolves direct share child links from the target item snapshot", async () => {
+    const { service, drive } = createService()
+    drive.resolvePublicShareAccess.mockResolvedValueOnce({
+      status: "ok",
+      value: {
+        id: "share-record-1",
+        shareId: "shr_123",
+        ownerId: "owner-1",
+        type: "folder",
+        storageKey: "",
+        accessMode: "link_read",
+        editorEmails: [],
+        item: {
+          id: "folder-1",
+          parentId: null,
+          name: "交付包",
+          type: "folder",
+          size: "0",
+          mimeType: "",
+          storageStatus: "active",
+          shared: true,
+          createdAt: "2026-06-28T00:00:00.000Z",
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    })
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      context: "share",
+      surface: "standalone",
+      current: {
+        id: "item-prd",
+        name: "PRD.md",
+        type: "file",
+        size: "8",
+        mimeType: "text/markdown",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+        previewKind: "markdown",
+        browserUrl: "/share/shr_123/items/item-prd",
+        downloadUrl: "/share/shr_123/items/item-prd/download",
+      },
+      breadcrumbs: [],
+      children: [],
+      childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+      preview: { kind: "markdown", text: "# PRD", html: "<h1>PRD</h1>", outline: [], truncated: false, imageUrl: null, visitUrl: null },
+      edit: null,
+      annotation: null,
+      canDownload: true,
+      canZip: false,
+    } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123/items/item-prd`, password: "secret" })).resolves.toMatchObject({
+      ok: true,
+      linkType: "share_item",
+      access: { status: "ok", canRead: true, canList: false, canReadText: true, canDownload: true },
+      root: { name: "PRD.md", type: "file", previewKind: "markdown" },
+      ref: { kind: "share", shareId: "shr_123", itemId: "item-prd" },
+    })
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_123",
+      itemId: "item-prd",
+      password: "secret",
+      cookie: undefined,
+    })
+  })
+
   it("returns password_required without echoing password", async () => {
     const { service, drive } = createService()
     drive.resolvePublicShareAccess.mockResolvedValueOnce({ status: "password_required" } as never)

@@ -225,6 +225,22 @@ export class DriveLinkIntakeService {
       return passwordRequiredResolve(parsed.itemId ? "share_item" : "share", ref)
     }
 
+    if (parsed.itemId) {
+      const snapshot = await this.deps.drive.getShareBrowserSnapshot({
+        shareId: parsed.shareId,
+        itemId: parsed.itemId,
+        password: input.password,
+        cookie: undefined,
+      })
+      return {
+        ok: true,
+        linkType: "share_item",
+        access: { status: "ok", canRead: true, canList: snapshot.current.type === "folder", canReadText: snapshot.current.previewKind !== "download-only", canDownload: true },
+        root: { name: snapshot.current.name, type: snapshot.current.type, previewKind: snapshot.current.previewKind },
+        ref,
+      }
+    }
+
     const previewKind = previewKindFromMime(access.value.item.mimeType, access.value.item.name)
     return {
       ok: true,
