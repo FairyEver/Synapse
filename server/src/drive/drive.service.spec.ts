@@ -559,11 +559,26 @@ describe("DriveService", () => {
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
-    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "11", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => !entry.isCurrent)!
 
     const pinned = await service.updateFileVersionPin("user-1", item.id, version.id, true)
 
     expect(pinned).toMatchObject({ id: version.id, isPinned: true })
+  })
+
+  it("rejects pinning the current file version", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const current = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((entry) => entry.isCurrent)!
+
+    await expect(service.updateFileVersionPin("user-1", item.id, current.id, true)).rejects.toThrow("不能保留当前版本。")
+
+    const version = await prisma.driveFileVersion.findUniqueOrThrow({ where: { id: current.id } })
+    expect(version.isPinned).toBe(false)
   })
 
   it("cleanup skips current and pinned versions when count exceeds the limit", async () => {
@@ -577,6 +592,14 @@ describe("DriveService", () => {
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
     const v1 = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+    const preparedCurrent = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "1",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", preparedCurrent.sessionId)
     await service.updateFileVersionPin("user-1", item.id, v1.id, true)
 
     for (let index = 0; index < 101; index += 1) {

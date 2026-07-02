@@ -595,7 +595,8 @@ export class DriveService implements OnApplicationBootstrap {
 
   async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
     const item = await this.requireOwnedFile(userId, itemId)
-    await this.requireOwnedFileVersion(userId, item.id, versionId)
+    const targetVersion = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    if (item.storageKey === targetVersion.storageKey) throw new BadRequestException("不能保留当前版本。")
     const version = await this.prisma.driveFileVersion.update({
       where: { id: versionId },
       data: { isPinned },
