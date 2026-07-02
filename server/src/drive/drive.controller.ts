@@ -325,7 +325,20 @@ export class DriveUserController {
   }
 
   @Get("/items")
-  listItems(@Query("parentId") parentId: string | undefined, @Req() request: AuthenticatedUserRequest) {
+  listItems(
+    @Query("parentId") parentId: string | undefined,
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    const parsedOffset = parseOptionalNonNegativeInteger(offset, "offset")
+    const parsedLimit = parseOptionalNonNegativeInteger(limit, "limit")
+    if (parsedOffset !== undefined || parsedLimit !== undefined) {
+      return this.drive.listItemsPage(request.user!.id, parentId ?? null, {
+        offset: parsedOffset,
+        limit: parsedLimit,
+      })
+    }
     return this.drive.listItems(request.user!.id, parentId ?? null)
   }
 

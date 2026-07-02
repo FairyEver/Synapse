@@ -37,6 +37,7 @@ describe("DriveController", () => {
   const originalAppPublicUrl = process.env.APP_PUBLIC_URL
   const drive = {
     listItems: vi.fn(),
+    listItemsPage: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
     listTrash: vi.fn(),
@@ -109,6 +110,7 @@ describe("DriveController", () => {
 
   beforeEach(async () => {
     drive.listItems.mockReset()
+    drive.listItemsPage.mockReset()
     drive.prepareFolderUpload.mockReset()
     drive.deleteItem.mockReset()
     drive.listTrash.mockReset()
@@ -238,6 +240,49 @@ describe("DriveController", () => {
         resyncRequired: false,
       })
       expect(changes.list).toHaveBeenCalledWith("user-1", { cursor: "41", limit: 50 })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("keeps legacy Drive item list responses and supports paged item lists", async () => {
+    drive.listItems.mockResolvedValue([{ id: "legacy-item" }])
+    drive.listItemsPage.mockResolvedValue({
+      items: [{ id: "paged-item" }],
+      page: { offset: 20, limit: 10, hasMore: false, nextOffset: null },
+    })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const legacyResponse = await request(userApp.getHttpServer())
+        .get("/api/drive/items?parentId=folder-1")
+        .expect(200)
+      expect(legacyResponse.body).toEqual([{ id: "legacy-item" }])
+      expect(drive.listItems).toHaveBeenCalledWith("user-1", "folder-1")
+      expect(drive.listItemsPage).not.toHaveBeenCalled()
+
+      const pagedResponse = await request(userApp.getHttpServer())
+        .get("/api/drive/items?parentId=folder-1&offset=20&limit=10")
+        .expect(200)
+      expect(pagedResponse.body).toEqual({
+        items: [{ id: "paged-item" }],
+        page: { offset: 20, limit: 10, hasMore: false, nextOffset: null },
+      })
+      expect(drive.listItemsPage).toHaveBeenCalledWith("user-1", "folder-1", { offset: 20, limit: 10 })
     } finally {
       await userApp.close()
     }

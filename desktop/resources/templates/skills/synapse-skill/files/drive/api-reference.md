@@ -11,6 +11,14 @@ List files and folders under a parent folder.
 Input:
 
 - `parentId` optional: folder item id. Omit or pass `null` for Drive root.
+- `offset` optional: pagination offset. Defaults to `0`.
+- `limit` optional: page size. Defaults to the service page size.
+
+Output:
+
+- `items`: page of files and folders.
+- `page.hasMore`: whether another page exists.
+- `page.nextOffset`: pass this as `offset` for the next page when `hasMore` is true.
 
 ### `app_drive_item_get`
 

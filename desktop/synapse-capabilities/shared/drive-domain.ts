@@ -109,11 +109,12 @@ export function buildDriveTools(): McpToolDefinition[] {
   return withPrimaryAndLegacyMcpTools([
     {
       name: "drive_item_list",
-      description: "List Synapse Drive files and folders. parentId defaults to root.",
+      description: "List Synapse Drive files and folders with pagination. parentId defaults to root.",
       inputSchema: {
         type: "object",
         properties: {
           parentId: optionalParentId,
+          ...pageInputProperties,
         },
       },
     },

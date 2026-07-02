@@ -774,6 +774,24 @@ describe("DriveService", () => {
     expect(await service.listItems("user-1", null)).toHaveLength(2)
   })
 
+  it("lists Drive items with page metadata when pagination is requested", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "one.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "two.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "three.txt", mimeType: "text/plain" })
+
+    const firstPage = await service.listItemsPage("user-1", null, { limit: 2 })
+    const secondPage = await service.listItemsPage("user-1", null, { offset: 2, limit: 2 })
+
+    expect(await service.listItems("user-1", null)).toHaveLength(3)
+    expect(firstPage.items).toHaveLength(2)
+    expect(firstPage.page).toEqual({ offset: 0, limit: 2, hasMore: true, nextOffset: 2 })
+    expect(secondPage.items).toHaveLength(1)
+    expect(secondPage.page).toEqual({ offset: 2, limit: 2, hasMore: false, nextOffset: null })
+  })
+
   it("keeps public asset backing files out of normal Drive views and actions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

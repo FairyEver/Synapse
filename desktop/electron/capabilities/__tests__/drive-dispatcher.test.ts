@@ -1,6 +1,6 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
-import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DrivePublicAssetDto, type DriveSiteDto, type DriveSiteListPageDto, type DriveTrashListPageDto } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveSiteListPageDto, type DriveTrashListPageDto } from "@synapse/shared"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
@@ -12,7 +12,7 @@ import {
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
 type DriveAuditSink = NonNullable<DriveDispatcherDeps["auditSink"]>
-type DriveItem = Awaited<ReturnType<DriveAccountService["listDriveItems"]>>[number]
+type DriveItem = DriveItemDto
 
 describe("createDriveCapabilityDispatcher", () => {
   it("exposes access settings on share creation", () => {
@@ -29,6 +29,15 @@ describe("createDriveCapabilityDispatcher", () => {
     const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
     expect(deleteTool?.inputSchema.properties).toEqual({
       itemId: { type: "string", description: expect.any(String) },
+    })
+  })
+
+  it("exposes pagination on item list", () => {
+    const listTool = buildDriveTools().find((tool) => tool.name === "drive_item_list")
+    expect(listTool?.inputSchema.properties).toMatchObject({
+      parentId: expect.any(Object),
+      offset: { type: "number" },
+      limit: { type: "number" },
     })
   })
 
@@ -102,17 +111,22 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("lists Drive items under root by default", async () => {
+    const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
     const accountService = createAccountService({
-      listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
+      listDriveItemsPage: vi.fn(async () => page),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
     await expect(dispatcher.dispatch("drive.item.list", {}, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: [driveItem({ id: "item-1", name: "a.txt" })],
+      data: page,
       total: 1,
     })
-    expect(accountService.listDriveItems).toHaveBeenCalledWith(null)
+    expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
+      parentId: null,
+      offset: undefined,
+      limit: undefined,
+    })
   })
 
   it("routes Drive organization reads and path ensure without reading file contents in bulk", async () => {
@@ -246,8 +260,9 @@ describe("createDriveCapabilityDispatcher", () => {
   })
 
   it("authorizes and audits Drive item reads", async () => {
+    const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
     const accountService = createAccountService({
-      listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
+      listDriveItemsPage: vi.fn(async () => page),
     })
     const auditSink = createAuditSink()
     const permissionGuard = {
@@ -258,9 +273,16 @@ describe("createDriveCapabilityDispatcher", () => {
 
     await expect(dispatcher.dispatch("drive.item.list", {
       parentId: "folder-1",
+      offset: 20,
+      limit: 10,
     }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })).resolves.toMatchObject({
       ok: true,
       total: 1,
+    })
+    expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      offset: 20,
+      limit: 10,
     })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -1600,6 +1622,7 @@ describe("createDriveCapabilityDispatcher", () => {
 function createAccountService(overrides: Partial<DriveAccountService> & Record<string, unknown> = {}): DriveAccountService {
   return {
     listDriveItems: vi.fn(async () => []),
+    listDriveItemsPage: vi.fn(async () => ({ items: [], page: drivePage() })),
     prepareDriveUpload: vi.fn(async () => ({
       sessionId: "session-1",
       item: { id: "item-1", name: "report.md" },

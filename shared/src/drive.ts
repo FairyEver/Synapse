@@ -144,6 +144,17 @@ export interface DriveItemDto {
   readonly updatedAt: string
 }
 
+export interface DriveItemListInput {
+  readonly parentId?: string | null
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DriveItemListPageDto {
+  readonly items: readonly DriveItemDto[]
+  readonly page: DriveBrowserChildrenPageDto
+}
+
 export interface DriveChangeDto {
   readonly id: string
   readonly sequence: string

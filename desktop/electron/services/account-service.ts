@@ -39,6 +39,8 @@ import type {
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -186,6 +188,15 @@ function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
 
 function drivePageQuery(input?: { readonly offset?: number; readonly limit?: number }): string {
   const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  const query = params.toString()
+  return query ? `?${query}` : ""
+}
+
+function driveItemListQuery(input?: DriveItemListInput): string {
+  const params = new URLSearchParams()
+  if (input?.parentId) params.set("parentId", input.parentId)
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
   if (input?.limit !== undefined) params.set("limit", String(input.limit))
   const query = params.toString()
@@ -455,6 +466,11 @@ export class AccountService {
   async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
     const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""
     return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
+  }
+
+  async listDriveItemsPage(input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {
+    const query = driveItemListQuery({ ...input, offset: input.offset ?? 0 })
+    return this.getAuthenticatedJson<DriveItemListPageDto>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
   }
 
   async getDriveItem(itemId: string): Promise<DriveItemDto> {

@@ -13,6 +13,8 @@ import type {
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -59,6 +61,7 @@ import {
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
+  readonly listDriveItemsPage: (input: DriveItemListInput) => Promise<DriveItemListPageDto>
   readonly getDriveItem: (itemId: string) => Promise<DriveItemDto>
   readonly prepareDriveUpload: (input: {
     readonly parentId?: string | null
@@ -195,8 +198,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.item.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const parentId = optionalNullableString(params.parentId)
-            const items = await deps.accountService.listDriveItems(parentId)
-            return { ok: true, data: items, total: items.length }
+            const page = await deps.accountService.listDriveItemsPage({
+              parentId,
+              offset: optionalNumber(params.offset),
+              limit: optionalNumber(params.limit),
+            })
+            return { ok: true, data: page, total: page.items.length }
           })
         case "drive.item.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({

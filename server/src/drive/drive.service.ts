@@ -22,6 +22,8 @@ import {
   type DriveFileContentUpdateResult,
   type DriveFileTextUpdateInput,
   type DriveItemDto,
+  type DriveItemListInput,
+  type DriveItemListPageDto,
   type DriveItemTreeEntryDto,
   type DriveItemTreeListInput,
   type DriveItemTreeListPageDto,
@@ -224,6 +226,8 @@ const driveShareWithEditors = {
 
 const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
 const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
+const DRIVE_ITEM_LIST_DEFAULT_LIMIT = 100
+const DRIVE_ITEM_LIST_MAX_LIMIT = 200
 const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
@@ -306,6 +310,22 @@ export class DriveService implements OnApplicationBootstrap {
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
     return items.map(toDriveItemDto)
+  }
+
+  async listItemsPage(userId: string, parentId: string | null, input: DriveItemListInput = {}): Promise<DriveItemListPageDto> {
+    if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const page = normalizeDriveItemListPage(input)
+    const items = await this.prisma.driveItem.findMany({
+      where: ordinaryDriveItemWhere({ userId, parentId }),
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      skip: page.offset,
+      take: page.limit + 1,
+    })
+    return {
+      items: items.slice(0, page.limit).map(toDriveItemDto),
+      page: buildDriveBrowserChildrenPage(page, items.length),
+    }
   }
 
   async getItem(userId: string, itemId: string): Promise<DriveItemDto> {
@@ -3574,6 +3594,21 @@ function normalizeDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput
   return {
     offset,
     limit: Math.min(rawLimit, DRIVE_BROWSER_CHILDREN_MAX_LIMIT),
+  }
+}
+
+function normalizeDriveItemListPage(input?: Pick<DriveItemListInput, "offset" | "limit">): { readonly offset: number; readonly limit: number } {
+  const requestedOffset = input?.offset
+  const requestedLimit = input?.limit
+  const offset = typeof requestedOffset === "number" && Number.isFinite(requestedOffset) && requestedOffset > 0
+    ? Math.floor(requestedOffset)
+    : 0
+  const rawLimit = typeof requestedLimit === "number" && Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.floor(requestedLimit)
+    : DRIVE_ITEM_LIST_DEFAULT_LIMIT
+  return {
+    offset,
+    limit: Math.min(rawLimit, DRIVE_ITEM_LIST_MAX_LIMIT),
   }
 }
 
