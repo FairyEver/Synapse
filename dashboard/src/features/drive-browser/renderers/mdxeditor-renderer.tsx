@@ -83,6 +83,7 @@ export function DriveMDXeditorRenderer({
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
+  const valueRef = useRef(initialText)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
@@ -252,6 +253,7 @@ export function DriveMDXeditorRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
+    valueRef.current = initialText
     setValue(initialText)
     setDirty(false)
     setError(null)
@@ -271,16 +273,18 @@ export function DriveMDXeditorRenderer({
   const handleSave = useCallback(async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
-    const normalizedValue = normalizeMdxEditorImageMarkdown(value)
+    const submittedValue = valueRef.current
+    const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
     try {
       await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
-      if (normalizedValue !== value) {
+      if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
+        valueRef.current = normalizedValue
         setValue(normalizedValue)
         beginExternalMarkdownSync(normalizedValue)
         editorRef.current?.setMarkdown(normalizedValue)
       }
       savedValueRef.current = normalizedValue
-      setDirty(false)
+      setDirty(valueRef.current !== normalizedValue)
       setParseError(null)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
@@ -289,7 +293,7 @@ export function DriveMDXeditorRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }, [beginExternalMarkdownSync, canEdit, edit?.currentVersionId, editContext, value])
+  }, [beginExternalMarkdownSync, canEdit, edit?.currentVersionId, editContext])
 
   const handleEditorError = useCallback((payload: { readonly error: unknown; readonly source: string }) => {
     const message = typeof payload.error === 'string'
@@ -298,6 +302,7 @@ export function DriveMDXeditorRenderer({
         ? payload.error.message
         : '解析失败。'
     setValue(payload.source)
+    valueRef.current = payload.source
     setParseError(message || '解析失败。')
   }, [])
 
@@ -308,6 +313,7 @@ export function DriveMDXeditorRenderer({
       const nextSnapshot = await editContext.reload()
       const nextText = nextSnapshot.preview?.text ?? ''
       savedValueRef.current = nextText
+      valueRef.current = nextText
       setValue(nextText)
       setDirty(false)
       setParseError(null)
@@ -412,6 +418,7 @@ export function DriveMDXeditorRenderer({
               onChange={(event) => {
                 if (!canEdit) return
                 const nextValue = event.currentTarget.value
+                valueRef.current = nextValue
                 setValue(nextValue)
                 setDirty(nextValue !== savedValueRef.current)
               }}
@@ -425,6 +432,7 @@ export function DriveMDXeditorRenderer({
             onError={handleEditorError}
             onChange={(nextValue, initialMarkdownNormalize) => {
               if (!canEdit) return
+              valueRef.current = nextValue
               setValue(nextValue)
               const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
                 && externalMarkdownTargetRef.current === nextValue

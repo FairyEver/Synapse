@@ -33,6 +33,7 @@ export function DriveCodeRenderer({
   const language = getCodeEditorLanguage(current.name)
   const initialText = preview.text ?? ''
   const savedValueRef = useRef(initialText)
+  const valueRef = useRef(initialText)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +45,7 @@ export function DriveCodeRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
+    valueRef.current = initialText
     setValue(initialText)
     setDirty(false)
     setError(null)
@@ -54,10 +56,11 @@ export function DriveCodeRenderer({
   const handleSave = useCallback(async () => {
     if (!canEdit || !edit?.currentVersionId || !editContext) return
     setError(null)
+    const submittedValue = valueRef.current
     try {
-      await editContext.saveText({ text: value, baseVersionId: edit.currentVersionId })
-      savedValueRef.current = value
-      setDirty(false)
+      await editContext.saveText({ text: submittedValue, baseVersionId: edit.currentVersionId })
+      savedValueRef.current = submittedValue
+      setDirty(valueRef.current !== submittedValue)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
         setConflictOpen(true)
@@ -65,7 +68,7 @@ export function DriveCodeRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
-  }, [canEdit, edit?.currentVersionId, editContext, value])
+  }, [canEdit, edit?.currentVersionId, editContext])
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
@@ -74,6 +77,7 @@ export function DriveCodeRenderer({
       const nextSnapshot = await editContext.reload()
       const nextText = nextSnapshot.preview?.text ?? ''
       savedValueRef.current = nextText
+      valueRef.current = nextText
       setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
@@ -159,8 +163,10 @@ export function DriveCodeRenderer({
           value={value}
           onChange={(nextValue) => {
             if (!canEdit) return
-            setValue(nextValue ?? '')
-            setDirty((nextValue ?? '') !== savedValueRef.current)
+            const nextText = nextValue ?? ''
+            valueRef.current = nextText
+            setValue(nextText)
+            setDirty(nextText !== savedValueRef.current)
           }}
           options={{
             minimap: { enabled: false },

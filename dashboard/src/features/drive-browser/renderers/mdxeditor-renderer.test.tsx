@@ -204,6 +204,35 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
+  it('keeps newer markdown edits dirty after a pending save resolves', async () => {
+    let resolveSave!: () => void
+    const savePromise = new Promise<never>((resolve) => {
+      resolveSave = () => resolve({} as never)
+    })
+    const editContext = createEditContext({
+      saveText: vi.fn(() => savePromise),
+    })
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Submitted')
+    await click(buttonWithText('保存'))
+    await inputValue(editor(), '# Newer')
+
+    await act(async () => {
+      resolveSave()
+      await savePromise
+      await Promise.resolve()
+    })
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Submitted',
+      baseVersionId: 'version-1',
+    })
+    expect(editor().value).toBe('# Newer')
+    expect(document.body.textContent).toContain('未保存')
+    expect(document.body.textContent).not.toContain('已同步')
+  })
+
   it('asks before reloading dirty markdown and clears dirty state after confirmation', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })

@@ -94,6 +94,35 @@ describe('DriveCodeRenderer', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-draft')
   })
 
+  it('keeps newer source edits dirty after a pending save resolves', async () => {
+    let resolveSave!: () => void
+    const savePromise = new Promise<never>((resolve) => {
+      resolveSave = () => resolve({} as never)
+    })
+    const editContext = createEditContext({
+      saveText: vi.fn(() => savePromise),
+    })
+    renderRenderer({ editContext })
+
+    await inputValue(editor(), 'const submitted = true')
+    await click(buttonWithText('保存'))
+    await inputValue(editor(), 'const newer = true')
+
+    await act(async () => {
+      resolveSave()
+      await savePromise
+      await Promise.resolve()
+    })
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: 'const submitted = true',
+      baseVersionId: 'version-1',
+    })
+    expect(editor().value).toBe('const newer = true')
+    expect(document.body.textContent).toContain('未保存')
+    expect(document.body.textContent).not.toContain('已同步')
+  })
+
   it('registers login action for shared read-only previews', () => {
     window.history.pushState(null, '', '/share/share-1')
     renderRenderer({
