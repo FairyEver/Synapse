@@ -172,10 +172,11 @@ export class DriveSiteService {
 
   async listSites(userId: string, publicAppUrl: string, input: DriveSiteListInput = {}): Promise<DriveSiteListPageDto> {
     const page = normalizeSiteListPage(input)
+    const statusWhere = siteListStatusWhere(input.status, new Date())
     const where: Prisma.DriveSiteWhereInput = {
       userId,
       deletedAt: null,
-      ...(input.status && input.status !== "all" && input.status !== "expired" ? { status: input.status } : {}),
+      ...(statusWhere ? { AND: [statusWhere] } : {}),
       ...(input.search?.trim()
         ? {
           OR: [
@@ -197,7 +198,6 @@ export class DriveSiteService {
     const deployments = await this.currentDeploymentsForSites(sites)
     const items = sites.slice(0, page.limit)
       .map((site) => this.toDto(site, publicAppUrl, deployments.get(site.currentDeploymentId ?? "")))
-      .filter((site) => !input.status || input.status === "all" || site.status === input.status)
     return {
       items,
       total,
@@ -551,6 +551,26 @@ function normalizeSiteListPage(input: DriveSiteListInput): { readonly offset: nu
   const offset = Number.isInteger(input.offset) && input.offset! >= 0 ? input.offset! : 0
   const requestedLimit = Number.isInteger(input.limit) && input.limit! > 0 ? input.limit! : DRIVE_SITE_DEFAULT_PAGE_SIZE
   return { offset, limit: Math.min(requestedLimit, DRIVE_SITE_MAX_PAGE_SIZE) }
+}
+
+function siteListStatusWhere(
+  status: DriveSiteListInput["status"] | undefined,
+  now: Date,
+): Prisma.DriveSiteWhereInput | null {
+  if (!status || status === "all") return null
+  if (status === "expired") {
+    return { status: DRIVE_SITE_STATUS.active, expiresAt: { lte: now } }
+  }
+  if (status === "active") {
+    return {
+      status: DRIVE_SITE_STATUS.active,
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: now } },
+      ],
+    }
+  }
+  return { status }
 }
 
 function expiresAtFromInput(expiresIn: DriveAccessExpiresIn): Date | null {

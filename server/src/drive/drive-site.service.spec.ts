@@ -121,6 +121,70 @@ describe("DriveSiteService", () => {
     expect(result.urlWithPassword).toBe(result.url)
   })
 
+  it("filters expired site status before pagination", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [
+        createSiteRecord({
+          id: "site-row-active",
+          siteId: "site_active",
+          name: "Active",
+          status: "active",
+          expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-06-25T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-expired-new",
+          siteId: "site_expired_new",
+          name: "Expired New",
+          status: "active",
+          expiresAt: new Date("2000-01-02T00:00:00.000Z"),
+          updatedAt: new Date("2026-06-24T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-forever",
+          siteId: "site_forever",
+          name: "Forever",
+          status: "active",
+          expiresAt: null,
+          updatedAt: new Date("2026-06-23T00:00:00.000Z"),
+        }),
+        createSiteRecord({
+          id: "site-row-expired-old",
+          siteId: "site_expired_old",
+          name: "Expired Old",
+          status: "active",
+          expiresAt: new Date("2000-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-06-22T00:00:00.000Z"),
+        }),
+      ],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const expired = await service.listSites("user-1", "https://synapse.test", {
+      status: "expired",
+      offset: 0,
+      limit: 1,
+    })
+
+    expect(expired.items).toEqual([
+      expect.objectContaining({ siteId: "site_expired_new", status: "expired" }),
+    ])
+    expect(expired.total).toBe(2)
+    expect(expired.page).toMatchObject({ hasMore: true, nextOffset: 1 })
+
+    const active = await service.listSites("user-1", "https://synapse.test", {
+      status: "active",
+      offset: 0,
+      limit: 10,
+    })
+
+    expect(active.items.map((site) => site.siteId)).toEqual(["site_active", "site_forever"])
+    expect(active.items.every((site) => site.status === "active")).toBe(true)
+    expect(active.total).toBe(2)
+    expect(active.page).toMatchObject({ hasMore: false, nextOffset: null })
+  })
+
   it("generates a readable password when legacy protected site access is saved without one", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
@@ -283,11 +347,19 @@ function createMemoryPrisma(seed: {
         Object.assign(site, args.data, { updatedAt: now })
         return site
       },
-      async findMany() {
-        return sites
+      async findMany(args: {
+        readonly where?: SiteWhere
+        readonly skip?: number
+        readonly take?: number
+      } = {}) {
+        const filtered = sites
+          .filter((site) => matchesSiteWhere(site, args.where))
+          .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id.localeCompare(left.id))
+        const start = args.skip ?? 0
+        return filtered.slice(start, typeof args.take === "number" ? start + args.take : undefined)
       },
-      async count() {
-        return sites.length
+      async count(args: { readonly where?: SiteWhere } = {}) {
+        return sites.filter((site) => matchesSiteWhere(site, args.where)).length
       },
     },
     driveSiteDeployment: {
@@ -359,6 +431,50 @@ function createMemoryPrisma(seed: {
 
 function matchesAssetRelativePath(relativePath: string, condition: string | { readonly startsWith: string }): boolean {
   return typeof condition === "string" ? relativePath === condition : relativePath.startsWith(condition.startsWith)
+}
+
+type SiteWhere = {
+  readonly AND?: readonly SiteWhere[]
+  readonly OR?: readonly SiteWhere[]
+  readonly userId?: string
+  readonly siteId?: string | { readonly contains: string; readonly mode?: string }
+  readonly name?: { readonly contains: string; readonly mode?: string }
+  readonly status?: string
+  readonly expiresAt?: null | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date }
+  readonly deletedAt?: null | Date
+}
+
+function matchesSiteWhere(site: MemorySite, where: SiteWhere = {}): boolean {
+  if (where.AND?.some((condition) => !matchesSiteWhere(site, condition))) return false
+  if (where.OR && !where.OR.some((condition) => matchesSiteWhere(site, condition))) return false
+  if (where.userId !== undefined && site.userId !== where.userId) return false
+  if (where.status !== undefined && site.status !== where.status) return false
+  if ("deletedAt" in where && site.deletedAt !== where.deletedAt) return false
+  if (where.siteId !== undefined && !matchesStringCondition(site.siteId, where.siteId)) return false
+  if (where.name !== undefined && !matchesStringCondition(site.name, where.name)) return false
+  if ("expiresAt" in where && !matchesDateCondition(site.expiresAt, where.expiresAt)) return false
+  return true
+}
+
+function matchesStringCondition(value: string, condition: string | { readonly contains: string; readonly mode?: string }): boolean {
+  if (typeof condition === "string") return value === condition
+  const haystack = condition.mode === "insensitive" ? value.toLowerCase() : value
+  const needle = condition.mode === "insensitive" ? condition.contains.toLowerCase() : condition.contains
+  return haystack.includes(needle)
+}
+
+function matchesDateCondition(
+  value: Date | null,
+  condition: null | { readonly gt?: Date; readonly gte?: Date; readonly lt?: Date; readonly lte?: Date } | undefined,
+): boolean {
+  if (condition === undefined) return true
+  if (condition === null) return value === null
+  if (value === null) return false
+  if (condition.gt && value.getTime() <= condition.gt.getTime()) return false
+  if (condition.gte && value.getTime() < condition.gte.getTime()) return false
+  if (condition.lt && value.getTime() >= condition.lt.getTime()) return false
+  if (condition.lte && value.getTime() > condition.lte.getTime()) return false
+  return true
 }
 
 function createItem(overrides: Record<string, unknown>) {
