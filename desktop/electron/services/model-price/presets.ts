@@ -161,7 +161,6 @@ const ALIYUN_BAILIAN_RULES: readonly ModelPriceRuleInput[] = [
 const OTHER_RULES: readonly ModelPriceRuleInput[] = [
   { modelPattern: "kimi-k2.5", inputPer1M: 4.32, outputPer1M: 21.6, cacheReadPer1M: 0.72, reasoningPer1M: 21.6 },
   { modelPattern: "kimi-k2.6", inputPer1M: 6.84, outputPer1M: 28.8, cacheReadPer1M: 1.152, reasoningPer1M: 28.8 },
-  { modelPattern: "glm-5.1", inputPer1M: 8, outputPer1M: 28, cacheReadPer1M: 8, reasoningPer1M: 28 },
   { modelPattern: "MiniMax-M2.5", inputPer1M: 2.16, outputPer1M: 8.64, cacheReadPer1M: 0.216, cacheWritePer1M: 2.7, reasoningPer1M: 8.64 },
 ]
 
