@@ -559,8 +559,9 @@ export class DriveService implements OnApplicationBootstrap {
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
+    if (version.isPinned) throw new BadRequestException("请先取消保留后再删除历史版本。")
     const claimed = await this.prisma.driveFileVersion.updateMany({
-      where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
+      where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false, isPinned: false },
       data: { deletePending: true },
     })
     if (claimed.count === 0) return { ok: true, deletePending: true }

@@ -373,7 +373,7 @@ function DriveFileVersionRow({
               {pinning ? <Loader2 className='animate-spin' /> : version.isPinned ? <PinOff /> : <Pin />}
             </DriveVersionActionButton>
           ) : null}
-          {canModify ? (
+          {canModify && !version.isPinned ? (
             <DriveVersionActionButton
               destructive
               label={`删除 v${version.versionNumber}`}

@@ -109,6 +109,16 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('删除')
   })
 
+  it('hides delete for pinned older versions', () => {
+    const html = renderVersions([
+      version({ id: 'version-pinned', versionNumber: 3, isPinned: true }),
+    ])
+
+    expect(html).toContain('保留')
+    expect(html).toContain('取消保留')
+    expect(html).not.toContain('删除')
+  })
+
   it('hides actions for versions pending cleanup', () => {
     const html = renderVersions([
       version({ id: 'version-pending', versionNumber: 3, deletePending: true }),
