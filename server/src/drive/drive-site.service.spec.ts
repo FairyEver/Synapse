@@ -343,6 +343,19 @@ describe("DriveSiteService", () => {
     })
   })
 
+  it("returns not found for invalid public site request paths", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({ currentDeploymentId: "dep-1", siteId: "site_existing" })],
+      deployments: [createDeploymentRecord({ id: "dep-1", driveSiteId: "site-row-1" })],
+      assets: [createAssetRecord({ deploymentId: "dep-1", storageKey: "drive-sites/site_existing/dep-1/index.html" })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.resolvePublicSite("site_existing", { cookie: null, relativePath: "a/../b.html" }))
+      .resolves.toEqual({ status: "not_found" })
+  })
+
   it("includes the exact asset when listing a concrete site file path", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({

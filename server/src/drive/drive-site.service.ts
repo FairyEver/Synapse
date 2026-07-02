@@ -297,7 +297,13 @@ export class DriveSiteService {
     const context = await this.resolvePublicDeployment(siteId, input)
     if (context.status !== "ok") return context
     const { deployment, site } = context
-    const requestPath = resolveDriveSiteRequestPath(input.relativePath ?? "")
+    let requestPath: ReturnType<typeof resolveDriveSiteRequestPath>
+    try {
+      requestPath = resolveDriveSiteRequestPath(input.relativePath ?? "")
+    } catch (error) {
+      if (error instanceof Error && error.message === "站点路径无效。") return { status: "not_found" }
+      throw error
+    }
     const relativePath = requestPath.kind === "entry" ? deployment.entryPath : requestPath.relativePath
     const asset = await this.prisma.driveSiteAsset.findUnique({
       where: { deploymentId_relativePath: { deploymentId: deployment.id, relativePath } },
