@@ -238,10 +238,14 @@ export class DriveSiteService {
   }
 
   async enableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
-    await this.requireOwnedSite(userId, siteId)
+    const site = await this.requireOwnedSite(userId, siteId)
     await this.prisma.driveSite.update({
       where: { siteId },
-      data: { status: DRIVE_SITE_STATUS.active, disabledAt: null },
+      data: {
+        status: DRIVE_SITE_STATUS.active,
+        disabledAt: null,
+        expiresAt: expiresAtFromInput(site.expiresIn as DriveAccessExpiresIn),
+      },
     })
     return this.getSiteDto(userId, siteId, publicAppUrl)
   }

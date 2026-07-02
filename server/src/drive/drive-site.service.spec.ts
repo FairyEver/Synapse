@@ -186,6 +186,35 @@ describe("DriveSiteService", () => {
     expect(active.page).toMatchObject({ hasMore: false, nextOffset: null })
   })
 
+  it("renews an expired site when enabling it", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({
+        siteId: "site_expired",
+        expiresIn: "7d",
+        expiresAt: new Date("2000-01-01T00:00:00.000Z"),
+        currentDeploymentId: "dep-1",
+      })],
+      deployments: [createDeploymentRecord({ id: "dep-1", driveSiteId: "site-row-1" })],
+      assets: [createAssetRecord({
+        deploymentId: "dep-1",
+        storageKey: "drive-sites/site_expired/dep-1/index.html",
+      })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.enableSite("user-1", "site_expired", "https://synapse.test")
+
+    expect(result.status).toBe("active")
+    expect(result.expiresIn).toBe("7d")
+    expect(result.expiresAt).not.toBeNull()
+    expect(Date.parse(result.expiresAt!)).toBeGreaterThan(Date.now())
+    await expect(service.resolvePublicSite("site_expired", { cookie: null })).resolves.toMatchObject({
+      status: "ok",
+      asset: { relativePath: "index.html" },
+    })
+  })
+
   it("generates a readable password when legacy protected site access is saved without one", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
