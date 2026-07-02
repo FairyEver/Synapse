@@ -235,7 +235,7 @@ export class DriveLinkIntakeService {
       return {
         ok: true,
         linkType: "share_item",
-        access: { status: "ok", canRead: true, canList: snapshot.current.type === "folder", canReadText: snapshot.current.previewKind !== "download-only", canDownload: true },
+        access: { status: "ok", canRead: true, canList: snapshot.current.type === "folder", canReadText: canReadDriveLinkText(snapshot.current.previewKind), canDownload: true },
         root: { name: snapshot.current.name, type: snapshot.current.type, previewKind: snapshot.current.previewKind },
         ref,
       }
@@ -245,7 +245,7 @@ export class DriveLinkIntakeService {
     return {
       ok: true,
       linkType: parsed.itemId ? "share_item" : "share",
-      access: { status: "ok", canRead: true, canList: access.value.item.type === "folder", canReadText: previewKind !== "download-only", canDownload: true },
+      access: { status: "ok", canRead: true, canList: access.value.item.type === "folder", canReadText: canReadDriveLinkText(previewKind), canDownload: true },
       root: { name: access.value.item.name, type: access.value.item.type, previewKind },
       ref,
     }
@@ -261,7 +261,7 @@ export class DriveLinkIntakeService {
     return {
       ok: true,
       linkType: parsed.path ? "site_path" : "site",
-      access: { status: "ok", canRead: true, canList: true, canReadText: previewKind !== "download-only", canDownload: true },
+      access: { status: "ok", canRead: true, canList: true, canReadText: canReadDriveLinkText(previewKind), canDownload: true },
       root: { name: access.asset.relativePath || "index.html", type: "site", previewKind },
       ref,
     }
@@ -444,6 +444,10 @@ function previewKindFromMime(mimeType: string | null | undefined, name: string):
   if (lowerMime === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) return "html-source"
   if (lowerMime.startsWith("text/") || lowerMime === "application/json" || lowerName.endsWith(".json")) return "text"
   return "download-only"
+}
+
+function canReadDriveLinkText(previewKind: DriveLinkPreviewKind): boolean {
+  return previewKind !== "download-only" && previewKind !== "image"
 }
 
 function basenameFromRelativePath(value: string): string {

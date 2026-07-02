@@ -121,6 +121,41 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("does not mark share image links as readable text", async () => {
+    const { service, drive } = createService()
+    drive.resolvePublicShareAccess.mockResolvedValueOnce({
+      status: "ok",
+      value: {
+        id: "share-record-1",
+        shareId: "shr_123",
+        ownerId: "owner-1",
+        type: "file",
+        storageKey: "objects/logo.png",
+        accessMode: "link_read",
+        editorEmails: [],
+        item: {
+          id: "image-1",
+          parentId: null,
+          type: "file",
+          name: "logo.png",
+          size: "12",
+          mimeType: "image/png",
+          storageStatus: "active",
+          shared: true,
+          createdAt: "2026-06-28T00:00:00.000Z",
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/share/shr_123` })).resolves.toMatchObject({
+      ok: true,
+      linkType: "share",
+      access: { status: "ok", canRead: true, canReadText: false, canDownload: true },
+      root: { name: "logo.png", type: "file", previewKind: "image" },
+    })
+  })
+
   it("rejects drive-shaped links from other origins before resolving content", async () => {
     const { service, drive, sites, publicAssets } = createService()
     const url = "https://example.com/share/shr_123"
@@ -266,6 +301,21 @@ describe("DriveLinkIntakeService", () => {
       access: { status: "ok", canRead: true, canList: true, canReadText: true, canDownload: true },
       root: { name: "pages/create-task.html", type: "site", previewKind: "html-source" },
       ref: { kind: "site", siteId: "site_public", path: "pages/create-task.html" },
+    })
+  })
+
+  it("does not mark site image links as readable text", async () => {
+    const { service, sites } = createService()
+    sites.resolvePublicSite.mockResolvedValueOnce({
+      status: "ok",
+      asset: { relativePath: "assets/logo.png", storageKey: "site/assets/logo.png", contentType: "image/png" },
+    } as never)
+
+    await expect(service.resolve({ url: `${publicAppUrl}/sites/site_123/assets/logo.png` })).resolves.toMatchObject({
+      ok: true,
+      linkType: "site_path",
+      access: { status: "ok", canRead: true, canReadText: false, canDownload: true },
+      root: { name: "assets/logo.png", type: "site", previewKind: "image" },
     })
   })
 
