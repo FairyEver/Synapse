@@ -21,6 +21,7 @@ import {
   shouldFocusMainForSecondInstance,
   showOrCreateMainWindow,
 } from "./bootstrap"
+import { formatStartupFailureDialogMessage } from "./bootstrap/startup-error"
 import type { WindowManager } from "./runtime/window"
 import { accountService } from "./services/account-service"
 import { createMainLogger } from "./services/log-store"
@@ -86,8 +87,7 @@ if (!gotSingleInstanceLock) {
     }))
     .catch((error) => {
       logger.error("Failed to initialize app.", error)
-      const message = error instanceof Error ? error.message : String(error)
-      dialog.showErrorBox("Synapse AI Studio 启动失败", `初始化时遇到错误：\n\n${message}\n\n请检查磁盘空间和文件权限。`)
+      dialog.showErrorBox("Synapse AI Studio 启动失败", formatStartupFailureDialogMessage(error))
       app.quit()
     })
 }
