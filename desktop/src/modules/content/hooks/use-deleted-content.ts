@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { listDeletedContent } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useRepositoryManager } from "@/app-shell/repository"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 type UseDeletedContentResult = {
@@ -12,6 +13,7 @@ type UseDeletedContentResult = {
 }
 
 function useDeletedContent(contentType: SynapseContentType): UseDeletedContentResult {
+  const manager = useRepositoryManager()
   const logger = useMemo(() => createRendererLogger("content.deleted"), [])
   const [items, setItems] = useState<SynapseContentMeta[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -43,6 +45,18 @@ function useDeletedContent(contentType: SynapseContentType): UseDeletedContentRe
     void refresh(controller.signal)
     return () => controller.abort()
   }, [refresh])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const unsubscribe = manager.subscribeToContentChanges(contentType, () => {
+      void refresh(controller.signal)
+    })
+
+    return () => {
+      controller.abort()
+      unsubscribe()
+    }
+  }, [contentType, manager, refresh])
 
   return {
     count: items.length,
