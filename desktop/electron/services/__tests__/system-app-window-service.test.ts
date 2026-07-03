@@ -102,6 +102,29 @@ describe("createSystemAppWindowService", () => {
 
     expect(createWindow).toHaveBeenCalledTimes(2)
   })
+
+  it("cleans up failed loads so the app can reopen with a fresh window", async () => {
+    const first = createWindowMock()
+    const second = createWindowMock()
+    const createWindow = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+    const windowManager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager,
+    })
+    first.loadURL.mockRejectedValueOnce(new Error("renderer unavailable"))
+
+    await expect(service.open("database")).rejects.toThrow("renderer unavailable")
+    await service.open("database")
+
+    expect(createWindow).toHaveBeenCalledTimes(2)
+    expect(windowManager.detach).toHaveBeenCalledWith("system-app:database")
+    expect(first.close).toHaveBeenCalledTimes(1)
+    expect(second.loadURL).toHaveBeenCalledWith("app://index.html?window=system-app&appId=database")
+  })
 })
 
 function createWindowMock() {
@@ -113,6 +136,8 @@ function createWindowMock() {
     restore: vi.fn(),
     focus: vi.fn(),
     loadURL: vi.fn(async () => undefined),
+    close: vi.fn(),
+    destroy: vi.fn(),
     webContents: {
       id: webContentsId,
       send: vi.fn(),

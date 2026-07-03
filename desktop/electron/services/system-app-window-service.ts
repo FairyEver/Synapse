@@ -121,7 +121,6 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
           },
         },
         load: (targetWindow, payload) => targetWindow.loadURL(payload.url),
-        cleanupOnLoadError: false,
         onCreated: ({ window }) => {
           deps.windowManager?.attach(
             { id: systemAppWindowManagerId(appId), role: "detail" },
