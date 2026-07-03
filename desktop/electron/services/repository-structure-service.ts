@@ -121,15 +121,44 @@ async function moveExistingEntriesToInitializationBackup(
 
   const backupPath = path.join(repositoryPath, createInitializationBackupDirectoryName(new Date()))
   await mkdir(backupPath, { recursive: false })
+  const movedEntries: string[] = []
 
   try {
     for (const entry of movableEntries) {
       await rename(path.join(repositoryPath, entry.name), path.join(backupPath, entry.name))
+      movedEntries.push(entry.name)
     }
     return backupPath
   } catch (error) {
+    const rollbackFailures: Array<{ readonly entryName: string; readonly error: unknown }> = []
+    for (const entryName of [...movedEntries].reverse()) {
+      try {
+        await rename(path.join(backupPath, entryName), path.join(repositoryPath, entryName))
+      } catch (rollbackError) {
+        rollbackFailures.push({ entryName, error: rollbackError })
+      }
+    }
+    if (rollbackFailures.length > 0) {
+      logger.error("Failed to roll back partial repository initialization backup move.", {
+        backupName: path.basename(backupPath),
+        movedEntries,
+        rollbackFailures,
+        error,
+      })
+      throw new Error(
+        `备份旧目录内容失败，且自动恢复部分旧内容失败。请从 ${path.basename(backupPath)} 手动恢复：${movedEntries.join(", ")}`,
+        { cause: error },
+      )
+    }
+    await rm(backupPath, { recursive: true, force: true }).catch((cleanupError) => {
+      logger.warn("Failed to remove empty initialization backup after rollback.", {
+        backupName: path.basename(backupPath),
+        error: cleanupError,
+      })
+    })
     logger.error("Failed to move repository contents into initialization backup.", {
       backupName: path.basename(backupPath),
+      movedEntries,
       error,
     })
     throw new Error("备份旧目录内容失败，未初始化。", { cause: error })

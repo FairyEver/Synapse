@@ -3,6 +3,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+type RenameFunction = typeof import("node:fs/promises").rename
+
 const mocks = vi.hoisted(() => ({
   contentIndexService: {
     clearIndex: vi.fn(),
@@ -20,6 +22,27 @@ const mocks = vi.hoisted(() => ({
     clearRepoProfiles: vi.fn(),
   },
 }))
+
+const fsMocks = vi.hoisted(() => ({
+  renameCalls: vi.fn(),
+  renameImplementation: undefined as
+    | undefined
+    | ((actualRename: RenameFunction, oldPath: string, newPath: string) => Promise<void>),
+}))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  return {
+    ...actual,
+    rename: async (oldPath: string, newPath: string) => {
+      fsMocks.renameCalls(oldPath, newPath)
+      if (fsMocks.renameImplementation) {
+        return fsMocks.renameImplementation(actual.rename, oldPath, newPath)
+      }
+      return actual.rename(oldPath, newPath)
+    },
+  }
+})
 
 vi.mock("../content-index-service", () => ({
   contentIndexService: mocks.contentIndexService,
@@ -54,6 +77,8 @@ async function makeTempRepositoryPath(): Promise<string> {
 describe("RepositoryStructureService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    fsMocks.renameImplementation = undefined
+    fsMocks.renameCalls.mockClear()
     mocks.repositoryStore.getRepositoryState.mockImplementation(async (repository) => ({
       gitRootPath: null,
       isGitRepository: false,
@@ -202,6 +227,45 @@ describe("RepositoryStructureService", () => {
         repositoryUuid: "repo-1",
       }),
     )
+  })
+
+  it("restores already moved contents when backup move fails halfway", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await writeFile(path.join(localPath, "first.md"), "# First", "utf8")
+    await writeFile(path.join(localPath, "second.md"), "# Second", "utf8")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
+    let backupMoveCount = 0
+    fsMocks.renameImplementation = async (actualRename, oldPath, newPath) => {
+      if (path.basename(path.dirname(newPath)).startsWith(".synapse-init-backup-")) {
+        backupMoveCount += 1
+        if (backupMoveCount === 2) {
+          throw new Error("rename failed")
+        }
+      }
+      await actualRename(oldPath, newPath)
+    }
+
+    await expect(repositoryStructureService.initializeStructure({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    }, {
+      confirmedOperationToken: preview.operationToken,
+    })).rejects.toThrow("备份旧目录内容失败")
+
+    await expect(access(path.join(localPath, "first.md"))).resolves.toBeUndefined()
+    await expect(access(path.join(localPath, "second.md"))).resolves.toBeUndefined()
+    await expect(access(path.join(localPath, "rules"))).rejects.toThrow()
+    const entries = await readdir(localPath)
+    expect(entries.some((entry) => entry.startsWith(".synapse-init-backup-"))).toBe(false)
+    expect(mocks.contentIndexService.clearIndex).not.toHaveBeenCalled()
   })
 
   it("rejects initialization when the confirmed token no longer matches current contents", async () => {
