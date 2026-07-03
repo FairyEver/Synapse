@@ -104,6 +104,7 @@ export class ModelPriceService {
         nextResult.push({
           ...presetRule,
           id: createModelPriceRuleId(`preset:${preset.id}`, presetRule.modelPattern),
+          enabled: rule.enabled,
           source: "builtin",
           updatedAt: now,
           sortIndex: rule.sortIndex,

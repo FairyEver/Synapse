@@ -574,6 +574,28 @@ describe("model price service", () => {
     db.close()
   })
 
+  it("preserves disabled state when reimporting a matching preset rule", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const [initialRule] = service.importPreset("deepseek-official")
+      .filter((item) => item.modelPattern === "deepseek-v4-pro")
+    expect(initialRule).toBeTruthy()
+    service.setRuleEnabled(initialRule!.id, false)
+
+    const imported = service.importPreset("deepseek-official")
+    const refreshedRule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(refreshedRule).toMatchObject({
+      enabled: false,
+      inputPer1M: 3,
+      outputPer1M: 6,
+      source: "builtin",
+    })
+    expect(service.findRuleForModel("deepseek-v4-pro")).toBeNull()
+    db.close()
+  })
+
   it("keeps non-overlapping user rules and appends preset rules after import", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
