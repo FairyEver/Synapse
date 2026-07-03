@@ -141,17 +141,48 @@ export function createTerminalCapabilityDispatcher(deps: {
         return { ok: true, data: { ok: true }, affected: 1 }
       }
       if (action === TERMINAL_SESSION_CREATE_CAPABILITY_ID) {
-        return { ok: true, data: await deps.service.createSession(terminalCreateSessionInputSchema.parse(params)), affected: 1 }
+        const parsed = terminalCreateSessionInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_CREATE_CAPABILITY_ID,
+          resource: parsed.groupId ?? "terminal:session",
+          boundary: "terminal.mcp.createSession",
+          groupId: parsed.groupId,
+          cols: parsed.cols,
+          rows: parsed.rows,
+          cwdProvided: parsed.cwd !== undefined,
+        })
+        return { ok: true, data: await deps.service.createSession(parsed), affected: 1 }
       }
       if (action === TERMINAL_SESSION_LIST_CAPABILITY_ID) {
         terminalEmptyInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_LIST_CAPABILITY_ID,
+          resource: "terminal:sessions",
+          boundary: "terminal.mcp.listSessions",
+        })
         return { ok: true, data: deps.service.listSessions(), affected: 0 }
       }
       if (action === TERMINAL_SESSION_GET_CAPABILITY_ID) {
-        return { ok: true, data: deps.service.getSession(terminalSessionIdInputSchema.parse(params)), affected: 0 }
+        const parsed = terminalSessionIdInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_GET_CAPABILITY_ID,
+          resource: parsed.sessionId,
+          boundary: "terminal.mcp.getSession",
+          sessionId: parsed.sessionId,
+        })
+        return { ok: true, data: deps.service.getSession(parsed), affected: 0 }
       }
       if (action === TERMINAL_SESSION_READ_CAPABILITY_ID) {
-        return { ok: true, data: deps.service.readSession(terminalReadSessionInputSchema.parse(params)), affected: 0 }
+        const parsed = terminalReadSessionInputSchema.parse(params)
+        await authorizeTerminalControl(deps, context, {
+          capabilityAction: TERMINAL_SESSION_READ_CAPABILITY_ID,
+          resource: parsed.sessionId,
+          boundary: "terminal.mcp.readSession",
+          sessionId: parsed.sessionId,
+          afterSeq: parsed.afterSeq,
+          limitBytes: parsed.limitBytes,
+        })
+        return { ok: true, data: deps.service.readSession(parsed), affected: 0 }
       }
       if (action === TERMINAL_SESSION_RENAME_CAPABILITY_ID) {
         return { ok: true, data: await deps.service.renameSession(terminalRenameSessionInputSchema.parse(params)), affected: 1 }
@@ -216,6 +247,11 @@ async function authorizeTerminalControl(
     readonly sessionId?: string
     readonly byteCount?: number
     readonly force?: boolean
+    readonly afterSeq?: number
+    readonly limitBytes?: number
+    readonly cols?: number
+    readonly rows?: number
+    readonly cwdProvided?: boolean
   },
 ): Promise<void> {
   if (!deps.permissionGuard) return
@@ -229,6 +265,11 @@ async function authorizeTerminalControl(
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.byteCount === undefined ? {} : { byteCount: input.byteCount }),
     ...(input.force === undefined ? {} : { force: input.force }),
+    ...(input.afterSeq === undefined ? {} : { afterSeq: input.afterSeq }),
+    ...(input.limitBytes === undefined ? {} : { limitBytes: input.limitBytes }),
+    ...(input.cols === undefined ? {} : { cols: input.cols }),
+    ...(input.rows === undefined ? {} : { rows: input.rows }),
+    ...(input.cwdProvided === undefined ? {} : { cwdProvided: input.cwdProvided }),
   }
   const permission = await deps.permissionGuard.check({
     action: TERMINAL_CONTROL_PERMISSION_ACTION,
