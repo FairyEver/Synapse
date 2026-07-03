@@ -1231,6 +1231,57 @@ describe("AutomationIngressService", () => {
     }))
   })
 
+  it("redacts successful exec output before returning or storing webhook runs", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const stdoutSecret = "raw.bearer.token"
+    const stderrSecret = "session-secret"
+    const tokenSecret = "sk-ant-test123456"
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: `normal output at /Users/alice/repo\nAuthorization: Bearer ${stdoutSecret}\ntoken=${tokenSecret}`,
+      stderr: `Cookie: sid=${stderrSecret}`,
+      timedOut: false,
+    }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: { run } as unknown as ControlledProcessRunner,
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    const response = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: Buffer.from(JSON.stringify({
+        project: "project-1",
+        exec: "printenv",
+        replyMode: "wait",
+      })),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(response.status).toBe(200)
+    const [storedRun] = await runs.list()
+    const [listedRun] = await service.listRuns("project-1")
+    const serialized = JSON.stringify([response.body, storedRun, listedRun])
+    expect(serialized).toContain("normal output at /Users/alice/repo")
+    expect(serialized).toContain("Authorization:")
+    expect(serialized).toContain("Cookie:")
+    expect(serialized).toContain("token=[redacted]")
+    expect(serialized).toContain("[redacted]")
+    expect(serialized).not.toContain(stdoutSecret)
+    expect(serialized).not.toContain(stderrSecret)
+    expect(serialized).not.toContain(tokenSecret)
+  })
+
   it("returns a fixed internal error when webhook config loading fails during a request", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

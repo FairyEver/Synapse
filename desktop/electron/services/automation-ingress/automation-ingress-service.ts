@@ -4,6 +4,7 @@ import {
   AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT,
   AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT,
 } from "../../../config"
+import { redactSensitiveText } from "../../../src/lib/agent-redaction"
 import type {
   DataNamespace,
   WebhookConfigEntryV1,
@@ -407,8 +408,10 @@ export class AutomationIngressService {
       const resultCorrelation = run.kind === "prompt"
         ? { messageId: webhookAgentMessageId(body, run.id), ...agentResultCorrelation(result) }
         : agentResultCorrelation(result)
+      const resultText = stringValue(result.resultText)
+      const safeResultText = resultText ? sanitizeWebhookRunText(resultText) : undefined
       await this.finishRun(run, finalStatus, {
-        resultText: stringValue(result.resultText),
+        resultText,
         lastError: finalStatus === "success" ? undefined : safeResultError ?? resultStatus,
         metadata: resultCorrelation,
       })
@@ -435,6 +438,7 @@ export class AutomationIngressService {
       return {
         runId: run.id,
         ...result,
+        resultText: safeResultText,
         ...(safeResultError ? { error: safeResultError } : {}),
       }
     } catch (error) {
@@ -670,8 +674,8 @@ export class AutomationIngressService {
     const nextRun: WebhookRunEntryV1 = {
       ...run,
       status,
-      resultText: patch.resultText ? truncate(patch.resultText) : undefined,
-      lastError: patch.lastError,
+      resultText: patch.resultText ? truncate(sanitizeWebhookRunText(patch.resultText)) : undefined,
+      lastError: patch.lastError ? sanitizeWebhookRunText(patch.lastError) : undefined,
       finishedAt: this.isoNow(),
       updatedAt: this.isoNow(),
     }
@@ -790,6 +794,12 @@ function sanitizeWebhookRunForDisplay(run: WebhookRunEntryV1): WebhookRunEntryV1
   const safeRun = { ...run }
   delete safeRun.sessionKey
   delete safeRun.workspacePath
+  if (safeRun.resultText) {
+    safeRun.resultText = sanitizeWebhookRunText(safeRun.resultText)
+  }
+  if (safeRun.lastError) {
+    safeRun.lastError = sanitizeWebhookRunText(safeRun.lastError)
+  }
   const metadata = sanitizeWebhookRunMetadata(run.metadata)
   if (metadata) {
     safeRun.metadata = metadata
@@ -934,6 +944,10 @@ function formatShellOutput(stdout: string | undefined, stderr: string | undefine
 function truncate(value: string): string {
   if (value.length <= MAX_REPLY_CHARS) return value
   return `${value.slice(0, MAX_REPLY_CHARS)}\n...`
+}
+
+function sanitizeWebhookRunText(value: string): string {
+  return redactSensitiveText(value)
 }
 
 function normalizePath(value: string): string {
