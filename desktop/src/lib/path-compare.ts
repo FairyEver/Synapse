@@ -28,6 +28,20 @@ function arePathsEqualForCompare(
   return normalizePathForCompare(left, options) === normalizePathForCompare(right, options)
 }
 
+function isPathInsideDirectory(
+  parentPath: string,
+  childPath: string,
+  options: PathCompareOptions = {},
+): boolean {
+  const parent = normalizePathForCompare(parentPath, options)
+  const child = normalizePathForCompare(childPath, options)
+  if (!parent || !child) return parent === child
+  if (parent === child) return true
+  const separator = options.platform === "win32" ? "\\" : "/"
+  const parentPrefix = parent.endsWith(separator) ? parent : `${parent}${separator}`
+  return child.startsWith(parentPrefix)
+}
+
 function normalizeDotSegments(value: string, platform?: RuntimePlatform): string {
   const windows = platform === "win32"
   const separator = windows ? "\\" : "/"
@@ -80,5 +94,5 @@ function splitPathPrefix(value: string, windows: boolean): { prefix: string; res
   return { prefix: "", rest: value }
 }
 
-export { arePathsEqualForCompare, normalizePathForCompare }
+export { arePathsEqualForCompare, isPathInsideDirectory, normalizePathForCompare }
 export type { PathCompareOptions, RuntimePlatform }

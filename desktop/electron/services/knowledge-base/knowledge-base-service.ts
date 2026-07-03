@@ -20,6 +20,7 @@ import type {
   SynapseKnowledgeBaseUploadRawItemsPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
+import { isPathInsideDirectory } from "../../../src/lib/path-compare"
 import type { SynapseConfig, SynapseKnowledgeBaseStorageConfig, SynapseProjectConfig } from "../../../src/types/config"
 import { stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
@@ -586,7 +587,7 @@ function applyRawManifestChanges(
     const toKey = change.to ? rawManifestKey(change.to) : undefined
     const affectedEntries = Object.entries(sources).filter(([sourcePath]) => {
       if (sourcePath === fromKey) return true
-      return change.kind === "directory" && sourcePath.startsWith(`${fromKey}/`)
+      return change.kind === "directory" && isPathInsideDirectory(fromKey, sourcePath, { platform: "linux" })
     })
 
     for (const [sourcePath, entry] of affectedEntries) {
@@ -624,7 +625,7 @@ function rawManifestHasAffectedSources(
   const sourcePaths = Object.keys(manifest.sources)
   return rawRelativePaths.some((rawRelativePath) => {
     const fromKey = rawManifestKey(rawRelativePath)
-    return sourcePaths.some((sourcePath) => sourcePath === fromKey || sourcePath.startsWith(`${fromKey}/`))
+    return sourcePaths.some((sourcePath) => isPathInsideDirectory(fromKey, sourcePath, { platform: "linux" }))
   })
 }
 
@@ -635,8 +636,7 @@ function normalizeRawRelativePath(value: string): string {
 function assertRawRelativePathInside(projectPath: string, rawRelativePath: string): void {
   const rawRoot = path.resolve(projectPath, ".raw")
   const target = path.resolve(rawRoot, normalizeRawRelativePath(rawRelativePath))
-  const relative = path.relative(rawRoot, target)
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(rawRoot, target, { resolvePath: path.resolve })) {
     throw new Error("目标路径不在资料目录中。")
   }
 }
@@ -685,8 +685,7 @@ function legacyManagedTemplateDirectoryName(): string {
 function assertInside(rootPath: string, targetPath: string): string {
   const root = path.resolve(rootPath)
   const target = path.resolve(targetPath)
-  const relative = path.relative(root, target)
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(root, target, { resolvePath: path.resolve })) {
     throw new Error("目标路径不在项目目录中。")
   }
   return target

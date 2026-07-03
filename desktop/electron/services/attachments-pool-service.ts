@@ -8,6 +8,7 @@ import type {
   SynapseContentFile,
 } from "../../src/types/content"
 import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import { isPathInsideDirectory } from "../../src/lib/path-compare"
 import { createMainLogger } from "./log-store"
 
 const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
@@ -50,9 +51,7 @@ function normalizeAttachmentSha256(sha256: string): string {
 }
 
 function assertPathInsideDirectory(targetPath: string, directoryPath: string): void {
-  const relative = path.relative(directoryPath, targetPath)
-
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(directoryPath, targetPath, { resolvePath: path.resolve })) {
     throw new Error("附件路径越界。")
   }
 }

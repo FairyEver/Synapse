@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
+import { isPathInsideDirectory } from "../../../src/lib/path-compare"
 import { atomicWriteTextFile } from "./atomic-write"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
@@ -146,8 +147,7 @@ function normalizeManifest(manifest: KnowledgeBaseManifest): KnowledgeBaseManife
 function assertInside(rootPath: string, targetPath: string): string {
   const root = path.resolve(rootPath)
   const target = path.resolve(targetPath)
-  const relative = path.relative(root, target)
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(root, target, { resolvePath: path.resolve })) {
     throw new Error("目标路径不在项目目录中。")
   }
   return target

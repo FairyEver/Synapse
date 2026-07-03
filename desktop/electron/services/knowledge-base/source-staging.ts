@@ -3,6 +3,7 @@ import { link, lstat, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
+import { isPathInsideDirectory } from "../../../src/lib/path-compare"
 import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { acquireUrlSource, type FetchUrl, type UrlSourceErrorCode } from "../source-acquisition/url-source"
@@ -165,8 +166,7 @@ function safeDecodeURIComponent(value: string): string {
 function assertInside(rootPath: string, targetPath: string): string {
   const root = path.resolve(rootPath)
   const target = path.resolve(targetPath)
-  const relative = path.relative(root, target)
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(root, target, { resolvePath: path.resolve })) {
     throw new Error("目标路径不在项目目录中。")
   }
   return target

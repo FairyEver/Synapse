@@ -6,6 +6,7 @@ import type {
   SynapseKnowledgeBaseRawEntry,
   SynapseKnowledgeBaseRawMutationResult,
 } from "../../../src/types/knowledge-base"
+import { isPathInsideDirectory } from "../../../src/lib/path-compare"
 import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
 import {
   KNOWLEDGE_BASE_RAW_EXPORT_MAX_DEPTH,
@@ -574,8 +575,7 @@ function resolveRawPath(rawRoot: string, rawRelativePath: string): string {
   const root = path.resolve(rawRoot)
   const normalized = normalizeRawPath(rawRelativePath)
   const target = path.resolve(root, normalized)
-  const relative = path.relative(root, target)
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!isPathInsideDirectory(root, target, { resolvePath: path.resolve })) {
     throw new Error("目标路径不在资料目录中。")
   }
   return target
@@ -752,7 +752,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
 function isSameOrDescendant(sourcePath: string, targetDirectoryPath: string): boolean {
   const source = normalizeRawPath(sourcePath)
   const target = normalizeRawPath(targetDirectoryPath)
-  return target === source || target.startsWith(`${source}/`)
+  return isPathInsideDirectory(source, target, { platform: "linux" })
 }
 
 async function assertRawExportTargetOutsideRawRoot(rawRoot: string, targetDirectory: string): Promise<void> {
@@ -773,8 +773,7 @@ async function assertRawExportTargetOutsideRawRoot(rawRoot: string, targetDirect
 }
 
 function isAbsoluteSameOrDescendant(parentPath: string, candidatePath: string): boolean {
-  const relative = path.relative(parentPath, candidatePath)
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  return isPathInsideDirectory(parentPath, candidatePath, { resolvePath: path.resolve })
 }
 
 function isInvalidRawPathError(error: unknown): boolean {
