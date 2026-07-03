@@ -114,6 +114,22 @@ describe('DriveRendererShell', () => {
     expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
   })
 
+  it('shows the edit unavailable reason in the shared header', () => {
+    renderShell({
+      snapshot: baseSnapshot({
+        edit: {
+          canEdit: false,
+          editorKind: 'text',
+          currentVersionId: null,
+          maxInlineEditBytes: '1048576',
+          reason: 'permission_denied',
+        },
+      }),
+    })
+
+    expect(document.body.textContent).toContain('没有编辑权限')
+  })
+
   it('allows direct content rendering without a toolbar provider', () => {
     const html = renderToStaticMarkup(
       <DriveRendererContent

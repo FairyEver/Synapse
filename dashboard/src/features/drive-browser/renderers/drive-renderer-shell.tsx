@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  type DriveBrowserEditUnavailableReason,
   type DriveBrowserSnapshotDto,
   type DriveFileContentUpdateResult,
 } from '@synapse/shared'
@@ -11,7 +12,7 @@ import { DriveCodeRenderer } from './code-renderer'
 import { getDrivePreviewDriveBrowserUrl } from './drive-preview-actions'
 import { DrivePreviewFloatingMenu, clampDriveFloatingMenuPosition, shouldSuppressDriveFloatingMenuOpen } from './drive-preview-floating-menu'
 import { DrivePreviewHeader } from './drive-preview-header'
-import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
+import { DriveRendererToolbarProvider, useDriveRendererToolbar, useRegisterDriveRendererToolbarItems } from './drive-renderer-toolbar-context'
 import {
   findDriveRendererOption,
   getDriveRendererOptions,
@@ -28,6 +29,13 @@ import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 const READING_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
 const FULL_CONTAINER_CLASSNAME = 'h-full min-h-0 w-full'
+const DRIVE_EDIT_UNAVAILABLE_LABELS: Record<DriveBrowserEditUnavailableReason, string> = {
+  login_required: '需要登录才能编辑',
+  permission_denied: '没有编辑权限',
+  quota: '云盘空间不足，无法编辑',
+  truncated: '文件过大，无法在线编辑',
+  unsupported: '不支持编辑此文件类型',
+}
 
 export { clampDriveFloatingMenuPosition, shouldSuppressDriveFloatingMenuOpen }
 
@@ -181,6 +189,14 @@ export function DriveRendererContent({
   readonly annotationContext?: DriveAnnotationContext
 }) {
   const preview = snapshot.preview
+  const editUnavailableLabel = getDriveEditUnavailableLabel(snapshot)
+  const editUnavailableItems = useMemo(
+    () => editUnavailableLabel
+      ? [{ kind: 'status' as const, id: 'drive-edit-unavailable-reason', label: editUnavailableLabel }]
+      : [],
+    [editUnavailableLabel]
+  )
+  useRegisterDriveRendererToolbarItems('drive-edit-unavailable', editUnavailableItems)
   const imageSourceContext = getDriveMarkdownImageSourceContext(snapshot, annotationContext)
   const containerClassName = selected.container === 'media'
     ? MEDIA_CONTAINER_CLASSNAME
@@ -233,6 +249,11 @@ export function DriveRendererContent({
     return renderContent(<DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />)
   }
   return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
+}
+
+function getDriveEditUnavailableLabel(snapshot: DriveBrowserSnapshotDto): string | null {
+  const reason = snapshot.edit?.canEdit === false ? snapshot.edit.reason : null
+  return reason ? DRIVE_EDIT_UNAVAILABLE_LABELS[reason] : null
 }
 
 function getDriveMarkdownImageSourceContext(
