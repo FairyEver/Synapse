@@ -9,6 +9,7 @@ import { z } from "zod"
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { DataRepository, ConversationEntryV1 } from "../../runtime/data-repo"
+import { quoteWindowsCommandArg } from "../../runtime/process/controlled-runner"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference, isResolvedInsideWorkspace } from "../../services/agent-runtime/references"
 import type {
@@ -930,7 +931,7 @@ async function openFileWithLine(filePath: string, line: number): Promise<boolean
   for (const editor of editors) {
     try {
       if (process.platform === "win32") {
-        const command = `${quoteCmdArgument(`${editor}.cmd`)} --goto ${quoteCmdArgument(target)}`
+        const command = [quoteWindowsCommandArg(`${editor}.cmd`), "--goto", quoteWindowsCommandArg(target)].join(" ")
         await execFileAsync("cmd.exe", ["/d", "/s", "/c", command], {
           timeout: 5000,
           windowsHide: true,
@@ -944,10 +945,6 @@ async function openFileWithLine(filePath: string, line: number): Promise<boolean
     }
   }
   return false
-}
-
-function quoteCmdArgument(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`
 }
 
 function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

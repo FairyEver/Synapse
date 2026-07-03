@@ -991,7 +991,7 @@ function wrapWindowsBatchCommand(
   }
 }
 
-function quoteWindowsCommandArg(value: string): string {
+export function quoteWindowsCommandArg(value: string): string {
   if (value.length === 0) return "\"\""
   const escaped = value
     .replace(/\^/g, "^^")
