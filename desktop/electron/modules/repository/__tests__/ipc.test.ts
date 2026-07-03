@@ -241,6 +241,25 @@ describe("repositoryIpcModule", () => {
     }))
   })
 
+  it("returns inaccessible state for repositories that fail during batch state refresh", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    const { repositoryStore } = await import("../../../services/repository-store")
+    vi.mocked(repositoryStore.getRepositoryState).mockRejectedValueOnce(new Error("EACCES: permission denied"))
+
+    await expect(repositoryIpcModule.methods.getStates.handler(createContext() as never, undefined))
+      .resolves.toEqual([{
+        repositoryUuid: "repo-1",
+        localPath: "/repo",
+        status: "inaccessible",
+        isGitRepository: false,
+        gitRootPath: null,
+      }])
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Repository state resolution failed; returning inaccessible state.",
+      expect.objectContaining({ repositoryUuid: "repo-1" }),
+    )
+  })
+
   it("does not create a local repository when write permission is denied", async () => {
     const { repositoryIpcModule } = await import("../ipc")
     const resourcePath = path.resolve("/parent", "Local Repo")

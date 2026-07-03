@@ -159,7 +159,7 @@ async function notifyInstallStatusChanges(eventBus: EventBus): Promise<void> {
 const repositoryStateSchema = z.object({
   repositoryUuid: z.string(),
   localPath: z.string(),
-  status: z.enum(["missing", "ready"]),
+  status: z.enum(["missing", "ready", "inaccessible"]),
   isGitRepository: z.boolean(),
   gitRootPath: z.string().nullable(),
 })
@@ -305,9 +305,24 @@ export const repositoryIpcModule: IpcModule = {
       handler: async (_ctx) => {
         logger.debug("Handling repository.getStates request.")
         const config = await configStore.load()
-        const states = await Promise.all(
+        const results = await Promise.allSettled(
           config.repositories.map((repository) => repositoryStore.getRepositoryState(repository)),
         )
+        const states = results.map((result, index) => {
+          if (result.status === "fulfilled") return result.value
+          const repository = config.repositories[index]
+          logger.warn("Repository state resolution failed; returning inaccessible state.", {
+            repositoryUuid: repository?.uuid,
+            error: result.reason,
+          })
+          return {
+            repositoryUuid: repository?.uuid ?? "unknown",
+            localPath: repository?.localPath ?? "",
+            status: "inaccessible" as const,
+            isGitRepository: false,
+            gitRootPath: null,
+          }
+        })
 
         logger.debug(`Repository states resolved for renderer. repositoryCount: ${config.repositories.length}`)
 

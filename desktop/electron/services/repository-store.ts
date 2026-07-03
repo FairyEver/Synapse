@@ -156,7 +156,24 @@ export class RepositoryStore {
     logger.info("getRepositoryState: starting.", { repositoryUuid: repository.uuid })
 
     const tPath = Date.now()
-    const repositoryExists = await pathExists(localPath)
+    let repositoryExists: boolean
+    try {
+      repositoryExists = await pathExists(localPath)
+    } catch (error) {
+      if (isPermissionError(error)) {
+        logger.warn("Repository path is temporarily inaccessible.", {
+          repositoryUuid: repository.uuid,
+        })
+        return {
+          repositoryUuid: repository.uuid,
+          localPath,
+          status: "inaccessible",
+          isGitRepository: false,
+          gitRootPath: null,
+        }
+      }
+      throw error
+    }
     logger.info("getRepositoryState: pathExists done.", { repositoryExists, durationMs: Date.now() - tPath, repositoryUuid: repository.uuid })
 
     if (!repositoryExists) {

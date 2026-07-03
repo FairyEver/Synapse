@@ -76,7 +76,7 @@ function MainApp() {
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
-  const isActiveRepositoryMissing = activeRepositoryState?.status === "missing"
+  const isActiveRepositoryMissing = activeRepositoryState?.status === "missing" || activeRepositoryState?.status === "inaccessible"
 
   const activeAppIdRef = useRef(activeAppId)
   activeAppIdRef.current = activeAppId

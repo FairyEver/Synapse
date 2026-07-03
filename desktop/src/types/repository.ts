@@ -45,7 +45,7 @@ export type SynapseRepositorySyncPrimaryAction =
   | "resolve-git"
   | null
 
-export type SynapseRepositoryLocalStatus = "missing" | "ready"
+export type SynapseRepositoryLocalStatus = "missing" | "ready" | "inaccessible"
 
 export type SynapseRepositoryLocalState = {
   repositoryUuid: string
