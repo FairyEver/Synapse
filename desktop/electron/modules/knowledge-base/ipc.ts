@@ -501,6 +501,7 @@ async function runGuardedKnowledgeBaseFileUpload<T>(options: {
   writeSource: string
   run(): Promise<T>
 }): Promise<T> {
+  assertStorageMigrationInactive(options.ctx)
   for (const filePath of options.filePaths) {
     await runGuardedKnowledgeBaseOperation({
       ctx: options.ctx,
@@ -695,6 +696,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       }),
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        assertStorageMigrationInactive(ctx)
         await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await showOpenDialog({
           properties: ["openFile", "multiSelections"],
@@ -722,6 +724,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: selectAndUploadRawDirectoryPayloadSchema,
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        assertStorageMigrationInactive(ctx)
         await assertKnowledgeBaseStorageAvailable(ctx)
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory"],

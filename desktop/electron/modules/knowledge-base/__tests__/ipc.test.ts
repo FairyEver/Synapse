@@ -836,6 +836,25 @@ describe("knowledgeBaseIpcModule", () => {
     expect(uploadRawFiles).not.toHaveBeenCalled()
   })
 
+  it("blocks selected raw file upload during storage migration before opening picker", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [],
+    })
+    const { harness, migrationService, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawFiles } })
+
+    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })).rejects.toThrow("知识库存储迁移正在进行，请稍后再试。")
+
+    expect(migrationService.getStorageStatus).not.toHaveBeenCalled()
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(uploadRawFiles).not.toHaveBeenCalled()
+  })
+
   it("does not upload raw files when external file read permission is denied", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
@@ -866,6 +885,24 @@ describe("knowledgeBaseIpcModule", () => {
         policyId: "test-policy",
       },
     })
+  })
+
+  it("blocks direct raw file upload during storage migration before permission checks", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [],
+    })
+    const { harness, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawFiles } })
+
+    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      filePaths: ["/tmp/brief.md"],
+    })).rejects.toThrow("知识库存储迁移正在进行，请稍后再试。")
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(uploadRawFiles).not.toHaveBeenCalled()
   })
 
   it("uploads raw items through guarded external read and managed write permissions", async () => {
@@ -933,6 +970,21 @@ describe("knowledgeBaseIpcModule", () => {
       targetDirectoryPath: "client-a",
     })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
 
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(uploadRawItems).not.toHaveBeenCalled()
+  })
+
+  it("blocks selected raw directory upload during storage migration before opening picker", async () => {
+    const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, migrationService, permissionGuard } = createHarness({ migrationActive: true, service: { uploadRawItems } })
+
+    await expect(harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })).rejects.toThrow("知识库存储迁移正在进行，请稍后再试。")
+
+    expect(migrationService.getStorageStatus).not.toHaveBeenCalled()
     expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
     expect(permissionGuard.check).not.toHaveBeenCalled()
     expect(uploadRawItems).not.toHaveBeenCalled()
