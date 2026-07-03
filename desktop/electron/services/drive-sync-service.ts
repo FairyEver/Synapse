@@ -593,11 +593,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (input.kind === "file" && input.direction === "remote_to_local") {
         await downloadInitialFile(binding)
       } else if (input.kind === "file" && input.direction === "local_to_remote") {
-        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding))
+        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding, input.targetParentId ?? null))
       } else if (input.kind === "folder" && input.direction === "remote_to_local") {
         await downloadInitialFolder(binding, input.drivePathHint ?? null)
       } else if (input.kind === "folder" && input.direction === "local_to_remote") {
-        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding))
+        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding, input.targetParentId ?? null))
       }
       return await activateBindingAtCurrentRemoteCursor(binding.id)
     } catch (error) {
@@ -902,13 +902,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return toBindingDto(entry)
   }
 
-  async function uploadInitialFile(binding: DriveSyncBindingDto): Promise<string> {
+  async function uploadInitialFile(binding: DriveSyncBindingDto, targetParentId: string | null): Promise<string> {
     const upload = await deps.accountService.uploadDriveLocalItems({
-      parentId: null,
+      parentId: targetParentId,
       items: [{ kind: "file", path: binding.localPath, name: binding.driveItemName }],
     })
     if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
-    const remoteItemId = await findUploadedRemoteItemId(binding.driveItemName, "file")
+    const remoteItemId = await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "file")
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -934,10 +934,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return remoteItemId
   }
 
-  async function findUploadedRemoteItemId(name: string, expectedType: "file" | "folder"): Promise<string> {
+  async function findUploadedRemoteItemId(parentId: string | null, name: string, expectedType: "file" | "folder"): Promise<string> {
     let offset: number | null = 0
     while (offset !== null) {
-      const page = await deps.accountService.listDriveItemTree({ parentId: null, offset, limit: 200 })
+      const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
       const item = page.items.find((candidate) => isDirectUploadedRemoteMatch(candidate, name, name, expectedType))
       if (item) return item.id
       offset = page.nextOffset ?? null
@@ -1044,7 +1044,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (skippedReason) throw new Error(skippedReason)
   }
 
-  async function uploadInitialFolder(binding: DriveSyncBindingDto): Promise<string> {
+  async function uploadInitialFolder(binding: DriveSyncBindingDto, targetParentId: string | null): Promise<string> {
     const snapshot = await scanDriveSyncLocalTree({
       rootPath: binding.localPath,
       rules: binding.excludeRules,
@@ -1060,7 +1060,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       }))
     if (files.length > 0) {
       const upload = await deps.accountService.uploadDriveLocalItems({
-        parentId: null,
+        parentId: targetParentId,
         items: [{
           kind: "folder",
           folderName: binding.driveItemName,
@@ -1069,11 +1069,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       })
       if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
     } else {
-      const created = await deps.accountService.createDriveFolder({ parentId: null, name: binding.driveItemName })
+      const created = await deps.accountService.createDriveFolder({ parentId: targetParentId, name: binding.driveItemName })
       createdRemoteRootId = created.id
     }
 
-    const remoteRootId = createdRemoteRootId ?? await findUploadedRemoteItemId(binding.driveItemName, "folder")
+    const remoteRootId = createdRemoteRootId ?? await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "folder")
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",

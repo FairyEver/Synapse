@@ -920,6 +920,47 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("uploads local-origin files into the selected Drive parent", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "spec", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const listDriveItemTree = vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => ({
+        items: parentId === "folder-1"
+          ? [{ id: "uploaded-spec", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "4", mimeType: "text/markdown" }]
+          : [],
+      }))
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveItemTree,
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "local-placeholder",
+        driveItemName: "spec.md",
+        kind: "file",
+        drivePathHint: "/Docs/spec.md",
+        targetParentId: "folder-1",
+        localPath,
+        direction: "local_to_remote",
+      })
+
+      expect(uploadDriveLocalItems).toHaveBeenCalledWith({
+        parentId: "folder-1",
+        items: [{ kind: "file", path: localPath, name: "spec.md" }],
+      })
+      expect(listDriveItemTree).toHaveBeenCalledWith({ parentId: "folder-1", offset: 0, limit: 200 })
+      expect(binding).toMatchObject({ driveItemId: "uploaded-spec" })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ drivePathHint: "/Docs/spec.md" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("rejects local folder uploads that contain symlinks before creating a binding", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

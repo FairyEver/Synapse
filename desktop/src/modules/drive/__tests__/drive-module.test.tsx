@@ -1212,12 +1212,60 @@ describe("DriveModule", () => {
       driveItemId: "local:/Users/me/LocalDocs",
       driveItemName: "LocalDocs",
       kind: "folder",
+      drivePathHint: "/LocalDocs",
+      targetParentId: null,
       localPath: "/Users/me/LocalDocs",
       direction: "local_to_remote",
       importGitignore: true,
     }))
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(listCallsBeforeSubmit + 1)
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(usageCallsBeforeSubmit + 1)
+  })
+
+  it("uploads local-to-cloud sync roots into the current Drive folder", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-projects", type: "folder", name: "Projects" }),
+      ])
+      .mockResolvedValueOnce([])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "ready",
+      direction: "local_to_remote",
+      reason: null,
+      localPath: "/Users/me/LocalDocs",
+      localKind: "folder",
+      localEmpty: false,
+      forcedExcludeRules: [".git/**", ".git"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+    })
+
+    await render(<DriveModule />)
+    await flushAct()
+    await act(async () => {
+      getTableRow("Projects").click()
+      await flushPromises()
+    })
+    await clickButtonText("本地同步")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    if (!dialog) throw new Error("Local drive sync dialog not found")
+    expect(dialog.textContent).toContain("/Projects")
+
+    await clickText("选择文件夹")
+    await clickButtonText("上传并同步")
+
+    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
+      driveItemId: "local:/Users/me/LocalDocs",
+      driveItemName: "LocalDocs",
+      kind: "folder",
+      drivePathHint: "/Projects/LocalDocs",
+      targetParentId: "folder-projects",
+      localPath: "/Users/me/LocalDocs",
+      direction: "local_to_remote",
+      importGitignore: true,
+    }))
   })
 
   it("sends folder exclude rules when previewing drive sync bindings", async () => {
@@ -1296,7 +1344,8 @@ describe("DriveModule", () => {
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync binding dialog not found")
     const submitButton = Array.from(dialog.querySelectorAll("button"))
-      .find((button) => button.textContent === "创建同步")
+      .filter((button) => button.textContent === "创建同步")
+      .at(-1)
     expect(dialog.textContent).toContain("不可绑定")
     expect(dialog.textContent).toContain("本地文件与云盘文件大小不一致")
     expect((submitButton as HTMLButtonElement | undefined)?.disabled).toBe(true)

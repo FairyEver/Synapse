@@ -62,7 +62,7 @@ const DRIVE_SYNC_OBJECT_FILTERS: ReadonlyArray<{
 export type DriveSyncDialogState =
   | { readonly mode: "status"; readonly item: null }
   | { readonly mode: "bind"; readonly item: DriveItemDto; readonly drivePathHint: string | null }
-  | { readonly mode: "local"; readonly item: null }
+  | { readonly mode: "local"; readonly item: null; readonly targetParentId: string | null; readonly drivePathHint: string | null }
 
 export function DriveSyncDialog({
   onDriveItemsChanged,
@@ -87,7 +87,8 @@ export function DriveSyncDialog({
   const [statusFilter, setStatusFilter] = useState<DriveSyncObjectFilter>("all")
   const [busy, setBusy] = useState(false)
   const item = state?.mode === "bind" ? state.item : null
-  const drivePathHint = state?.mode === "bind" ? state.drivePathHint : null
+  const drivePathHint = state?.mode === "bind" || state?.mode === "local" ? state.drivePathHint : null
+  const targetParentId = state?.mode === "local" ? state.targetParentId : null
   const isLocalBinding = state?.mode === "local"
   const isBindingDialog = state?.mode === "bind" || isLocalBinding
   const isStatusDialog = !isBindingDialog
@@ -145,13 +146,16 @@ export function DriveSyncDialog({
     if (!isBindingDialog || nextLocalPath.trim().length === 0) return null
     const currentPath = nextLocalPath.trim()
     const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
+    const bindingDrivePathHint = isLocalBinding
+      ? joinDriveSyncPathHint(drivePathHint, driveItemName)
+      : drivePathHint ?? item?.name ?? driveItemName
     setBusy(true)
     try {
       const nextPreview = await requireSynapseBridge().driveSync.previewBinding({
         driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
         driveItemName,
         kind: bindingKind,
-        drivePathHint: drivePathHint ?? item?.name ?? driveItemName,
+        drivePathHint: bindingDrivePathHint,
         localPath: currentPath,
         remoteExists: nextMode !== "local_to_remote",
         directionHint: nextMode,
@@ -172,6 +176,9 @@ export function DriveSyncDialog({
     if (!isBindingDialog) return
     const currentPath = localPath.trim()
     const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
+    const bindingDrivePathHint = isLocalBinding
+      ? joinDriveSyncPathHint(drivePathHint, driveItemName)
+      : drivePathHint ?? item?.name ?? driveItemName
     const currentPreview = preview?.localPath === currentPath && preview.direction === effectiveBindingMode
       ? preview
       : await previewBinding(currentPath, effectiveBindingMode)
@@ -182,7 +189,8 @@ export function DriveSyncDialog({
         driveItemId: item?.id ?? getDriveSyncLocalPlaceholderId(currentPath),
         driveItemName,
         kind: bindingKind,
-        drivePathHint: drivePathHint ?? item?.name ?? driveItemName,
+        drivePathHint: bindingDrivePathHint,
+        targetParentId,
         localPath: currentPath,
         direction: currentPreview.direction,
         excludeRules: bindingKind === "folder" ? parseExcludeText(excludeText) : [],
@@ -283,6 +291,12 @@ export function DriveSyncDialog({
                           }} />
                         </div>
                       </details>
+                    ) : null}
+                    {isLocalBinding ? (
+                      <div className="grid gap-1 text-sm">
+                        <span className="font-medium">云端目标</span>
+                        <span className="truncate text-muted-foreground">{drivePathHint ?? "根目录"}</span>
+                      </div>
                     ) : null}
                     {preview ? <DriveSyncPreview preview={preview} /> : null}
                   </div>
@@ -894,6 +908,12 @@ function driveSyncManualActionErrorMessage(snapshot: DriveSyncSnapshotDto, bindi
 
 function parseExcludeText(value: string): string[] {
   return value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean)
+}
+
+function joinDriveSyncPathHint(parentPath: string | null | undefined, name: string): string {
+  const normalizedParent = parentPath?.trim()
+  if (!normalizedParent || normalizedParent === "根目录" || normalizedParent === "/") return `/${name}`
+  return `${normalizedParent.replace(/\/+$/u, "")}/${name}`
 }
 
 function formatDirection(direction: DriveSyncBindingPreviewDto["direction"]): string {

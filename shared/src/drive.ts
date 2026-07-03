@@ -258,6 +258,7 @@ export interface DriveSyncCreateSafeBindingInput {
   readonly driveItemName: string
   readonly kind: DriveItemType
   readonly drivePathHint?: string | null
+  readonly targetParentId?: string | null
   readonly localPath: string
   readonly direction: DriveSyncInitialDirection
   readonly excludeRules?: readonly string[]
