@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import { performDashboardSignOut } from '@/lib/dashboard-sign-out'
 import { useAuthStore } from '@/stores/auth-store'
@@ -20,6 +21,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
       logout: dashboardApi.logout,
       reset: auth.reset,
       navigate,
+      onLogoutFailure: () => toast.error('退出登录失败，服务端会话可能未清除。'),
     })
   }
 
