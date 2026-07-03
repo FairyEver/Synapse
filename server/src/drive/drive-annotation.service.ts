@@ -86,8 +86,9 @@ export class DriveAnnotationService {
 
   async listOwnerAnnotations(userId: string, itemId: string): Promise<DriveAnnotationThreadDto[]> {
     const item = await this.requireOwnerItem(userId, itemId)
+    const currentVersionId = await this.findCurrentVersionId(item)
     const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId, deletedAt: null },
+      where: { itemId, baseVersionId: currentVersionId, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })
@@ -235,8 +236,9 @@ export class DriveAnnotationService {
     readonly actorUserId?: string | null
   }): Promise<DriveAnnotationThreadDto[]> {
     const { item, canComment } = await this.resolveShareAnnotationAccess(input)
+    const currentVersionId = await this.findCurrentVersionId(item)
     const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId: item.id, deletedAt: null },
+      where: { itemId: item.id, baseVersionId: currentVersionId, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: annotationInclude,
     })

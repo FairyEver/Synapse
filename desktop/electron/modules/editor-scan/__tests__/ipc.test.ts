@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   uploadService: {
     importLocal: vi.fn(),
   },
+  contentSkillSourceService: {
+    resolveSkillMainFile: vi.fn(),
+  },
   editorScanService: {
     assertTrustedEditorReadTarget: vi.fn(),
   },
@@ -13,6 +16,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../services/skill-repository-upload-service", () => ({
   skillRepositoryUploadService: mocks.uploadService,
+}))
+
+vi.mock("../../../services/content-skill-source-service", () => ({
+  resolveSkillMainFile: mocks.contentSkillSourceService.resolveSkillMainFile,
 }))
 
 vi.mock("../../../services/editor-scan-service", () => ({
@@ -36,6 +43,7 @@ describe("editorScanIpcModule", () => {
       managementUrl: "https://synapse.example.test/console/skill-repositories/repo-1",
       identityWritten: true,
     })
+    mocks.contentSkillSourceService.resolveSkillMainFile.mockResolvedValue("/tmp/skills/review/SKILL.md")
     mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
   })
 
@@ -83,6 +91,22 @@ describe("editorScanIpcModule", () => {
       },
       "skill",
     )
+  })
+
+  it("rejects fallback Skill main files before importing to Skill Repository", async () => {
+    const harness = createHarness()
+    mocks.contentSkillSourceService.resolveSkillMainFile.mockResolvedValueOnce("/tmp/skills/review/README.md")
+
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-to-skill-repository", {
+      itemType: "skill",
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "global",
+      mainFileName: "README.md",
+    })).rejects.toThrow("上传到 Skill Repository 需要根目录 SKILL.md。")
+
+    expect(mocks.uploadService.importLocal).not.toHaveBeenCalled()
   })
 
   it("rejects Skill uploads outside trusted editor roots", async () => {

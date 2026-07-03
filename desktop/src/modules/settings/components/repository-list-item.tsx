@@ -38,8 +38,12 @@ function getRepositoryStatusLabel(repositoryState: SynapseRepositoryLocalState |
     return "未连接"
   }
 
-  if (repositoryState.status !== "ready") {
+  if (repositoryState.status === "missing") {
     return "本地目录不存在"
+  }
+
+  if (repositoryState.status === "inaccessible") {
+    return "本地目录无法访问"
   }
 
   return repositoryState.isGitRepository ? "Git 仓库已连接" : "本地目录已连接（非 Git 仓库）"
@@ -114,6 +118,9 @@ function RepositoryListItem({
           {isActive && <Badge variant="secondary">当前目录</Badge>}
           {repositoryState?.status === "missing" && (
             <Badge variant="destructive">目录不存在</Badge>
+          )}
+          {repositoryState?.status === "inaccessible" && (
+            <Badge variant="destructive">无法访问</Badge>
           )}
         </CardTitle>
       </CardHeader>

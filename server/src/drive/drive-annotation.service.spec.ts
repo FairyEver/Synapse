@@ -37,6 +37,13 @@ describe("DriveAnnotationService", () => {
         userId: "owner-1",
       }),
     }))
+    expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        itemId: "item-1",
+        baseVersionId: "version-1",
+        deletedAt: null,
+      }),
+    }))
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)
@@ -406,6 +413,13 @@ describe("DriveAnnotationService", () => {
 
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: "reader-1",
+    }))
+    expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        itemId: "item-1",
+        baseVersionId: "version-1",
+        deletedAt: null,
+      }),
     }))
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: true, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)

@@ -97,6 +97,7 @@ const driveSyncCreateSafeBindingInputSchema = z.object({
   driveItemName: z.string().min(1),
   kind: driveItemKindSchema,
   drivePathHint: z.string().nullable().optional(),
+  targetParentId: z.string().nullable().optional(),
   localPath: z.string().min(1),
   direction: driveSyncInitialDirectionSchema,
   excludeRules: z.array(z.string()).optional(),

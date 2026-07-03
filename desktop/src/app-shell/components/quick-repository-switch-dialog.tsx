@@ -102,11 +102,11 @@ function QuickRepositorySwitchDialog() {
               const isActive = repository.uuid === activeRepository?.uuid
               const isSwitchingCurrentRepository = switchingRepositoryUuid === repository.uuid
               const repoState = repositoryStates.get(repository.uuid)
-              const isMissing = repoState?.status === "missing"
-              const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository || isMissing
+              const isUnavailable = repoState?.status === "missing" || repoState?.status === "inaccessible"
+              const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository || isUnavailable
               const isBlockedByOperation =
                 !isActive
-                && !isMissing
+                && !isUnavailable
                 && !isSwitchingCurrentRepository
                 && (hasRunningRepositoryOperation || isSwitchingRepository)
 

@@ -2,7 +2,7 @@
 
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   DrivePublicAssetDto,
   DriveBrowserEditDto,
@@ -12,13 +12,28 @@ import type {
   DriveDocumentImageSource,
   DriveDocumentImageSourcesDto,
 } from '@synapse/shared'
-import { ApiError, driveBrowserApi } from '@/lib/api'
+import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let objectUrlIndex = 0
+
+function installObjectUrlMocks() {
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => `blob:synapse-test-${++objectUrlIndex}`),
+  })
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: vi.fn(),
+  })
+}
+
+installObjectUrlMocks()
 
 vi.mock('@mdxeditor/editor/style.css', () => ({}))
 
@@ -159,6 +174,11 @@ vi.mock('@mdxeditor/editor', async () => {
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 
+beforeEach(() => {
+  objectUrlIndex = 0
+  installObjectUrlMocks()
+})
+
 afterEach(() => {
   if (root) {
     act(() => {
@@ -170,6 +190,7 @@ afterEach(() => {
   host = null
   document.body.innerHTML = ''
   window.localStorage.clear()
+  objectUrlIndex = 0
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
@@ -405,11 +426,12 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('asks before uploading a selected image as a public asset', async () => {
+    const editContext = createEditContext()
     vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
       name: 'chart.png',
       url: 'https://synapse.test/files/asset_image',
     }))
-    renderRenderer({ edit: editable() })
+    renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
 
@@ -418,15 +440,26 @@ describe('DriveMDXeditorRenderer', () => {
 
     await click(buttonWithText('继续插入'))
 
+    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
+    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
+    expect(document.body.textContent).toContain('未保存')
+
+    await click(buttonWithText('保存'))
+
     expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
       expect.any(File),
       { name: 'chart.png', mimeType: 'image/png' }
     )
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Notes![chart](https://synapse.test/files/asset_image)',
+      baseVersionId: 'version-1',
+    })
     expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)')
-    expect(document.body.textContent).toContain('未保存')
+    expect(document.body.textContent).toContain('已同步')
   })
 
   it('remembers public image consent after the first confirmed insertion', async () => {
+    const editContext = createEditContext()
     vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
       .mockResolvedValueOnce(createPublicAsset({
         name: 'first.png',
@@ -436,17 +469,54 @@ describe('DriveMDXeditorRenderer', () => {
         name: 'second.png',
         url: 'https://synapse.test/files/second',
       }))
-    renderRenderer({ edit: editable() })
+    renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'first.png', { type: 'image/png' }))
     await click(buttonWithText('继续插入'))
     await selectImage(new File(['image'], 'second.png', { type: 'image/png' }))
 
     expect(document.body.textContent).not.toContain('公开素材')
+    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
+    expect(editor().value).toBe(
+      '# Notes![first](blob:synapse-test-1)![second](blob:synapse-test-2)'
+    )
+
+    await click(buttonWithText('保存'))
+
     expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledTimes(2)
     expect(editor().value).toBe(
       '# Notes![first](https://synapse.test/files/first)![second](https://synapse.test/files/second)'
     )
+  })
+
+  it('cleans up newly uploaded public images when markdown save fails', async () => {
+    const editContext = createEditContext({
+      saveText: vi.fn(async () => {
+        throw new Error('保存失败。')
+      }),
+    })
+    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
+      assetId: 'asset_unsaved',
+      name: 'chart.png',
+      url: 'https://synapse.test/files/asset_unsaved',
+    }))
+    const trash = vi.spyOn(driveApi, 'trashPublicAsset').mockResolvedValue(createPublicAsset({
+      assetId: 'asset_unsaved',
+      lifecycleStatus: 'trashed',
+    }))
+    renderRenderer({ edit: editable(), editContext })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    await click(buttonWithText('继续插入'))
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Notes![chart](https://synapse.test/files/asset_unsaved)',
+      baseVersionId: 'version-1',
+    })
+    expect(trash).toHaveBeenCalledWith('asset_unsaved')
+    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
+    expect(document.body.textContent).toContain('保存失败。')
   })
 
   it('cancels public image insertion without uploading', async () => {

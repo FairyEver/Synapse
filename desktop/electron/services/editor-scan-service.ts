@@ -398,6 +398,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
       if (!previewFile && !meta) continue
 
       const preview = previewFile ? await readPreview(previewFile) : ""
+      const mainFileName = previewFile ? path.basename(previewFile) : null
 
       items.push({
         name: entry.name,
@@ -406,6 +407,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanR
         synapseContentId: meta?.id ?? null,
         repositoryVersion: meta?.repositoryVersion ?? null,
         preview,
+        mainFileName,
         fileCount: children.length,
         trash: { mode: "path" },
       })

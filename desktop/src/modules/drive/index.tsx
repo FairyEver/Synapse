@@ -208,6 +208,14 @@ function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
+function formatDriveBreadcrumbPath(pathEntries: readonly DrivePathEntry[]): string {
+  const names = pathEntries
+    .filter((entry) => entry.id !== null)
+    .map((entry) => entry.name.trim())
+    .filter(Boolean)
+  return names.length === 0 ? "根目录" : `/${names.join("/")}`
+}
+
 function createDriveItemsPage(items: readonly DriveItemDto[] = []): DriveItemListPageDto {
   return {
     items,
@@ -747,7 +755,12 @@ function DriveModuleContent() {
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
         onOpenSites={() => setSitesOpen(true)}
-        onOpenLocalSync={() => setSyncDialog({ mode: "local", item: null })}
+        onOpenLocalSync={() => setSyncDialog({
+          mode: "local",
+          item: null,
+          targetParentId: parentId,
+          drivePathHint: formatDriveBreadcrumbPath(path),
+        })}
         onOpenSyncStatus={() => setSyncDialog({ mode: "status", item: null })}
         onRefresh={() => { void refreshDriveView() }}
       >
