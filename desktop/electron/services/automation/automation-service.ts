@@ -474,7 +474,7 @@ export class AutomationService {
     id: string,
     triggeredBy: AutomationRunTrigger,
   ): Promise<AutomationRun | null> {
-    return this.runScheduled(id, triggeredBy)
+    return this.runScheduled(id, triggeredBy, { respectNextRunAt: false })
   }
 
   automationRuntimeInspect(): {
@@ -602,6 +602,7 @@ export class AutomationService {
   private async runScheduled(
     id: string,
     triggeredBy: AutomationRunTrigger,
+    options: { readonly respectNextRunAt?: boolean } = {},
   ): Promise<AutomationRun | null> {
     this.timers.delete(id)
     const item = await this.deps.items.get(id)
@@ -612,6 +613,7 @@ export class AutomationService {
     if (!this.isItemValid(item)) {
       return this.recordSkipped(item, triggeredBy, NEEDS_UPDATE_MESSAGE)
     }
+    if (options.respectNextRunAt !== false && await this.deferTriggerRunUntilDue(item, triggeredBy)) return null
     const trigger = this.deps.triggers.get(item.trigger.type)
     const parsedTriggerConfig = trigger.manifest.configSchema.parse(item.trigger.config)
     if (trigger.runtime.shouldRunNow && !trigger.runtime.shouldRunNow({
@@ -694,6 +696,27 @@ export class AutomationService {
       }
     })
     return runPromise
+  }
+
+  private async deferTriggerRunUntilDue(
+    item: AutomationItem,
+    triggeredBy: AutomationRunTrigger,
+  ): Promise<boolean> {
+    if (triggeredBy !== "trigger") return false
+    if (!item.nextRunAt) return false
+    const nextRunAt = new Date(item.nextRunAt)
+    if (Number.isNaN(nextRunAt.getTime())) return false
+    const now = this.now()
+    if (nextRunAt.getTime() <= now.getTime()) return false
+
+    await this.schedule(item.id, nextRunAt.toISOString())
+    this.deps.logger?.info?.("Automation trigger timer woke before due time, rescheduled.", {
+      automationId: item.id,
+      nextRunAt: nextRunAt.toISOString(),
+      now: now.toISOString(),
+      boundary: "automation-schedule-checkpoint",
+    })
+    return true
   }
 
   private async recordSkipped(

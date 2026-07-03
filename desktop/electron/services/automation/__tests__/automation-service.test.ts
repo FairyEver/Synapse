@@ -590,6 +590,34 @@ describe("AutomationService", () => {
     }
   })
 
+  it("treats capped long-delay timers as checkpoints until nextRunAt is due", async () => {
+    vi.useFakeTimers()
+    try {
+      const clock = { now: new Date("2026-06-03T00:00:00.000Z") }
+      const logger = structuredLogger()
+      const harness = createHarness({ logger, now: () => clock.now })
+      const item = await harness.service.automationCreate(createLongIntervalInput())
+      await harness.service.start()
+      const originalNextRunAt = (await harness.items.get(item.id))?.nextRunAt
+
+      clock.now = new Date(clock.now.getTime() + 2_147_483_647)
+      await vi.advanceTimersByTimeAsync(2_147_483_647)
+
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+      expect((await harness.items.get(item.id))?.nextRunAt).toBe(originalNextRunAt)
+      expect(harness.service.automationRuntimeInspect().timers).toContain(item.id)
+      expect(logger.info).toHaveBeenCalledWith("Automation trigger timer woke before due time, rescheduled.", {
+        automationId: item.id,
+        nextRunAt: originalNextRunAt,
+        now: clock.now.toISOString(),
+        boundary: "automation-schedule-checkpoint",
+      })
+      await harness.service.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("accepts events through trigger runtime matching", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ triggers: fakeEventTriggerRegistry(), logger })
@@ -958,6 +986,22 @@ function createCompletionAnchoredIntervalInput() {
       config: {
         everyMinutes: 10,
         anchor: "last_completed_at",
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+      },
+    },
+    executor: { type: "builtin.test", config: { message: "ok" } },
+  }
+}
+
+function createLongIntervalInput() {
+  return {
+    name: "Long interval",
+    scope: { type: "global" as const },
+    trigger: {
+      type: "builtin.interval",
+      config: {
+        everyMinutes: 60 * 24 * 60,
+        anchor: "created_at",
         activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
