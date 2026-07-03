@@ -3,7 +3,6 @@ import { cp, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
-import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
@@ -19,12 +18,10 @@ import type {
   SynapseRuleInstallerSource,
   SynapseSkillInstallerSource,
 } from "../../src/types/installers"
-import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
-import { editorAdapterById } from "./editor-adapters"
 import {
   findSkillDirectoryByContentId,
 } from "./editor-adapters/skill-identity"
@@ -39,17 +36,19 @@ import { editorInstallStrategyById } from "./definitions/generated/main-registry
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
+import {
+  checkEditorWritePermission,
+  recordEditorWriteAudit,
+  type EditorWriteSecurityDeps,
+} from "./editor-write-security"
+import {
+  assertTrustedResolvedRuleTarget,
+  isSameEditorPath,
+} from "./editor-install-target-security"
 
 const logger = createMainLogger("service.editor-install-core")
 
-const UNTRUSTED_INSTALL_TARGET_ERROR = "安装目标不在已配置编辑器路径中。"
 const MAX_SKILL_BACKUP_PATH_ATTEMPTS = 1000
-
-export type EditorWriteSecurityDeps = {
-  actor: ActorIdentity
-  auditSink: AuditSink
-  permissionGuard: PermissionGuard
-}
 
 export type PreparedContentInstallSourceProvider = {
   readPreparedRule(sourceId: string, contentId: string): Promise<string>
@@ -87,11 +86,6 @@ type EditorInstallSourceOverride = {
   readSkillDetail?: () => Promise<SynapseContentDetail<"skill">>
 }
 
-type TrustedRuleTargetPath = {
-  kind: "directory" | "file"
-  targetPath: string
-}
-
 function isCrossDeviceRenameError(error: unknown): boolean {
   return typeof error === "object"
     && error !== null
@@ -110,45 +104,6 @@ async function moveDirectoryAllowingCrossDevice(sourcePath: string, destinationP
     await cp(sourcePath, destinationPath, { recursive: true, force: true })
     await rm(sourcePath, { recursive: true, force: true })
   }
-}
-
-async function checkEditorWritePermission(
-  deps: EditorWriteSecurityDeps | undefined,
-  resource: string,
-  metadata: Record<string, unknown>,
-): Promise<void> {
-  if (!deps) return
-  const permission = await deps.permissionGuard.check({
-    action: "fs.write",
-    actor: deps.actor,
-    context: metadata,
-    resource,
-  })
-  if (!permission.allowed) {
-    deps.auditSink.record({
-      action: "fs.write",
-      actor: deps.actor,
-      metadata,
-      outcome: "denied",
-      resource,
-    })
-    throw new Error("没有写入该位置的权限。")
-  }
-}
-
-function recordEditorWriteAudit(
-  deps: EditorWriteSecurityDeps | undefined,
-  resource: string,
-  outcome: "allowed" | "failed",
-  metadata: Record<string, unknown>,
-): void {
-  deps?.auditSink.record({
-    action: "fs.write",
-    actor: deps.actor,
-    metadata,
-    outcome,
-    resource,
-  })
 }
 
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
@@ -174,13 +129,6 @@ function formatInstallFailure(error: unknown, targetPath: string): Error {
   return formatted.message === "写入失败，请稍后重试。"
     ? new Error("安装失败，请稍后重试。")
     : formatted
-}
-
-function isSamePath(left: string, right: string): boolean {
-  return arePathsEqualForCompare(left, right, {
-    platform: process.platform,
-    resolvePath: path.resolve,
-  })
 }
 
 function getDesktopSkillBackupPath(targetPath: string): string {
@@ -213,23 +161,6 @@ function createSkillBackupRestoreFailureError(backupPath: string): Error {
   return new Error(`安装失败，且旧 Skill 备份恢复失败。旧备份仍保留在桌面：${path.basename(backupPath)}，请手动检查目标目录。`)
 }
 
-function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
-  const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
-  return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
-}
-
-function inferRuleTargetKind(targetPath: string): TrustedRuleTargetPath["kind"] {
-  return path.basename(targetPath) === "rules" ? "directory" : "file"
-}
-
-function isTrustedRuleTargetPath(targetPath: string, trusted: TrustedRuleTargetPath): boolean {
-  if (trusted.kind === "file") {
-    return isSamePath(targetPath, trusted.targetPath)
-  }
-
-  return isSamePath(targetPath, trusted.targetPath) || isPathInsideDirectory(targetPath, trusted.targetPath)
-}
-
 function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload): SynapseInstallToEditorPayload {
   return {
     editorId: payload.editorId,
@@ -246,50 +177,6 @@ function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload):
     replacedContentId: payload.replacedSourceIdentity,
     variableSubstitutions: payload.variableSubstitutions,
     preparedSourceId: payload.source.preparedSourceId,
-  }
-}
-
-async function getTrustedRuleTargets(editorId: string): Promise<TrustedRuleTargetPath[]> {
-  const adapter = editorAdapterById.get(editorId)
-  if (!adapter) return []
-
-  const targets: TrustedRuleTargetPath[] = []
-  const scanConfig = adapter.getScanPathConfig()
-  if (scanConfig.globalRulesPath) {
-    targets.push({
-      kind: inferRuleTargetKind(scanConfig.globalRulesPath),
-      targetPath: scanConfig.globalRulesPath,
-    })
-  }
-
-  const config = await configStore.load()
-  for (const project of config.global.projects) {
-    const rulesPath = scanConfig.projectPaths(project.path).rulesPath
-    targets.push({
-      kind: inferRuleTargetKind(rulesPath),
-      targetPath: rulesPath,
-    })
-  }
-
-  const seen = new Set<string>()
-  return targets.filter((target) => {
-    const key = `${target.kind}:${path.resolve(target.targetPath)}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-async function assertTrustedResolvedRuleTarget(
-  payload: SynapseInstallToEditorPayload,
-  target: SynapseEditorResolvedTarget,
-): Promise<void> {
-  if (payload.contentType !== "rule") return
-  if (target.status !== "ready" && target.status !== "conflict") return
-  const targets = await getTrustedRuleTargets(payload.editorId)
-  const isTrusted = targets.some((trusted) => isTrustedRuleTargetPath(target.targetPath, trusted))
-  if (!isTrusted) {
-    throw new Error(UNTRUSTED_INSTALL_TARGET_ERROR)
   }
 }
 
@@ -438,7 +325,7 @@ export class EditorInstallCore {
             ? await findSkillDirectoryByContentId(parentDirectoryPath, payload.contentId)
             : null
           const isOwnExistingSkillDirectory = Boolean(
-            previousSkillDirectoryPath && isSamePath(previousSkillDirectoryPath, target.targetPath),
+            previousSkillDirectoryPath && isSameEditorPath(previousSkillDirectoryPath, target.targetPath),
           )
 
           if (
@@ -560,7 +447,7 @@ export class EditorInstallCore {
 
           if (
             previousSkillDirectoryPath
-            && !isSamePath(previousSkillDirectoryPath, target.targetPath)
+            && !isSameEditorPath(previousSkillDirectoryPath, target.targetPath)
           ) {
             try {
               await rm(previousSkillDirectoryPath, { recursive: true, force: true })

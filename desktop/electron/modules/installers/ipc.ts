@@ -9,8 +9,8 @@ import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { editorInstallService } from "../../services/editor-install-service"
 import { installerSourceService } from "../../services/installer-source-service"
-import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { createMainLogger } from "../../services/log-store"
+import { notifyInstallStatusChanged } from "../install-status-events"
 
 const logger = createMainLogger("ipc.installers")
 
@@ -65,23 +65,6 @@ const installSourceToEditorSchema = z.object({
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 }).strict()
 
-async function notifyInstallStatusChanged(
-  eventBus: EventBus,
-  contentId: string,
-): Promise<void> {
-  try {
-    const entries = await installStatusCacheService.refresh(contentId)
-    eventBus.emit({
-      domain: "install-status",
-      type: "install-status.changed",
-      payload: { contentId, entries },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    logger.warn("Failed to refresh install status after installer install.", { contentId, error })
-  }
-}
-
 export const installersIpcModule: IpcModule = {
   id: "installers",
   methods: {
@@ -114,9 +97,15 @@ export const installersIpcModule: IpcModule = {
 
         if (payload.source.origin === "repository" && payload.source.repositoryContentId) {
           const eventBus = ctx.resolve<EventBus>("core.event-bus")
-          await notifyInstallStatusChanged(eventBus, payload.source.repositoryContentId)
+          await notifyInstallStatusChanged(eventBus, payload.source.repositoryContentId, {
+            logger,
+            warningMessage: "Failed to refresh install status after installer install.",
+          })
           if (payload.replacedSourceIdentity && payload.replacedSourceIdentity !== payload.source.repositoryContentId) {
-            await notifyInstallStatusChanged(eventBus, payload.replacedSourceIdentity)
+            await notifyInstallStatusChanged(eventBus, payload.replacedSourceIdentity, {
+              logger,
+              warningMessage: "Failed to refresh install status after installer install.",
+            })
           }
         }
 

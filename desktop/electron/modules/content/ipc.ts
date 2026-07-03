@@ -37,13 +37,13 @@ import type {
 import { configStore } from "../../services/config-store"
 import { contentDownloadService } from "../../services/content-download-service"
 import { editorInstallService } from "../../services/editor-install-service"
-import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { contentService } from "../../services/content-service"
 import { contentSubmissionService } from "../../services/content-submission-service"
 import { contentWindowService } from "../../services/content-window-service"
 import { editorAdapterService } from "../../services/editor-adapter-service"
 import { createMainLogger } from "../../services/log-store"
 import type { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
+import { notifyInstallStatusChanged } from "../install-status-events"
 
 const logger = createMainLogger("ipc.content")
 
@@ -200,23 +200,6 @@ async function notifyPendingPushesUpdated(
     },
     timestamp: new Date().toISOString(),
   })
-}
-
-async function notifyInstallStatusChanged(
-  eventBus: EventBus,
-  contentId: string,
-): Promise<void> {
-  try {
-    const entries = await installStatusCacheService.refresh(contentId)
-    eventBus.emit({
-      domain: "install-status",
-      type: "install-status.changed",
-      payload: { contentId, entries },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    logger.warn("Failed to refresh install status after content change.", { contentId, error })
-  }
 }
 
 function emitContentChanged(
@@ -509,7 +492,10 @@ export const contentIpcModule: IpcModule = {
         }
 
         if (result.status === "saved" && request.contentType === "skill") {
-          await notifyInstallStatusChanged(eventBus, request.payload.id)
+          await notifyInstallStatusChanged(eventBus, request.payload.id, {
+            logger,
+            warningMessage: "Failed to refresh install status after content change.",
+          })
         }
 
         return result
@@ -748,9 +734,15 @@ export const contentIpcModule: IpcModule = {
         })
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
-        await notifyInstallStatusChanged(eventBus, payload.contentId)
+        await notifyInstallStatusChanged(eventBus, payload.contentId, {
+          logger,
+          warningMessage: "Failed to refresh install status after content change.",
+        })
         if (payload.replacedContentId && payload.replacedContentId !== payload.contentId) {
-          await notifyInstallStatusChanged(eventBus, payload.replacedContentId)
+          await notifyInstallStatusChanged(eventBus, payload.replacedContentId, {
+            logger,
+            warningMessage: "Failed to refresh install status after content change.",
+          })
         }
 
         return result

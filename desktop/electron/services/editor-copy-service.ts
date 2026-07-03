@@ -7,7 +7,6 @@ import type {
   SynapseEditorCopySource,
   SynapseResolveEditorCopyTargetPayload,
 } from "../../src/types/editor-copy"
-import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
@@ -17,7 +16,6 @@ import {
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
 import { isWindowsReservedContentNameInput } from "../../src/lib/content-name-input"
-import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
 import { configStore } from "./config-store"
@@ -31,56 +29,17 @@ import {
   replaceDirectoryAtomically,
   replaceFileAtomically,
 } from "./editor-file-write-utils"
+import {
+  checkEditorWritePermission,
+  recordEditorWriteAudit,
+  type EditorWriteSecurityDeps,
+} from "./editor-write-security"
+import { isSameEditorPath } from "./editor-install-target-security"
 
 const logger = createMainLogger("service.editor-copy")
 const MARKDOWN_EXTENSION_PATTERN = /\.(md|mdc)$/iu
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
 const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
-
-type EditorWriteSecurityDeps = {
-  actor: ActorIdentity
-  auditSink: AuditSink
-  permissionGuard: PermissionGuard
-}
-
-async function checkEditorWritePermission(
-  deps: EditorWriteSecurityDeps | undefined,
-  resource: string,
-  metadata: Record<string, unknown>,
-): Promise<void> {
-  if (!deps) return
-  const permission = await deps.permissionGuard.check({
-    action: "fs.write",
-    actor: deps.actor,
-    context: metadata,
-    resource,
-  })
-  if (!permission.allowed) {
-    deps.auditSink.record({
-      action: "fs.write",
-      actor: deps.actor,
-      metadata,
-      outcome: "denied",
-      resource,
-    })
-    throw new Error("没有写入该位置的权限。")
-  }
-}
-
-function recordEditorWriteAudit(
-  deps: EditorWriteSecurityDeps | undefined,
-  resource: string,
-  outcome: "allowed" | "failed",
-  metadata: Record<string, unknown>,
-): void {
-  deps?.auditSink.record({
-    action: "fs.write",
-    actor: deps.actor,
-    metadata,
-    outcome,
-    resource,
-  })
-}
 
 function stripRuleExtension(value: string): string {
   return value.replace(MARKDOWN_EXTENSION_PATTERN, "")
@@ -119,13 +78,6 @@ function assertEditorCopyRuleName(ruleName: string): void {
   }
 }
 
-function isSamePath(left: string, right: string): boolean {
-  return arePathsEqualForCompare(left, right, {
-    platform: process.platform,
-    resolvePath: path.resolve,
-  })
-}
-
 function toSamePathUnavailableTarget(
   target: Extract<SynapseEditorResolvedTarget, { status: "ready" | "conflict" }>,
 ): SynapseEditorResolvedTarget {
@@ -149,7 +101,7 @@ async function normalizeCopyTarget(
     return target
   }
 
-  if (isSamePath(source.itemPath, target.targetPath)) {
+  if (isSameEditorPath(source.itemPath, target.targetPath)) {
     return toSamePathUnavailableTarget(target)
   }
 
@@ -206,7 +158,7 @@ async function assertConfiguredProjectPath(
   }
 
   const config = await configStore.load()
-  const isConfigured = config.global.projects.some((project) => isSamePath(project.path, payload.targetProjectPath ?? ""))
+  const isConfigured = config.global.projects.some((project) => isSameEditorPath(project.path, payload.targetProjectPath ?? ""))
   if (!isConfigured) {
     throw new Error(UNTRUSTED_PROJECT_PATH_ERROR)
   }
