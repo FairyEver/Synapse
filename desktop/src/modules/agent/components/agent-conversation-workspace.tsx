@@ -187,7 +187,8 @@ function AgentConversationWorkspace({
   const [conversationRolloverPromptNow, setConversationRolloverPromptNow] = useState(() => Date.now())
   const canManageKnowledgeSources = canUseManagedKnowledgeBase(project)
   const quickInputItems = useQuickInputItems(quickInputs)
-  const composerPersona = chat.personas.find((item) => item.id === composerPersonaId)
+  const personas = chat.personas ?? []
+  const composerPersona = personas.find((item) => item.id === composerPersonaId)
   const composerPersonaName = composerPersona?.name ?? "普通"
 
   useEffect(() => {
@@ -698,7 +699,7 @@ function AgentConversationWorkspace({
         cancelPhase={chat.cancelPhase}
         permissionMode={selectedPermissionMode}
         quickInputs={quickInputItems}
-        personaItems={chat.personas}
+        personaItems={personas}
         activePersonaId={composerPersonaId}
         onPersonaChange={(personaId) => {
           const previousPersonaId = composerPersonaId

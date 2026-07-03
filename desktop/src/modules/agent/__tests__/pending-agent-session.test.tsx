@@ -347,7 +347,12 @@ describe("AgentModule pending prompt sessions", () => {
       projectId: targetSession.projectId,
       conversationId: targetSession.id,
       sessionKey: targetSession.sessionKey,
-    }, { attachments })
+    }, {
+      attachments,
+      mainThreadPersonaId: null,
+      mainThreadPersonaName: "普通",
+      mainThreadPersonaSource: undefined,
+    })
     expect(restoreAttachments).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -865,6 +870,10 @@ describe("AgentModule pending prompt sessions", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
+    }, {
+      mainThreadPersonaId: null,
+      mainThreadPersonaName: "普通",
+      mainThreadPersonaSource: undefined,
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "agent",
@@ -909,6 +918,10 @@ describe("AgentModule pending prompt sessions", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
+    }, {
+      mainThreadPersonaId: null,
+      mainThreadPersonaName: "普通",
+      mainThreadPersonaSource: undefined,
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "agent",

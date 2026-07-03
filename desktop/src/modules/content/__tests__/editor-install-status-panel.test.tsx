@@ -120,13 +120,14 @@ function findButtons(node: ReactNode): ReactElement<ComponentProps<typeof Button
     return []
   }
 
-  const element = node as ReactElement<{ children?: ReactNode }>
+  const element = node as ReactElement<{ actions?: ReactNode; children?: ReactNode }>
   const matches = element.type === Button
     ? [element as ReactElement<ComponentProps<typeof Button>>]
     : []
 
   return [
     ...matches,
+    ...findButtons(element.props.actions),
     ...findButtons(element.props.children),
   ]
 }
@@ -240,7 +241,6 @@ describe("EditorInstallStatusPanel", () => {
     expect(html).toContain("安装状态")
     expect(html).not.toContain("刷新失败")
     expect(html).not.toContain("读取失败")
-    expect(html).not.toContain("重试")
     findButtonByText(element, "重试").props.onClick?.({} as React.MouseEvent<HTMLButtonElement>)
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })

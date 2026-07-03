@@ -160,7 +160,12 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { gitAccessServiceDescriptor } = await importBootstrap()
     expect(gitAccessServiceDescriptor.id).toBe("git.access-service")
     expect(gitAccessServiceDescriptor.criticality).toBe("degraded")
-    expect(gitAccessServiceDescriptor.dependsOn).toEqual(["git.command-runner", "core.process-environment"])
+    expect(gitAccessServiceDescriptor.dependsOn).toEqual([
+      "git.command-runner",
+      "core.process-environment",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(gitAccessServiceDescriptor.create).toBeTypeOf("function")
   })
 

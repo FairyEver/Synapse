@@ -16,6 +16,13 @@ function allCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS.flatMap((domain) => domain.capabilities.map((capability) => capability.id)).sort()
 }
 
+function conventionalPrimaryCapabilityIds(): CapabilityId[] {
+  return CAPABILITY_DOMAINS
+    .filter((domain) => domain.id !== "skill_repository")
+    .flatMap((domain) => domain.capabilities.map((capability) => capability.id))
+    .sort()
+}
+
 function readRepoFile(path: string): string {
   return readFileSync(new URL(path, repoRoot), "utf-8")
 }
@@ -42,7 +49,9 @@ describe("API and MCP capability surface", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name).sort()
     const mappedToolNames = Object.keys(MCP_TOOL_ACTIONS).sort()
     const mappedActionIds = [...new Set(Object.values(MCP_TOOL_ACTIONS))].sort()
-    const expectedToolNames = actionIds.map((action) => capabilityIdToMcpTool(action)).sort()
+    const expectedToolNames = conventionalPrimaryCapabilityIds()
+      .map((action) => capabilityIdToMcpTool(action))
+      .sort()
 
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
@@ -73,6 +82,7 @@ describe("API and MCP capability surface", () => {
       drive: vi.fn(async () => ({ ok: true as const })),
       model_price: vi.fn(async () => ({ ok: true as const })),
       repository: vi.fn(async () => ({ ok: true as const })),
+      skill_repository: vi.fn(async () => ({ ok: true as const })),
       variable: vi.fn(async () => ({ ok: true as const })),
       workflow: vi.fn(async () => ({ ok: true as const })),
     }
@@ -84,6 +94,7 @@ describe("API and MCP capability surface", () => {
       driveDispatch: dispatchers.drive,
       modelPriceDispatch: dispatchers.model_price,
       repositoryDispatch: dispatchers.repository,
+      skillRepositoryDispatch: dispatchers.skill_repository,
       variableDispatch: dispatchers.variable,
       workflowDispatch: dispatchers.workflow,
     })

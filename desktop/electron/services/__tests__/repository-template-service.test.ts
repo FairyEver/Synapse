@@ -90,6 +90,8 @@ describe("RepositoryTemplateService", () => {
       "model-price/index.md",
       "repository/api-reference.md",
       "repository/index.md",
+      "skill-repository/api-reference.md",
+      "skill-repository/index.md",
       "variable/api-reference.md",
       "variable/index.md",
       "workflow/api-reference.md",

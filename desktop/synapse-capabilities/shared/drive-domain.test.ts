@@ -36,6 +36,7 @@ describe("Drive capability domain", () => {
       "app_drive_site_list",
       "app_drive_site_update_access",
       "app_drive_site_disable",
+      "app_drive_site_enable",
       "app_drive_site_delete",
       "app_drive_site_republish",
       "app_drive_usage_get",
@@ -85,6 +86,7 @@ describe("Drive capability domain", () => {
       "drive_site_list",
       "drive_site_update_access",
       "drive_site_disable",
+      "drive_site_enable",
       "drive_site_delete",
       "drive_site_republish",
       "drive_usage_get",
@@ -132,6 +134,8 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_update_access).toBe("app.drive.site.update_access")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_disable).toBe("app.drive.site.disable")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_disable).toBe("app.drive.site.disable")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_enable).toBe("app.drive.site.enable")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_enable).toBe("app.drive.site.enable")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_delete).toBe("app.drive.site.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.drive_site_delete).toBe("app.drive.site.delete")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_site_republish).toBe("app.drive.site.republish")
