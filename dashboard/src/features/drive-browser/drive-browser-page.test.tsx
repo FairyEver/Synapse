@@ -130,6 +130,23 @@ describe('DriveBrowserPage', () => {
     expect(document.body.textContent).not.toContain('文件未找到')
   })
 
+  it('lets users retry after a browser load error', () => {
+    const retry = vi.fn()
+    mockDriveBrowserState({
+      status: 'error',
+      message: '网络错误',
+      retry,
+      retrying: false,
+    })
+
+    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='file' />)
+
+    buttonWithText('重试')?.click()
+
+    expect(document.body.textContent).toContain('网络错误')
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
   it('allows selected-text comments in console markdown file views', async () => {
     mockDriveBrowserState({
       status: 'ready',

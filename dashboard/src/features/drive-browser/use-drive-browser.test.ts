@@ -102,6 +102,35 @@ describe('toDriveBrowserQueryKey', () => {
     })
   })
 
+  it('retries the initial browser load from the error state', async () => {
+    const snapshot = createSnapshot()
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockRejectedValueOnce(new Error('网络错误'))
+      .mockResolvedValueOnce(snapshot)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'item-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('error')
+    })
+
+    await act(async () => {
+      if (hook.result.current.status !== 'error') throw new Error('browser is not in error state')
+      hook.result.current.retry()
+    })
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+
+    expect(driveBrowserApi.getOwnerItem).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot : null).toBe(snapshot)
+  })
+
   it('passes child pagination options to owner browser requests', async () => {
     const snapshot = createSnapshot()
     vi.mocked(driveBrowserApi.getOwnerItem).mockResolvedValue(snapshot)

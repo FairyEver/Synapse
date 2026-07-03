@@ -96,7 +96,13 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
     >
       {state.status === 'loading' ? <DriveBrowserLoading mode={loadingMode} /> : null}
       {state.status === 'invalidShare' ? <DriveInvalidShareState /> : null}
-      {state.status === 'error' ? <DriveBrowserError message={state.message} /> : null}
+      {state.status === 'error' ? (
+        <DriveBrowserError
+          message={state.message}
+          retrying={state.retrying}
+          onRetry={state.retry}
+        />
+      ) : null}
       {state.status === 'passwordRequired' ? (
         <DriveBrowserPasswordForm
           message={state.message}
@@ -137,7 +143,9 @@ export {
 export function DriveConsoleRootBrowser() {
   const state = useDriveBrowser({ context: 'console-root' })
   if (state.status === 'loading') return <DriveBrowserLoading mode='card' />
-  if (state.status === 'error') return <DriveBrowserError message={state.message} />
+  if (state.status === 'error') {
+    return <DriveBrowserError message={state.message} retrying={state.retrying} onRetry={state.retry} />
+  }
   if (state.status !== 'ready') return null
   return (
     <DriveBrowserView
@@ -310,11 +318,25 @@ function DriveInvalidShareState() {
   )
 }
 
-function DriveBrowserError({ message }: { readonly message: string }) {
+function DriveBrowserError({
+  message,
+  retrying,
+  onRetry,
+}: {
+  readonly message: string
+  readonly retrying: boolean
+  readonly onRetry: () => void
+}) {
   return (
     <Alert variant='destructive'>
       <AlertTitle>无法打开</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
+      <div className='mt-3'>
+        <Button type='button' variant='outline' size='sm' disabled={retrying} onClick={onRetry}>
+          {retrying ? <Loader2 className='animate-spin' /> : null}
+          重试
+        </Button>
+      </div>
     </Alert>
   )
 }

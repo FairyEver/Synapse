@@ -28,7 +28,12 @@ export type DriveBrowserInput =
 export type DriveBrowserState =
   | { status: 'loading' }
   | { status: 'invalidShare' }
-  | { status: 'error'; message: string }
+  | {
+      status: 'error'
+      message: string
+      retry: () => void
+      retrying: boolean
+    }
   | {
       status: 'passwordRequired'
       message: string
@@ -200,7 +205,14 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   }
   if (query.isLoading) return { status: 'loading' }
   if (query.isError && isInvalidShareError(input, query.error)) return { status: 'invalidShare' }
-  if (query.isError) return { status: 'error', message: getErrorMessage(query.error) }
+  if (query.isError) {
+    return {
+      status: 'error',
+      message: getErrorMessage(query.error),
+      retry: () => { void query.refetch() },
+      retrying: query.isFetching,
+    }
+  }
   if (isDriveBrowserPasswordRequired(query.data)) {
     const initialPasswordRejected = input.context === 'share' && Boolean(input.initialPassword)
     return {
