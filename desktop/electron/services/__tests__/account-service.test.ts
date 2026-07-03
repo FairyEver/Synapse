@@ -3127,6 +3127,7 @@ function driveSite(overrides: Partial<DriveSiteDto> = {}): DriveSiteDto {
     urlWithPassword: overrides.urlWithPassword ?? `${expectedPublicAppUrl}/sites/site_abc/`,
     passwordEnabled: overrides.passwordEnabled ?? false,
     password: overrides.password ?? null,
+    expiresIn: overrides.expiresIn ?? "forever",
     expiresAt: overrides.expiresAt ?? null,
     sourceFolderItemId: overrides.sourceFolderItemId ?? "folder-1",
     sourceFolderName: overrides.sourceFolderName ?? "产品原型",

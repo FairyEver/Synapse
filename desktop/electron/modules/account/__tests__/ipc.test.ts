@@ -6,6 +6,17 @@ import vm from "node:vm"
 import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "../../../../src/lib/drive-local-upload-limits"
 
+function assertParseableSchema(schema: unknown): asserts schema is { parse: (value: unknown) => unknown } {
+  if (
+    typeof schema !== "object"
+    || schema === null
+    || !("parse" in schema)
+    || typeof schema.parse !== "function"
+  ) {
+    throw new Error("expected parseable schema")
+  }
+}
+
 vi.mock("electron", () => ({
   app: {
     getPath: (name: string) => path.join(os.tmpdir(), `synapse-account-${name}`),
@@ -772,8 +783,9 @@ describe("accountIpcModule", () => {
     const responseSchema = accountIpcModule.methods.listDriveItems.response
     expect(responseSchema).toBeDefined()
     if (!responseSchema) throw new Error("expected drive item list response schema")
+    assertParseableSchema(responseSchema)
 
-    expect(responseSchema.parse({
+    const parsed = responseSchema.parse({
       items: [{
         id: "item-1",
         parentId: null,
@@ -788,7 +800,8 @@ describe("accountIpcModule", () => {
         updatedAt: "2026-06-07T12:00:00.000Z",
       }],
       page: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
-    }).items).toEqual([
+    }) as { readonly items: readonly unknown[] }
+    expect(parsed.items).toEqual([
       expect.objectContaining({
         activeShareId: "share-1",
         shared: true,

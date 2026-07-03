@@ -102,7 +102,9 @@ function QuickRepositorySwitchDialog() {
               const isActive = repository.uuid === activeRepository?.uuid
               const isSwitchingCurrentRepository = switchingRepositoryUuid === repository.uuid
               const repoState = repositoryStates.get(repository.uuid)
-              const isUnavailable = repoState?.status === "missing" || repoState?.status === "inaccessible"
+              const isMissing = repoState?.status === "missing"
+              const isInaccessible = repoState?.status === "inaccessible"
+              const isUnavailable = isMissing || isInaccessible
               const isDisabled = isActive || hasRunningRepositoryOperation || isSwitchingRepository || isUnavailable
               const isBlockedByOperation =
                 !isActive
@@ -152,6 +154,9 @@ function QuickRepositorySwitchDialog() {
                       ) : null}
                       {isMissing ? (
                         <Badge variant="destructive">目录不存在</Badge>
+                      ) : null}
+                      {isInaccessible ? (
+                        <Badge variant="destructive">无法访问</Badge>
                       ) : null}
                       {isBlockedByOperation ? (
                         <Badge variant="outline">操作中</Badge>

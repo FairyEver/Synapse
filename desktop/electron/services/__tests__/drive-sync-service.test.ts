@@ -14,7 +14,7 @@ import type {
 } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { hashDriveSyncFile } from "../drive-sync-local-snapshot"
-import { createDriveSyncService } from "../drive-sync-service"
+import { createDriveSyncService, type DriveSyncAccountService } from "../drive-sync-service"
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
@@ -886,7 +886,7 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "old", "utf8")
-      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
       const harness = createHarness({
         accountService: {
           uploadDriveLocalItems,
@@ -925,7 +925,7 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "spec", "utf8")
-      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
       const listDriveItemTree = vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => ({
         items: parentId === "folder-1"
           ? [{ id: "uploaded-spec", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "4", mimeType: "text/markdown" }]
@@ -1333,9 +1333,10 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "node_modules", "pkg", "index.js"), "dependency", "utf8")
       await writeFile(path.join(tempDir, "notes", "spec.md"), "local spec", "utf8")
       await writeFile(path.join(tempDir, "secrets", "token.txt"), "secret", "utf8")
+      const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
       const harness = createHarness({
         accountService: {
-          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          uploadDriveLocalItems,
           listDriveItemTree: vi.fn(async ({ parentId, offset }: { parentId?: string | null; offset?: number | null }) => {
             if (parentId === null || parentId === undefined) {
               return {
@@ -1375,7 +1376,7 @@ describe("DriveSyncService", () => {
 
       expect(binding).toMatchObject({ status: "active", driveItemId: "remote-docs" })
       expect(binding.excludeRules.defaults).toEqual(expect.arrayContaining(["node_modules/**", "dist/**", "*.log"]))
-      const uploadInput = vi.mocked(harness.deps.accountService.uploadDriveLocalItems).mock.calls[0]?.[0]
+      const uploadInput = uploadDriveLocalItems.mock.calls[0]?.[0]
       const uploadedFolder = uploadInput?.items[0]
       expect(uploadedFolder?.kind).toBe("folder")
       if (!uploadedFolder || uploadedFolder.kind !== "folder") throw new Error("expected folder upload")
@@ -1804,8 +1805,8 @@ describe("DriveSyncService", () => {
       })
 
       await rename(oldPath, newPath)
-      rawEvent?.("rename", "old.md")
-      rawEvent?.("rename", "new.md")
+      emitRawEvent(rawEvent, "rename", "old.md")
+      emitRawEvent(rawEvent, "rename", "new.md")
 
       await waitForExpect(() => {
         expect(harness.deps.accountService.moveDriveItem).toHaveBeenCalledWith("remote-old", "drive-root")
@@ -1859,7 +1860,7 @@ describe("DriveSyncService", () => {
 
       await mkdir(path.join(tempDir, "Project"), { recursive: true })
       await writeFile(path.join(tempDir, "Project", "spec.md"), "spec", "utf8")
-      rawEvent?.("rename", "Project")
+      emitRawEvent(rawEvent, "rename", "Project")
 
       await waitForExpect(() => {
         expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Project" })
@@ -1908,7 +1909,7 @@ describe("DriveSyncService", () => {
 
       await mkdir(path.join(tempDir, "Project"), { recursive: true })
       await writeFile(path.join(tempDir, "Project", "spec.md"), "spec", "utf8")
-      rawEvent?.("rename", "Project")
+      emitRawEvent(rawEvent, "rename", "Project")
 
       await waitForExpect(async () => {
         expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Project" })
@@ -3304,7 +3305,7 @@ describe("DriveSyncService", () => {
       await expect(service.resolveConflict({ conflictId: conflict.id, action: "keep_remote" })).rejects.toThrow("denied by test")
       await service.resumeBinding(binding.id)
       await writeFile(localPath, "user edit", "utf8")
-      rawEvent?.("change", "spec.md")
+      emitRawEvent(rawEvent, "change", "spec.md")
 
       await waitForExpect(() => {
         expect(uploadDriveLocalItems).toHaveBeenCalled()
@@ -3451,6 +3452,15 @@ function createDeferred<T>(): { readonly promise: Promise<T>; readonly resolve: 
     rejectDeferred = reject
   })
   return { promise, resolve: resolveDeferred, reject: rejectDeferred }
+}
+
+function emitRawEvent(
+  listener: ((eventType: string, filename: string | Buffer | null) => void) | null,
+  eventType: string,
+  filename: string | Buffer | null,
+): void {
+  if (!listener) throw new Error("expected raw watcher event listener")
+  listener(eventType, filename)
 }
 
 function createHarness(overrides: {

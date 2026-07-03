@@ -969,7 +969,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const })),
       downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
-      downloadDriveLinkFile: vi.fn(async () => ({ ok: true as const })),
+      downloadDriveLinkFile: vi.fn(async () => ({ localPath: "/tmp/report.md", mimeType: "text/markdown", size: "12" })),
       downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const })),
     })
     const permissionGuard = {

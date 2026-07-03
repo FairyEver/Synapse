@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import type { SynapseCategoryViewItem } from "@/types/category"
 import type { SynapseContentSortOrder } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
+import type { SynapseRepositoryLocalStatus } from "@/types/repository"
 
 type ContentState = {
   description: string | null
@@ -91,7 +92,7 @@ function getContentState(params: {
   items: SynapseContentMeta[]
   itemsInActiveCategory: SynapseContentMeta[]
   normalizedSearchQuery: string
-  repositoryStatus: "checking" | "missing" | "ready"
+  repositoryStatus: SynapseRepositoryLocalStatus | "checking"
   contentType: SynapseContentType
 }): ContentState | null {
   const {
@@ -122,6 +123,14 @@ function getContentState(params: {
     return {
       title: "本地目录不存在",
       description: "前往设置重新选择本地目录。",
+      icon: TriangleAlert,
+    }
+  }
+
+  if (repositoryStatus === "inaccessible") {
+    return {
+      title: "本地目录无法访问",
+      description: "前往设置检查本地目录。",
       icon: TriangleAlert,
     }
   }
