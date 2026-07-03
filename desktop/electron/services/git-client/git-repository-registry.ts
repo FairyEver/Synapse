@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import type { SynapseGitRepository } from "../../../src/types/git"
 import type { SynapseGitRepositoryRemoveInput } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
+import {
+  copyToTimestampedBackup,
+  isFileNotFoundError,
+  writeJsonFileAtomic,
+} from "../../runtime/data-repo/atomic-io"
 import { normalizeRepositoryPath, normalizeRepositoryPathForCompare } from "./git-path-utils"
 import {
   createGitOperationId,
@@ -35,12 +40,16 @@ function registryFilePath(userDataPath: string): string {
   return path.join(userDataPath, "git-client", "repositories.json")
 }
 
+function registryBackupFilePath(filePath: string): string {
+  return `${filePath}.bak`
+}
+
 function sanitizeName(name: string, localPath: string): string {
   const trimmed = name.trim()
   return trimmed || path.basename(localPath) || "Git 仓库"
 }
 
-async function readRegistry(filePath: string): Promise<RegistryFile> {
+async function readRegistryFile(filePath: string): Promise<RegistryFile | null> {
   try {
     const raw = await readFile(filePath, "utf8")
     const parsed = JSON.parse(raw) as Partial<RegistryFile>
@@ -49,16 +58,55 @@ async function readRegistry(filePath: string): Promise<RegistryFile> {
       repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [],
     }
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return { version: 1, repositories: [] }
-    }
+    if (isFileNotFoundError(error)) return null
     throw error
   }
 }
 
+async function readRegistry(filePath: string, logger: Pick<StructuredLogger, "error" | "info">): Promise<RegistryFile> {
+  try {
+    return await readRegistryFile(filePath) ?? { version: 1, repositories: [] }
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+
+    const quarantinedPath = await copyToTimestampedBackup(filePath)
+    await rm(filePath, { force: true }).catch(() => undefined)
+    logger.error("Git repository registry is malformed.", {
+      quarantined: Boolean(quarantinedPath),
+    })
+
+    try {
+      const backup = await readRegistryFile(registryBackupFilePath(filePath))
+      if (backup) {
+        logger.info("Recovered Git repository registry from backup.", {
+          repositoryCount: backup.repositories.length,
+        })
+        return backup
+      }
+    } catch (backupError) {
+      if (backupError instanceof SyntaxError) {
+        await copyToTimestampedBackup(registryBackupFilePath(filePath)).catch(() => null)
+        logger.error("Git repository registry backup is malformed.", {
+          errorName: backupError.name,
+        })
+      } else {
+        throw backupError
+      }
+    }
+
+    return { version: 1, repositories: [] }
+  }
+}
+
 async function writeRegistry(filePath: string, data: RegistryFile): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+  const previous = await readRegistryFile(filePath).catch((error) => {
+    if (error instanceof SyntaxError) return null
+    throw error
+  })
+  if (previous) {
+    await writeJsonFileAtomic(registryBackupFilePath(filePath), previous)
+  }
+  await writeJsonFileAtomic(filePath, data)
 }
 
 export function createGitRepositoryRegistry(deps: RegistryDeps) {
@@ -75,7 +123,7 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
 
   return {
     async list(): Promise<SynapseGitRepository[]> {
-      const data = await readRegistry(filePath)
+      const data = await readRegistry(filePath, deps.logger ?? noopLogger)
       return [...data.repositories]
     },
 
@@ -90,7 +138,7 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       })
       try {
         return await withRegistryMutation(async () => {
-          const data = await readRegistry(filePath)
+          const data = await readRegistry(filePath, deps.logger ?? noopLogger)
           const localPathKey = normalizeRepositoryPathForCompare(localPath, { platform })
           const existing = data.repositories.find((repository) => (
             normalizeRepositoryPathForCompare(repository.localPath, { platform }) === localPathKey
@@ -135,7 +183,7 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       const startedAt = performance.now()
       try {
         await withRegistryMutation(async () => {
-          const data = await readRegistry(filePath)
+          const data = await readRegistry(filePath, deps.logger ?? noopLogger)
           const repository = data.repositories.find((item) => item.id === repositoryId)
           const openedAt = now().toISOString()
           await writeRegistry(filePath, {
@@ -172,7 +220,7 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       })
       try {
         await withRegistryMutation(async () => {
-          const data = await readRegistry(filePath)
+          const data = await readRegistry(filePath, deps.logger ?? noopLogger)
           const repository = data.repositories.find((item) => item.id === input.repositoryId)
 
           if (!repository) {

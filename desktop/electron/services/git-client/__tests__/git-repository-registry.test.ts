@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -127,5 +127,46 @@ describe("git repository registry", () => {
 
     const raw = await readFile(path.join(tempDir as string, "git-client", "repositories.json"), "utf8")
     expect(JSON.parse(raw).repositories).toHaveLength(1)
+  })
+
+  it("recovers from the last registry backup when the live file is malformed", async () => {
+    const logger = { error: vi.fn(), info: vi.fn() }
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
+    const registry = createGitRepositoryRegistry({
+      logger,
+      userDataPath: tempDir,
+      now: () => new Date("2026-06-17T10:00:00.000Z"),
+    })
+    const first = await registry.addLocal({ name: "Docs", localPath: "/tmp/docs" })
+    await registry.addLocal({ name: "Website", localPath: "/tmp/website" })
+
+    const registryPath = path.join(tempDir, "git-client", "repositories.json")
+    await writeFile(registryPath, "{\"version\":1,\"repositories\":[", "utf8")
+
+    await expect(registry.list()).resolves.toEqual([first])
+    expect(logger.error).toHaveBeenCalledWith("Git repository registry is malformed.", { quarantined: true })
+    expect(logger.info).toHaveBeenCalledWith("Recovered Git repository registry from backup.", {
+      repositoryCount: 1,
+    })
+  })
+
+  it("quarantines malformed registry files instead of blocking repository listing", async () => {
+    const logger = { error: vi.fn(), info: vi.fn() }
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
+    const registryDir = path.join(tempDir, "git-client")
+    await mkdir(registryDir, { recursive: true })
+    await writeFile(path.join(registryDir, "repositories.json"), "{\"version\":1,\"repositories\":[", "utf8")
+    const registry = createGitRepositoryRegistry({
+      logger,
+      userDataPath: tempDir,
+      now: () => new Date("2026-06-17T10:00:00.000Z"),
+    })
+
+    await expect(registry.list()).resolves.toEqual([])
+
+    const entries = await readdir(registryDir)
+    expect(entries.some((entry) => /^repositories\.invalid-.*\.json$/.test(entry))).toBe(true)
+    expect(entries).not.toContain("repositories.json")
+    expect(logger.error).toHaveBeenCalledWith("Git repository registry is malformed.", { quarantined: true })
   })
 })
