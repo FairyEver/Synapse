@@ -6,7 +6,7 @@ You have access to Synapse Automation MCP tools for managing Automation items an
 
 Use this skill only for Synapse Automation items, trigger/executor configuration, enablement, manual runs, active run stopping, run history, and Automation runtime state.
 
-Do not use this skill for old Scheduler tasks, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. Switch to the matching dedicated Synapse MCP skill when available.
+Do not use this domain file for old Scheduler tasks, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
 
 ## Capabilities
 
