@@ -5,6 +5,8 @@ import path from "node:path"
 
 export type PathStrategy = "merge" | "replace"
 
+const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS = [".exe", ".cmd", ".bat", ""]
+
 type BuildHostEnvironmentInput = {
   readonly baseEnv?: NodeJS.ProcessEnv
   readonly shellPath?: string | null
@@ -15,6 +17,7 @@ type BuildHostEnvironmentInput = {
 type ResolveExecutableOptions = {
   readonly platform?: NodeJS.Platform | string
   readonly fileExists?: (candidate: string) => boolean
+  readonly pathext?: string | null
 }
 
 type LoginShellPathExec = (
@@ -194,7 +197,7 @@ export function resolveExecutableInPath(
   const fileExists = options.fileExists ?? syncFileExists
   const targetPath = pathForPlatform(platform)
   const extensions = platform === "win32" && !targetPath.extname(command)
-    ? [".exe", ".cmd", ".bat", ""]
+    ? getWindowsExecutableExtensions(options.pathext)
     : [""]
 
   for (const directoryPath of splitPath(pathValue, platform === "win32" ? ";" : ":")) {
@@ -204,6 +207,19 @@ export function resolveExecutableInPath(
     }
   }
   return null
+}
+
+function getWindowsExecutableExtensions(pathext: string | null | undefined): string[] {
+  const parsedExtensions = (pathext ?? "")
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.startsWith(".") ? entry : `.${entry}`)
+  const source = parsedExtensions.length > 0
+    ? parsedExtensions
+    : DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS
+  const extensions = dedupePath(source, true)
+  return extensions.some((extension) => extension === "") ? extensions : [...extensions, ""]
 }
 
 export function collectShellEnvironmentSnapshot(input: {
@@ -216,6 +232,7 @@ export function collectShellEnvironmentSnapshot(input: {
   const platform = input.platform ?? process.platform
   const baseEnv = input.baseEnv ?? process.env
   const processPath = findEnvEntry(baseEnv, "PATH", platform)?.value ?? ""
+  const pathext = findEnvEntry(baseEnv, "PATHEXT", platform)?.value
   const shellPath = input.shellPath !== undefined
     ? input.shellPath
     : resolveCachedLoginShellPath(baseEnv)
@@ -231,12 +248,12 @@ export function collectShellEnvironmentSnapshot(input: {
     processPath,
     shellPath,
     effectivePath,
-    processNodePath: resolveExecutableInPath("node", processPath, { platform, fileExists: input.fileExists }),
-    shellNodePath: resolveExecutableInPath("node", shellPath, { platform, fileExists: input.fileExists }),
-    effectiveNodePath: resolveExecutableInPath("node", effectivePath, { platform, fileExists: input.fileExists }),
-    processGitPath: resolveExecutableInPath("git", processPath, { platform, fileExists: input.fileExists }),
-    shellGitPath: resolveExecutableInPath("git", shellPath, { platform, fileExists: input.fileExists }),
-    effectiveGitPath: resolveExecutableInPath("git", effectivePath, { platform, fileExists: input.fileExists }),
+    processNodePath: resolveExecutableInPath("node", processPath, { platform, fileExists: input.fileExists, pathext }),
+    shellNodePath: resolveExecutableInPath("node", shellPath, { platform, fileExists: input.fileExists, pathext }),
+    effectiveNodePath: resolveExecutableInPath("node", effectivePath, { platform, fileExists: input.fileExists, pathext }),
+    processGitPath: resolveExecutableInPath("git", processPath, { platform, fileExists: input.fileExists, pathext }),
+    shellGitPath: resolveExecutableInPath("git", shellPath, { platform, fileExists: input.fileExists, pathext }),
+    effectiveGitPath: resolveExecutableInPath("git", effectivePath, { platform, fileExists: input.fileExists, pathext }),
     nodeRuntimeBinPath,
   }
 }

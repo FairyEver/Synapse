@@ -967,6 +967,7 @@ function resolveLaunchCommand(
   return resolveExecutableInPath(command, findEnvEntry(env, "PATH", platform)?.value, {
     platform,
     fileExists: options.fileExists,
+    pathext: findEnvEntry(env, "PATHEXT", platform)?.value,
   }) ?? command
 }
 

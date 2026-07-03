@@ -48,6 +48,27 @@ describe("shell environment helpers", () => {
     expect(result).toBe("/opt/homebrew/bin/node")
   })
 
+  it("resolves Windows executables using PATHEXT order", () => {
+    const existing = new Set(["C:\\Tools\\node.PS1"])
+    const result = resolveExecutableInPath("node", "C:\\Tools", {
+      platform: "win32",
+      pathext: ".PS1;.EXE",
+      fileExists: (candidate) => existing.has(candidate),
+    })
+
+    expect(result).toBe("C:\\Tools\\node.PS1")
+  })
+
+  it("falls back to default Windows executable extensions when PATHEXT is missing", () => {
+    const existing = new Set(["C:\\Tools\\git.cmd"])
+    const result = resolveExecutableInPath("git", "C:\\Tools", {
+      platform: "win32",
+      fileExists: (candidate) => existing.has(candidate),
+    })
+
+    expect(result).toBe("C:\\Tools\\git.cmd")
+  })
+
   it("reports git visibility across process, shell, and effective PATH", () => {
     const existing = new Set([
       "/usr/bin/git",
@@ -68,6 +89,23 @@ describe("shell environment helpers", () => {
     expect(snapshot.processGitPath).toBe("/usr/bin/git")
     expect(snapshot.shellGitPath).toBe("/opt/homebrew/bin/git")
     expect(snapshot.effectiveGitPath).toBe("/usr/bin/git")
+  })
+
+  it("uses PATHEXT from the base environment when collecting Windows executable visibility", () => {
+    const existing = new Set(["C:\\Tools\\node.PY"])
+
+    const snapshot = collectShellEnvironmentSnapshot({
+      baseEnv: {
+        Path: "C:\\Tools",
+        PATHEXT: ".PY;.EXE",
+      },
+      shellPath: null,
+      platform: "win32",
+      fileExists: (candidate) => existing.has(candidate),
+    })
+
+    expect(snapshot.processNodePath).toBe("C:\\Tools\\node.PY")
+    expect(snapshot.effectiveNodePath).toBe("C:\\Tools\\node.PY")
   })
 
   it("builds a POSIX node shim that runs through Electron as Node", () => {
