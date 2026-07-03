@@ -4,6 +4,7 @@ import { chmodSync, readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import { mcpClientActorForSource } from "../../synapse-capabilities/shared/types"
+import { isProcessAlive } from "../../database/shared/process-liveness"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import type { DatabaseServerInfo } from "./types"
 import { createMainLogger } from "../services/log-store"
@@ -160,9 +161,7 @@ function cleanupStaleServerInfo(): void {
       return
     }
 
-    try {
-      process.kill(info.pid, 0)
-    } catch {
+    if (!isProcessAlive(info.pid)) {
       unlinkSync(getServerInfoPath())
       logger.info("Cleaned up stale data-server.json from a previous crash.", { stalePid: info.pid })
     }

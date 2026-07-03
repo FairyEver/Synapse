@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { isProcessAlive } from "./process-liveness"
 
 type ServerInfo = {
   port: number
@@ -32,15 +33,7 @@ function readServerInfo(): ServerInfo {
   }
 }
 
-function isAppRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EPERM") return true
-    return false
-  }
-}
+const isAppRunning = isProcessAlive
 
 async function apiCall(
   info: ServerInfo,

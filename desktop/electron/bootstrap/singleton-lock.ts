@@ -15,6 +15,7 @@
 import { app } from "electron"
 import { existsSync, readlinkSync, rmSync } from "node:fs"
 import path from "node:path"
+import { isProcessAlive } from "../../database/shared/process-liveness"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("bootstrap.singleton-lock")
@@ -36,12 +37,10 @@ export function clearStaleSingletonLock(): boolean {
 
     const pid = Number.parseInt(match[1], 10)
 
-    try {
-      process.kill(pid, 0)
+    if (isProcessAlive(pid)) {
       return false
-    } catch {
-      logger.debug("Process doesn't exist — lock is stale.", { pid })
     }
+    logger.debug("Process doesn't exist — lock is stale.", { pid })
   } catch (err) {
     logger.debug("Not a symlink or unreadable — treat as stale.", { err })
   }

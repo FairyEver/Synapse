@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs"
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import { isProcessAlive } from "../../../../database/shared/process-liveness"
 import { atomicWriteTextFile } from "../atomic-write"
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
@@ -198,21 +199,6 @@ function parseLockOwnerPid(owner: string | null): number | null {
   if (!match?.[1]) return null
   const pid = Number(match[1])
   return Number.isSafeInteger(pid) ? pid : null
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    if (typeof error === "object"
-      && error !== null
-      && "code" in error
-      && (error as { readonly code?: unknown }).code === "ESRCH") {
-      return false
-    }
-    return true
-  }
 }
 
 function isPathExistsError(error: unknown): boolean {

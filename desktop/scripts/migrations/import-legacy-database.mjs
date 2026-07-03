@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { DatabaseSync } from "node:sqlite"
+import { execFileSync } from "node:child_process"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
@@ -117,11 +118,64 @@ function isSynapseRunning(userDataPath) {
   try {
     const raw = JSON.parse(readFileSync(infoPath, "utf-8"))
     if (!Number.isInteger(raw.pid)) return false
-    process.kill(raw.pid, 0)
+    return isProcessAlive(raw.pid)
+  } catch {
+    return false
+  }
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  if (process.platform === "win32") {
+    try {
+      const output = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      })
+      return output
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .some((line) => line.startsWith("\"") && parseCsvLine(line)[1] === String(pid))
+    } catch {
+      return true
+    }
+  }
+
+  try {
+    process.kill(pid, 0)
     return true
   } catch (error) {
-    return error?.code === "EPERM"
+    if (error?.code === "ESRCH") return false
+    if (error?.code === "EPERM") return true
+    return true
   }
+}
+
+function parseCsvLine(line) {
+  const fields = []
+  let current = ""
+  let inQuotes = false
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]
+    if (character === "\"") {
+      if (inQuotes && line[index + 1] === "\"") {
+        current += "\""
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if (character === "," && !inQuotes) {
+      fields.push(current)
+      current = ""
+      continue
+    }
+    current += character
+  }
+  fields.push(current)
+  return fields
 }
 
 function findLatestLegacySource(userDataPath) {
