@@ -1686,6 +1686,38 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(bridgeMocks.knowledgeBase.uploadRawFiles).not.toHaveBeenCalled()
   })
 
+  it("uploads external files dropped on a tree folder into that folder", async () => {
+    renderWindow()
+    bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("客户")
+    })
+
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!target) throw new Error("Drop target not found.")
+    const dataTransfer = createDragDataTransfer()
+    const dragTypes = dataTransfer.types as string[]
+    dragTypes.push("Files")
+    Object.defineProperty(dataTransfer, "files", {
+      value: [new File(["image"], "diagram.png", { type: "image/png" })],
+    })
+
+    await act(async () => {
+      target.dispatchEvent(dragEvent("drop", dataTransfer))
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.uploadRawItems).toHaveBeenCalledWith({
+        projectId: "project-1",
+        targetDirectoryPath: "客户",
+        itemPaths: ["/tmp/diagram.png"],
+      })
+    })
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).not.toHaveBeenCalled()
+  })
+
   it("keeps the upload hint visible when dragging over children inside the source manager", async () => {
     renderWindow()
     await waitForExpectation(() => {

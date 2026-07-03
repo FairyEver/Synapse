@@ -1016,16 +1016,20 @@ function KnowledgeBaseSourceManagerWindow() {
       ? "indeterminate"
       : false
 
-  const uploadItems = useCallback(async (itemPaths: string[]) => {
+  const uploadItems = useCallback(async (itemPaths: string[], targetDirectoryPath = currentDirectory) => {
     if (!payload || !bridge || itemPaths.length === 0) return
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.uploadRawItems({
           projectId: payload.projectId,
-          targetDirectoryPath: currentDirectory,
+          targetDirectoryPath,
           itemPaths,
         })
-        await refreshDirectory()
+        if (targetDirectoryPath === currentDirectory) {
+          await refreshDirectory()
+        } else {
+          await refreshTreeDirectories([targetDirectoryPath])
+        }
         return result
       },
       {
@@ -1034,7 +1038,25 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "上传失败",
       },
     )
-  }, [bridge, currentDirectory, payload, promise, refreshDirectory])
+  }, [bridge, currentDirectory, payload, promise, refreshDirectory, refreshTreeDirectories])
+
+  const readDroppedItemPaths = useCallback((dataTransfer: DataTransfer): string[] => {
+    if (!bridge) return []
+    const itemPaths: string[] = []
+    let unresolvedCount = 0
+    for (const file of Array.from(dataTransfer.files)) {
+      const filePath = bridge.knowledgeBase.filePathForDroppedFile(file)
+      if (filePath) {
+        itemPaths.push(filePath)
+      } else {
+        unresolvedCount += 1
+      }
+    }
+    if (unresolvedCount > 0) {
+      showWarning(`跳过 ${unresolvedCount} 个无法读取路径的文件`)
+    }
+    return itemPaths
+  }, [bridge, showWarning])
 
   const chooseFiles = useCallback(async () => {
     if (!payload || !bridge) return
@@ -1241,9 +1263,13 @@ function KnowledgeBaseSourceManagerWindow() {
     internalDragPathsRef.current = []
     setInternalDragPaths([])
     setInternalDropTarget(null)
+    if (paths.length === 0 && event?.dataTransfer && hasExternalDraggedFiles(event.dataTransfer)) {
+      await uploadItems(readDroppedItemPaths(event.dataTransfer), targetDirectoryPath)
+      return
+    }
     if (!canMoveRawPathsToTarget(paths, targetDirectoryPath)) return
     await runMoveRawEntries(paths, targetDirectoryPath)
-  }, [runMoveRawEntries])
+  }, [readDroppedItemPaths, runMoveRawEntries, uploadItems])
 
   const exportEntries = useCallback(async (relativePaths: string[]) => {
     if (!payload || !bridge || relativePaths.length === 0) return
@@ -1275,22 +1301,8 @@ function KnowledgeBaseSourceManagerWindow() {
     event.preventDefault()
     setIsDragging(false)
     if (internalDragPathsRef.current.length > 0 || !hasExternalDraggedFiles(event.dataTransfer)) return
-    if (!bridge) return
-    const itemPaths: string[] = []
-    let unresolvedCount = 0
-    for (const file of Array.from(event.dataTransfer.files)) {
-      const filePath = bridge.knowledgeBase.filePathForDroppedFile(file)
-      if (filePath) {
-        itemPaths.push(filePath)
-      } else {
-        unresolvedCount += 1
-      }
-    }
-    if (unresolvedCount > 0) {
-      showWarning(`跳过 ${unresolvedCount} 个无法读取路径的文件`)
-    }
-    void uploadItems(itemPaths)
-  }, [bridge, showWarning, uploadItems])
+    void uploadItems(readDroppedItemPaths(event.dataTransfer))
+  }, [readDroppedItemPaths, uploadItems])
 
   const toggleSelected = useCallback((relativePath: string, checked: boolean) => {
     setSelectedPaths((previous) => {
