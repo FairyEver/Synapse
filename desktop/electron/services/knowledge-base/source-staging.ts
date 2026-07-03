@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto"
-import { link, lstat, mkdir, rm, writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
+import { access, lstat, mkdir } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
@@ -7,6 +7,7 @@ import { isPathInsideDirectory } from "../../../src/lib/path-compare"
 import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { acquireUrlSource, type FetchUrl, type UrlSourceErrorCode } from "../source-acquisition/url-source"
+import { atomicWriteTextFile } from "./atomic-write"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 export interface StageKnowledgeBaseUrlSourceInput {
@@ -99,23 +100,21 @@ function normalizeRawDirectoryPath(value: string): string {
 
 async function writeUtf8FileToAvailablePath(directoryPath: string, fileName: string, content: string): Promise<string> {
   return writeToAvailablePath(directoryPath, fileName, async (candidate) => {
-    await writeUtf8FileToNewPathAtomically(candidate, content)
+    await assertFileDoesNotExist(candidate)
+    await atomicWriteTextFile(candidate, content)
   })
 }
 
-async function writeUtf8FileToNewPathAtomically(filePath: string, content: string): Promise<void> {
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
-  )
+async function assertFileDoesNotExist(filePath: string): Promise<void> {
   try {
-    await writeFile(temporaryPath, content, "utf8")
-    await link(temporaryPath, filePath)
-    await rm(temporaryPath, { force: true }).catch(() => undefined)
+    await access(filePath, constants.F_OK)
   } catch (error) {
-    await rm(temporaryPath, { force: true }).catch(() => undefined)
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return
     throw error
   }
+  const error = new Error("File already exists.") as NodeJS.ErrnoException
+  error.code = "EEXIST"
+  throw error
 }
 
 async function writeToAvailablePath(
