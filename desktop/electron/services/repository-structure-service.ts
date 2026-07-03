@@ -77,11 +77,19 @@ async function stageRepositoryScope(
 ): Promise<void> {
   const relativePath = path.relative(gitRootPath, repository.localPath) || "."
   const normalizedRelativePath = relativePath.split(path.sep).join("/")
+  const backupPathspec = normalizedRelativePath === "."
+    ? ".synapse-init-backup-*"
+    : `${normalizedRelativePath}/.synapse-init-backup-*`
 
   await runStructureGitCommand(
     gitRootPath,
     ["add", "-A", "--", normalizedRelativePath],
     "暂存仓库结构改动失败。",
+  )
+  await runStructureGitCommand(
+    gitRootPath,
+    ["reset", "-q", "--", backupPathspec],
+    "排除初始化备份目录失败。",
   )
 }
 

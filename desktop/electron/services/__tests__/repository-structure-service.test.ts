@@ -194,6 +194,47 @@ describe("RepositoryStructureService", () => {
     expect(mocks.contentIndexService.clearIndex).toHaveBeenCalledTimes(1)
   })
 
+  it("excludes initialization backups from git initialization commits", async () => {
+    const { runGitTextCommand } = await import("../git-command")
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await writeFile(path.join(localPath, "notes.md"), "# Notes", "utf8")
+    mocks.repositoryStore.getRepositoryState.mockImplementation(async (repository) => ({
+      gitRootPath: repository.localPath,
+      isGitRepository: true,
+      localPath: repository.localPath,
+      repositoryUuid: repository.uuid,
+      status: "ready",
+    }))
+    vi.mocked(runGitTextCommand).mockResolvedValue("commit-hash")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
+
+    await expect(repositoryStructureService.initializeStructure({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    }, {
+      confirmedOperationToken: preview.operationToken,
+    })).resolves.toEqual(expect.objectContaining({
+      message: "初始化完成。",
+    }))
+
+    expect(runGitTextCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["add", "-A", "--", "."],
+      cwd: localPath,
+    }))
+    expect(runGitTextCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["reset", "-q", "--", ".synapse-init-backup-*"],
+      cwd: localPath,
+    }))
+  })
+
   it("restores backed up contents when initialization fails after scaffolding", async () => {
     const { repositoryStructureService } = await import("../repository-structure-service")
     const localPath = await makeTempRepositoryPath()
