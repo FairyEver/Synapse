@@ -102,6 +102,7 @@ function EditorScanModule() {
         path: item.path,
         source: item.source,
         preview: item.preview,
+        mainFileName: "mainFileName" in item ? item.mainFileName : undefined,
         fileCount: "fileCount" in item ? item.fileCount : undefined,
         metadata: "metadata" in item ? item.metadata : undefined,
         synapseContentId: item.synapseContentId,

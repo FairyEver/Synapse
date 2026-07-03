@@ -17,6 +17,7 @@ export type EditorScanSkillItem = {
   synapseContentId: string | null
   repositoryVersion: string | null
   preview: string
+  mainFileName?: string | null
   fileCount: number
   trash: EditorScanTrashInfo
 }
@@ -76,6 +77,7 @@ export type ScanItemForDetail = {
   path: string
   source: EditorScanItemSource
   preview: string
+  mainFileName?: string | null
   fileCount?: number
   metadata?: Record<string, string>
   synapseContentId?: string | null
@@ -143,6 +145,7 @@ export type EditorScanSkillRepositoryUploadRequest = {
   editorId: SynapseEditorId
   scope: EditorScanScope
   projectPath?: string | null
+  mainFileName?: string | null
 }
 
 export type EditorScanSkillRepositoryUploadResult = {

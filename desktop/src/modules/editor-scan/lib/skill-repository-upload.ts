@@ -7,6 +7,9 @@ function getUploadSkillToSkillRepositoryDisabledReason(item: ScanItemForDetail |
   if (!item) return "未选择内容"
   if (item.type !== "skill") return "只有 Skill 可以上传到 Skill Repository"
   if (!item.path.trim()) return "本地路径为空"
+  if (item.mainFileName && item.mainFileName !== "SKILL.md") {
+    return "上传到 Skill Repository 需要根目录 SKILL.md"
+  }
   return null
 }
 
@@ -28,6 +31,7 @@ function buildUploadSkillToSkillRepositoryRequest(
     editorId: item.editorId,
     scope: item.scope,
     ...(item.projectPath ? { projectPath: item.projectPath } : {}),
+    ...(item.mainFileName ? { mainFileName: item.mainFileName } : {}),
   }
 }
 

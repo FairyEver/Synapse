@@ -5,6 +5,7 @@
  * Replaces electron/ipc/editor-scan-handlers.ts with IpcModule.
  */
 
+import path from "node:path"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
@@ -22,6 +23,7 @@ import {
   trashScanItem,
 } from "../../services/editor-scan-service"
 import { skillRepositoryUploadService } from "../../services/skill-repository-upload-service"
+import { resolveSkillMainFile } from "../../services/content-skill-source-service"
 
 // Schemas
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
@@ -37,7 +39,9 @@ const editorScanSkillItemSchema = z.object({
   path: z.string(),
   source: editorScanItemSourceSchema,
   synapseContentId: z.string().nullable(),
+  repositoryVersion: z.string().nullable().optional(),
   preview: z.string(),
+  mainFileName: z.string().nullable().optional(),
   fileCount: z.number(),
   trash: editorScanTrashInfoSchema,
 })
@@ -140,6 +144,7 @@ const uploadSkillToSkillRepositoryRequestSchema = z.object({
   editorId: z.string().min(1),
   scope: z.enum(["global", "project"]),
   projectPath: z.string().nullable().optional(),
+  mainFileName: z.string().nullable().optional(),
 }).strict()
 type UploadSkillToSkillRepositoryRequest = z.infer<typeof uploadSkillToSkillRepositoryRequestSchema>
 
@@ -235,6 +240,10 @@ export const editorScanIpcModule: IpcModule = {
           itemName: request.itemName,
           operation: "upload-skill-to-skill-repository",
         }, "skill")
+        const mainFile = await resolveSkillMainFile(request.itemPath)
+        if (!mainFile || path.basename(mainFile) !== "SKILL.md") {
+          throw new Error("上传到 Skill Repository 需要根目录 SKILL.md。")
+        }
         return skillRepositoryUploadService.importLocal(
           {
             sourceDirectoryPath: (request as EditorScanSkillRepositoryUploadRequest).itemPath,
