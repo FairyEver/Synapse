@@ -52,6 +52,8 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       toolUseId?: string
       toolName: string
       content?: string
+      contentDiagnostics?: SynapseAgentToolResultContentDiagnostics
+      imageArtifacts?: readonly SynapseAgentImageArtifact[]
       status?: string
       exitCode?: number
       success?: boolean
@@ -277,11 +279,44 @@ export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBa
   readonly startedAt?: string
 }
 
+export interface SynapseAgentToolResultImageDiagnostic {
+  readonly mimeType?: string
+  readonly base64Length?: number
+  readonly originalSize?: number
+  readonly dimensions?: Record<string, number>
+}
+
+export type SynapseAgentArtifactImageMimeType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp"
+
+export interface SynapseAgentImageArtifact {
+  readonly id: string
+  readonly kind: "image"
+  readonly mimeType: SynapseAgentArtifactImageMimeType
+  readonly byteSize: number
+  readonly url: string
+  readonly sha256?: string
+}
+
+export interface SynapseAgentToolResultContentDiagnostics {
+  readonly kind: "string" | "array" | "other"
+  readonly itemCount?: number
+  readonly contentTypes?: readonly string[]
+  readonly textCharCount: number
+  readonly imageCount: number
+  readonly images: readonly SynapseAgentToolResultImageDiagnostic[]
+}
+
 export interface SynapseAgentToolResultTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "toolResult"
   readonly toolUseId?: string
   readonly toolName: string
   readonly content?: string
+  readonly contentDiagnostics?: SynapseAgentToolResultContentDiagnostics
+  readonly imageArtifacts?: readonly SynapseAgentImageArtifact[]
   readonly status?: string
   readonly exitCode?: number
   readonly success?: boolean

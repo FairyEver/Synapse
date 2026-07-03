@@ -86,7 +86,7 @@ export function DriveShareSettingsDialog({
   }
   const confirm = () => {
     const result = prepareDriveShareSettingsForSubmit(settings, editorEmailInput)
-    if (result.error) {
+    if (result.settings === null) {
       setEditorEmailError(result.error)
       return
     }

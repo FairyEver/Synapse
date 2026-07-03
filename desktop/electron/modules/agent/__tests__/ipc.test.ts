@@ -733,7 +733,15 @@ describe("agentIpcModule", () => {
     }))
   })
 
-  it("preserves tool use ids in conversation timelines", async () => {
+  it("preserves tool use ids and image artifacts in conversation timelines", async () => {
+    const imageArtifacts = [{
+      id: "artifact-1",
+      kind: "image" as const,
+      mimeType: "image/png" as const,
+      byteSize: 76,
+      url: "synapse-agent-artifact://local/project/conv/artifact-1.png",
+      sha256: "sha256-artifact-1",
+    }]
     const getSession = vi.fn().mockResolvedValue({
       projectId: "project-1",
       id: "conv-1",
@@ -760,6 +768,7 @@ describe("agentIpcModule", () => {
             toolName: "Read",
             status: "success",
             success: true,
+            imageArtifacts,
           },
         },
       ],
@@ -775,7 +784,12 @@ describe("agentIpcModule", () => {
     const result = await harness.invoke("synapse:agent:get-timeline", {
       projectId: "project-1",
       conversationId: "conv-1",
-    }) as { readonly entries: readonly { readonly toolUseId?: string }[] }
+    }) as {
+      readonly entries: readonly {
+        readonly toolUseId?: string
+        readonly imageArtifacts?: readonly typeof imageArtifacts[number][]
+      }[]
+    }
 
     expect(result.entries).toEqual([
       expect.objectContaining({
@@ -787,6 +801,7 @@ describe("agentIpcModule", () => {
         kind: "toolResult",
         toolUseId: "toolu-read-1",
         toolName: "Read",
+        imageArtifacts,
       }),
     ])
   })
@@ -828,6 +843,7 @@ describe("agentIpcModule", () => {
     })
 
     expect(result).toEqual({ success: false })
+    expect(harness.dataRepository.namespace).toHaveBeenCalledWith("agent.artifacts")
     expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
       title: "导出对话",
       filters: [{ name: "ZIP", extensions: ["zip"] }],

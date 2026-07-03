@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 
 import type {
+  AgentArtifactEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -224,6 +225,77 @@ describe("AgentConversationExportService", () => {
     expect(auditEvents[0]?.metadata).toMatchObject({
       sessionKey: "[redacted]",
     })
+  })
+
+  it("exports agent image artifact metadata and copied files", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-artifact-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const imagePath = path.join(tempRoot, "artifact-source.png")
+    const { writeFile } = await import("node:fs/promises")
+    await writeFile(imagePath, Buffer.from([137, 80, 78, 71]))
+
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const agentArtifacts = new MemoryNamespace<AgentArtifactEntryV1>("agent.artifacts")
+    await conversations.upsert(createConversation())
+    await agentArtifacts.upsert({
+      id: "artifact-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      toolUseId: "toolu-read-1",
+      toolName: "Read",
+      kind: "image",
+      mimeType: "image/png",
+      byteSize: 4,
+      sha256: "a".repeat(64),
+      storagePath: imagePath,
+      createdAt: "2026-07-03T00:00:00.000Z",
+    })
+
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
+      const artifactsText = await readFile(path.join(sourceDirectoryPath, "agent-artifacts.json"), "utf8")
+      const artifacts = JSON.parse(artifactsText) as {
+        binaryIncluded: boolean
+        artifacts: Array<{ id: string; relativePath: string }>
+      }
+      expect(artifacts.binaryIncluded).toBe(true)
+      expect(artifacts.artifacts).toEqual([expect.objectContaining({
+        id: "artifact-1",
+        relativePath: "artifacts/artifact-1.png",
+      })])
+      await expect(readFile(path.join(sourceDirectoryPath, "artifacts", "artifact-1.png")))
+        .resolves.toEqual(Buffer.from([137, 80, 78, 71]))
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents,
+      agentUsage,
+      agentArtifacts,
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      createZipArchive,
+      now: () => new Date("2026-07-03T00:00:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: TEST_SESSION_KEY,
+    })).resolves.toMatchObject({
+      success: true,
+      filePath: outputPath,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
   })
 
   it("returns success false when the save dialog is cancelled", async () => {

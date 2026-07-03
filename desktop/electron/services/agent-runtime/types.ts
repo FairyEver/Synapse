@@ -23,6 +23,27 @@ export type AgentAttachment =
   | AgentImageAttachment
   | AgentPathAttachment
 
+export type AgentArtifactImageMimeType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp"
+
+export interface AgentToolResultImageBlock {
+  readonly kind: "image"
+  readonly mimeType: AgentArtifactImageMimeType
+  readonly base64: string
+}
+
+export interface AgentImageArtifact {
+  readonly id: string
+  readonly kind: "image"
+  readonly mimeType: AgentArtifactImageMimeType
+  readonly byteSize: number
+  readonly url: string
+  readonly sha256?: string
+}
+
 export interface AgentMessage {
   readonly projectId: string
   readonly sessionKey: string
@@ -94,11 +115,30 @@ export interface AgentToolUseEvent extends AgentEventBase {
   readonly toolInputRaw?: Record<string, unknown>
 }
 
+export interface AgentToolResultImageDiagnostic {
+  readonly mimeType?: string
+  readonly base64Length?: number
+  readonly originalSize?: number
+  readonly dimensions?: Record<string, number>
+}
+
+export interface AgentToolResultContentDiagnostics {
+  readonly kind: "string" | "array" | "other"
+  readonly itemCount?: number
+  readonly contentTypes?: readonly string[]
+  readonly textCharCount: number
+  readonly imageCount: number
+  readonly images: readonly AgentToolResultImageDiagnostic[]
+}
+
 export interface AgentToolResultEvent extends AgentEventBase {
   readonly type: "toolResult"
   readonly toolUseId?: string
   readonly toolName: string
   readonly content?: string
+  readonly contentDiagnostics?: AgentToolResultContentDiagnostics
+  readonly imageBlocks?: readonly AgentToolResultImageBlock[]
+  readonly imageArtifacts?: readonly AgentImageArtifact[]
   readonly status?: string
   readonly exitCode?: number
   readonly success?: boolean

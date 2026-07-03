@@ -419,13 +419,18 @@ function AgentConversationWorkspace({
     }
   }
 
+  const currentPendingPermissions = chat.pendingPermissions.filter((item) =>
+    item.projectId === target.projectId
+    && item.conversationId === target.conversationId
+    && item.sessionKey === target.sessionKey)
+
   const handlePendingPermissionsClick = () => {
-    const requestId = chat.pendingPermissions.find(isToolPermission)?.requestId
+    const requestId = currentPendingPermissions.find(isToolPermission)?.requestId
     scrollToPendingRequest(requestId)
   }
 
   const handlePendingQuestionsClick = () => {
-    const requestId = chat.pendingPermissions.find(isUserQuestionPending)?.requestId
+    const requestId = currentPendingPermissions.find(isUserQuestionPending)?.requestId
     scrollToPendingRequest(requestId)
   }
 
@@ -479,8 +484,8 @@ function AgentConversationWorkspace({
     [canManageKnowledgeSources],
   )
   const selectedPermissionMode = session.mode ?? "default"
-  const pendingPermissionCount = chat.pendingPermissions.filter(isToolPermission).length
-  const pendingQuestionCount = chat.pendingPermissions.filter(isUserQuestionPending).length
+  const pendingPermissionCount = currentPendingPermissions.filter(isToolPermission).length
+  const pendingQuestionCount = currentPendingPermissions.filter(isUserQuestionPending).length
 
   const openReference = (reference: string) => {
     const bridge = getSynapseBridge()
@@ -683,7 +688,7 @@ function AgentConversationWorkspace({
         profile={displayProfile}
         agentIcon={agentIcon}
         sending={chat.sending}
-        pendingPermissions={chat.pendingPermissions}
+        pendingPermissions={currentPendingPermissions}
         onOpenReference={openReference}
         onRespondPermission={(requestId, behavior, updatedInput, message) =>
           chat.respondPermission(requestId, behavior, updatedInput, message)}

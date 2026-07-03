@@ -137,7 +137,12 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return toolCallTranscriptText(entry)
     case "toolResult": {
       const content = entry.content?.trim()
-      return content ? redactSensitiveText(content) : entry.toolName
+      const artifactText = entry.imageArtifacts?.map((artifact, index) =>
+        `Image ${index + 1}: ${artifact.id} ${artifact.mimeType} ${artifact.byteSize} B`,
+      ).join("\n")
+      return [content ? redactSensitiveText(content) : entry.toolName, artifactText]
+        .filter((part): part is string => Boolean(part))
+        .join("\n")
     }
     case "toolProgress":
       return entry.status === "stopped"

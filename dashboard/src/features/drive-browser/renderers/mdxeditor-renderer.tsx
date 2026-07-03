@@ -581,7 +581,7 @@ async function materializeDraftPublicImages(
     setUploadingImage(false)
   }
 
-  return { markdown: nextMarkdown, replacedDraftUrls, uploadedAssets }
+  return { markdown: nextMarkdown, replacedDraftUrls }
 }
 
 async function cleanupUploadedPublicAssets(assets: readonly DrivePublicAssetDto[]): Promise<boolean> {

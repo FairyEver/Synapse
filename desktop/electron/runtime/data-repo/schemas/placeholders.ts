@@ -296,6 +296,60 @@ export const agentEventsSchema: NamespaceSchema<AgentEventEntryV1> = {
     && typeof (v as AgentEventEntryV1).createdAt === "string",
 }
 
+const supportedAgentArtifactImageMimeTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
+
+const isSha256Hex = (value: unknown): value is string =>
+  typeof value === "string" && /^[a-f0-9]{64}$/i.test(value)
+
+const hasNoArtifactBytes = (value: Record<string, unknown>): boolean =>
+  value.base64 === undefined && value.data === undefined && value.bytes === undefined
+
+export interface AgentArtifactEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  conversationId: string
+  turnId: string
+  toolUseId?: string
+  toolName?: string
+  kind: "image"
+  mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+  byteSize: number
+  sha256: string
+  storagePath: string
+  createdAt: string
+}
+
+export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntryV1> = {
+  name: "agent.artifacts",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentArtifactEntryV1 =>
+    isAnyRecord<AgentArtifactEntryV1>(v)
+    && (v as AgentArtifactEntryV1).schemaVersion === 1
+    && typeof (v as AgentArtifactEntryV1).id === "string"
+    && typeof (v as AgentArtifactEntryV1).projectId === "string"
+    && typeof (v as AgentArtifactEntryV1).conversationId === "string"
+    && typeof (v as AgentArtifactEntryV1).turnId === "string"
+    && isOptionalString((v as AgentArtifactEntryV1).toolUseId)
+    && isOptionalString((v as AgentArtifactEntryV1).toolName)
+    && (v as AgentArtifactEntryV1).kind === "image"
+    && supportedAgentArtifactImageMimeTypes.has((v as AgentArtifactEntryV1).mimeType)
+    && typeof (v as AgentArtifactEntryV1).byteSize === "number"
+    && Number.isInteger((v as AgentArtifactEntryV1).byteSize)
+    && (v as AgentArtifactEntryV1).byteSize > 0
+    && isSha256Hex((v as AgentArtifactEntryV1).sha256)
+    && typeof (v as AgentArtifactEntryV1).storagePath === "string"
+    && typeof (v as AgentArtifactEntryV1).createdAt === "string"
+    && hasNoArtifactBytes(v as Record<string, unknown>),
+}
+
 export interface AgentUsageSummaryV1 extends Record<string, unknown> {
   inputTokens: number
   outputTokens: number

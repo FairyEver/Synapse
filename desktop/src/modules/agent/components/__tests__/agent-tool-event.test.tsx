@@ -323,6 +323,41 @@ describe("AgentToolEvent", () => {
     expect(container.textContent).not.toContain("sk-bearer")
   })
 
+  it("renders image artifact thumbnails for image tool results", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentToolEvent
+        item={{
+          id: "tool-image",
+          kind: "toolResult",
+          timestamp: "2026-07-03T00:00:00.000Z",
+          toolName: "Read",
+          toolUseId: "toolu-1",
+          imageArtifacts: [{
+            id: "artifact-1",
+            kind: "image",
+            mimeType: "image/png",
+            byteSize: 4,
+            url: "/Users/liyang/Library/Application Support/Synapse/agent-artifacts/project_1/conversation_1/artifact-1.png",
+          }],
+          success: true,
+        }}
+        profile={profile}
+      />)
+    })
+
+    expect(container.querySelector("[data-slot='collapsible']")?.getAttribute("data-state")).toBe("open")
+    const image = container.querySelector("img[alt='Read image 1']")
+    const link = container.querySelector("a")
+    expect(image).toBeTruthy()
+    expect(image?.getAttribute("src")).toBe("synapse-agent-artifact://local/project_1/conversation_1/artifact-1.png")
+    expect(link?.getAttribute("href")).toBe("synapse-agent-artifact://local/project_1/conversation_1/artifact-1.png")
+  })
+
   it("collapses failed tool results while keeping the failed status visible", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{

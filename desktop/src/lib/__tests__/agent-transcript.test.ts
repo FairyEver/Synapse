@@ -61,4 +61,27 @@ describe("agent transcript helpers", () => {
     expect(transcript).not.toContain("sk-secret")
     expect(transcript).not.toContain("sk-bearer")
   })
+
+  it("mentions image artifacts in tool result transcript text", () => {
+    const transcript = formatAgentTranscript([{
+      id: "tool-result",
+      kind: "toolResult",
+      toolUseId: "toolu-read-1",
+      toolName: "Read",
+      imageArtifacts: [{
+        id: "artifact-1",
+        kind: "image",
+        mimeType: "image/png",
+        byteSize: 4,
+        url: "/tmp/artifact-1.png",
+      }],
+      status: "success",
+      success: true,
+      timestamp: "2026-07-03T00:00:00.000Z",
+    }])
+
+    expect(transcript).toContain("Read")
+    expect(transcript).toContain("image/png")
+    expect(transcript).toContain("artifact-1")
+  })
 })

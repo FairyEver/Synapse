@@ -97,6 +97,51 @@ describe("agent IPC schemas", () => {
     })
   })
 
+  it("preserves image artifacts on tool result events and timeline items", () => {
+    const imageArtifacts = [{
+      id: "artifact-1",
+      kind: "image" as const,
+      mimeType: "image/png" as const,
+      byteSize: 76,
+      url: "synapse-agent-artifact://local/project/conv/artifact-1.png",
+      sha256: "sha256-artifact-1",
+    }]
+
+    expect(agentEventSchema.parse({
+      type: "toolResult",
+      toolUseId: "toolu-read-image",
+      toolName: "Read",
+      imageArtifacts,
+      status: "success",
+      success: true,
+    })).toEqual({
+      type: "toolResult",
+      toolUseId: "toolu-read-image",
+      toolName: "Read",
+      imageArtifacts,
+      status: "success",
+      success: true,
+    })
+
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:2",
+      timestamp: "2026-07-03T13:25:40.000Z",
+      kind: "toolResult",
+      toolUseId: "toolu-read-image",
+      toolName: "Read",
+      imageArtifacts,
+      success: true,
+    })).toEqual({
+      id: "conv-1:history:2",
+      timestamp: "2026-07-03T13:25:40.000Z",
+      kind: "toolResult",
+      toolUseId: "toolu-read-image",
+      toolName: "Read",
+      imageArtifacts,
+      success: true,
+    })
+  })
+
   it("accepts a permission mode on session summaries", () => {
     expect(sessionSummarySchema.parse({
       projectId: "project-1",

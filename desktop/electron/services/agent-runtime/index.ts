@@ -1,4 +1,5 @@
 import type {
+  AgentArtifactEntryV1,
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   AgentEventEntryV1,
@@ -7,6 +8,8 @@ import type {
   DataRepository,
   OutboxEntryV1,
 } from "../../runtime/data-repo"
+import { app } from "electron"
+import path from "node:path"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
   createControlledProcessRunner,
@@ -22,6 +25,7 @@ import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
 import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
+import { AgentArtifactStore } from "./artifact-store"
 import type { AgentPersonaService } from "../../../app-capabilities/agent-personas/main/service"
 import { CustomCommandRegistry } from "./command-registry"
 import { createAgentPersonaRuntimeResolver } from "./persona-runtime"
@@ -96,6 +100,9 @@ export {
   ConversationRouter,
   type ConversationRouterDeps,
 } from "./conversation-router"
+export {
+  AgentArtifactStore,
+} from "./artifact-store"
 export {
   SkillRegistry,
   buildSkillInvocationPrompt,
@@ -178,6 +185,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         logger: ctx.logger,
       })
       const isManagedKnowledgeBase = ctx.projectMeta.managedKnowledgeBase === true
+      const agentArtifactStore = new AgentArtifactStore({
+        rootDirectory: path.join(app.getPath("userData"), "agent-artifacts"),
+        artifacts: ctx.dataRepo.namespace<AgentArtifactEntryV1>("agent.artifacts"),
+      })
       const hasManagedKnowledgeBaseWorkspace =
         isManagedKnowledgeBase
         && typeof ctx.projectMeta.workspacePath === "string"
@@ -200,6 +211,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: ctx.dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
+        agentArtifactStore,
         getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
         providerService,
         agentType: "claude-code",

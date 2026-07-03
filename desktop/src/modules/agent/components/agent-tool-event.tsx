@@ -17,6 +17,7 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
+import { AgentToolImageArtifacts } from "./agent-tool-image-artifacts"
 import { errorLogMeta, formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
 const logger = createRendererLogger("agent")
@@ -152,6 +153,12 @@ function AgentToolEvent({
                 </Button>
               </>
             ) : null}
+            {effectiveResult?.imageArtifacts?.length ? (
+              <AgentToolImageArtifacts
+                toolName={effectiveResult.toolName}
+                artifacts={effectiveResult.imageArtifacts}
+              />
+            ) : null}
             {effectiveResult && typeof effectiveResult.exitCode === "number" ? (
               <span className="text-xs text-muted-foreground">exit {effectiveResult.exitCode}</span>
             ) : null}
@@ -210,6 +217,7 @@ function shouldAutoOpenToolEvent({
   readonly result: SynapseAgentToolResultTimelineItem | undefined
 }): boolean {
   if (permission) return true
+  if ((result?.imageArtifacts?.length ?? 0) > 0) return true
   return !result
 }
 

@@ -101,6 +101,30 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("restores image artifacts from stored tool result metadata", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "tool",
+      content: "Read (1 image)",
+      timestamp: "2026-07-03T00:00:00.000Z",
+      metadata: {
+        agentEventType: "toolResult",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        imageArtifacts: [{
+          id: "artifact-1",
+          kind: "image",
+          mimeType: "image/png",
+          byteSize: 4,
+          url: "/tmp/artifact-1.png",
+        }],
+      },
+    }, 3)).toEqual(expect.objectContaining({
+      kind: "toolResult",
+      toolName: "Read",
+      imageArtifacts: [expect.objectContaining({ id: "artifact-1" })],
+    }))
+  })
+
   it("restores stored thinking start time for process duration", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "system",
@@ -657,6 +681,32 @@ describe("agent timeline conversion", () => {
         usage: { input_tokens: 1 },
         turnUsage: { input_tokens: 1 },
       }),
+    }))
+  })
+
+  it("preserves image artifacts on live tool result timeline items", () => {
+    const item = agentEventToTimelineItem({
+      type: "toolResult",
+      toolName: "Read",
+      toolUseId: "toolu-1",
+      imageArtifacts: [{
+        id: "artifact-1",
+        kind: "image",
+        mimeType: "image/png",
+        byteSize: 4,
+        url: "/tmp/artifact-1.png",
+        sha256: "a".repeat(64),
+      }],
+      status: "success",
+      success: true,
+    }, {
+      id: "event:1",
+      timestamp: "2026-07-03T00:00:00.000Z",
+    })
+
+    expect(item).toEqual(expect.objectContaining({
+      kind: "toolResult",
+      imageArtifacts: [expect.objectContaining({ id: "artifact-1" })],
     }))
   })
 

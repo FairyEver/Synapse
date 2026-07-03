@@ -145,6 +145,24 @@ describe("AgentConversationWorkspace", () => {
     expect(container.textContent).not.toContain("资料管理")
   })
 
+  it("does not show pending questions from another conversation in the header", () => {
+    const container = renderWorkspace({
+      mode: "embedded",
+      chat: createController({
+        pendingPermissions: [{
+          requestId: "question-1",
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          conversationId: "conversation-2",
+          toolName: "AskUserQuestion",
+          createdAt: "2026-06-17T00:01:00.000Z",
+        }],
+      }),
+    })
+
+    expect(container.textContent).not.toContain("待回答 1")
+  })
+
   it("creates a replacement session from window mode and asks the page to retarget", async () => {
     const createdSession: SynapseAgentSessionSummary = {
       ...session,

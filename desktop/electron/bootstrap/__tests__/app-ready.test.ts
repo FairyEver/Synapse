@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => {
     logStore: {
       dispose: vi.fn(async () => undefined),
     },
+    registerAgentArtifactProtocol: vi.fn(),
     registry,
     windowManager,
   }
@@ -85,6 +86,10 @@ vi.mock("../../services/log-store", () => ({
 
 vi.mock("../account-external-opener", () => ({
   createAccountExternalUrlOpener: mocks.createAccountExternalUrlOpener,
+}))
+
+vi.mock("../agent-artifact-protocol", () => ({
+  registerAgentArtifactProtocol: mocks.registerAgentArtifactProtocol,
 }))
 
 vi.mock("../app-events", () => ({

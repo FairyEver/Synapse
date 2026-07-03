@@ -2,10 +2,22 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolut
 
 import { SYNAPSE_COST_CURRENCY, usdToCny } from "../../../action-packages/shared/cost-currency"
 import { sdkResultErrorPresentation } from "./agent-error-messages"
-import type { AgentEvent } from "./types"
+import type {
+  AgentArtifactImageMimeType,
+  AgentEvent,
+  AgentToolResultContentDiagnostics,
+  AgentToolResultImageBlock,
+  AgentToolResultImageDiagnostic,
+} from "./types"
 import { isSensitiveKey, redactSensitiveText, REDACTED } from "./redaction"
 
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
 
 export interface AgentEventEnvelope {
   readonly conversationId?: string
@@ -235,12 +247,15 @@ function toolResultEventsFromBlocks(
     if (record?.type !== "tool_result") return []
     const isError = record.is_error === true
     const toolUseId = stringValue(record.tool_use_id)
+    const imageBlocks = toolResultImageBlocks(record.content)
     return [{
       type: "toolResult",
       sdkSessionId,
       toolUseId,
       toolName: toolUseId ?? "tool_result",
       content: toolResultContent(record.content),
+      contentDiagnostics: toolResultContentDiagnostics(record.content),
+      ...(imageBlocks ? { imageBlocks } : {}),
       status: isError ? "error" : "success",
       success: !isError,
       ...envelope,
@@ -279,6 +294,113 @@ function toolResultContent(value: unknown): string | undefined {
     return stringValue(record?.text) ?? ""
   }).join("")
   return text.length > 0 ? redactDiagnosticText(text) : undefined
+}
+
+function toolResultContentDiagnostics(value: unknown): AgentToolResultContentDiagnostics {
+  if (typeof value === "string") {
+    return {
+      kind: "string",
+      textCharCount: value.length,
+      imageCount: 0,
+      images: [],
+    }
+  }
+  if (!Array.isArray(value)) {
+    return {
+      kind: "other",
+      textCharCount: 0,
+      imageCount: 0,
+      images: [],
+    }
+  }
+
+  const contentTypes: string[] = []
+  let textCharCount = 0
+  const images: AgentToolResultImageDiagnostic[] = []
+
+  for (const item of value) {
+    if (typeof item === "string") {
+      textCharCount += item.length
+      contentTypes.push("string")
+      continue
+    }
+    const record = isRecord(item) ? item : undefined
+    const type = stringValue(record?.type) ?? typeof item
+    contentTypes.push(type)
+    if (type === "text") {
+      textCharCount += stringValue(record?.text)?.length ?? 0
+    }
+    if (type === "image") {
+      const diagnostic = imageDiagnostic(record)
+      images.push(diagnostic)
+    }
+  }
+
+  return {
+    kind: "array",
+    itemCount: value.length,
+    contentTypes,
+    textCharCount,
+    imageCount: images.length,
+    images,
+  }
+}
+
+function toolResultImageBlocks(value: unknown): readonly AgentToolResultImageBlock[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const images: AgentToolResultImageBlock[] = []
+  for (const item of value) {
+    const record = isRecord(item) ? item : undefined
+    if (!record || stringValue(record.type) !== "image") continue
+    const file = isRecord(record.file) ? record.file : undefined
+    const source = isRecord(record.source) ? record.source : undefined
+    const base64 = stringValue(file?.base64)
+      ?? stringValue(record.data)
+      ?? stringValue(source?.data)
+    const mimeType = stringValue(file?.type)
+      ?? stringValue(record.mimeType)
+      ?? stringValue(record.mime_type)
+      ?? stringValue(source?.media_type)
+      ?? stringValue(source?.mimeType)
+    if (!base64 || !isSupportedImageMimeType(mimeType)) continue
+    images.push({ kind: "image", mimeType, base64 })
+  }
+  return images.length > 0 ? images : undefined
+}
+
+function isSupportedImageMimeType(value: string | undefined): value is AgentArtifactImageMimeType {
+  return Boolean(value && SUPPORTED_IMAGE_MIME_TYPES.has(value))
+}
+
+function imageDiagnostic(record: Record<string, unknown> | undefined): AgentToolResultImageDiagnostic {
+  const file = isRecord(record?.file) ? record.file : undefined
+  const source = isRecord(record?.source) ? record.source : undefined
+  const base64 = stringValue(file?.base64)
+    ?? stringValue(record?.data)
+    ?? stringValue(source?.data)
+  const mimeType = stringValue(file?.type)
+    ?? stringValue(record?.mimeType)
+    ?? stringValue(record?.mime_type)
+    ?? stringValue(source?.media_type)
+    ?? stringValue(source?.mimeType)
+  const dimensions = dimensionsDiagnostic(file?.dimensions ?? record?.dimensions)
+  return {
+    ...(mimeType ? { mimeType } : {}),
+    ...(base64 ? { base64Length: base64.length } : {}),
+    ...(typeof file?.originalSize === "number" ? { originalSize: file.originalSize } : {}),
+    ...(dimensions ? { dimensions } : {}),
+  }
+}
+
+function dimensionsDiagnostic(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined
+  const dimensions: Record<string, number> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "number" && Number.isFinite(item)) {
+      dimensions[key] = item
+    }
+  }
+  return Object.keys(dimensions).length > 0 ? dimensions : undefined
 }
 
 function streamDeltaFields(event: Record<string, unknown>): {

@@ -118,6 +118,12 @@ export function sqliteIndexesFor(namespace: string): readonly string[] {
         "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId'), id",
         "json_extract(value, '$.conversationId'), id",
       ]
+    case "agent.artifacts":
+      return [
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId')",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId'), id",
+        "json_extract(value, '$.conversationId'), json_extract(value, '$.turnId'), id",
+      ]
     case "app.quick-input.items":
       return ["json_extract(value, '$.sortOrder'), id"]
     case "app.agent-personas.items":

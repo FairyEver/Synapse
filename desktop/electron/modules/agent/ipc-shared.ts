@@ -87,6 +87,20 @@ const agentErrorKindSchema = z.enum([
   "tool_use_interrupted",
   "webfetch_preflight_failed",
 ])
+const agentArtifactImageMimeTypeSchema = z.enum([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
+export const agentImageArtifactSchema = z.object({
+  id: z.string(),
+  kind: z.literal("image"),
+  mimeType: agentArtifactImageMimeTypeSchema,
+  byteSize: z.number(),
+  url: z.string(),
+  sha256: z.string().optional(),
+})
 export const agentUserQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string().optional(),
@@ -150,6 +164,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
+    imageArtifacts: z.array(agentImageArtifactSchema).optional(),
     status: z.string().optional(),
     exitCode: z.number().optional(),
     success: z.boolean().optional(),
@@ -467,6 +482,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
+    imageArtifacts: z.array(agentImageArtifactSchema).optional(),
     status: z.string().optional(),
     exitCode: z.number().optional(),
     success: z.boolean().optional(),

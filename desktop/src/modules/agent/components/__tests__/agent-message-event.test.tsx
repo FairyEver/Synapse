@@ -232,6 +232,35 @@ describe("AgentMessageEvent", () => {
     expect(links).not.toContain("./src/private/file.ts")
   })
 
+  it("renders local markdown image references as clickable references", async () => {
+    const onOpenReference = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-local-image",
+            kind: "message",
+            role: "assistant",
+            content: "![probe](/tmp/synapse-sdk-image-display-probe/case-1-read-png.png)",
+            timestamp: "2026-07-03T00:00:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a")
+    expect(container.querySelector("img")).toBeNull()
+    expect(link?.textContent).toBe("probe")
+    expect(link?.getAttribute("data-reference")).toBe("/tmp/synapse-sdk-image-display-probe/case-1-read-png.png")
+  })
+
   it("keeps local references inside inline code unchanged", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

@@ -217,6 +217,11 @@ export type AdminSkillRepositoryRow = {
   updatedAt: string
 }
 
+export type AdminSkillRepositoryListQuery = PaginationOptions & {
+  status?: SkillRepositoryStatus
+  query?: string
+}
+
 export type BackupFile = {
   filename: string
   size: number

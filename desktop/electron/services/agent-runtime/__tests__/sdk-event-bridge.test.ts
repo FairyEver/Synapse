@@ -587,6 +587,132 @@ describe("SDK event bridge", () => {
     ])
   })
 
+  it("extracts image SDK tool_result blocks into runtime-only imageBlocks", () => {
+    const events = bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-tools",
+      uuid: "uuid-tool-result-image",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu-image",
+            content: [
+              {
+                type: "image",
+                file: {
+                  base64: "base64-secret-image-data",
+                  type: "image/png",
+                  originalSize: 123,
+                  dimensions: {
+                    originalWidth: 16,
+                    originalHeight: 9,
+                    displayWidth: 8,
+                    displayHeight: 4,
+                  },
+                },
+              },
+              {
+                type: "image",
+                data: "mcp-image-data",
+                mimeType: "image/webp",
+              },
+            ],
+            is_error: false,
+          },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "toolResult",
+        sdkSessionId: "sdk-tools",
+        toolUseId: "toolu-image",
+        toolName: "toolu-image",
+        contentDiagnostics: {
+          kind: "array",
+          itemCount: 2,
+          contentTypes: ["image", "image"],
+          textCharCount: 0,
+          imageCount: 2,
+          images: [
+            {
+              mimeType: "image/png",
+              base64Length: 24,
+              originalSize: 123,
+              dimensions: {
+                originalWidth: 16,
+                originalHeight: 9,
+                displayWidth: 8,
+                displayHeight: 4,
+              },
+            },
+            {
+              mimeType: "image/webp",
+              base64Length: 14,
+            },
+          ],
+        },
+        imageBlocks: [
+          {
+            kind: "image",
+            mimeType: "image/png",
+            base64: "base64-secret-image-data",
+          },
+          {
+            kind: "image",
+            mimeType: "image/webp",
+            base64: "mcp-image-data",
+          },
+        ],
+        status: "success",
+        success: true,
+        ...baseEnvelope,
+      }),
+    ])
+  })
+
+  it("ignores unsupported image mime types from tool result imageBlocks", () => {
+    const events = bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-tools",
+      uuid: "uuid-tool-result-image-svg",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu-svg",
+            content: [
+              {
+                type: "image",
+                data: "PHN2Zz4=",
+                mimeType: "image/svg+xml",
+              },
+            ],
+            is_error: false,
+          },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "toolResult",
+        toolUseId: "toolu-svg",
+        contentDiagnostics: expect.objectContaining({
+          imageCount: 1,
+        }),
+      }),
+    ])
+    expect(Array.isArray(events)).toBe(true)
+    if (Array.isArray(events)) {
+      expect(events[0]).not.toHaveProperty("imageBlocks")
+    }
+  })
+
   it("redacts sensitive SDK user tool_result content before emitting Agent events", () => {
     const events = bridgeSdkMessage({
       type: "user",

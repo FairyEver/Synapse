@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   allSchemas,
   auditSchema,
+  agentArtifactsSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
@@ -48,6 +49,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.command-settings",
         "agent.commands",
         "agent.compress_state",
+        "agent.artifacts",
         "agent.events",
         "agent.usage",
         "app.agent-personas.items",
@@ -115,6 +117,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(webhookRunsSchema.backend).toBe("sqlite")
     expect(relayBindingsSchema.backend).toBe("json")
     expect(relayRunsSchema.backend).toBe("sqlite")
+    expect(agentArtifactsSchema.backend).toBe("sqlite")
     expect(agentCompressStateSchema.backend).toBe("json")
     expect(agentEventsSchema.backend).toBe("sqlite")
     expect(agentUsageSchema.backend).toBe("sqlite")
@@ -457,6 +460,39 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-05-13T00:00:00.000Z",
       }),
     ).toBe(true)
+    expect(
+      agentArtifactsSchema.validate({
+        id: "artifact-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        conversationId: "conv-1",
+        turnId: "turn-1",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        kind: "image",
+        mimeType: "image/png",
+        byteSize: 68,
+        sha256: "a".repeat(64),
+        storagePath: "/tmp/synapse/agent-artifacts/project-1/conv-1/artifact-1.png",
+        createdAt: "2026-07-03T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      agentArtifactsSchema.validate({
+        id: "artifact-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        conversationId: "conv-1",
+        turnId: "turn-1",
+        kind: "image",
+        mimeType: "image/png",
+        byteSize: 68,
+        sha256: "a".repeat(64),
+        storagePath: "/tmp/file.png",
+        base64: "must-not-be-valid",
+        createdAt: "2026-07-03T00:00:00.000Z",
+      }),
+    ).toBe(false)
     expect(
       auditSchema.validate({
         id: "evt-1",

@@ -190,6 +190,38 @@ describe("SqliteNamespace (T2.5)", () => {
     }
   })
 
+  it("indexes agent artifacts by conversation without scanning the whole artifact table", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const _ns = new SqliteNamespace<Conversation>({
+        name: "agent.artifacts",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        indexes: sqliteIndexesFor("agent.artifacts"),
+      })
+      void _ns
+
+      const plan = db
+        .prepare(`
+          EXPLAIN QUERY PLAN
+          SELECT value FROM ns_agent_artifacts
+          WHERE id != ?
+            AND json_extract(value, '$.projectId') = ?
+            AND json_extract(value, '$.conversationId') = ?
+          ORDER BY id;
+        `)
+        .all("__singleton", "project-1", "conversation-1") as Array<{ detail: string }>
+
+      expect(plan.some((row) => row.detail.includes("USING INDEX"))).toBe(true)
+      expect(plan.some((row) => row.detail.includes("SCAN ns_agent_artifacts"))).toBe(false)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("indexes outbox by project and status without scanning the whole outbox table", async () => {
     const dir = await tempDir()
     try {

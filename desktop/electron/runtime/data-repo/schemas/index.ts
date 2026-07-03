@@ -66,6 +66,7 @@ export {
 } from "./sound-notifier"
 export {
   auditSchema,
+  agentArtifactsSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
@@ -90,6 +91,7 @@ export {
   workflowParamPresetsSchema,
   workflowsSchema,
   type AuditEntryV1,
+  type AgentArtifactEntryV1,
   type AgentCompressStateEntryV1,
   type AgentCompressStatusV1,
   type AgentCommandEntryV1,
@@ -144,6 +146,7 @@ import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
+  agentArtifactsSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
@@ -192,6 +195,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentCommandsSchema,
   agentCommandSettingsSchema,
   agentCompressStateSchema,
+  agentArtifactsSchema,
   agentEventsSchema,
   agentUsageSchema,
   automationItemsSchema,

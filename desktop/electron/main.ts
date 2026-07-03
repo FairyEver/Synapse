@@ -17,6 +17,7 @@ import {
   createProtocolUrlRouter,
   initializeReadyApp,
   isSynapseProtocolUrl,
+  registerAgentArtifactProtocolScheme,
   registerAuthProtocol,
   shouldFocusMainForSecondInstance,
   showOrCreateMainWindow,
@@ -52,6 +53,7 @@ attachProcessLevelLogging({
   cleanupBeforeExit: () => processLevelCleanup?.(),
 })
 configureWindowsAppIdentity()
+registerAgentArtifactProtocolScheme()
 registerAuthProtocol()
 
 let gotSingleInstanceLock = app.requestSingleInstanceLock()

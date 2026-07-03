@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
 import type {
+  AgentArtifactEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -43,6 +44,7 @@ interface AgentConversationExportServiceDeps {
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly agentEvents: DataNamespace<AgentEventEntryV1>
   readonly agentUsage: DataNamespace<AgentUsageEntryV1>
+  readonly agentArtifacts?: DataNamespace<AgentArtifactEntryV1>
   readonly chooseSavePath: (defaultFileName: string) => Promise<string | null>
   readonly createZipArchive: (sourceDirectoryPath: string, outputFilePath: string) => Promise<void>
   readonly makeTempDir?: (prefix: string) => Promise<string>
@@ -169,6 +171,17 @@ class AgentConversationExportService {
       }, included)
       await this.writeJson(packageRoot, "agent-events.json", agentEvents, included)
       await this.writeJson(packageRoot, "agent-usage.json", agentUsage, included)
+      if (this.deps.agentArtifacts) {
+        const agentArtifacts = await this.collectRows(
+          "agent-artifacts.json",
+          () => this.deps.agentArtifacts!.list({
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+          } as Partial<AgentArtifactEntryV1>),
+          skipped,
+        )
+        await this.writeAgentArtifacts(packageRoot, agentArtifacts, included, skipped)
+      }
       await this.writeJson(packageRoot, "summary.json", summary, included)
       await this.writeText(packageRoot, "transcript.md", `${formatAgentTranscript(timeline)}\n`, included)
       await this.writeJson(packageRoot, "live-state.json", liveState ?? {}, included)
@@ -186,7 +199,7 @@ class AgentConversationExportService {
         },
         attachments: {
           binaryIncluded: false,
-          description: "Only attachment diagnostics are included: kind, MIME type, size, SHA-256, path metadata, and preparation-status fields. Original attachment bytes are not exported.",
+          description: "User input attachment bytes are not exported. Agent output artifacts are listed in agent-artifacts.json and copied under artifacts/ when available.",
         },
         included,
         skipped,
@@ -295,6 +308,41 @@ class AgentConversationExportService {
   ): Promise<void> {
     await this.writeTextFile(path.join(packageRoot, relativePath), normalizeExportText(content))
     included?.push(relativePath)
+  }
+
+  private async writeAgentArtifacts(
+    packageRoot: string,
+    artifacts: readonly AgentArtifactEntryV1[],
+    included: string[],
+    skipped: Array<{ path: string; reason: string }>,
+  ): Promise<void> {
+    const exported = artifacts.map((artifact) => ({
+      id: artifact.id,
+      kind: artifact.kind,
+      mimeType: artifact.mimeType,
+      byteSize: artifact.byteSize,
+      sha256: artifact.sha256,
+      toolUseId: artifact.toolUseId,
+      toolName: artifact.toolName,
+      createdAt: artifact.createdAt,
+      relativePath: `artifacts/${artifact.id}.${extensionForMimeType(artifact.mimeType)}`,
+    }))
+    await this.writeJson(packageRoot, "agent-artifacts.json", {
+      schemaVersion: 1,
+      binaryIncluded: true,
+      artifacts: exported,
+    }, included)
+
+    for (const artifact of artifacts) {
+      const relativePath = `artifacts/${artifact.id}.${extensionForMimeType(artifact.mimeType)}`
+      try {
+        await mkdir(path.dirname(path.join(packageRoot, relativePath)), { recursive: true })
+        await copyFile(artifact.storagePath, path.join(packageRoot, relativePath))
+        included.push(relativePath)
+      } catch {
+        skipped.push({ path: relativePath, reason: "artifact file copy failed" })
+      }
+    }
   }
 
   private async writeTextFile(targetPath: string, content: string): Promise<void> {
@@ -427,6 +475,23 @@ function isFailedToolResult(entry: SynapseAgentTimelineItem): boolean {
     || entry.status === "error"
     || entry.status === "failed"
   )
+}
+
+function extensionForMimeType(mimeType: AgentArtifactEntryV1["mimeType"]): string {
+  switch (mimeType) {
+    case "image/png":
+      return "png"
+    case "image/jpeg":
+      return "jpg"
+    case "image/gif":
+      return "gif"
+    case "image/webp":
+      return "webp"
+    default: {
+      const exhaustive: never = mimeType
+      return exhaustive
+    }
+  }
 }
 
 function summarizeUsage(

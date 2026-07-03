@@ -74,6 +74,7 @@ import type {
   PendingPermissionState,
 } from "./session-lifecycle"
 import { ConversationRouter } from "./conversation-router"
+import type { AgentArtifactStore } from "./artifact-store"
 import type {
   AgentEvent,
   AgentMessage,
@@ -115,6 +116,7 @@ export interface AgentRuntimeServiceDeps {
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
+  readonly agentArtifactStore?: AgentArtifactStore
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
@@ -265,6 +267,7 @@ export class AgentRuntimeService {
         outbox: deps.outbox,
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
+        agentArtifactStore: deps.agentArtifactStore,
         getUsagePriceRules: deps.getUsagePriceRules,
         now: deps.now,
         permissionGuard: deps.permissionGuard,

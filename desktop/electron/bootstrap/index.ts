@@ -44,6 +44,11 @@ export type { MainWindowDeps, MainWindowState } from "./main-window"
 
 export { clearStaleSingletonLock } from "./singleton-lock"
 
+export {
+  registerAgentArtifactProtocol,
+  registerAgentArtifactProtocolScheme,
+} from "./agent-artifact-protocol"
+
 export { attachBeforeQuitHandler } from "./before-quit"
 export type { BeforeQuitDeps } from "./before-quit"
 

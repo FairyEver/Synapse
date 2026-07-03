@@ -1,6 +1,7 @@
 import type {
   SynapseAgentEvent,
   SynapseAgentErrorKind,
+  SynapseAgentImageArtifact,
   SynapseAgentMainThreadPersonaMetadata,
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
@@ -66,6 +67,8 @@ export function agentEventToTimelineItem(
         toolUseId: event.toolUseId,
         toolName: event.toolName,
         content: event.content,
+        contentDiagnostics: event.contentDiagnostics,
+        imageArtifacts: event.imageArtifacts,
         status: event.status,
         exitCode: event.exitCode,
         success: event.success,
@@ -178,6 +181,7 @@ export function historyRecordToTimelineItem(
         toolUseId: stringMetadata(metadata, "toolUseId"),
         toolName: stringMetadata(metadata, "toolName") ?? "tool",
         content: entry.content,
+        imageArtifacts: imageArtifactsMetadata(metadata, "imageArtifacts"),
         status: stringMetadata(metadata, "status"),
         exitCode: numberMetadata(metadata, "exitCode"),
         success: booleanMetadata(metadata, "success"),
@@ -622,6 +626,24 @@ function questionId(record: Record<string, unknown> | undefined): string | undef
   const id = typeof record?.id === "string" && record.id.trim() ? record.id.trim() : undefined
   if (id) return id
   return typeof record?.key === "string" && record.key.trim() ? record.key.trim() : undefined
+}
+
+function imageArtifactsMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): readonly SynapseAgentImageArtifact[] | undefined {
+  const value = metadata?.[key]
+  if (!Array.isArray(value)) return undefined
+  const artifacts = value.filter((item): item is SynapseAgentImageArtifact => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false
+    const record = item as Record<string, unknown>
+    return record.kind === "image"
+      && typeof record.id === "string"
+      && typeof record.mimeType === "string"
+      && typeof record.byteSize === "number"
+      && typeof record.url === "string"
+  })
+  return artifacts.length > 0 ? artifacts : undefined
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {

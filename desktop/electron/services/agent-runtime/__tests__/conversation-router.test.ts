@@ -1,9 +1,12 @@
-import { readFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 
 import { describe, expect, it, vi } from "vitest"
 
 import type {
   AgentEventEntryV1,
+  AgentArtifactEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
   DataChangeEvent,
@@ -19,6 +22,7 @@ import type { ModelPriceRule } from "../../model-price"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
 import type { ConversationRouterDeps } from "../conversation-router"
+import { AgentArtifactStore } from "../artifact-store"
 import { AgentGovernanceService } from "../governance"
 import { AgentSessionRepository, conversationId } from "../session-repository"
 import { SessionManager } from "../session-manager"
@@ -383,6 +387,74 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ eventType: "text" }),
       expect.objectContaining({ eventType: "result" }),
     ])
+  })
+
+  it("materializes imageBlocks before broadcasting and persisting tool results", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-artifacts-"))
+    try {
+      const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+      const agentArtifacts = new MemoryNamespace<AgentArtifactEntryV1>("agent.artifacts")
+      const { eventBus, events: emittedEvents } = createEventBusRecorder()
+      const { conversations, router } = createRouter({
+        agentEvents,
+        eventBus,
+        agentArtifactStore: new AgentArtifactStore({
+          rootDirectory: root,
+          artifacts: agentArtifacts,
+          now: fixedNow,
+          randomId: () => "artifact_1",
+        }),
+        session: new ScriptedSession([
+          {
+            type: "toolResult",
+            toolUseId: "toolu_1",
+            toolName: "Read",
+            imageBlocks: [{
+              kind: "image",
+              mimeType: "image/png",
+              base64: Buffer.from([137, 80, 78, 71]).toString("base64"),
+            }],
+            status: "success",
+            success: true,
+            sdkSessionId: "sdk-1",
+          },
+          { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+        ], "sdk-1"),
+      })
+
+      const result = await router.send(baseMessage("hello"))
+      const emittedToolResult = emittedEvents.find((event) =>
+        event.type === "toolResult")?.payload?.event as AgentEvent | undefined
+      const serializedEvents = JSON.stringify(await agentEvents.list())
+      const conversation = await conversations.get(result.conversationId)
+
+      expect(emittedToolResult).toEqual(expect.objectContaining({
+        type: "toolResult",
+        imageArtifacts: [expect.objectContaining({
+          id: "artifact_1",
+          mimeType: "image/png",
+          byteSize: 4,
+        })],
+      }))
+      expect(emittedToolResult).not.toHaveProperty("imageBlocks")
+      expect(serializedEvents).not.toContain("iVBOR")
+      expect(serializedEvents).not.toContain("imageBlocks")
+      expect(await agentArtifacts.list()).toEqual([
+        expect.objectContaining({
+          id: "artifact_1",
+          projectId: "project-1",
+          conversationId: result.conversationId,
+          turnId: expect.any(String),
+          toolUseId: "toolu_1",
+          toolName: "Read",
+          mimeType: "image/png",
+          byteSize: 4,
+        }),
+      ])
+      expect(JSON.stringify(conversation?.history)).not.toContain("iVBOR")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it("emits stream events through a bounded non-blocking queue", async () => {
@@ -2427,6 +2499,7 @@ function createRouter(input: {
   readonly priceRules?: readonly ModelPriceRule[]
   readonly outbox?: ConversationRouterDeps["outbox"]
   readonly replyTargets?: ConversationRouterDeps["replyTargets"]
+  readonly agentArtifactStore?: ConversationRouterDeps["agentArtifactStore"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
   readonly afterTurn?: ConversationRouterDeps["afterTurn"]
   readonly permissionGuard?: PermissionGuard
@@ -2479,6 +2552,7 @@ function createRouter(input: {
       logger: input.logger,
       outbox: input.outbox,
       replyTargets: input.replyTargets,
+      agentArtifactStore: input.agentArtifactStore,
       now: fixedNow,
       permissionGuard: input.permissionGuard,
       auditSink: input.auditSink,

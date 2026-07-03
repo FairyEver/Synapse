@@ -79,6 +79,7 @@ export type ProcessGroupState = {
   readonly failed: boolean
   readonly denied: boolean
   readonly pendingPermission: boolean
+  readonly hasImageArtifacts: boolean
 }
 
 export type GroupTimelineDisplayContext = {
@@ -117,6 +118,7 @@ function isMainlineEntry(
   context: GroupTimelineDisplayContext,
 ): boolean {
   const item = entry.item
+  if (entryHasImageArtifacts(entry)) return true
   if (item.kind === "message" && (item.role === "user" || item.role === "assistant")) return true
   if (item.kind === "permissionRequest" && context.pendingPermissionRequestIds.has(item.requestId)) return true
   if (item.kind === "error" && !item.recoverable) return true
@@ -125,6 +127,11 @@ function isMainlineEntry(
     return status === "cancelled" || status === "failed" || status === "timed_out"
   }
   return false
+}
+
+function entryHasImageArtifacts(entry: TimelineDisplayEntry): boolean {
+  const result = entry.result ?? (entry.item.kind === "toolResult" ? entry.item : undefined)
+  return (result?.imageArtifacts?.length ?? 0) > 0
 }
 
 function createProcessGroup(entries: readonly TimelineDisplayEntry[], nowMs: number | undefined): AgentTimelineDisplayNode {
@@ -257,6 +264,7 @@ function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGro
   let failed = false
   let denied = false
   let pendingPermission = false
+  let hasImageArtifacts = false
 
   for (const entry of entries) {
     const item = entry.item
@@ -266,6 +274,7 @@ function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGro
     if (item.kind === "phase" && item.status === "in-progress") active = true
     if (item.kind === "permissionRequest") pendingPermission = true
     if (result) {
+      if ((result.imageArtifacts?.length ?? 0) > 0) hasImageArtifacts = true
       if (isDeniedToolResult(result)) denied = true
       if (isFailedToolResult(result)) failed = true
     }
@@ -273,7 +282,7 @@ function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGro
     if (item.kind === "error") failed = true
   }
 
-  return { active, failed, denied, pendingPermission }
+  return { active, failed, denied, pendingPermission, hasImageArtifacts }
 }
 
 function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
@@ -293,6 +302,7 @@ export function defaultProcessGroupOpen(
 ): boolean {
   if (group.state.pendingPermission) return true
   if (group.state.active) return true
+  if (group.state.hasImageArtifacts) return true
   if (context.sending && group.state.active) return true
   return false
 }

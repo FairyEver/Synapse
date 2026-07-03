@@ -7,6 +7,7 @@ import { z } from "zod"
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type {
+  AgentArtifactEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -370,6 +371,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         conversations: dataRepo.namespace<ConversationEntryV1>("conversations"),
         agentEvents: dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
+        agentArtifacts: dataRepo.namespace<AgentArtifactEntryV1>("agent.artifacts"),
         permissionGuard,
         auditSink,
         logger,

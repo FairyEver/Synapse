@@ -711,6 +711,46 @@ describe("AgentTimeline", () => {
     expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : true).toBe(false)
   })
 
+  it("keeps completed image artifact tool results outside collapsed process groups", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-call",
+        kind: "toolCall",
+        toolUseId: "toolu-image",
+        toolName: "Read",
+        toolInput: "diagram.png",
+        timestamp: "2026-07-03T00:00:00.000Z",
+      },
+      {
+        id: "tool-result",
+        kind: "toolResult",
+        toolUseId: "toolu-image",
+        toolName: "Read",
+        imageArtifacts: [{
+          id: "artifact-image",
+          kind: "image",
+          mimeType: "image/png",
+          byteSize: 4,
+          url: "/tmp/artifact-image.png",
+        }],
+        success: true,
+        timestamp: "2026-07-03T00:00:01.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0]).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({
+        item: expect.objectContaining({ id: "tool-call" }),
+        result: expect.objectContaining({
+          id: "tool-result",
+          imageArtifacts: [expect.objectContaining({ id: "artifact-image" })],
+        }),
+      }),
+    }))
+  })
+
   it("opens active process groups and collapses failed completed process groups by default", () => {
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {

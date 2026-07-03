@@ -64,6 +64,7 @@ import {
   outcomeMessage,
   outcomeToAgentEvent,
 } from "./turn-outcome"
+import type { AgentArtifactStore } from "./artifact-store"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -78,6 +79,7 @@ export interface ConversationRouterDeps {
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
+  readonly agentArtifactStore?: AgentArtifactStore
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
@@ -753,14 +755,15 @@ export class ConversationRouter {
         break
       }
 
-      events.push(event)
-      this.emitEvent(message, conversation.id, event)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-      await this.saveEventSdkSession(conversation.id, event, liveSession)
-      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+      const preparedEvent = await this.prepareEventForStorageAndDisplay(conversation.id, turnId, event)
+      events.push(preparedEvent)
+      this.emitEvent(message, conversation.id, preparedEvent)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, preparedEvent)
+      await this.saveEventSdkSession(conversation.id, preparedEvent, liveSession)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent) || assistantHistoryPersisted
 
-      if (event.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
+      if (preparedEvent.type === "permissionRequest") {
+        await this.awaitPendingPermission(state, message, conversation.id, preparedEvent, liveSession, abortSignal)
         continue
       }
     }
@@ -1552,6 +1555,42 @@ export class ConversationRouter {
     }
   }
 
+  private async prepareEventForStorageAndDisplay(
+    conversationId: string,
+    turnId: string,
+    event: AgentEvent,
+  ): Promise<AgentEvent> {
+    if (event.type !== "toolResult" || !event.imageBlocks?.length) {
+      return stripTransientImageBlocks(event)
+    }
+    const store = this.deps.agentArtifactStore
+    if (!store) return stripTransientImageBlocks(event)
+    try {
+      const imageArtifacts = await store.materializeToolResultImages({
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId,
+        toolUseId: event.toolUseId,
+        toolName: event.toolName,
+        imageBlocks: event.imageBlocks,
+      })
+      return stripTransientImageBlocks({
+        ...event,
+        ...(imageArtifacts.length > 0 ? { imageArtifacts } : {}),
+      })
+    } catch (error) {
+      this.deps.logger?.warn("AgentRuntime image artifact persistence failed.", {
+        boundary: "agent-runtime.image-artifact-persistence",
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId,
+        toolName: event.toolName,
+        ...queuedTurnFailureMetadata(error),
+      })
+      return stripTransientImageBlocks(event)
+    }
+  }
+
   private async persistAgentEvent(
     conversationId: string,
     turnId: string,
@@ -1846,17 +1885,21 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         }),
       }
     case "toolResult":
+      const artifactLabel = event.imageArtifacts?.length
+        ? `${event.toolName} (${event.imageArtifacts.length} image${event.imageArtifacts.length === 1 ? "" : "s"})`
+        : event.toolName
       return {
         role: "tool",
         content: truncateString(
           event.content ? redactSensitiveText(event.content.trim()) : undefined,
           MAX_HISTORY_CONTENT_LENGTH,
-        ) || event.toolName,
+        ) || artifactLabel,
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
           toolUseId: event.toolUseId,
           toolName: event.toolName,
+          imageArtifacts: event.imageArtifacts,
           status: event.status,
           exitCode: event.exitCode,
           success: event.success,
@@ -2267,6 +2310,7 @@ function sanitizeValue(value: unknown): unknown {
   const output: Record<string, unknown> = {}
   for (const [key, entry] of Object.entries(value)) {
     const lower = key.toLowerCase()
+    if (key === "imageBlocks") continue
     if (lower.includes("raw")) continue
     if (
       lower.includes("secret")
@@ -2283,6 +2327,12 @@ function sanitizeValue(value: unknown): unknown {
     output[key] = sanitizeValue(entry)
   }
   return output
+}
+
+function stripTransientImageBlocks<T extends AgentEvent>(event: T): T {
+  if (event.type !== "toolResult" || !event.imageBlocks) return event
+  const { imageBlocks: _imageBlocks, ...rest } = event
+  return rest as T
 }
 
 function errorSummary(error: unknown): {

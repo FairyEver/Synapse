@@ -46,6 +46,7 @@ export type { FileBackedDataRepositoryOptions } from "./factory"
 export {
   allSchemas,
   auditSchema,
+  agentArtifactsSchema,
   agentCompressStateSchema,
   agentCommandSettingsSchema,
   agentCommandsSchema,
@@ -87,6 +88,7 @@ export {
   workflowParamPresetsSchema,
   workflowsSchema,
   type AuditEntryV1,
+  type AgentArtifactEntryV1,
   type AgentCompressStateEntryV1,
   type AgentCompressStatusV1,
   type AgentCommandEntryV1,

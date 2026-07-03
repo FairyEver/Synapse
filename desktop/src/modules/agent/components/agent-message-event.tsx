@@ -122,7 +122,7 @@ function AssistantMessageBody({
   readonly onOpenReference: (reference: string) => void
 }) {
   const streaming = item.streaming === true
-  const preprocessed = wrapLocalReferences(renderObsidianWikilinksAsBoldText(item.content))
+  const preprocessed = wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(item.content)))
   const hasUsage = Boolean(item.metadata?.usage)
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
@@ -399,6 +399,10 @@ function renderObsidianWikilinksAsBoldText(content: string): string {
   return transformMarkdownPlainText(content, renderObsidianWikilinksInText)
 }
 
+function renderLocalMarkdownImagesAsReferences(content: string): string {
+  return transformMarkdownPlainText(content, renderLocalMarkdownImagesInText)
+}
+
 function transformMarkdownPlainText(content: string, transform: (value: string) => string): string {
   const parts = content.split(/(\r\n|\n|\r)/)
   let fence: MarkdownFence | undefined
@@ -446,6 +450,10 @@ function renderObsidianWikilinksInText(content: string): string {
   return transformInlinePlainText(content, renderObsidianWikilinksInPlainText)
 }
 
+function renderLocalMarkdownImagesInText(content: string): string {
+  return transformInlinePlainText(content, renderLocalMarkdownImagesInPlainText)
+}
+
 function transformInlinePlainText(content: string, transform: (value: string) => string): string {
   const marker = /`+/.exec(content)
   if (!marker) return transform(content)
@@ -488,6 +496,24 @@ function renderObsidianWikilinksInPlainText(content: string): string {
     if (!wikilink.displayText) return _match
     return `**${escapeMarkdownStrongText(wikilink.displayText)}**`
   })
+}
+
+const LOCAL_MARKDOWN_IMAGE_PATTERN = /!\[([^\]\r\n]*)\]\((<[^>\r\n]+>|[^)\r\n]+)\)/g
+
+function renderLocalMarkdownImagesInPlainText(content: string): string {
+  return content.replace(LOCAL_MARKDOWN_IMAGE_PATTERN, (match, altText: string, destination: string) => {
+    const reference = markdownImageReference(destination)
+    if (!reference || !isLocalReferenceHref(reference)) return match
+    return `[${altText.trim() || reference}](${destination})`
+  })
+}
+
+function markdownImageReference(destination: string): string | undefined {
+  const value = destination.trim()
+  if (!value) return undefined
+  if (value.startsWith("<") && value.endsWith(">")) return value.slice(1, -1).trim()
+  if (/\s/.test(value)) return undefined
+  return value
 }
 
 type ParsedObsidianWikilink = {
