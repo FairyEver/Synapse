@@ -62,8 +62,14 @@ describe('normalizeDashboardRedirect', () => {
     expect(normalizeDashboardRedirect('/settings')).toBe('/settings')
   })
 
-  it('rejects external redirects', () => {
-    expect(normalizeDashboardRedirect('https://example.com/dashboard/users')).toBeUndefined()
+  it('normalizes absolute deployment redirects without keeping their origin', () => {
+    expect(normalizeDashboardRedirect('https://example.com/dashboard/users?page=2#profile')).toBe('/users?page=2#profile')
+    expect(normalizeDashboardRedirect('https://example.com/console/settings')).toBe('/settings')
+  })
+
+  it('rejects sign-in self redirects', () => {
+    expect(normalizeDashboardRedirect('/sign-in')).toBeUndefined()
+    expect(normalizeDashboardRedirect('https://example.com/console/sign-in')).toBeUndefined()
   })
 })
 

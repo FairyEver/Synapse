@@ -42,7 +42,6 @@ export function normalizeDashboardRedirect(value: string | undefined) {
   if (!value) return undefined
   try {
     const url = new URL(value, dashboardRedirectOrigin)
-    if (url.origin !== dashboardRedirectOrigin) return undefined
     const pathname = stripDashboardBasePath(url.pathname)
     if (!pathname.startsWith('/') || pathname === '/sign-in') {
       return undefined
