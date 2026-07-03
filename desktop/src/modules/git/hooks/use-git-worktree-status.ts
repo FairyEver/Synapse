@@ -2,6 +2,22 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitDiffResult, SynapseGitFileChange, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 
+export function gitCommitPathsForSelection(
+  changes: readonly SynapseGitFileChange[],
+  selectedPaths: readonly string[],
+): string[] {
+  const selected = new Set(selectedPaths)
+  const commitPaths: string[] = []
+  for (const change of changes) {
+    if (!selected.has(change.path)) continue
+    if (change.originalPath && change.originalPath !== change.path) {
+      commitPaths.push(change.originalPath)
+    }
+    commitPaths.push(change.path)
+  }
+  return Array.from(new Set(commitPaths))
+}
+
 export function useGitWorktreeStatus(repository: SynapseGitRepository) {
   const [snapshot, setSnapshot] = useState<SynapseGitRepositorySnapshot | null>(null)
   const [selectedFile, setSelectedFile] = useState<SynapseGitFileChange | null>(null)

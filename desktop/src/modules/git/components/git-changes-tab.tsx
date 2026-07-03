@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
+import { gitCommitPathsForSelection } from "../hooks/use-git-worktree-status"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
 
@@ -75,7 +76,7 @@ export function GitChangesTab({
       await requireSynapseBridge().git.commit({
         repositoryId: repository.id,
         message: message.trim(),
-        paths: [...status.selectedPaths],
+        paths: gitCommitPathsForSelection(changes, status.selectedPaths),
       })
       setMessage("")
       const nextSnapshot = await status.refresh()

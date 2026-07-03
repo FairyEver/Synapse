@@ -98,6 +98,43 @@ describe("GitWorkbench", () => {
     })
   })
 
+  it("commits both old and new paths for selected renames", async () => {
+    bridge.git.getSnapshot.mockResolvedValueOnce({
+      repositoryId: "repo-1",
+      pathExists: true,
+      isGitRepository: true,
+      currentBranch: "main",
+      upstream: "origin/main",
+      ahead: 0,
+      behind: 0,
+      hasConflicts: false,
+      changes: [{
+        path: "docs/new-name.md",
+        originalPath: "docs/old-name.md",
+        status: "renamed",
+        staged: false,
+        conflicted: false,
+      }],
+    })
+    bridge.git.getDiff.mockResolvedValueOnce({
+      path: "docs/new-name.md",
+      originalPath: "docs/old-name.md",
+      binary: false,
+      text: "+renamed",
+    })
+    await renderWorkbench(roots)
+
+    await click(findButton("提交改动"))
+    await changeTextarea("提交说明", "重命名文档")
+    await click(findButton("提交选中文件"))
+
+    expect(bridge.git.commit).toHaveBeenCalledWith({
+      repositoryId: "repo-1",
+      message: "重命名文档",
+      paths: ["docs/old-name.md", "docs/new-name.md"],
+    })
+  })
+
   it("shows current branch history", async () => {
     await renderWorkbench(roots)
 
