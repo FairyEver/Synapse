@@ -211,6 +211,7 @@ let roots: Root[] = []
 async function renderFlow(
   source: SynapseInstallerSource = ruleSource,
   projects: SynapseProjectConfig[] = mocks.config.global.projects,
+  onInstalled: () => Promise<void> | void = vi.fn(),
 ) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -225,7 +226,7 @@ async function renderFlow(
         editors={[editor]}
         projects={projects}
         onCancel={vi.fn()}
-        onInstalled={vi.fn()}
+        onInstalled={onInstalled}
       />,
     )
   })
@@ -443,5 +444,42 @@ describe("SharedInstallerFlow", () => {
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       installFormValues: { description: "from form" },
     }))
+  })
+
+  it("retries completion without repeating local editor writes", async () => {
+    const onInstalled = vi.fn()
+      .mockRejectedValueOnce(new Error("完成记录失败"))
+      .mockResolvedValueOnce(undefined)
+    mocks.readContent.mockResolvedValue({ content: "# Demo" })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource, mocks.config.global.projects, onInstalled)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledTimes(1)
+    expect(onInstalled).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("完成记录失败")
+    expect(document.body.textContent).toContain("重试完成记录")
+
+    await act(async () => {
+      clickButton("重试完成记录")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mocks.installSourceToEditor).toHaveBeenCalledTimes(1)
+    expect(onInstalled).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain("安装完成")
   })
 })

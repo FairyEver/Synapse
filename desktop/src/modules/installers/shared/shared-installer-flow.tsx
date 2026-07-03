@@ -135,6 +135,7 @@ export function SharedInstallerFlow({
   const [isConflictConfirmOpen, setIsConflictConfirmOpen] = useState(false)
   const [isRuleProjectInstallFormOpen, setIsRuleProjectInstallFormOpen] = useState(false)
   const [isRuleGlobalInstallFormOpen, setIsRuleGlobalInstallFormOpen] = useState(false)
+  const [isCompletionRetryPending, setIsCompletionRetryPending] = useState(false)
 
   const scope = selection?.scope ?? "global"
   const activeTarget = selection?.activeTarget ?? null
@@ -185,21 +186,25 @@ export function SharedInstallerFlow({
     setInstalling(true)
     setError("")
     try {
-      await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
-      if (!onInstall) {
-        await installSourceToEditor({
-          editorId: flow.selectedEditor.id,
-          overwriteConfirmed,
-          projectPath: selection.scope === "project" ? selection.projectPath : undefined,
-          replaceConfirmed,
-          replacedSourceIdentity: activeTarget.status === "conflict" ? activeTarget.conflictContentId : undefined,
-          scope: selection.scope,
-          source: flow.source,
-          installFormValues,
-          variableSubstitutions: pendingSubstitutionsRef.current,
-        })
+      if (!isCompletionRetryPending) {
+        await onInstall?.({ editor: flow.selectedEditor, source: flow.source })
+        if (!onInstall) {
+          await installSourceToEditor({
+            editorId: flow.selectedEditor.id,
+            overwriteConfirmed,
+            projectPath: selection.scope === "project" ? selection.projectPath : undefined,
+            replaceConfirmed,
+            replacedSourceIdentity: activeTarget.status === "conflict" ? activeTarget.conflictContentId : undefined,
+            scope: selection.scope,
+            source: flow.source,
+            installFormValues,
+            variableSubstitutions: pendingSubstitutionsRef.current,
+          })
+        }
+        setIsCompletionRetryPending(true)
       }
       await onInstalled()
+      setIsCompletionRetryPending(false)
       flow.markInstalled()
     } catch (err) {
       setError(err instanceof Error ? err.message : "安装失败")
@@ -484,6 +489,7 @@ export function SharedInstallerFlow({
                   onClick={() => {
                     setSelection(null)
                     setError("")
+                    setIsCompletionRetryPending(false)
                     flow.selectEditor(editor)
                   }}
                 >
@@ -515,7 +521,10 @@ export function SharedInstallerFlow({
               projects={projects}
               resolveTarget={resolveTarget}
               onError={setError}
-              onSelectionChange={setSelection}
+              onSelectionChange={(nextSelection) => {
+                setSelection(nextSelection)
+                setIsCompletionRetryPending(false)
+              }}
             />
           ) : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -538,7 +547,7 @@ export function SharedInstallerFlow({
                 || (selection?.activeTarget?.status !== "ready" && selection?.activeTarget?.status !== "conflict")
               }
             >
-              {installing ? "安装中" : "安装"}
+              {installing ? "安装中" : isCompletionRetryPending ? "重试完成记录" : "安装"}
             </Button>
           </div>
         </div>
