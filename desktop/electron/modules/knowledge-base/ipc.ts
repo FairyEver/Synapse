@@ -765,7 +765,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
           source: "knowledgeBase.exportRawEntries.read",
           run: () => runGuardedKnowledgeBaseOperation({
             ctx,
-            action: "fs.write",
+            action: "fs.write.outside-userdata",
             resource: targetDirectoryPath,
             source: "knowledgeBase.exportRawEntries.write",
             run: () => service(ctx).exportRawEntries({

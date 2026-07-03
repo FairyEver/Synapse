@@ -963,7 +963,7 @@ describe("knowledgeBaseIpcModule", () => {
       context: { source: "knowledgeBase.exportRawEntries.read" },
     })
     expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
-      action: "fs.write",
+      action: "fs.write.outside-userdata",
       actor: { kind: "user" },
       resource: "/tmp/export",
       context: { source: "knowledgeBase.exportRawEntries.write" },
