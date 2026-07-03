@@ -50,7 +50,7 @@ export interface UserMeTeam {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status" | "displayName" | "handle">
+  readonly user: Pick<User, "id" | "email" | "status" | "handle">
   readonly teams: readonly UserMeTeam[]
 }
 
@@ -147,15 +147,6 @@ function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, pas
   return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
-function normalizeDisplayName(value: string): string {
-  const displayName = value.trim()
-  if (!displayName) throw new BadRequestException("displayName is required.")
-  if (displayName.length > 40) {
-    throw new BadRequestException("displayName must be at most 40 characters.")
-  }
-  return displayName
-}
-
 function normalizeProfileHandle(value: string): string {
   try {
     return normalizeUserHandle(value)
@@ -169,8 +160,7 @@ function toUserMeResponse(user: {
   readonly id: string
   readonly email: string
   readonly status: User["status"]
-  readonly displayName: string | null
-  readonly handle: string | null
+  readonly handle: string
   readonly memberships: ReadonlyArray<{
     readonly id: string
     readonly role: TeamRole
@@ -182,7 +172,6 @@ function toUserMeResponse(user: {
       id: user.id,
       email: user.email,
       status: user.status,
-      displayName: user.displayName,
       handle: user.handle,
     },
     teams: user.memberships.map((membership) => ({
@@ -205,8 +194,9 @@ export class UserAuthService {
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async register(input: { email: string; password: string }, ipAddress = "system"): Promise<UserRegistrationResult> {
+  async register(input: { email: string; handle: string; password: string }, ipAddress = "system"): Promise<UserRegistrationResult> {
     const email = input.email.trim().toLowerCase()
+    const handle = normalizeProfileHandle(input.handle)
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         await this.lockAdminEmailsForRegistration(tx)
@@ -220,10 +210,21 @@ export class UserAuthService {
           select: { id: true },
         })
         if (existingUser) return { registered: false as const }
+        const reservedHandle = await tx.userHandleRedirect.findUnique({
+          where: { oldHandle: handle },
+          select: { userId: true },
+        })
+        if (reservedHandle) throw new BadRequestException("用户名已被保留。")
+        const existingHandle = await tx.user.findUnique({
+          where: { handle },
+          select: { id: true },
+        })
+        if (existingHandle) throw new BadRequestException("用户名已被使用。")
 
         const user = await tx.user.create({
           data: {
             email,
+            handle,
             passwordHash: await hashPassword(input.password),
           },
           select: {
@@ -249,6 +250,9 @@ export class UserAuthService {
       return { ok: true }
     } catch (error) {
       if (isUniqueConstraintError(error)) {
+        if (isUniqueConstraintErrorOn(error, "handle")) {
+          throw new BadRequestException("用户名已被使用。")
+        }
         await this.recordUserRegistrationFailure({
           adminEmail: email,
           reason: "duplicate_email",
@@ -706,7 +710,6 @@ export class UserAuthService {
         id: true,
         email: true,
         status: true,
-        displayName: true,
         handle: true,
         memberships: {
           select: {
@@ -724,15 +727,13 @@ export class UserAuthService {
 
   async updateMyProfile(
     userId: string,
-    input: { readonly displayName?: string; readonly handle?: string },
+    input: { readonly handle?: string },
     ipAddress = "system",
   ): Promise<UserMeResponse> {
-    if (input.displayName === undefined && input.handle === undefined) {
+    if (input.handle === undefined) {
       throw new BadRequestException("profile update is empty.")
     }
-    const auditFields: string[] = []
-    if (input.displayName !== undefined) auditFields.push("displayName")
-    if (input.handle !== undefined) auditFields.push("handle")
+    const auditFields = ["handle"]
 
     const user = await this.prisma.$transaction(async (tx) => {
       const current = await tx.user.findUniqueOrThrow({
@@ -741,15 +742,10 @@ export class UserAuthService {
           id: true,
           email: true,
           status: true,
-          displayName: true,
           handle: true,
         },
       })
       const data: Prisma.UserUpdateInput = {}
-
-      if (input.displayName !== undefined) {
-        data.displayName = normalizeDisplayName(input.displayName)
-      }
 
       if (input.handle !== undefined) {
         const nextHandle = normalizeProfileHandle(input.handle)
@@ -787,7 +783,6 @@ export class UserAuthService {
             id: true,
             email: true,
             status: true,
-            displayName: true,
             handle: true,
             memberships: {
               select: {
@@ -1018,6 +1013,13 @@ export class UserAuthService {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+function isUniqueConstraintErrorOn(error: unknown, field: string): boolean {
+  if (!isUniqueConstraintError(error)) return false
+  const target = (error as Prisma.PrismaClientKnownRequestError).meta?.target
+  if (typeof target === "string") return target.includes(field)
+  return Array.isArray(target) && target.some((value) => value === field)
 }
 
 function isExpectedAccessTokenFailure(error: unknown): boolean {

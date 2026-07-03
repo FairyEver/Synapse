@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   SkillRepositoryFileDeleteInput,
   SkillRepositoryFileRenameInput,
-  SkillRepositoryFileUploadInput,
   SkillRepositoryPublicListInput,
   SkillRepositoryTextSaveInput,
   SkillRepositoryUpdateInput,
@@ -116,11 +115,6 @@ export function useSkillRepository(repositoryId: string) {
     },
   })
 
-  const uploadMutation = useMutation({
-    mutationFn: (input: SkillRepositoryFileUploadInput) => skillRepositoryApi.uploadFile(repositoryId, input),
-    onSuccess: async () => { await invalidateDetail() },
-  })
-
   const renameMutation = useMutation({
     mutationFn: (input: SkillRepositoryFileRenameInput) => skillRepositoryApi.renameFile(repositoryId, input),
     onSuccess: async (_result, input) => {
@@ -167,7 +161,6 @@ export function useSkillRepository(repositoryId: string) {
     browser,
     updateRepository: updateMutation.mutateAsync,
     deleteRepository: deleteRepositoryMutation.mutateAsync,
-    uploadFile: uploadMutation.mutateAsync,
     renameFile: renameMutation.mutateAsync,
     deleteFile: deleteFileMutation.mutateAsync,
     reloadSelectedFile,
@@ -176,7 +169,6 @@ export function useSkillRepository(repositoryId: string) {
       updating: updateMutation.isPending,
       deletingRepository: deleteRepositoryMutation.isPending,
       savingText: saveTextMutation.isPending,
-      uploading: uploadMutation.isPending,
       renaming: renameMutation.isPending,
       deletingFile: deleteFileMutation.isPending,
       reloadingFile: fileContentQuery.isFetching,

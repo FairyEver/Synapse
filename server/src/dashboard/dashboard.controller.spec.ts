@@ -17,7 +17,7 @@ describe("DashboardController", () => {
           id: "user-1",
           email: "user@example.com",
           status: "active",
-          displayName: "Ada",
+          handle: "ada",
         },
         teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
       }),
@@ -29,21 +29,21 @@ describe("DashboardController", () => {
         id: "user-1",
         email: "user@example.com",
         status: "active",
-        displayName: "Ada",
+        handle: "ada",
       },
       teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
     })
     expect(auth.getMe).toHaveBeenCalledWith("user-1")
   })
 
-  it("updates the normal user dashboard profile", async () => {
+  it("updates the normal user dashboard handle", async () => {
     const auth = {
       updateMyProfile: vi.fn().mockResolvedValue({
         user: {
           id: "user-1",
           email: "user@example.com",
           status: "active",
-          displayName: "Ada Lovelace",
+          handle: "ada-lovelace",
         },
         teams: [],
       }),
@@ -51,7 +51,7 @@ describe("DashboardController", () => {
     const controller = new DashboardController(auth as never)
 
     await expect(controller.updateMe({
-      displayName: "Ada Lovelace",
+      handle: "ada-lovelace",
     }, {
       ip: "203.0.113.90",
       user: { id: "user-1" },
@@ -60,32 +60,15 @@ describe("DashboardController", () => {
         id: "user-1",
         email: "user@example.com",
         status: "active",
-        displayName: "Ada Lovelace",
+        handle: "ada-lovelace",
       },
       teams: [],
     })
     expect(auth.updateMyProfile).toHaveBeenCalledWith(
       "user-1",
-      { displayName: "Ada Lovelace" },
+      { handle: "ada-lovelace" },
       "203.0.113.90",
     )
-  })
-
-  it("passes handle updates to the profile service", async () => {
-    const auth = {
-      updateMyProfile: vi.fn().mockResolvedValue({
-        user: { id: "user-1", email: "u@example.test", status: "active", displayName: "Liyang", handle: "liyang" },
-        teams: [],
-      }),
-    }
-    const controller = new DashboardController(auth as never)
-
-    await controller.updateMe({ displayName: "Liyang", handle: "liyang" }, {
-      ip: "127.0.0.1",
-      user: { id: "user-1" },
-    } as never)
-
-    expect(auth.updateMyProfile).toHaveBeenCalledWith("user-1", { displayName: "Liyang", handle: "liyang" }, "127.0.0.1")
   })
 
   it("rejects invalid profile update bodies", async () => {

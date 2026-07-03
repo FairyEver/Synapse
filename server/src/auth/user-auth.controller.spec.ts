@@ -46,11 +46,13 @@ describe("UserAuthController", () => {
 
     controller.register({
       email: "user@example.com",
+      handle: "liyang",
       password: "password",
     }, { ip: "203.0.113.21" } as never)
 
     expect(auth.register).toHaveBeenCalledWith({
       email: "user@example.com",
+      handle: "liyang",
       password: "password",
     }, "203.0.113.21")
   })
@@ -146,6 +148,7 @@ describe("UserAuthController", () => {
     expect(() => controller.register({
       inviteToken: "invite-token",
       email: "user@example.com",
+      handle: "liyang",
       password: "password",
     }, { ip: "203.0.113.21" } as never))
       .toThrow(BadRequestException)
@@ -160,9 +163,10 @@ describe("UserAuthController", () => {
 
     expect(() => controller.register({
       email: "not-an-email",
+      handle: "",
       password: "short",
     }, { ip: "203.0.113.21" } as never))
-      .toThrow("注册请求无效：email 格式无效；password 至少 8 个字符")
+      .toThrow("注册请求无效：email 格式无效；handle 至少 1 个字符；password 至少 8 个字符")
     expect(auth.register).not.toHaveBeenCalled()
   })
 

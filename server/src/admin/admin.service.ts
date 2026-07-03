@@ -24,7 +24,7 @@ const bulkInvitationDeleteAuditSampleSize = 10
 const adminUserSelect = {
   id: true,
   email: true,
-  displayName: true,
+  handle: true,
   adminNote: true,
   status: true,
   memberships: {
@@ -54,7 +54,7 @@ const adminSkillRepositorySelect = {
   title: true,
   visibility: true,
   status: true,
-  owner: { select: { id: true, handle: true, displayName: true } },
+  owner: { select: { id: true, handle: true } },
   updatedAt: true,
 } as const
 

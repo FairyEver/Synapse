@@ -278,7 +278,7 @@ describe("LiveDeviceService", () => {
           user: {
             id: "user-1",
             email: "user@example.com",
-            displayName: "Li Yang",
+            handle: "liyang",
           },
         }),
       ])
@@ -287,7 +287,7 @@ describe("LiveDeviceService", () => {
           user: {
             id: "user-1",
             email: "user@example.com",
-            displayName: "Li Yang",
+            handle: "liyang",
           },
         }),
       ])
@@ -309,7 +309,7 @@ describe("LiveDeviceService", () => {
       orderBy: { lastSeenAt: "desc" },
       include: {
         user: {
-          select: { id: true, email: true, displayName: true },
+          select: { id: true, email: true, handle: true },
         },
       },
     })
@@ -318,7 +318,7 @@ describe("LiveDeviceService", () => {
         expect.objectContaining({
           userId: "user-1",
           userEmail: "user@example.com",
-          userDisplayName: "Li Yang",
+          userHandle: "liyang",
           clientInstanceId: "client-a",
           status: "online",
         }),
@@ -337,14 +337,14 @@ describe("LiveDeviceService", () => {
           clientInstanceId: "client-a",
           platform: "darwin-arm64",
           lastSeenAt: new Date("2026-06-06T09:00:00.000Z"),
-          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+          user: { id: "user-1", email: "user@example.com", handle: "liyang" },
         }),
         device({
           id: "device-b",
           clientInstanceId: "client-b",
           platform: "win32-x64",
           lastSeenAt: new Date("2026-06-06T10:00:00.000Z"),
-          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+          user: { id: "user-1", email: "user@example.com", handle: "liyang" },
         }),
       ])
       .mockResolvedValueOnce([])
@@ -391,7 +391,7 @@ describe("LiveDeviceService", () => {
       },
       include: {
         user: {
-          select: { id: true, email: true, displayName: true },
+          select: { id: true, email: true, handle: true },
         },
       },
     })
@@ -418,13 +418,13 @@ describe("LiveDeviceService", () => {
         device({
           clientInstanceId: "client-a",
           lastSeenAt: new Date("2026-06-06T10:00:00.000Z"),
-          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+          user: { id: "user-1", email: "user@example.com", handle: "liyang" },
         }),
         device({
           id: "device-b",
           clientInstanceId: "client-b",
           lastSeenAt: new Date("2026-06-06T09:59:00.000Z"),
-          user: { id: "user-1", email: "user@example.com", displayName: "Li Yang" },
+          user: { id: "user-1", email: "user@example.com", handle: "liyang" },
         }),
       ])
       .mockResolvedValueOnce([])
@@ -450,7 +450,7 @@ describe("LiveDeviceService", () => {
       orderBy: { lastSeenAt: "desc" },
       include: {
         user: {
-          select: { id: true, email: true, displayName: true },
+          select: { id: true, email: true, handle: true },
         },
       },
     })

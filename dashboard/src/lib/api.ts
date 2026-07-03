@@ -42,7 +42,6 @@ import type {
   SkillRepositoryFileContentDto,
   SkillRepositoryFileDeleteInput,
   SkillRepositoryFileRenameInput,
-  SkillRepositoryFileUploadInput,
   SkillRepositoryForkInput,
   SkillRepositoryForkResultDto,
   SkillRepositoryInstallSessionDto,
@@ -60,7 +59,7 @@ import type {
 
 export type AdminSession = {
   email: string
-  displayName: string | null
+  handle: string | null
   role: 'admin' | 'user'
   sessionId: string
 }
@@ -113,7 +112,7 @@ export type AuditLog = {
 export type AdminUserRow = {
   id: string
   email: string
-  displayName: string | null
+  handle: string
   adminNote: string | null
   status: 'active' | 'disabled'
   memberships: Array<{
@@ -147,7 +146,7 @@ export type LiveClientChangedEvent = {
 export type DashboardDeviceRow = {
   userId?: string
   userEmail?: string
-  userDisplayName?: string | null
+  userHandle?: string | null
   clientInstanceId: string
   displayName: string | null
   deviceName: string
@@ -175,8 +174,7 @@ export type DashboardMe = {
     id: string
     email: string
     status: 'active' | 'disabled'
-    displayName: string | null
-    handle: string | null
+    handle: string
   }
   teams: Array<{
     id: string
@@ -214,8 +212,7 @@ export type AdminSkillRepositoryRow = {
   status: SkillRepositoryStatus
   owner: {
     id: string
-    handle: string | null
-    displayName: string | null
+    handle: string
   }
   updatedAt: string
 }
@@ -640,7 +637,7 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
-  updateMe: (input: { displayName?: string; handle?: string }) =>
+  updateMe: (input: { handle: string }) =>
     request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',
       body: JSON.stringify(input),
@@ -782,14 +779,6 @@ export const dashboardApi = {
       `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files/text`,
       {
         method: 'PUT',
-        body: JSON.stringify(input),
-      }
-    ),
-  uploadSkillRepositoryFile: (id: string, input: SkillRepositoryFileUploadInput) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files`,
-      {
-        method: 'POST',
         body: JSON.stringify(input),
       }
     ),
@@ -1367,7 +1356,7 @@ export const adminApi = {
 }
 
 export const userAuthApi = {
-  register: (input: { email: string; password: string }) =>
+  register: (input: { email: string; handle: string; password: string }) =>
     request<UserRegistrationResult>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),

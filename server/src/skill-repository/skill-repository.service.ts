@@ -17,7 +17,6 @@ import {
   type SkillRepositoryFileDeleteInput,
   type SkillRepositoryFileDto,
   type SkillRepositoryFileRenameInput,
-  type SkillRepositoryFileUploadInput,
   type SkillRepositoryForkInput,
   type SkillRepositoryForkResultDto,
   type SkillRepositoryInstallSessionDto,
@@ -48,8 +47,7 @@ const skillRepositoryInstallSessionTtlSeconds = 5 * 60
 
 interface SkillRepositoryOwnerRow {
   readonly id: string
-  readonly handle: string | null
-  readonly displayName: string | null
+  readonly handle: string
 }
 
 interface SkillRepositoryRow {
@@ -103,6 +101,12 @@ interface SkillRepositoryInstallSessionRow {
   readonly expiresAt: Date
   readonly consumedAt: Date | null
   readonly repository: SkillRepositoryRow
+}
+
+interface SkillRepositoryMutatedFileInput {
+  readonly path: string
+  readonly contentBase64: string
+  readonly mimeType?: string | null
 }
 
 @Injectable()
@@ -216,7 +220,7 @@ export class SkillRepositoryService {
     const repositories = await this.prisma.skillRepository.findMany({
       where: { ownerUserId: userId, status: "active" },
       orderBy: { updatedAt: "desc" },
-      include: { owner: { select: { id: true, handle: true, displayName: true } } },
+      include: { owner: { select: { id: true, handle: true } } },
     }) as SkillRepositoryRow[]
     return repositories.map(repositoryItemDto)
   }
@@ -225,7 +229,7 @@ export class SkillRepositoryService {
     const repository = await this.prisma.skillRepository.findFirst({
       where: { id: repositoryId, ownerUserId: userId, status: "active" },
       include: {
-        owner: { select: { id: true, handle: true, displayName: true } },
+        owner: { select: { id: true, handle: true } },
         files: { orderBy: { path: "asc" } },
       },
     }) as SkillRepositoryRow | null
@@ -240,7 +244,6 @@ export class SkillRepositoryService {
     const where: Prisma.SkillRepositoryWhereInput = {
       visibility: "public",
       status: "active",
-      owner: { handle: { not: null } },
       ...(query ? {
         OR: [
           { name: { contains: query, mode: "insensitive" } },
@@ -256,7 +259,7 @@ export class SkillRepositoryService {
       orderBy: { updatedAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { owner: { select: { id: true, handle: true, displayName: true } } },
+      include: { owner: { select: { id: true, handle: true } } },
     }) as SkillRepositoryRow[]
     return {
       items: repositories.map(repositoryItemDto),
@@ -412,19 +415,6 @@ export class SkillRepositoryService {
     })
     const staleStorageKeys: string[] = []
     await this.replaceRepositoryFile(repositoryId, normalizedFile, existingFile, staleStorageKeys, "skill-file-replaced")
-    await this.cleanupStaleObjects(staleStorageKeys)
-    return this.getMine(userId, repositoryId)
-  }
-
-  async uploadFile(userId: string, repositoryId: string, input: SkillRepositoryFileUploadInput): Promise<SkillRepositoryDetailDto> {
-    await this.requireOwnedActiveRepository(userId, repositoryId)
-    const normalizedFile = normalizeMutatedFile(input)
-    const existingFile = await this.findRepositoryFile(repositoryId, normalizedFile.path)
-    if (!existingFile && input.expectedSha256) throw skillRepositoryFileConflict()
-    if (existingFile && input.expectedSha256 && existingFile.sha256 !== input.expectedSha256) throw skillRepositoryFileConflict()
-
-    const staleStorageKeys: string[] = []
-    await this.replaceRepositoryFile(repositoryId, normalizedFile, existingFile, staleStorageKeys, existingFile ? "skill-file-replaced" : null)
     await this.cleanupStaleObjects(staleStorageKeys)
     return this.getMine(userId, repositoryId)
   }
@@ -608,7 +598,7 @@ export class SkillRepositoryService {
       where: { id: sessionId },
       include: {
         repository: {
-          include: { owner: { select: { id: true, handle: true, displayName: true } } },
+          include: { owner: { select: { id: true, handle: true } } },
         },
       },
     }) as SkillRepositoryInstallSessionRow | null
@@ -734,7 +724,7 @@ export class SkillRepositoryService {
         ],
       },
       include: {
-        owner: { select: { id: true, handle: true, displayName: true } },
+        owner: { select: { id: true, handle: true } },
         ...(includeFiles ? { files: { orderBy: { path: "asc" } } } : {}),
       },
     }) as SkillRepositoryRow | null
@@ -764,7 +754,7 @@ export class SkillRepositoryService {
     const repository = await this.prisma.skillRepository.findFirst({
       where: { ownerUserId, name, visibility: "public", status: "active" },
       include: {
-        owner: { select: { id: true, handle: true, displayName: true } },
+        owner: { select: { id: true, handle: true } },
         files: { orderBy: { path: "asc" } },
       },
     }) as SkillRepositoryRow | null
@@ -779,7 +769,7 @@ export class SkillRepositoryService {
     const redirectedRepository = await this.prisma.skillRepository.findFirst({
       where: { id: redirect.repositoryId, ownerUserId, visibility: "public", status: "active" },
       include: {
-        owner: { select: { id: true, handle: true, displayName: true } },
+        owner: { select: { id: true, handle: true } },
         files: { orderBy: { path: "asc" } },
       },
     }) as SkillRepositoryRow | null
@@ -813,7 +803,7 @@ export class SkillRepositoryService {
       include: {
         repository: {
           include: {
-            owner: { select: { id: true, handle: true, displayName: true } },
+            owner: { select: { id: true, handle: true } },
           },
         },
       },
@@ -953,7 +943,7 @@ function normalizeImportFiles(files: SkillRepositoryImportRequest["files"]): rea
   }
 }
 
-function normalizeMutatedFile(file: SkillRepositoryFileUploadInput): NormalizedSkillRepositoryFile {
+function normalizeMutatedFile(file: SkillRepositoryMutatedFileInput): NormalizedSkillRepositoryFile {
   const normalizedFile = normalizeSkillRepositoryFile(file)
   if (isSkillRepositoryRootPath(normalizedFile.path) && (normalizedFile.kind !== "text" || !normalizedFile.text?.trim())) {
     throw invalidSkill("Skill 必须包含非空 SKILL.md。")
@@ -1040,8 +1030,7 @@ function repositoryItemDto(repository: SkillRepositoryRow): SkillRepositoryItemD
     status: toStatus(repository.status),
     owner: {
       id: repository.owner?.id ?? repository.ownerUserId,
-      handle: repository.owner?.handle ?? null,
-      displayName: repository.owner?.displayName ?? null,
+      handle: repository.owner?.handle ?? repository.ownerUserId,
     },
     forkedFromRepositoryId: repository.forkedFromRepositoryId,
     createdAt: repository.createdAt.toISOString(),

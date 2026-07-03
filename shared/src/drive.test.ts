@@ -328,7 +328,7 @@ describe("drive URL helpers", () => {
       author: {
         id: "user-1",
         email: "reader@example.com",
-        displayName: "Reader",
+        handle: "reader",
       },
       createdAt: "2026-06-21T00:00:00.000Z",
       updatedAt: "2026-06-21T00:00:00.000Z",

@@ -26,7 +26,7 @@ export function DriveShareViewerStatus({ snapshot, className }: DriveShareViewer
   return (
     <span className={cn('inline-flex min-w-0 max-w-48 items-center gap-1.5 truncate text-xs text-muted-foreground', className)}>
       <UserRound className='size-3.5 shrink-0' />
-      <span className='min-w-0 truncate'>{user.displayName || user.email}</span>
+      <span className='min-w-0 truncate'>{user.handle || user.email}</span>
     </span>
   )
 }

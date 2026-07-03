@@ -1183,7 +1183,7 @@ describe("DriveController", () => {
       verifyDashboardSession: vi.fn(async () => ({
         id: "reader-1",
         email: "reader@example.com",
-        displayName: "Reader",
+        handle: "reader",
         role: "user" as const,
       })),
     }
@@ -2061,7 +2061,7 @@ function createAnnotationThread() {
     targetKind: "textRange",
     target: createAnnotationInput().target,
     anchorStatus: "attached",
-    author: { id: "user-1", email: "user@example.com", displayName: null },
+    author: { id: "user-1", email: "user@example.com", handle: null },
     comments: [createAnnotationComment()],
     createdAt: "2026-06-21T00:00:00.000Z",
     updatedAt: "2026-06-21T00:00:00.000Z",
@@ -2075,7 +2075,7 @@ function createAnnotationComment() {
     threadId: "thread-1",
     parentCommentId: null,
     body: "Comment body",
-    author: { id: "user-1", email: "user@example.com", displayName: null },
+    author: { id: "user-1", email: "user@example.com", handle: null },
     createdAt: "2026-06-21T00:00:00.000Z",
     updatedAt: "2026-06-21T00:00:00.000Z",
     editedAt: null,

@@ -80,7 +80,7 @@ function thread(input: {
       quote: input.quote ?? { exact: '重点', prefix: '这是 ', suffix: ' 内容' },
     },
     anchorStatus: 'attached' as const,
-    author: { id: 'user-1', email: 'user@example.com', displayName: null },
+    author: { id: 'user-1', email: 'user@example.com', handle: null },
     comments: [],
     createdAt: '2026-06-21T00:00:00.000Z',
     updatedAt: '2026-06-21T00:00:00.000Z',

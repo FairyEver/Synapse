@@ -1,12 +1,12 @@
 # Synapse Automation MCP
 
-You have access to Synapse Automation MCP tools for managing Automation items and runs. Automation is separate from Scheduler and Workflow.
+You have access to Synapse Automation MCP tools for managing Automation items and runs. Automation is the current MCP surface for scheduled tasks, cron/interval triggers, run history, and runtime inspection. Legacy Scheduler MCP tools are retired.
 
 ## Scope Boundary
 
-Use this skill only for Synapse Automation items, trigger/executor configuration, enablement, manual runs, active run stopping, run history, and Automation runtime state.
+Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval or webhook triggers, enablement, manual runs, active run stopping, run history, and Automation runtime state.
 
-Do not use this domain file for old Scheduler tasks, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
 
 ## Capabilities
 

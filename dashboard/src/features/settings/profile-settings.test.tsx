@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 describe('ProfileSettings', () => {
-  it('saves a normalized handle', async () => {
+  it('saves a normalized username', async () => {
     mockedDashboardApi.getMe.mockResolvedValue(profile())
     mockedDashboardApi.updateMe.mockResolvedValue(profile({
       user: { ...profile().user, handle: 'new-name' },
@@ -58,7 +58,6 @@ describe('ProfileSettings', () => {
 
     await waitFor(() => {
       expect(mockedDashboardApi.updateMe.mock.calls[0]?.[0]).toEqual({
-        displayName: 'Liyang',
         handle: 'new-name',
       })
     })
@@ -74,6 +73,16 @@ describe('ProfileSettings', () => {
 
     expect(saveButton().disabled).toBe(true)
     expect(document.body.textContent).toContain('只能使用小写字母、数字和连字符，并以字母或数字开头和结尾。')
+  })
+
+  it('does not render a nickname field', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-handle'))
+
+    expect(document.getElementById('display-name')).toBeNull()
+    expect(document.body.textContent).not.toContain('昵称')
   })
 
   it('blocks reserved route handles', async () => {
@@ -104,7 +113,7 @@ describe('ProfileSettings', () => {
 function renderProfileSettings() {
   useAuthStore.getState().auth.setUser({
     email: 'u@example.test',
-    displayName: 'Liyang',
+    handle: 'liyang',
     role: 'user',
     sessionId: 'session-1',
   })
@@ -134,7 +143,6 @@ function profile(overrides: Partial<Awaited<ReturnType<typeof dashboardApi.getMe
       id: 'user-1',
       email: 'u@example.test',
       status: 'active' as const,
-      displayName: 'Liyang',
       handle: 'liyang',
     },
     teams: [],

@@ -33,12 +33,14 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDriveBytes } from '@/features/drive'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { formatDriveBrowserDate } from './shared/drive-format'
 
 export function AdminPublicAssets() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -47,7 +49,7 @@ export function AdminPublicAssets() {
   const listQuery = {
     page,
     pageSize,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     ...sortQuery,
   }
 

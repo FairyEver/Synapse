@@ -882,7 +882,7 @@ export const DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH = 1000
 export interface DriveAnnotationAuthorDto {
   readonly id: string
   readonly email: string | null
-  readonly displayName: string | null
+  readonly handle: string | null
 }
 
 export interface DriveAnnotationTextRangeTargetV1 {

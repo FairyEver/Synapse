@@ -19,7 +19,7 @@ export type DashboardRole = "admin" | "user"
 export interface DashboardSession {
   readonly id: string
   readonly email: string
-  readonly displayName: string | null
+  readonly handle: string | null
   readonly role: DashboardRole
 }
 
@@ -68,7 +68,7 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; displayName: string | null; token: string; role: DashboardRole }> {
+  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; handle: string | null; token: string; role: DashboardRole }> {
     const normalizedEmail = email.trim().toLowerCase()
     const matchedAdmin = await this.prisma.adminUser.findUnique({ where: { email: normalizedEmail } })
     const passwordMatches = matchedAdmin ? await verifyPassword(password, matchedAdmin.passwordHash) : false
@@ -81,7 +81,7 @@ export class AdminAuthService {
         targetId: matchedAdmin.id,
         ipAddress,
       })
-      return { email: matchedAdmin.email, displayName: null, token, role: "admin" }
+      return { email: matchedAdmin.email, handle: null, token, role: "admin" }
     }
     if (matchedAdmin) {
       const adminLoginFailureAction = matchedAdmin.status === "active"
@@ -104,7 +104,7 @@ export class AdminAuthService {
         email: true,
         passwordHash: true,
         status: true,
-        displayName: true,
+        handle: true,
       },
     })
     const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
@@ -119,7 +119,7 @@ export class AdminAuthService {
       })
       return {
         email: user.email,
-        displayName: user.displayName,
+        handle: user.handle,
         token,
         role: "user",
       }
@@ -160,7 +160,7 @@ export class AdminAuthService {
             id: true,
             email: true,
             status: true,
-            displayName: true,
+            handle: true,
             passwordChangedAt: true,
           },
         })
@@ -173,13 +173,13 @@ export class AdminAuthService {
         return {
           id: user.id,
           email: user.email,
-          displayName: user.displayName,
+          handle: user.handle,
           role: "user",
         }
       }
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
-      return { id: admin.id, email: admin.email, displayName: null, role: "admin" }
+      return { id: admin.id, email: admin.email, handle: null, role: "admin" }
     } catch (error) {
       if (isExpectedDashboardSessionFailure(error)) return null
       this.logger.warn(safeDashboardAuthErrorDetail(error), "Dashboard session verification failed")

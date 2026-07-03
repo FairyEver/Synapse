@@ -1,7 +1,7 @@
 export type SynapseAccountUser = {
   id: string
   email: string
-  displayName: string | null
+  handle: string
   status: "active" | "disabled"
 }
 

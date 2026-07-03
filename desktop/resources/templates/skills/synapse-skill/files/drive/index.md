@@ -55,7 +55,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_trash_delete`
 - `app_drive_item_restore`
 
-Do not use this skill for database records, Resource Repository resources, scheduler tasks, workflow definitions, provider settings, or general local file editing.
+Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing.
 
 ## Drive Link Intake Flow
 

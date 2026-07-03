@@ -88,6 +88,7 @@ describe('AdminPublicAssets', () => {
     })
 
     await changeInput('搜索', ' owner@example.com ')
+    await waitForDebounce()
     await waitFor(() => {
       expect(mockedAdminApi.listDrivePublicAssets).toHaveBeenLastCalledWith({
         page: 1,
@@ -249,6 +250,12 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+async function waitForDebounce(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350))
+  })
+}
+
 function createPublicAsset(overrides: Partial<AdminDrivePublicAssetRow> = {}): AdminDrivePublicAssetRow {
   return {
     accessCount: '3',
@@ -260,7 +267,6 @@ function createPublicAsset(overrides: Partial<AdminDrivePublicAssetRow> = {}): A
     mimeType: 'image/png',
     name: 'asset.png',
     owner: {
-      displayName: 'Owner',
       email: 'owner@example.com',
       userId: 'user-1',
     },

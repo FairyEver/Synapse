@@ -41,8 +41,8 @@ export function FileBrowserList({
           <TableRow>
             <TableHead>名称</TableHead>
             <TableHead className='w-28 text-right'>大小</TableHead>
-            <TableHead className='w-40'>更新时间</TableHead>
-            {renderFileActions ? <TableHead className='w-12' /> : null}
+            <TableHead className='w-40 text-right'>更新时间</TableHead>
+            {renderFileActions ? <TableHead className='w-12 text-right' aria-label='操作' /> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -78,14 +78,15 @@ export function FileBrowserList({
                     <span className='min-w-0 truncate font-medium'>{row.name}</span>
                   </div>
                 </TableCell>
-                <TableCell className='text-right text-muted-foreground'>
+                <TableCell className='text-right tabular-nums text-muted-foreground'>
                   {row.type === 'folder' ? '-' : formatBytes(row.file.size)}
                 </TableCell>
-                <TableCell className='text-muted-foreground'>
-                  {row.type === 'folder' ? '-' : <RelativeTime value={row.file.updatedAt} />}
+                <TableCell className='text-right tabular-nums text-muted-foreground'>
+                  {row.type === 'folder' ? '-' : <RelativeTime value={row.file.updatedAt} className='tabular-nums' />}
                 </TableCell>
                 {renderFileActions ? (
                   <TableCell
+                    className='text-right'
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >

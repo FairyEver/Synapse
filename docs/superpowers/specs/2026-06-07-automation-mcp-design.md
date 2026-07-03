@@ -6,13 +6,13 @@ Date: 2026-06-07
 
 Synapse already exposes one local `synapse-mcp` server. The server lists tools from shared capability domains, maps MCP tool names to canonical actions, and dispatches those actions through Electron main-process domain dispatchers.
 
-Existing domains include Database, Scheduler, Workflow, Content, Repository, Variable, and Model Price. Each mature MCP domain also has a built-in Skill template under `desktop/resources/templates/skills/` so users can install focused Agent guidance before asking their Agent to operate that domain.
+Current MCP domains include Database, Automation, Workflow, Content, Repository, Variable, Model Price, Drive, Skill Repository, and App-provided capabilities. The legacy Scheduler MCP domain has been retired; scheduled-task, cron/interval, run-history, and runtime-state Agent requests should route to Automation.
 
 Automation is now a separate Synapse module from the old Task Scheduler. It owns independent data namespaces, service methods, triggers, executors, run history, runtime state, and renderer UI. The product goal for this feature is to let a user install an Automation MCP built-in Skill and then ask their Agent to create, update, enable, disable, delete, run, stop, inspect, and review Synapse Automations.
 
 ## Goals
 
-- Add a new `automation` MCP capability domain, separate from `scheduler`.
+- Add a new `automation` MCP capability domain for scheduled tasks and Automation runs.
 - Expose the full current Automation user-operation surface to MCP:
   - list/get/create/update/delete Automation items
   - enable/disable Automation items
@@ -23,7 +23,7 @@ Automation is now a separate Synapse module from the old Task Scheduler. It owns
   - list trigger types
   - list executor types
 - Reuse `AutomationService`, `AutomationTriggerRegistry`, and `MainActionRegistry`.
-- Keep Automation and Task Scheduler data, MCP tools, services, and product semantics separate.
+- Keep Automation data, MCP tools, services, and product semantics separate from historical Task Scheduler implementation details.
 - Keep Automation Core generic: do not hard-code `builtin.cron`, `builtin.interval`, `builtin.webhook`, `builtin.command`, `builtin.script`, `builtin.http-request`, or `builtin.agent` in MCP dispatcher logic except through registry output.
 - Return safe summaries from read and mutation responses. Do not expose executor config bodies such as Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, cookies, tokens, API keys, or environment secrets.
 - Add a built-in Skill template `synapse-automation-mcp` that teaches Agents how to use the new tools safely.
@@ -31,7 +31,7 @@ Automation is now a separate Synapse module from the old Task Scheduler. It owns
 
 ## Non-Goals
 
-- Do not remove, rename, or replace existing `scheduler_*` MCP tools.
+- Do not reintroduce legacy `scheduler_*` MCP tools as aliases for Automation.
 - Do not migrate old `task-scheduler.tasks` or `task-scheduler.runs` data into Automation.
 - Do not add new trigger types or executor types.
 - Do not add new renderer UI.
@@ -337,7 +337,7 @@ Responsibilities:
 - Apply PermissionGuard and AuditSink for mutating actions.
 - Avoid logging raw trigger/executor configs or raw error text.
 
-The dispatcher should be constructed in `coreDatabaseDescriptor`, alongside the existing content, scheduler, variable, repository, model price, and workflow dispatchers. `core.database` must depend on `core.automation` so the single `synapse-mcp` server can route Automation MCP tools to the running service.
+The dispatcher should be constructed in `coreDatabaseDescriptor`, alongside the existing content, variable, repository, model price, drive, skill-repository, app, and workflow dispatchers. `core.database` must depend on `core.automation` so the single `synapse-mcp` server can route Automation MCP tools to the running service.
 
 The action router adds an `automationDispatch` dependency and routes `domainId === "automation"` to it.
 
@@ -463,6 +463,6 @@ Do not start dev servers or browser previews for this feature unless the user ex
 
 - `synapse-mcp` exposes `automation_*` tools.
 - Agents can create, update, enable, disable, delete, manually run, stop, inspect, and review Automation items through MCP.
-- Existing `scheduler_*`, `workflow_*`, and other MCP tools continue to work.
+- Legacy `scheduler_*` MCP tools are not supported aliases. Existing `workflow_*` and other current MCP tools continue to work.
 - Automation read responses remain useful but do not leak sensitive configs.
 - Users can install `Synapse 自动化 MCP` from built-in Skills and get domain-specific Agent guidance.

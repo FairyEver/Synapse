@@ -123,7 +123,7 @@ function comment(input: { readonly id?: string; readonly parentCommentId?: strin
     createdAt: '2026-06-21T00:00:00.000Z',
     author: {
       id: 'user-1',
-      displayName: '李杨',
+      handle: 'liyang',
       email: 'liyang@example.com',
     },
     permissions: {

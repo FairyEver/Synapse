@@ -29,7 +29,7 @@ describe("AdminAuthController", () => {
     const auth = {
       login: vi.fn().mockResolvedValue({
         email: "user@example.com",
-        displayName: "Ada",
+        handle: "ada",
         role: "user",
         token: "dashboard-token",
       }),
@@ -43,7 +43,7 @@ describe("AdminAuthController", () => {
       password: "secret",
     }, request, response as never)).resolves.toEqual({
       email: "user@example.com",
-      displayName: "Ada",
+      handle: "ada",
       role: "user",
       sessionId: hashToken("dashboard-token"),
     })
@@ -214,7 +214,7 @@ describe("AdminAuthController", () => {
       verifyDashboardSession: vi.fn().mockResolvedValue({
         id: "user-1",
         email: "user@example.com",
-        displayName: "Ada",
+        handle: "ada",
         role: "user",
       }),
     }
@@ -224,7 +224,7 @@ describe("AdminAuthController", () => {
       cookies: { synapse_admin: "dashboard-token" },
     } as unknown as AdminRequest)).resolves.toEqual({
       email: "user@example.com",
-      displayName: "Ada",
+      handle: "ada",
       role: "user",
       sessionId: hashToken("dashboard-token"),
     })

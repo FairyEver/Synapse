@@ -21,6 +21,7 @@ import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ export default function SkillRepositoryAdminPage({
       : 'active'
   )
   const [query, setQuery] = useState(typeof search.query === 'string' ? search.query : '')
+  const debouncedQuery = useDebouncedValue(query)
   const [removeTarget, setRemoveTarget] = useState<AdminSkillRepositoryRow | null>(null)
   const [sorting, setSorting] = useState<SortingState>(
     typeof search.sortBy === 'string'
@@ -57,7 +59,7 @@ export default function SkillRepositoryAdminPage({
     page,
     pageSize,
     status,
-    query: query.trim() || undefined,
+    query: debouncedQuery.trim() || undefined,
     ...sortQuery,
   }
 
@@ -254,7 +256,7 @@ function readPositiveNumber(value: unknown, fallback: number): number {
 }
 
 function getOwnerLabel(owner: AdminSkillRepositoryRow['owner']): string {
-  return owner.handle || owner.displayName || owner.id
+  return owner.handle || owner.id
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

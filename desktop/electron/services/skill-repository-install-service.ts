@@ -49,8 +49,7 @@ const installSessionSchema = z.object({
     title: z.string(),
     owner: z.object({
       id: z.string().min(1),
-      handle: z.string().nullable(),
-      displayName: z.string().nullable(),
+      handle: z.string().min(1),
     }).strict(),
   }).strict(),
   packageSha256: z.string().regex(/^[a-f0-9]{64}$/i),

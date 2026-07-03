@@ -1,8 +1,18 @@
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -15,6 +25,7 @@ import { useSkillRepositoryList } from './use-skill-repository'
 
 export function SkillRepositoryListPage() {
   const navigate = useNavigate()
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const query = useSkillRepositoryList()
   const repositories = query.data ?? []
 
@@ -22,11 +33,33 @@ export function SkillRepositoryListPage() {
     <div className='flex min-h-0 flex-1 flex-col gap-4 p-6'>
       <div className='flex items-center justify-between gap-3'>
         <h1 className='text-xl font-semibold'>我的 Skill 仓库</h1>
-        <Button type='button' variant='outline' size='sm' onClick={() => { void query.refetch() }}>
-          <RefreshCw data-icon='inline-start' className={query.isFetching ? 'animate-spin' : undefined} />
-          刷新
-        </Button>
+        <div className='flex items-center gap-2'>
+          <Button type='button' size='sm' onClick={() => setCreateDialogOpen(true)}>
+            <Plus data-icon='inline-start' />
+            新建
+          </Button>
+          <Button type='button' variant='outline' size='sm' onClick={() => { void query.refetch() }}>
+            <RefreshCw data-icon='inline-start' className={query.isFetching ? 'animate-spin' : undefined} />
+            刷新
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>网页端暂未提供新建入口</DialogTitle>
+            <DialogDescription>
+              当前页面仅支持查看和管理已有 Skill 仓库。请在 Synapse 客户端从本地 Skill 上传或导入仓库，完成后刷新本页查看。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type='button'>关闭</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className='min-h-0 flex-1 overflow-auto rounded-md border bg-background'>
         {query.isLoading ? (

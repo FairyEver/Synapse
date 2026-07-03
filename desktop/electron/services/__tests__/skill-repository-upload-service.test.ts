@@ -82,7 +82,7 @@ const authenticatedState: SynapseAccountState = {
     user: {
       id: "user-1",
       email: "liyang@example.test",
-      displayName: "liyang",
+      handle: "liyang",
       status: "active",
     },
     teams: [],
@@ -344,7 +344,7 @@ function repositoryDetail(overrides: Partial<SkillRepositoryDetailDto> = {}): Sk
     description: null,
     visibility: "private",
     status: "active",
-    owner: { id: "user-1", handle: "liyang", displayName: "liyang" },
+    owner: { id: "user-1", handle: "liyang" },
     forkedFromRepositoryId: null,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",

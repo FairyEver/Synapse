@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { SkillRepositoryFileContentDto } from '@synapse/shared'
-import { Download, MoreHorizontal, Upload } from 'lucide-react'
+import { Download, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,13 +35,6 @@ import { FileBrowserCodeRenderer } from '../file-browser/renderers/code-renderer
 import { FileRendererShell, type FileRendererEditContext } from '../file-browser/renderers/renderer-shell'
 import { isProtectedSkillRepositoryPath } from './skill-repository-view-model'
 
-type FileUploadInput = {
-  readonly path: string
-  readonly contentBase64: string
-  readonly mimeType?: string | null
-  readonly expectedSha256?: string | null
-}
-
 export function SkillRepositoryFileBrowser({
   tree,
   selectedFilePath,
@@ -51,7 +44,6 @@ export function SkillRepositoryFileBrowser({
   reloadingFile,
   onNavigateFolder,
   onOpenFile,
-  onUploadFile,
   onRenameFile,
   onDeleteFile,
   onDownloadFile,
@@ -68,19 +60,15 @@ export function SkillRepositoryFileBrowser({
   readonly readonlyMode?: boolean
   readonly onNavigateFolder: (path: string) => void
   readonly onOpenFile: (path: string) => void
-  readonly onUploadFile: (input: FileUploadInput) => Promise<unknown>
   readonly onRenameFile: (input: { readonly fromPath: string; readonly toPath: string }) => Promise<unknown>
   readonly onDeleteFile: (input: { readonly path: string; readonly expectedSha256?: string | null }) => Promise<unknown>
   readonly onDownloadFile: (path: string) => string
   readonly onReloadText: () => Promise<{ readonly text: string; readonly baseVersionId: string }>
   readonly onSaveText: (input: { readonly text: string; readonly baseVersionId: string }) => Promise<{ readonly baseVersionId: string }>
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const [replaceRow, setReplaceRow] = useState<FileBrowserFileRow | null>(null)
   const [renameRow, setRenameRow] = useState<FileBrowserFileRow | null>(null)
   const [deleteRow, setDeleteRow] = useState<FileBrowserFileRow | null>(null)
   const [renamePath, setRenamePath] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const selectedName = lastPathSegment(selectedFilePath)
   const editContext: FileRendererEditContext | undefined = readonlyMode ? undefined : {
     reload: onReloadText,
@@ -89,56 +77,10 @@ export function SkillRepositoryFileBrowser({
     savingText,
   }
 
-  const handleFileInput = async (file: File) => {
-    const targetPath = replaceRow
-      ? replaceRow.file.path
-      : [tree.currentPath, file.name].filter(Boolean).join('/')
-    const expectedSha256 = replaceRow?.file.sha256 ?? null
-    setError(null)
-    try {
-      await onUploadFile({
-        path: targetPath,
-        contentBase64: await fileToBase64(file),
-        mimeType: file.type || null,
-        expectedSha256,
-      })
-      if (replaceRow) onOpenFile(targetPath)
-      setReplaceRow(null)
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : '上传失败。')
-    } finally {
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-
   return (
     <section className='flex min-h-0 flex-1 flex-col gap-3'>
-      <div className='flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+      <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <FileBrowserBreadcrumbs breadcrumbs={tree.breadcrumbs} onNavigate={onNavigateFolder} />
-        {!readonlyMode ? <div className='flex shrink-0 items-center gap-2'>
-          {error ? <span className='text-sm text-destructive'>{error}</span> : null}
-          <input
-            ref={inputRef}
-            type='file'
-            className='hidden'
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void handleFileInput(file)
-            }}
-          />
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            onClick={() => {
-              setReplaceRow(null)
-              inputRef.current?.click()
-            }}
-          >
-            <Upload data-icon='inline-start' />
-            上传
-          </Button>
-        </div> : null}
       </div>
 
       {selectedFilePath && fileContent ? (
@@ -174,10 +116,6 @@ export function SkillRepositoryFileBrowser({
                   row={row}
                   readonlyMode={readonlyMode}
                   onDownload={() => downloadFile(onDownloadFile(row.file.path))}
-                  onReplace={() => {
-                    setReplaceRow(row)
-                    inputRef.current?.click()
-                  }}
                   onRename={() => {
                     setRenameRow(row)
                     setRenamePath(row.file.path)
@@ -244,14 +182,12 @@ function FileActions({
   row,
   readonlyMode,
   onDownload,
-  onReplace,
   onRename,
   onDelete,
 }: {
   readonly row: FileBrowserFileRow
   readonly readonlyMode: boolean
   readonly onDownload: () => void
-  readonly onReplace: () => void
   readonly onRename: () => void
   readonly onDelete: () => void
 }) {
@@ -259,7 +195,7 @@ function FileActions({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type='button' variant='ghost' size='icon' aria-label='文件操作'>
+        <Button type='button' variant='ghost' size='icon' className='size-8' aria-label={`${row.name} 文件操作`}>
           <MoreHorizontal className='size-4' />
         </Button>
       </DropdownMenuTrigger>
@@ -268,9 +204,18 @@ function FileActions({
           <Download data-icon='inline-start' />
           下载
         </DropdownMenuItem>
-        {!readonlyMode ? <DropdownMenuItem onClick={onReplace}>替换</DropdownMenuItem> : null}
-        {!readonlyMode && !protectedFile ? <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem> : null}
-        {!readonlyMode && !protectedFile ? <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem> : null}
+        {!readonlyMode && !protectedFile ? (
+          <DropdownMenuItem onClick={onRename}>
+            <Pencil data-icon='inline-start' />
+            重命名
+          </DropdownMenuItem>
+        ) : null}
+        {!readonlyMode && !protectedFile ? (
+          <DropdownMenuItem onClick={onDelete} variant='destructive'>
+            <Trash2 data-icon='inline-start' />
+            删除
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -281,18 +226,6 @@ function downloadFile(url: string): void {
   anchor.href = url
   anchor.rel = 'noopener noreferrer'
   anchor.click()
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : ''
-      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
-    }
-    reader.onerror = () => reject(reader.error ?? new Error('读取文件失败。'))
-    reader.readAsDataURL(file)
-  })
 }
 
 function lastPathSegment(path: string | null): string | null {

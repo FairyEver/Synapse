@@ -27,8 +27,7 @@ export type SkillRepositoryErrorCode = (typeof skillRepositoryErrorCodes)[number
 
 export interface SkillRepositoryOwnerDto {
   readonly id: string
-  readonly handle: string | null
-  readonly displayName: string | null
+  readonly handle: string
 }
 
 export interface SkillRepositoryFileDto {

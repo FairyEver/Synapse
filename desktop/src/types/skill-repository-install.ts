@@ -10,8 +10,7 @@ export type SynapseSkillRepositoryInstallSession = {
     readonly title: string
     readonly owner: {
       readonly id: string
-      readonly handle: string | null
-      readonly displayName: string | null
+      readonly handle: string
     }
   }
   readonly packageSha256: string

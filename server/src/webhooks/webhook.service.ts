@@ -357,12 +357,12 @@ export class WebhookService implements OnModuleInit {
 
   private async loadHistoryUsers(
     deliveries: ReadonlyArray<{ readonly userId?: string | null }>,
-  ): Promise<Map<string, { readonly id: string; readonly email: string; readonly displayName: string | null }>> {
+  ): Promise<Map<string, { readonly id: string; readonly email: string; readonly handle: string | null }>> {
     const userIds = [...new Set(deliveries.map((delivery) => delivery.userId).filter((id): id is string => Boolean(id)))]
     if (userIds.length === 0) return new Map()
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, email: true, displayName: true },
+      select: { id: true, email: true, handle: true },
     })
     return new Map(users.map((user) => [user.id, user]))
   }
@@ -777,7 +777,7 @@ function buildDeliveryHistoryWhere(
       user: {
         OR: [
           { email: { contains: userSearch, mode: "insensitive" } },
-          { displayName: { contains: userSearch, mode: "insensitive" } },
+          { handle: { contains: userSearch, mode: "insensitive" } },
         ],
       },
     }
@@ -867,7 +867,7 @@ function toWebhookDeliveryHistoryDto(
       readonly deletedAt: Date | null
     } | null
   },
-  usersById: Map<string, { readonly id: string; readonly email: string; readonly displayName: string | null }>,
+  usersById: Map<string, { readonly id: string; readonly email: string; readonly handle: string | null }>,
 ): WebhookDeliveryHistoryDto {
   const dto = toWebhookDeliveryDto(delivery)
   const user = delivery.userId ? usersById.get(delivery.userId) : undefined
@@ -885,7 +885,7 @@ function toWebhookDeliveryHistoryDto(
           user: {
             id: user.id,
             email: user.email,
-            displayName: user.displayName,
+            handle: user.handle ?? user.id,
           },
         }
       : {}),

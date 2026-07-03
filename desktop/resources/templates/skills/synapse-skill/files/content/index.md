@@ -10,7 +10,7 @@ Use this skill only for Synapse Resource Repository resources:
 - Skills
 - Prompts
 
-Do not use this domain file for database records, scheduler tasks, workflow definitions, editor installation, provider settings, or general file editing. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not use this domain file for database records, Automation schedules/items, workflow definitions, editor installation, provider settings, or general file editing. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
 
 ## Default Flow
 

@@ -89,7 +89,7 @@ describe("shared webhook protocol", () => {
       user: {
         id: "user-1",
         email: "user@example.com",
-        displayName: null,
+        handle: "user",
       },
     }
 

@@ -5,6 +5,7 @@ import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import {
   Table,
   TableBody,
@@ -21,7 +22,8 @@ import { getSkillRepositoryDisplayOwner } from './skill-repository-view-model'
 export function SkillRepositoryExplorePage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const listQuery = usePublicSkillRepositoryList({ page: 1, pageSize: 20, query: query.trim() || null })
+  const debouncedQuery = useDebouncedValue(query)
+  const listQuery = usePublicSkillRepositoryList({ page: 1, pageSize: 20, query: debouncedQuery.trim() || null })
   const repositories = listQuery.data?.items ?? []
 
   return (

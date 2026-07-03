@@ -161,28 +161,15 @@ describe("SkillRepositoryController", () => {
     })
   })
 
-  it("normalizes nullish upload and delete expected sha to undefined", async () => {
+  it("normalizes nullish delete expected sha to undefined", async () => {
     const service = createService()
     const controller = new SkillRepositoryController(service as never)
-    const contentBase64 = Buffer.from("Read me").toString("base64")
 
-    await controller.uploadFile("repo-1", {
-      path: "README.md",
-      contentBase64,
-      mimeType: null,
-      expectedSha256: null,
-    }, request("user-1"))
     await controller.deleteFile("repo-1", {
       path: "README.md",
       expectedSha256: null,
     }, request("user-1"))
 
-    expect(service.uploadFile).toHaveBeenCalledWith("user-1", "repo-1", {
-      path: "README.md",
-      contentBase64,
-      mimeType: undefined,
-      expectedSha256: undefined,
-    })
     expect(service.deleteFile).toHaveBeenCalledWith("user-1", "repo-1", {
       path: "README.md",
       expectedSha256: undefined,
@@ -257,7 +244,6 @@ function createService() {
       filename: "logo.png",
     }),
     saveTextFile: vi.fn().mockResolvedValue({ id: "repo-1" }),
-    uploadFile: vi.fn().mockResolvedValue({ id: "repo-1" }),
     renameFile: vi.fn().mockResolvedValue({ id: "repo-1" }),
     deleteFile: vi.fn().mockResolvedValue({ id: "repo-1" }),
   }

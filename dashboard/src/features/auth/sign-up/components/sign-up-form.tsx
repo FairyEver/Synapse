@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { normalizeUserHandle, userHandleMaxLength } from '@synapse/shared'
 import { Link } from '@tanstack/react-router'
 import { Loader2, UserPlus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -25,12 +26,24 @@ const duplicateEmailMessage = '邮箱已注册。'
 const formSchema = z
   .object({
     email: z.email({ error: () => '请输入有效的邮箱地址' }),
+    handle: z.string().trim().min(1, '请输入用户名').max(userHandleMaxLength, `用户名不能超过 ${userHandleMaxLength} 个字符`),
     password: z.string().min(8, '密码至少 8 个字符'),
     confirmPassword: z.string().min(1, '请再次输入密码'),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: '两次输入的密码不一致',
     path: ['confirmPassword'],
+  })
+  .refine((data) => {
+    try {
+      normalizeUserHandle(data.handle)
+      return true
+    } catch {
+      return false
+    }
+  }, {
+    message: '只能使用小写字母、数字和连字符，并以字母或数字开头和结尾。',
+    path: ['handle'],
   })
 
 export function SignUpForm({
@@ -45,6 +58,7 @@ export function SignUpForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
+      handle: '',
       password: '',
       confirmPassword: '',
     },
@@ -55,6 +69,7 @@ export function SignUpForm({
     try {
       await userAuthApi.register({
         email: data.email,
+        handle: normalizeUserHandle(data.handle),
         password: data.password,
       })
       setRegisteredEmail(data.email)
@@ -69,6 +84,13 @@ export function SignUpForm({
         form.setError('email', {
           type: 'server',
           message: duplicateEmailMessage,
+        }, { shouldFocus: true })
+        return
+      }
+      if (err instanceof ApiError && err.status === 400 && err.message.includes('用户名')) {
+        form.setError('handle', {
+          type: 'server',
+          message: err.message,
         }, { shouldFocus: true })
         return
       }
@@ -109,6 +131,24 @@ export function SignUpForm({
                 <Input
                   autoComplete='email'
                   placeholder='name@example.com'
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='handle'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>用户名</FormLabel>
+              <FormControl>
+                <Input
+                  autoComplete='username'
+                  maxLength={userHandleMaxLength}
+                  placeholder='liyang'
                   {...field}
                 />
               </FormControl>

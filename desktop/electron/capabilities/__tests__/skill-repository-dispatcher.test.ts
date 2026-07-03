@@ -11,7 +11,7 @@ const repository = {
   description: null,
   visibility: "private",
   status: "active",
-  owner: { id: "user-1", handle: "liyang", displayName: "Liyang" },
+  owner: { id: "user-1", handle: "liyang" },
   forkedFromRepositoryId: null,
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",

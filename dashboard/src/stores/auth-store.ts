@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 export interface AuthUser {
   email: string
-  displayName: string | null
+  handle: string | null
   role: 'admin' | 'user'
   sessionId: string
 }

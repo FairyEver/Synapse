@@ -203,7 +203,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValueOnce({
       id: "user-1",
       email: "user@example.com",
-      displayName: "Ada",
+      handle: "ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
     })
@@ -211,7 +211,7 @@ describe("AdminAuthService", () => {
     const result = await service.login("user@example.com", "user-password")
 
     expect(result.email).toBe("user@example.com")
-    expect(result.displayName).toBe("Ada")
+    expect(result.handle).toBe("ada")
     expect(result.role).toBe("user")
     expect(result.token.length).toBeGreaterThan(20)
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
@@ -221,7 +221,7 @@ describe("AdminAuthService", () => {
         email: true,
         passwordHash: true,
         status: true,
-        displayName: true,
+        handle: true,
       },
     })
   })
@@ -278,7 +278,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
-      displayName: "Ada",
+      handle: "ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
     })
@@ -288,7 +288,7 @@ describe("AdminAuthService", () => {
     await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
       id: "user-1",
       email: "user@example.com",
-      displayName: "Ada",
+      handle: "ada",
       role: "user",
     })
   })

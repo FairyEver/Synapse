@@ -14,7 +14,7 @@ Use this skill only for Synapse model price rules:
 - partially update or clear price rules;
 - enable, disable, or delete price rules.
 
-Do not use this skill for Database tables, Scheduler tasks, Workflow definitions, Resource Repository publishing, provider settings, editor installation, or running Usage Analysis refresh jobs.
+Do not use this skill for Database tables, Automation schedules/items, Workflow definitions, Resource Repository publishing, provider settings, editor installation, or running Usage Analysis refresh jobs.
 
 ## Default Flow
 

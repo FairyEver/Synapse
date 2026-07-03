@@ -109,7 +109,6 @@ export function SkillRepositoryPublicPage({
           repository.setCurrentPath(path)
         }}
         onOpenFile={repository.setSelectedFilePath}
-        onUploadFile={async () => undefined}
         onRenameFile={async () => undefined}
         onDeleteFile={async () => undefined}
         onDownloadFile={(path) => skillRepositoryApi.getFileDownloadUrlByPath(ownerHandle, repositoryName, path)}

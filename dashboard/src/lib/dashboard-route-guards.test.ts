@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth-store'
 function signInAs(role: 'admin' | 'user') {
   useAuthStore.getState().auth.setUser({
     email: `${role}@example.com`,
-    displayName: null,
+    handle: role,
     role,
     sessionId: `${role}-session`,
   })

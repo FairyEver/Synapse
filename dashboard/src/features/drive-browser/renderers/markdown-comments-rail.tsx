@@ -528,8 +528,8 @@ function getCommentDeleteConfigs(
   return configs
 }
 
-function displayAuthor(author: { readonly displayName: string | null } | undefined): string {
-  return author?.displayName || '评论者'
+function displayAuthor(author: { readonly handle: string | null; readonly email: string | null } | undefined): string {
+  return author?.handle || author?.email || '评论者'
 }
 
 function isInteractiveCommentTarget(target: EventTarget | null): boolean {

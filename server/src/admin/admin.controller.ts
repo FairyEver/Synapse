@@ -27,7 +27,7 @@ const createInvitationSchema = z.object({
   teamId: z.string().trim().min(1),
 }).strict()
 
-const userSortFields = ["createdAt", "updatedAt", "email", "displayName", "status"] as const
+const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const

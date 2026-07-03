@@ -17,10 +17,9 @@ describe('skill repository view model', () => {
     ])
   })
 
-  it('uses handle, display name, then id for owner display', () => {
-    expect(getSkillRepositoryDisplayOwner(repository({ owner: { id: 'u1', handle: 'alice', displayName: 'Alice' } }))).toBe('alice')
-    expect(getSkillRepositoryDisplayOwner(repository({ owner: { id: 'u1', handle: null, displayName: 'Alice' } }))).toBe('Alice')
-    expect(getSkillRepositoryDisplayOwner(repository({ owner: { id: 'u1', handle: null, displayName: null } }))).toBe('u1')
+  it('uses handle then id for owner display', () => {
+    expect(getSkillRepositoryDisplayOwner(repository({ owner: { id: 'u1', handle: 'alice' } }))).toBe('alice')
+    expect(getSkillRepositoryDisplayOwner(repository({ owner: { id: 'u1', handle: '' } }))).toBe('u1')
   })
 
   it('protects root SKILL.md only', () => {
@@ -38,7 +37,7 @@ function repository(overrides: Partial<SkillRepositoryDetailDto> = {}): SkillRep
     description: null,
     visibility: 'private',
     status: 'active',
-    owner: { id: 'user-1', handle: 'alice', displayName: 'Alice' },
+    owner: { id: 'user-1', handle: 'alice' },
     forkedFromRepositoryId: null,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-02T00:00:00.000Z',

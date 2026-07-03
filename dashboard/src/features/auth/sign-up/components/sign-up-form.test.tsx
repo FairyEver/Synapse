@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, userAuthApi } from '@/lib/api'
@@ -26,6 +26,12 @@ vi.mock('sonner', () => ({
   },
 }))
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { readonly children: ReactNode; readonly to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+}))
+
 const mockedUserAuthApi = vi.mocked(userAuthApi)
 const mockedToast = vi.mocked(toast)
 
@@ -46,6 +52,34 @@ afterEach(() => {
 })
 
 describe('SignUpForm', () => {
+  it('submits the username during registration', async () => {
+    mockedUserAuthApi.register.mockResolvedValue({ ok: true })
+
+    renderForm()
+    await fillValidForm()
+    await submitForm()
+
+    await waitFor(() => {
+      expect(mockedUserAuthApi.register).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        handle: 'liyang',
+        password: 'StrongPassword123!',
+      })
+    })
+  })
+
+  it('requires a username', async () => {
+    renderForm()
+    await inputValue(inputByName('email'), 'user@example.com')
+    await inputValue(inputByName('password'), 'StrongPassword123!')
+    await inputValue(inputByName('confirmPassword'), 'StrongPassword123!')
+    await inputValue(inputByName('handle'), '')
+    await submitForm()
+
+    expect(mockedUserAuthApi.register).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('请输入用户名')
+  })
+
   it('shows duplicate email errors on the email field without a toast', async () => {
     mockedUserAuthApi.register.mockRejectedValue(new ApiError('邮箱已注册。', 400))
 
@@ -85,6 +119,7 @@ function renderForm() {
 
 async function fillValidForm() {
   await inputValue(inputByName('email'), 'user@example.com')
+  await inputValue(inputByName('handle'), 'liyang')
   await inputValue(inputByName('password'), 'StrongPassword123!')
   await inputValue(inputByName('confirmPassword'), 'StrongPassword123!')
 }

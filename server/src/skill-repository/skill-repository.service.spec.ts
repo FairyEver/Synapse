@@ -80,7 +80,7 @@ describe("SkillRepositoryService", () => {
       id: "repo-1",
       name: "demo-skill",
       visibility: "private",
-      owner: { id: "user-1", handle: "alice", displayName: "Alice" },
+      owner: { id: "user-1", handle: "alice" },
     })
     expect(prisma.skillRepository.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -417,7 +417,7 @@ describe("SkillRepositoryService", () => {
     }))
     expect(result.map((repo) => repo.id)).toEqual(["repo-new", "repo-old"])
     expect(result[0]).toMatchObject({
-      owner: { id: "user-1", handle: "alice", displayName: "Alice" },
+      owner: { id: "user-1", handle: "alice" },
     })
   })
 
@@ -619,24 +619,8 @@ describe("SkillRepositoryService", () => {
     })
   })
 
-  it("uploads, replaces, deletes non-root files, and records stale object cleanup", async () => {
+  it("deletes non-root files and records stale object cleanup", async () => {
     prisma.skillRepository.findFirst.mockResolvedValue(repositoryRow({ id: "repo-1" }))
-    prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(null)
-    prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({
-      id: "repo-1",
-      files: [repositoryFileRow(), repositoryFileRow({ path: "README.md", pathKey: "readme.md" })],
-    }))
-
-    await service.uploadFile("user-1", "repo-1", {
-      path: "README.md",
-      contentBase64: Buffer.from("Read me").toString("base64"),
-      mimeType: "text/markdown",
-    })
-
-    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({
-      key: expect.stringMatching(/^skill-repositories\/repo-1\/files\/file-\d+\/[a-f0-9]{64}$/u),
-    }))
-
     prisma.skillRepositoryFile.findFirst.mockResolvedValueOnce(repositoryFileRow({
       path: "README.md",
       pathKey: "readme.md",
@@ -787,7 +771,6 @@ function ownerRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "user-1",
     handle: "alice",
-    displayName: "Alice",
     ...overrides,
   }
 }

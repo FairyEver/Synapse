@@ -43,10 +43,6 @@ const textSaveSchema = z.object({
   expectedSha256: z.string().trim().length(64),
 }).strict()
 
-const uploadSchema = fileSchema.extend({
-  expectedSha256: z.string().trim().length(64).nullable().optional(),
-}).strict()
-
 const renameSchema = z.object({
   fromPath: z.string().min(1).max(1024),
   toPath: z.string().min(1).max(1024),
@@ -201,17 +197,6 @@ export class SkillRepositoryController {
   saveTextFile(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(textSaveSchema, body, "Skill 文件保存请求无效。")
     return this.service.saveTextFile(request.user!.id, id, parsed)
-  }
-
-  @Post("/:id/files")
-  uploadFile(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    const parsed = parseBody(uploadSchema, body, "Skill 文件上传请求无效。")
-    return this.service.uploadFile(request.user!.id, id, {
-      path: parsed.path,
-      contentBase64: parsed.contentBase64,
-      mimeType: parsed.mimeType ?? undefined,
-      expectedSha256: parsed.expectedSha256 ?? undefined,
-    })
   }
 
   @Patch("/:id/files/rename")

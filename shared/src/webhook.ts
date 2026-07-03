@@ -89,7 +89,7 @@ export interface WebhookDeliveryHistoryWebhookDto {
 export interface WebhookDeliveryHistoryUserDto {
   readonly id: string
   readonly email: string
-  readonly displayName: string | null
+  readonly handle: string
 }
 
 export interface WebhookDeliveryHistoryDto extends WebhookDeliveryDto {

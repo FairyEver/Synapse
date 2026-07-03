@@ -12,7 +12,7 @@ type AdminUserDeviceRow = Prisma.UserDeviceGetPayload<{
       select: {
         id: true
         email: true
-        displayName: true
+        handle: true
       }
     }
   }
@@ -21,7 +21,7 @@ type AdminUserDeviceRow = Prisma.UserDeviceGetPayload<{
 export interface DashboardDeviceRow {
   readonly userId?: string
   readonly userEmail?: string
-  readonly userDisplayName?: string | null
+  readonly userHandle?: string | null
   readonly clientInstanceId: string
   readonly displayName: string | null
   readonly deviceName: string
@@ -133,7 +133,7 @@ export class LiveDeviceService {
         orderBy: prismaArgs.orderBy,
         include: {
           user: {
-            select: { id: true, email: true, displayName: true },
+            select: { id: true, email: true, handle: true },
           },
         },
       }),
@@ -250,7 +250,7 @@ export class LiveDeviceService {
       },
       include: {
         user: {
-          select: { id: true, email: true, displayName: true },
+          select: { id: true, email: true, handle: true },
         },
       },
     })
@@ -305,7 +305,7 @@ function userFields(row: AdminUserDeviceRow) {
   return {
     userId: row.user.id,
     userEmail: row.user.email,
-    userDisplayName: row.user.displayName,
+    userHandle: row.user.handle,
   }
 }
 

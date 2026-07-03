@@ -15,7 +15,7 @@ function createAuthenticatedState(): SynapseAccountState {
         id: "user-1",
         email: "user@example.com",
         status: "active",
-        displayName: "Ada",
+        handle: "ada",
       },
       teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
@@ -32,7 +32,7 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
         id: "user-1",
         email: "user@example.com",
         status: "active",
-        displayName: "Ada",
+        handle: "ada",
       },
       teams: [],
       syncedAt: "2026-06-01T00:00:00.000Z",
@@ -120,14 +120,14 @@ function renderActions() {
 }
 
 describe("AccountUserControl", () => {
-  it("shows display name as the panel title and email as detail", () => {
+  it("shows handle as the panel title and email as detail", () => {
     const container = renderControl("panel")
 
-    expect(container.textContent).toContain("Ada")
+    expect(container.textContent).toContain("ada")
     expect(container.textContent).toContain("user@example.com")
   })
 
-  it("falls back to email when display name is empty", () => {
+  it("falls back to email when handle is empty", () => {
     accountState.current = {
       status: "authenticated",
       connectivity: "online",
@@ -136,7 +136,7 @@ describe("AccountUserControl", () => {
           id: "user-1",
           email: "user@example.com",
           status: "active",
-          displayName: null,
+          handle: "",
         },
         teams: [],
         syncedAt: "2026-06-01T00:00:00.000Z",
@@ -158,7 +158,7 @@ describe("AccountUserControl", () => {
           id: "user-1",
           email: "user@example.com",
           status: "active",
-          displayName: "Ada",
+          handle: "ada",
         },
         teams: [],
         syncedAt: "2026-06-01T00:00:00.000Z",
@@ -167,7 +167,7 @@ describe("AccountUserControl", () => {
 
     const panel = renderControl("panel")
 
-    expect(panel.textContent).toContain("Ada")
+    expect(panel.textContent).toContain("ada")
     expect(panel.textContent).toContain("离线")
     expect(panel.textContent).toContain("同步")
     expect(panel.textContent).toContain("退出")
@@ -206,8 +206,8 @@ describe("AccountUserControl", () => {
 
     const container = renderActions()
 
-    expect(container.textContent).toContain("Ada")
-    expect(container.querySelector("button")?.textContent).toContain("Ada")
+    expect(container.textContent).toContain("ada")
+    expect(container.querySelector("button")?.textContent).toContain("ada")
   })
 
   it("opens the user dashboard home from the account summary", async () => {
@@ -220,7 +220,7 @@ describe("AccountUserControl", () => {
     })
 
     const accountSummary = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
-      .find((item) => item.textContent?.includes("Ada") && item.textContent.includes("user@example.com"))
+      .find((item) => item.textContent?.includes("ada") && item.textContent.includes("user@example.com"))
 
     expect(accountSummary).toBeTruthy()
 

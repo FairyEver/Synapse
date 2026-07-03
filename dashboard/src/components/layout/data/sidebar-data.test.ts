@@ -23,13 +23,13 @@ describe('getSidebarData', () => {
   it('keeps settings available for normal users', () => {
     const data = getSidebarData({
       email: 'user@example.com',
-      displayName: 'Ada Lovelace',
+      handle: 'ada',
       role: 'user',
       sessionId: 'session-1',
     })
 
     expect(data.user.profileUrl).toBeUndefined()
-    expect(data.user.name).toBe('Ada Lovelace')
+    expect(data.user.name).toBe('ada')
     expect(data.appTitle.name).toBe('Synapse')
     expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/skill-repositories')
@@ -50,7 +50,7 @@ describe('getSidebarData', () => {
   it('does not expose normal-user profile entry to admins', () => {
     const data = getSidebarData({
       email: 'admin@example.com',
-      displayName: null,
+      handle: null,
       role: 'admin',
       sessionId: 'session-1',
     })

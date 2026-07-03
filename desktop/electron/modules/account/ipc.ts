@@ -13,7 +13,7 @@ import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 const accountUserSchema = z.object({
   id: z.string(),
   email: z.string(),
-  displayName: z.string().nullable(),
+  handle: z.string(),
   status: z.enum(["active", "disabled"]),
 })
 

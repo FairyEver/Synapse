@@ -180,7 +180,6 @@ function createPublicAsset(): AdminDrivePublicAssetRow {
     mimeType: 'image/png',
     name: 'logo.png',
     owner: {
-      displayName: 'Owner',
       email: 'owner@example.com',
       userId: 'user-1',
     },

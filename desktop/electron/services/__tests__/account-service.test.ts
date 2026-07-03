@@ -98,7 +98,7 @@ function failingDownloadResponse(): Response {
 }
 
 const storedProfile: SynapseAccountProfile = {
-  user: { id: "u1", email: "u@example.com", displayName: null, status: "active" },
+  user: { id: "u1", email: "u@example.com", handle: "u1", status: "active" },
   teams: [],
   syncedAt: "2026-05-28T00:00:00.000Z",
 }

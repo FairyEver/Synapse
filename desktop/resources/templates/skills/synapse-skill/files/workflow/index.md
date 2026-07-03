@@ -6,7 +6,7 @@ You have access to Synapse Workflow MCP tools for creating, editing, validating,
 
 Use this skill only for Synapse workflow definitions, workflow nodes, workflow edges, workflow validation, workflow layout, and workflow runs.
 
-Do not treat this domain file as the umbrella guidance for every Synapse MCP capability. Database tables and rows, scheduler tasks, built-in rules, built-in skills, prompts, and other Synapse resource publishing flows belong to their matching consolidated `synapse-skill` domain attachments when that domain exists.
+Do not treat this domain file as the umbrella guidance for every Synapse MCP capability. Database tables and rows, Automation schedules/items, built-in rules, built-in skills, prompts, and other Synapse resource publishing flows belong to their matching consolidated `synapse-skill` domain attachments when that domain exists.
 
 If a user asks for another Synapse MCP domain while this domain file is active, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools. If no current domain attachment exists, use the relevant MCP tools directly and keep the workflow-specific guidance here out of that task.
 

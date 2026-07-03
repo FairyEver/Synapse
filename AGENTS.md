@@ -65,7 +65,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 当用户提到 `sss` 时，按意图使用匹配的 `synapse-mcp` MCP 工具：
 
 - 数据库、表、字段、行、SQL、Database 或数据增删改查请求使用 Database 工具。
-- 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用 scheduler 工具。
+- 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用当前 Automation 工具；legacy `scheduler_*` MCP 工具已退役，不要再引导 Agent 调用。
 - 如果 `sss` 没有明确领域，先根据上下文推断；仍不明确时，只问一句简短澄清。
 
 ## 未来开发计划

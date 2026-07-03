@@ -19,7 +19,7 @@ export function buildSkillRepositoryBrowser(
 }
 
 export function getSkillRepositoryDisplayOwner(repository: SkillRepositoryDetailDto): string {
-  return repository.owner.handle ?? repository.owner.displayName ?? repository.owner.id
+  return repository.owner.handle || repository.owner.id
 }
 
 export function isProtectedSkillRepositoryPath(path: string): boolean {

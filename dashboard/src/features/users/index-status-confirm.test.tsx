@@ -59,7 +59,7 @@ describe('UsersPage status confirmation', () => {
       data: [{
         id: 'user-1',
         email: 'ada@example.com',
-        displayName: 'Ada',
+        handle: 'ada',
         adminNote: null,
         status: 'active',
         memberships: [],
@@ -73,7 +73,7 @@ describe('UsersPage status confirmation', () => {
     mockedAdminApi.updateUserStatus.mockResolvedValue({
       id: 'user-1',
       email: 'ada@example.com',
-      displayName: 'Ada',
+      handle: 'ada',
       adminNote: null,
       status: 'disabled',
       memberships: [],
@@ -100,12 +100,12 @@ describe('UsersPage status confirmation', () => {
     expect(mockedAdminApi.updateUserStatus).toHaveBeenCalledWith('user-1', 'disabled')
   })
 
-  it('shows display names and lets administrators edit user notes', async () => {
+  it('shows handles and lets administrators edit user notes', async () => {
     mockedAdminApi.listUsers.mockResolvedValue({
       data: [{
         id: 'user-1',
         email: 'ada@example.com',
-        displayName: 'Ada',
+        handle: 'ada',
         adminNote: '付费客户',
         status: 'active',
         memberships: [],
@@ -119,7 +119,7 @@ describe('UsersPage status confirmation', () => {
     mockedAdminApi.updateUserAdminNote.mockResolvedValue({
       id: 'user-1',
       email: 'ada@example.com',
-      displayName: 'Ada',
+      handle: 'ada',
       adminNote: '内部测试账号',
       status: 'active',
       memberships: [],
@@ -130,7 +130,7 @@ describe('UsersPage status confirmation', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(document.body.textContent).toContain('Ada')
+      expect(document.body.textContent).toContain('ada')
       expect(document.body.textContent).toContain('付费客户')
     })
 

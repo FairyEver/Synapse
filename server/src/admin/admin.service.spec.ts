@@ -104,7 +104,7 @@ function createAdminSkillRepositoryRow(overrides: Partial<{
   readonly title: string
   readonly visibility: string
   readonly status: string
-  readonly owner: { readonly id: string; readonly handle: string | null; readonly displayName: string | null }
+  readonly owner: { readonly id: string; readonly handle: string }
   readonly updatedAt: Date
 }> = {}) {
   return {
@@ -113,7 +113,7 @@ function createAdminSkillRepositoryRow(overrides: Partial<{
     title: overrides.title ?? "Demo",
     visibility: overrides.visibility ?? "public",
     status: overrides.status ?? "active",
-    owner: overrides.owner ?? { id: "user-1", handle: "alice", displayName: "Alice" },
+    owner: overrides.owner ?? { id: "user-1", handle: "alice" },
     updatedAt: overrides.updatedAt ?? new Date("2026-07-01T00:00:00.000Z"),
   }
 }
@@ -203,7 +203,7 @@ describe("AdminService", () => {
       select: expect.objectContaining({
         id: true,
         email: true,
-        displayName: true,
+        handle: true,
         adminNote: true,
         status: true,
         memberships: {
@@ -234,7 +234,7 @@ describe("AdminService", () => {
       select: expect.objectContaining({
         id: true,
         email: true,
-        displayName: true,
+        handle: true,
         adminNote: true,
         status: true,
         memberships: {
@@ -258,7 +258,7 @@ describe("AdminService", () => {
     prisma.user.update.mockResolvedValue({
       id: "user-1",
       email: "ada@example.com",
-      displayName: "Ada",
+      handle: "ada",
       adminNote: "important account",
       status: "active",
       memberships: [],
@@ -284,7 +284,7 @@ describe("AdminService", () => {
       select: expect.objectContaining({
         id: true,
         email: true,
-        displayName: true,
+        handle: true,
         adminNote: true,
         status: true,
       }),
@@ -559,7 +559,7 @@ describe("AdminService", () => {
         title: true,
         visibility: true,
         status: true,
-        owner: { select: { id: true, handle: true, displayName: true } },
+        owner: { select: { id: true, handle: true } },
         updatedAt: true,
       }),
     }))

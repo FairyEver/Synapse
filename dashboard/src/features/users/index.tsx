@@ -162,11 +162,11 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: 'displayName',
+      accessorKey: 'handle',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='用户名' />
       ),
-      cell: ({ row }) => row.original.displayName?.trim() || '-',
+      cell: ({ row }) => row.original.handle || '-',
     },
     {
       accessorKey: 'adminNote',

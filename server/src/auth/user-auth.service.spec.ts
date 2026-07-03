@@ -84,10 +84,11 @@ function createPrismaMock() {
   }
 }
 
-function createUniqueConstraintError() {
+function createUniqueConstraintError(target?: string[]) {
   return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
     code: "P2002",
     clientVersion: "6.0.0",
+    meta: target ? { target } : undefined,
   })
 }
 
@@ -621,6 +622,7 @@ describe("UserAuthService", () => {
 
     await expect(service.register({
       email: "U@example.com",
+      handle: " Li-Yang ",
       password: "StrongPassword123!",
     }, "203.0.113.25")).resolves.toEqual({ ok: true })
 
@@ -636,6 +638,7 @@ describe("UserAuthService", () => {
     expect(prisma.__tx.user.create).toHaveBeenCalledWith({
       data: {
         email: "u@example.com",
+        handle: "li-yang",
         passwordHash: expect.any(String),
       },
       select: {
@@ -662,12 +665,14 @@ describe("UserAuthService", () => {
     try {
       await expect(service.register({
         email: "U@example.com",
+        handle: "liyang",
         password: "StrongPassword123!",
       }, "203.0.113.25")).resolves.toEqual({ ok: true })
 
       expect(prisma.__tx.user.create).toHaveBeenCalledWith({
         data: {
           email: "u@example.com",
+          handle: "liyang",
           passwordHash: expect.any(String),
         },
         select: {
@@ -698,6 +703,36 @@ describe("UserAuthService", () => {
     }
   })
 
+  it("rejects reserved handles during registration", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue({ userId: "user-2" })
+    const service = createService(prisma)
+
+    await expect(service.register({
+      email: "U@example.com",
+      handle: "old-name",
+      password: "StrongPassword123!",
+    })).rejects.toThrow("用户名已被保留。")
+
+    expect(prisma.__tx.userHandleRedirect.findUnique).toHaveBeenCalledWith({
+      where: { oldHandle: "old-name" },
+      select: { userId: true },
+    })
+    expect(prisma.__tx.user.create).not.toHaveBeenCalled()
+  })
+
+  it("maps registration handle unique races to username errors", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockRejectedValue(createUniqueConstraintError(["handle"]))
+    const service = createService(prisma)
+
+    await expect(service.register({
+      email: "U@example.com",
+      handle: "liyang",
+      password: "StrongPassword123!",
+    })).rejects.toThrow("用户名已被使用。")
+  })
+
   it("rejects admin emails during registration and records duplicate email audits", async () => {
     const prisma = createPrismaMock()
     prisma.__tx.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })
@@ -706,6 +741,7 @@ describe("UserAuthService", () => {
 
     await expect(service.register({
       email: "Admin@example.com",
+      handle: "admin-user",
       password: "StrongPassword123!",
     }, "203.0.113.26"))
       .rejects
@@ -732,6 +768,7 @@ describe("UserAuthService", () => {
 
     await expect(service.register({
       email: "User@example.com",
+      handle: "existing-user",
       password: "StrongPassword123!",
     }, "203.0.113.26"))
       .rejects
@@ -766,6 +803,7 @@ describe("UserAuthService", () => {
 
     await expect(service.register({
       email: "U@example.com",
+      handle: "liyang",
       password: "StrongPassword123!",
     }, "203.0.113.26"))
       .rejects
@@ -791,6 +829,7 @@ describe("UserAuthService", () => {
 
     await expect(service.register({
       email: "U@example.com",
+      handle: "liyang",
       password: "StrongPassword123!",
     }, "203.0.113.27"))
       .rejects
@@ -1388,7 +1427,6 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Ada",
       handle: "ada",
       memberships: [
         {
@@ -1406,7 +1444,7 @@ describe("UserAuthService", () => {
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active", displayName: "Ada", handle: "ada" },
+      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada" },
       teams: [
         {
           id: "team-1",
@@ -1431,7 +1469,6 @@ describe("UserAuthService", () => {
         id: true,
         email: true,
         status: true,
-        displayName: true,
         handle: true,
         memberships: {
           select: {
@@ -1442,79 +1479,6 @@ describe("UserAuthService", () => {
           orderBy: { createdAt: "asc" },
         },
       },
-    })
-  })
-
-  it("updates the current user display name", async () => {
-    const prisma = createPrismaMock()
-    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-      displayName: "Grace",
-      handle: "grace",
-    })
-    prisma.__tx.user.update.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-      displayName: "Grace Hopper",
-      handle: "grace",
-      memberships: [],
-    })
-    const auditLog = { record: vi.fn() }
-    const service = createService(prisma, auditLog)
-
-    await expect(service.updateMyProfile("user-1", {
-      displayName: "  Grace Hopper  ",
-    }, "203.0.113.80")).resolves.toEqual({
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "active",
-        displayName: "Grace Hopper",
-        handle: "grace",
-      },
-      teams: [],
-    })
-
-    expect(prisma.__tx.user.findUniqueOrThrow).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        displayName: true,
-        handle: true,
-      },
-    })
-    expect(prisma.__tx.user.update).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      data: { displayName: "Grace Hopper" },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        displayName: true,
-        handle: true,
-        memberships: {
-          select: {
-            id: true,
-            role: true,
-            team: { select: { id: true, name: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    })
-    expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "u@example.com",
-      action: "user.profile.update",
-      targetType: "user",
-      targetId: "user-1",
-      detail: { fields: ["displayName"] },
-      ipAddress: "203.0.113.80",
     })
   })
 
@@ -1524,7 +1488,6 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Liyang",
       handle: "old-name",
     })
     prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
@@ -1532,7 +1495,6 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Liyang",
       handle: "new-name",
       memberships: [],
     })
@@ -1546,7 +1508,6 @@ describe("UserAuthService", () => {
         id: "user-1",
         email: "u@example.com",
         status: "active",
-        displayName: "Liyang",
         handle: "new-name",
       },
       teams: [],
@@ -1568,7 +1529,6 @@ describe("UserAuthService", () => {
         id: true,
         email: true,
         status: true,
-        displayName: true,
         handle: true,
         memberships: {
           select: {
@@ -1590,58 +1550,12 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("updates display name and handle audit fields together", async () => {
-    const prisma = createPrismaMock()
-    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-      displayName: "Liyang",
-      handle: "old-name",
-    })
-    prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
-    prisma.__tx.user.update.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-      displayName: "Li Yang",
-      handle: "new-name",
-      memberships: [],
-    })
-    const auditLog = { record: vi.fn() }
-    const service = createService(prisma, auditLog)
-
-    await expect(service.updateMyProfile("user-1", {
-      displayName: " Li Yang ",
-      handle: " New-Name ",
-    }, "203.0.113.82")).resolves.toEqual({
-      user: {
-        id: "user-1",
-        email: "u@example.com",
-        status: "active",
-        displayName: "Li Yang",
-        handle: "new-name",
-      },
-      teams: [],
-    })
-
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "u@example.com",
-      action: "user.profile.update",
-      targetType: "user",
-      targetId: "user-1",
-      detail: { fields: ["displayName", "handle"] },
-      ipAddress: "203.0.113.82",
-    })
-  })
-
   it("rejects handles reserved by another user", async () => {
     const prisma = createPrismaMock()
     prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Liyang",
       handle: "liyang",
     })
     prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue({ userId: "user-2" })
@@ -1667,7 +1581,6 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Liyang",
       handle: "liyang",
     })
     prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
@@ -1694,7 +1607,6 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Liyang",
       handle: "liyang",
     })
     prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
@@ -1716,15 +1628,13 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Grace",
       handle: "grace",
     })
     prisma.__tx.user.update.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
-      displayName: "Grace Hopper",
-      handle: "grace",
+      handle: "grace-hopper",
       memberships: [],
     })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
@@ -1732,14 +1642,13 @@ describe("UserAuthService", () => {
 
     try {
       await expect(service.updateMyProfile("user-1", {
-        displayName: "Grace Hopper",
+        handle: "Grace-Hopper",
       }, "203.0.113.80")).resolves.toEqual({
         user: {
           id: "user-1",
           email: "u@example.com",
           status: "active",
-          displayName: "Grace Hopper",
-          handle: "grace",
+          handle: "grace-hopper",
         },
         teams: [],
       })
@@ -1749,7 +1658,7 @@ describe("UserAuthService", () => {
         action: "user.profile.update",
         targetType: "user",
         targetId: "user-1",
-        detail: { fields: ["displayName"] },
+        detail: { fields: ["handle"] },
         ipAddress: "203.0.113.80",
       })
       expect(warnSpy).toHaveBeenCalledWith({
@@ -1762,28 +1671,6 @@ describe("UserAuthService", () => {
     } finally {
       warnSpy.mockRestore()
     }
-  })
-
-  it("rejects empty current user display names", async () => {
-    const prisma = createPrismaMock()
-    const service = createService(prisma)
-
-    await expect(service.updateMyProfile("user-1", {
-      displayName: "   ",
-    })).rejects.toThrow("displayName is required.")
-
-    expect(prisma.user.update).not.toHaveBeenCalled()
-  })
-
-  it("rejects over length current user display names", async () => {
-    const prisma = createPrismaMock()
-    const service = createService(prisma)
-
-    await expect(service.updateMyProfile("user-1", {
-      displayName: "a".repeat(41),
-    })).rejects.toThrow("displayName must be at most 40 characters.")
-
-    expect(prisma.user.update).not.toHaveBeenCalled()
   })
 
   it("rejects access tokens issued before a password change", async () => {

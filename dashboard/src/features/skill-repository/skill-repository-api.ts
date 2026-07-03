@@ -14,7 +14,6 @@ export const skillRepositoryApi = {
   fork: api.forkSkillRepository,
   createInstallSession: api.createSkillRepositoryInstallSession,
   saveTextFile: api.saveSkillRepositoryTextFile,
-  uploadFile: api.uploadSkillRepositoryFile,
   renameFile: api.renameSkillRepositoryFile,
   deleteFile: api.deleteSkillRepositoryFile,
 }

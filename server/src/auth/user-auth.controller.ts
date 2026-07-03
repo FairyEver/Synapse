@@ -4,6 +4,8 @@ import {
   DESKTOP_CLIENT_ID,
   DESKTOP_PKCE_CHALLENGE_METHOD,
   DESKTOP_REDIRECT_URI,
+  normalizeUserHandle,
+  userHandleMaxLength,
 } from "@synapse/shared"
 import type { Request } from "express"
 import { z } from "zod"
@@ -14,6 +16,17 @@ import { UserAuthService } from "./user-auth.service"
 
 const registerSchema = z.object({
   email: z.string().email(),
+  handle: z.string().trim().min(1).max(userHandleMaxLength).superRefine((value, ctx) => {
+    if (!value || value.length > userHandleMaxLength) return
+    try {
+      normalizeUserHandle(value)
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "用户名无效。",
+      })
+    }
+  }),
   password: z.string().min(8),
 }).strict()
 

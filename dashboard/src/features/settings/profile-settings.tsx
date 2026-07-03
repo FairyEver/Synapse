@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { normalizeUserHandle, userHandleMaxLength } from '@synapse/shared'
+import {
+  normalizeUserHandle,
+  userHandleMaxLength,
+} from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
@@ -10,7 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 
-const maxDisplayNameLength = 40
 const maxHandleLength = userHandleMaxLength
 type HandleError = 'format' | 'unavailable'
 
@@ -32,7 +34,6 @@ export function ProfileSettings() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const setAuthUser = useAuthStore((state) => state.auth.setUser)
-  const [displayName, setDisplayName] = useState('')
   const [handle, setHandle] = useState('')
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
@@ -47,7 +48,7 @@ export function ProfileSettings() {
         setAuthUser({
           ...authUser,
           email: nextData.user.email,
-          displayName: nextData.user.displayName,
+          handle: nextData.user.handle,
         })
       }
       toast.success('已保存')
@@ -57,7 +58,6 @@ export function ProfileSettings() {
 
   useEffect(() => {
     if (data) {
-      setDisplayName(data.user.displayName ?? '')
       setHandle(data.user.handle ?? '')
     }
   }, [data])
@@ -88,24 +88,19 @@ export function ProfileSettings() {
 
   if (!data) return null
 
-  const trimmedDisplayName = displayName.trim()
   const trimmedHandle = handle.trim().toLowerCase()
-  const hasHandleValue = trimmedHandle.length > 0
   const handleError = getHandleError(trimmedHandle)
   const isInvalid =
-    trimmedDisplayName.length === 0 ||
-    trimmedDisplayName.length > maxDisplayNameLength ||
+    trimmedHandle.length === 0 ||
     handleError !== null
   const hasChanged =
-    trimmedDisplayName !== (data.user.displayName ?? '') ||
-    (hasHandleValue && trimmedHandle !== (data.user.handle ?? ''))
+    trimmedHandle !== data.user.handle
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isInvalid || !hasChanged) return
     updateProfile.mutate({
-      displayName: trimmedDisplayName,
-      ...(trimmedHandle ? { handle: trimmedHandle } : {}),
+      handle: trimmedHandle,
     })
   }
 
@@ -135,15 +130,6 @@ export function ProfileSettings() {
           </div>
 
           <form className='space-y-4' onSubmit={handleSubmit}>
-            <div className='space-y-2'>
-              <Label htmlFor='display-name'>昵称</Label>
-              <Input
-                id='display-name'
-                value={displayName}
-                maxLength={maxDisplayNameLength}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-            </div>
             <div className='space-y-2'>
               <Label htmlFor='user-handle'>用户名</Label>
               <Input

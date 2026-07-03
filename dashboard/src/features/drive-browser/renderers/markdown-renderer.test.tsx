@@ -422,7 +422,7 @@ describe('DriveMarkdownRenderer', () => {
   it('opens the composer for logged-in share viewers even when editing is unavailable', async () => {
     useAuthStore.getState().auth.setUser({
       email: 'reader@example.com',
-      displayName: null,
+      handle: null,
       role: 'user',
       sessionId: 'session-1',
     })
@@ -941,13 +941,13 @@ function thread({
       quote: { exact: quote, prefix: '这是 ', suffix: ' 内容' },
     },
     anchorStatus: 'attached' as const,
-    author: { id: 'user-1', email: 'user@example.com', displayName: null },
+    author: { id: 'user-1', email: 'user@example.com', handle: null },
     comments: [{
       id: `comment-${id}`,
       threadId: id,
       parentCommentId: null,
       body,
-      author: { id: 'user-1', email: 'user@example.com', displayName: null },
+      author: { id: 'user-1', email: 'user@example.com', handle: null },
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: '2026-06-21T00:00:00.000Z',
       editedAt: null,

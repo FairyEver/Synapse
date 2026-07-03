@@ -130,14 +130,14 @@ const adminAccountNavGroup = {
   ],
 } satisfies SidebarData['navGroups'][number]
 
-export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'role'> | null): SidebarData {
+export function getSidebarData(user: Pick<AuthUser, 'handle' | 'email' | 'role'> | null): SidebarData {
   const isAdmin = user?.role !== 'user'
-  const displayName = user?.displayName?.trim()
+  const handle = user?.handle?.trim()
   const fallbackName = user?.email || (isAdmin ? 'Admin' : 'User')
 
   return {
     user: {
-      name: displayName || fallbackName,
+      name: handle || fallbackName,
       email: user?.email ?? '',
       avatar: '',
       profileUrl: undefined,

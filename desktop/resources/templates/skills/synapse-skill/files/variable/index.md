@@ -6,7 +6,7 @@ You have access to Synapse Settings Variable MCP tools for managing user-scoped 
 
 Use this skill only for Synapse local variables stored in the user's Synapse configuration.
 
-Do not use this skill for Database rows, Scheduler tasks, Workflow variables, Resource Repository publishing, provider settings, shell environment variables, or editor installation.
+Do not use this skill for Database rows, Automation schedules/items, Workflow variables, Resource Repository publishing, provider settings, shell environment variables, or editor installation.
 
 ## Default Flow
 

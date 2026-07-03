@@ -17,6 +17,7 @@ import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ export default function DriveAdminPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [userId, setUserId] = useState('')
   const [type, setType] = useState<AdminDriveItemRow['type'] | ''>('')
   const [shared, setShared] = useState<'true' | 'false' | ''>('')
@@ -54,7 +56,7 @@ export default function DriveAdminPage() {
   const listQuery = {
     page,
     pageSize,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     userId: userId.trim() || undefined,
     type: type || undefined,
     shared: shared || undefined,

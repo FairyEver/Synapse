@@ -41,7 +41,7 @@ type AnnotationThreadRecord = {
   readonly target: unknown
   readonly anchorStatus: string
   readonly createdByUserId: string
-  readonly createdByUser: { readonly id: string; readonly email: string; readonly displayName: string | null }
+  readonly createdByUser: { readonly id: string; readonly email: string; readonly handle: string | null }
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly comments: readonly AnnotationCommentRecord[]
@@ -53,7 +53,7 @@ type AnnotationCommentRecord = {
   readonly parentCommentId: string | null
   readonly body: string
   readonly createdByUserId: string
-  readonly createdByUser: { readonly id: string; readonly email: string; readonly displayName: string | null }
+  readonly createdByUser: { readonly id: string; readonly email: string; readonly handle: string | null }
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly editedAt: Date | null
@@ -63,14 +63,14 @@ type AnnotationCommentRecord = {
 type AnnotationAuthorRecord = {
   readonly id: string
   readonly email: string
-  readonly displayName: string | null
+  readonly handle: string | null
 }
 
 const annotationInclude = {
-  createdByUser: { select: { id: true, email: true, displayName: true } },
+  createdByUser: { select: { id: true, email: true, handle: true } },
   comments: {
     orderBy: { createdAt: "asc" as const },
-    include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+    include: { createdByUser: { select: { id: true, email: true, handle: true } } },
   },
 } as const
 
@@ -139,7 +139,7 @@ export class DriveAnnotationService {
         body: input.body,
         createdByUserId: userId,
       },
-      include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
     })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -166,7 +166,7 @@ export class DriveAnnotationService {
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: commentId },
       data: { body: input.body, editedAt: new Date() },
-      include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
     })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -303,7 +303,7 @@ export class DriveAnnotationService {
         body: input.body.body,
         createdByUserId: input.actorUserId,
       },
-      include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
     })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
@@ -338,7 +338,7 @@ export class DriveAnnotationService {
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: input.commentId },
       data: { body: input.body.body, editedAt: new Date() },
-      include: { createdByUser: { select: { id: true, email: true, displayName: true } } },
+      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
     })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
@@ -677,7 +677,7 @@ function toAuthorDto(record: AnnotationAuthorRecord, redactEmail: boolean) {
   return {
     id: record.id,
     email: redactEmail ? null : record.email,
-    displayName: record.displayName,
+    handle: record.handle,
   }
 }
 

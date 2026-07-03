@@ -5,10 +5,9 @@ import { UserAuthService } from "../auth/user-auth.service"
 import { badRequestFromZodError } from "../common/zod-validation"
 
 const updateMeSchema = z.object({
-  displayName: z.string().trim().min(1).max(40).optional(),
   handle: z.string().trim().min(1).max(64).optional(),
 }).strict().refine(
-  (value) => value.displayName !== undefined || value.handle !== undefined,
+  (value) => value.handle !== undefined,
   "Profile update request is empty.",
 )
 

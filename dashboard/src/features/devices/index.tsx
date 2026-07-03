@@ -74,9 +74,9 @@ export default function DevicesPage() {
         cell: ({ row }) => (
           <div className='min-w-0'>
             <div className='truncate font-medium'>
-              {row.original.userDisplayName || row.original.userEmail || '-'}
+              {row.original.userHandle || row.original.userEmail || '-'}
             </div>
-            {row.original.userDisplayName ? (
+            {row.original.userHandle ? (
               <div className='truncate text-sm text-muted-foreground'>
                 {row.original.userEmail}
               </div>

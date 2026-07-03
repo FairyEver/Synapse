@@ -49,8 +49,7 @@ model DashboardRevokedToken {
 model User {
   id                           String                        @id @default(cuid())
   email                        String                        @unique
-  handle                       String?                       @unique @db.VarChar(64)
-  displayName                  String?                       @db.VarChar(40)
+  handle                       String                        @unique @db.VarChar(64)
   adminNote                    String?                       @db.VarChar(500)
   passwordHash                 String
   passwordChangedAt            DateTime?

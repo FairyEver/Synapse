@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { SkillRepositoryDetailDto, SkillRepositoryItemDto } from '@synapse/shared'
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SidebarProvider } from '@/components/ui/sidebar'
+import { DirectionProvider } from '@/context/direction-provider'
+import { LayoutProvider } from '@/context/layout-provider'
+import { ThemeProvider } from '@/context/theme-provider'
 import { SkillRepositoryDetailPage } from './skill-repository-detail-page'
 import { SkillRepositoryExplorePage } from './skill-repository-explore-page'
 import { SkillRepositoryListPage } from './skill-repository-list-page'
@@ -34,7 +38,6 @@ vi.mock('./skill-repository-api', () => ({
     createInstallSession: vi.fn(),
     getFileContent: vi.fn(),
     saveTextFile: vi.fn(),
-    uploadFile: vi.fn(),
     renameFile: vi.fn(),
     deleteFile: vi.fn(),
   },
@@ -43,6 +46,22 @@ vi.mock('./skill-repository-api', () => ({
 const mockedApi = vi.mocked(skillRepositoryApi)
 let root: Root | null = null
 let host: HTMLDivElement | null = null
+
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
+})
 
 afterEach(() => {
   if (root) {
@@ -103,6 +122,22 @@ describe('Skill Repository pages', () => {
     expect(document.body.textContent).toContain('通过本地 Synapse MCP 上传 Skill 后会显示在这里。')
   })
 
+  it('opens client MCP guidance from the create button', async () => {
+    mockedApi.listMine.mockResolvedValue([])
+
+    render(
+      <QueryClientProvider client={queryClient()}>
+        <SkillRepositoryListPage />
+      </QueryClientProvider>
+    )
+
+    await waitForText('新建')
+    await click(buttonByText('新建'))
+
+    expect(document.body.textContent).toContain('网页端暂未提供新建入口')
+    expect(document.body.textContent).toContain('当前页面仅支持查看和管理已有 Skill 仓库。请在 Synapse 客户端从本地 Skill 上传或导入仓库，完成后刷新本页查看。')
+  })
+
   it('opens public repositories from explore rows', async () => {
     mockedApi.listPublic.mockResolvedValue({
       items: [repositoryItem({ visibility: 'public' })],
@@ -139,6 +174,7 @@ describe('Skill Repository pages', () => {
     expect(document.body.textContent).toContain('alice/demo-skill')
     expect(document.body.textContent).toContain('docs')
     expect(document.body.textContent).toContain('README.md')
+    expect(document.body.textContent).not.toContain('上传文件')
   })
 })
 
@@ -147,7 +183,15 @@ function render(element: ReactNode) {
   document.body.append(host)
   root = createRoot(host)
   act(() => {
-    root?.render(element)
+    root?.render(
+      <ThemeProvider>
+        <DirectionProvider>
+          <LayoutProvider>
+            <SidebarProvider>{element}</SidebarProvider>
+          </LayoutProvider>
+        </DirectionProvider>
+      </ThemeProvider>
+    )
   })
 }
 
@@ -186,6 +230,13 @@ function rowByText(text: string): HTMLTableRowElement {
   return row
 }
 
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('button'))
+    .find((item) => item.textContent?.includes(text))
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
 function repositoryItem(overrides: Partial<SkillRepositoryItemDto> = {}): SkillRepositoryItemDto {
   return {
     id: 'repo-1',
@@ -194,7 +245,7 @@ function repositoryItem(overrides: Partial<SkillRepositoryItemDto> = {}): SkillR
     description: null,
     visibility: 'private',
     status: 'active',
-    owner: { id: 'user-1', handle: 'alice', displayName: 'Alice' },
+    owner: { id: 'user-1', handle: 'alice' },
     forkedFromRepositoryId: null,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-02T00:00:00.000Z',
