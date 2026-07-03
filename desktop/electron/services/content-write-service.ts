@@ -691,11 +691,12 @@ class ContentWriteService {
       try {
         await rename(stagedIconPath, path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME))
       } catch (error) {
-        logger.warn("Icon rename failed after history committed, keeping history intact.", {
+        logger.warn("Icon rename failed after history committed.", {
           contentId,
           error: error instanceof Error ? error.message : String(error),
         })
         await rm(stagedIconPath, { force: true }).catch(() => {})
+        throw new Error("图标图片保存失败，内容已写入但未完成图标替换，请重试保存。")
       }
     }
 

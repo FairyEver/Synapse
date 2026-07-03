@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 const fsMockState = vi.hoisted(() => ({
   cleanupFailureParentPath: null as string | null,
+  iconRenameFailureParentPath: null as string | null,
 }))
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -27,6 +28,22 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       }
 
       return actual.rm(...args)
+    }),
+    rename: vi.fn(async (...args: Parameters<typeof actual.rename>) => {
+      const [source, target] = args
+      const sourcePath = String(source)
+      const targetPath = String(target)
+
+      if (
+        fsMockState.iconRenameFailureParentPath
+        && pathModule.dirname(sourcePath) === fsMockState.iconRenameFailureParentPath
+        && pathModule.basename(sourcePath).startsWith(".synapse-icon-")
+        && pathModule.basename(targetPath) === "icon.png"
+      ) {
+        throw Object.assign(new Error("icon target locked"), { code: "EACCES" })
+      }
+
+      return actual.rename(...args)
     }),
   }
 })
@@ -131,6 +148,7 @@ async function writeRuleFixture(root: string, historyDirname: string): Promise<v
 describe("contentWriteService", () => {
   afterEach(async () => {
     fsMockState.cleanupFailureParentPath = null
+    fsMockState.iconRenameFailureParentPath = null
     vi.restoreAllMocks()
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
@@ -178,6 +196,52 @@ describe("contentWriteService", () => {
 
     await expect(readFile(path.join(result.gitPaths[0], CONTENT_MAIN_FILE_NAME), "utf8"))
       .resolves.toBe("# Updated\n")
+  })
+
+  it("rejects an image icon update when replacing the final icon file fails", async () => {
+    const root = await createTempRoot()
+    const baseHistoryDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { rule: "rules" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeRuleFixture(root, baseHistoryDirname)
+    await writeFile(path.join(root, "rules", "rule-1", "icon.png"), new Uint8Array([1, 2, 3]))
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    fsMockState.iconRenameFailureParentPath = path.join(root, "rules", "rule-1")
+
+    await expect(contentWriteService.updateRule(
+      {
+        id: "rule-1",
+        baseHistoryDirname,
+        title: "Rule",
+        name: "rule",
+        description: "Description",
+        category: "test",
+        icon: "",
+        iconBg: "",
+        iconType: "image",
+        iconImage: "icon.png",
+        iconImageBytes: new Uint8Array([4, 5, 6]),
+        content: "# Updated",
+      },
+      { displayName: "User", userId: "user" },
+    )).rejects.toThrow("图标图片保存失败")
+    await expect(readFile(path.join(root, "rules", "rule-1", "icon.png")))
+      .resolves.toEqual(Buffer.from([1, 2, 3]))
   })
 
   it("preserves skill usage and image icon metadata when deleting content", async () => {
