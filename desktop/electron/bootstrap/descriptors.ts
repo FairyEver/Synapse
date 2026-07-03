@@ -1782,14 +1782,17 @@ export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryReg
 export const gitAccessServiceDescriptor: ServiceDescriptor<GitAccessService> = {
   id: "git.access-service",
   criticality: "degraded",
-  dependsOn: ["git.command-runner", "core.process-environment"],
+  dependsOn: ["git.command-runner", "core.process-environment", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     return createGitAccessService({
+      actor: { kind: "user" },
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       effectivePath: ctx.registry.get<ProcessEnvironmentService>("core.process-environment").shell.effectivePath,
       homeDir: os.homedir(),
       logger: ctx.logger.child("git.access"),
       pathExists,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       readFile: (filePath) => readFile(filePath, "utf8"),
       platform: process.platform,
     })

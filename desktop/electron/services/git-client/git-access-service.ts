@@ -14,6 +14,7 @@ import type {
   SynapseGitTestSshConnectionInput,
 } from "../../../src/types/git"
 import type { StructuredLogger } from "../../runtime/logging"
+import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { GitClientCommandRunner } from "./git-command-runner"
 
 type Platform = NodeJS.Platform
@@ -59,6 +60,8 @@ type GitAccessCheckInput = {
   readonly hosts?: readonly GitAccessCheckHostInput[]
 }
 type GitAccessDeps = {
+  readonly actor?: ActorIdentity
+  readonly auditSink?: Pick<AuditSink, "record">
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly effectivePath?: string | null
   readonly ensureDirectory?: EnsureDirectory
@@ -66,6 +69,7 @@ type GitAccessDeps = {
   readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly now?: () => Date
   readonly pathExists: (filePath: string) => Promise<boolean>
+  readonly permissionGuard?: Pick<PermissionGuard, "check">
   readonly platform: Platform
   readonly readFile: (filePath: string) => Promise<string>
   readonly runProcess?: ProcessRunner
@@ -73,6 +77,11 @@ type GitAccessDeps = {
   readonly runSshKeygen?: (input: SshKeygenRunInput) => Promise<ProcessRunResult>
   readonly runSshTest?: (input: SshTestRunInput) => Promise<SshTestRunResult>
   readonly writeFile?: WriteFile
+}
+type GitAccessSecurityCheck = {
+  readonly action: PermissionAction
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
 }
 
 const PROVIDER_LINKS: Readonly<Record<SynapseGitProvider, SynapseGitProviderLinks>> = {
@@ -345,6 +354,81 @@ function createProcessError(message: string, result: ProcessRunResult): Error {
   return error
 }
 
+function getErrorMetadata(error: unknown): Record<string, unknown> {
+  return {
+    errorLength: String(error).length,
+    errorName: error instanceof Error ? error.name : typeof error,
+  }
+}
+
+async function checkGitAccessPermission(
+  deps: Pick<GitAccessDeps, "actor" | "auditSink" | "permissionGuard">,
+  check: GitAccessSecurityCheck,
+): Promise<void> {
+  if (!deps.permissionGuard) return
+  const actor = deps.actor ?? { kind: "user" }
+  const permission = await deps.permissionGuard.check({
+    action: check.action,
+    actor,
+    context: check.metadata,
+    resource: check.resource,
+  })
+  if (permission.allowed) return
+  deps.auditSink?.record({
+    action: check.action,
+    actor,
+    metadata: {
+      ...check.metadata,
+      policyId: permission.policyId,
+      reason: permission.reason,
+    },
+    outcome: "denied",
+    resource: check.resource,
+  })
+  throw new Error(permission.reason)
+}
+
+function recordGitAccessAudit(
+  deps: Pick<GitAccessDeps, "actor" | "auditSink">,
+  check: GitAccessSecurityCheck,
+  outcome: "allowed" | "failed",
+  extraMetadata: Record<string, unknown> = {},
+): void {
+  deps.auditSink?.record({
+    action: check.action,
+    actor: deps.actor ?? { kind: "user" },
+    metadata: {
+      ...check.metadata,
+      ...extraMetadata,
+    },
+    outcome,
+    resource: check.resource,
+  })
+}
+
+async function runSecuredGitAccessOperation<T>(
+  deps: Pick<GitAccessDeps, "actor" | "auditSink" | "permissionGuard">,
+  checks: readonly GitAccessSecurityCheck[],
+  operation: () => Promise<T>,
+): Promise<T> {
+  for (const check of checks) {
+    await checkGitAccessPermission(deps, check)
+  }
+  try {
+    const result = await operation()
+    for (const check of checks) {
+      recordGitAccessAudit(deps, check, "allowed")
+    }
+    return result
+  } catch (error) {
+    const metadata = getErrorMetadata(error)
+    for (const check of checks) {
+      recordGitAccessAudit(deps, check, "failed", metadata)
+    }
+    throw error
+  }
+}
+
 function runProcess(input: ProcessRunInput, options: { readonly effectivePath?: string | null; readonly platform: Platform }): Promise<ProcessRunResult> {
   return new Promise((resolve, reject) => {
     const childProcess = spawn(input.command, [...input.args], {
@@ -528,39 +612,58 @@ export function createGitAccessService(deps: GitAccessDeps) {
         })
         throw new Error("不支持此凭证保存方式。")
       }
-      const previousHelpers = await readCredentialHelpersForConfiguration(deps)
-      if (previousHelpers.length > 0) {
-        try {
-          await unsetCredentialHelpers(deps)
-        } catch (error) {
-          // Missing credential.helper is fine; lock/permission/config corruption must stop here.
-          if (!isNoCredentialHelperConfigError(error)) {
-            throw new Error("无法清理旧的凭证保存配置。", { cause: error })
-          }
-        }
-      }
-      try {
-        await addCredentialHelper(deps, helper)
-      } catch (error) {
+      await runSecuredGitAccessOperation(deps, [
+        {
+          action: "fs.write.outside-userdata",
+          resource: "git:global-config:credential.helper",
+          metadata: {
+            helper,
+            operation: "git.access.configureCredentialHelper",
+          },
+        },
+        {
+          action: "shell.exec",
+          resource: "git",
+          metadata: {
+            command: "git",
+            operation: "git.access.configureCredentialHelper",
+          },
+        },
+      ], async () => {
+        const previousHelpers = await readCredentialHelpersForConfiguration(deps)
         if (previousHelpers.length > 0) {
           try {
-            await restoreCredentialHelpers(deps, previousHelpers)
-            deps.logger?.warn("Restored previous Git credential helpers after configuration failure.", {
-              previousHelperCount: previousHelpers.length,
-            })
-          } catch (restoreError) {
-            deps.logger?.warn("Failed to restore previous Git credential helpers after configuration failure.", {
-              error: restoreError,
-              previousHelperCount: previousHelpers.length,
-            })
-            throw new Error("无法配置新的凭证保存方式，且恢复旧配置失败。请手动检查 Git credential.helper。", {
-              cause: restoreError,
-            })
+            await unsetCredentialHelpers(deps)
+          } catch (error) {
+            // Missing credential.helper is fine; lock/permission/config corruption must stop here.
+            if (!isNoCredentialHelperConfigError(error)) {
+              throw new Error("无法清理旧的凭证保存配置。", { cause: error })
+            }
           }
-          throw new Error("无法配置新的凭证保存方式，已恢复旧配置。", { cause: error })
         }
-        throw new Error("无法配置新的凭证保存方式。", { cause: error })
-      }
+        try {
+          await addCredentialHelper(deps, helper)
+        } catch (error) {
+          if (previousHelpers.length > 0) {
+            try {
+              await restoreCredentialHelpers(deps, previousHelpers)
+              deps.logger?.warn("Restored previous Git credential helpers after configuration failure.", {
+                previousHelperCount: previousHelpers.length,
+              })
+            } catch (restoreError) {
+              deps.logger?.warn("Failed to restore previous Git credential helpers after configuration failure.", {
+                error: restoreError,
+                previousHelperCount: previousHelpers.length,
+              })
+              throw new Error("无法配置新的凭证保存方式，且恢复旧配置失败。请手动检查 Git credential.helper。", {
+                cause: restoreError,
+              })
+            }
+            throw new Error("无法配置新的凭证保存方式，已恢复旧配置。", { cause: error })
+          }
+          throw new Error("无法配置新的凭证保存方式。", { cause: error })
+        }
+      })
     },
 
     async saveHttpsCredential(input: SynapseGitSaveHttpsCredentialInput): Promise<void> {
@@ -568,14 +671,38 @@ export function createGitAccessService(deps: GitAccessDeps) {
       if (!isSafeCredentialHelper(helpers, deps.platform)) {
         throw new Error("请先设置安全的凭证保存方式。")
       }
-      await runGitCredential({
-        action: "approve",
-        cwd: deps.homeDir,
-        stdin: buildCredentialInput(input, true),
-      })
-      deps.logger?.info("Git HTTPS credential saved.", {
-        host: normalizeHost(input.host),
-        usernameLength: input.username.length,
+      const host = normalizeHost(input.host)
+      await runSecuredGitAccessOperation(deps, [
+        {
+          action: "secret.write",
+          resource: `git-credential:https://${host}`,
+          metadata: {
+            credentialAction: "approve",
+            host,
+            operation: "git.access.saveHttpsCredential",
+            usernameLength: input.username.length,
+          },
+        },
+        {
+          action: "shell.exec",
+          resource: "git",
+          metadata: {
+            command: "git",
+            credentialAction: "approve",
+            host,
+            operation: "git.access.saveHttpsCredential",
+          },
+        },
+      ], async () => {
+        await runGitCredential({
+          action: "approve",
+          cwd: deps.homeDir,
+          stdin: buildCredentialInput(input, true),
+        })
+        deps.logger?.info("Git HTTPS credential saved.", {
+          host,
+          usernameLength: input.username.length,
+        })
       })
     },
 
@@ -584,14 +711,38 @@ export function createGitAccessService(deps: GitAccessDeps) {
       if (!isSafeCredentialHelper(helpers, deps.platform)) {
         throw new Error("请先设置安全的凭证保存方式。")
       }
-      await runGitCredential({
-        action: "reject",
-        cwd: deps.homeDir,
-        stdin: buildCredentialInput(input, false),
-      })
-      deps.logger?.info("Git HTTPS credential cleared.", {
-        host: normalizeHost(input.host),
-        usernamePresent: Boolean(input.username),
+      const host = normalizeHost(input.host)
+      await runSecuredGitAccessOperation(deps, [
+        {
+          action: "secret.write",
+          resource: `git-credential:https://${host}`,
+          metadata: {
+            credentialAction: "reject",
+            host,
+            operation: "git.access.clearHttpsCredential",
+            usernamePresent: Boolean(input.username),
+          },
+        },
+        {
+          action: "shell.exec",
+          resource: "git",
+          metadata: {
+            command: "git",
+            credentialAction: "reject",
+            host,
+            operation: "git.access.clearHttpsCredential",
+          },
+        },
+      ], async () => {
+        await runGitCredential({
+          action: "reject",
+          cwd: deps.homeDir,
+          stdin: buildCredentialInput(input, false),
+        })
+        deps.logger?.info("Git HTTPS credential cleared.", {
+          host,
+          usernamePresent: Boolean(input.username),
+        })
       })
     },
 
@@ -600,37 +751,103 @@ export function createGitAccessService(deps: GitAccessDeps) {
       const privateKeyPath = getEd25519PrivateKeyPath(deps.homeDir)
       if (await deps.pathExists(publicKeyPath)) return
       if (await deps.pathExists(privateKeyPath)) {
-        const restored = await runSshKeygen({
-          cwd: deps.homeDir,
-          args: ["-y", "-f", privateKeyPath],
+        await runSecuredGitAccessOperation(deps, [
+          {
+            action: "secret.read",
+            resource: privateKeyPath,
+            metadata: {
+              operation: "git.access.generateSshKey.restorePublicKey",
+            },
+          },
+          {
+            action: "fs.write.outside-userdata",
+            resource: publicKeyPath,
+            metadata: {
+              operation: "git.access.generateSshKey.restorePublicKey",
+            },
+          },
+          {
+            action: "shell.exec",
+            resource: "ssh-keygen",
+            metadata: {
+              command: "ssh-keygen",
+              operation: "git.access.generateSshKey.restorePublicKey",
+            },
+          },
+        ], async () => {
+          const restored = await runSshKeygen({
+            cwd: deps.homeDir,
+            args: ["-y", "-f", privateKeyPath],
+          })
+          const publicKey = restored.stdout.trim()
+          if (!publicKey) {
+            throw new Error("无法从已有 SSH 私钥恢复公钥。")
+          }
+          await writePublicKey(publicKeyPath, `${publicKey}\n`, "utf8")
         })
-        const publicKey = restored.stdout.trim()
-        if (!publicKey) {
-          throw new Error("无法从已有 SSH 私钥恢复公钥。")
-        }
-        await writePublicKey(publicKeyPath, `${publicKey}\n`, "utf8")
         return
       }
-      await ensureDirectory(getSshDirectoryPath(deps.homeDir), { recursive: true, mode: 0o700 })
-      await runSshKeygen({
-        cwd: deps.homeDir,
-        args: ["-t", "ed25519", "-C", input.email, "-f", privateKeyPath, "-N", ""],
+      await runSecuredGitAccessOperation(deps, [
+        {
+          action: "fs.write.outside-userdata",
+          resource: getSshDirectoryPath(deps.homeDir),
+          metadata: {
+            operation: "git.access.generateSshKey",
+            targetFile: privateKeyPath,
+          },
+        },
+        {
+          action: "shell.exec",
+          resource: "ssh-keygen",
+          metadata: {
+            command: "ssh-keygen",
+            operation: "git.access.generateSshKey",
+          },
+        },
+      ], async () => {
+        await ensureDirectory(getSshDirectoryPath(deps.homeDir), { recursive: true, mode: 0o700 })
+        await runSshKeygen({
+          cwd: deps.homeDir,
+          args: ["-t", "ed25519", "-C", input.email, "-f", privateKeyPath, "-N", ""],
+        })
       })
     },
 
     async testSshConnection(input: SynapseGitTestSshConnectionInput): Promise<SynapseGitSshTestResult> {
       const host = normalizeHost(input.host)
-      const result = await runSshTest({
-        cwd: deps.homeDir,
-        host,
-        provider: input.provider,
+      return runSecuredGitAccessOperation(deps, [
+        {
+          action: "network.connect",
+          resource: `ssh://${host}`,
+          metadata: {
+            host,
+            operation: "git.access.testSshConnection",
+            provider: input.provider ?? detectProvider(host),
+          },
+        },
+        {
+          action: "shell.exec",
+          resource: "ssh",
+          metadata: {
+            command: "ssh",
+            host,
+            operation: "git.access.testSshConnection",
+            provider: input.provider ?? detectProvider(host),
+          },
+        },
+      ], async () => {
+        const result = await runSshTest({
+          cwd: deps.homeDir,
+          host,
+          provider: input.provider,
+        })
+        return {
+          detail: result.detail,
+          host,
+          ok: result.ok,
+          title: result.ok ? "SSH 可用" : "SSH 访问失败",
+        }
       })
-      return {
-        detail: result.detail,
-        host,
-        ok: result.ok,
-        title: result.ok ? "SSH 可用" : "SSH 访问失败",
-      }
     },
   }
 }

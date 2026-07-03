@@ -16,6 +16,13 @@ function createService(overrides: Partial<Parameters<typeof createGitAccessServi
   })
 }
 
+function createSecurity(result: { readonly allowed: true } | { readonly allowed: false; readonly reason: string; readonly policyId?: string } = { allowed: true }) {
+  return {
+    auditSink: { record: vi.fn() },
+    permissionGuard: { check: vi.fn().mockResolvedValue(result) },
+  }
+}
+
 describe("git access service", () => {
   it("checks credential helper, hosts, provider links, and SSH public key state", async () => {
     const publicKeyPath = path.join("/Users/writer", ".ssh", "id_ed25519.pub")
@@ -281,6 +288,58 @@ describe("git access service", () => {
     expect(serializedLogs).not.toContain(password)
   })
 
+  it("checks permission and audits HTTPS credential saves without exposing the password", async () => {
+    const password = "test-password-value"
+    const security = createSecurity()
+    const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createService({ ...security, runGitCredential })
+
+    await service.saveHttpsCredential({
+      host: "GitHub.com",
+      password,
+      protocol: "https",
+      username: "writer",
+    })
+
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "git-credential:https://github.com",
+    }))
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "git",
+    }))
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "git-credential:https://github.com",
+    }))
+    expect(JSON.stringify([
+      security.permissionGuard.check.mock.calls,
+      security.auditSink.record.mock.calls,
+    ])).not.toContain(password)
+  })
+
+  it("does not save HTTPS credentials when permission is denied", async () => {
+    const security = createSecurity({ allowed: false, reason: "denied by policy", policyId: "test-policy" })
+    const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const service = createService({ ...security, runGitCredential })
+
+    await expect(service.saveHttpsCredential({
+      host: "github.com",
+      password: "test-password-value",
+      protocol: "https",
+      username: "writer",
+    })).rejects.toThrow("denied by policy")
+
+    expect(runGitCredential).not.toHaveBeenCalled()
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      outcome: "denied",
+      resource: "git-credential:https://github.com",
+    }))
+  })
+
   it("checks credential helper safety before saving HTTPS credentials", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "store\n", stderr: "" })
     const runGitCredential = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
@@ -378,6 +437,53 @@ describe("git access service", () => {
     })
   })
 
+  it("checks permission and audits SSH key generation", async () => {
+    const security = createSecurity()
+    const runSshKeygen = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const ensureDirectory = vi.fn().mockResolvedValue(undefined)
+    const service = createService({
+      ...security,
+      ensureDirectory,
+      pathExists: async () => false,
+      runSshKeygen,
+    })
+
+    await service.generateSshKey({ email: "writer@example.com" })
+
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: path.join("/Users/writer", ".ssh"),
+    }))
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "ssh-keygen",
+    }))
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      outcome: "allowed",
+      resource: path.join("/Users/writer", ".ssh"),
+    }))
+  })
+
+  it("records failed audit when SSH key generation fails", async () => {
+    const security = createSecurity()
+    const runSshKeygen = vi.fn().mockRejectedValue(new Error("ssh-keygen failed"))
+    const service = createService({
+      ...security,
+      ensureDirectory: vi.fn().mockResolvedValue(undefined),
+      pathExists: async () => false,
+      runSshKeygen,
+    })
+
+    await expect(service.generateSshKey({ email: "writer@example.com" })).rejects.toThrow("ssh-keygen failed")
+
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      outcome: "failed",
+      resource: "ssh-keygen",
+    }))
+  })
+
   it("does not overwrite an existing ed25519 SSH key", async () => {
     const runSshKeygen = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
     const publicKeyPath = path.join("/Users/writer", ".ssh", "id_ed25519.pub")
@@ -436,6 +542,31 @@ describe("git access service", () => {
       host: "github.com",
       provider: "github",
     })
+  })
+
+  it("checks permission and audits SSH connection tests", async () => {
+    const security = createSecurity()
+    const runSshTest = vi.fn().mockResolvedValue({
+      detail: "Hi writer! You've successfully authenticated.",
+      ok: true,
+    })
+    const service = createService({ ...security, runSshTest })
+
+    await service.testSshConnection({ host: "GitHub.com", provider: "github" })
+
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      resource: "ssh://github.com",
+    }))
+    expect(security.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      resource: "ssh",
+    }))
+    expect(security.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "ssh://github.com",
+    }))
   })
 
   it("treats default SSH test authentication success text as ok when ssh exits non-zero", async () => {
