@@ -183,6 +183,14 @@ If the run already finished, the result can include:
 { "stopped": false, "alreadyFinished": true }
 ```
 
+If stop was requested but the run did not settle yet, the result can include:
+
+```json
+{ "stopped": false, "stopRequested": true }
+```
+
+Do not describe `stopRequested: true` as stopped. Check `app_automation_runtime_inspect` or `app_automation_run_list` before reporting the run as stopped.
+
 If the run is missing or no longer active, the tool fails instead of returning a successful empty stop result.
 
 ### app_automation_run_list

@@ -50,6 +50,7 @@
 
 ## 问题修复
 
+- 修复 Automation MCP 停止运行时未说明 `stopRequested` 待确认状态的问题，避免 Agent 把“已请求停止”误说成“已停止”。
 - 修复 Terminal MCP 创建会话、读取会话和查看会话列表时缺少权限检查与审计记录的问题。
 - 修复 Webhook exec 成功输出可能把 Authorization、Cookie 或 token 写入运行记录和等待响应的问题。
 - 修复 Git 访问面板保存/清除凭据、生成 SSH Key 和测试 SSH 时缺少权限检查与审计记录的问题。

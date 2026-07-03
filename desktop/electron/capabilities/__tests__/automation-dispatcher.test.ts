@@ -243,6 +243,8 @@ describe("automation capability dispatcher", () => {
       .toContain("webhookPublicId")
     expect(tools.find((tool) => tool.name === "automation_run_disable")?.description)
       .toContain("Fails if the run is missing or no longer active")
+    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description)
+      .toContain("stopRequested")
   })
 
   it("lists trigger and executor descriptors from registries", async () => {
@@ -551,7 +553,7 @@ describe("automation capability dispatcher", () => {
   it("runs stops lists runs and inspects runtime without exposing raw logs", async () => {
     const { dispatcher, service } = createHarness()
     vi.mocked(service.runAutomationNow).mockResolvedValueOnce(baseRun)
-    vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false, alreadyFinished: true })
+    vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false, stopRequested: true })
 
     const run = await dispatcher.dispatch("automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
     const stopped = await dispatcher.dispatch("automation.run.disable", { runId: "automation-run:1" }, { source: "mcp-http" })
@@ -560,7 +562,7 @@ describe("automation capability dispatcher", () => {
 
     expect(service.runAutomationNow).toHaveBeenCalledWith("automation:1")
     expect(service.stopRun).toHaveBeenCalledWith("automation-run:1")
-    expect(stopped).toEqual({ ok: true, data: { stopped: false, alreadyFinished: true } })
+    expect(stopped).toEqual({ ok: true, data: { stopped: false, stopRequested: true } })
     expect(runs).toMatchObject({ ok: true, total: 1 })
     expect(runtime).toMatchObject({
       ok: true,

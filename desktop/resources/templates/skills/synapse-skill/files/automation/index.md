@@ -77,7 +77,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 ## Run Rules
 
 - `app_automation_run_execute` starts a manual run and returns a safe run summary. Treat tool failure as no run started.
-- `app_automation_run_disable` stops an active run by run id. Treat tool failure as missing or no longer active.
+- `app_automation_run_disable` stops an active run by run id. Treat tool failure as missing or no longer active. If the result has `stopRequested: true`, say the stop request was sent, not that the run has stopped; then check `app_automation_runtime_inspect` or `app_automation_run_list`.
 - `app_automation_run_list` returns recent run summaries without raw logs or outputs.
 - `app_automation_runtime_inspect` shows which items are scheduled or running.
 - `app_automation_webhook_list` returns Webhook `publicId`, name, enabled state, and delivery status for `builtin.webhook` trigger configuration.

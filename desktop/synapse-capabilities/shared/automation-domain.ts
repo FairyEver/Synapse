@@ -84,7 +84,7 @@ const automationCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.automation.item.enable" as CapabilityId, title: "Enable automation", description: "Enable one Synapse Automation item.", mutates: true },
   { id: "app.automation.item.disable" as CapabilityId, title: "Disable automation", description: "Disable one Synapse Automation item.", mutates: true },
   { id: "app.automation.run.execute" as CapabilityId, title: "Run automation", description: "Manually run one Synapse Automation item.", mutates: true },
-  { id: "app.automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run. Fails if the run is missing or no longer active.", mutates: true },
+  { id: "app.automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run. A successful result can be stopped, alreadyFinished, or stopRequested; stopRequested means the run may still be running and should be checked with automation_runtime_inspect or automation_run_list. Fails if the run is missing or no longer active.", mutates: true },
   { id: "app.automation.run.list" as CapabilityId, title: "List automation runs", description: "List recent runs for one Synapse Automation item.", mutates: false },
   { id: "app.automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
   { id: "app.automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
@@ -228,7 +228,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_run_disable",
-      description: "Stop one active Automation run by runId. Fails if the run is missing or no longer active.",
+      description: "Stop one active Automation run by runId. A successful result can be stopped, alreadyFinished, or stopRequested; stopRequested means the run may still be running and should be checked with automation_runtime_inspect or automation_run_list. Fails if the run is missing or no longer active.",
       inputSchema: {
         type: "object",
         properties: { runId: { type: "string", description: "Automation run id." } },

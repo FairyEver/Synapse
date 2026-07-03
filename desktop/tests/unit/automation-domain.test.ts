@@ -79,5 +79,6 @@ describe("Automation capability domain", () => {
       "patch",
     ])
     expect(tools.find((tool) => tool.name === "automation_run_disable")?.inputSchema.required).toEqual(["runId"])
+    expect(tools.find((tool) => tool.name === "automation_run_disable")?.description).toContain("stopRequested")
   })
 })
