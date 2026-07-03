@@ -84,6 +84,86 @@ describe("createScreenshotCapabilityDispatcher", () => {
     )
   })
 
+  it("checks screen capture permission and records an allowed audit before MCP capture", async () => {
+    const service = {
+      capture: vi.fn(async () => ({ ...publicArtifact, bytes: new Uint8Array([1, 2, 3]) })),
+      captureToFile: vi.fn(),
+      captureToClipboard: vi.fn(),
+      saveArtifact: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const auditSink = {
+      record: vi.fn(),
+    }
+    const dispatcher = createScreenshotCapabilityDispatcher({
+      service,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await dispatcher.dispatch(
+      SCREENSHOT_CAPTURE_CAPABILITY_ID,
+      { mode: "fullscreen" },
+      { source: "mcp-http" },
+    )
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "screen.capture",
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      resource: "screenshot://capture",
+      context: {
+        source: "mcp-http",
+        capabilityAction: SCREENSHOT_CAPTURE_CAPABILITY_ID,
+        boundary: "screenshot.mcp.capture",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "screen.capture",
+      resource: "screenshot://capture",
+      outcome: "allowed",
+    }))
+    expect(service.capture).toHaveBeenCalled()
+  })
+
+  it("blocks MCP capture and records a denied audit when screen capture permission is denied", async () => {
+    const service = {
+      capture: vi.fn(),
+      captureToFile: vi.fn(),
+      captureToClipboard: vi.fn(),
+      saveArtifact: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: false as const, reason: "screen blocked", policyId: "policy-screen" })),
+    }
+    const auditSink = {
+      record: vi.fn(),
+    }
+    const dispatcher = createScreenshotCapabilityDispatcher({
+      service,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+    })
+
+    await expect(dispatcher.dispatch(
+      SCREENSHOT_CAPTURE_CAPABILITY_ID,
+      { mode: "fullscreen" },
+      { source: "mcp-http" },
+    )).rejects.toThrow("screen blocked")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "screen.capture",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        reason: "screen blocked",
+        policyId: "policy-screen",
+      }),
+    }))
+    expect(windowCaptureMock.runWithScreenshotWindowState).not.toHaveBeenCalled()
+    expect(service.capture).not.toHaveBeenCalled()
+  })
+
   it("checks write permission before saving a screenshot file", async () => {
     const service = {
       capture: vi.fn(),
@@ -116,6 +196,9 @@ describe("createScreenshotCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       resource: "/tmp/screen.png",
+      context: expect.objectContaining({
+        capabilityAction: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
+      }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "allowed" }))
     expect(service.captureToFile).toHaveBeenCalledWith(

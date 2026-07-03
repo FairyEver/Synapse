@@ -264,6 +264,8 @@ Output:
 
 Capture a fullscreen or coordinate-region PNG screenshot. Fullscreen captures use the current focused Synapse window's screen when available, otherwise the primary screen.
 
+This tool is permission-checked and audited before capture.
+
 Input:
 
 - `mode` required: `"fullscreen"` or `"region"`.

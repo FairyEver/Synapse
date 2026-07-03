@@ -28,6 +28,12 @@ export function createScreenshotCapabilityDispatcher(deps: {
     async dispatch(action, params, context) {
       if (action === SCREENSHOT_CAPTURE_CAPABILITY_ID) {
         const parsed = screenshotCaptureInputSchema.parse(params)
+        await authorizeSensitiveAction(deps, context, {
+          action: "screen.capture",
+          resource: "screenshot://capture",
+          capabilityAction: SCREENSHOT_CAPTURE_CAPABILITY_ID,
+          boundary: "screenshot.mcp.capture",
+        })
         const artifact = await runWithScreenshotWindowState(
           { hideCurrentWindow: parsed.hideCurrentWindow === true },
           (screenshotContext) => deps.service.capture(parsed, screenshotContext),
@@ -36,7 +42,12 @@ export function createScreenshotCapabilityDispatcher(deps: {
       }
       if (action === SCREENSHOT_FILE_SAVE_CAPABILITY_ID) {
         const parsed = screenshotCaptureToFileInputSchema.parse(params)
-        await authorizeFileAccess(deps, context, "fs.write.outside-userdata", parsed.outputPath, "screenshot.mcp.output")
+        await authorizeSensitiveAction(deps, context, {
+          action: "fs.write.outside-userdata",
+          resource: parsed.outputPath,
+          capabilityAction: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
+          boundary: "screenshot.mcp.output",
+        })
         const result = await runWithScreenshotWindowState(
           { hideCurrentWindow: parsed.capture.hideCurrentWindow === true },
           (screenshotContext) => deps.service.captureToFile(parsed, screenshotContext),
@@ -48,34 +59,37 @@ export function createScreenshotCapabilityDispatcher(deps: {
   }
 }
 
-async function authorizeFileAccess(
+async function authorizeSensitiveAction(
   deps: {
     readonly permissionGuard?: PermissionGuard
     readonly auditSink?: AuditSink
     readonly actor?: ActorIdentity
   },
   context: DispatchContext,
-  action: PermissionAction,
-  resource: string,
-  source: string,
+  request: {
+    readonly action: PermissionAction
+    readonly resource: string
+    readonly capabilityAction: string
+    readonly boundary: string
+  },
 ): Promise<void> {
   if (!deps.permissionGuard) return
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const metadata = {
     source: context.source ?? "api",
-    capabilityAction: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
-    boundary: source,
+    capabilityAction: request.capabilityAction,
+    boundary: request.boundary,
   }
   const permission = await deps.permissionGuard.check({
-    action,
+    action: request.action,
     actor,
-    resource,
+    resource: request.resource,
     context: metadata,
   })
   deps.auditSink?.record({
-    action,
+    action: request.action,
     actor,
-    resource,
+    resource: request.resource,
     outcome: permission.allowed ? "allowed" : "denied",
     metadata: permission.allowed
       ? metadata
