@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 
 type DriveSiteCreateDialogProps = {
@@ -249,23 +250,6 @@ function createInitialForm(folder: DriveItemDto | null, preflight: DriveSitePref
     passwordEnabled: DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
     expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
   }
-}
-
-function formatBytes(value: string): string {
-  const bytes = Number(value)
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB", "TB"] as const
-  let size = bytes
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(size)} ${units[unitIndex]}`
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback
 }
 
 async function copyText(value: string, successMessage: string): Promise<void> {

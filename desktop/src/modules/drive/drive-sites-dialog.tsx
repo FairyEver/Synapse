@@ -38,6 +38,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { DRIVE_SITE_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
 
@@ -556,23 +557,6 @@ function createInitialState(): DriveSitesState {
     error: null,
     page: null,
   }
-}
-
-function formatBytes(value: string): string {
-  const bytes = Number(value)
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB", "TB"] as const
-  let size = bytes
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(size)} ${units[unitIndex]}`
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback
 }
 
 async function copyText(value: string, successMessage: string): Promise<void> {

@@ -46,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from "@/types/bridge"
 import { DriveItemIcon } from "./drive-item-icon"
@@ -54,8 +55,6 @@ import { DRIVE_PUBLIC_ASSET_TABLE_COLUMNS, DriveTableColumns } from "./drive-tab
 const DRIVE_PUBLIC_ASSET_PAGE_SIZE = 50
 const DRIVE_PUBLIC_ASSET_SKELETON_ROWS = Array.from({ length: 6 }, (_, index) => index)
 const DRIVE_PUBLIC_ASSET_IMAGE_ACCEPT = Array.from(new Set(Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))).join(",")
-const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
-const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 
 type DrivePublicAssetRenameState = {
   readonly asset: DrivePublicAssetDto
@@ -647,34 +646,11 @@ function publicAssetUploadToast(results: readonly DrivePublicAssetUploadResultIt
   return `上传完成 ${completed} 个，失败 ${failed} 个`
 }
 
-function formatBytes(value: string): string {
-  const bytes = Number(value)
-  if (!Number.isFinite(bytes) || bytes < 0) return "-"
-
-  let nextValue = bytes
-  let unitIndex = 0
-  while (nextValue >= 1024 && unitIndex < DRIVE_BYTE_UNITS.length - 1) {
-    nextValue /= 1024
-    unitIndex += 1
-  }
-
-  const formattedValue = unitIndex === 0 ? String(Math.round(nextValue)) : DRIVE_BYTE_NUMBER_FORMAT.format(nextValue)
-  return `${formattedValue} ${DRIVE_BYTE_UNITS[unitIndex]}`
-}
-
 function formatDriveDateTime(value: string | null): string {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
   return date.toLocaleString("zh-CN")
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof Error) || !error.message) return fallback
-  return error.message
-    .replace(/^Error invoking remote method '[^']+':\s*/, "")
-    .replace(/^Error:\s*/, "")
-    .trim() || fallback
 }
 
 export { DrivePublicAssetsView }
