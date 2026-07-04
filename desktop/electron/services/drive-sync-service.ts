@@ -1,7 +1,8 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
 import { constants as fsConstants } from "node:fs"
-import { copyFile, lstat, mkdir, rename } from "node:fs/promises"
+import { copyFile, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import type {
   DriveChangeDto,
@@ -935,37 +936,89 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return toBindingDto(entry)
   }
 
+  type InitialFileUploadSnapshot = {
+    readonly uploadPath: string
+    readonly uploadDirectory: string
+    readonly localSize: number
+    readonly localMtimeMs: number
+    readonly localHash: string
+  }
+
+  async function createInitialFileUploadSnapshot(localPath: string): Promise<InitialFileUploadSnapshot> {
+    const stats = await lstat(localPath)
+    if (!stats.isFile()) throw new Error("本地条目类型不支持同步。")
+    const uploadDirectory = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-upload-"))
+    const uploadPath = path.join(uploadDirectory, path.basename(localPath))
+    await copyFile(localPath, uploadPath, fsConstants.COPYFILE_EXCL)
+    const uploadStats = await lstat(uploadPath)
+    return {
+      uploadPath,
+      uploadDirectory,
+      localSize: uploadStats.size,
+      localMtimeMs: stats.mtimeMs,
+      localHash: await hashDriveSyncFile(uploadPath),
+    }
+  }
+
+  async function hasInitialFileChangedSinceSnapshot(localPath: string, snapshot: InitialFileUploadSnapshot): Promise<boolean> {
+    try {
+      const current = await lstat(localPath)
+      if (!current.isFile()) return true
+      if (current.size !== snapshot.localSize) return true
+      return await hashDriveSyncFile(localPath) !== snapshot.localHash
+    } catch {
+      return true
+    }
+  }
+
   async function uploadInitialFile(binding: DriveSyncBindingDto, targetParentId: string | null, drivePathHint: string | null): Promise<string> {
-    const upload = await deps.accountService.uploadDriveLocalItems({
-      parentId: targetParentId,
-      items: [{ kind: "file", path: binding.localPath, name: binding.driveItemName }],
-    })
-    if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
-    const remoteItemId = await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "file", drivePathHint ?? binding.driveItemName)
-    await updateBindingDriveItemId(binding.id, remoteItemId)
-    await baselineStore.upsert({
-      bindingId: binding.id,
-      relativePath: "",
-      kind: "file",
-      remoteItemId,
-      remoteVersionId: null,
-      remoteEtag: null,
-      localSize: null,
-      localMtimeMs: null,
-      localHash: await hashDriveSyncFile(binding.localPath),
-      deletedAt: null,
-    })
-    await recordOperation({
-      bindingId: binding.id,
-      kind: "upload",
-      status: "succeeded",
-      driveItemId: remoteItemId,
-      relativePath: "",
-      localPath: binding.localPath,
-      remotePathHint: null,
-      message: null,
-    })
-    return remoteItemId
+    const snapshot = await createInitialFileUploadSnapshot(binding.localPath)
+    try {
+      const upload = await deps.accountService.uploadDriveLocalItems({
+        parentId: targetParentId,
+        items: [{ kind: "file", path: snapshot.uploadPath, name: binding.driveItemName }],
+      })
+      if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
+      const remoteItemId = await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "file", drivePathHint ?? binding.driveItemName)
+      await updateBindingDriveItemId(binding.id, remoteItemId)
+      await baselineStore.upsert({
+        bindingId: binding.id,
+        relativePath: "",
+        kind: "file",
+        remoteItemId,
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: snapshot.localSize,
+        localMtimeMs: snapshot.localMtimeMs,
+        localHash: snapshot.localHash,
+        deletedAt: null,
+      })
+      await recordOperation({
+        bindingId: binding.id,
+        kind: "upload",
+        status: "succeeded",
+        driveItemId: remoteItemId,
+        relativePath: "",
+        localPath: binding.localPath,
+        remotePathHint: null,
+        message: null,
+      })
+      if (await hasInitialFileChangedSinceSnapshot(binding.localPath, snapshot)) {
+        await recordOperation({
+          bindingId: binding.id,
+          kind: "upload",
+          status: "retry_wait",
+          driveItemId: remoteItemId,
+          relativePath: "",
+          localPath: binding.localPath,
+          remotePathHint: null,
+          message: "初始上传期间本地文件发生变化，等待下次同步上传最新内容。",
+        })
+      }
+      return remoteItemId
+    } finally {
+      await rm(snapshot.uploadDirectory, { recursive: true, force: true }).catch(() => undefined)
+    }
   }
 
   async function findUploadedRemoteItemId(parentId: string | null, name: string, expectedType: "file" | "folder", expectedPath: string = name): Promise<string> {

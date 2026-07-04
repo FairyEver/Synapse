@@ -1248,7 +1248,15 @@ describe("DriveSyncService", () => {
     try {
       const localPath = path.join(tempDir, "spec.md")
       await writeFile(localPath, "spec", "utf8")
-      const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
+      let uploadedPath: string | null = null
+      const uploadDriveLocalItems = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => {
+        const item = input.items[0]
+        if (!item || item.kind !== "file") throw new Error("expected file upload")
+        uploadedPath = item.path
+        expect(item.path).not.toBe(localPath)
+        await expect(readFile(item.path, "utf8")).resolves.toBe("spec")
+        return { completed: 1, failed: 0, skipped: 0 }
+      })
       const listDriveItemTree = vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => ({
         items: parentId === "folder-1"
           ? [{ id: "uploaded-spec", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 1, size: "4", mimeType: "text/markdown" }]
@@ -1274,11 +1282,13 @@ describe("DriveSyncService", () => {
 
       expect(uploadDriveLocalItems).toHaveBeenCalledWith({
         parentId: "folder-1",
-        items: [{ kind: "file", path: localPath, name: "spec.md" }],
+        items: [{ kind: "file", path: uploadedPath, name: "spec.md" }],
       })
       expect(listDriveItemTree).toHaveBeenCalledWith({ parentId: "folder-1", offset: 0, limit: 200 })
       expect(binding).toMatchObject({ driveItemId: "uploaded-spec" })
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ drivePathHint: "/Docs/spec.md" })
+      expect(uploadedPath).not.toBeNull()
+      await expect(lstat(uploadedPath!)).rejects.toThrow()
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -2166,6 +2176,63 @@ describe("DriveSyncService", () => {
           message: "quota exceeded",
         },
       ])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps edits during initial local file upload pending instead of marking them synced", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "uploaded bytes", "utf8")
+      const uploadedHash = await hashDriveSyncFile(localPath)
+      let uploadedPath: string | null = null
+      const uploadDriveLocalItems = vi.fn(async (input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => {
+        const item = input.items[0]
+        if (!item || item.kind !== "file") throw new Error("expected file upload")
+        uploadedPath = item.path
+        expect(item.path).not.toBe(localPath)
+        await expect(readFile(item.path, "utf8")).resolves.toBe("uploaded bytes")
+        await writeFile(localPath, "edited during upload", "utf8")
+        return { completed: 1, failed: 0, skipped: 0 }
+      })
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-file-1", name: "spec.md", type: "file", path: "spec.md", depth: 0 }],
+            nextOffset: null,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: `local:${localPath}`,
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "local_to_remote",
+      })
+
+      expect(binding).toMatchObject({ status: "active", driveItemId: "remote-file-1" })
+      expect(uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
+        items: [expect.objectContaining({ kind: "file", name: "spec.md", path: uploadedPath })],
+      }))
+      await expect(readFile(localPath, "utf8")).resolves.toBe("edited during upload")
+      await expect(harness.baseline.list()).resolves.toContainEqual(expect.objectContaining({
+        bindingId: binding.id,
+        relativePath: "",
+        remoteItemId: "remote-file-1",
+        localHash: uploadedHash,
+      }))
+      await expect(harness.operations.list()).resolves.toEqual(expect.arrayContaining([
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "" }),
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "retry_wait", relativePath: "" }),
+      ]))
+      expect(uploadedPath).not.toBeNull()
+      await expect(lstat(uploadedPath!)).rejects.toThrow()
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
