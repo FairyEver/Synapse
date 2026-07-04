@@ -1,4 +1,0 @@
-interface:
-  display_name: "Synapse Issue Query Fixer"
-  short_description: "Fix all open Synapse bugs matching a GitHub issue query link."
-  default_prompt: "Paste a FairyEver/Synapse GitHub issue search URL to fix all matching unclaimed bug issues."

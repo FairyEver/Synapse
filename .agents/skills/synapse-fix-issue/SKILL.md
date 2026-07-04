@@ -1,9 +1,9 @@
 ---
-name: synapse-fix-issue-query
-description: Use when working in the Synapse repository and the user provides a FairyEver/Synapse GitHub issue search URL, issue query link, or says to 修改问题, 改 bug, 修 bug, 解决 issue, or gives only a GitHub issues?q= link. Fix every open bug issue matching the supplied filter, using GitHub labels for claim/status management, focused commits, validation, and Chinese issue close comments.
+name: synapse-fix-issue
+description: Use when working in the Synapse repository and the user provides a FairyEver/Synapse GitHub issue search URL, issue query link, or says to 修改问题, 改 bug, 修 bug, 解决 issue, or gives only a GitHub issues?q= link. Fix open bug issues matching the supplied filter, using GitHub labels for claim/status management, focused commits, validation, and Chinese issue close comments.
 ---
 
-# Synapse Fix Issue Query
+# Synapse Fix Issue
 
 ## Purpose
 
@@ -85,6 +85,8 @@ For the claimed issue:
 - Use `优先级:*`, `类型:*`, and `模块:*` to guide the search.
 - Locate relevant docs before product-boundary changes. Follow `AGENTS.md`, `.claude/rules/*`, and module design documents.
 - Identify whether the issue needs a code fix, is a false positive, or requires a product/user decision.
+- Before choosing an implementation, evaluate whether the fix would create a negative user-facing behavior change. Treat it as negative when a user could previously perform an action or rely on a behavior, but the proposed fix would remove, restrict, degrade, slow down, hide, or otherwise make that capability worse from the user's perspective.
+- Positive user-facing changes, such as making behavior clearer, safer, faster, more reliable, or more capable without removing an existing capability, are not blockers and should continue through the normal bug-fix flow.
 - Before modifying code, re-read the issue and continue only if it remains open with `状态:处理中`.
 
 ### 5. Classify Without Fixing
@@ -106,6 +108,16 @@ For missing information, unclear product behavior, or a required decision:
 - Keep the issue open.
 - Do not change classification labels.
 - Comment in Chinese with the specific decision/questions needed.
+
+For a proposed fix that would cause a negative user-facing behavior change:
+
+- Treat it as blocked by product decision, even if it would technically resolve the reported bug.
+- Do not implement the fix.
+- Add `状态:需要决策`.
+- Remove `状态:处理中`.
+- Keep the issue open.
+- Do not change classification labels.
+- Comment in Chinese with the blocking item, including what existing user capability or behavior would be lost or negatively affected, why the fix creates that tradeoff, and what decision is needed before continuing.
 
 After classification, move to the next queued issue.
 
