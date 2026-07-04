@@ -166,6 +166,7 @@ const LOCAL_ROOT_MISSING_ERROR = "本地路径不存在。"
 const LOCAL_ROOT_INACCESSIBLE_ERROR = "本地路径无法访问。"
 const REMOTE_ROOT_MISSING_ERROR = "云端同步根目录不存在。"
 const REMOTE_RESYNC_REQUIRED_ERROR = "远端变更记录已过期，需要重新建立同步绑定后再同步。"
+const BINDING_ACTION_BUSY_MESSAGE = "同步操作正在执行，请稍后再试。"
 const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
 const SNAPSHOT_GLOBAL_OPERATION_LIMIT = 20
 const SNAPSHOT_BINDING_OPERATION_LIMIT = 20
@@ -386,7 +387,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
     const bindings = (await deps.bindings.list()).filter((binding) => binding.status === "active")
     for (const binding of bindings) {
-      await pollActiveBindingRemoteChanges(binding, false)
+      await runBindingActionSingleFlight(binding.id, async () => {
+        const current = await requireBinding(binding.id)
+        if (current.status !== "active") return
+        await pollActiveBindingRemoteChanges(current, false)
+      }).catch((error) => {
+        if (isBindingActionBusyError(error)) return
+        throw error
+      })
     }
   }
 
@@ -589,16 +597,19 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     })
 
     try {
-      if (input.kind === "file" && input.direction === "remote_to_local") {
-        await downloadInitialFile(binding)
-      } else if (input.kind === "file" && input.direction === "local_to_remote") {
-        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding, input.targetParentId ?? null))
-      } else if (input.kind === "folder" && input.direction === "remote_to_local") {
-        await downloadInitialFolder(binding, input.drivePathHint ?? null)
-      } else if (input.kind === "folder" && input.direction === "local_to_remote") {
-        binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding, input.targetParentId ?? null))
-      }
-      return await activateBindingAtCurrentRemoteCursor(binding.id)
+      await runBindingActionSingleFlight(binding.id, async () => {
+        if (input.kind === "file" && input.direction === "remote_to_local") {
+          await downloadInitialFile(binding)
+        } else if (input.kind === "file" && input.direction === "local_to_remote") {
+          binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding, input.targetParentId ?? null))
+        } else if (input.kind === "folder" && input.direction === "remote_to_local") {
+          await downloadInitialFolder(binding, input.drivePathHint ?? null)
+        } else if (input.kind === "folder" && input.direction === "local_to_remote") {
+          binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding, input.targetParentId ?? null))
+        }
+        binding = await activateBindingAtCurrentRemoteCursor(binding.id)
+      })
+      return binding
     } catch (error) {
       const message = errorMessage(error)
       const currentBinding = await deps.bindings.get(binding.id) ?? binding
@@ -1363,7 +1374,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         .filter((entry) => entry.deletedAt === null)
         .map((entry) => entry.relativePath),
     )
-    return changes.some((change) => activePaths.has(change.relativePath))
+    return changes.some((change) => change.kind !== "created" && activePaths.has(change.relativePath))
   }
 
   async function handleMissingFileBindingRoot(input: {
@@ -1633,6 +1644,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         if (!rootReady) return
         await scanBindingForLocalChanges(current, { throwOnScanError: false })
       }).catch(async (error) => {
+        if (isBindingActionBusyError(error)) return
         await markBindingError(binding.id, errorMessage(error), { emitChanged: true })
       })
     }
@@ -1877,7 +1889,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function runBindingActionSingleFlight<T>(bindingId: string, action: () => Promise<T>): Promise<T> {
-    if (bindingActionFlights.has(bindingId)) throw new Error("同步操作正在执行，请稍后再试。")
+    if (bindingActionFlights.has(bindingId)) throw new Error(BINDING_ACTION_BUSY_MESSAGE)
     const promise = Promise.resolve().then(action)
     bindingActionFlights.set(bindingId, promise)
     try {
@@ -1885,6 +1897,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     } finally {
       if (bindingActionFlights.get(bindingId) === promise) bindingActionFlights.delete(bindingId)
     }
+  }
+
+  function isBindingActionBusyError(error: unknown): boolean {
+    return error instanceof Error && error.message === BINDING_ACTION_BUSY_MESSAGE
   }
 
   async function emitChanged(): Promise<void> {

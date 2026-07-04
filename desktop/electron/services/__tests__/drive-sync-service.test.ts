@@ -2223,6 +2223,45 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("blocks sync actions while a safe binding is still initializing", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      const download = createDeferred<{ readonly ok: true; readonly path: string }>()
+      const harness = createHarness({
+        accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { readonly outputPath: string }) => {
+            await download.promise
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const creating = service.createSafeBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "remote_to_local",
+      })
+
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.downloadDriveFile).toHaveBeenCalled()
+      })
+      const [binding] = await harness.bindings.list()
+      expect(binding).toBeDefined()
+      await expect(service.rescanBinding(binding!.id)).rejects.toThrow("同步操作正在执行，请稍后再试。")
+      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+
+      download.resolve({ ok: true, path: localPath })
+      await expect(creating).resolves.toMatchObject({ status: "active" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps the remote cursor and marks the binding as error when resync is required", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
