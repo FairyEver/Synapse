@@ -1,3 +1,4 @@
+import path from "node:path"
 import type { DriveChangeListInput, DriveChangeListPageDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBaselineEntryV1, DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { planDriveSyncRemoteChanges, type DriveSyncPlannedConflict, type DriveSyncPlannedOperation } from "./drive-sync-planner"
@@ -19,6 +20,7 @@ export async function pollDriveSyncRemoteChanges(input: {
 }): Promise<void> {
   const limit = input.limit ?? 100
   let binding = input.binding
+  let baseline = input.baseline
   let cursor = input.binding.remoteCursor
   const seenChangeIds = new Set<string>()
 
@@ -49,13 +51,14 @@ export async function pollDriveSyncRemoteChanges(input: {
     })
     const plan = planDriveSyncRemoteChanges({
       binding,
-      baseline: input.baseline,
+      baseline,
       changes,
       localChangedPaths: input.localChangedPaths,
       shouldIgnoreChange: input.shouldIgnoreChange,
     })
     if (plan.operations.length > 0) await input.onOperations(plan.operations)
     if (plan.conflicts.length > 0) await input.onConflicts(plan.conflicts)
+    baseline = baselineAfterOperations(baseline, plan.operations)
     binding = bindingAfterRootMove(binding, plan.operations)
 
     cursor = page.nextCursor
@@ -80,6 +83,44 @@ function bindingAfterRootMove(
     driveItemName: driveItemNameFromPathHint(rootMove.remotePathHint, binding.driveItemName),
     drivePathHint: rootMove.remotePathHint,
   }
+}
+
+function baselineAfterOperations(
+  baseline: readonly DriveSyncBaselineEntryV1[],
+  operations: readonly DriveSyncPlannedOperation[],
+): readonly DriveSyncBaselineEntryV1[] {
+  let nextBaseline = baseline
+  for (const operation of operations) {
+    if (operation.kind === "move_local") {
+      nextBaseline = baselineAfterMoveOperation(nextBaseline, operation)
+    }
+  }
+  return nextBaseline
+}
+
+function baselineAfterMoveOperation(
+  baseline: readonly DriveSyncBaselineEntryV1[],
+  operation: DriveSyncPlannedOperation,
+): readonly DriveSyncBaselineEntryV1[] {
+  if (!operation.driveItemId) return baseline
+  const moved = baseline.find((entry) => entry.remoteItemId === operation.driveItemId && entry.deletedAt === null)
+  if (!moved || moved.relativePath === operation.relativePath) return baseline
+  return baseline.map((entry) => {
+    if (entry.deletedAt !== null || !isPathInSubtree(entry.relativePath, moved.relativePath)) return entry
+    const suffix = subtreeSuffix(entry.relativePath, moved.relativePath)
+    return {
+      ...entry,
+      relativePath: suffix ? path.posix.join(operation.relativePath, suffix) : operation.relativePath,
+    }
+  })
+}
+
+function isPathInSubtree(relativePath: string, root: string): boolean {
+  return relativePath === root || relativePath.startsWith(`${root}/`)
+}
+
+function subtreeSuffix(relativePath: string, root: string): string {
+  return relativePath === root ? "" : relativePath.slice(root.length + 1)
 }
 
 function driveItemNameFromPathHint(pathHint: string, fallback: string): string {

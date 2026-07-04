@@ -71,6 +71,36 @@ describe("drive sync remote poller", () => {
     expect(operations).toHaveLength(2)
   })
 
+  it("uses updated child paths when later pages change the same remote item", async () => {
+    const accountService = createAccountService([
+      page({
+        items: [remoteChange({ id: "change:move", itemId: "remote-spec", type: "renamed", pathHint: "/Docs/new.md" })],
+        nextCursor: "42",
+        hasMore: true,
+      }),
+      page({
+        items: [remoteChange({ id: "change:update", itemId: "remote-spec", type: "content_updated", pathHint: "/Docs/new.md", sequence: "43" })],
+        nextCursor: "43",
+      }),
+    ])
+    const operations: unknown[] = []
+
+    await pollDriveSyncRemoteChanges({
+      binding: binding({ remoteCursor: "41" }),
+      baseline: [baseline({ relativePath: "old.md", remoteItemId: "remote-spec" })],
+      accountService,
+      onOperations: async (items) => { operations.push(...items) },
+      onConflicts: async () => undefined,
+      updateBindingCursor: async () => undefined,
+    })
+
+    expect(operations).toEqual([
+      expect.objectContaining({ kind: "move_local", relativePath: "new.md", driveItemId: "remote-spec" }),
+      expect.objectContaining({ kind: "download", relativePath: "new.md", driveItemId: "remote-spec" }),
+    ])
+    expect(operations).not.toContainEqual(expect.objectContaining({ kind: "download", relativePath: "old.md" }))
+  })
+
   it("emits one resync operation without advancing cursor when the server requires resync", async () => {
     const accountService = createAccountService([
       page({ items: [], nextCursor: "50", resyncRequired: true }),
@@ -197,12 +227,13 @@ function baseline(input: Partial<DriveSyncBaselineEntryV1> & {
 }
 
 function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
+  readonly id?: string
   readonly pathHint: string
   readonly sequence?: string
   readonly itemKind?: DriveChangeDto["itemKind"]
 }): DriveChangeDto {
   return {
-    id: `change:${input.itemId}`,
+    id: input.id ?? `change:${input.itemId}`,
     sequence: input.sequence ?? "42",
     itemId: input.itemId,
     parentId: null,
