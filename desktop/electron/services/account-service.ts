@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { createReadStream, createWriteStream, type Stats } from "node:fs"
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Readable } from "node:stream"
+import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { app, safeStorage } from "electron"
 
@@ -638,10 +638,19 @@ export class AccountService {
       }
       reserveMaterializedPath(relativePath)
       await mkdir(path.dirname(outputPath), { recursive: true })
-      const downloaded = await this.downloadDriveLinkFile({
-        ...baseInput,
-        outputPath,
-      })
+      let downloaded: DriveLinkDownloadFileDto
+      try {
+        downloaded = await this.downloadDriveLinkFile({
+          ...baseInput,
+          outputPath,
+        }, { maxBytes: Math.max(0, maxBytes - totalBytes) })
+      } catch (error) {
+        if (!isDriveDownloadMaxBytesExceededError(error)) throw error
+        await rm(outputPath, { force: true })
+        releaseMaterializedPath(relativePath)
+        skipped.push({ path: relativePath, reason: "max-bytes" })
+        return
+      }
       const actualSize = Number(downloaded.size)
       if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
         await rm(outputPath, { force: true })
@@ -673,10 +682,19 @@ export class AccountService {
       reserveMaterializedPath(relativePath)
       const outputPath = path.join(root.contentPath, relativePath)
       await mkdir(path.dirname(outputPath), { recursive: true })
-      const downloaded = await this.downloadDriveLinkFile({
-        ...baseInput,
-        outputPath,
-      })
+      let downloaded: DriveLinkDownloadFileDto
+      try {
+        downloaded = await this.downloadDriveLinkFile({
+          ...baseInput,
+          outputPath,
+        }, { maxBytes })
+      } catch (error) {
+        if (!isDriveDownloadMaxBytesExceededError(error)) throw error
+        await rm(outputPath, { force: true })
+        releaseMaterializedPath(relativePath)
+        skipped.push({ path: relativePath, reason: "max-bytes" })
+        return finish()
+      }
       const actualSize = Number(downloaded.size)
       if (Number.isFinite(actualSize) && actualSize > maxBytes) {
         await rm(outputPath, { force: true })
@@ -744,12 +762,21 @@ export class AccountService {
           }
           reserveMaterializedPath(relativePath)
           await mkdir(path.dirname(outputPath), { recursive: true })
-          const downloaded = await this.downloadDriveLinkFile({
-            ...baseInput,
-            itemId: item.itemId ?? undefined,
-            path: relativePath,
-            outputPath,
-          })
+          let downloaded: DriveLinkDownloadFileDto
+          try {
+            downloaded = await this.downloadDriveLinkFile({
+              ...baseInput,
+              itemId: item.itemId ?? undefined,
+              path: relativePath,
+              outputPath,
+            }, { maxBytes: Math.max(0, maxBytes - totalBytes) })
+          } catch (error) {
+            if (!isDriveDownloadMaxBytesExceededError(error)) throw error
+            await rm(outputPath, { force: true })
+            releaseMaterializedPath(relativePath)
+            skipped.push({ path: relativePath, reason: "max-bytes" })
+            continue
+          }
           const actualSize = Number(downloaded.size)
           if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
             await rm(outputPath, { force: true })
@@ -772,7 +799,7 @@ export class AccountService {
     return finish()
   }
 
-  async downloadDriveLinkFile(input: DriveLinkDownloadFileInput): Promise<DriveLinkDownloadFileDto> {
+  async downloadDriveLinkFile(input: DriveLinkDownloadFileInput, options: { readonly maxBytes?: number } = {}): Promise<DriveLinkDownloadFileDto> {
     const targetPath = input.outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
     const { outputPath: _outputPath, ...request } = input
     const response = await this.fetchAuthenticated(`${apiBaseUrl()}/drive/link-intake/download-file`, {
@@ -780,7 +807,7 @@ export class AccountService {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     }, "云盘链接下载失败。")
-    await writeResponseBodyToFile(response, targetPath)
+    await writeResponseBodyToFile(response, targetPath, options)
     const fileStat = await safeLocalFileStat(targetPath)
     return {
       localPath: targetPath,
@@ -2453,16 +2480,38 @@ function validateUtf8MaxBytes(maxBytes: number): void {
   if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
 }
 
-async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {
+class DriveDownloadMaxBytesExceededError extends Error {
+  constructor(readonly maxBytes: number) {
+    super("下载内容超过 maxBytes。")
+    this.name = "DriveDownloadMaxBytesExceededError"
+  }
+}
+
+function isDriveDownloadMaxBytesExceededError(error: unknown): error is DriveDownloadMaxBytesExceededError {
+  return error instanceof DriveDownloadMaxBytesExceededError
+}
+
+async function writeResponseBodyToFile(
+  response: Response,
+  outputPath: string,
+  options: { readonly maxBytes?: number } = {},
+): Promise<void> {
   if (!response.body) throw new Error("下载响应为空。")
+  const maxBytes = normalizeDownloadMaxBytes(options.maxBytes)
+  const contentLength = parseDownloadContentLength(response.headers.get("Content-Length"))
+  if (maxBytes !== undefined && contentLength !== null && contentLength > maxBytes) {
+    throw new DriveDownloadMaxBytesExceededError(maxBytes)
+  }
   const outputDir = path.dirname(outputPath)
   await mkdir(outputDir, { recursive: true })
   const tempPath = path.join(outputDir, `.${path.basename(outputPath)}.${process.pid}.${Date.now()}.${randomBytes(6).toString("hex")}.tmp`)
   try {
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(tempPath, { flags: "wx" }),
-    )
+    const source = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0])
+    if (maxBytes === undefined) {
+      await pipeline(source, createWriteStream(tempPath, { flags: "wx" }))
+    } else {
+      await pipeline(source, createDownloadMaxBytesTransform(maxBytes), createWriteStream(tempPath, { flags: "wx" }))
+    }
     await rename(tempPath, outputPath)
   } catch (error) {
     await rm(tempPath, { force: true }).catch((cleanupError) => {
@@ -2474,6 +2523,32 @@ async function writeResponseBodyToFile(response: Response, outputPath: string): 
     })
     throw error
   }
+}
+
+function normalizeDownloadMaxBytes(maxBytes: number | undefined): number | undefined {
+  if (maxBytes === undefined) return undefined
+  if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
+  return Math.floor(maxBytes)
+}
+
+function parseDownloadContentLength(value: string | null): number | null {
+  if (!value || !/^\d+$/u.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+function createDownloadMaxBytesTransform(maxBytes: number): Transform {
+  let bytes = 0
+  return new Transform({
+    transform(chunk: Buffer | string, encoding, callback) {
+      bytes += typeof chunk === "string" ? Buffer.byteLength(chunk, encoding as BufferEncoding) : chunk.byteLength
+      if (bytes > maxBytes) {
+        callback(new DriveDownloadMaxBytesExceededError(maxBytes))
+        return
+      }
+      callback(null, chunk)
+    },
+  })
 }
 
 function localUploadErrorMessage(error?: unknown): string {

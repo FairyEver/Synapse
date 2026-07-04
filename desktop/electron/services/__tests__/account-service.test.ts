@@ -616,6 +616,59 @@ describe("AccountService", () => {
     await expect(readFile(path.join(result.localRootPath, "content", "logo.png"), "utf8")).resolves.toBe("pngdata")
   })
 
+  it("skips oversized public asset materialize downloads before reading declared-large responses", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "public_asset",
+      access: { status: "ok", canRead: true, canList: false, canReadText: false, canDownload: true },
+      root: { name: "logo.png", type: "asset", previewKind: "image" },
+      ref: { kind: "public_asset", shareId: null, itemId: null, siteId: null, path: null, assetId: "asset-logo" },
+    })
+    const fetchAuthenticated = vi.spyOn(service, "fetchAuthenticated").mockResolvedValueOnce(new Response(new ReadableStream({
+      pull() {
+        throw new Error("body should not be read")
+      },
+    }), {
+      headers: { "Content-Type": "image/png", "Content-Length": "7" },
+    }))
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/files/asset-logo",
+      scope: "all",
+      maxBytes: 3,
+    })
+
+    expect(fetchAuthenticated).toHaveBeenCalled()
+    expect(result.files).toEqual([])
+    expect(result.skipped).toEqual([{ path: "logo.png", reason: "max-bytes" }])
+    await expect(readdir(path.join(result.localRootPath, "content"))).resolves.toEqual([])
+  })
+
+  it("stops single-file materialize downloads when streams exceed maxBytes", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "share",
+      access: { status: "ok", canRead: true, canList: false, canReadText: false, canDownload: true },
+      root: { name: "logo.png", type: "file", previewKind: "image" },
+      ref: { kind: "share", shareId: "shr_123", itemId: null, siteId: null, path: null, assetId: null },
+    })
+    vi.spyOn(service, "fetchAuthenticated").mockResolvedValueOnce(new Response("pngdata", {
+      headers: { "Content-Type": "image/png" },
+    }))
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/share/shr_123",
+      scope: "entry",
+      maxBytes: 3,
+    })
+
+    expect(result.files).toEqual([])
+    expect(result.skipped).toEqual([{ path: "logo.png", reason: "max-bytes" }])
+    await expect(readdir(path.join(result.localRootPath, "content"))).resolves.toEqual([])
+  })
+
   it("rejects local files over the shared single file limit before preparing upload", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-too-large-"))
     const filePath = path.join(dir, "large.bin")
