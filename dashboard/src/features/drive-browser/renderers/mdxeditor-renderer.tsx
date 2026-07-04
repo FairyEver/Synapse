@@ -309,6 +309,15 @@ export function DriveMDXeditorRenderer({
         setValue(normalizedValue)
         beginExternalMarkdownSync(normalizedValue)
         editorRef.current?.setMarkdown(normalizedValue)
+      } else if (materialized.replacements.length > 0 && valueRef.current !== submittedValue) {
+        const currentValue = valueRef.current
+        const nextCurrentValue = replaceDraftPublicImageUrls(currentValue, materialized.replacements)
+        if (nextCurrentValue !== currentValue) {
+          valueRef.current = nextCurrentValue
+          setValue(nextCurrentValue)
+          beginExternalMarkdownSync(nextCurrentValue)
+          editorRef.current?.setMarkdown(nextCurrentValue)
+        }
       }
       savedValueRef.current = normalizedValue
       clearDraftPublicImages(replacedDraftUrls)
@@ -561,27 +570,43 @@ async function materializeDraftPublicImages(
 ): Promise<{
   readonly markdown: string
   readonly replacedDraftUrls: string[]
+  readonly replacements: readonly DraftPublicImageReplacement[]
 }> {
   const referencedDrafts = Array.from(drafts.values()).filter((draft) => markdown.includes(draft.url))
   if (referencedDrafts.length === 0) {
-    return { markdown, replacedDraftUrls: [] }
+    return { markdown, replacedDraftUrls: [], replacements: [] }
   }
 
   let nextMarkdown = markdown
   const replacedDraftUrls: string[] = []
+  const replacements: DraftPublicImageReplacement[] = []
   setUploadingImage(true)
   try {
     for (const draft of referencedDrafts) {
       const asset = await driveBrowserApi.uploadPublicAssetFile(draft.file, draft.input)
       uploadedAssets.push(asset)
       replacedDraftUrls.push(draft.url)
+      replacements.push({ draftUrl: draft.url, assetUrl: asset.url })
       nextMarkdown = nextMarkdown.split(draft.url).join(asset.url)
     }
   } finally {
     setUploadingImage(false)
   }
 
-  return { markdown: nextMarkdown, replacedDraftUrls }
+  return { markdown: nextMarkdown, replacedDraftUrls, replacements }
+}
+
+type DraftPublicImageReplacement = {
+  readonly draftUrl: string
+  readonly assetUrl: string
+}
+
+function replaceDraftPublicImageUrls(markdown: string, replacements: readonly DraftPublicImageReplacement[]): string {
+  let nextMarkdown = markdown
+  for (const replacement of replacements) {
+    nextMarkdown = nextMarkdown.split(replacement.draftUrl).join(replacement.assetUrl)
+  }
+  return nextMarkdown
 }
 
 async function cleanupUploadedPublicAssets(assets: readonly DrivePublicAssetDto[]): Promise<boolean> {

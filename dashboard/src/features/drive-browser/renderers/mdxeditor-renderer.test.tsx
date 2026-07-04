@@ -254,6 +254,42 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).not.toContain('已同步')
   })
 
+  it('keeps materialized draft image urls when editing continues during a pending save', async () => {
+    let resolveSave!: () => void
+    const savePromise = new Promise<never>((resolve) => {
+      resolveSave = () => resolve({} as never)
+    })
+    const editContext = createEditContext({
+      saveText: vi.fn(() => savePromise),
+    })
+    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
+      name: 'chart.png',
+      url: 'https://synapse.test/files/asset_image',
+    }))
+    renderRenderer({ edit: editable(), editContext })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    await click(buttonWithText('继续插入'))
+    await click(buttonWithText('保存'))
+    await inputValue(editor(), '# Notes![chart](blob:synapse-test-1)\n\nMore')
+
+    await act(async () => {
+      resolveSave()
+      await savePromise
+      await Promise.resolve()
+    })
+
+    expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)\n\nMore')
+    expect(document.body.textContent).toContain('未保存')
+
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenLastCalledWith({
+      text: '# Notes![chart](https://synapse.test/files/asset_image)\n\nMore',
+      baseVersionId: 'version-1',
+    })
+  })
+
   it('asks before reloading dirty markdown and clears dirty state after confirmation', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
