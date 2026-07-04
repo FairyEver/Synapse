@@ -23,6 +23,8 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded("notes.synapse-sync-tmp", rules)).toBe(true)
     expect(isDriveSyncExcluded(".synapse-sync-trash", rules)).toBe(true)
     expect(isDriveSyncExcluded(".synapse-sync-trash/removed.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded(".synapse-drive-sync-123.tmp", rules)).toBe(true)
+    expect(isDriveSyncExcluded("nested/.synapse-drive-sync-123.tmp", rules)).toBe(true)
     expect(isDriveSyncExcluded("packages/app/.git/config", rules)).toBe(true)
   })
 
