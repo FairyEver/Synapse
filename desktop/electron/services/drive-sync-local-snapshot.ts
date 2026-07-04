@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs"
 import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
 import type { DriveSyncExcludeRulesDto } from "@synapse/shared" with { "resolution-mode": "import" }
-import { isDriveSyncExcluded } from "./drive-sync-excludes"
+import { hasDriveSyncIncludedDescendant, isDriveSyncExcluded } from "./drive-sync-excludes"
 import { resolveBindingChildPath, toDriveSyncRelativePath } from "./drive-sync-paths"
 
 export interface DriveSyncLocalSnapshotEntry {
@@ -72,21 +72,25 @@ export async function scanDriveSyncLocalTreeDetailed(input: {
     for (const entry of entries) {
       const absolutePath = resolveBindingChildPath(rootPath, toDriveSyncRelativePath(rootPath, path.join(directoryPath, entry.name)))
       const relativePath = toDriveSyncRelativePath(rootPath, absolutePath)
-      if (isDriveSyncExcluded(relativePath, input.rules)) continue
+      const excluded = isDriveSyncExcluded(relativePath, input.rules)
+      if (excluded && (!entry.isDirectory() || !hasDriveSyncIncludedDescendant(relativePath, input.rules))) continue
       const stats = await lstat(absolutePath)
       if (stats.isSymbolicLink()) {
         skipped.push({ relativePath, reason: "symlink" })
         continue
       }
       if (stats.isDirectory()) {
-        result.push({
-          relativePath,
-          kind: "folder",
-          size: null,
-          mtimeMs: stats.mtimeMs,
-          hash: null,
-        })
+        const entryCountBeforeWalk = result.length
         await walk(absolutePath)
+        if (!excluded || result.length > entryCountBeforeWalk) {
+          result.push({
+            relativePath,
+            kind: "folder",
+            size: null,
+            mtimeMs: stats.mtimeMs,
+            hash: null,
+          })
+        }
       } else if (stats.isFile()) {
         result.push({
           relativePath,

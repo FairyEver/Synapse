@@ -70,6 +70,23 @@ describe("drive sync local snapshot", () => {
     expect(snapshot.skipped).toEqual([{ relativePath: "docs/link.md", reason: "symlink" }])
   })
 
+  it("scans gitignore-negated files inside otherwise excluded folders", async () => {
+    await mkdir(path.join(tempDir, "build"), { recursive: true })
+    await writeFile(path.join(tempDir, "build", "keep.txt"), "keep", "utf8")
+    await writeFile(path.join(tempDir, "build", "output.js"), "drop", "utf8")
+
+    const entries = await scanDriveSyncLocalTree({
+      rootPath: tempDir,
+      rules: {
+        ...createDefaultDriveSyncExcludeRules(),
+        importedGitignore: ["build/**", "!build/keep.txt"],
+      },
+      hashFiles: false,
+    })
+
+    expect(entries.map((entry) => entry.relativePath)).toEqual(["build", "build/keep.txt"])
+  })
+
   it("hashes files with a stable sha256 prefix", async () => {
     const filePath = path.join(tempDir, "note.md")
     await writeFile(filePath, "hello", "utf8")

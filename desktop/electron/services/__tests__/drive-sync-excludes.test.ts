@@ -72,7 +72,21 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded("packages/app/secrets/token.txt", rules)).toBe(false)
   })
 
+  it("applies imported gitignore negation rules in order", () => {
+    const rules = {
+      ...createDefaultDriveSyncExcludeRules(),
+      importedGitignore: ["build/**", "!build/keep.txt"],
+    }
+
+    expect(isDriveSyncExcluded("build/output.js", rules)).toBe(true)
+    expect(isDriveSyncExcluded("build/keep.txt", rules)).toBe(false)
+    expect(isDriveSyncExcluded(".git/config", {
+      ...rules,
+      user: ["!.git/config"],
+    })).toBe(true)
+  })
+
   it("parses gitignore content into copied binding rules", () => {
-    expect(parseGitignoreForDriveSync("# comment\n\nsecrets/\n!important.md\n*.tmp\n")).toEqual(["secrets/**", "*.tmp"])
+    expect(parseGitignoreForDriveSync("# comment\n\nsecrets/\n!important.md\n*.tmp\n")).toEqual(["secrets/**", "!important.md", "*.tmp"])
   })
 })
