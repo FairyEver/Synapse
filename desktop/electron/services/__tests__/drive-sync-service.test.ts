@@ -862,6 +862,68 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("exposes running operations while sync work is in progress", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const download = createDeferred<{ readonly ok: true; readonly path: string }>()
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-1",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "user",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await download.promise
+            await writeFile(outputPath, "remote spec", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+      const pollPromise = service.pollRemoteChanges(binding.id)
+
+      await waitForExpect(() => {
+        expect(harness.deps.accountService.downloadDriveFile).toHaveBeenCalled()
+      })
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        operations: [expect.objectContaining({ kind: "download", status: "running" })],
+        summary: { runningOperationCount: 1 },
+      })
+
+      download.resolve({ ok: true, path: path.join(tempDir, "spec.md") })
+      await pollPromise
+
+      const snapshot = await service.getSnapshot()
+      expect(snapshot.summary.runningOperationCount).toBe(0)
+      expect(snapshot.operations).toHaveLength(1)
+      expect(snapshot.operations[0]).toMatchObject({ kind: "download", status: "succeeded" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("initializes safe binding remote cursor after the initial sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

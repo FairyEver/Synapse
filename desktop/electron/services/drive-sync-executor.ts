@@ -20,17 +20,18 @@ export interface DriveSyncExecutorDeps {
   readonly operation: DriveSyncPlannedOperation
   readonly baselineStore: DriveSyncBaselineStore
   readonly accountService: DriveSyncAccountService
-  readonly recordOperation: (input: DriveSyncRecordOperationInput) => Promise<unknown>
+  readonly recordOperation: (input: DriveSyncRecordOperationInput) => Promise<{ readonly id: string }>
   readonly trashLocalPath: (localPath: string) => Promise<void>
   readonly markSelfWrite?: (input: { readonly bindingId: string; readonly relativePath: string }) => void
 }
 
 export async function executeDriveSyncOperation(deps: DriveSyncExecutorDeps): Promise<void> {
+  const runningOperation = await record(deps, "running", null)
   try {
     await executeOperationBody(deps)
-    await record(deps, "succeeded", null)
+    await record(deps, "succeeded", null, runningOperation.id)
   } catch (error) {
-    await record(deps, "error", errorMessage(error))
+    await record(deps, "error", errorMessage(error), runningOperation.id)
     throw error
   }
 }
@@ -448,8 +449,10 @@ async function record(
   deps: DriveSyncExecutorDeps,
   status: DriveSyncOperationStatus,
   message: string | null,
-): Promise<void> {
-  await deps.recordOperation({
+  id?: string,
+): Promise<{ readonly id: string }> {
+  return deps.recordOperation({
+    id,
     bindingId: deps.binding.id,
     kind: deps.operation.kind as DriveSyncOperationEntryV1["kind"],
     status,

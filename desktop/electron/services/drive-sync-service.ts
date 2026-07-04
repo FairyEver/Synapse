@@ -132,6 +132,7 @@ type DriveSyncLocalPermissionSource =
   | "driveSync.executeOperation"
 
 export interface DriveSyncRecordOperationInput {
+  readonly id?: string
   readonly bindingId: string
   readonly kind: DriveSyncOperationEntryV1["kind"]
   readonly status: DriveSyncOperationStatus
@@ -1799,8 +1800,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
     const binding = await requireBinding(input.bindingId)
     const now = timestamp()
+    const existing = input.id ? await deps.operations.get(input.id) : null
     const entry: DriveSyncOperationEntryV1 = {
-      id: createId("drive-sync-operation"),
+      id: existing?.id ?? input.id ?? createId("drive-sync-operation"),
       schemaVersion: 1,
       bindingId: input.bindingId,
       kind: input.kind,
@@ -1810,9 +1812,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       localPath: input.localPath ?? null,
       remotePathHint: input.remotePathHint ?? null,
       message: sanitizeNullableDriveSyncMessage(input.message),
-      createdAt: now,
+      createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      startedAt: input.status === "running" ? now : null,
+      startedAt: input.status === "running" ? existing?.startedAt ?? now : existing?.startedAt ?? null,
       completedAt: isTerminalOperationStatus(input.status) ? now : null,
     }
     await deps.operations.upsert(entry)
