@@ -325,7 +325,7 @@ describe("drive sync planner", () => {
     ])
   })
 
-  it("keeps nested remote paths and item kinds from change metadata", () => {
+  it("collapses created folder descendants into one folder download", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),
       baseline: [],
@@ -342,12 +342,6 @@ describe("drive sync planner", () => {
         relativePath: "notes",
         driveItemId: "remote-folder",
         remoteItemKind: "folder",
-      }),
-      expect.objectContaining({
-        kind: "download",
-        relativePath: "notes/spec.md",
-        driveItemId: "remote-file",
-        remoteItemKind: "file",
       }),
     ])
   })

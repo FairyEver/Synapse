@@ -23,7 +23,7 @@ export async function pollDriveSyncRemoteChanges(input: {
   let baseline = input.baseline
   let cursor = input.binding.remoteCursor
   const seenChangeIds = new Set<string>()
-  const restoredFolderDownloads = new Set<string>()
+  const recursiveFolderDownloads = new Set<string>()
 
   while (true) {
     const page = await input.accountService.listDriveChanges({
@@ -56,13 +56,13 @@ export async function pollDriveSyncRemoteChanges(input: {
       changes,
       localChangedPaths: input.localChangedPaths,
       shouldIgnoreChange: (change, relativePath, entry) => {
-        if (change.type === "restored" && isDescendantOfAnyRoot(relativePath, restoredFolderDownloads)) return true
+        if (isDescendantOfAnyRoot(relativePath, recursiveFolderDownloads)) return true
         return input.shouldIgnoreChange?.(change, relativePath, entry) ?? false
       },
     })
     if (plan.operations.length > 0) await input.onOperations(plan.operations)
     if (plan.conflicts.length > 0) await input.onConflicts(plan.conflicts)
-    rememberRestoredFolderDownloads(restoredFolderDownloads, changes, plan.operations)
+    rememberRecursiveFolderDownloads(recursiveFolderDownloads, changes, plan.operations)
     baseline = baselineAfterOperations(baseline, plan.operations)
     binding = bindingAfterRootMove(binding, plan.operations)
 
@@ -103,19 +103,19 @@ function baselineAfterOperations(
   return nextBaseline
 }
 
-function rememberRestoredFolderDownloads(
+function rememberRecursiveFolderDownloads(
   roots: Set<string>,
   changes: DriveChangeListPageDto["items"],
   operations: readonly DriveSyncPlannedOperation[],
 ): void {
-  const restoredFolderIds = new Set(
+  const recursiveFolderIds = new Set(
     changes
-      .filter((change) => change.type === "restored" && change.itemKind === "folder")
+      .filter((change) => (change.type === "created" || change.type === "restored") && change.itemKind === "folder")
       .map((change) => change.itemId),
   )
   for (const operation of operations) {
     if (operation.kind !== "download" || operation.remoteItemKind !== "folder" || !operation.driveItemId) continue
-    if (!restoredFolderIds.has(operation.driveItemId)) continue
+    if (!recursiveFolderIds.has(operation.driveItemId)) continue
     roots.add(operation.relativePath)
   }
 }

@@ -132,6 +132,37 @@ describe("drive sync remote poller", () => {
     ])
   })
 
+  it("skips created descendants after a previous page downloads the created folder", async () => {
+    const accountService = createAccountService([
+      page({
+        items: [remoteChange({ id: "change:folder", itemId: "remote-folder", type: "created", pathHint: "/Docs/Upload", itemKind: "folder" })],
+        nextCursor: "42",
+        hasMore: true,
+      }),
+      page({
+        items: [
+          remoteChange({ id: "change:spec", itemId: "remote-spec", type: "content_updated", pathHint: "/Docs/Upload/spec.md", itemKind: "file", sequence: "43" }),
+          remoteChange({ id: "change:assets", itemId: "remote-assets", type: "created", pathHint: "/Docs/Upload/assets", itemKind: "folder", sequence: "44" }),
+        ],
+        nextCursor: "44",
+      }),
+    ])
+    const operations: unknown[] = []
+
+    await pollDriveSyncRemoteChanges({
+      binding: binding({ remoteCursor: "41" }),
+      baseline: [],
+      accountService,
+      onOperations: async (items) => { operations.push(...items) },
+      onConflicts: async () => undefined,
+      updateBindingCursor: async () => undefined,
+    })
+
+    expect(operations).toEqual([
+      expect.objectContaining({ kind: "download", relativePath: "Upload", driveItemId: "remote-folder" }),
+    ])
+  })
+
   it("emits one resync operation without advancing cursor when the server requires resync", async () => {
     const accountService = createAccountService([
       page({ items: [], nextCursor: "50", resyncRequired: true }),
