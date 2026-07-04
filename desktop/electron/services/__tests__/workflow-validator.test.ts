@@ -93,6 +93,53 @@ describe("validateWorkflow", () => {
     ]))
   })
 
+  it("rejects option metadata that is not a text array", () => {
+    const nonArrayResult = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: "日报" as unknown as string[], allowCustomOption: true },
+      ],
+    })
+    const nonStringEntryResult = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: [1] as unknown as string[], allowCustomOption: true },
+      ],
+    })
+
+    expect(nonArrayResult.valid).toBe(false)
+    expect(nonArrayResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项必须是文本数组",
+      }),
+    ]))
+    expect(nonStringEntryResult.valid).toBe(false)
+    expect(nonStringEntryResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项必须是文本数组",
+      }),
+    ]))
+  })
+
+  it("rejects allowCustomOption values that are not booleans", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: "true" as unknown as boolean },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的允许自定义设置必须是布尔值",
+      }),
+    ]))
+  })
+
   it("rejects duplicate option values after trimming", () => {
     const result = validateWorkflow({
       ...base,

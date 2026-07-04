@@ -71,14 +71,28 @@ function validateParamDefault(param: WorkflowParam, errors: ValidationError[]): 
   }
 }
 
-function normalizeOptionValues(options?: readonly string[]): string[] {
-  return (options ?? []).map((option) => option.trim()).filter(Boolean)
+function normalizeOptionValues(options: unknown): string[] {
+  if (!Array.isArray(options)) return []
+  return options
+    .filter((option): option is string => typeof option === "string")
+    .map((option) => option.trim())
+    .filter(Boolean)
 }
 
 function validateOptionParam(param: WorkflowParam, errors: ValidationError[]): void {
   if (param.type !== "option") return
   const name = param.name.trim()
-  const options = normalizeOptionValues(param.options)
+  const rawOptions = param.options as unknown
+  const hasMalformedOptions = rawOptions !== undefined
+    && (!Array.isArray(rawOptions) || rawOptions.some((option) => typeof option !== "string"))
+  if (hasMalformedOptions) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的选项必须是文本数组` })
+  }
+  if (param.allowCustomOption !== undefined && typeof param.allowCustomOption !== "boolean") {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的允许自定义设置必须是布尔值` })
+  }
+  const options = normalizeOptionValues(rawOptions)
+  if (hasMalformedOptions) return
   if (options.length === 0) {
     errors.push({ type: "invalid_config", message: `参数「${name}」至少需要一个选项` })
   }

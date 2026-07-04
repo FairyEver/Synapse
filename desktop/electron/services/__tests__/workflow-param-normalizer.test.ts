@@ -119,6 +119,28 @@ describe("normalizeWorkflowRunParams", () => {
     })
   })
 
+  it("treats non-array option metadata as no valid closed options", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: "日报" as unknown as string[], allowCustomOption: false },
+    ]), { report_type: "日报" })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「report_type」必须是预设选项之一",
+    })
+  })
+
+  it("ignores non-string option entries during closed option normalization", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: [1] as unknown as string[], allowCustomOption: false },
+    ]), { report_type: "日报" })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「report_type」必须是预设选项之一",
+    })
+  })
+
   it("accepts custom option values when enabled", async () => {
     const result = await normalizeWorkflowRunParams(def([
       { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },

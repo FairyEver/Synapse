@@ -78,8 +78,12 @@ async function normalizeOneParam(
   return { value: ref.value, stringValue: ref.value.path, snapshotValue: ref.value }
 }
 
-function normalizeOptionValues(options?: readonly string[]): string[] {
-  return (options ?? []).map((option) => option.trim()).filter(Boolean)
+function normalizeOptionValues(options: unknown): string[] {
+  if (!Array.isArray(options)) return []
+  return options
+    .filter((option): option is string => typeof option === "string")
+    .map((option) => option.trim())
+    .filter(Boolean)
 }
 
 function normalizeResourceInput(
