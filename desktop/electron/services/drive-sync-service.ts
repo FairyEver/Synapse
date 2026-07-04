@@ -1129,8 +1129,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly localEntries: readonly { readonly relativePath: string; readonly kind: "file" | "folder"; readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null }[]
   }): Promise<void> {
     const items = await listRemoteTreeChildren(input.parentId)
+    const hasRecursivePaths = items.some((item) => typeof item.path === "string" && item.path.length > 0)
     for (const item of items) {
-      const relativePath = joinRelativePath(input.relativeRoot, item.name)
+      const relativePath = item.path
+        ? normalizeRemoteTreePath(item.path, input.binding.driveItemName, input.binding.drivePathHint)
+        : joinRelativePath(input.relativeRoot, item.name)
       const localEntry = input.localEntries.find((entry) => entry.relativePath === relativePath)
       if (!localEntry) continue
       await baselineStore.upsert({
@@ -1145,7 +1148,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         localHash: localEntry.hash,
         deletedAt: null,
       })
-      if (item.type === "folder") {
+      if (!hasRecursivePaths && item.type === "folder") {
         await recordUploadedFolderBaseline({
           binding: input.binding,
           parentId: item.id,

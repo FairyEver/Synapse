@@ -1473,6 +1473,54 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("records uploaded folder baselines by recursive remote paths instead of duplicate names", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await mkdir(path.join(tempDir, "docs"), { recursive: true })
+      await writeFile(path.join(tempDir, "README.md"), "root", "utf8")
+      await writeFile(path.join(tempDir, "docs", "README.md"), "nested", "utf8")
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          listDriveItemTree: vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => {
+            if (parentId === null || parentId === undefined) {
+              return { items: [{ id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0 }] }
+            }
+            if (parentId === "remote-docs") {
+              return { items: [
+                { id: "remote-root-readme", name: "README.md", type: "file", path: "Docs/README.md", depth: 1 },
+                { id: "remote-docs-folder", name: "docs", type: "folder", path: "Docs/docs", depth: 1 },
+                { id: "remote-nested-readme", name: "README.md", type: "file", path: "Docs/docs/README.md", depth: 2 },
+              ] }
+            }
+            return { items: [] }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "new-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        direction: "local_to_remote",
+      })
+
+      expect(binding).toMatchObject({ status: "active", driveItemId: "remote-docs" })
+      await expect(harness.baseline.get(`${binding.id}:README.md`)).resolves.toMatchObject({
+        relativePath: "README.md",
+        remoteItemId: "remote-root-readme",
+      })
+      await expect(harness.baseline.get(`${binding.id}:docs/README.md`)).resolves.toMatchObject({
+        relativePath: "docs/README.md",
+        remoteItemId: "remote-nested-readme",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("downloads a remote folder binding recursively", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
