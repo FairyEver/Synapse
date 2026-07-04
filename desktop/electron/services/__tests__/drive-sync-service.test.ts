@@ -673,6 +673,33 @@ describe("DriveSyncService", () => {
     ])
   })
 
+  it("prunes old terminal operations after recording new history", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+    })
+
+    for (let index = 1; index <= 105; index += 1) {
+      await service.recordOperation({
+        bindingId: binding.id,
+        kind: "download",
+        status: "succeeded",
+        driveItemId: `drive-item-${index}`,
+        relativePath: `history-${index}.md`,
+        localPath: `/Users/me/docs/history-${index}.md`,
+        remotePathHint: `/产品文档/history-${index}.md`,
+        message: null,
+      })
+    }
+
+    await expect(harness.operations.list({ bindingId: binding.id })).resolves.toHaveLength(100)
+  })
+
   it("redacts drive sync error messages before storing and exposing them", async () => {
     const harness = createHarness()
     const service = createDriveSyncService(harness.deps)

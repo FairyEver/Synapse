@@ -172,6 +172,7 @@ const BINDING_ACTION_BUSY_MESSAGE = "同步操作正在执行，请稍后再试�
 const DEFAULT_REMOTE_POLL_INTERVAL_MS = 30_000
 const SNAPSHOT_GLOBAL_OPERATION_LIMIT = 20
 const SNAPSHOT_BINDING_OPERATION_LIMIT = 20
+const OPERATION_HISTORY_LIMIT_PER_BINDING = SNAPSHOT_BINDING_OPERATION_LIMIT * 5
 
 class TypedDriveSyncEventEmitter extends EventEmitter {
   override on<K extends keyof DriveSyncServiceEvents>(
@@ -1819,6 +1820,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       completedAt: isTerminalOperationStatus(input.status) ? now : null,
     }
     await deps.operations.upsert(entry)
+    await pruneOperationsForBinding(input.bindingId)
     if (input.status === "succeeded") {
       await deps.bindings.upsert({
         ...binding,
@@ -1828,6 +1830,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
     await emitChanged()
     return toOperationDto(entry)
+  }
+
+  async function pruneOperationsForBinding(bindingId: string): Promise<void> {
+    const terminalOperations = (await deps.operations.list({ bindingId }))
+      .filter((operation) => isTerminalOperationStatus(operation.status))
+      .sort(compareUpdatedDesc)
+    const expired = terminalOperations.slice(OPERATION_HISTORY_LIMIT_PER_BINDING)
+    await Promise.all(expired.map((operation) => deps.operations.remove(operation.id)))
   }
 
   async function recordConflict(input: DriveSyncRecordConflictInput): Promise<DriveSyncConflictDto> {
