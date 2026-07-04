@@ -352,6 +352,29 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("collapses restored folder descendants into one folder download", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [],
+      changes: [
+        remoteChange({ itemId: "remote-folder", type: "restored", pathHint: "/Docs/Project", itemKind: "folder" }),
+        remoteChange({ itemId: "remote-spec", type: "restored", pathHint: "/Docs/Project/spec.md", itemKind: "file" }),
+        remoteChange({ itemId: "remote-assets", type: "restored", pathHint: "/Docs/Project/assets", itemKind: "folder" }),
+        remoteChange({ itemId: "remote-logo", type: "restored", pathHint: "/Docs/Project/assets/logo.png", itemKind: "file" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "download",
+        relativePath: "Project",
+        driveItemId: "remote-folder",
+        remoteItemKind: "folder",
+      }),
+    ])
+  })
+
   it("ignores remote changes outside the binding path and excluded paths", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),

@@ -276,6 +276,7 @@ export function planDriveSyncRemoteChanges(input: {
       .map((entry) => [entry.remoteItemId, entry] as const),
   )
   const localChangedPaths = input.localChangedPaths ?? new Set<string>()
+  const restoredFolderRoots = restoredFolderRelativePaths(input.binding, input.changes)
   const operations: DriveSyncPlannedOperation[] = []
   const conflicts: DriveSyncPlannedConflict[] = []
 
@@ -292,6 +293,7 @@ export function planDriveSyncRemoteChanges(input: {
       : baseline?.relativePath ?? currentRelativePath
     if (relativePath === null) continue
     if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
+    if (change.type === "restored" && isDescendantOfAnyRoot(relativePath, restoredFolderRoots)) continue
     if (input.shouldIgnoreChange?.(change, relativePath, baseline)) continue
     const localPath = path.join(input.binding.localPath, relativePath)
     const conflictRelativePath = overlappingChangedRelativePath(localChangedPaths, [
@@ -363,6 +365,27 @@ export function planDriveSyncRemoteChanges(input: {
   }
 
   return sortPlan({ operations, conflicts })
+}
+
+function restoredFolderRelativePaths(
+  binding: DriveSyncBindingEntryV1,
+  changes: readonly DriveChangeDto[],
+): ReadonlySet<string> {
+  const roots = new Set<string>()
+  for (const change of changes) {
+    if (change.type !== "restored" || change.itemKind !== "folder") continue
+    const relativePath = remoteRelativePath(binding, currentPathChange(change))
+    if (relativePath === null || isDriveSyncExcluded(relativePath, binding.excludeRules)) continue
+    roots.add(relativePath)
+  }
+  return roots
+}
+
+function isDescendantOfAnyRoot(relativePath: string, roots: ReadonlySet<string>): boolean {
+  for (const root of roots) {
+    if (relativePath !== root && (root === "" || isPathInSubtree(relativePath, root))) return true
+  }
+  return false
 }
 
 function currentPathChange(change: DriveChangeDto): DriveChangeDto {

@@ -23,6 +23,7 @@ export async function pollDriveSyncRemoteChanges(input: {
   let baseline = input.baseline
   let cursor = input.binding.remoteCursor
   const seenChangeIds = new Set<string>()
+  const restoredFolderDownloads = new Set<string>()
 
   while (true) {
     const page = await input.accountService.listDriveChanges({
@@ -54,10 +55,14 @@ export async function pollDriveSyncRemoteChanges(input: {
       baseline,
       changes,
       localChangedPaths: input.localChangedPaths,
-      shouldIgnoreChange: input.shouldIgnoreChange,
+      shouldIgnoreChange: (change, relativePath, entry) => {
+        if (change.type === "restored" && isDescendantOfAnyRoot(relativePath, restoredFolderDownloads)) return true
+        return input.shouldIgnoreChange?.(change, relativePath, entry) ?? false
+      },
     })
     if (plan.operations.length > 0) await input.onOperations(plan.operations)
     if (plan.conflicts.length > 0) await input.onConflicts(plan.conflicts)
+    rememberRestoredFolderDownloads(restoredFolderDownloads, changes, plan.operations)
     baseline = baselineAfterOperations(baseline, plan.operations)
     binding = bindingAfterRootMove(binding, plan.operations)
 
@@ -98,6 +103,23 @@ function baselineAfterOperations(
   return nextBaseline
 }
 
+function rememberRestoredFolderDownloads(
+  roots: Set<string>,
+  changes: DriveChangeListPageDto["items"],
+  operations: readonly DriveSyncPlannedOperation[],
+): void {
+  const restoredFolderIds = new Set(
+    changes
+      .filter((change) => change.type === "restored" && change.itemKind === "folder")
+      .map((change) => change.itemId),
+  )
+  for (const operation of operations) {
+    if (operation.kind !== "download" || operation.remoteItemKind !== "folder" || !operation.driveItemId) continue
+    if (!restoredFolderIds.has(operation.driveItemId)) continue
+    roots.add(operation.relativePath)
+  }
+}
+
 function baselineAfterMoveOperation(
   baseline: readonly DriveSyncBaselineEntryV1[],
   operation: DriveSyncPlannedOperation,
@@ -121,6 +143,13 @@ function isPathInSubtree(relativePath: string, root: string): boolean {
 
 function subtreeSuffix(relativePath: string, root: string): string {
   return relativePath === root ? "" : relativePath.slice(root.length + 1)
+}
+
+function isDescendantOfAnyRoot(relativePath: string, roots: ReadonlySet<string>): boolean {
+  for (const root of roots) {
+    if (relativePath !== root && (root === "" || isPathInSubtree(relativePath, root))) return true
+  }
+  return false
 }
 
 function driveItemNameFromPathHint(pathHint: string, fallback: string): string {
