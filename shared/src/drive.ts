@@ -86,6 +86,8 @@ export const DRIVE_SYNC_BINDING_PREVIEW_STATUSES = ["ready", "blocked", "warning
 export type DriveSyncBindingPreviewStatus = typeof DRIVE_SYNC_BINDING_PREVIEW_STATUSES[number]
 export const DRIVE_SYNC_CONFLICT_RESOLUTIONS = ["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"] as const
 export type DriveSyncConflictResolutionAction = typeof DRIVE_SYNC_CONFLICT_RESOLUTIONS[number]
+export const DRIVE_SYNC_HEALTH_STATUSES = ["idle", "syncing", "paused", "error"] as const
+export type DriveSyncHealth = typeof DRIVE_SYNC_HEALTH_STATUSES[number]
 export type DriveDocumentImageSourceKind =
   | "owner_asset"
   | "collaborator_asset"
@@ -237,6 +239,11 @@ export interface DriveSyncSnapshotDto {
   readonly bindings: readonly DriveSyncBindingDto[]
   readonly conflicts: readonly DriveSyncConflictDto[]
   readonly operations: readonly DriveSyncOperationDto[]
+  readonly health: {
+    readonly status: DriveSyncHealth
+    readonly lastError: string | null
+    readonly updatedAt: string
+  }
   readonly summary: {
     readonly activeBindingCount: number
     readonly runningOperationCount: number

@@ -33,6 +33,7 @@ describe("driveSyncIpcModule", () => {
         id: "binding-1",
         driveItemId: "drive-item-1",
         driveItemName: "spec.md",
+        drivePathHint: null,
         kind: "file",
         localPath: "/tmp/spec.md",
         status: "error",
@@ -50,6 +51,11 @@ describe("driveSyncIpcModule", () => {
       }],
       conflicts: [],
       operations: [],
+      health: {
+        status: "error",
+        lastError: "network unavailable",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      },
       summary: {
         activeBindingCount: 0,
         runningOperationCount: 0,

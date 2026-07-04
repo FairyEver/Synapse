@@ -716,6 +716,10 @@ describe("DriveSyncService", () => {
     await expect(service.getSnapshot()).resolves.toMatchObject({
       conflicts: [conflict],
       operations: [operation],
+      health: {
+        status: "error",
+        lastError: "network unavailable",
+      },
       summary: {
         activeBindingCount: 0,
         runningOperationCount: 1,

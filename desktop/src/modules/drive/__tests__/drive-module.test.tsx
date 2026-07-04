@@ -597,6 +597,28 @@ describe("DriveModule", () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("恢复")
   })
 
+  it("shows background drive sync health errors in the top toolbar", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 1 },
+      {
+        bindings: [createDriveSyncBinding()],
+        health: {
+          status: "error",
+          lastError: "network unavailable",
+          updatedAt: "2026-06-28T00:00:00.000Z",
+        },
+      },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = getButtonByLabel("同步状态：1 个错误")
+    expect(button.dataset.variant).toBe("outline")
+    expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("outline")
+    expect(button.textContent).toContain("1")
+  })
+
   it("shows active bindings with open conflicts in the conflict tab", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 1, conflictCount: 1 },
@@ -3679,6 +3701,7 @@ function createDriveSyncSnapshot(
     readonly bindings?: DriveSyncSnapshotDto["bindings"]
     readonly conflicts?: readonly DriveSyncConflictFixture[]
     readonly operations?: DriveSyncSnapshotDto["operations"]
+    readonly health?: DriveSyncSnapshotDto["health"]
   } = {},
 ): DriveSyncSnapshotDto {
   const nextSummary = {
@@ -3697,6 +3720,11 @@ function createDriveSyncSnapshot(
       availableActions: conflict.availableActions ?? defaultConflictActions(conflict.type),
     })),
     operations: entries.operations ?? [],
+    health: entries.health ?? {
+      status: "idle",
+      lastError: null,
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    },
     summary: nextSummary,
   }
 }

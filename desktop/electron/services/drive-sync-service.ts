@@ -234,11 +234,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const operationEntries = (await deps.operations.list()).sort(compareUpdatedDesc)
     const operations = selectSnapshotOperations(operationEntries, bindingEntries)
       .map(toOperationDto)
+    const state = await loadState()
 
     return {
       bindings,
       conflicts,
       operations,
+      health: {
+        status: state.health,
+        lastError: state.lastError,
+        updatedAt: state.updatedAt,
+      },
       summary: {
         activeBindingCount: bindings.filter((binding) => binding.status === "active").length,
         runningOperationCount: operations.filter((operation) => isRunningOperationStatus(operation.status)).length,

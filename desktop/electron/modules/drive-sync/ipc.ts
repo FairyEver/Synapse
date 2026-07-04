@@ -63,6 +63,11 @@ const driveSyncSnapshotSchema = z.object({
   bindings: z.array(driveSyncBindingSchema),
   conflicts: z.array(driveSyncConflictSchema),
   operations: z.array(driveSyncOperationSchema),
+  health: z.object({
+    status: z.enum(["idle", "syncing", "paused", "error"]),
+    lastError: z.string().nullable(),
+    updatedAt: z.string().min(1),
+  }),
   summary: z.object({
     activeBindingCount: z.number().int().nonnegative(),
     runningOperationCount: z.number().int().nonnegative(),

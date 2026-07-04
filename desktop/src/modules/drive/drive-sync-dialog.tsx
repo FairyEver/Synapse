@@ -887,7 +887,8 @@ export function DriveSyncStatusButton({
 }) {
   const summary = snapshot?.summary
   const conflictCount = countVisibleDriveSyncConflicts(snapshot)
-  const errorCount = summary?.errorCount ?? 0
+  const hasHealthError = snapshot?.health.status === "error"
+  const errorCount = (summary?.errorCount ?? 0) + (hasHealthError ? 1 : 0)
   const activeCount = summary?.activeBindingCount ?? 0
   const pausedCount = snapshot?.bindings.filter((binding) => binding.status === "paused").length ?? 0
   const badge = conflictCount > 0
