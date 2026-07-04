@@ -404,6 +404,15 @@ const workflowResourceRefSchema = z.union([
   z.object({ kind: z.literal("inline_file"), entryType: z.literal("file"), name: z.string(), mimeType: z.string().optional(), base64: z.string() }),
 ])
 
+const workflowParamSchema = z.object({
+  name: z.string(),
+  type: z.enum(["text", "number", "file", "directory", "option"]),
+  default: z.union([z.string(), z.number(), workflowResourceRefSchema, z.null()]),
+  description: z.string().optional(),
+  options: z.array(z.string()).optional(),
+  allowCustomOption: z.boolean().optional(),
+})
+
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
@@ -412,7 +421,7 @@ const workflowDefinitionSchema = z.object({
   defaultProviderId: z.string().optional(),
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   defaultNodeTimeoutMins: z.number().int().min(1).optional(),
-  params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number", "file", "directory"]), default: z.union([z.string(), z.number(), workflowResourceRefSchema, z.null()]), description: z.string().optional() })),
+  params: z.array(workflowParamSchema),
   nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
 })

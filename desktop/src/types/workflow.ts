@@ -1,6 +1,6 @@
 import type { SynapseAgentConversationTarget } from "./agent-navigation"
 
-export type WorkflowParamType = "text" | "number" | "file" | "directory"
+export type WorkflowParamType = "text" | "number" | "file" | "directory" | "option"
 export type WorkflowResourceEntryType = "file" | "directory"
 export type WorkflowLocalPathResourceRef = { readonly kind: "local_path"; readonly entryType: WorkflowResourceEntryType; readonly path: string }
 export type WorkflowDriveResourceRef = { readonly kind: "drive"; readonly entryType: WorkflowResourceEntryType; readonly id: string; readonly versionId?: string }
@@ -14,6 +14,8 @@ export type WorkflowResourceRef =
 export type WorkflowParamDefault = string | number | WorkflowResourceRef | null
 export interface WorkflowParam {
   name: string; type: WorkflowParamType; default: WorkflowParamDefault; description?: string
+  options?: string[]
+  allowCustomOption?: boolean
 }
 export interface WorkflowParamPreset {
   id: string

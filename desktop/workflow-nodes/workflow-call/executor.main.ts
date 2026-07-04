@@ -94,6 +94,10 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
 }
 
 function childFailureMessage(result: WorkflowRunResult): string {
+  const runError = (result as WorkflowRunResult & { error?: unknown }).error
+  if (typeof runError === "string" && runError.trim().length > 0) {
+    return `子工作流执行失败：${runError.trim()}`
+  }
   const failedNodeError = Object.values(result.nodeResults)
     .find((nodeResult) => nodeResult.status === "failed" && typeof nodeResult.error === "string" && nodeResult.error.trim().length > 0)
     ?.error

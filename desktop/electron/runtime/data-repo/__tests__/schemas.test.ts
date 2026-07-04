@@ -149,6 +149,28 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     }
   })
 
+  it("workflows schema accepts option params", () => {
+    const workflows = allSchemas.find((schema) => schema.name === "workflows")
+    expect(workflows).toBeDefined()
+    expect(workflows?.validate({
+      id: "workflow-1",
+      schemaVersion: 1,
+      name: "Workflow",
+      version: "v1",
+      createdAt: 1,
+      updatedAt: 1,
+      params: [{
+        name: "report_type",
+        type: "option",
+        default: "周报",
+        options: ["日报", "周报"],
+        allowCustomOption: false,
+      }],
+      nodes: [],
+      edges: [],
+    })).toBe(true)
+  })
+
   it("rejects invalid webhook numeric config records", () => {
     const validWebhookConfig = {
       id: "webhook:default",

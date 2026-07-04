@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
@@ -8,20 +8,28 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, ChevronUp, ChevronDown, FolderOpen } from "lucide-react"
 import type { WorkflowParam, WorkflowParamDefault, WorkflowResourceEntryType, WorkflowResourceRef } from "@/types/workflow"
 
 type DraftParam = WorkflowParam & { _key: string }
+const REQUIRED_OPTION_VALUE = "__required__"
+
 function toDraft(p: WorkflowParam): DraftParam {
   return { ...p, _key: crypto.randomUUID() }
 }
 function fromDraft(d: DraftParam): WorkflowParam {
-  return {
+  const param: WorkflowParam = {
     name: d.name,
     type: d.type,
     default: d.default,
-    description: d.description,
   }
+  if (d.description !== undefined) param.description = d.description
+  if (d.type === "option") {
+    param.options = d.options
+    param.allowCustomOption = d.allowCustomOption
+  }
+  return param
 }
 
 // ─── WorkflowParamCard ────────────────────────────────────────────────────────
@@ -38,7 +46,14 @@ interface WorkflowParamCardProps {
 }
 
 function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
+  const allowCustomId = useId()
   const resourceEntryType: WorkflowResourceEntryType | null = param.type === "file" || param.type === "directory" ? param.type : null
+  const optionRows = param.options ?? []
+  const normalizedOptions = normalizeOptionValues(optionRows)
+  const optionDefault = typeof param.default === "string" && normalizedOptions.includes(param.default.trim())
+    ? param.default.trim()
+    : REQUIRED_OPTION_VALUE
+
   const handleChooseResourceDefault = async () => {
     if (!resourceEntryType) return
     const selectedPath = resourceEntryType === "file"
@@ -47,6 +62,23 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
     if (selectedPath) {
       onChange({ default: toLocalPathDefault(resourceEntryType, selectedPath) })
     }
+  }
+  const handleTypeChange = (value: string) => {
+    const type = value as WorkflowParam["type"]
+    if (type === "option") {
+      onChange({ type, default: null, options: [], allowCustomOption: false })
+      return
+    }
+    onChange({ type, default: null, options: undefined, allowCustomOption: undefined })
+  }
+  const updateOption = (optionIndex: number, value: string) => {
+    onChange({ options: optionRows.map((option, i) => i === optionIndex ? value : option) })
+  }
+  const addOption = () => {
+    onChange({ options: [...optionRows, ""] })
+  }
+  const removeOption = (optionIndex: number) => {
+    onChange({ options: optionRows.filter((_, i) => i !== optionIndex) })
   }
 
   return (
@@ -103,7 +135,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
           <Label className="text-xs">类型</Label>
           <Select
             value={param.type}
-            onValueChange={(v) => onChange({ type: v as WorkflowParam["type"], default: null })}
+            onValueChange={handleTypeChange}
           >
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -113,6 +145,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
               <SelectItem value="number">数字</SelectItem>
               <SelectItem value="file">文件</SelectItem>
               <SelectItem value="directory">文件夹</SelectItem>
+              <SelectItem value="option">选项</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -143,6 +176,21 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
+        ) : param.type === "option" ? (
+          <Select
+            value={optionDefault}
+            onValueChange={(value) => onChange({ default: value === REQUIRED_OPTION_VALUE ? null : value })}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={REQUIRED_OPTION_VALUE}>必填</SelectItem>
+              {normalizedOptions.map((option, optionIndex) => (
+                <SelectItem key={`${option}-${optionIndex}`} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ) : (
           <Textarea
             className="resize-none"
@@ -155,6 +203,53 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
           />
         )}
       </div>
+      {param.type === "option" && (
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">选项</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor={allowCustomId} className="text-xs text-muted-foreground">允许自定义</Label>
+              <Switch
+                id={allowCustomId}
+                size="sm"
+                checked={param.allowCustomOption ?? false}
+                onCheckedChange={(checked) => onChange({ allowCustomOption: checked })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            {optionRows.map((option, optionIndex) => (
+              <div key={optionIndex} className="flex items-center gap-1.5">
+                <Input
+                  value={option}
+                  onChange={(e) => updateOption(optionIndex, e.target.value)}
+                  aria-label={`选项 ${optionIndex + 1}`}
+                  placeholder="选项"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => removeOption(optionIndex)}
+                  aria-label="删除选项"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-muted-foreground justify-start gap-1.5 px-2 border border-dashed w-fit"
+              onClick={addOption}
+            >
+              <Plus className="h-3 w-3" />添加选项
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -175,15 +270,33 @@ function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
     && p.type === b[i]?.type
     && p.description === b[i]?.description
     && paramDefaultEqual(p.default, b[i]?.default)
+    && optionMetadataEqual(p, b[i])
   )
+}
+
+function optionMetadataEqual(a: WorkflowParam, b?: WorkflowParam): boolean {
+  if (!b) return false
+  if (a.type !== "option" && b.type !== "option") return true
+  return a.allowCustomOption === b.allowCustomOption
+    && stringArrayEqual(a.options, b.options)
+}
+
+function stringArrayEqual(a?: readonly string[], b?: readonly string[]): boolean {
+  if (a === b) return true
+  if (!a || !b || a.length !== b.length) return false
+  return a.every((value, index) => value === b[index])
 }
 
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
   const [draft, setDraft] = useState<DraftParam[]>(() => params.map(toDraft))
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (open) setDraft(params.map(toDraft))
+    if (open) {
+      setDraft(params.map(toDraft))
+      setSaveError(null)
+    }
   }, [open, params])
 
   const isDirty = useMemo(() => !paramsEqual(draft.map(fromDraft), params), [draft, params])
@@ -216,14 +329,17 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   const addParam = () => {
+    setSaveError(null)
     setDraft((d) => [...d, toDraft({ name: "", type: "text", default: null })])
   }
 
   const removeParam = (i: number) => {
+    setSaveError(null)
     setDraft((d) => d.filter((_, j) => j !== i))
   }
 
   const updateParam = (i: number, patch: Partial<WorkflowParam>) => {
+    setSaveError(null)
     setDraft((d) => d.map((p, j) => j === i ? { ...p, ...patch } : p))
   }
 
@@ -237,9 +353,15 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   const handleSave = () => {
-    onChange(draft
+    const namedParams = draft
       .map((p) => ({ ...fromDraft(p), name: p.name.trim() }))
-      .filter((p) => p.name !== ""))
+      .filter((p) => p.name !== "")
+    const error = namedParams.map(optionValidationError).find(Boolean)
+    if (error) {
+      setSaveError(error)
+      return
+    }
+    onChange(namedParams.map(sanitizeParamForSave))
     onClose()
   }
 
@@ -276,6 +398,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           </Button>
           </div>
         </ScrollArea>
+        {saveError && <p className="text-sm text-destructive">{saveError}</p>}
         <DialogFooter>
           <Button variant="ghost" onClick={handleCancel}>取消</Button>
           <Button onClick={handleSave} disabled={hasDuplicates}>保存</Button>
@@ -317,6 +440,37 @@ function toLocalPathDefault(entryType: WorkflowResourceEntryType, rawPath: strin
   const path = rawPath.trim()
   if (!path) return null
   return { kind: "local_path", entryType, path }
+}
+
+function normalizeOptionValues(options?: readonly string[]): string[] {
+  return options?.map((option) => option.trim()).filter(Boolean) ?? []
+}
+
+function optionValidationError(param: WorkflowParam): string | null {
+  if (param.type !== "option") return null
+  const options = normalizeOptionValues(param.options)
+  if (options.length === 0) return "至少保留一个选项"
+  if (new Set(options).size !== options.length) return "选项不能重复"
+  return null
+}
+
+function sanitizeParamForSave(param: WorkflowParam): WorkflowParam {
+  const base: WorkflowParam = {
+    name: param.name,
+    type: param.type,
+    default: param.default,
+  }
+  if (param.description !== undefined) base.description = param.description
+  if (param.type !== "option") return base
+
+  const options = normalizeOptionValues(param.options)
+  const defaultValue = typeof param.default === "string" ? param.default.trim() : null
+  return {
+    ...base,
+    default: defaultValue && options.includes(defaultValue) ? defaultValue : null,
+    options,
+    allowCustomOption: param.allowCustomOption ?? false,
+  }
 }
 
 function paramDefaultEqual(a: WorkflowParamDefault, b: WorkflowParamDefault): boolean {

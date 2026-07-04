@@ -77,7 +77,7 @@ No provider needed on the call node. It invokes another saved workflow and retur
 
 - `workflowId` (string) — child workflow ID to call. Must not be the current workflow ID.
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
-- `paramTemplates` (object) — child text/number param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
+- `paramTemplates` (object) — child text/number/option param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
 - `paramBindings` (object) — child param name to typed binding map. Use this for file/directory params, for example `{ "input_file": { "mode": "value", "source": { "type": "param", "param": "input_file" } } }`.
 
 Before configuring child params, call `app_workflow_definition_get` for the child workflow and read its current `params`. Do not put the same child param in both `paramTemplates` and `paramBindings`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
@@ -302,7 +302,7 @@ Delete an edge by ID.
 
 Replace the workflow's parameter list entirely.
 
-**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory", default?, description? }`
+**Params:** `workflowId` (string, required), `params` (array, required) — each: `{ name, type: "text"|"number"|"file"|"directory"|"option", default?, description?, options?, allowCustomOption? }`
 **Returns:** `{ versionHash, validation? }`
 **Notes:** Pass empty array to clear all params. Use `null` default for required params. For file/directory defaults, use a resource ref:
 
@@ -311,6 +311,8 @@ Replace the workflow's parameter list entirely.
 ```
 
 Use `"entryType": "directory"` for directory params. Defaults store a reference, not file bytes.
+
+For option / 选项 params, set `options` to an array of strings. The option label and value are the same string. Set `allowCustomOption: true` only when runs may provide a non-empty custom string. Custom run values are not saved back to the workflow definition.
 
 ---
 
@@ -334,7 +336,7 @@ Execute a workflow with parameters.
 
 **Params:** `workflowId` (string, required), `params?` (object — key-value matching param definitions)
 **Returns:** `{ runId }`
-**Notes:** Poll `app_workflow_run_get` with the returned runId to track progress. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
+**Notes:** Poll `app_workflow_run_get` with the returned runId to track progress. For option params, pass a string. Closed options must match one configured option value; params with `allowCustomOption: true` accept a non-empty custom string. Custom run values are not saved back to the workflow definition. For file/directory params, pass either a local path string or a resource ref. Synapse normalizes strings to:
 
 ```json
 { "kind": "local_path", "entryType": "file", "path": "/absolute/path/to/file.txt" }

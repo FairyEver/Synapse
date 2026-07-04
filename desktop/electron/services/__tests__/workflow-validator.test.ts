@@ -23,6 +23,156 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow(base)
     expect(r.valid).toBe(true); expect(r.errors).toHaveLength(0)
   })
+  it("accepts valid option parameters", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "周报", options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("accepts option parameters with null defaults", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects option defaults that are not strings", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: 1, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的默认值必须是选项之一",
+      }),
+    ]))
+  })
+
+  it("accepts option defaults that match after trimming", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: " 周报 ", options: ["日报", " 周报 "], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects option parameters without usable options", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["  "], allowCustomOption: true },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」至少需要一个选项",
+      }),
+    ]))
+  })
+
+  it("rejects option metadata that is not a text array", () => {
+    const nonArrayResult = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: "日报" as unknown as string[], allowCustomOption: true },
+      ],
+    })
+    const nonStringEntryResult = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: [1] as unknown as string[], allowCustomOption: true },
+      ],
+    })
+
+    expect(nonArrayResult.valid).toBe(false)
+    expect(nonArrayResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项必须是文本数组",
+      }),
+    ]))
+    expect(nonStringEntryResult.valid).toBe(false)
+    expect(nonStringEntryResult.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项必须是文本数组",
+      }),
+    ]))
+  })
+
+  it("rejects allowCustomOption values that are not booleans", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: "true" as unknown as boolean },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的允许自定义设置必须是布尔值",
+      }),
+    ]))
+  })
+
+  it("rejects duplicate option values after trimming", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", " 日报 "], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项不能重复",
+      }),
+    ]))
+  })
+
+  it("rejects option defaults outside the option list", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "月报", options: ["日报", "周报"], allowCustomOption: true },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的默认值必须是选项之一",
+      }),
+    ]))
+  })
   it("detects a cycle", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "a" }, { id: "e3", from: "b", to: "end" }] })
     expect(r.valid).toBe(false); expect(r.errors.some((e) => e.type === "cycle")).toBe(true)

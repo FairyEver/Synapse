@@ -2087,10 +2087,43 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           const snapshots = registry.get<RunSnapshotService>("core.workflow.snapshots")
           const runId = randomUUID()
           const startedAt = Date.now()
+          const normalizedParams = await normalizeWorkflowRunParams(input.definition, input.params)
+          if (normalizedParams.errors.length > 0) {
+            const endedAt = Date.now()
+            const error = normalizedParams.errors.map((validationError) => validationError.message).join("；")
+            const result = {
+              status: "failed" as const,
+              nodeResults: {},
+              durationMs: endedAt - startedAt,
+              error,
+            }
+            try {
+              await snapshots.save(sanitizeWorkflowRunSnapshot({
+                runId,
+                workflowId: input.definition.id,
+                version: input.definition.version,
+                startedAt,
+                endedAt,
+                status: "failed",
+                params: input.params,
+                nodeResults: {},
+                definition: input.definition,
+                error,
+              }))
+            } catch (err) {
+              engineLogger.warn("failed to persist nested workflow run snapshot", {
+                runId,
+                workflowId: input.definition.id,
+                boundary: "workflow-call-snapshot",
+                ...capabilityRejectionDiagnostic(err),
+              })
+            }
+            return { runId, result }
+          }
           let workflowError: string | undefined
           const result = await workflowEngine.run(
             input.definition,
-            input.params,
+            normalizedParams.params,
             runId,
             (event) => {
               if (event.type === "workflow:failed") {
@@ -2105,6 +2138,15 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             buildWorkflowRunAttribution(input),
           )
           const endedAt = Date.now()
+          const resultError = (result as WorkflowRunResult & { error?: unknown }).error
+          const resultWithWorkflowError = result.status === "failed"
+            && typeof resultError !== "string"
+            && workflowError
+            ? { ...result, error: workflowError }
+            : result
+          const snapshotError = typeof (resultWithWorkflowError as WorkflowRunResult & { error?: unknown }).error === "string"
+            ? (resultWithWorkflowError as WorkflowRunResult & { error: string }).error
+            : undefined
           try {
             await snapshots.save(sanitizeWorkflowRunSnapshot({
               runId,
@@ -2112,11 +2154,11 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
               version: input.definition.version,
               startedAt,
               endedAt,
-              status: result.status,
-              params: input.params,
-              nodeResults: result.nodeResults,
+              status: resultWithWorkflowError.status,
+              params: normalizedParams.params,
+              nodeResults: resultWithWorkflowError.nodeResults,
               definition: input.definition,
-              ...(workflowError ? { error: workflowError } : {}),
+              ...(snapshotError ? { error: snapshotError } : {}),
             }))
           } catch (err) {
             engineLogger.warn("failed to persist nested workflow run snapshot", {
@@ -2126,7 +2168,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
               ...capabilityRejectionDiagnostic(err),
             })
           }
-          return { runId, result }
+          return { runId, result: resultWithWorkflowError }
         },
       },
     }

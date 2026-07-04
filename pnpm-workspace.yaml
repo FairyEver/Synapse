@@ -14,3 +14,15 @@ overrides:
 onlyBuiltDependencies:
   - electron
   - node-pty
+
+allowBuilds:
+  '@clerk/shared': set this to true or false
+  '@nestjs/core': set this to true or false
+  '@prisma/client': set this to true or false
+  '@prisma/engines': set this to true or false
+  electron: set this to true or false
+  electron-winstaller: set this to true or false
+  esbuild: set this to true or false
+  msw: set this to true or false
+  node-pty: set this to true or false
+  prisma: set this to true or false
