@@ -75,5 +75,13 @@ function bindingAfterRootMove(
     && operation.remotePathHint !== binding.drivePathHint,
   )
   if (!rootMove?.remotePathHint) return binding
-  return { ...binding, drivePathHint: rootMove.remotePathHint }
+  return {
+    ...binding,
+    driveItemName: driveItemNameFromPathHint(rootMove.remotePathHint, binding.driveItemName),
+    drivePathHint: rootMove.remotePathHint,
+  }
+}
+
+function driveItemNameFromPathHint(pathHint: string, fallback: string): string {
+  return pathHint.split(/[\\/]+/u).filter(Boolean).at(-1) ?? fallback
 }

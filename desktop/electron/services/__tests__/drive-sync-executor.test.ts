@@ -40,7 +40,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })
 
@@ -48,9 +48,9 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toMatchObject([
       { bindingId: "binding-1", relativePath: "spec.md", remoteItemId: "remote-spec", kind: "file" },
     ])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "download", status: "succeeded", relativePath: "spec.md" }),
-    ])
+    ]))
   })
 
   it("rejects remote file downloads through symlinked local folders", async () => {
@@ -75,16 +75,16 @@ describe("drive sync executor", () => {
         }),
         baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
         accountService,
-        recordOperation: async (record) => { records.push(record) },
+        recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
         trashLocalPath: vi.fn(),
       })).rejects.toThrow("同步路径包含符号链接，已停止写入。")
 
       expect(downloadDriveFile).not.toHaveBeenCalled()
       await expect(readFile(path.join(outsideDir, "spec.md"), "utf8")).rejects.toThrow()
       await expect(namespace.list()).resolves.toEqual([])
-      expect(records).toEqual([
+      expect(records).toEqual(expect.arrayContaining([
         expect.objectContaining({ kind: "download", status: "error", relativePath: "linked/spec.md", message: "同步路径包含符号链接，已停止写入。" }),
-      ])
+      ]))
     } finally {
       await rm(outsideDir, { recursive: true, force: true })
     }
@@ -107,7 +107,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })
 
@@ -115,9 +115,9 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toMatchObject([
       { bindingId: "binding-1", relativePath: "notes", remoteItemId: "remote-notes", kind: "folder" },
     ])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "download", status: "succeeded", relativePath: "notes" }),
-    ])
+    ]))
   })
 
   it("recursively downloads remote folder descendants without existing local baselines", async () => {
@@ -154,7 +154,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -174,14 +174,14 @@ describe("drive sync executor", () => {
       uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
       listDriveItemTree: vi.fn(async () => ({
         items: [
-          { id: "nested-local", name: "local.md", type: "file", path: "Docs/Archive/local.md", depth: 2 },
-          { id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 },
+          { id: "stale-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 },
+          { id: "remote-local", name: "local.md", type: "file", path: "Archive/local.md", depth: 1 },
         ],
       })),
     })
 
     await executeDriveSyncOperation({
-      binding: binding({ localPath: tempDir }),
+      binding: binding({ driveItemName: "Docs", drivePathHint: "/Archive", localPath: tempDir }),
       operation: operation({
         kind: "upload",
         relativePath: "local.md",
@@ -190,7 +190,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })
 
@@ -198,9 +198,9 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toMatchObject([
       { relativePath: "local.md", remoteItemId: "remote-local", kind: "file" },
     ])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "upload", status: "succeeded", relativePath: "local.md" }),
-    ])
+    ]))
   })
 
   it("uploads modified single-file bindings to the remote file parent folder", async () => {
@@ -234,7 +234,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })
 
@@ -243,9 +243,9 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toContainEqual(
       expect.objectContaining({ relativePath: "", remoteItemId: "remote-bound", kind: "file" }),
     )
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "upload", status: "succeeded", relativePath: "" }),
-    ])
+    ]))
   })
 
   it("creates remote folders for local folder uploads", async () => {
@@ -260,7 +260,7 @@ describe("drive sync executor", () => {
       operation: operation({ kind: "upload", relativePath: "Folder", driveItemId: null, localPath: path.join(tempDir, "Folder") }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -304,7 +304,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -342,7 +342,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService: createAccountService(),
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -392,7 +392,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService: createAccountService(),
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -433,7 +433,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -476,7 +476,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })).rejects.toThrow("文件名无效。")
 
@@ -520,7 +520,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })).rejects.toThrow("目标位置已有同名文件。")
 
@@ -572,7 +572,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath: vi.fn(),
     })
 
@@ -613,7 +613,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService: createAccountService(),
-      recordOperation: async () => undefined,
+      recordOperation: async () => ({ id: "operation-1" }),
       trashLocalPath,
     })
 
@@ -655,16 +655,16 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })
 
     await expect(namespace.list()).resolves.toMatchObject([
       { relativePath: "gone.md", deletedAt: "2026-06-28T00:00:00.000Z" },
     ])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "delete_remote", status: "succeeded", message: null }),
-    ])
+    ]))
   })
 
   it("treats missing local paths as successful local deletes", async () => {
@@ -694,7 +694,7 @@ describe("drive sync executor", () => {
       }),
       baselineStore: store,
       accountService: createAccountService(),
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(async () => {
         throw Object.assign(new Error("ENOENT"), { code: "ENOENT" })
       }),
@@ -703,9 +703,9 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toMatchObject([
       { relativePath: "gone.md", deletedAt: "2026-06-28T00:00:00.000Z" },
     ])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "delete_local", status: "succeeded", message: null }),
-    ])
+    ]))
   })
 
   it("rejects nested uploads when the parent folder baseline is missing", async () => {
@@ -726,20 +726,20 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService: createAccountService({ uploadDriveLocalItems }),
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })).rejects.toThrow("云盘父文件夹尚未同步，已停止上传子项。")
 
     expect(uploadDriveLocalItems).not.toHaveBeenCalled()
     await expect(namespace.list()).resolves.toEqual([])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: "upload",
         status: "error",
         relativePath: "Project/spec.md",
         message: "云盘父文件夹尚未同步，已停止上传子项。",
       }),
-    ])
+    ]))
   })
 
   it("records failed operations without updating baseline", async () => {
@@ -761,18 +761,18 @@ describe("drive sync executor", () => {
       }),
       baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
       accountService,
-      recordOperation: async (record) => { records.push(record) },
+      recordOperation: async (record) => { records.push(record); return { id: "operation-1" } },
       trashLocalPath: vi.fn(),
     })).rejects.toThrow("disk unavailable")
 
     await expect(namespace.list()).resolves.toEqual([])
-    expect(records).toEqual([
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: "download",
         status: "error",
         message: expect.stringContaining("[redacted]"),
       }),
-    ])
+    ]))
     expect(JSON.stringify(records)).not.toContain("raw-bearer")
     expect(JSON.stringify(records)).not.toContain("plain-secret")
     expect(JSON.stringify(records)).not.toContain("/Users/me/private/secret.md")

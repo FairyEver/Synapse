@@ -1513,6 +1513,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await deps.bindings.upsert({
       ...current,
       drivePathHint: operation.remotePathHint,
+      driveItemName: driveItemNameFromPathHint(operation.remotePathHint, current.driveItemName),
       updatedAt: timestamp(),
     })
     await emitChanged()
@@ -2255,6 +2256,10 @@ function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?
 
 function normalizeRemoteTreePathSegments(value: string): string {
   return value.split(/[\\/]+/u).filter(Boolean).join("/")
+}
+
+function driveItemNameFromPathHint(pathHint: string, fallback: string): string {
+  return normalizeRemoteTreePathSegments(pathHint).split("/").filter(Boolean).at(-1) ?? fallback
 }
 
 function assertNoRemoteFolderPathCollisions(

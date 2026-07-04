@@ -2715,7 +2715,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("updates the remote root path after the synced drive folder moves", async () => {
+  it("updates the remote root name and path after the synced drive folder renames", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       const listDriveChanges = vi.fn()
@@ -2729,8 +2729,8 @@ describe("DriveSyncService", () => {
             itemKind: "folder",
             versionId: null,
             etag: null,
-            name: "Docs",
-            pathHint: "/Archive/Docs",
+            name: "Archive",
+            pathHint: "/Archive",
             actor: "user",
             occurredAt: "2026-06-28T00:00:00.000Z",
           }],
@@ -2748,7 +2748,7 @@ describe("DriveSyncService", () => {
             versionId: null,
             etag: null,
             name: "spec.md",
-            pathHint: "/Archive/Docs/spec.md",
+            pathHint: "/Archive/spec.md",
             actor: "user",
             occurredAt: "2026-06-28T00:00:01.000Z",
           }],
@@ -2788,11 +2788,12 @@ describe("DriveSyncService", () => {
         cursor: "42",
         limit: 100,
         rootItemId: "drive-root",
-        rootPathHint: "/Archive/Docs",
+        rootPathHint: "/Archive",
       })
       await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("remote")
       await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
-        drivePathHint: "/Archive/Docs",
+        driveItemName: "Archive",
+        drivePathHint: "/Archive",
         remoteCursor: "43",
       })
     } finally {

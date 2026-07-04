@@ -408,7 +408,8 @@ async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: strin
 
 function uploadedRemotePath(deps: DriveSyncExecutorDeps, name: string): string {
   if (deps.binding.kind !== "folder" || !deps.operation.relativePath) return name
-  return path.posix.join(deps.binding.driveItemName, deps.operation.relativePath)
+  const rootPath = deps.binding.drivePathHint?.split(/[\\/]+/u).filter(Boolean).join("/") || deps.binding.driveItemName
+  return path.posix.join(rootPath, deps.operation.relativePath)
 }
 
 function isDirectUploadedRemoteMatch(
