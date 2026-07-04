@@ -465,7 +465,11 @@ describe("DriveController", () => {
   it("does not leak protected static assets without a site cookie", async () => {
     sites.resolvePublicSite.mockResolvedValue({ status: "password_required" })
 
-    await request(app!.getHttpServer()).get("/sites/site_secret/assets/app.js").expect(404)
+    const response = await request(app!.getHttpServer()).get("/sites/site_secret/assets/app.js").expect(404)
+
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
@@ -476,8 +480,23 @@ describe("DriveController", () => {
 
     expect(sites.resolvePublicSite).toHaveBeenCalledWith("site_secret", { cookie: null, relativePath: "docs/" })
     expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/sites/site_secret/docs/"')
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("does not cache protected static site assets after an invalid password query", async () => {
+    sites.createSiteAccessCookie.mockResolvedValue(null)
+
+    const response = await request(app!.getHttpServer())
+      .get("/sites/site_secret/assets/app.js?password=wrong-password")
+      .expect(404)
+
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 

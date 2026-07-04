@@ -1079,6 +1079,7 @@ export class DrivePublicController {
     const sites = requireDriveSiteService(this.sites)
     const cookie = password ? await sites.createSiteAccessCookie(siteId, password) : null
     if (!cookie) {
+      setProtectedSiteDenialHeaders(response)
       response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
       return
     }
@@ -1097,9 +1098,11 @@ export class DrivePublicController {
         return
       }
       if (isDriveSitePasswordPagePath(relativePath)) {
+        setProtectedSiteDenialHeaders(response)
         response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
         return
       }
+      setProtectedSiteDenialHeaders(response)
       response.status(404).type("html").send(renderDriveSiteNotFoundPage())
       return
     }
@@ -1109,9 +1112,11 @@ export class DrivePublicController {
     })
     if (access.status === "password_required") {
       if (isDriveSitePasswordPagePath(relativePath)) {
+        setProtectedSiteDenialHeaders(response)
         response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
         return
       }
+      setProtectedSiteDenialHeaders(response)
       response.status(404).type("html").send(renderDriveSiteNotFoundPage())
       return
     }
@@ -2036,6 +2041,12 @@ function ensureDriveZipDirectoryPath(path: string): string {
 function setProtectedShareContentCacheHeaders(response: Response): void {
   response.setHeader("Cache-Control", "private, no-store")
   response.setHeader("Vary", "Cookie")
+}
+
+function setProtectedSiteDenialHeaders(response: Response): void {
+  response.setHeader("Cache-Control", "private, no-store")
+  response.setHeader("Vary", "Cookie")
+  response.setHeader("X-Content-Type-Options", "nosniff")
 }
 
 async function sendDriveFileDownload(response: Response, download: {
