@@ -78,6 +78,38 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(0n)
   })
 
+  it("prepares and completes zero-byte file uploads without reserving quota", async () => {
+    const prisma = createPrismaMemory()
+    const storage = {
+      ...storageMock,
+      createUploadInstruction: vi.fn(async () => ({
+        method: "PUT" as const,
+        url: "https://cos.example/upload",
+        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+        headers: { "Content-Type": "text/plain" },
+      })),
+      headObject: vi.fn(async () => ({ key: "drive/empty", size: 0n, etag: "empty-etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "empty.txt",
+      size: "0",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    const completed = await service.completeUpload("user-1", result.sessionId)
+
+    expect(result.item).toMatchObject({ name: "empty.txt", size: "0", storageStatus: "pending" })
+    expect(completed).toMatchObject({ name: "empty.txt", size: "0", storageStatus: "active" })
+    expect(storage.createUploadInstruction).toHaveBeenCalledWith(expect.objectContaining({ expectedSize: 0n }))
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    expect(usage.usedBytes).toBe(0n)
+  })
+
   it("rejects stale concurrent upload reservations before reserved quota exceeds the limit", async () => {
     const prisma = createPrismaMemory({ staleUsageReads: true })
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1824,6 +1856,37 @@ describe("DriveService", () => {
     expect(prepareUpload).not.toHaveBeenCalled()
     const rootChildren = await service.listItems("user-1", result.root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
+  })
+
+  it("prepares folder uploads that contain zero-byte files", async () => {
+    const prisma = createPrismaMemory()
+    const storage = {
+      ...storageMock,
+      createUploadInstruction: vi.fn(async () => ({
+        method: "PUT" as const,
+        url: "https://cos.example/upload",
+        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+        headers: { "Content-Type": "text/plain" },
+      })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [
+        { relativePath: ".gitkeep", size: "0", mimeType: "text/plain" },
+        { relativePath: "docs/empty.md", size: "0", mimeType: "text/markdown" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })
+
+    expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([".gitkeep", "docs/empty.md"])
+    expect(result.entries.map((entry) => entry.item.size)).toEqual(["0", "0"])
+    expect(storage.createUploadInstruction).toHaveBeenCalledWith(expect.objectContaining({ expectedSize: 0n }))
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
   })
 
   it("prepares folder uploads with empty directory entries", async () => {

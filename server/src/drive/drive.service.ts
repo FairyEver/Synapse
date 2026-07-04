@@ -3450,7 +3450,6 @@ function toDriveItemTreeEntryDto(row: DriveItemTreeEntryQueryRow): DriveItemTree
 function parseRequestedSize(value: string): bigint {
   if (!/^\d+$/u.test(value)) throw new BadRequestException("文件大小无效。")
   const size = BigInt(value)
-  if (size <= 0n) throw new BadRequestException("文件大小无效。")
   return size
 }
 
