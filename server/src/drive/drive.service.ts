@@ -1191,6 +1191,7 @@ export class DriveService implements OnApplicationBootstrap {
       type: item.type,
       userId,
     })
+    const previousPathHint = `/${await this.resolveOwnedItemPath(userId, item)}`
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.driveItem.update({
         where: { id: item.id },
@@ -1203,6 +1204,7 @@ export class DriveService implements OnApplicationBootstrap {
         parentId: next.parentId,
         type: "moved",
         name: next.name,
+        pathHint: previousPathHint,
         actor: userId,
       }, tx)
       return next

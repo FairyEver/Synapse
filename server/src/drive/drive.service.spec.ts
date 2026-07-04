@@ -1688,6 +1688,30 @@ describe("DriveService", () => {
     await expect(service.moveItem("user-1", moving.id, source.id)).resolves.toMatchObject({ id: moving.id, parentId: source.id })
   })
 
+  it("records moved changes with the previous path so synced folders see moved-out children", async () => {
+    const prisma = createPrismaMemory()
+    const changes = createDriveChangeLogMock()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, undefined, undefined, changes as unknown as DriveChangeLogService)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const source = await service.createFolder("user-1", { parentId: null, name: "来源" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "目标" })
+    const moving = await createCompletedUpload(service, "user-1", {
+      parentId: source.id,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    changes.append.mockClear()
+
+    await service.moveItem("user-1", moving.id, target.id)
+
+    expect(changes.append).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: moving.id,
+      parentId: target.id,
+      type: "moved",
+      pathHint: "/来源/report.txt",
+    }), expect.anything())
+  })
+
   it("allows files and folders with the same name in one folder", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
