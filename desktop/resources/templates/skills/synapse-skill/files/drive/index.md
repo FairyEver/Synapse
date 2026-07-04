@@ -64,6 +64,7 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 1. Call `app_drive_link_resolve` with `url` and optional `password`.
    - `password` must be the actual password string. MCP parameters do not expand `$ENV_VAR`; read the variable in your own runtime first, or ask the user for the password.
    - If `access.status` is `password_required`, stop and ask for the password. A protected result may use `root.type: "protected"` until access is unlocked.
+   - `app_drive_link_list`, `app_drive_link_read_text`, and `app_drive_link_download_file` also report password-required protected links; do not treat that as a missing file.
 2. If the result is a folder or site, call `app_drive_link_list` before reading content.
 3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`. For `/share` children, prefer the `itemId` returned by `app_drive_link_list`; use `path` mainly for `/sites` assets or as a share fallback.
 4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`. The returned `files` and manifest include materialized folders, including empty folders. This writes to the local Drive link intake cache and is subject to local write permission and audit.

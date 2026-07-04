@@ -263,6 +263,20 @@ describe("DriveLinkIntakeService", () => {
       .resolves.not.toHaveProperty("password")
   })
 
+  it("asks for passwords before listing, reading, or downloading protected share links", async () => {
+    const { service, drive } = createService()
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" } as never)
+
+    await expect(service.list({ url: `${publicAppUrl}/share/shr_123` })).rejects.toThrow("该链接需要密码。")
+    await expect(service.readText({ url: `${publicAppUrl}/share/shr_123` })).rejects.toThrow("该链接需要密码。")
+    await expect((service as unknown as {
+      openDownload: (input: { readonly url: string }) => Promise<unknown>
+    }).openDownload({ url: `${publicAppUrl}/share/shr_123` })).rejects.toThrow("该链接需要密码。")
+
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+    expect(drive.openShareBrowserItemDownload).not.toHaveBeenCalled()
+  })
+
   it("returns a protected root placeholder for password-required sites", async () => {
     const { service, sites } = createService()
     sites.resolvePublicSite.mockResolvedValueOnce({ status: "password_required" } as never)

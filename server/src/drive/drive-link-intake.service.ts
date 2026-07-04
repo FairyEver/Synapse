@@ -35,6 +35,7 @@ type PublicShareAccessResult =
     }
   }
   | { readonly status: "password_required" }
+  | { readonly status: "not_found" | "disabled" | "expired" | "deleted" }
 
 export type DriveLinkIntakeDeps = {
   readonly drive: {
@@ -146,6 +147,7 @@ export class DriveLinkIntakeService {
       }
     }
 
+    await this.assertShareLinkAccessible(parsed, input.password)
     const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
@@ -208,6 +210,7 @@ export class DriveLinkIntakeService {
       }
     }
 
+    await this.assertShareLinkAccessible(parsed, input.password)
     const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const transfer = await this.deps.drive.openShareBrowserItemDownload({
       shareId: parsed.shareId,
@@ -290,6 +293,7 @@ export class DriveLinkIntakeService {
   }
 
   private async readShareText(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, input: DriveLinkReadTextInput): Promise<DriveLinkReadTextDto> {
+    await this.assertShareLinkAccessible(parsed, input.password)
     const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const snapshot = await this.deps.drive.getShareBrowserSnapshot({
       shareId: parsed.shareId,
@@ -335,6 +339,16 @@ export class DriveLinkIntakeService {
       truncated: raw.truncated,
       source: { linkType: parsed.path ? "site_path" : "site" },
     }
+  }
+
+  private async assertShareLinkAccessible(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, password: string | undefined): Promise<void> {
+    const access = await this.deps.drive.resolvePublicShareAccess({
+      shareId: parsed.shareId,
+      password: driveLinkPassword(password, parsed.password),
+      cookie: undefined,
+    })
+    if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
+    if (access.status !== "ok") throw new NotFoundException("分享链接不存在。")
   }
 
   private async resolveShareItemIdByPath(
