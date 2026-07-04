@@ -11,10 +11,8 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
 } from "@/components/ui/command"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -493,6 +491,11 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
   const [open, setOpen] = useState(false)
   const options = useMemo(() => normalizeOptionValues(param.options), [param.options])
   const trimmedValue = value.trim()
+  const visibleOptions = useMemo(() => {
+    const search = trimmedValue.toLocaleLowerCase()
+    if (!search) return options
+    return options.filter((option) => option.toLocaleLowerCase().includes(search))
+  }, [options, trimmedValue])
 
   if (param.allowCustomOption !== true) {
     return (
@@ -539,21 +542,25 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
             data-track="workflow-run-param-option-input"
           />
           <CommandList>
-            <CommandEmpty>无匹配选项</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
+              {visibleOptions.map((option) => (
+                <button
                   key={option}
-                  value={option}
-                  data-checked={trimmedValue === option}
-                  onSelect={(selectedValue) => {
-                    onChange(selectedValue)
+                  type="button"
+                  role="option"
+                  aria-selected={trimmedValue === option}
+                  className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted aria-selected:bg-muted"
+                  onClick={() => {
+                    onChange(option)
                     setOpen(false)
                   }}
                 >
                   {option}
-                </CommandItem>
+                </button>
               ))}
+              {visibleOptions.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">无匹配选项</p>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>
