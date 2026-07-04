@@ -80,7 +80,7 @@ Input:
 
 Move a Drive file or folder to Drive trash.
 
-This disables `/share/...` links for the deleted item and its folder subtree. Restoring the item later does not reactivate those old share links.
+This temporarily disables `/share/...` links for the deleted item and its folder subtree. Restoring the item reactivates share links disabled by that delete operation; shares manually disabled before the delete stay disabled.
 
 Input:
 
@@ -196,7 +196,7 @@ For `/share` children, prefer `itemId` from `app_drive_link_list`; for `/sites`,
 
 ## Share Tools
 
-Use share tools for `/share/...` links to existing Drive files or folders. Shares can be read-only or editable depending on access settings. Deleted or trashed source items invalidate their share links; restore does not reactivate old links.
+Use share tools for `/share/...` links to existing Drive files or folders. Shares can be read-only or editable depending on access settings. Deleted or trashed source items temporarily disable affected share links. Restoring the item reactivates links disabled by that delete operation; manually disabled shares stay disabled.
 
 ### `app_drive_share_list`
 
