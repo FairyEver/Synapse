@@ -965,6 +965,41 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("redacts Drive link download URLs in local write permission audit metadata", async () => {
+    const accountService = createAccountService({
+      downloadDriveLinkFile: vi.fn(async () => ({ localPath: "/tmp/report.md", mimeType: "text/markdown", size: "12" })),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+    const url = "https://synapse.test/share/shr_secret?password=secret&token=raw-token"
+
+    await expect(dispatcher.dispatch("drive.link.download_file", {
+      url,
+      outputPath: "/tmp/report.md",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: { localPath: "/tmp/report.md", mimeType: "text/markdown", size: "12" },
+    })
+
+    expect(accountService.downloadDriveLinkFile).toHaveBeenCalledWith({ url, outputPath: "/tmp/report.md" })
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/tmp/report.md",
+      context: expect.objectContaining({
+        driveAction: "drive.link.download_file",
+        itemId: expect.stringContaining("password=***"),
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret")
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("raw-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("raw-token")
+  })
+
   it("rejects relative Drive download output paths before fs.write.outside-userdata authorization", async () => {
     const accountService = createAccountService({
       downloadDriveFile: vi.fn(async () => ({ ok: true as const })),

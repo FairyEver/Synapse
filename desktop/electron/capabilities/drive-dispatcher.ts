@@ -2,6 +2,7 @@ import path from "node:path"
 import { createReadStream } from "node:fs"
 import { lstat, readdir, stat } from "node:fs/promises"
 
+import { maskDriveBrowserUrl } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DriveAccessExpiresIn,
   DriveAccessSettingsUpdateInput,
@@ -342,7 +343,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.link.download_file":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkDownloadFileInput(params)
-            if (input.outputPath) await authorizeFileWrite(deps, action, input.url, input.outputPath, context)
+            if (input.outputPath) await authorizeFileWrite(deps, action, maskDriveBrowserUrl(input.url), input.outputPath, context)
             return {
               ok: true,
               data: await deps.accountService.downloadDriveLinkFile(input),
