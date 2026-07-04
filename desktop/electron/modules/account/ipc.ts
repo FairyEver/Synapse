@@ -1130,7 +1130,7 @@ export const accountIpcModule: IpcModule = {
         return runGuardedDriveLinkMaterialize({
           ctx,
           request: parsed,
-          run: () => accountService.materializeDriveLink(parsed),
+          run: async () => driveLinkMaterializeResponseSchema.parse(await accountService.materializeDriveLink(parsed)),
         })
       },
     },

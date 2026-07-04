@@ -29,7 +29,7 @@ export type DriveChangeAppendInput = {
 
 @Injectable()
 export class DriveChangeLogService {
-  private readonly scopedFolderCache = new Map<string, { readonly expiresAt: number; readonly folderIds: readonly string[] }>()
+  private readonly scopedFolderCache = new Map<string, { readonly expiresAt: number; readonly folderIds: string[] }>()
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -94,7 +94,7 @@ export class DriveChangeLogService {
     }
   }
 
-  private async resolveScopedFolderIdsCached(userId: string, rootItemId: string): Promise<readonly string[]> {
+  private async resolveScopedFolderIdsCached(userId: string, rootItemId: string): Promise<string[]> {
     const cacheKey = scopedFolderCacheKey(userId, rootItemId)
     const cached = this.scopedFolderCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) return cached.folderIds
@@ -124,7 +124,7 @@ async function driveChangeScopeWhere(
   client: DriveChangePrisma,
   userId: string,
   input: DriveChangeListInput,
-  resolveFolderIds: (rootItemId: string) => Promise<readonly string[]> = (rootItemId) => resolveScopedFolderIds(client, userId, rootItemId),
+  resolveFolderIds: (rootItemId: string) => Promise<string[]> = (rootItemId) => resolveScopedFolderIds(client, userId, rootItemId),
 ): Promise<Prisma.DriveChangeWhereInput> {
   const rootItemId = normalizeScopeValue(input.rootItemId)
   const rootPathHint = normalizeRootPathHint(input.rootPathHint)
