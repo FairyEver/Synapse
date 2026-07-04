@@ -260,9 +260,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function createBinding(input: DriveSyncCreateBindingInput): Promise<DriveSyncBindingDto> {
-    const localPath = normalizeLocalPath(normalizeRequiredString(input.localPath, "本地路径不能为空。"))
+    const localPath = normalizeLocalPath(preserveRequiredString(input.localPath, "本地路径不能为空。"))
     const driveItemId = normalizeRequiredString(input.driveItemId, "云盘条目不能为空。")
-    const driveItemName = normalizeRequiredString(input.driveItemName, "云盘条目名称不能为空。")
+    const driveItemName = preserveRequiredString(input.driveItemName, "云盘条目名称不能为空。")
     if (input.kind !== "file" && input.kind !== "folder") throw new Error("云盘条目类型无效。")
     await authorizeLocalPath({
       action: "fs.read.outside-userdata",
@@ -2098,6 +2098,11 @@ function normalizeRequiredString(value: string, message: string): string {
   const normalized = value.trim()
   if (!normalized) throw new Error(message)
   return normalized
+}
+
+function preserveRequiredString(value: string, message: string): string {
+  if (!value.trim()) throw new Error(message)
+  return value
 }
 
 async function readBindingImportedGitignoreRules(input: DriveSyncCreateSafeBindingInput): Promise<readonly string[]> {

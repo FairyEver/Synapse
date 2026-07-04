@@ -95,9 +95,9 @@ export function DriveSyncDialog({
   const effectiveBindingMode = isLocalBinding ? "local_to_remote" : bindingMode
   const bindingKind = item?.type ?? localKind
   const pathFieldCopy = isBindingDialog ? getDriveSyncBindingPathFieldCopy(bindingKind, effectiveBindingMode) : null
-  const trimmedLocalPath = localPath.trim()
-  const currentPreview = preview?.localPath === trimmedLocalPath ? preview : null
-  const canSubmitBinding = trimmedLocalPath.length > 0 && !busy && currentPreview?.status !== "blocked"
+  const hasLocalPath = localPath.trim().length > 0
+  const currentPreview = preview?.localPath === localPath ? preview : null
+  const canSubmitBinding = hasLocalPath && !busy && currentPreview?.status !== "blocked"
 
   useEffect(() => {
     if (!open) {
@@ -144,7 +144,7 @@ export function DriveSyncDialog({
     nextMode: DriveSyncBindingMode = effectiveBindingMode,
   ): Promise<DriveSyncBindingPreviewDto | null> => {
     if (!isBindingDialog || nextLocalPath.trim().length === 0) return null
-    const currentPath = nextLocalPath.trim()
+    const currentPath = nextLocalPath
     const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
     const bindingDrivePathHint = isLocalBinding
       ? joinDriveSyncPathHint(drivePathHint, driveItemName)
@@ -174,7 +174,8 @@ export function DriveSyncDialog({
 
   const createBinding = async () => {
     if (!isBindingDialog) return
-    const currentPath = localPath.trim()
+    if (localPath.trim().length === 0) return
+    const currentPath = localPath
     const driveItemName = item?.name ?? getDriveSyncLocalName(currentPath, bindingKind)
     const bindingDrivePathHint = isLocalBinding
       ? joinDriveSyncPathHint(drivePathHint, driveItemName)
@@ -309,7 +310,7 @@ export function DriveSyncDialog({
           <DialogFrameFooter>
             {isBindingDialog ? (
               <>
-                <Button type="button" variant="outline" disabled={busy || trimmedLocalPath.length === 0} onClick={() => { void previewBinding() }}>校验</Button>
+                <Button type="button" variant="outline" disabled={busy || !hasLocalPath} onClick={() => { void previewBinding() }}>校验</Button>
                 <Button type="button" disabled={!canSubmitBinding} onClick={() => { void createBinding() }}>{pathFieldCopy?.submitLabel}</Button>
               </>
             ) : (
@@ -350,7 +351,7 @@ function getDriveSyncBindingPathFieldCopy(
 }
 
 function getDriveSyncLocalName(localPath: string, kind: DriveSyncLocalKind): string {
-  const name = localPath.split(/[\\/]/u).filter(Boolean).at(-1)?.trim()
+  const name = localPath.split(/[\\/]/u).filter(Boolean).at(-1)
   if (name) return name
   return kind === "folder" ? "同步文件夹" : "同步文件"
 }

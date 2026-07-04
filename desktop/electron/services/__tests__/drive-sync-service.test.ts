@@ -1536,6 +1536,47 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("preserves local-to-remote root names and paths with surrounding spaces", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, " Report ")
+      await mkdir(localPath, { recursive: true })
+      await writeFile(path.join(localPath, "note.md"), "note", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      let rootListCalls = 0
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveItemTree: vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => {
+            if (parentId === null || parentId === undefined) {
+              rootListCalls += 1
+              if (rootListCalls === 1) return { items: [], nextOffset: null }
+              return { items: [{ id: "remote-report", name: " Report ", type: "folder", path: " Report ", depth: 0 }] }
+            }
+            return { items: [{ id: "remote-note", name: "note.md", type: "file", path: " Report /note.md", depth: 1 }] }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "new-folder",
+        driveItemName: " Report ",
+        kind: "folder",
+        localPath,
+        direction: "local_to_remote",
+      })
+
+      expect(uploadDriveLocalItems).toHaveBeenCalledWith({
+        parentId: null,
+        items: [expect.objectContaining({ kind: "folder", folderName: " Report " })],
+      })
+      expect(binding).toMatchObject({ localPath, driveItemName: " Report ", driveItemId: "remote-report" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("rejects local folder uploads when the target parent already contains the same folder", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
