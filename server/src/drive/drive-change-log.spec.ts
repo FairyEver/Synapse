@@ -237,6 +237,64 @@ describe("DriveChangeLogService", () => {
     }))
   })
 
+  it("reuses scoped folder ids across paginated scoped reads", async () => {
+    const items = [
+      { id: "drive-root", parentId: null, type: "folder", name: "Docs" },
+      { id: "nested", parentId: "drive-root", type: "folder", name: "Nested" },
+      { id: "remote-report", parentId: "nested", type: "file", name: "report.md" },
+    ]
+    let scopedFolderQueries = 0
+    const prisma = {
+      driveItem: {
+        findMany: vi.fn(async ({ where }) => {
+          if (where.parentId?.in) {
+            scopedFolderQueries += 1
+            const parentIds = new Set(where.parentId.in)
+            return items
+              .filter((item) => item.type === "folder" && parentIds.has(item.parentId ?? ""))
+              .map((item) => ({ id: item.id }))
+          }
+          const ids = new Set(where.id.in)
+          return items.filter((item) => ids.has(item.id))
+        }),
+      },
+      driveChange: {
+        findMany: vi.fn(async () => [
+          {
+            id: "chg_2",
+            sequence: 2n,
+            userId: "user-1",
+            itemId: "remote-report",
+            parentId: "nested",
+            type: "content_updated",
+            versionId: null,
+            etag: null,
+            name: "report.md",
+            pathHint: "/Docs/Nested/report.md",
+            actor: "user-1",
+            occurredAt: new Date("2026-06-28T08:02:00.000Z"),
+          },
+        ]),
+      },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await service.list("user-1", {
+      cursor: "1",
+      limit: 1,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
+    await service.list("user-1", {
+      cursor: "2",
+      limit: 1,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })
+
+    expect(scopedFolderQueries).toBe(2)
+  })
+
   it("returns the current cursor without replaying historical changes", async () => {
     const prisma = {
       driveItem: {

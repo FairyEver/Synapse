@@ -11,6 +11,7 @@ import { PrismaService } from "../prisma/prisma.service"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_ITEM_TYPE } from "./drive.constants"
 
 type DriveChangePrisma = PrismaService | Prisma.TransactionClient
+const SCOPED_FOLDER_CACHE_TTL_MS = 30_000
 
 export type DriveChangeAppendInput = {
   readonly userId: string
@@ -28,9 +29,12 @@ export type DriveChangeAppendInput = {
 
 @Injectable()
 export class DriveChangeLogService {
+  private readonly scopedFolderCache = new Map<string, { readonly expiresAt: number; readonly folderIds: readonly string[] }>()
+
   constructor(private readonly prisma: PrismaService) {}
 
   async append(input: DriveChangeAppendInput, client: DriveChangePrisma = this.prisma): Promise<DriveChangeDto> {
+    this.invalidateScopedFolderCache(input.userId)
     const metadata = await resolveItemMetadata(client, input.userId, [input.itemId])
     const itemMetadata = metadata.get(input.itemId)
     const change = await client.driveChange.create({
@@ -56,7 +60,7 @@ export class DriveChangeLogService {
     if (input.cursor === "latest") return this.currentCursor(userId)
     const limit = Math.max(1, Math.min(Math.floor(input.limit ?? 100), 500))
     const cursor = parseCursor(input.cursor)
-    const scopeWhere = await driveChangeScopeWhere(this.prisma, userId, input)
+    const scopeWhere = await driveChangeScopeWhere(this.prisma, userId, input, (rootItemId) => this.resolveScopedFolderIdsCached(userId, rootItemId))
     const rows = await this.prisma.driveChange.findMany({
       where: { userId, sequence: { gt: cursor }, ...scopeWhere },
       orderBy: { sequence: "asc" },
@@ -89,6 +93,25 @@ export class DriveChangeLogService {
       resyncRequired: false,
     }
   }
+
+  private async resolveScopedFolderIdsCached(userId: string, rootItemId: string): Promise<readonly string[]> {
+    const cacheKey = scopedFolderCacheKey(userId, rootItemId)
+    const cached = this.scopedFolderCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) return cached.folderIds
+    const folderIds = await resolveScopedFolderIds(this.prisma, userId, rootItemId)
+    this.scopedFolderCache.set(cacheKey, {
+      expiresAt: Date.now() + SCOPED_FOLDER_CACHE_TTL_MS,
+      folderIds,
+    })
+    return folderIds
+  }
+
+  private invalidateScopedFolderCache(userId: string): void {
+    const prefix = `${userId}:`
+    for (const key of this.scopedFolderCache.keys()) {
+      if (key.startsWith(prefix)) this.scopedFolderCache.delete(key)
+    }
+  }
 }
 
 function parseCursor(cursor: string | null | undefined): bigint {
@@ -101,13 +124,14 @@ async function driveChangeScopeWhere(
   client: DriveChangePrisma,
   userId: string,
   input: DriveChangeListInput,
+  resolveFolderIds: (rootItemId: string) => Promise<readonly string[]> = (rootItemId) => resolveScopedFolderIds(client, userId, rootItemId),
 ): Promise<Prisma.DriveChangeWhereInput> {
   const rootItemId = normalizeScopeValue(input.rootItemId)
   const rootPathHint = normalizeRootPathHint(input.rootPathHint)
   const conditions: Prisma.DriveChangeWhereInput[] = []
   if (rootItemId) {
     conditions.push({ itemId: rootItemId }, { parentId: rootItemId })
-    const scopedFolderIds = await resolveScopedFolderIds(client, userId, rootItemId)
+    const scopedFolderIds = await resolveFolderIds(rootItemId)
     if (scopedFolderIds.length > 0) conditions.push({ parentId: { in: scopedFolderIds } })
   }
   if (rootPathHint) {
@@ -145,6 +169,10 @@ async function resolveScopedFolderIds(
     }
   }
   return [...scoped]
+}
+
+function scopedFolderCacheKey(userId: string, rootItemId: string): string {
+  return `${userId}:${rootItemId}`
 }
 
 function normalizeScopeValue(value: string | null | undefined): string | null {
