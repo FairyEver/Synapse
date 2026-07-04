@@ -76,6 +76,21 @@ describe('DriveTrashView', () => {
     await click(lastTextButton('删除'))
     expect(driveApi.deleteTrashItem).toHaveBeenCalledWith('item-1')
   })
+
+  it('restores public asset trash items through the public asset endpoint', async () => {
+    vi.mocked(driveApi.listTrash).mockResolvedValue({
+      items: [{ id: 'item-1', kind: 'public_asset', assetId: 'asset-1', name: 'logo.png', type: 'file', size: '10', mimeType: 'image/png', originalPath: '/logo.png', trashedAt: '2026-06-29T00:00:00.000Z' }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.restorePublicAsset).mockResolvedValue({} as never)
+    render(<DriveTrashView onChanged={async () => undefined} />)
+    await flush()
+
+    await click(textButton('恢复'))
+    expect(driveApi.restorePublicAsset).toHaveBeenCalledWith('asset-1')
+    expect(driveApi.restoreItem).not.toHaveBeenCalled()
+  })
 })
 
 describe('DrivePublicAssetsView', () => {

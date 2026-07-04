@@ -28,7 +28,12 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
 
   const restoreItem = async (item: DriveTrashItemDto) => {
     try {
-      await driveApi.restoreItem(item.id)
+      if (item.kind === 'public_asset') {
+        if (!item.assetId) throw new Error('公开素材缺少资源 ID，无法恢复')
+        await driveApi.restorePublicAsset(item.assetId)
+      } else {
+        await driveApi.restoreItem(item.id)
+      }
       await load()
       await onChanged()
     } catch (error) {
