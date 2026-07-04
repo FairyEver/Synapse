@@ -88,6 +88,58 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rescans active bindings on local watcher startup and uploads changes missed while closed", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "local.md")
+      await writeFile(localPath, "before", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-local", name: "local.md", type: "file", path: "Docs/local.md", depth: 1 }],
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      await harness.baseline.upsert({
+        id: `${binding.id}:local.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "local.md",
+        kind: "file",
+        remoteItemId: "remote-local",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: 6,
+        localMtimeMs: 1,
+        localHash: "sha256:old",
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+      await writeFile(localPath, "after", "utf8")
+
+      await service.startLocalWatcher()
+
+      expect(uploadDriveLocalItems).toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "local.md" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("denies local sync creation through PermissionGuard and records audit", async () => {
     const permissionGuard: PermissionGuard = {
       registerPolicy: vi.fn(),

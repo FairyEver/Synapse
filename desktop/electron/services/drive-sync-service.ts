@@ -369,9 +369,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await runBindingActionSingleFlight(id, async () => {
       const binding = await requireBinding(id)
       await assertBindingRootReady(binding, { checkRemote: true })
-      const baseline = await baselineStore.listByBinding(id)
-      const changes = await localWatcher.scanBinding({ binding, baseline })
-      await handleLocalChanges(changes)
+      await scanBindingForLocalChanges(binding, { throwOnScanError: true })
     })
   }
 
@@ -431,6 +429,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function startLocalWatcher(): Promise<void> {
     await reconcileLocalWatcher()
+    await rescanActiveBindingsAfterWatcherStart()
   }
 
   async function stopRemotePolling(): Promise<void> {
@@ -1603,6 +1602,38 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function reconcileLocalWatcher(): Promise<void> {
     localWatcher.reconcile(await deps.bindings.list())
+  }
+
+  async function rescanActiveBindingsAfterWatcherStart(): Promise<void> {
+    const bindings = (await deps.bindings.list()).filter((binding) => binding.status === "active")
+    for (const binding of bindings) {
+      await runBindingActionSingleFlight(binding.id, async () => {
+        const current = await requireBinding(binding.id)
+        if (current.status !== "active") return
+        const rootReady = await ensureBindingRootReady(current, { checkRemote: true, throwOnIssue: false })
+        if (!rootReady) return
+        await scanBindingForLocalChanges(current, { throwOnScanError: false })
+      }).catch(async (error) => {
+        await markBindingError(binding.id, errorMessage(error), { emitChanged: true })
+      })
+    }
+  }
+
+  async function scanBindingForLocalChanges(
+    binding: DriveSyncBindingEntryV1,
+    options: { readonly throwOnScanError: boolean },
+  ): Promise<void> {
+    const baseline = await baselineStore.listByBinding(binding.id)
+    let changes: readonly DriveSyncLocalChange[]
+    try {
+      changes = await localWatcher.scanBinding({ binding, baseline })
+    } catch (error) {
+      const message = `本地变更扫描失败：${errorMessage(error)}`
+      await markBindingError(binding.id, message, { emitChanged: true })
+      if (options.throwOnScanError) throw new Error(message)
+      return
+    }
+    await handleLocalChanges(changes)
   }
 
   async function assertBindingRootReady(
