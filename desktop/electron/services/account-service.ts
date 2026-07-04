@@ -2349,12 +2349,21 @@ function parseDriveLinkSize(value: string): number | null {
 
 function driveLinkManifestSourceUrl(value: string): string {
   try {
-    const parsed = new URL(value)
-    parsed.searchParams.delete("password")
-    return parsed.toString()
+    const absolute = /^[a-z][a-z0-9+.-]*:/iu.test(value)
+    const parsed = new URL(value, "https://synapse.local")
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (isSensitiveDriveManifestQueryKey(key)) parsed.searchParams.delete(key)
+    }
+    return absolute ? parsed.toString() : `${parsed.pathname}${parsed.search}${parsed.hash}`
   } catch {
-    return value
+    return value.replace(/([?&](?:password|token|access_token|api_?key|signature|sig)=)[^&#]*&?/giu, (match, prefix: string) =>
+      prefix.startsWith("?") ? "?" : "",
+    ).replace(/[?&]$/u, "")
   }
+}
+
+function isSensitiveDriveManifestQueryKey(key: string): boolean {
+  return /^(?:password|token|access_token|api_?key|signature|sig)$/iu.test(key)
 }
 
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {

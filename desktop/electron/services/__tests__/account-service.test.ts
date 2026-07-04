@@ -327,12 +327,18 @@ describe("AccountService", () => {
       source: { linkType: "share" },
     })
 
-    const result = await service.materializeDriveLink({ url: "https://synapse.test/share/shr_123", password: "secret", scope: "text" })
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/share/shr_123?token=secret-token&signature=secret-signature&utm_source=agent",
+      password: "secret",
+      scope: "text",
+    })
 
     expect(result.localRootPath).toContain(path.join(os.tmpdir(), "synapse-account-userData", "drive-link-intake"))
     expect(result.entryPath).toContain("需求说明.md")
     expect(result.files).toEqual([{ relativePath: "需求说明.md", kind: "markdown", size: "15" }])
-    expect(await readFile(result.manifestPath, "utf8")).not.toContain("secret")
+    const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as { readonly sourceUrl: string }
+    expect(manifest.sourceUrl).toBe("https://synapse.test/share/shr_123?utm_source=agent")
+    expect(JSON.stringify(manifest)).not.toContain("secret")
   })
 
   it("materializes empty Drive link folders into the local cache manifest", async () => {
