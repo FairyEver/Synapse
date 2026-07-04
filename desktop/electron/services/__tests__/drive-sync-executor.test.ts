@@ -239,7 +239,10 @@ describe("drive sync executor", () => {
     })
 
     expect(accountService.getDriveItem).toHaveBeenCalledWith("remote-bound")
-    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-parent" }))
+    expect(accountService.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: "remote-parent",
+      items: [{ kind: "file", path: localPath, name: "bound.md", expectedItemId: "remote-bound" }],
+    })
     await expect(namespace.list()).resolves.toContainEqual(
       expect.objectContaining({ relativePath: "", remoteItemId: "remote-bound", kind: "file" }),
     )

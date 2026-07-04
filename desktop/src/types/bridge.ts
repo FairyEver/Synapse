@@ -140,6 +140,7 @@ export type DriveLocalUploadFileItem = {
   readonly path: string
   readonly name: string
   readonly mimeType?: string | null
+  readonly expectedItemId?: string | null
 }
 
 export type DriveLocalUploadFolderItem = {
@@ -1044,7 +1045,7 @@ export type SynapseBridge = {
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
     listDriveItems: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
-    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
+    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null; expectedItemId?: string | null }) => Promise<DriveUploadPrepareResult>
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
     uploadDrivePreparedFile: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>

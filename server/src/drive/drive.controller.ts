@@ -49,6 +49,7 @@ const prepareUploadSchema = z.object({
   name: z.string().min(1).max(255),
   size: z.string().regex(/^\d+$/u),
   mimeType: z.string().trim().max(255).nullable().optional(),
+  expectedItemId: z.string().nullable().optional(),
 }).strict()
 
 const prepareFolderUploadSchema = z.object({
@@ -192,6 +193,7 @@ export class DriveUserController {
       name: parsed.name,
       size: parsed.size,
       mimeType: parsed.mimeType ?? null,
+      expectedItemId: parsed.expectedItemId ?? null,
       publicAppUrl: resolveRequestPublicAppUrl(request),
     })
   }

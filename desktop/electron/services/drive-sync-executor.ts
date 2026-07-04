@@ -205,7 +205,12 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {
 
   const upload = await deps.accountService.uploadDriveLocalItems({
     parentId: await parentRemoteId(deps),
-    items: [{ kind: "file", path: localPath, name: path.basename(localPath) }],
+    items: [{
+      kind: "file",
+      path: localPath,
+      name: path.basename(localPath),
+      expectedItemId: deps.operation.driveItemId ?? null,
+    }],
   })
   if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
   const remoteItemId = deps.operation.driveItemId ?? await findUploadedRemoteItemId(deps, path.basename(localPath), "file")

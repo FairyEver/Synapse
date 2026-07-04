@@ -438,6 +438,7 @@ const drivePrepareUploadSchema = z.object({
   name: z.string(),
   size: z.string(),
   mimeType: z.string().nullable().optional(),
+  expectedItemId: z.string().nullable().optional(),
 })
 const drivePrepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
@@ -508,6 +509,7 @@ const driveLocalUploadFileItemSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
   mimeType: z.string().nullable().optional(),
+  expectedItemId: z.string().nullable().optional(),
 })
 
 const driveLocalUploadFolderItemSchema = z.object({

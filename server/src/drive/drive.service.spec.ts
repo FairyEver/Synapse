@@ -987,6 +987,43 @@ describe("DriveService", () => {
     expect(await service.listItems("user-1", null)).toHaveLength(2)
   })
 
+  it("overwrites the expected same-name file when an upload target item is supplied", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const older = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const newer = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report-copy.txt",
+      mimeType: "text/plain",
+    })
+    await prisma.driveItem.update({ where: { id: newer.id }, data: { name: "report.txt" } })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      expectedItemId: older.id,
+      publicAppUrl: "https://synapse.test",
+    })
+    expect(prepared.item.id).toBe(older.id)
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(await service.getItem("user-1", older.id)).toMatchObject({ id: older.id, name: "report.txt", size: "5", mimeType: "text/markdown" })
+    expect(await service.getItem("user-1", newer.id)).toMatchObject({ id: newer.id, name: "report.txt", size: "11" })
+    expect(await service.listItems("user-1", null)).toHaveLength(2)
+  })
+
   it("lists Drive items with page metadata when pagination is requested", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

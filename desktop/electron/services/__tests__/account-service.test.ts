@@ -230,7 +230,7 @@ describe("AccountService", () => {
 
     await expect(service.uploadDriveLocalItems({
       parentId: "folder-1",
-      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain", expectedItemId: "file-1" }],
     })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
 
     expect(service.prepareDriveUpload).toHaveBeenCalledWith({
@@ -238,6 +238,7 @@ describe("AccountService", () => {
       name: "report.txt",
       size: "5",
       mimeType: "text/plain",
+      expectedItemId: "file-1",
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()

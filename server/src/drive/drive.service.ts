@@ -724,6 +724,7 @@ export class DriveService implements OnApplicationBootstrap {
       name,
       requestedSize,
       mimeType: input.mimeType ?? null,
+      expectedItemId: input.expectedItemId ?? null,
     }))
 
     let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
@@ -757,22 +758,39 @@ export class DriveService implements OnApplicationBootstrap {
       readonly name: string
       readonly requestedSize: bigint
       readonly mimeType: string | null
+      readonly expectedItemId: string | null
     },
   ): Promise<PreparedUploadRecord> {
-    const existingFile = await tx.driveItem.findFirst({
-      where: {
-        userId,
-        parentId: input.parentId,
-        type: DRIVE_ITEM_TYPE.file,
-        name: input.name,
-        storageStatus: DRIVE_STORAGE_STATUS.active,
-        deletedAt: null,
-        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
-        publicAsset: null,
-      },
-      include: driveItemWithShares,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    })
+    const existingFile = input.expectedItemId
+      ? await tx.driveItem.findFirst({
+          where: {
+            id: input.expectedItemId,
+            userId,
+            parentId: input.parentId,
+            type: DRIVE_ITEM_TYPE.file,
+            name: input.name,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            deletedAt: null,
+            lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+            publicAsset: null,
+          },
+          include: driveItemWithShares,
+        })
+      : await tx.driveItem.findFirst({
+          where: {
+            userId,
+            parentId: input.parentId,
+            type: DRIVE_ITEM_TYPE.file,
+            name: input.name,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            deletedAt: null,
+            lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+            publicAsset: null,
+          },
+          include: driveItemWithShares,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        })
+    if (input.expectedItemId && !existingFile) throw new BadRequestException("上传目标文件已变更。")
     const reservedBytes = input.requestedSize
     if (existingFile) {
       const sessionId = randomUUID()

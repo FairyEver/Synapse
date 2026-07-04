@@ -89,7 +89,13 @@ export interface DriveSyncAccountService {
   readonly uploadDriveLocalItems: (input: {
     readonly parentId?: string | null
     readonly items: Array<
-      | { kind: "file"; path: string; name: string; mimeType?: string | null }
+      | {
+        kind: "file"
+        path: string
+        name: string
+        mimeType?: string | null
+        expectedItemId?: string | null
+      }
       | {
         kind: "folder"
         folderName: string

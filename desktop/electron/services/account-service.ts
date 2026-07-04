@@ -843,12 +843,19 @@ export class AccountService {
     )
   }
 
-  async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {
+  async prepareDriveUpload(input: {
+    parentId?: string | null
+    name: string
+    size: string
+    mimeType?: string | null
+    expectedItemId?: string | null
+  }): Promise<DriveUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
       parentId: input.parentId ?? null,
       name: input.name,
       size: input.size,
       mimeType: input.mimeType ?? null,
+      ...(input.expectedItemId ? { expectedItemId: input.expectedItemId } : {}),
     }, "上传准备失败。")
   }
 
@@ -1024,6 +1031,7 @@ export class AccountService {
         name: item.name,
         size: String(fileStat.size),
         mimeType: item.mimeType ?? null,
+        expectedItemId: item.expectedItemId ?? null,
       })
     } catch (error) {
       return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage(error) }

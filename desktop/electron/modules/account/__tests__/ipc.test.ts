@@ -211,7 +211,7 @@ describe("accountIpcModule", () => {
     expect(requestSchema.parse({
       parentId: "folder-1",
       items: [
-        { kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" },
+        { kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain", expectedItemId: "file-1" },
         {
           kind: "folder",
           folderName: "项目A",
@@ -224,7 +224,7 @@ describe("accountIpcModule", () => {
     })).toMatchObject({
       parentId: "folder-1",
       items: [
-        { kind: "file", name: "report.txt" },
+        { kind: "file", name: "report.txt", expectedItemId: "file-1" },
         { kind: "folder", folderName: "项目A" },
       ],
     })
