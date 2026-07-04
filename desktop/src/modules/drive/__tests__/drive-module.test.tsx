@@ -923,6 +923,39 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("重试同步 Docs").textContent).toContain("重试同步")
   })
 
+  it("does not show a success toast when a manual remote sync records a conflict", async () => {
+    mocks.getDriveSyncSnapshot
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { activeBindingCount: 1 },
+        { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      ))
+      .mockResolvedValueOnce(createDriveSyncSnapshot(
+        { conflictCount: 1 },
+        {
+          bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "conflict" })],
+          conflicts: [{
+            id: "conflict-1",
+            bindingId: "binding-1",
+            relativePath: "spec.md",
+            type: "both_modified",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          }],
+        },
+      ))
+    mocks.pollDriveSyncRemoteChanges.mockResolvedValueOnce(undefined)
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个绑定")
+    await clickButtonByLabel("更多同步操作 Docs")
+    await clickMenuItemText("同步云端变更")
+
+    expect(mocks.pollDriveSyncRemoteChanges).toHaveBeenCalledWith({ id: "binding-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("同步产生冲突，请处理冲突")
+    expect(mocks.toast).not.toHaveBeenCalledWith("已同步云端变更")
+    expect(getButtonByLabel("处理同步冲突 Docs").textContent).toContain("处理冲突")
+  })
+
   it("runs local and remote sync checks when retrying an error binding", async () => {
     mocks.getDriveSyncSnapshot
       .mockResolvedValueOnce(createDriveSyncSnapshot(

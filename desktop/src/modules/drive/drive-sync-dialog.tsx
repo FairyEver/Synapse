@@ -903,8 +903,11 @@ function countVisibleDriveSyncConflicts(snapshot: DriveSyncSnapshotDto | null): 
 
 function driveSyncManualActionErrorMessage(snapshot: DriveSyncSnapshotDto, bindingId: string): string | null {
   const binding = snapshot.bindings.find((item) => item.id === bindingId)
-  if (binding?.status !== "error") return null
-  return binding.lastError?.trim() || "同步失败，请查看同步记录"
+  if (binding?.status === "error") return binding.lastError?.trim() || "同步失败，请查看同步记录"
+  if (binding?.status === "conflict" || snapshot.conflicts.some((conflict) => conflict.bindingId === bindingId)) {
+    return "同步产生冲突，请处理冲突"
+  }
+  return null
 }
 
 function parseExcludeText(value: string): string[] {
