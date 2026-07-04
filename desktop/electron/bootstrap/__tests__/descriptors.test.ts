@@ -903,6 +903,84 @@ describe("bootstrap descriptors (T1.5)", () => {
     }))
   })
 
+  it("nested workflow calls return run-level workflow failed errors", async () => {
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const workflowService = { get: vi.fn() }
+    const snapshotService = { save: vi.fn(async () => undefined) }
+    const containers = { open: vi.fn() }
+    const permissionGuard = { check: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((serviceId: string) => {
+          if (serviceId === "core.workflow") return workflowService
+          if (serviceId === "core.workflow.snapshots") return snapshotService
+          if (serviceId === "core.project-containers") return containers
+          if (serviceId === "core.permission-guard") return permissionGuard
+          if (serviceId === "core.audit-sink") return auditSink
+          throw new Error(`Unexpected service id: ${serviceId}`)
+        }),
+      },
+    }
+    const childDefinition = {
+      id: "child-workflow",
+      name: "Child Workflow",
+      version: "v1",
+      params: [],
+      nodes: [
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 0, y: 0 },
+          config: { outputType: "text", template: "child-output", variables: [] },
+        },
+      ],
+      edges: [],
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      run: ReturnType<typeof vi.fn>
+      runtimeDeps: {
+        workflowCall?: {
+          runWorkflow: (input: {
+            definition: typeof childDefinition
+            params: Record<string, unknown>
+            projectId?: string
+            triggerSource: string
+            abortSignal: AbortSignal
+            parentRunId: string
+            callStack: Array<{ workflowId: string; workflowName?: string }>
+          }) => Promise<{ runId: string; result: { status: string; nodeResults: Record<string, unknown>; durationMs: number; error?: string } }>
+        }
+      }
+    }
+    engine.run = vi.fn(async (_definition, _params, runId: string, emit: (event: unknown) => void) => {
+      emit({ type: "workflow:failed", runId, workflowId: childDefinition.id, error: "子工作流准备失败" })
+      return { status: "failed", nodeResults: {}, durationMs: 1 }
+    })
+
+    const result = await engine.runtimeDeps.workflowCall?.runWorkflow({
+      definition: childDefinition,
+      params: {},
+      projectId: "repo-1",
+      triggerSource: "workflow-call",
+      abortSignal: new AbortController().signal,
+      parentRunId: "parent-run",
+      callStack: [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
+    })
+
+    expect(result?.result.error).toBe("子工作流准备失败")
+    expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
+      runId: result?.runId,
+      workflowId: "child-workflow",
+      status: "failed",
+      error: "子工作流准备失败",
+    }))
+  })
+
   it("workflow Agent dependency converts node timeout minutes to milliseconds", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {
