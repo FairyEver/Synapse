@@ -50,6 +50,18 @@ async function normalizeOneParam(
     if (typeof raw !== "string") return paramError(param, "必须是文本")
     return { value: raw, stringValue: raw, snapshotValue: raw }
   }
+  if (param.type === "option") {
+    if (typeof raw !== "string") return paramError(param, "必须是文本")
+    const value = raw.trim()
+    if (!value) {
+      return { error: { type: "missing_param", message: `缺少必填参数「${param.name}」` } }
+    }
+    const options = normalizeOptionValues(param.options)
+    if (param.allowCustomOption !== true && !options.includes(value)) {
+      return paramError(param, "必须是预设选项之一")
+    }
+    return { value, stringValue: value, snapshotValue: value }
+  }
   if (param.type === "number") {
     const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : Number.NaN
     if (!Number.isFinite(value)) return paramError(param, "必须是数字")
@@ -64,6 +76,10 @@ async function normalizeOneParam(
   const statResult = await statLocalResource(param, ref.value.path)
   if ("error" in statResult) return statResult
   return { value: ref.value, stringValue: ref.value.path, snapshotValue: ref.value }
+}
+
+function normalizeOptionValues(options?: readonly string[]): string[] {
+  return (options ?? []).map((option) => option.trim()).filter(Boolean)
 }
 
 function normalizeResourceInput(

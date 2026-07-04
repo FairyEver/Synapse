@@ -71,6 +71,28 @@ function validateParamDefault(param: WorkflowParam, errors: ValidationError[]): 
   }
 }
 
+function normalizeOptionValues(options?: readonly string[]): string[] {
+  return (options ?? []).map((option) => option.trim()).filter(Boolean)
+}
+
+function validateOptionParam(param: WorkflowParam, errors: ValidationError[]): void {
+  if (param.type !== "option") return
+  const name = param.name.trim()
+  const options = normalizeOptionValues(param.options)
+  if (options.length === 0) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」至少需要一个选项` })
+  }
+  if (new Set(options).size !== options.length) {
+    errors.push({ type: "invalid_config", message: `参数「${name}」的选项不能重复` })
+  }
+  if (param.default !== null) {
+    const defaultValue = typeof param.default === "string" ? param.default.trim() : null
+    if (!defaultValue || !options.includes(defaultValue)) {
+      errors.push({ type: "invalid_config", message: `参数「${name}」的默认值必须是选项之一` })
+    }
+  }
+}
+
 function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
   const r = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
   for (const e of def.edges) r.get(e.to)?.push(e.from)
@@ -241,6 +263,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
     paramNamesSeen.add(trimmed)
 
     validateParamDefault(p, errors)
+    validateOptionParam(p, errors)
   }
 
   const endNodes = def.nodes.filter((n) => n.type === "end")

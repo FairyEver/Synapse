@@ -55,6 +55,48 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」暂不支持 drive 文件引用" })
   })
 
+  it("normalizes option params as strings and rejects values outside a closed option list", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: "周报", options: ["日报", "周报"], allowCustomOption: false },
+    ]), { report_type: "月报" })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「report_type」必须是预设选项之一",
+    })
+  })
+
+  it("accepts option params from the configured list", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+    ]), { report_type: "周报" })
+
+    expect(result.errors).toEqual([])
+    expect(result.params).toEqual({ report_type: "周报" })
+    expect(result.stringValues).toEqual({ report_type: "周报" })
+    expect(result.snapshotParams).toEqual({ report_type: "周报" })
+  })
+
+  it("accepts custom option values when enabled", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
+    ]), { report_type: "季度复盘" })
+
+    expect(result.errors).toEqual([])
+    expect(result.params.report_type).toBe("季度复盘")
+  })
+
+  it("rejects empty custom option values for required params", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
+    ]), { report_type: "" })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "missing_param",
+      message: "缺少必填参数「report_type」",
+    })
+  })
+
   it("keeps explicit empty text values and applies defaults", async () => {
     const result = await normalizeWorkflowRunParams(def([
       { name: "text", type: "text", default: "fallback" },

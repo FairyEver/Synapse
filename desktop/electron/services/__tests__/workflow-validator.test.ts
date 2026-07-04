@@ -23,6 +23,68 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow(base)
     expect(r.valid).toBe(true); expect(r.errors).toHaveLength(0)
   })
+  it("accepts valid option parameters", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "周报", options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects option parameters without usable options", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["  "], allowCustomOption: true },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」至少需要一个选项",
+      }),
+    ]))
+  })
+
+  it("rejects duplicate option values after trimming", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", " 日报 "], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的选项不能重复",
+      }),
+    ]))
+  })
+
+  it("rejects option defaults outside the option list", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: "月报", options: ["日报", "周报"], allowCustomOption: true },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的默认值必须是选项之一",
+      }),
+    ]))
+  })
   it("detects a cycle", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "a" }, { id: "e3", from: "b", to: "end" }] })
     expect(r.valid).toBe(false); expect(r.errors.some((e) => e.type === "cycle")).toBe(true)
