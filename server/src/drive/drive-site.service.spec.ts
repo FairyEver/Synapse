@@ -416,6 +416,28 @@ describe("DriveSiteService", () => {
     })
   })
 
+  it("keeps disabled sites disabled when republished", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({
+        currentDeploymentId: "dep-old",
+        siteId: "site_disabled",
+        status: "disabled",
+        disabledAt: new Date("2026-06-28T00:00:00.000Z"),
+      })],
+      deployments: [createDeploymentRecord({ id: "dep-old", driveSiteId: "site-row-1" })],
+      assets: [createAssetRecord({ deploymentId: "dep-old", storageKey: "drive-sites/site_disabled/dep-old/index.html" })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.republishSite("user-1", "site_disabled", "https://synapse.test", { entryPath: "index.html" })
+
+    expect(result.status).toBe("disabled")
+    expect(result.currentDeploymentId).not.toBe("dep-old")
+    await expect(service.resolvePublicSite("site_disabled", { cookie: null }))
+      .resolves.toEqual({ status: "disabled" })
+  })
+
   it("returns not found for invalid public site request paths", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({

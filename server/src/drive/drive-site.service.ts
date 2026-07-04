@@ -468,7 +468,10 @@ export class DriveSiteService {
       })
       await this.prisma.driveSite.update({
         where: { id: site.id },
-        data: { status: DRIVE_SITE_STATUS.active, currentDeploymentId: deployment.id },
+        data: {
+          status: site.status === DRIVE_SITE_STATUS.disabled ? DRIVE_SITE_STATUS.disabled : DRIVE_SITE_STATUS.active,
+          currentDeploymentId: deployment.id,
+        },
       })
     } catch (error) {
       await this.prisma.driveSiteDeployment.update({
