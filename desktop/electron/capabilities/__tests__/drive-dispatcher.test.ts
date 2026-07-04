@@ -52,6 +52,11 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("documents empty directory preservation for folder uploads", () => {
+    const uploadTool = buildDriveTools().find((tool) => tool.name === "drive_folder_upload")
+    expect(uploadTool?.description).toContain("empty subdirectories")
+  })
+
   it("requires an explicit parent id for item moves", () => {
     const moveTool = buildDriveTools().find((tool) => tool.name === "drive_item_move")
     expect(moveTool?.inputSchema.required).toContain("parentId")
@@ -1347,6 +1352,64 @@ describe("createDriveCapabilityDispatcher", () => {
         error: "Folder upload completed with failed files.",
       }),
     }))
+  })
+
+  it("passes nested local directories to MCP folder uploads", async () => {
+    const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
+    const accountService = createAccountService({
+      prepareDriveFolderUpload: vi.fn(async () => ({
+        root,
+        rootCreated: true,
+        entries: [{
+          relativePath: "docs/keep.md",
+          sessionId: "session-keep",
+          item: driveItem({ id: "file-keep", name: "keep.md" }),
+          upload: {
+            method: "PUT" as const,
+            url: "https://cos.example/upload/keep",
+            expiresAt: "2026-06-07T00:00:00.000Z",
+            headers: {},
+          },
+        }],
+      })),
+    })
+    const fileSystem = {
+      lstat: vi.fn(async (target: string) => statLikeForTest({
+        isFile: target.endsWith("keep.md"),
+        isDirectory: !target.endsWith("keep.md"),
+        size: target.endsWith("keep.md") ? 4 : 0,
+      })),
+      stat: vi.fn(),
+      createReadStream: vi.fn(() => Readable.from(["keep"])),
+      readdir: vi.fn(async (directoryPath: string) => {
+        if (directoryPath === "/tmp/project") {
+          return [{ name: "docs", isDirectory: () => true, isFile: () => false }]
+        }
+        if (directoryPath === "/tmp/project/docs") {
+          return [
+            { name: "keep.md", isDirectory: () => false, isFile: () => true },
+            { name: "empty", isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        return []
+      }),
+    } as unknown as DriveDispatcherDeps["fileSystem"]
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem,
+      fetch: vi.fn(async () => ({ ok: true }) as Response),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "project",
+      directories: [{ relativePath: "docs" }, { relativePath: "docs/empty" }],
+      files: [{ relativePath: "docs/keep.md", size: "4", mimeType: null }],
+    })
   })
 
   it("creates a Drive folder when an MCP folder upload points to an empty local directory", async () => {

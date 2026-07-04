@@ -146,7 +146,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_folder_upload",
-      description: "Upload a local folder to Synapse Drive while preserving relative paths. Same-name folders are merged and same-name files are overwritten. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload a local folder to Synapse Drive while preserving relative paths, including empty subdirectories. Same-name folders are merged and same-name files are overwritten. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {

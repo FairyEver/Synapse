@@ -74,6 +74,7 @@ type DriveAccountServicePort = {
     readonly parentId?: string | null
     readonly folderName: string
     readonly files: Array<{ readonly relativePath: string; readonly size: string; readonly mimeType?: string | null }>
+    readonly directories?: Array<{ readonly relativePath: string }>
   }) => Promise<DriveFolderUploadPrepareResult>
   readonly completeDriveUpload: (sessionId: string) => Promise<DriveItemDto>
   readonly cancelDriveUpload: (sessionId: string) => Promise<{ ok: true }>
@@ -176,6 +177,11 @@ type LocalFileEntry = {
   readonly relativePath: string
   readonly size: string
   readonly sizeBytes: number
+}
+
+type LocalFolderEntries = {
+  readonly files: LocalFileEntry[]
+  readonly directories: Array<{ readonly relativePath: string }>
 }
 
 type DriveMutationSecurity = {
@@ -547,8 +553,8 @@ async function uploadFolder(
   if (folderStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
   if (!folderStat.isDirectory()) throw new Error("folderPath must point to a directory.")
 
-  const entries = await listLocalFiles(fileSystem, folderPath)
-  if (entries.length === 0) {
+  const entries = await listLocalFolderEntries(fileSystem, folderPath)
+  if (entries.files.length === 0 && entries.directories.length === 0) {
     const root = await deps.accountService.createDriveFolder({
       parentId: optionalNullableString(params.parentId),
       name: optionalString(params.folderName) ?? path.basename(folderPath),
@@ -570,7 +576,8 @@ async function uploadFolder(
   const prepared = await deps.accountService.prepareDriveFolderUpload({
     parentId: optionalNullableString(params.parentId),
     folderName: optionalString(params.folderName) ?? path.basename(folderPath),
-    files: entries.map((entry) => ({
+    ...(entries.directories.length > 0 ? { directories: entries.directories } : {}),
+    files: entries.files.map((entry) => ({
       relativePath: entry.relativePath,
       size: entry.size,
       mimeType: null,
@@ -582,7 +589,7 @@ async function uploadFolder(
   let cleanupRootDeleted = false
   let cleanupRootDeleteFailed = false
 
-  for (const entry of entries) {
+  for (const entry of entries.files) {
     const preparedEntry = preparedByPath.get(entry.relativePath)
     if (!preparedEntry) {
       failures.push({ relativePath: entry.relativePath, error: "Missing upload session." })
@@ -759,8 +766,9 @@ async function putPreparedUploadFromPath(
   }
 }
 
-async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Promise<LocalFileEntry[]> {
-  const result: LocalFileEntry[] = []
+async function listLocalFolderEntries(fileSystem: FileSystemPort, rootPath: string): Promise<LocalFolderEntries> {
+  const files: LocalFileEntry[] = []
+  const directories: Array<{ readonly relativePath: string }> = []
 
   async function walk(directoryPath: string, relativePrefix: string, depth: number): Promise<void> {
     if (depth > DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH) {
@@ -774,19 +782,20 @@ async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Pro
       const entryStat = await fileSystem.lstat(absolutePath)
       if (entryStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
       if (entryStat.isDirectory()) {
+        directories.push({ relativePath })
         await walk(absolutePath, relativePath, depth + 1)
       } else if (entryStat.isFile()) {
-        if (result.length >= DRIVE_LOCAL_UPLOAD_MAX_FILES) {
+        if (files.length >= DRIVE_LOCAL_UPLOAD_MAX_FILES) {
           throw createDriveLocalUploadTooManyFilesError()
         }
 
-        result.push({ absolutePath, relativePath, size: String(entryStat.size), sizeBytes: entryStat.size })
+        files.push({ absolutePath, relativePath, size: String(entryStat.size), sizeBytes: entryStat.size })
       }
     }
   }
 
   await walk(rootPath, "", 0)
-  return result
+  return { files, directories }
 }
 
 async function dispatchDriveRead(

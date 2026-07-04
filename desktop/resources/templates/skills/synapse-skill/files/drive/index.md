@@ -81,6 +81,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
    - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
+   - Empty subdirectories inside the local folder are preserved in Drive.
 4. To open or preview an item for the owner, call `app_drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
 5. To read a small previewable text file, call `app_drive_file_content_read`. Use `app_drive_file_download_create` instead for binary, oversized, or non-previewable files.
 6. To save Drive content locally, call `app_drive_file_download_create` for a file, `app_drive_file_version_download_create` for a specific file version, or `app_drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.

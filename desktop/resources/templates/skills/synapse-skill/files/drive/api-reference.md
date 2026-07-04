@@ -41,7 +41,7 @@ Input:
 
 ### `app_drive_folder_upload`
 
-Upload a local folder to Drive. Same-name folders are merged and same-name files are overwritten.
+Upload a local folder to Drive. Relative paths are preserved, including empty subdirectories. Same-name folders are merged and same-name files are overwritten.
 
 Input:
 
