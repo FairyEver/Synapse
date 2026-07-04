@@ -67,7 +67,7 @@ describe('DriveFileVersionContent', () => {
     expect(source).toContain('getNextPageParam')
     expect(source).toContain('lastPage.page.nextOffset')
     expect(source).toContain('fetchNextPage')
-    expect(source).toContain('maxPages: versionWindowPageCount')
+    expect(source).not.toContain('maxPages')
   })
 
   it('keeps version rows inside a bounded table frame', () => {
@@ -222,7 +222,7 @@ describe('DriveFileVersionContent', () => {
     expect(document.body.textContent).toContain('v2')
   })
 
-  it('caps loaded version rows after multiple history pages', async () => {
+  it('keeps previously loaded version rows after multiple history pages', async () => {
     vi.mocked(driveFileVersionsApi.list)
       .mockResolvedValueOnce(versionPage(300, 201, 100))
       .mockResolvedValueOnce(versionPage(200, 101, 200))
@@ -244,9 +244,9 @@ describe('DriveFileVersionContent', () => {
 
     await waitFor(() => {
       expect(document.body.textContent).toContain('v99')
-      expect(document.querySelectorAll('tbody tr')).toHaveLength(200)
+      expect(document.querySelectorAll('tbody tr')).toHaveLength(300)
     })
-    expect(document.body.textContent).not.toContain('v300')
+    expect(document.body.textContent).toContain('v300')
   })
 })
 
