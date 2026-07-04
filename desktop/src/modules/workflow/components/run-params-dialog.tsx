@@ -151,7 +151,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
           ? toLocalPathParam(param.type, values[param.name])
           : param.default
       } else if (param.type === "option") {
-        parsed[param.name] = values[param.name]?.trim() ?? ""
+        const trimmed = values[param.name]?.trim() ?? ""
+        parsed[param.name] = trimmed || param.default || ""
       } else {
         parsed[param.name] = values[param.name]
       }
@@ -507,7 +508,7 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
         aria-invalid={hasError}
         className="flex h-8 w-full cursor-pointer items-center justify-between rounded-lg border border-input bg-background px-2.5 py-1 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
       >
-        <option value="">选择选项</option>
+        <option value="" disabled>选择选项</option>
         {options.map((option) => (
           <option key={option} value={option}>{option}</option>
         ))}

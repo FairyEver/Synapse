@@ -364,6 +364,21 @@ describe("RunParamsDialog", () => {
     expect(document.body.textContent).toContain("请选择预设选项")
   })
 
+  it("falls back to the default when a defaulted option value is blank", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: false },
+      ],
+      lastValues: { report_type: "" },
+    })
+
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith({ report_type: "日报" }, { report_type: "" })
+  })
+
   it("loads preset custom option values unchanged", async () => {
     mocks.presetList.mockResolvedValue([
       { id: "preset-1", workflowId: "workflow-1", name: "季度", values: { report_type: "季度复盘" }, createdAt: 1, updatedAt: 2 },
