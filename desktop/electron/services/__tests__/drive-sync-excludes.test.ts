@@ -41,14 +41,20 @@ describe("drive sync exclude utilities", () => {
   it("applies imported gitignore and user rules without rereading .gitignore", () => {
     const rules = {
       ...createDefaultDriveSyncExcludeRules(),
-      importedGitignore: ["secrets/**"],
-      user: ["private/**"],
+      importedGitignore: ["secrets/**", "**/*.pem", "docs/**/index.md"],
+      user: ["private/**", "foo/*/bar.md"],
     }
 
     expect(isDriveSyncExcluded("secrets/token.txt", rules)).toBe(true)
     expect(isDriveSyncExcluded("packages/app/secrets/token.txt", rules)).toBe(true)
+    expect(isDriveSyncExcluded("certs/client.pem", rules)).toBe(true)
+    expect(isDriveSyncExcluded("client.pem", rules)).toBe(true)
+    expect(isDriveSyncExcluded("docs/index.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded("docs/a/b/index.md", rules)).toBe(true)
     expect(isDriveSyncExcluded("private/note.md", rules)).toBe(true)
     expect(isDriveSyncExcluded("packages/app/private/note.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded("foo/a/bar.md", rules)).toBe(true)
+    expect(isDriveSyncExcluded("foo/a/b/bar.md", rules)).toBe(false)
     expect(isDriveSyncExcluded(".gitignore", rules)).toBe(false)
   })
 

@@ -75,9 +75,29 @@ function basename(value: string): string {
 }
 
 function globToRegExp(rule: string): RegExp {
-  const escaped = rule
-    .replace(/[.+^${}()|[\]\\]/gu, "\\$&")
-    .replaceAll("**", ".*")
-    .replaceAll("*", "[^/]*")
-  return new RegExp(`^${escaped}$`, "u")
+  let source = ""
+  for (let index = 0; index < rule.length; index += 1) {
+    const char = rule[index]
+    if (char === "*") {
+      if (rule[index + 1] === "*") {
+        if (rule[index + 2] === "/") {
+          source += "(?:.*/)?"
+          index += 2
+        } else {
+          source += ".*"
+          index += 1
+        }
+      } else {
+        source += "[^/]*"
+      }
+      continue
+    }
+    source += escapeRegExpChar(char)
+  }
+  return new RegExp(`^${source}$`, "u")
+}
+
+function escapeRegExpChar(char: string | undefined): string {
+  if (!char) return ""
+  return /[.+^${}()|[\]\\]/u.test(char) ? `\\${char}` : char
 }
