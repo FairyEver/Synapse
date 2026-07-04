@@ -128,7 +128,7 @@ function DriveRendererShellChrome({
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
 }) {
-  const { items } = useDriveRendererToolbar()
+  const { hasUnsavedChanges, items } = useDriveRendererToolbar()
   const [versionsOpen, setVersionsOpen] = useState(false)
   const versionItemId = getDriveFileVersionItemId(snapshot)
   const useFloatingChrome = body && selected.id === 'iframe'
@@ -167,6 +167,7 @@ function DriveRendererShellChrome({
         <DriveFileVersionsDialog
           itemId={versionItemId}
           open={versionsOpen}
+          hasUnsavedChanges={hasUnsavedChanges}
           onChanged={editContext?.reload}
           onOpenChange={setVersionsOpen}
         />

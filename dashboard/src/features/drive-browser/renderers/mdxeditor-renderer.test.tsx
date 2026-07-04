@@ -338,6 +338,16 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
+  it('registers dirty markdown for external restore confirmations', async () => {
+    renderRenderer({ edit: editable() })
+
+    expect(toolbarHost()?.dataset.unsaved).toBe('false')
+
+    await inputValue(editor(), '# Draft')
+
+    expect(toolbarHost()?.dataset.unsaved).toBe('true')
+  })
+
   it('syncs mounted editor content when the file or version changes', () => {
     const { rerender } = renderRenderer({ edit: editable() })
 
@@ -704,10 +714,15 @@ function renderRenderer(input: {
 function ToolbarHost() {
   const toolbar = useDriveRendererToolbar()
   return (
-    <div data-testid='toolbar'>
+    <div data-testid='toolbar' data-unsaved={String(toolbar.hasUnsavedChanges)}>
       {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
     </div>
   )
+}
+
+function toolbarHost(): HTMLDivElement | null {
+  const element = document.querySelector('[data-testid="toolbar"]')
+  return element instanceof HTMLDivElement ? element : null
 }
 
 function baseCurrent(): DriveBrowserItemDto {

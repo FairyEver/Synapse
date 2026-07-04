@@ -17,7 +17,7 @@ import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { ApiError } from '@/lib/api'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
-import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
+import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 export function DriveCodeRenderer({
   current,
@@ -149,6 +149,7 @@ export function DriveCodeRenderer({
   ])
 
   useRegisterDriveRendererToolbarItems('code-editor', toolbarItems)
+  useRegisterDriveRendererUnsavedState('code-editor-unsaved', canEdit && dirty)
 
   return (
     <div

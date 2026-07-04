@@ -200,6 +200,25 @@ describe('DriveFileVersionContent', () => {
     })
   })
 
+  it('warns before restoring over an unsaved editor draft', async () => {
+    vi.mocked(driveFileVersionsApi.list).mockResolvedValue({
+      items: [version({ id: 'version-old', versionNumber: 1 })],
+      page: { limit: 100, offset: 0, nextOffset: null, hasMore: false },
+    })
+    renderVersionDialog({ hasUnsavedChanges: true })
+
+    await waitFor(() => {
+      expect(buttonByLabel('恢复 v1')).toBeTruthy()
+    })
+
+    await act(async () => {
+      buttonByLabel('恢复 v1')?.click()
+    })
+
+    expect(document.body.textContent).toContain('放弃本地修改？')
+    expect(document.body.textContent).toContain('恢复 v1 会放弃当前未保存修改。')
+  })
+
   it('shows a next-page error after version load-more fails', async () => {
     vi.mocked(driveFileVersionsApi.list)
       .mockResolvedValueOnce({

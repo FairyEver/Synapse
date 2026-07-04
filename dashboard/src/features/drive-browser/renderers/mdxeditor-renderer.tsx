@@ -52,7 +52,7 @@ import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
-import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
+import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const PUBLIC_IMAGE_UPLOAD_CONSENT_STORAGE_KEY = 'synapse.drive.markdown.publicImageUploadConsent.v1'
 
@@ -430,6 +430,7 @@ export function DriveMDXeditorRenderer({
   ])
 
   useRegisterDriveRendererToolbarItems('mdxeditor', toolbarItems)
+  useRegisterDriveRendererUnsavedState('mdxeditor-unsaved', canEdit && dirty)
 
   return (
     <div

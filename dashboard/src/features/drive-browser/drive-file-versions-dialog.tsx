@@ -43,11 +43,13 @@ type ConfirmTarget =
 export function DriveFileVersionsDialog({
   itemId,
   open,
+  hasUnsavedChanges = false,
   onChanged,
   onOpenChange,
 }: {
   readonly itemId: string
   readonly open: boolean
+  readonly hasUnsavedChanges?: boolean
   readonly onChanged?: () => void | Promise<unknown>
   readonly onOpenChange: (open: boolean) => void
 }) {
@@ -94,10 +96,13 @@ export function DriveFileVersionsDialog({
     onError: (error: Error) => toast.error(error.message),
   })
   const confirming = restoreMutation.isPending || deleteMutation.isPending
-  const confirmTitle = confirmTarget?.action === 'restore' ? '恢复版本' : '删除版本'
+  const restoreWillDiscardDraft = confirmTarget?.action === 'restore' && hasUnsavedChanges
+  const confirmTitle = restoreWillDiscardDraft ? '放弃本地修改？' : confirmTarget?.action === 'restore' ? '恢复版本' : '删除版本'
   const confirmText = confirmTarget?.action === 'restore' ? '恢复' : '删除'
   const confirmDesc = confirmTarget?.action === 'restore'
-    ? `将 v${confirmTarget.version.versionNumber} 恢复为当前版本。`
+    ? restoreWillDiscardDraft
+      ? `恢复 v${confirmTarget.version.versionNumber} 会放弃当前未保存修改。`
+      : `将 v${confirmTarget.version.versionNumber} 恢复为当前版本。`
     : `删除 v${confirmTarget?.version.versionNumber ?? ''} 后无法恢复。`
 
   return (

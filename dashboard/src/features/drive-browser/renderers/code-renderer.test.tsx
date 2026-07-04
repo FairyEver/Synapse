@@ -123,6 +123,16 @@ describe('DriveCodeRenderer', () => {
     expect(document.body.textContent).not.toContain('已同步')
   })
 
+  it('registers dirty source text for external restore confirmations', async () => {
+    renderRenderer()
+
+    expect(toolbarHost()?.dataset.unsaved).toBe('false')
+
+    await inputValue(editor(), 'const draft = true')
+
+    expect(toolbarHost()?.dataset.unsaved).toBe('true')
+  })
+
   it('registers login action for shared read-only previews', () => {
     window.history.pushState(null, '', '/share/share-1')
     renderRenderer({
@@ -196,10 +206,15 @@ function renderRenderer(input: {
 function ToolbarHost() {
   const toolbar = useDriveRendererToolbar()
   return (
-    <div data-testid='toolbar'>
+    <div data-testid='toolbar' data-unsaved={String(toolbar.hasUnsavedChanges)}>
       {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
     </div>
   )
+}
+
+function toolbarHost(): HTMLDivElement | null {
+  const element = document.querySelector('[data-testid="toolbar"]')
+  return element instanceof HTMLDivElement ? element : null
 }
 
 function baseCurrent(): DriveBrowserItemDto {
