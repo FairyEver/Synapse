@@ -1655,6 +1655,7 @@ export class DrivePublicController {
         response.redirect(302, cleanPasswordUrl(request))
         return
       }
+      if (access.value.passwordEnabled) setProtectedShareContentCacheHeaders(response)
       const transfer = await this.drive.openShareBrowserItemDownload({
         shareId: input.shareId,
         itemId: input.itemId,
@@ -1711,6 +1712,7 @@ export class DrivePublicController {
       if (access.cookie) {
         setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
       }
+      if (access.value.passwordProtected) setProtectedShareContentCacheHeaders(response)
       await sendDriveHtmlRenderedAsset(response, access.value)
     } catch (error) {
       if (isNotFoundException(error)) {
@@ -2029,6 +2031,11 @@ async function sendDriveZip(
 
 function ensureDriveZipDirectoryPath(path: string): string {
   return path.endsWith("/") ? path : `${path}/`
+}
+
+function setProtectedShareContentCacheHeaders(response: Response): void {
+  response.setHeader("Cache-Control", "private, no-store")
+  response.setHeader("Vary", "Cookie")
 }
 
 async function sendDriveFileDownload(response: Response, download: {

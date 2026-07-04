@@ -1589,6 +1589,58 @@ describe("DriveController", () => {
     })
   })
 
+  it("sets private cache headers for protected share downloads", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "file",
+        item: createDriveItem({
+          id: "file-1",
+          name: "brief.txt",
+          activeShare: { id: "share-1", passwordEnabled: true, expiresAt: null, accessMode: "link_read", editorCount: 0 },
+        }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+        passwordEnabled: true,
+      },
+    })
+    drive.openShareBrowserItemDownload.mockResolvedValue({
+      stream: Readable.from("secret"),
+      fileName: "brief.txt",
+      size: 6n,
+      contentType: "text/plain",
+    })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/download")
+      .set("Cookie", `${driveAccessCookieName("share", "shr_file")}=share-cookie`)
+      .expect(200)
+
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.text).toBe("secret")
+  })
+
+  it("sets private cache headers for protected share renders", async () => {
+    drive.resolveShareRenderAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        stream: Readable.from("<!doctype html><html><body>Secret page</body></html>"),
+        contentType: "text/html; charset=utf-8",
+        passwordProtected: true,
+      },
+    })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/render")
+      .set("Cookie", `${driveAccessCookieName("share", "shr_file")}=share-cookie`)
+      .expect(200)
+
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.text).toContain("Secret page")
+  })
+
   it("renders password errors when posted share passwords are wrong", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
 

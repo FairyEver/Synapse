@@ -142,6 +142,7 @@ type DrivePublicShareValue = {
   readonly ownerId: string
   readonly storageKey: string | null
   readonly type: "file" | "folder"
+  readonly passwordEnabled: boolean
   readonly accessMode: DriveShareAccessMode
   readonly editorEmails: readonly string[]
 }
@@ -151,6 +152,7 @@ type DriveRenderedAssetValue = {
   readonly contentType: string
   readonly size?: bigint
   readonly csp?: string
+  readonly passwordProtected?: boolean
 }
 
 type DriveFolderZipEntry = {
@@ -1976,6 +1978,7 @@ export class DriveService implements OnApplicationBootstrap {
         stream: object.stream,
         size: object.size ?? current.size,
         contentType: "text/html; charset=utf-8",
+        passwordProtected: access.value.passwordEnabled,
       },
       ...(access.cookie ? { cookie: access.cookie } : {}),
     }
@@ -3480,6 +3483,7 @@ function isMarkdownDriveItem(name: string, mimeType: string | null): boolean {
 function toDrivePublicShareValue(share: {
   readonly id: string
   readonly shareId: string
+  readonly passwordEnabled?: boolean
   readonly accessMode: string
   readonly editors?: readonly { readonly email: string }[]
   readonly item: Parameters<typeof toDriveItemDto>[0] & {
@@ -3494,6 +3498,7 @@ function toDrivePublicShareValue(share: {
     ownerId: share.item.userId,
     storageKey: share.item.storageKey,
     type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+    passwordEnabled: share.passwordEnabled ?? false,
     accessMode: normalizeDriveShareAccessMode(share.accessMode),
     editorEmails: share.editors?.map((editor) => editor.email) ?? [],
   }
