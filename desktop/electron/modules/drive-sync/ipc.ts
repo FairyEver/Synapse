@@ -26,6 +26,7 @@ const driveSyncBindingSchema = z.object({
   id: z.string().min(1),
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
+  drivePathHint: z.string().nullable(),
   kind: driveItemKindSchema,
   localPath: z.string().min(1),
   status: bindingStatusSchema,

@@ -200,6 +200,7 @@ export interface DriveSyncBindingDto {
   readonly id: string
   readonly driveItemId: string
   readonly driveItemName: string
+  readonly drivePathHint: string | null
   readonly kind: DriveItemType
   readonly localPath: string
   readonly status: DriveSyncBindingStatus

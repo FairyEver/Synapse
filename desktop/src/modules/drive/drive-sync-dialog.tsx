@@ -526,6 +526,7 @@ function DriveSyncBindingList({
         const bindingOperations = operations.filter((operation) => operation.bindingId === binding.id)
         const operationCount = bindingOperations.length
         const issueSummary = getBindingIssueSummary(binding, conflictCount, bindingOperations)
+        const remotePath = driveSyncRemotePath(binding)
         return (
           <div
             key={binding.id}
@@ -538,7 +539,8 @@ function DriveSyncBindingList({
                   {formatBindingStatus(binding.status)}
                 </Badge>
               </div>
-              <div className="mt-1 truncate text-xs text-muted-foreground">{binding.localPath}</div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">云端 {remotePath}</div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">本地 {binding.localPath}</div>
               <div className="mt-2 truncate text-sm">{issueSummary}</div>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
                 <span>{formatBindingTime(binding)}</span>
@@ -599,7 +601,7 @@ function DriveSyncBindingDetailDialog({
             <DialogFrameHeader
               bordered
               title={binding.driveItemName}
-              description={binding.localPath}
+              description={`云端 ${driveSyncRemotePath(binding)} · 本地 ${binding.localPath}`}
               actions={(
                 <>
                   <Badge variant={binding.status === "error" || binding.status === "conflict" ? "destructive" : "secondary"}>
@@ -908,6 +910,10 @@ function driveSyncManualActionErrorMessage(snapshot: DriveSyncSnapshotDto, bindi
     return "同步产生冲突，请处理冲突"
   }
   return null
+}
+
+function driveSyncRemotePath(binding: DriveSyncBindingDto): string {
+  return binding.drivePathHint?.trim() || binding.driveItemName
 }
 
 function parseExcludeText(value: string): string[] {

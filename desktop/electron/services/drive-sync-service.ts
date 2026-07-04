@@ -2039,6 +2039,7 @@ function toBindingDto(
     id: entry.id,
     driveItemId: entry.driveItemId,
     driveItemName: entry.driveItemName,
+    drivePathHint: entry.drivePathHint,
     kind: entry.kind,
     localPath: entry.localPath,
     status: override?.status ?? entry.status,

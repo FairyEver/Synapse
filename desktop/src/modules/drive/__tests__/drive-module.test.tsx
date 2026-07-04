@@ -814,7 +814,7 @@ describe("DriveModule", () => {
   it("groups secondary drive sync actions behind a menu and confirms stopping sync", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 1 },
-      { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] },
+      { bindings: [createDriveSyncBinding({ driveItemName: "Docs", drivePathHint: "/Projects/Docs" })] },
     ))
 
     await render(<DriveModule />)
@@ -822,6 +822,8 @@ describe("DriveModule", () => {
     await clickButtonByLabel("同步状态：1 个绑定")
 
     expect(getButtonByLabel("查看同步详情 Docs")).toBeTruthy()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("云端 /Projects/Docs")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地 /Users/me/Docs")
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("检查本地变更")
 
     await clickButtonByLabel("更多同步操作 Docs")
@@ -3686,6 +3688,7 @@ function createDriveSyncBinding(input: Partial<DriveSyncSnapshotDto["bindings"][
     id: "binding-1",
     driveItemId: "drive-root",
     driveItemName: "Docs",
+    drivePathHint: null,
     kind: "folder",
     localPath: "/Users/me/Docs",
     status: "active",
