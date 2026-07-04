@@ -68,11 +68,12 @@ Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or p
 
 ## Workflow Parameters
 
-Workflow params support four types:
+Workflow params support five types:
 - `text` — string input.
 - `number` — numeric input.
 - `file` — a file resource reference.
 - `directory` — a directory resource reference.
+- `option` — 选项 input. Each option's label and value are the same string.
 
 For `file` and `directory`, the parameter value is a resource reference, not file bytes. The current local form is:
 
@@ -83,6 +84,14 @@ For `file` and `directory`, the parameter value is a resource reference, not fil
 For directories, use `"entryType": "directory"` and a directory path. When calling `app_workflow_run_execute` from MCP, you may pass either this object or a plain local path string. Synapse normalizes plain strings to `local_path`, verifies that the path exists, and checks the expected file/directory kind before the run starts.
 
 When defining defaults with `app_workflow_param_update`, use `null` for required params. For optional file/directory params, use the same resource object shape as above. Do not inline file bytes into params.
+
+For `option` params, define `options` as an array of strings and optionally set `allowCustomOption`. Example:
+
+```json
+{ "name": "report_type", "type": "option", "default": "周报", "options": ["日报", "周报"], "allowCustomOption": false }
+```
+
+When calling `app_workflow_run_execute`, pass an option param as a string. If `allowCustomOption` is false or omitted, the run value must match one configured option string. If `allowCustomOption` is true, the run may pass a non-empty custom string. Custom run values are not saved back to the workflow definition.
 
 ## Variable Bindings
 
@@ -106,7 +115,7 @@ Use a **workflow_call** node when the parent workflow should run another saved w
 Config fields:
 - `workflowId` — child workflow ID. Do not set this to the current workflow ID.
 - `variables` — bindings from the parent workflow params, upstream node outputs, or static values.
-- `paramTemplates` — object whose keys are child text/number param names and whose values are template strings using `{{variableName}}`.
+- `paramTemplates` — object whose keys are child text/number/option param names and whose values are template strings using `{{variableName}}`.
 - `paramBindings` — object whose keys are child param names and whose values are typed bindings. Use this for file/directory child params so resource references pass through without becoming strings.
 
 Recommended MCP flow:

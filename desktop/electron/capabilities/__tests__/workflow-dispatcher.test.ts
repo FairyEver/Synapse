@@ -102,10 +102,11 @@ describe("createWorkflowDispatcher", () => {
   })
 
   it("describes option params in the workflow param update MCP schema", () => {
-    const tool = buildWorkflowTools().find((item) => item.name === "workflow_param_update")
-    expect(tool).toBeDefined()
+    const tools = buildWorkflowTools()
+    const paramUpdateTool = tools.find((item) => item.name === "workflow_param_update")
+    expect(paramUpdateTool).toBeDefined()
 
-    const paramProperties = (tool?.inputSchema as {
+    const paramProperties = (paramUpdateTool?.inputSchema as {
       properties?: {
         params?: {
           items?: {
@@ -118,6 +119,17 @@ describe("createWorkflowDispatcher", () => {
     expect(paramProperties?.type).toMatchObject({ enum: expect.arrayContaining(["option"]) })
     expect(paramProperties).toHaveProperty("options")
     expect(paramProperties).toHaveProperty("allowCustomOption")
+
+    const nodeTypeListTool = tools.find((item) => item.name === "workflow_node_type_list")
+    expect(nodeTypeListTool?.description).toContain("text/number/option")
+
+    const runExecuteTool = tools.find((item) => item.name === "workflow_run_execute")
+    const runExecuteParams = (runExecuteTool?.inputSchema as {
+      properties?: { params?: { description?: string } }
+    }).properties?.params
+    expect(runExecuteTool?.description).toContain("custom-enabled options")
+    expect(runExecuteParams?.description).toContain("allowCustomOption=true")
+    expect(runExecuteParams?.description).toContain("Custom run values are not saved back")
   })
 
   it("workflow.definition.list dispatches correctly", async () => {
