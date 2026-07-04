@@ -82,6 +82,7 @@ import type {
   SkillRepositoryItemDto,
   SkillRepositoryUpdateInput,
 } from "@synapse/shared" with { "resolution-mode": "import" }
+import { truncateUtf8StringToBytes } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
@@ -2378,13 +2379,8 @@ function withContentLengthHeader(headers: Record<string, string>, sizeBytes: num
 
 function limitUtf8Preview(value: string | null, maxBytes: number | undefined): { readonly value: string | null; readonly truncated: boolean } {
   if (value === null || maxBytes === undefined) return { value, truncated: false }
-  if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
-  const buffer = Buffer.from(value, "utf8")
-  if (buffer.length <= maxBytes) return { value, truncated: false }
-  return {
-    value: buffer.subarray(0, maxBytes).toString("utf8"),
-    truncated: true,
-  }
+  const truncated = truncateUtf8StringToBytes(value, maxBytes)
+  return { value: truncated.text, truncated: truncated.truncated }
 }
 
 async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {

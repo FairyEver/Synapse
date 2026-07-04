@@ -4,6 +4,8 @@ import {
   DRIVE_PUBLIC_ASSET_PATH_PREFIX,
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SITE_PATH_PREFIX,
+  decodeUtf8Prefix,
+  truncateUtf8StringToBytes,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewKind,
   type DriveBrowserSnapshotDto,
@@ -499,9 +501,7 @@ function parseSafeRelativePathSegments(value: string): string[] {
 }
 
 function truncateUtf8(value: string, maxBytes: number): { readonly text: string; readonly truncated: boolean } {
-  const bytes = Buffer.byteLength(value)
-  if (bytes <= maxBytes) return { text: value, truncated: false }
-  return { text: Buffer.from(value).subarray(0, maxBytes).toString("utf8"), truncated: true }
+  return truncateUtf8StringToBytes(value, maxBytes)
 }
 
 async function streamToString(stream: NodeJS.ReadableStream, maxBytes: number): Promise<{ readonly text: string; readonly truncated: boolean }> {
@@ -524,5 +524,5 @@ async function streamToString(stream: NodeJS.ReadableStream, maxBytes: number): 
     chunks.push(buffer)
     total += buffer.byteLength
   }
-  return { text: Buffer.concat(chunks, total).toString("utf8"), truncated }
+  return { text: decodeUtf8Prefix(Buffer.concat(chunks, total), total), truncated }
 }

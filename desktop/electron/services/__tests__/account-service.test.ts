@@ -2176,7 +2176,7 @@ describe("AccountService", () => {
       childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
       preview: {
         kind: "html-source",
-        text: "<h1>Report</h1>",
+        text: "<h1>报告</h1>",
         html: null,
         outline: null,
         truncated: false,
@@ -2240,7 +2240,7 @@ describe("AccountService", () => {
       itemId: "item-1",
       name: "report.html",
       kind: "html-source",
-      text: "<h1>Repo",
+      text: "<h1>报",
       html: null,
       truncated: true,
     })

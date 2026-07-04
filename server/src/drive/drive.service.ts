@@ -7,6 +7,7 @@ import {
   type DriveBrowserAnnotationCapabilityDto,
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
+  decodeUtf8Prefix,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
@@ -3544,7 +3545,7 @@ async function readStreamTextPrefix(
     bytes += buffer.length
   }
 
-  return { text: Buffer.concat(chunks, bytes).toString("utf8"), truncated }
+  return { text: decodeUtf8Prefix(Buffer.concat(chunks, bytes), bytes), truncated }
 }
 
 function toDriveShareDto(

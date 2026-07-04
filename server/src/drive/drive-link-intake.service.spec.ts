@@ -437,6 +437,15 @@ describe("DriveLinkIntakeService", () => {
     })
   })
 
+  it("does not split UTF-8 characters when limiting share text bytes", async () => {
+    const { service } = createService()
+
+    await expect(service.readText({ url: `${publicAppUrl}/share/shr_123`, maxBytes: 7 })).resolves.toMatchObject({
+      text: "# 需",
+      truncated: true,
+    })
+  })
+
   it("reads empty markdown text from a share link", async () => {
     const { service, drive } = createService()
     drive.getShareBrowserSnapshot.mockResolvedValueOnce({
