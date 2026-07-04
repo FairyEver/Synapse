@@ -361,6 +361,21 @@ describe("AccountService", () => {
     await expect(readFile(result.manifestPath, "utf8")).resolves.toContain('"kind": "folder"')
   })
 
+  it("materializes Drive site folder entries without recursive item lookup", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink")
+      .mockResolvedValueOnce({
+        items: [{ path: "empty", name: "empty", type: "folder", mimeType: null, previewKind: "download-only", size: "0" }],
+        page: { hasMore: false, nextOffset: null },
+      })
+
+    const result = await service.materializeDriveLink({ url: "https://synapse.test/sites/site_123/", scope: "text" })
+
+    expect(listDriveLink).toHaveBeenCalledTimes(1)
+    expect(result.files).toEqual([{ relativePath: "empty", kind: "folder", size: "0" }])
+    await expect(readdir(path.join(result.localRootPath, "content", "empty"))).resolves.toEqual([])
+  })
+
   it("materializes a single-file Drive share when the link has no child listing", async () => {
     const { service } = await createTestAccountService()
     vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({

@@ -82,7 +82,10 @@ export type DriveLinkIntakeDeps = {
     }) => Promise<
       | {
         readonly status: "ok"
-        readonly assets: ReadonlyArray<{ readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null; readonly size: bigint }>
+        readonly entries: ReadonlyArray<
+          | { readonly kind: "file"; readonly relativePath: string; readonly storageKey: string; readonly contentType: string | null; readonly size: bigint }
+          | { readonly kind: "folder"; readonly relativePath: string; readonly contentType: null; readonly size: 0n }
+        >
         readonly page: { readonly hasMore: boolean; readonly nextOffset: number | null }
       }
       | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
@@ -136,7 +139,7 @@ export class DriveLinkIntakeService {
       if (access.status === "password_required") throw new BadRequestException("该链接需要密码。")
       if (access.status !== "ok") throw new NotFoundException("站点链接不存在。")
       return {
-        items: access.assets.map(toDriveLinkSiteEntry),
+        items: access.entries.map(toDriveLinkSiteEntry),
         page: access.page,
       }
     }
@@ -421,7 +424,20 @@ function toDriveLinkEntry(item: DriveBrowserItemDto): DriveLinkEntryDto {
   }
 }
 
-function toDriveLinkSiteEntry(item: { readonly relativePath: string; readonly contentType: string | null; readonly size: bigint }): DriveLinkEntryDto {
+function toDriveLinkSiteEntry(item:
+  | { readonly kind: "file"; readonly relativePath: string; readonly contentType: string | null; readonly size: bigint }
+  | { readonly kind: "folder"; readonly relativePath: string; readonly contentType: null; readonly size: 0n }
+): DriveLinkEntryDto {
+  if (item.kind === "folder") {
+    return {
+      path: item.relativePath,
+      name: basenameFromRelativePath(item.relativePath),
+      type: "folder",
+      mimeType: null,
+      previewKind: "download-only",
+      size: "0",
+    }
+  }
   return {
     path: item.relativePath,
     name: basenameFromRelativePath(item.relativePath),

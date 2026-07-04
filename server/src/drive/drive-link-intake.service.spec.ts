@@ -70,11 +70,12 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
     })),
     listPublicSiteAssets: vi.fn(async () => ({
       status: "ok",
-      assets: [
-        { relativePath: "index.html", storageKey: "site/index.html", contentType: "text/html", size: 15n },
-        { relativePath: "pages/create-task.html", storageKey: "site/pages/create-task.html", contentType: "text/html", size: 20n },
-        { relativePath: "assets/styles.css", storageKey: "site/assets/styles.css", contentType: "text/css", size: 8n },
-        { relativePath: "assets/logo.png", storageKey: "site/assets/logo.png", contentType: "image/png", size: 12n },
+      entries: [
+        { kind: "folder", relativePath: "assets", contentType: null, size: 0n },
+        { kind: "file", relativePath: "index.html", storageKey: "site/index.html", contentType: "text/html", size: 15n },
+        { kind: "file", relativePath: "pages/create-task.html", storageKey: "site/pages/create-task.html", contentType: "text/html", size: 20n },
+        { kind: "file", relativePath: "assets/styles.css", storageKey: "site/assets/styles.css", contentType: "text/css", size: 8n },
+        { kind: "file", relativePath: "assets/logo.png", storageKey: "site/assets/logo.png", contentType: "image/png", size: 12n },
       ],
       page: { hasMore: false, nextOffset: null },
     })),
@@ -368,6 +369,7 @@ describe("DriveLinkIntakeService", () => {
 
     await expect(service.list({ url: `${publicAppUrl}/sites/site_public/` })).resolves.toEqual({
       items: [
+        { path: "assets", name: "assets", type: "folder", mimeType: null, previewKind: "download-only", size: "0" },
         { path: "index.html", name: "index.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "15" },
         { path: "pages/create-task.html", name: "create-task.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "20" },
         { path: "assets/styles.css", name: "styles.css", type: "file", mimeType: "text/css", previewKind: "text", size: "8" },
@@ -388,8 +390,9 @@ describe("DriveLinkIntakeService", () => {
     const { service, sites } = createService()
     sites.listPublicSiteAssets.mockResolvedValueOnce({
       status: "ok",
-      assets: [
+      entries: [
         {
+          kind: "file",
           relativePath: "pages/create-task.html",
           storageKey: "site/pages/create-task.html",
           contentType: "text/html",

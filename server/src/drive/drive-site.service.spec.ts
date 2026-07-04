@@ -33,6 +33,34 @@ describe("DriveSiteService", () => {
     ])
   })
 
+  it("preserves published site folders for Drive link materialization", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      items: [createItem({ id: "empty", type: "folder", name: "empty", parentId: "folder-1" })],
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    const result = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+
+    await expect(service.listPublicSiteAssets(result.siteId, { cookie: null })).resolves.toMatchObject({
+      status: "ok",
+      entries: [
+        { kind: "folder", relativePath: "assets", size: 0n },
+        { kind: "file", relativePath: "assets/app.js" },
+        { kind: "file", relativePath: "assets/logo.png" },
+        { kind: "folder", relativePath: "empty", size: 0n },
+        { kind: "file", relativePath: "index.html" },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+  })
+
   it("generates a share-style password when publishing a protected site without manual password input", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()
@@ -480,8 +508,8 @@ describe("DriveSiteService", () => {
     await expect(service.listPublicSiteAssets("site_existing", { cookie: null, path: "pages/create-task.html" }))
       .resolves.toMatchObject({
         status: "ok",
-        assets: [
-          { relativePath: "pages/create-task.html", storageKey: "drive-sites/site_existing/dep-1/pages/create-task.html" },
+        entries: [
+          { kind: "file", relativePath: "pages/create-task.html", storageKey: "drive-sites/site_existing/dep-1/pages/create-task.html" },
         ],
         page: { hasMore: false, nextOffset: null },
       })
@@ -512,12 +540,14 @@ function createMemoryStorage() {
 type MemorySite = ReturnType<typeof createSiteRecord>
 type MemoryDeployment = ReturnType<typeof createDeploymentRecord>
 type MemoryAsset = ReturnType<typeof createAssetRecord>
+type MemoryFolder = ReturnType<typeof createFolderRecord>
 
 function createMemoryPrisma(seed: {
   readonly items?: Array<ReturnType<typeof createItem>>
   readonly sites?: MemorySite[]
   readonly deployments?: MemoryDeployment[]
   readonly assets?: MemoryAsset[]
+  readonly folders?: MemoryFolder[]
 } = {}) {
   const now = new Date("2026-06-23T00:00:00.000Z")
   const items = [
@@ -531,6 +561,7 @@ function createMemoryPrisma(seed: {
   const sites: MemorySite[] = [...(seed.sites ?? [])]
   const deployments: MemoryDeployment[] = [...(seed.deployments ?? [])]
   const assets: MemoryAsset[] = [...(seed.assets ?? [])]
+  const folders: MemoryFolder[] = [...(seed.folders ?? [])]
   let deploymentCounter = 0
   return {
     driveItem: {
@@ -655,6 +686,32 @@ function createMemoryPrisma(seed: {
           .sort((first, second) => first.relativePath.localeCompare(second.relativePath) || first.id.localeCompare(second.id))
         const start = args.skip ?? 0
         return filtered.slice(start, typeof args.take === "number" ? start + args.take : undefined)
+      },
+    },
+    driveSiteFolder: {
+      async createMany(args: { readonly data: MemoryFolder[] }) {
+        folders.push(...args.data.map((folder, index) => createFolderRecord({
+          ...folder,
+          id: folder.id ?? `folder-row-${folders.length + index + 1}`,
+        })))
+        return { count: args.data.length }
+      },
+      async findMany(args: {
+        readonly where: {
+          readonly deploymentId: string
+          readonly OR?: ReadonlyArray<
+            | { readonly relativePath: string }
+            | { readonly relativePath: { readonly startsWith: string } }
+          >
+        }
+      }) {
+        return folders
+          .filter((folder) => folder.deploymentId === args.where.deploymentId)
+          .filter((folder) => {
+            if (!args.where.OR) return true
+            return args.where.OR.some((condition) => matchesAssetRelativePath(folder.relativePath, condition.relativePath))
+          })
+          .sort((first, second) => first.relativePath.localeCompare(second.relativePath) || first.id.localeCompare(second.id))
       },
     },
     async $transaction(actions: readonly Promise<unknown>[]) {
@@ -821,6 +878,17 @@ function createAssetRecord(overrides: Record<string, unknown> = {}) {
     contentType: "text/html",
     size: 20n,
     sha256: null,
+    ...overrides,
+  }
+}
+
+function createFolderRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "folder-row-1",
+    driveSiteId: "site-row-1",
+    deploymentId: "dep-1",
+    sourceItemId: "folder",
+    relativePath: "folder",
     ...overrides,
   }
 }

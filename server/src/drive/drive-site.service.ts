@@ -62,10 +62,16 @@ type DriveSiteSnapshotFile = {
   readonly size: bigint
 }
 
+type DriveSiteSnapshotFolder = {
+  readonly sourceItemId: string
+  readonly relativePath: string
+}
+
 type DriveSiteSnapshot = {
   readonly sourceFolderItemId: string
   readonly sourceFolderName: string
   readonly files: readonly DriveSiteSnapshotFile[]
+  readonly folders: readonly DriveSiteSnapshotFolder[]
   readonly htmlFiles: readonly string[]
   readonly defaultEntryPath: string | null
   readonly totalBytes: bigint
@@ -101,10 +107,39 @@ type DriveSiteDeploymentRecord = {
 }
 
 type DriveSiteAssetRecord = {
+  readonly id?: string
   readonly storageKey: string
   readonly relativePath: string
   readonly contentType: string | null
   readonly size: bigint
+}
+
+type DriveSiteFolderRecord = {
+  readonly id?: string
+  readonly relativePath: string
+}
+
+type DrivePublicSiteEntryRecord =
+  | (DriveSiteAssetRecord & { readonly kind: "file" })
+  | (DriveSiteFolderRecord & { readonly kind: "folder"; readonly contentType: null; readonly size: 0n })
+
+type DriveSiteFolderDelegate = {
+  readonly createMany: (args: { readonly data: readonly {
+    readonly driveSiteId: string
+    readonly deploymentId: string
+    readonly sourceItemId: string
+    readonly relativePath: string
+  }[] }) => Promise<{ readonly count: number }>
+  readonly findMany: (args: {
+    readonly where: {
+      readonly deploymentId: string
+      readonly OR?: ReadonlyArray<
+        | { readonly relativePath: string }
+        | { readonly relativePath: { readonly startsWith: string } }
+      >
+    }
+    readonly orderBy: readonly [{ readonly relativePath: "asc" }, { readonly id: "asc" }]
+  }) => Promise<Array<DriveSiteFolderRecord & { readonly id: string }>>
 }
 
 export type DriveResolvedSiteAccess =
@@ -123,7 +158,7 @@ export type DrivePublicSiteAssetListResult =
   | { readonly status: "not_found" | "disabled" | "expired" | "password_required" }
   | {
     readonly status: "ok"
-    readonly assets: readonly DriveSiteAssetRecord[]
+    readonly entries: readonly DrivePublicSiteEntryRecord[]
     readonly page: { readonly hasMore: boolean; readonly nextOffset: number | null }
   }
 
@@ -328,23 +363,47 @@ export class DriveSiteService {
     const page = normalizeSiteListPage(input)
     const prefix = input.path ? normalizeDriveSiteRelativePath(input.path) : ""
     const pathFilter = prefix ? `${prefix.replace(/\/$/u, "")}/` : ""
-    const assets = await this.prisma.driveSiteAsset.findMany({
-      where: {
-        deploymentId: context.deployment.id,
-        ...(pathFilter
-          ? { OR: [{ relativePath: prefix }, { relativePath: { startsWith: pathFilter } }] }
-          : {}),
-      },
-      orderBy: [{ relativePath: "asc" }, { id: "asc" }],
-      skip: page.offset,
-      take: page.limit + 1,
-    })
+    const where = {
+      deploymentId: context.deployment.id,
+      ...(pathFilter
+        ? { OR: [{ relativePath: prefix }, { relativePath: { startsWith: pathFilter } }] }
+        : {}),
+    }
+    const [folders, assets] = await Promise.all([
+      driveSiteFolderDelegate(this.prisma).findMany({
+        where,
+        orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      }),
+      this.prisma.driveSiteAsset.findMany({
+        where: {
+          deploymentId: context.deployment.id,
+          ...(pathFilter
+            ? { OR: [{ relativePath: prefix }, { relativePath: { startsWith: pathFilter } }] }
+            : {}),
+        },
+        orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      }),
+    ])
+    const entries: DrivePublicSiteEntryRecord[] = [
+      ...folders.map((folder) => ({
+        kind: "folder" as const,
+        relativePath: folder.relativePath,
+        contentType: null,
+        size: 0n as 0n,
+        id: folder.id,
+      })),
+      ...assets.map((asset) => ({
+        ...asset,
+        kind: "file" as const,
+      })),
+    ].sort(comparePublicSiteEntries)
+    const pageEntries = entries.slice(page.offset, page.offset + page.limit + 1)
     return {
       status: "ok",
-      assets: assets.slice(0, page.limit),
+      entries: pageEntries.slice(0, page.limit),
       page: {
-        hasMore: assets.length > page.limit,
-        nextOffset: assets.length > page.limit ? page.offset + page.limit : null,
+        hasMore: pageEntries.length > page.limit,
+        nextOffset: pageEntries.length > page.limit ? page.offset + page.limit : null,
       },
     }
   }
@@ -461,6 +520,16 @@ export class DriveSiteService {
           size: file.size,
         })),
       })
+      if (snapshot.folders.length > 0) {
+        await driveSiteFolderDelegate(this.prisma).createMany({
+          data: snapshot.folders.map((folder) => ({
+            driveSiteId: site.id,
+            deploymentId: deployment.id,
+            sourceItemId: folder.sourceItemId,
+            relativePath: folder.relativePath,
+          })),
+        })
+      }
       const activatedAt = new Date()
       await this.prisma.driveSiteDeployment.update({
         where: { id: deployment.id },
@@ -494,6 +563,7 @@ export class DriveSiteService {
     })
     if (!root) throw new NotFoundException("来源文件夹不存在。")
     const files: DriveSiteSnapshotFile[] = []
+    const folders: DriveSiteSnapshotFolder[] = []
     const htmlFiles: string[] = []
     const seen = new Set<string>()
     const queue: Array<{ readonly parentId: string; readonly prefix: string; readonly depth: number }> = [{ parentId: root.id, prefix: "", depth: 0 }]
@@ -521,6 +591,9 @@ export class DriveSiteService {
           if (nextDepth > DRIVE_SITE_MAX_DEPTH) throw new BadRequestException("站点文件夹层级超出限制。")
           folderCount += 1
           if (folderCount > DRIVE_SITE_MAX_FOLDERS) throw new BadRequestException("站点文件夹数量超出限制。")
+          if (seen.has(relativePath)) throw new BadRequestException(`站点路径重复：${relativePath}`)
+          seen.add(relativePath)
+          folders.push({ sourceItemId: child.id, relativePath })
           queue.push({ parentId: child.id, prefix: `${relativePath}/`, depth: nextDepth })
           continue
         }
@@ -550,6 +623,7 @@ export class DriveSiteService {
       sourceFolderItemId: root.id,
       sourceFolderName: root.name,
       files,
+      folders,
       htmlFiles,
       defaultEntryPath,
       totalBytes,
@@ -610,6 +684,17 @@ function normalizeSiteListPage(input: DriveSiteListInput): { readonly offset: nu
   const offset = Number.isInteger(input.offset) && input.offset! >= 0 ? input.offset! : 0
   const requestedLimit = Number.isInteger(input.limit) && input.limit! > 0 ? input.limit! : DRIVE_SITE_DEFAULT_PAGE_SIZE
   return { offset, limit: Math.min(requestedLimit, DRIVE_SITE_MAX_PAGE_SIZE) }
+}
+
+function driveSiteFolderDelegate(db: DrivePrismaClient): DriveSiteFolderDelegate {
+  return (db as unknown as { readonly driveSiteFolder: DriveSiteFolderDelegate }).driveSiteFolder
+}
+
+function comparePublicSiteEntries(first: DrivePublicSiteEntryRecord, second: DrivePublicSiteEntryRecord): number {
+  const pathOrder = first.relativePath.localeCompare(second.relativePath)
+  if (pathOrder !== 0) return pathOrder
+  if (first.kind !== second.kind) return first.kind === "folder" ? -1 : 1
+  return (first.id ?? "").localeCompare(second.id ?? "")
 }
 
 function siteListStatusWhere(

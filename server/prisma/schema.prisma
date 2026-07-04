@@ -448,6 +448,7 @@ model DriveSite {
   deletedAt           DateTime?
   deployments         DriveSiteDeployment[]
   assets              DriveSiteAsset[]
+  folders             DriveSiteFolder[]
 
   @@index([userId, createdAt])
   @@index([userId, status, updatedAt])
@@ -466,6 +467,7 @@ model DriveSiteDeployment {
   activatedAt DateTime?
   error       String?
   assets      DriveSiteAsset[]
+  folders     DriveSiteFolder[]
 
   @@index([driveSiteId, createdAt])
   @@index([status])
@@ -483,6 +485,20 @@ model DriveSiteAsset {
   contentType  String?             @db.VarChar(255)
   size         BigInt
   sha256       String?
+
+  @@unique([deploymentId, relativePath])
+  @@index([driveSiteId, deploymentId])
+  @@index([sourceItemId])
+}
+
+model DriveSiteFolder {
+  id           String              @id @default(cuid())
+  driveSiteId  String
+  driveSite    DriveSite           @relation(fields: [driveSiteId], references: [id], onDelete: Cascade)
+  deploymentId String
+  deployment   DriveSiteDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  sourceItemId String?
+  relativePath String              @db.VarChar(1024)
 
   @@unique([deploymentId, relativePath])
   @@index([driveSiteId, deploymentId])

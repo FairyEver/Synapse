@@ -690,7 +690,7 @@ export class AccountService {
           if (item.type === "folder") {
             await mkdir(path.join(root.contentPath, relativePath), { recursive: true })
             addMaterializedFile({ relativePath, kind: "folder", size: "0" })
-            queue.push({ itemId: item.itemId ?? undefined, prefix: relativePath })
+            if (item.itemId) queue.push({ itemId: item.itemId, prefix: relativePath })
             continue
           }
           if (materializedFileCount >= maxFiles) {
