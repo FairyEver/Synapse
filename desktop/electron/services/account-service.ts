@@ -82,7 +82,6 @@ import type {
   SkillRepositoryItemDto,
   SkillRepositoryUpdateInput,
 } from "@synapse/shared" with { "resolution-mode": "import" }
-import { truncateUtf8StringToBytes } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
@@ -2379,8 +2378,41 @@ function withContentLengthHeader(headers: Record<string, string>, sizeBytes: num
 
 function limitUtf8Preview(value: string | null, maxBytes: number | undefined): { readonly value: string | null; readonly truncated: boolean } {
   if (value === null || maxBytes === undefined) return { value, truncated: false }
-  const truncated = truncateUtf8StringToBytes(value, maxBytes)
-  return { value: truncated.text, truncated: truncated.truncated }
+  validateUtf8MaxBytes(maxBytes)
+  const buffer = Buffer.from(value, "utf8")
+  if (buffer.byteLength <= maxBytes) return { value, truncated: false }
+  return {
+    value: buffer.subarray(0, safeUtf8PrefixLength(buffer, maxBytes)).toString("utf8"),
+    truncated: true,
+  }
+}
+
+function safeUtf8PrefixLength(bytes: Uint8Array, end: number): number {
+  if (end <= 0) return 0
+  let sequenceStart = end - 1
+  while (sequenceStart >= 0 && isUtf8ContinuationByte(bytes[sequenceStart] ?? 0)) {
+    sequenceStart -= 1
+  }
+  if (sequenceStart < 0) return 0
+  const expectedLength = utf8SequenceLength(bytes[sequenceStart] ?? 0)
+  if (expectedLength === 0) return sequenceStart
+  return end - sequenceStart >= expectedLength ? end : sequenceStart
+}
+
+function isUtf8ContinuationByte(byte: number): boolean {
+  return (byte & 0xc0) === 0x80
+}
+
+function utf8SequenceLength(byte: number): number {
+  if ((byte & 0x80) === 0) return 1
+  if ((byte & 0xe0) === 0xc0) return 2
+  if ((byte & 0xf0) === 0xe0) return 3
+  if ((byte & 0xf8) === 0xf0) return 4
+  return 0
+}
+
+function validateUtf8MaxBytes(maxBytes: number): void {
+  if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
 }
 
 async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {
