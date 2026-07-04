@@ -103,12 +103,14 @@ function normalizeResourceInput(
   return { value: ref }
 }
 
-async function statLocalResource(param: WorkflowParam, resourcePath: string): Promise<Record<string, never> | { error: ValidationError }> {
+type ResourceStatResult = { ok: true } | { error: ValidationError }
+
+async function statLocalResource(param: WorkflowParam, resourcePath: string): Promise<ResourceStatResult> {
   try {
     const stat = await lstat(resourcePath)
     if (param.type === "file" && !stat.isFile()) return paramError(param, "必须是文件")
     if (param.type === "directory" && !stat.isDirectory()) return paramError(param, "必须是文件夹")
-    return {}
+    return { ok: true }
   } catch {
     return paramError(param, "路径不存在或不可访问")
   }
