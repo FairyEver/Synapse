@@ -396,10 +396,11 @@ async function rewriteDescendantBaselines(
 async function findUploadedRemoteItemId(deps: DriveSyncExecutorDeps, name: string, expectedType: "file" | "folder"): Promise<string> {
   const parentId = await parentRemoteId(deps)
   const expectedPath = uploadedRemotePath(deps, name)
+  const expectedDepth = uploadedRemoteDepth(parentId, expectedPath)
   let offset: number | null = 0
   while (offset !== null) {
     const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
-    const item = page.items.find((candidate) => isDirectUploadedRemoteMatch(candidate, name, expectedPath, expectedType))
+    const item = page.items.find((candidate) => isDirectUploadedRemoteMatch(candidate, name, expectedPath, expectedDepth, expectedType))
     if (item) return item.id
     offset = page.nextOffset ?? null
   }
@@ -412,13 +413,18 @@ function uploadedRemotePath(deps: DriveSyncExecutorDeps, name: string): string {
   return path.posix.join(rootPath, deps.operation.relativePath)
 }
 
+function uploadedRemoteDepth(parentId: string | null, expectedPath: string): number {
+  if (parentId) return 1
+  return expectedPath.split("/").filter(Boolean).length - 1
+}
+
 function isDirectUploadedRemoteMatch(
   item: Awaited<ReturnType<DriveSyncAccountService["listDriveItemTree"]>>["items"][number],
   name: string,
   expectedPath: string,
+  expectedDepth: number,
   expectedType: "file" | "folder",
 ): boolean {
-  const expectedDepth = expectedPath.split("/").filter(Boolean).length - 1
   return item.name === name
     && item.type === expectedType
     && item.path === expectedPath
