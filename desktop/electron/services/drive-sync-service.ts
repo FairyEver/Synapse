@@ -585,6 +585,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         })
       }
     }
+    const initialRemoteCursor = input.direction === "remote_to_local" ? await currentRemoteCursor() : null
 
     let binding = await createBinding({
       driveItemId: input.driveItemId,
@@ -608,7 +609,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         } else if (input.kind === "folder" && input.direction === "local_to_remote") {
           binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding, input.targetParentId ?? null, input.drivePathHint ?? null))
         }
-        binding = await activateBindingAtCurrentRemoteCursor(binding.id)
+        if (input.direction === "remote_to_local") {
+          await replayInitialRemoteChanges(binding.id, initialRemoteCursor)
+          binding = await activateBindingAfterInitialReplay(binding.id)
+        } else {
+          binding = await activateBindingAtCurrentRemoteCursor(binding.id)
+        }
       })
       return binding
     } catch (error) {
@@ -737,6 +743,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function activateBindingAtCurrentRemoteCursor(bindingId: string): Promise<DriveSyncBindingDto> {
     await updateBindingCursor(bindingId, await currentRemoteCursor())
+    return updateBindingStatus(bindingId, "active")
+  }
+
+  async function replayInitialRemoteChanges(bindingId: string, cursor: string | null): Promise<void> {
+    await updateBindingCursor(bindingId, cursor)
+    await pollActiveBindingRemoteChanges(await requireBinding(bindingId), true)
+  }
+
+  async function activateBindingAfterInitialReplay(bindingId: string): Promise<DriveSyncBindingDto> {
+    const binding = await requireBinding(bindingId)
+    if (binding.status === "conflict" || binding.status === "error") return toBindingDto(binding)
     return updateBindingStatus(bindingId, "active")
   }
 

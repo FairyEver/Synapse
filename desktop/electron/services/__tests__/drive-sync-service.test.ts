@@ -933,6 +933,66 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("replays remote changes that happen during initial remote file sync", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      let downloadCount = 0
+      const listDriveChanges = vi.fn(async (input: { readonly cursor?: string | null }) => {
+        if (input.cursor === "latest") {
+          return { items: [], nextCursor: "100", hasMore: false, resyncRequired: false }
+        }
+        if (input.cursor === "100") {
+          return {
+            items: [{
+              id: "change-101",
+              sequence: "101",
+              itemId: "remote-file",
+              parentId: null,
+              type: "content_updated",
+              versionId: null,
+              etag: null,
+              name: "spec.md",
+              pathHint: "/spec.md",
+              actor: "web",
+              occurredAt: "2026-06-28T00:00:01.000Z",
+            }],
+            nextCursor: "101",
+            hasMore: false,
+            resyncRequired: false,
+          }
+        }
+        return { items: [], nextCursor: input.cursor ?? null, hasMore: false, resyncRequired: false }
+      })
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            downloadCount += 1
+            await writeFile(outputPath, downloadCount === 1 ? "initial" : "remote update", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "remote_to_local",
+      })
+
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote update")
+      expect(listDriveChanges).toHaveBeenCalledWith({ cursor: "latest", limit: 1 })
+      expect(listDriveChanges).toHaveBeenCalledWith(expect.objectContaining({ cursor: "100", rootItemId: "remote-file" }))
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "active", remoteCursor: "101" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("records local upload failures without rejecting watcher-driven sync", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
@@ -2349,7 +2409,8 @@ describe("DriveSyncService", () => {
       const [binding] = await harness.bindings.list()
       expect(binding).toBeDefined()
       await expect(service.rescanBinding(binding!.id)).rejects.toThrow("同步操作正在执行，请稍后再试。")
-      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(1)
+      expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledWith({ cursor: "latest", limit: 1 })
 
       download.resolve({ ok: true, path: localPath })
       await expect(creating).resolves.toMatchObject({ status: "active" })
