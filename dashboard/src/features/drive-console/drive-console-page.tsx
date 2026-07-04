@@ -32,7 +32,7 @@ import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
 import { DriveSiteCreateDialog, DriveSitesDialog } from './drive-sites-dialogs'
 import { DriveTrashView } from './drive-trash-view'
-import { uploadDriveFiles, type DriveWebUploadResult } from './drive-upload'
+import { pickDriveFolderForUpload, uploadDriveFiles, type DriveWebFolderUploadInput, type DriveWebUploadResult } from './drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
 
 type NameDialogState =
@@ -198,18 +198,32 @@ function DriveConsoleContent({
     }
   }
 
-  const runUpload = async (files: readonly File[]) => {
+  const runUpload = async (input: { readonly files: readonly File[]; readonly folders?: readonly DriveWebFolderUploadInput[] }) => {
     const parentId = currentFolderId(state)
-    if (files.length === 0) return
+    if (input.files.length === 0 && (input.folders?.length ?? 0) === 0) return
     setUploading(true)
     try {
-      const result = await uploadDriveFiles({ parentId, files })
+      const result = await uploadDriveFiles({ parentId, files: input.files, folders: input.folders })
       toast(uploadResultMessage(result))
       await refreshAfterMutation()
     } catch (error) {
       toast(error instanceof Error ? error.message : '上传失败')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const pickAndUploadFolder = async () => {
+    try {
+      const picked = await pickDriveFolderForUpload()
+      if (picked.kind === 'unsupported') {
+        folderInputRef.current?.click()
+        return
+      }
+      if (picked.kind === 'cancelled') return
+      await runUpload({ files: [], folders: [picked.folder] })
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '上传失败')
     }
   }
 
@@ -233,7 +247,7 @@ function DriveConsoleContent({
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? [])
               event.currentTarget.value = ''
-              void runUpload(files)
+              void runUpload({ files })
             }}
           />
           <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
@@ -248,10 +262,10 @@ function DriveConsoleContent({
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? [])
               event.currentTarget.value = ''
-              void runUpload(files)
+              void runUpload({ files })
             }}
           />
-          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => folderInputRef.current?.click()}>
+          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => { void pickAndUploadFolder() }}>
             <FolderUp data-icon='inline-start' />
             上传文件夹
           </Button>
@@ -292,7 +306,7 @@ function DriveConsoleContent({
             onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
             onShare={setShareTarget}
             onNavigate={onNavigate}
-            onDropFiles={(files) => { void runUpload(files) }}
+            onDropFiles={(files) => { void runUpload({ files }) }}
           />
         ) : null}
       </TabsContent>

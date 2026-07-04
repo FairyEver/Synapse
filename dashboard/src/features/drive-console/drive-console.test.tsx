@@ -13,7 +13,7 @@ import { LayoutProvider } from '@/context/layout-provider'
 import { useDriveBrowser } from '@/features/drive-browser/use-drive-browser'
 import { driveApi } from '@/lib/api'
 import { DriveConsoleItemPage, DriveConsolePage } from './drive-console-page'
-import { uploadDriveFiles } from './drive-upload'
+import { pickDriveFolderForUpload, uploadDriveFiles } from './drive-upload'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -59,6 +59,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
 })
 
 vi.mock('./drive-upload', () => ({
+  pickDriveFolderForUpload: vi.fn(),
   uploadDriveFiles: vi.fn(),
 }))
 
@@ -319,6 +320,45 @@ describe('DriveConsolePage', () => {
     })
 
     expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('uploads directory picker folders with explicit empty directories', async () => {
+    const snapshot = folderSnapshot()
+    const reload = vi.fn(async () => snapshot)
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload,
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(pickDriveFolderForUpload).mockResolvedValue({
+      kind: 'selected',
+      folder: {
+        folderName: 'Project',
+        directories: ['docs/empty'],
+        files: [],
+      },
+    })
+    vi.mocked(uploadDriveFiles).mockResolvedValue({ completed: 0, failed: 0, skipped: 0, message: '已上传文件夹' })
+    await render(<DriveConsolePage />)
+
+    await click(button('上传文件夹'))
+
+    expect(uploadDriveFiles).toHaveBeenCalledWith({
+      parentId: null,
+      files: [],
+      folders: [{
+        folderName: 'Project',
+        directories: ['docs/empty'],
+        files: [],
+      }],
+    })
     expect(reload).toHaveBeenCalled()
   })
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, driveApi } from '@/lib/api'
-import { uploadDriveFiles } from './drive-upload'
+import { pickDriveFolderForUpload, uploadDriveFiles } from './drive-upload'
 
 vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -102,6 +102,35 @@ describe('uploadDriveFiles', () => {
     expect(driveApi.cancelUpload).not.toHaveBeenCalled()
   })
 
+  it('uploads explicit empty directories from directory picker entries', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    vi.mocked(driveApi.prepareFolderUpload).mockResolvedValue({
+      root: {} as never,
+      rootCreated: true,
+      entries: [],
+    })
+
+    const result = await uploadDriveFiles({
+      parentId: null,
+      files: [],
+      folders: [{
+        folderName: 'Project',
+        directories: ['docs/empty', 'assets/icons'],
+        files: [],
+      }],
+    })
+
+    expect(result).toEqual({ completed: 0, failed: 0, skipped: 0, message: '已上传文件夹' })
+    expect(driveApi.prepareFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: 'Project',
+      directories: [{ relativePath: 'docs/empty' }, { relativePath: 'assets/icons' }],
+      files: [],
+    })
+    expect(driveApi.prepareUpload).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('keeps folder prepare failures scoped to the selected folder files', async () => {
     const folderFile = new File(['x'], 'nested.md', { type: 'text/markdown' })
     Object.defineProperty(folderFile, 'webkitRelativePath', { value: 'Project/nested.md' })
@@ -167,3 +196,51 @@ describe('uploadDriveFiles', () => {
     expect(result).toMatchObject({ completed: 0, failed: 1, skipped: 0, message: '文件超过 100MB 限制。' })
   })
 })
+
+describe('pickDriveFolderForUpload', () => {
+  it('reads empty directories and nested files from the directory picker', async () => {
+    const file = new File(['hello'], 'readme.md', { type: 'text/markdown' })
+    const picker = vi.fn(async () => directoryHandle('Project', [
+      directoryHandle('empty', []),
+      directoryHandle('docs', [
+        fileHandle('readme.md', file),
+      ]),
+    ]))
+    Object.defineProperty(globalThis, 'showDirectoryPicker', {
+      value: picker,
+      configurable: true,
+    })
+
+    try {
+      await expect(pickDriveFolderForUpload()).resolves.toEqual({
+        kind: 'selected',
+        folder: {
+          folderName: 'Project',
+          directories: ['empty', 'docs'],
+          files: [{ file, relativePath: 'docs/readme.md' }],
+        },
+      })
+      expect(picker).toHaveBeenCalledWith({ mode: 'read' })
+    } finally {
+      Reflect.deleteProperty(globalThis, 'showDirectoryPicker')
+    }
+  })
+})
+
+function directoryHandle(name: string, children: readonly unknown[]) {
+  return {
+    kind: 'directory',
+    name,
+    async *values() {
+      yield* children
+    },
+  }
+}
+
+function fileHandle(name: string, file: File) {
+  return {
+    kind: 'file',
+    name,
+    getFile: vi.fn(async () => file),
+  }
+}
