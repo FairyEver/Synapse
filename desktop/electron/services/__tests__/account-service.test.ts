@@ -341,6 +341,32 @@ describe("AccountService", () => {
     expect(JSON.stringify(manifest)).not.toContain("secret")
   })
 
+  it("rejects Drive link materialize paths that collide by case", async () => {
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
+      items: [
+        { path: "assets/Logo.png", name: "Logo.png", type: "file", mimeType: "text/plain", previewKind: "text", size: "5", itemId: "item-logo-upper" },
+        { path: "assets/logo.png", name: "logo.png", type: "file", mimeType: "text/plain", previewKind: "text", size: "5", itemId: "item-logo-lower" },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+    const readDriveLinkText = vi.spyOn(service, "readDriveLinkText").mockResolvedValue({
+      path: "assets/Logo.png",
+      mimeType: "text/plain",
+      previewKind: "text",
+      text: "upper",
+      truncated: false,
+      source: { linkType: "share" },
+    })
+
+    await expect(service.materializeDriveLink({
+      url: "https://synapse.test/share/shr_123",
+      scope: "text",
+    })).rejects.toThrow("大小写冲突路径")
+
+    expect(readDriveLinkText).toHaveBeenCalledTimes(1)
+  })
+
   it("materializes empty Drive link folders into the local cache manifest", async () => {
     const { service } = await createTestAccountService()
     const listDriveLink = vi.spyOn(service, "listDriveLink")

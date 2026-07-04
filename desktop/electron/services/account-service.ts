@@ -578,6 +578,7 @@ export class AccountService {
     const files: Array<DriveLinkMaterializeDto["files"][number]> = []
     const skipped: Array<DriveLinkMaterializeDto["skipped"][number]> = []
     const warnings: string[] = []
+    const materializedPathKeys = new Map<string, string>()
     let totalBytes = 0
     let materializedFileCount = 0
     const scope = input.scope ?? "text"
@@ -589,6 +590,17 @@ export class AccountService {
     const addMaterializedFile = (file: DriveLinkMaterializeDto["files"][number]): void => {
       files.push(file)
       if (file.kind !== "folder") materializedFileCount += 1
+    }
+    const reserveMaterializedPath = (relativePath: string): void => {
+      const key = driveLinkMaterializePathKey(relativePath)
+      const existing = materializedPathKeys.get(key)
+      if (existing !== undefined) {
+        throw new Error(`云盘链接包含重复或大小写冲突路径：${existing} / ${relativePath}`)
+      }
+      materializedPathKeys.set(key, relativePath)
+    }
+    const releaseMaterializedPath = (relativePath: string): void => {
+      materializedPathKeys.delete(driveLinkMaterializePathKey(relativePath))
     }
     const finish = async (): Promise<DriveLinkMaterializeDto> => {
       if (maxFilesReached) warnings.push("文件数量达到上限，剩余文件未落盘。")
@@ -610,9 +622,11 @@ export class AccountService {
       }
       const outputPath = path.join(root.contentPath, relativePath)
       if (isDriveLinkTextPreview(resolved.root.previewKind)) {
+        reserveMaterializedPath(relativePath)
         const text = await this.readDriveLinkText(baseInput)
         const bytes = Buffer.byteLength(text.text, "utf8")
         if (totalBytes + bytes > maxBytes) {
+          releaseMaterializedPath(relativePath)
           skipped.push({ path: relativePath, reason: "max-bytes" })
           return
         }
@@ -626,6 +640,7 @@ export class AccountService {
         skipped.push({ path: relativePath, reason: "not-text" })
         return
       }
+      reserveMaterializedPath(relativePath)
       await mkdir(path.dirname(outputPath), { recursive: true })
       const downloaded = await this.downloadDriveLinkFile({
         ...baseInput,
@@ -634,6 +649,7 @@ export class AccountService {
       const actualSize = Number(downloaded.size)
       if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
         await rm(outputPath, { force: true })
+        releaseMaterializedPath(relativePath)
         skipped.push({ path: relativePath, reason: "max-bytes" })
         return
       }
@@ -658,6 +674,7 @@ export class AccountService {
         skipped.push({ path: relativePath, reason: "not-text" })
         return finish()
       }
+      reserveMaterializedPath(relativePath)
       const outputPath = path.join(root.contentPath, relativePath)
       await mkdir(path.dirname(outputPath), { recursive: true })
       const downloaded = await this.downloadDriveLinkFile({
@@ -667,6 +684,7 @@ export class AccountService {
       const actualSize = Number(downloaded.size)
       if (Number.isFinite(actualSize) && actualSize > maxBytes) {
         await rm(outputPath, { force: true })
+        releaseMaterializedPath(relativePath)
         skipped.push({ path: relativePath, reason: "max-bytes" })
         return finish()
       }
@@ -688,6 +706,7 @@ export class AccountService {
         for (const item of page.items) {
           const relativePath = safeDriveLinkOutputPath(joinDriveLinkRelativePath(current.prefix, item.path || item.name))
           if (item.type === "folder") {
+            reserveMaterializedPath(relativePath)
             await mkdir(path.join(root.contentPath, relativePath), { recursive: true })
             addMaterializedFile({ relativePath, kind: "folder", size: "0" })
             if (item.itemId) queue.push({ itemId: item.itemId, prefix: relativePath })
@@ -700,6 +719,7 @@ export class AccountService {
           }
           const outputPath = path.join(root.contentPath, relativePath)
           if (isDriveLinkTextPreview(item.previewKind)) {
+            reserveMaterializedPath(relativePath)
             const text = await this.readDriveLinkText({
               ...baseInput,
               itemId: item.itemId ?? undefined,
@@ -707,6 +727,7 @@ export class AccountService {
             })
             const bytes = Buffer.byteLength(text.text, "utf8")
             if (totalBytes + bytes > maxBytes) {
+              releaseMaterializedPath(relativePath)
               skipped.push({ path: relativePath, reason: "max-bytes" })
               continue
             }
@@ -725,6 +746,7 @@ export class AccountService {
             skipped.push({ path: relativePath, reason: "max-bytes" })
             continue
           }
+          reserveMaterializedPath(relativePath)
           await mkdir(path.dirname(outputPath), { recursive: true })
           const downloaded = await this.downloadDriveLinkFile({
             ...baseInput,
@@ -735,6 +757,7 @@ export class AccountService {
           const actualSize = Number(downloaded.size)
           if (Number.isFinite(actualSize) && totalBytes + actualSize > maxBytes) {
             await rm(outputPath, { force: true })
+            releaseMaterializedPath(relativePath)
             skipped.push({ path: relativePath, reason: "max-bytes" })
             continue
           }
@@ -2320,6 +2343,13 @@ function safeDriveLinkOutputPath(value: string): string {
     throw new Error("云盘链接路径无效。")
   }
   return normalized
+}
+
+function driveLinkMaterializePathKey(relativePath: string): string {
+  return relativePath
+    .split("/")
+    .map((segment) => segment.normalize("NFC").toLocaleLowerCase())
+    .join("/")
 }
 
 function driveLinkFileKind(previewKind: string, mimeType: string | null): "markdown" | "html" | "text" | "image" | "binary" | "folder" {
