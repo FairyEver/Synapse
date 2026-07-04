@@ -21,6 +21,14 @@ vi.mock('@/features/drive-browser/use-drive-browser', () => ({
   useDriveBrowser: vi.fn(),
 }))
 
+vi.mock('@/features/drive-browser/renderers/drive-renderer-shell', () => ({
+  DriveRendererShell: vi.fn(({ annotationContext, snapshot }) => (
+    <div data-testid='drive-renderer-shell' data-annotation-context={JSON.stringify(annotationContext ?? null)}>
+      {snapshot.current.name}
+    </div>
+  )),
+}))
+
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return {
@@ -124,6 +132,16 @@ describe('DriveConsolePage', () => {
 
     expect(document.body.textContent).toContain('notes.md')
     expect(document.body.textContent).not.toContain('公开素材')
+  })
+
+  it('passes owner annotation context to console file readers', async () => {
+    mockReadySnapshot(fileSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsoleItemPage itemId='file-1' surface='console' />)
+
+    expect(document.querySelector('[data-testid="drive-renderer-shell"]')?.getAttribute('data-annotation-context'))
+      .toBe(JSON.stringify({ context: 'owner', itemId: 'file-1' }))
   })
 
   it('renders console file readers as embedded full-bleed content', async () => {

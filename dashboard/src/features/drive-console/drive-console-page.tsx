@@ -22,6 +22,7 @@ import {
   DriveSingleFileReaderView,
 } from '@/features/drive-browser/drive-browser-page'
 import type { DriveBrowserNavigate } from '@/features/drive-browser/shared/drive-navigation'
+import type { DriveAnnotationContext } from '@/features/drive-browser/use-drive-annotations'
 import { shouldRenderDriveSingleFileReader } from '@/features/drive-browser/shared/drive-view-model'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
 import { driveApi } from '@/lib/api'
@@ -90,11 +91,14 @@ function DriveConsoleItemMain({
 }) {
   const state = useDriveConsole({ context: 'item', itemId, surface })
   const fileReader = state.browser.status === 'ready' && shouldRenderDriveSingleFileReader(state.browser.snapshot)
+  const annotationContext: DriveAnnotationContext | undefined = fileReader
+    ? { context: 'owner', itemId: state.browser.snapshot.current.id }
+    : undefined
 
   return (
     <Main fixed fluid className={fileReader ? 'p-0' : undefined}>
       {fileReader ? (
-        <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} embedded />
+        <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} annotationContext={annotationContext} embedded />
       ) : (
         <DriveConsoleContent state={state} onNavigate={onNavigate} />
       )}
