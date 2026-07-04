@@ -1489,6 +1489,36 @@ describe("DriveService", () => {
     expect(activeShares).toHaveLength(1)
   })
 
+  it("refreshes expired enabled shares when creating a share without access settings", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      mimeType: "text/plain",
+    })
+    const first = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
+    await prisma.driveShare.update({
+      where: { id: first.id },
+      data: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+    })
+
+    const second = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    expect(second.id).toBe(first.id)
+    expect(second.shareId).toBe(first.shareId)
+    expect(second.url).toBe(first.url)
+    expect(second.expiresAt).not.toBe("2020-01-01T00:00:00.000Z")
+    expect(new Date(second.expiresAt ?? 0).getTime()).toBeGreaterThan(Date.now())
+    await expect(service.resolvePublicShareAccess({
+      shareId: second.shareId,
+      password: second.password ?? undefined,
+    })).resolves.toMatchObject({ status: "ok" })
+    const activeShares = await prisma.driveShare.findMany({ where: { itemId: file.id, userId: "user-1", enabled: true } })
+    expect(activeShares).toHaveLength(1)
+  })
+
   it("overwrites active share settings without changing the share id", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

@@ -265,6 +265,10 @@ function resolveShareAccessSettingsBase(
   }
 }
 
+function isExpiredDriveShare(share: { readonly expiresAt: Date | null } | null, now = new Date()): boolean {
+  return Boolean(share?.expiresAt && share.expiresAt <= now)
+}
+
 type DriveItemTreeQueryRow = {
   readonly id: string | null
   readonly parentId: string | null
@@ -1278,13 +1282,15 @@ export class DriveService implements OnApplicationBootstrap {
       where: { itemId: item.id, userId, enabled: true },
       include: driveShareWithEditors,
     })
-    const reusedExisting = Boolean(existing && settings === undefined)
+    const existingExpired = isExpiredDriveShare(existing)
+    const reusedExisting = Boolean(existing && settings === undefined && !existingExpired)
     let share = existing
     let password = existing?.passwordEnabled ? this.decryptStoredPassword(existing.passwordEncrypted) : null
-    if (!share || settings !== undefined) {
-      const normalizedSettings = normalizeDriveAccessSettings(resolveShareAccessSettingsBase(existing, settings))
+    if (!share || settings !== undefined || existingExpired) {
+      const settingsForUpdate = settings ?? (existingExpired ? { expiresIn: DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn } : undefined)
+      const normalizedSettings = normalizeDriveAccessSettings(resolveShareAccessSettingsBase(existing, settingsForUpdate))
       const material = existing
-        ? await this.buildExistingSharePasswordMaterial(existing, normalizedSettings, settings ?? {})
+        ? await this.buildExistingSharePasswordMaterial(existing, normalizedSettings, settingsForUpdate ?? {})
         : await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
       share = existing
         ? await this.updateShareAccessSettings(existing.id, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
