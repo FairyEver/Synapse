@@ -114,6 +114,31 @@ describe("workflowIpcModule", () => {
     await expect(harness.invoke("synapse:workflow:param-file:choose", undefined)).resolves.toBeNull()
   })
 
+  it("accepts option params when saving workflow definitions", async () => {
+    const workflow = { save: vi.fn(async () => ({ versionHash: "v-option" })) }
+    const eventBus = { emit: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+    const definition = {
+      ...workflowDefinition(),
+      params: [{
+        name: "report_type",
+        type: "option",
+        default: "周报",
+        options: ["日报", "周报"],
+        allowCustomOption: false,
+      }],
+    }
+
+    await expect(harness.invoke("synapse:workflow:save", definition)).resolves.toEqual({ versionHash: "v-option" })
+    expect(workflow.save).toHaveBeenCalledWith(definition)
+  })
+
   it("sanitizes workflow engine rejection diagnostics and visible failure state", async () => {
     const rawError = "engine failed token=sk-secret at /Users/example/repo with prompt text"
     const runStatuses = new Map<string, WorkflowRunStatus>()

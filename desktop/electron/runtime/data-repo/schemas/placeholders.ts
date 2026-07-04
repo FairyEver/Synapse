@@ -1057,7 +1057,14 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   defaultNodeTimeoutMins?: number
-  params: Array<{ name: string; type: "text" | "number" | "file" | "directory"; default: string | number | WorkflowResourceRefV1 | null; description?: string }>
+  params: Array<{
+    name: string
+    type: "text" | "number" | "file" | "directory" | "option"
+    default: string | number | WorkflowResourceRefV1 | null
+    description?: string
+    options?: string[]
+    allowCustomOption?: boolean
+  }>
   nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
   edges: Array<{ id: string; from: string; to: string; branch?: string }>
 }
@@ -1068,10 +1075,12 @@ function isWorkflowParam(value: unknown): value is WorkflowEntryV1["params"][num
     && isWorkflowParamType(value.type)
     && (value.default === null || typeof value.default === "string" || typeof value.default === "number" || isWorkflowResourceRef(value.default))
     && isOptionalString(value.description)
+    && (value.options === undefined || isStringArray(value.options))
+    && isOptionalBoolean(value.allowCustomOption)
 }
 
 function isWorkflowParamType(value: unknown): value is WorkflowEntryV1["params"][number]["type"] {
-  return value === "text" || value === "number" || value === "file" || value === "directory"
+  return value === "text" || value === "number" || value === "file" || value === "directory" || value === "option"
 }
 
 function isWorkflowResourceRef(value: unknown): value is WorkflowResourceRefV1 {
@@ -1154,6 +1163,8 @@ function normalizeWorkflowParam(value: unknown): WorkflowEntryV1["params"][numbe
   }
   const description = normalizeOptionalString(value.description)
   if (description !== undefined) param.description = description
+  if (isStringArray(value.options)) param.options = value.options
+  if (typeof value.allowCustomOption === "boolean") param.allowCustomOption = value.allowCustomOption
   return param
 }
 

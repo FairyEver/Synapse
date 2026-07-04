@@ -8,8 +8,11 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
 import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus } from "../../../src/types/workflow"
+import { buildWorkflowTools } from "../../../synapse-capabilities/shared/workflow-domain"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import "../../../workflow-nodes/register.main"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
@@ -96,6 +99,25 @@ describe("createWorkflowDispatcher", () => {
     logStoreMock.logger.error.mockClear()
     logStoreMock.logger.info.mockClear()
     logStoreMock.logger.warn.mockClear()
+  })
+
+  it("describes option params in the workflow param update MCP schema", () => {
+    const tool = buildWorkflowTools().find((item) => item.name === "workflow_param_update")
+    expect(tool).toBeDefined()
+
+    const paramProperties = (tool?.inputSchema as {
+      properties?: {
+        params?: {
+          items?: {
+            properties?: Record<string, unknown>
+          }
+        }
+      }
+    }).properties?.params?.items?.properties
+
+    expect(paramProperties?.type).toMatchObject({ enum: expect.arrayContaining(["option"]) })
+    expect(paramProperties).toHaveProperty("options")
+    expect(paramProperties).toHaveProperty("allowCustomOption")
   })
 
   it("workflow.definition.list dispatches correctly", async () => {
