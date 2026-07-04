@@ -131,7 +131,7 @@ export class DriveAnnotationService {
 
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
-    await this.requireThread(itemId, threadId)
+    const thread = await this.requireCurrentThread(item, threadId)
     await this.requireParentComment(threadId, input.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
       data: {
@@ -154,6 +154,7 @@ export class DriveAnnotationService {
         threadId,
         commentId: comment.id,
         parentCommentId: input.parentCommentId ?? null,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: auditContext.ipAddress,
     })
@@ -162,7 +163,7 @@ export class DriveAnnotationService {
 
   async updateOwnerComment(userId: string, itemId: string, commentId: string, input: DriveAnnotationCommentUpdateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
-    const comment = await this.requireComment(itemId, commentId)
+    const { comment, thread } = await this.requireCurrentComment(item, commentId)
     if (comment.createdByUserId !== userId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: commentId },
@@ -180,6 +181,7 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId: updated.id,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: auditContext.ipAddress,
     })
@@ -189,7 +191,7 @@ export class DriveAnnotationService {
   async deleteOwnerComment(userId: string, itemId: string, commentId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    const comment = await this.requireComment(itemId, commentId)
+    const { comment, thread } = await this.requireCurrentComment(item, commentId)
     await this.prisma.driveAnnotationComment.update({ where: { id: commentId }, data: { deletedAt: new Date() } })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -202,6 +204,7 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: auditContext.ipAddress,
     })
@@ -211,7 +214,7 @@ export class DriveAnnotationService {
   async deleteOwnerThread(userId: string, itemId: string, threadId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    await this.requireThread(itemId, threadId)
+    const thread = await this.requireCurrentThread(item, threadId)
     await this.prisma.driveAnnotationThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -223,6 +226,7 @@ export class DriveAnnotationService {
         ownerId: item.userId,
         itemId: item.id,
         threadId,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: auditContext.ipAddress,
     })
@@ -296,7 +300,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
-    await this.requireThread(item.id, input.threadId)
+    const thread = await this.requireCurrentThread(item, input.threadId)
     await this.requireParentComment(input.threadId, input.body.parentCommentId ?? null)
     const comment = await this.prisma.driveAnnotationComment.create({
       data: {
@@ -319,6 +323,7 @@ export class DriveAnnotationService {
         threadId: input.threadId,
         commentId: comment.id,
         parentCommentId: input.body.parentCommentId ?? null,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: input.auditContext?.ipAddress,
     })
@@ -335,7 +340,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
-    const comment = await this.requireComment(item.id, input.commentId)
+    const { comment, thread } = await this.requireCurrentComment(item, input.commentId)
     if (comment.createdByUserId !== input.actorUserId) throw new ForbiddenException("不能编辑他人的评论。")
     const updated = await this.prisma.driveAnnotationComment.update({
       where: { id: input.commentId },
@@ -353,6 +358,7 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId: updated.id,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: input.auditContext?.ipAddress,
     })
@@ -368,7 +374,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
-    const comment = await this.requireComment(item.id, input.commentId)
+    const { comment, thread } = await this.requireCurrentComment(item, input.commentId)
     if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
     await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
     await this.recordShareAnnotationAudit({
@@ -382,6 +388,7 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId: input.commentId,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: input.auditContext?.ipAddress,
     })
@@ -397,7 +404,7 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
     const item = await this.requireCommentableShareItem(input)
-    const thread = await this.requireThread(item.id, input.threadId)
+    const thread = await this.requireCurrentThread(item, input.threadId)
     if (!canDeleteThread(thread, visibleComments(thread.comments), input.actorUserId, item.userId)) {
       throw new ForbiddenException("不能删除该评论。")
     }
@@ -412,6 +419,7 @@ export class DriveAnnotationService {
         ownerId: item.userId,
         itemId: item.id,
         threadId: input.threadId,
+        baseVersionId: thread.baseVersionId,
       },
       ipAddress: input.auditContext?.ipAddress,
     })
@@ -470,6 +478,12 @@ export class DriveAnnotationService {
     return thread
   }
 
+  private async requireCurrentThread(item: DriveAnnotationItem, threadId: string): Promise<AnnotationThreadRecord> {
+    const thread = await this.requireThread(item.id, threadId)
+    await this.assertThreadCurrentVersion(item, thread)
+    return thread
+  }
+
   private async requireParentComment(threadId: string, parentCommentId: string | null): Promise<void> {
     if (!parentCommentId) return
     const comment = await this.prisma.driveAnnotationComment.findFirst({
@@ -485,6 +499,12 @@ export class DriveAnnotationService {
     })
     if (!comment) throw new NotFoundException("评论不存在。")
     return comment
+  }
+
+  private async requireCurrentComment(item: DriveAnnotationItem, commentId: string) {
+    const comment = await this.requireComment(item.id, commentId)
+    const thread = await this.requireCurrentThread(item, comment.threadId)
+    return { comment, thread }
   }
 
   private async findCurrentVersionId(item: {
@@ -506,6 +526,11 @@ export class DriveAnnotationService {
       throw new ConflictException("文件已有新内容。")
     }
     return currentVersionId
+  }
+
+  private async assertThreadCurrentVersion(item: DriveAnnotationItem, thread: AnnotationThreadRecord): Promise<void> {
+    const currentVersionId = await this.findCurrentVersionId(item)
+    if (thread.baseVersionId !== currentVersionId) throw new ConflictException("文件已有新内容。")
   }
 
   private async recordShareAnnotationAudit(input: {

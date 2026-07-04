@@ -158,6 +158,23 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
+  it("rejects owner annotation writes when the thread version is stale", async () => {
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ baseVersionId: "version-0" }))
+
+    await expect(service.replyOwnerAnnotation("owner-1", "item-1", "thread-1", { parentCommentId: null, body: "Reply" }))
+      .rejects.toBeInstanceOf(ConflictException)
+    await expect(service.updateOwnerComment("owner-1", "item-1", "comment-1", { body: "updated" }))
+      .rejects.toBeInstanceOf(ConflictException)
+    await expect(service.deleteOwnerComment("owner-1", "item-1", "comment-1"))
+      .rejects.toBeInstanceOf(ConflictException)
+    await expect(service.deleteOwnerThread("owner-1", "item-1", "thread-1"))
+      .rejects.toBeInstanceOf(ConflictException)
+
+    expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
+  })
+
   it("rejects comment creation for unsupported file names", async () => {
     prisma.driveItem.findFirst.mockResolvedValueOnce({ ...markdownItem(), name: "notes.txt", mimeType: "text/plain" })
 
@@ -248,6 +265,21 @@ describe("DriveAnnotationService", () => {
     })).rejects.toBeInstanceOf(ConflictException)
 
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects share annotation replies when the thread version is stale", async () => {
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ baseVersionId: "version-0" }))
+
+    await expect(service.replyShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      threadId: "thread-1",
+      body: { parentCommentId: null, body: "Reply" },
+    })).rejects.toBeInstanceOf(ConflictException)
+
+    expect(prisma.driveAnnotationComment.create).not.toHaveBeenCalled()
   })
 
   it("allows share annotation writes when the share can be commented but cannot be edited", async () => {
@@ -582,12 +614,15 @@ function shareSnapshot(input: { readonly canEdit?: boolean; readonly canComment?
   }
 }
 
-function threadRecord(input: { readonly comments?: readonly ReturnType<typeof commentRecord>[] } = {}) {
+function threadRecord(input: {
+  readonly baseVersionId?: string | null
+  readonly comments?: readonly ReturnType<typeof commentRecord>[]
+} = {}) {
   const createdAt = new Date("2026-06-21T00:00:00.000Z")
   return {
     id: "thread-1",
     itemId: "item-1",
-    baseVersionId: "version-1",
+    baseVersionId: input.baseVersionId ?? "version-1",
     targetKind: "textRange",
     target: createInput().target,
     anchorStatus: "attached",
