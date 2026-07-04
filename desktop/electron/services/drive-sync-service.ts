@@ -602,22 +602,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       return await activateBindingAtCurrentRemoteCursor(binding.id)
     } catch (error) {
       const message = errorMessage(error)
-      const rollbackUnfinishedLocalUpload = input.direction === "local_to_remote" && binding.driveItemId === input.driveItemId
+      const currentBinding = await deps.bindings.get(binding.id) ?? binding
+      const rollbackUnfinishedLocalUpload = input.direction === "local_to_remote" && currentBinding.driveItemId === input.driveItemId
       await recordOperation({
-        bindingId: binding.id,
+        bindingId: currentBinding.id,
         kind: input.direction === "remote_to_local" ? "download" : "upload",
         status: "error",
-        driveItemId: rollbackUnfinishedLocalUpload ? null : binding.driveItemId,
+        driveItemId: rollbackUnfinishedLocalUpload ? null : currentBinding.driveItemId,
         relativePath: "",
         localPath: input.localPath,
         remotePathHint: input.drivePathHint ?? null,
         message,
       })
       if (rollbackUnfinishedLocalUpload) {
-        await discardBinding(binding.id)
+        await discardBinding(currentBinding.id)
         throw new Error(message)
       }
-      return await updateBindingStatus(binding.id, "error", message)
+      return await updateBindingStatus(currentBinding.id, "error", message)
     }
   }
 
@@ -909,6 +910,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     })
     if (upload.failed > 0 || upload.completed === 0) throw new Error(upload.message ?? "上传失败。")
     const remoteItemId = await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "file")
+    await updateBindingDriveItemId(binding.id, remoteItemId)
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",
@@ -1074,6 +1076,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
 
     const remoteRootId = createdRemoteRootId ?? await findUploadedRemoteItemId(targetParentId, binding.driveItemName, "folder")
+    await updateBindingDriveItemId(binding.id, remoteRootId)
     await baselineStore.upsert({
       bindingId: binding.id,
       relativePath: "",

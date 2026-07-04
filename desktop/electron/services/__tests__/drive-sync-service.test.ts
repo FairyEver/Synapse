@@ -1702,6 +1702,99 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("keeps local-to-remote file bindings recoverable when finalization fails after upload", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-file-1", name: "spec.md", type: "file", path: "spec.md", depth: 0 }],
+            nextOffset: null,
+          })),
+        },
+      })
+      vi.spyOn(harness.baseline, "upsert").mockRejectedValueOnce(new Error("baseline unavailable"))
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: `local:${localPath}`,
+        driveItemName: "spec.md",
+        kind: "file",
+        localPath,
+        direction: "local_to_remote",
+      })
+
+      expect(binding).toMatchObject({
+        status: "error",
+        driveItemId: "remote-file-1",
+        lastError: "baseline unavailable",
+      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        driveItemId: "remote-file-1",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({
+          bindingId: binding.id,
+          kind: "upload",
+          status: "error",
+          driveItemId: "remote-file-1",
+          message: "baseline unavailable",
+        }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps local-to-remote folder bindings recoverable when empty folder finalization fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await mkdir(path.join(tempDir, "empty"))
+      const harness = createHarness({
+        accountService: {
+          createDriveFolder: vi.fn(async ({ name }: { readonly name: string }) => {
+            if (name === "Project") return { id: "remote-root-1", name, type: "folder" }
+            throw new Error("folder create failed")
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: `local:${tempDir}`,
+        driveItemName: "Project",
+        kind: "folder",
+        localPath: tempDir,
+        direction: "local_to_remote",
+      })
+
+      expect(binding).toMatchObject({
+        status: "error",
+        driveItemId: "remote-root-1",
+        lastError: "folder create failed",
+      })
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        status: "error",
+        driveItemId: "remote-root-1",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({
+          bindingId: binding.id,
+          kind: "upload",
+          status: "error",
+          driveItemId: "remote-root-1",
+          message: "folder create failed",
+        }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("removes baseline entries when a binding is removed", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
