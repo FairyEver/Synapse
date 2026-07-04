@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   DriveBrowserPasswordRequiredDto,
   DriveBrowserPreviewKind,
@@ -8,6 +8,7 @@ import type {
   DriveFileContentUpdateResult,
 } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
+import { driveAnnotationsQueryKey, type DriveAnnotationContext } from './use-drive-annotations'
 
 export type DriveBrowserInput =
   | {
@@ -64,6 +65,7 @@ type KeyedDriveBrowserSnapshot = {
 }
 
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
+  const queryClient = useQueryClient()
   const [unlockedSnapshotState, setUnlockedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
   const [pagedSnapshotState, setPagedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
   const loadingChildrenPageKeyRef = useRef<string | null>(null)
@@ -180,6 +182,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       } else {
         setPagedSnapshotState({ keySignature: queryKeySignature, snapshot: nextSnapshot })
       }
+      await queryClient.invalidateQueries({ queryKey: driveAnnotationsQueryKey(toDriveAnnotationContext(input, variables.snapshot)) })
       return result
     },
   })
@@ -284,6 +287,12 @@ function snapshotAfterTextSave(
           }
       : snapshot.preview,
   }
+}
+
+function toDriveAnnotationContext(input: DriveBrowserInput, snapshot: DriveBrowserSnapshotDto): DriveAnnotationContext {
+  return input.context === 'share'
+    ? { context: 'share', shareId: input.shareId, itemId: snapshot.current.id }
+    : { context: 'owner', itemId: snapshot.current.id }
 }
 
 function isEditableTextPreviewKind(kind: DriveBrowserPreviewKind): boolean {

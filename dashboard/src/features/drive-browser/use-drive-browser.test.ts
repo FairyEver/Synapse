@@ -519,6 +519,96 @@ describe('toDriveBrowserQueryKey', () => {
     expect(readySnapshot?.preview?.outline).toBeNull()
   })
 
+  it('invalidates owner annotations after saving text', async () => {
+    vi.mocked(driveBrowserApi.getOwnerItem).mockReset()
+    vi.mocked(driveBrowserApi.updateOwnerText).mockReset()
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: { ...baseCurrent(), id: 'item-1', name: 'notes.md', mimeType: 'text/markdown', previewKind: 'markdown' },
+      edit: {
+        canEdit: true,
+        editorKind: 'mdxeditor',
+        currentVersionId: 'version-1',
+        maxInlineEditBytes: '1024',
+        reason: null,
+      },
+    })
+    const updateResult = createTextUpdateResult()
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(createSnapshot({ ...snapshot, edit: { ...snapshot.edit!, currentVersionId: 'version-2' } }))
+    vi.mocked(driveBrowserApi.updateOwnerText).mockResolvedValueOnce(updateResult)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    const hook = createDriveBrowserHookRenderer(queryClient, 'item-1')
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      await hook.result.current.saveText({
+        text: '# New',
+        baseVersionId: 'version-1',
+      })
+    })
+
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['drive-annotations', 'owner', 'item-1'] })
+  })
+
+  it('invalidates share annotations after saving text', async () => {
+    vi.mocked(driveBrowserApi.getShareItem).mockReset()
+    vi.mocked(driveBrowserApi.updateShareText).mockReset()
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: { ...baseCurrent(), id: 'share-file', name: 'notes.md', mimeType: 'text/markdown', previewKind: 'markdown' },
+      breadcrumbs: [{ id: 'share-root', name: 'Root' }, { id: 'share-file', name: 'notes.md' }],
+      edit: {
+        canEdit: true,
+        editorKind: 'mdxeditor',
+        currentVersionId: 'version-1',
+        maxInlineEditBytes: '1024',
+        reason: null,
+      },
+    })
+    const updateResult = createTextUpdateResult()
+    vi.mocked(driveBrowserApi.getShareItem)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(createSnapshot({ ...snapshot, edit: { ...snapshot.edit!, currentVersionId: 'version-2' } }))
+    vi.mocked(driveBrowserApi.updateShareText).mockResolvedValueOnce(updateResult)
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    const hook = createDriveBrowserHookRenderer(queryClient, {
+      context: 'share',
+      shareId: 'share-1',
+      itemId: 'share-file',
+    })
+
+    await waitFor(() => {
+      expect(hook.result.current.status).toBe('ready')
+    })
+    await act(async () => {
+      if (hook.result.current.status !== 'ready') throw new Error('browser is not ready')
+      await hook.result.current.saveText({
+        text: '# New',
+        baseVersionId: 'version-1',
+      })
+    })
+
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['drive-annotations', 'share', 'share-1', 'share-file'] })
+  })
+
   it('does not reuse unlocked share snapshots after share route changes', async () => {
     const unlockedSnapshot = createSnapshot({
       current: { ...baseCurrent(), id: 'share-a-file', name: 'first.txt' },
