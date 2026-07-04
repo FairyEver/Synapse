@@ -213,6 +213,26 @@ describe("drive sync binding validator", () => {
     })
   })
 
+  it("allows local folder uploads when user rules exclude skipped entries", async () => {
+    const folder = path.join(tempDir, "docs")
+    await mkdir(folder)
+    await writeFile(path.join(folder, "spec.md"), "spec", "utf8")
+    await symlink(path.join(folder, "spec.md"), path.join(folder, "link.md"))
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: folder,
+      remoteExists: false,
+      activeBindings: [],
+      excludeRules: ["link.md"],
+    })).resolves.toMatchObject({
+      status: "ready",
+      direction: "local_to_remote",
+    })
+  })
+
   it("copies gitignore rules once when requested", async () => {
     const folder = path.join(tempDir, "repo")
     await mkdir(folder)

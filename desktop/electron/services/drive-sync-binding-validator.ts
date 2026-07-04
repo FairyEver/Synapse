@@ -16,6 +16,7 @@ export async function previewDriveSyncBinding(input: {
   readonly directionHint?: DriveSyncInitialDirection | null
   readonly activeBindings: readonly DriveSyncBindingEntryV1[]
   readonly importGitignore?: boolean
+  readonly excludeRules?: readonly string[]
 }): Promise<DriveSyncBindingPreviewDto> {
   const localPath = normalizeLocalPath(input.localPath)
   const rules = createDefaultDriveSyncExcludeRules()
@@ -29,7 +30,7 @@ export async function previewDriveSyncBinding(input: {
     ? await readDriveSyncGitignoreRules(localPath)
     : []
   const skippedLocalFolderReason = input.kind === "folder" && local.kind === "folder" && shouldRequireCompleteLocalFolder(input)
-    ? await findSkippedLocalFolderReason(localPath, importedGitignoreRules)
+    ? await findSkippedLocalFolderReason(localPath, input.excludeRules ?? [], importedGitignoreRules)
     : null
   if (skippedLocalFolderReason) {
     return blocked(localPath, local.kind, local.empty, skippedLocalFolderReason, importedGitignoreRules)
@@ -173,6 +174,7 @@ function shouldRequireCompleteLocalFolder(input: {
 
 async function findSkippedLocalFolderReason(
   localPath: string,
+  userRules: readonly string[],
   importedGitignoreRules: readonly string[],
 ): Promise<string | null> {
   const defaults = createDefaultDriveSyncExcludeRules()
@@ -182,7 +184,7 @@ async function findSkippedLocalFolderReason(
       forced: defaults.forced,
       defaults: defaults.defaults,
       importedGitignore: importedGitignoreRules,
-      user: [],
+      user: userRules,
     },
     hashFiles: false,
   })
