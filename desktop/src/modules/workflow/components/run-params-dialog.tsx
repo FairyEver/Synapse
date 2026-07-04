@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { Command as CommandPrimitive } from "cmdk"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -21,10 +22,10 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
-import { ChevronsUpDown, FolderOpen, Trash2 } from "lucide-react"
+import { CheckIcon, ChevronsUpDown, FolderOpen, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import type {
   WorkflowParam,
@@ -499,18 +500,18 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
 
   if (param.allowCustomOption !== true) {
     return (
-      <Select value={trimmedValue} onValueChange={onChange}>
-        <SelectTrigger id={param.name} className="w-full" aria-invalid={hasError}>
-          <SelectValue placeholder="选择选项" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {options.map((option) => (
-              <SelectItem key={option} value={option}>{option}</SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      <select
+        id={param.name}
+        value={trimmedValue}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={hasError}
+        className="flex h-8 w-full cursor-pointer items-center justify-between rounded-lg border border-input bg-background px-2.5 py-1 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+      >
+        <option value="">选择选项</option>
+        {options.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
     )
   }
 
@@ -543,19 +544,19 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
           <CommandList>
             <CommandGroup>
               {visibleOptions.map((option) => (
-                <button
+                <CommandPrimitive.Item
                   key={option}
-                  type="button"
-                  role="option"
-                  aria-selected={trimmedValue === option}
-                  className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted aria-selected:bg-muted"
-                  onClick={() => {
+                  value={option}
+                  data-checked={trimmedValue === option}
+                  className="group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground"
+                  onSelect={() => {
                     onChange(option)
                     setOpen(false)
                   }}
                 >
-                  {option}
-                </button>
+                  <span className="truncate">{option}</span>
+                  <CheckIcon className="ml-auto size-4 opacity-0 group-data-[checked=true]/command-item:opacity-100" />
+                </CommandPrimitive.Item>
               ))}
               {visibleOptions.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">无匹配选项</p>

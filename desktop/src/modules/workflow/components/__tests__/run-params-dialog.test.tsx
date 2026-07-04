@@ -258,10 +258,7 @@ describe("RunParamsDialog", () => {
     })
 
     await act(async () => {
-      document.body.querySelector<HTMLButtonElement>("#report_type")?.click()
-    })
-    await act(async () => {
-      clickOption("周报")
+      setSelectValue(document.body.querySelector<HTMLSelectElement>("#report_type"), "周报")
     })
     await act(async () => {
       document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
@@ -273,6 +270,7 @@ describe("RunParamsDialog", () => {
         optionParamCount: 1,
       }),
     }))
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("周报")
   })
 
   it("accepts a typed custom option value", async () => {
@@ -289,10 +287,17 @@ describe("RunParamsDialog", () => {
       setControlValue(document.body.querySelector<HTMLInputElement>('input[aria-label="report_type"]'), "季度复盘")
     })
     await act(async () => {
+      const trigger = document.body.querySelector<HTMLButtonElement>("#report_type")
+      expect(trigger).toBeTruthy()
+      Object.defineProperty(trigger, "innerText", { configurable: true, value: "季度复盘" })
+      trigger?.click()
+    })
+    await act(async () => {
       document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     })
 
     expect(onConfirm).toHaveBeenCalledWith({ report_type: "季度复盘" }, { report_type: "季度复盘" })
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("季度复盘")
   })
 
   it("does not track selected custom-enabled option values", async () => {
@@ -465,6 +470,13 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | null,
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
   setter?.call(control, value)
   control?.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+function setSelectValue(control: HTMLSelectElement | null, value: string) {
+  expect(control).toBeTruthy()
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set
+  setter?.call(control, value)
+  control?.dispatchEvent(new Event("change", { bubbles: true }))
 }
 
 function clickButton(label: string) {
