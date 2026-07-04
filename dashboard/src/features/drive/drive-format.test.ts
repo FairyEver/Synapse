@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AdminDriveItemRow } from '@/lib/api'
 import {
   canDeleteAdminDriveItem,
+  canRestoreAdminDriveItem,
   driveDisplayStatusLabel,
   driveItemTypeLabel,
   driveLifecycleStatusLabel,
@@ -57,6 +58,21 @@ describe('drive admin format helpers', () => {
     expect(canDeleteAdminDriveItem(createDriveItem({
       storageStatus: 'failed',
       storageDeletePending: true,
+    }))).toBe(false)
+  })
+
+  it('only allows restore actions for recoverable lifecycle states', () => {
+    expect(canRestoreAdminDriveItem(createDriveItem({
+      lifecycleStatus: 'trashed',
+    }))).toBe(true)
+    expect(canRestoreAdminDriveItem(createDriveItem({
+      lifecycleStatus: 'hidden',
+    }))).toBe(true)
+    expect(canRestoreAdminDriveItem(createDriveItem({
+      lifecycleStatus: 'active',
+    }))).toBe(false)
+    expect(canRestoreAdminDriveItem(createDriveItem({
+      lifecycleStatus: 'legacy_missing',
     }))).toBe(false)
   })
 })

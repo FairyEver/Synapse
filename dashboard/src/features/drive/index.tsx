@@ -165,6 +165,7 @@ export default function DriveAdminPage() {
         cell: ({ row }) => {
           const item = row.original
           const canDelete = canDeleteAdminDriveItem(item)
+          const canRestore = canRestoreAdminDriveItem(item)
           const deleteLabel = item.lifecycleStatus === 'trashed' ? '清理' : '删除'
 
           return (
@@ -177,7 +178,7 @@ export default function DriveAdminPage() {
                   </a>
                 </Button>
               ) : null}
-              {item.lifecycleStatus !== 'active' ? (
+              {canRestore ? (
                 <Button
                   variant='ghost'
                   className='h-8 w-8 p-0'
@@ -403,6 +404,10 @@ export function canDeleteAdminDriveItem(item: AdminDriveItemRow) {
     item.storageStatus !== 'delete_pending' &&
     !item.storageDeletePending
   )
+}
+
+export function canRestoreAdminDriveItem(item: AdminDriveItemRow) {
+  return item.lifecycleStatus === 'trashed' || item.lifecycleStatus === 'hidden'
 }
 
 export function formatDriveBytes(value: string) {
