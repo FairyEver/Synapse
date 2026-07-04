@@ -601,7 +601,7 @@ export class AccountService {
     }
     const materializeRootFile = async (): Promise<void> => {
       const resolved = await this.resolveDriveLink(baseInput)
-      if (resolved.root.type !== "file") return
+      if (resolved.root.type === "folder") return
       const relativePath = safeDriveLinkOutputPath(resolved.root.name || "download")
       if (materializedFileCount >= maxFiles) {
         skipped.push({ path: relativePath, reason: "max-files" })
@@ -639,6 +639,11 @@ export class AccountService {
       }
       totalBytes += Number.isFinite(actualSize) ? actualSize : 0
       addMaterializedFile({ relativePath, kind: driveLinkFileKind(resolved.root.previewKind, downloaded.mimeType), size: downloaded.size })
+    }
+
+    if (scope === "entry") {
+      await materializeRootFile()
+      return finish()
     }
 
     if (isPublicAssetDriveLink(input.url)) {

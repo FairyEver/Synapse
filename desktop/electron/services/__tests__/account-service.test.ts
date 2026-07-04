@@ -485,6 +485,45 @@ describe("AccountService", () => {
       .resolves.toBe("content:pages/create-task.html")
   })
 
+  it("materializes the resolved site entry for Drive link entry scope", async () => {
+    const { service } = await createTestAccountService()
+    const listDriveLink = vi.spyOn(service, "listDriveLink").mockResolvedValue({
+      items: [
+        { path: "assets/app.css", name: "app.css", type: "file", mimeType: "text/css", previewKind: "text", size: "8" },
+        { path: "index.html", name: "index.html", type: "file", mimeType: "text/html", previewKind: "html-source", size: "12" },
+      ],
+      page: { hasMore: false, nextOffset: null },
+    })
+    vi.spyOn(service, "resolveDriveLink").mockResolvedValueOnce({
+      ok: true,
+      linkType: "site",
+      access: { status: "ok", canRead: true, canList: true, canReadText: true, canDownload: true },
+      root: { name: "index.html", type: "site", previewKind: "html-source" },
+      ref: { kind: "site", shareId: null, itemId: null, siteId: "site_123", path: null, assetId: null },
+    })
+    const readDriveLinkText = vi.spyOn(service, "readDriveLinkText").mockResolvedValueOnce({
+      path: "index.html",
+      mimeType: "text/html",
+      previewKind: "html-source",
+      text: "<!doctype html>",
+      truncated: false,
+      source: { linkType: "site" },
+    })
+
+    const result = await service.materializeDriveLink({
+      url: "https://synapse.test/sites/site_123/",
+      scope: "entry",
+      maxFiles: 1,
+      maxBytes: 1024,
+    })
+
+    expect(listDriveLink).not.toHaveBeenCalled()
+    expect(readDriveLinkText).toHaveBeenCalledWith({ url: "https://synapse.test/sites/site_123/" })
+    expect(result.files).toEqual([{ relativePath: "index.html", kind: "html", size: "15" }])
+    expect(result.entryPath).toContain("index.html")
+    await expect(readFile(result.entryPath!, "utf8")).resolves.toBe("<!doctype html>")
+  })
+
   it("materializes binary files when Drive link scope is all", async () => {
     const { service } = await createTestAccountService()
     vi.spyOn(service, "listDriveLink").mockResolvedValueOnce({
