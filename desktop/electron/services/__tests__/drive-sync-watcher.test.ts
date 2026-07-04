@@ -231,6 +231,24 @@ describe("drive sync watcher", () => {
     ])
   })
 
+  it("drops pending local changes when a binding stops", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 10,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+    })
+    watcher.reconcile([binding({ localPath: tempDir })])
+
+    await writeFile(path.join(tempDir, "queued.md"), "queued", "utf8")
+    fakeWatch.emit(tempDir, "rename", "queued.md")
+    watcher.reconcile([])
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([])
+  })
+
   it("reports watcher startup failures without emitting root deletes", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
     const errors: unknown[] = []

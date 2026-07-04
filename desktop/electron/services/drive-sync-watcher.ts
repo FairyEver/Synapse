@@ -159,7 +159,19 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     if (!entry) return
     entry.watcher.close()
     entries.delete(bindingId)
+    clearBindingQueues(bindingId)
+  }
+
+  function clearBindingQueues(bindingId: string): void {
+    const timer = timers.get(bindingId)
+    if (timer) clearTimeout(timer)
+    timers.delete(bindingId)
+    pending.delete(bindingId)
     flushRetryAttempts.delete(bindingId)
+    const prefix = `${bindingId}:`
+    for (const key of selfWrites.keys()) {
+      if (key.startsWith(prefix)) selfWrites.delete(key)
+    }
   }
 
   function handleRawEvent(
