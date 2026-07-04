@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { randomUUID } from "node:crypto"
+import { constants as fsConstants } from "node:fs"
 import { copyFile, lstat, mkdir, rename } from "node:fs/promises"
 import path from "node:path"
 import type {
@@ -1263,8 +1264,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const localPath = conflictLocalPath(binding, conflict)
     const stats = await lstat(localPath)
     if (!stats.isFile()) throw new Error("仅文件冲突支持保留两份。")
-    const copyLocalPath = conflictCopyLocalPath(localPath)
-    await copyFile(localPath, copyLocalPath)
+    const copyLocalPath = await createConflictLocalCopy(localPath)
     const copyRelativePath = path.posix.join(path.posix.dirname(conflict.relativePath), path.basename(copyLocalPath))
       .replace(/^\.\//u, "")
     await executeConflictResolutionOperations([
@@ -2252,10 +2252,25 @@ function assertNoRemoteFolderPathCollisions(
   }
 }
 
-function conflictCopyLocalPath(localPath: string): string {
+async function createConflictLocalCopy(localPath: string): Promise<string> {
+  for (let index = 1; index <= 1000; index += 1) {
+    const copyLocalPath = conflictCopyLocalPath(localPath, index)
+    try {
+      await copyFile(localPath, copyLocalPath, fsConstants.COPYFILE_EXCL)
+      return copyLocalPath
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue
+      throw error
+    }
+  }
+  throw new Error("无法创建冲突副本，已有过多同名文件。")
+}
+
+function conflictCopyLocalPath(localPath: string, index = 1): string {
   const extension = path.extname(localPath)
   const baseName = path.basename(localPath, extension)
-  return path.join(path.dirname(localPath), `${baseName}.local${extension}`)
+  const suffix = index === 1 ? ".local" : `.local-${index}`
+  return path.join(path.dirname(localPath), `${baseName}${suffix}${extension}`)
 }
 
 function parentRelativePathForSync(relativePath: string): string | null {

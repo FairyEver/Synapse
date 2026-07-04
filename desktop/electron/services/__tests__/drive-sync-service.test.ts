@@ -3550,6 +3550,54 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("resolves keep-both conflicts without overwriting existing local copies", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "local", "utf8")
+      await writeFile(path.join(tempDir, "spec.local.md"), "existing copy", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const conflict = await service.recordConflict({
+        bindingId: binding.id,
+        driveItemId: "remote-spec",
+        relativePath: "spec.md",
+        localPath,
+        remotePathHint: "/Docs/spec.md",
+        type: "both_modified",
+      })
+
+      await service.resolveConflict({ conflictId: conflict.id, action: "keep_both" })
+
+      await expect(readFile(path.join(tempDir, "spec.local.md"), "utf8")).resolves.toBe("existing copy")
+      await expect(readFile(path.join(tempDir, "spec.local-2.md"), "utf8")).resolves.toBe("local")
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+      expect(uploadDriveLocalItems).toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "spec.local-2.md" }),
+      )
+      await expect(harness.conflicts.get(conflict.id)).resolves.toMatchObject({ status: "resolved", resolution: "keep_both" })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps skipped conflicts open for later resolution", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
