@@ -1,5 +1,11 @@
 export function driveSiteContentType(relativePath: string, storedContentType?: string | null): string {
+  const inferredContentType = inferDriveSiteContentType(relativePath)
+  if (inferredContentType) return inferredContentType
   if (storedContentType) return storedContentType
+  return "application/octet-stream"
+}
+
+function inferDriveSiteContentType(relativePath: string): string | null {
   const lower = relativePath.toLowerCase()
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8"
   if (lower.endsWith(".css")) return "text/css; charset=utf-8"
@@ -13,7 +19,7 @@ export function driveSiteContentType(relativePath: string, storedContentType?: s
   if (lower.endsWith(".ico")) return "image/x-icon"
   if (lower.endsWith(".woff")) return "font/woff"
   if (lower.endsWith(".woff2")) return "font/woff2"
-  return "application/octet-stream"
+  return null
 }
 
 export function driveSiteCacheControl(relativePath: string, input: { readonly accessMode?: string | null } = {}): string {
