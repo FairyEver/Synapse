@@ -573,15 +573,16 @@ async function uploadFolder(
 
   const entries = await listLocalFolderEntries(fileSystem, folderPath)
   if (entries.files.length === 0 && entries.directories.length === 0) {
-    const root = await deps.accountService.createDriveFolder({
+    const prepared = await deps.accountService.prepareDriveFolderUpload({
       parentId: optionalNullableString(params.parentId),
-      name: optionalString(params.folderName) ?? path.basename(folderPath),
+      folderName: optionalString(params.folderName) ?? path.basename(folderPath),
+      files: [],
     })
     return {
       ok: true,
       data: {
-        root,
-        rootCreated: true,
+        root: prepared.root,
+        rootCreated: prepared.rootCreated,
         completed: 0,
         failed: 0,
         uploadedFiles: [],

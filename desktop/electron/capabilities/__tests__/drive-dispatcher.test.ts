@@ -1532,10 +1532,14 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("creates a Drive folder when an MCP folder upload points to an empty local directory", async () => {
+  it("uses folder upload merge semantics for an empty local directory", async () => {
     const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
     const accountService = createAccountService({
-      createDriveFolder: vi.fn(async () => root),
+      prepareDriveFolderUpload: vi.fn(async () => ({
+        root,
+        rootCreated: false,
+        entries: [],
+      })),
     })
     const fetchImpl = vi.fn()
     const dispatcher = createDriveCapabilityDispatcher({
@@ -1560,7 +1564,7 @@ describe("createDriveCapabilityDispatcher", () => {
       ok: true,
       data: {
         root,
-        rootCreated: true,
+        rootCreated: false,
         completed: 0,
         failed: 0,
         uploadedFiles: [],
@@ -1570,11 +1574,12 @@ describe("createDriveCapabilityDispatcher", () => {
         cleanupRootDeleteFailed: false,
       },
     })
-    expect(accountService.createDriveFolder).toHaveBeenCalledWith({
+    expect(accountService.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: "drive-root",
-      name: "project",
+      folderName: "project",
+      files: [],
     })
-    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+    expect(accountService.createDriveFolder).not.toHaveBeenCalled()
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
