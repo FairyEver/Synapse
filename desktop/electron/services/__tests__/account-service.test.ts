@@ -2167,6 +2167,7 @@ describe("AccountService", () => {
       url: `${expectedPublicAppUrl}/share/share_public`,
       urlWithPassword: `${expectedPublicAppUrl}/share/share_public?password=ListPw1`,
     }
+    const versionDownloadPath = path.join(os.tmpdir(), `synapse-version-download-${Date.now()}.html`)
     const shareSettings = { passwordEnabled: true, expiresIn: "30d" } as const
     const driveItemDto = driveItem({ id: "item-1", name: "report.html", mimeType: "text/html" })
     const fileVersion = {
@@ -2238,6 +2239,7 @@ describe("AccountService", () => {
             page: { offset: 10, limit: 5, hasMore: false, nextOffset: null },
           })
         }
+        if (String(url).endsWith("/drive/items/item-1/versions/version-1/download")) return new Response("<h1>v1</h1>")
         if (String(url).endsWith("/drive/items/item-1/versions/version-1/restore")) return jsonResponse(driveItemDto)
         if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "PATCH") {
           return jsonResponse({ ...fileVersion, isPinned: true })
@@ -2276,6 +2278,12 @@ describe("AccountService", () => {
       total: 1,
       page: { offset: 10, limit: 5, hasMore: false, nextOffset: null },
     })
+    await expect(service.downloadDriveFileVersion({
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: versionDownloadPath,
+    })).resolves.toEqual({ ok: true, path: versionDownloadPath })
+    await expect(readFile(versionDownloadPath, "utf8")).resolves.toBe("<h1>v1</h1>")
     await expect(service.restoreDriveFileVersion("item-1", "version-1")).resolves.toEqual(driveItemDto)
     await expect(service.updateDriveFileVersionPin("item-1", "version-1", true)).resolves.toEqual({
       ...fileVersion,
@@ -2297,6 +2305,7 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: shareSettings },
       { url: expectedApiUrl("/drive/items/item-1/versions?offset=10&limit=5"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/versions/version-1/download"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1/restore"), method: "POST", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "PATCH", body: { isPinned: true } },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "DELETE", body: undefined },

@@ -292,10 +292,6 @@ function currentOwnerDriveDownloadUrl(itemId: string): string {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/download`
 }
 
-function currentOwnerDriveVersionDownloadUrl(itemId: string, versionId: string): string {
-  return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}/download`
-}
-
 function driveDocumentImageSourcesPath(input: DriveDocumentImageSourceContext): string {
   if (input.kind === "owner") {
     return `/drive/items/${encodeURIComponent(input.itemId)}/image-sources`
@@ -812,7 +808,7 @@ export class AccountService {
     readonly outputPath: string
   }): Promise<{ readonly ok: true; readonly path: string }> {
     const response = await this.fetchAuthenticated(
-      currentOwnerDriveVersionDownloadUrl(input.itemId, input.versionId),
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(input.itemId)}/versions/${encodeURIComponent(input.versionId)}/download`,
       {},
       "历史版本下载失败。",
     )
