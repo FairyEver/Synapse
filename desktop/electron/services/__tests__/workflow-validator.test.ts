@@ -35,6 +35,47 @@ describe("validateWorkflow", () => {
     expect(result.errors).toHaveLength(0)
   })
 
+  it("accepts option parameters with null defaults", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects option defaults that are not strings", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: 1, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        message: "参数「report_type」的默认值必须是选项之一",
+      }),
+    ]))
+  })
+
+  it("accepts option defaults that match after trimming", () => {
+    const result = validateWorkflow({
+      ...base,
+      params: [
+        { name: "report_type", type: "option", default: " 周报 ", options: ["日报", " 周报 "], allowCustomOption: false },
+      ],
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
   it("rejects option parameters without usable options", () => {
     const result = validateWorkflow({
       ...base,

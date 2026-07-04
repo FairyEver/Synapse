@@ -77,6 +77,48 @@ describe("normalizeWorkflowRunParams", () => {
     expect(result.snapshotParams).toEqual({ report_type: "周报" })
   })
 
+  it("rejects non-string option values", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+    ]), { report_type: 1 })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「report_type」必须是文本",
+    })
+  })
+
+  it("trims option values before storing normalized params", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+    ]), { report_type: " 周报 " })
+
+    expect(result.errors).toEqual([])
+    expect(result.params).toEqual({ report_type: "周报" })
+    expect(result.stringValues).toEqual({ report_type: "周报" })
+    expect(result.snapshotParams).toEqual({ report_type: "周报" })
+  })
+
+  it("trims option lists and ignores empty options for closed option params", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["", " 周报 "], allowCustomOption: false },
+    ]), { report_type: "周报" })
+
+    expect(result.errors).toEqual([])
+    expect(result.params.report_type).toBe("周报")
+  })
+
+  it("treats omitted allowCustomOption as a closed option list", async () => {
+    const result = await normalizeWorkflowRunParams(def([
+      { name: "report_type", type: "option", default: null, options: ["日报"] },
+    ]), { report_type: "周报" })
+
+    expect(result.errors[0]).toMatchObject({
+      type: "invalid_config",
+      message: "参数「report_type」必须是预设选项之一",
+    })
+  })
+
   it("accepts custom option values when enabled", async () => {
     const result = await normalizeWorkflowRunParams(def([
       { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
