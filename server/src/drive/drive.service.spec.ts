@@ -863,6 +863,59 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(5n)
   })
 
+  it("audits completed and failed file version downloads without error message leaks", async () => {
+    const prisma = createPrismaMemory()
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "11", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const historical = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items.find((version) => !version.isCurrent)!
+
+    await service.recordFileVersionDownloadAudit("user-1", item.id, historical.id, {
+      fileName: "report-v1.txt",
+      size: 11n,
+      contentType: "text/plain",
+      status: "completed",
+      auditContext: { ipAddress: "127.0.0.1" },
+    })
+    await service.recordFileVersionDownloadAudit("user-1", item.id, historical.id, {
+      fileName: "report-v1.txt",
+      size: 11n,
+      contentType: "text/plain",
+      status: "failed",
+      auditContext: { ipAddress: "127.0.0.1" },
+      error: new Error("stream failed token=secret"),
+    })
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "user@example.com",
+      action: "drive.file_version.download",
+      targetType: "drive.fileVersion",
+      targetId: historical.id,
+      ipAddress: "127.0.0.1",
+      detail: expect.objectContaining({
+        userId: "user-1",
+        itemId: item.id,
+        versionId: historical.id,
+        name: "report-v1.txt",
+        size: "11",
+        contentType: "text/plain",
+        status: "completed",
+      }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.file_version.download",
+      detail: expect.objectContaining({
+        status: "failed",
+        errorName: "Error",
+        errorLength: "stream failed token=secret".length,
+      }),
+    }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("token=secret")
+  })
+
   it("overwrites same-name files while preserving item identity and shares", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)

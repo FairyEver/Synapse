@@ -185,6 +185,15 @@ type DriveBrowserDownloadResult = {
   readonly contentType?: string | null
 }
 
+type DriveFileVersionDownloadAuditInput = {
+  readonly fileName: string
+  readonly size?: bigint
+  readonly contentType?: string | null
+  readonly status: "completed" | "failed"
+  readonly auditContext?: DriveAuditContext
+  readonly error?: unknown
+}
+
 type DriveBrowserTransferResult =
   | ({ readonly kind: "file" } & DriveBrowserDownloadResult)
   | ({ readonly kind: "zip" } & DriveFolderZipBrowserResult)
@@ -643,6 +652,31 @@ export class DriveService implements OnApplicationBootstrap {
       size: object.size ?? version.size,
       contentType: object.contentType ?? version.mimeType,
     }
+  }
+
+  async recordFileVersionDownloadAudit(
+    userId: string,
+    itemId: string,
+    versionId: string,
+    input: DriveFileVersionDownloadAuditInput,
+  ): Promise<void> {
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.file_version.download",
+      targetType: "drive.fileVersion",
+      targetId: versionId,
+      detail: {
+        userId,
+        itemId,
+        versionId,
+        name: input.fileName,
+        size: input.size?.toString(),
+        contentType: input.contentType ?? null,
+        status: input.status,
+        ...(input.status === "failed" ? driveDownloadTransferErrorMetadata(input.error) : {}),
+      },
+      ipAddress: input.auditContext?.ipAddress,
+    })
   }
 
   async retryPendingFileVersionDeletes(limit = 100): Promise<{ readonly attempted: number; readonly deleted: number; readonly failed: number }> {
@@ -3335,6 +3369,14 @@ export class DriveService implements OnApplicationBootstrap {
 
 function redactDriveAuditDetail(value: Record<string, unknown>): Record<string, unknown> {
   return redactDriveAuditValue(value) as Record<string, unknown>
+}
+
+function driveDownloadTransferErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 function redactDriveAuditValue(value: unknown): unknown {

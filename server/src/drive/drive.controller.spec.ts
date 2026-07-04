@@ -48,6 +48,7 @@ describe("DriveController", () => {
     updateFileVersionPin: vi.fn(),
     deleteFileVersion: vi.fn(),
     openFileVersionDownload: vi.fn(),
+    recordFileVersionDownloadAudit: vi.fn(),
     listShares: vi.fn(),
     createShare: vi.fn(),
     resolvePublicShareAccess: vi.fn(),
@@ -121,6 +122,7 @@ describe("DriveController", () => {
     drive.updateFileVersionPin.mockReset()
     drive.deleteFileVersion.mockReset()
     drive.openFileVersionDownload.mockReset()
+    drive.recordFileVersionDownloadAudit.mockReset()
     drive.listShares.mockReset()
     drive.createShare.mockReset()
     drive.resolvePublicShareAccess.mockReset()
@@ -675,19 +677,62 @@ describe("DriveController", () => {
       drive.restoreFileVersion.mockResolvedValue({ id: "file-1" })
       drive.updateFileVersionPin.mockResolvedValue({ id: "ver-1", isPinned: true })
       drive.deleteFileVersion.mockResolvedValue({ ok: true })
+      drive.openFileVersionDownload.mockResolvedValue({
+        stream: Readable.from("old"),
+        fileName: "spec-v2.md",
+        size: 3n,
+        contentType: "text/markdown",
+      })
+      drive.recordFileVersionDownloadAudit.mockResolvedValue(undefined)
 
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions?offset=10&limit=5").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions/ver-1/download").expect(200)
       await request(userApp.getHttpServer()).post("/api/drive/items/file-1/versions/ver-1/restore").expect(201)
       await request(userApp.getHttpServer()).patch("/api/drive/items/file-1/versions/ver-1").send({ isPinned: true }).expect(200)
       await request(userApp.getHttpServer()).delete("/api/drive/items/file-1/versions/ver-1").expect(200)
 
       expect(drive.listFileVersions).toHaveBeenCalledWith("user-1", "file-1", { offset: 10, limit: 5 })
+      expect(drive.openFileVersionDownload).toHaveBeenCalledWith("user-1", "file-1", "ver-1")
+      expect(drive.recordFileVersionDownloadAudit).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.objectContaining({
+        fileName: "spec-v2.md",
+        size: 3n,
+        contentType: "text/markdown",
+        status: "completed",
+        auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      }))
       expect(drive.restoreFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
       expect(drive.updateFileVersionPin).toHaveBeenCalledWith("user-1", "file-1", "ver-1", true, expect.any(Object))
       expect(drive.deleteFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
     } finally {
       await userApp.close()
     }
+  })
+
+  it("records failed owner file version download audits when stream transfer fails", async () => {
+    const controller = new DriveUserController(drive as unknown as DriveService)
+    const requestContext = {
+      user: { id: "user-1" },
+      ip: "127.0.0.1",
+    } as never
+    drive.openFileVersionDownload.mockResolvedValue({
+      stream: createFailingReadable("version stream failed token=secret"),
+      fileName: "spec-v2.md",
+      size: 3n,
+      contentType: "text/markdown",
+    })
+    drive.recordFileVersionDownloadAudit.mockResolvedValue(undefined)
+
+    await expect(controller.downloadFileVersion("file-1", "ver-1", requestContext, createDownloadResponse() as never))
+      .rejects.toThrow("version stream failed")
+
+    expect(drive.recordFileVersionDownloadAudit).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.objectContaining({
+      fileName: "spec-v2.md",
+      size: 3n,
+      contentType: "text/markdown",
+      status: "failed",
+      auditContext: { ipAddress: "127.0.0.1" },
+      error: expect.any(Error),
+    }))
   })
 
   it("routes owner trash operations through the authenticated user", async () => {

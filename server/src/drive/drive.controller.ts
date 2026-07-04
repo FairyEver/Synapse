@@ -412,7 +412,12 @@ export class DriveUserController {
     @Res() response: Response,
   ) {
     const download = await this.drive.openFileVersionDownload(request.user!.id, id, versionId)
-    await sendDriveFileDownload(response, download)
+    await this.sendFileVersionDownloadWithAudit(response, download, {
+      userId: request.user!.id,
+      itemId: id,
+      versionId,
+      ipAddress: request.ip ?? "system",
+    })
   }
 
   @Post("/items/:id/versions/:versionId/restore")
@@ -678,6 +683,38 @@ export class DriveUserController {
   ) {
     const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
     return this.drive.updateOwnerFileText(request.user!.id, itemId, parsed, driveAuditContext(request))
+  }
+
+  private async sendFileVersionDownloadWithAudit(
+    response: Response,
+    download: Parameters<typeof sendDriveFileDownload>[1],
+    audit: {
+      readonly userId: string
+      readonly itemId: string
+      readonly versionId: string
+      readonly ipAddress: string
+    },
+  ): Promise<void> {
+    try {
+      await sendDriveFileDownload(response, download)
+      await this.drive.recordFileVersionDownloadAudit(audit.userId, audit.itemId, audit.versionId, {
+        fileName: download.fileName,
+        size: download.size,
+        contentType: download.contentType,
+        status: "completed",
+        auditContext: { ipAddress: audit.ipAddress },
+      })
+    } catch (error) {
+      await this.drive.recordFileVersionDownloadAudit(audit.userId, audit.itemId, audit.versionId, {
+        fileName: download.fileName,
+        size: download.size,
+        contentType: download.contentType,
+        status: "failed",
+        auditContext: { ipAddress: audit.ipAddress },
+        error,
+      })
+      throw error
+    }
   }
 }
 
