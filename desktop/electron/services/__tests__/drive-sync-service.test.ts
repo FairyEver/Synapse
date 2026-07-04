@@ -704,8 +704,12 @@ describe("DriveSyncService", () => {
       localPath: "/Users/me/docs/spec.md",
       remotePathHint: "/产品文档/spec.md",
       type: "both_modified",
-      localSnapshot: { mtimeMs: 1000 },
-      remoteSnapshot: { sequence: "43" },
+      localSnapshot: { change: { localKind: "file", relativePath: "spec.md", localSize: 12 } },
+      remoteSnapshot: { change: { itemKind: "file", pathHint: "/产品文档/spec.md", versionId: "v2", size: "12" } },
+    })
+    expect(conflict).toMatchObject({
+      localSummary: "本地：文件，路径 spec.md，大小 12 B",
+      remoteSummary: "云端：文件，路径 /产品文档/spec.md，大小 12 B，版本 v2",
     })
     await service.setHealth({ health: "error", lastError: "network unavailable" })
 

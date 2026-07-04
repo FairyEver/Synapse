@@ -2092,9 +2092,55 @@ function toConflictDto(entry: DriveSyncConflictEntryV1): DriveSyncConflictDto {
     bindingId: entry.bindingId,
     relativePath: entry.relativePath,
     type: entry.type,
+    localSummary: conflictSideSummary("本地", entry.localSnapshot, entry.relativePath),
+    remoteSummary: conflictSideSummary("云端", entry.remoteSnapshot, entry.remotePathHint ?? entry.relativePath),
     availableActions: availableConflictActions(entry),
     createdAt: entry.createdAt,
   }
+}
+
+function conflictSideSummary(
+  label: "本地" | "云端",
+  snapshot: Record<string, unknown> | null,
+  pathHint: string,
+): string | null {
+  const record = snapshotRecord(snapshot)
+  if (!record) return null
+  const parts = [
+    conflictKindLabel(driveItemKindFromSnapshotRecord(record)),
+    conflictSnapshotPath(record, pathHint),
+    conflictSnapshotSize(record),
+    conflictSnapshotVersion(record),
+  ].filter((part): part is string => Boolean(part))
+  return `${label}：${parts.join("，")}`
+}
+
+function snapshotRecord(snapshot: Record<string, unknown> | null): Record<string, unknown> | null {
+  const value = snapshot?.change ?? snapshot?.baseline
+  return value && typeof value === "object" ? value as Record<string, unknown> : null
+}
+
+function conflictKindLabel(kind: "file" | "folder" | null): string {
+  if (kind === "file") return "文件"
+  if (kind === "folder") return "文件夹"
+  return "未知类型"
+}
+
+function conflictSnapshotPath(record: Record<string, unknown>, fallback: string): string | null {
+  const pathValue = record.currentPathHint ?? record.pathHint ?? record.relativePath ?? fallback
+  return typeof pathValue === "string" && pathValue.trim() ? `路径 ${pathValue}` : null
+}
+
+function conflictSnapshotSize(record: Record<string, unknown>): string | null {
+  const size = record.localSize ?? record.size
+  if (typeof size === "number" && Number.isFinite(size)) return `大小 ${size} B`
+  if (typeof size === "string" && size.trim()) return `大小 ${size} B`
+  return null
+}
+
+function conflictSnapshotVersion(record: Record<string, unknown>): string | null {
+  const version = record.remoteVersionId ?? record.versionId ?? record.remoteEtag ?? record.etag
+  return typeof version === "string" && version.trim() ? `版本 ${version}` : null
 }
 
 function availableConflictActions(entry: DriveSyncConflictEntryV1): readonly DriveSyncConflictResolutionAction[] {

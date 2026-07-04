@@ -810,7 +810,15 @@ function DriveSyncConflictTable({
           const availableActions = new Set(conflict.availableActions)
           return (
             <TableRow key={conflict.id}>
-              <TableCell className="truncate">{conflict.relativePath || "/"}</TableCell>
+              <TableCell className="min-w-0">
+                <div className="truncate">{conflict.relativePath || "/"}</div>
+                {conflict.localSummary || conflict.remoteSummary ? (
+                  <div className="mt-1 grid gap-1 text-xs text-muted-foreground">
+                    {conflict.localSummary ? <div className="truncate">{conflict.localSummary}</div> : null}
+                    {conflict.remoteSummary ? <div className="truncate">{conflict.remoteSummary}</div> : null}
+                  </div>
+                ) : null}
+              </TableCell>
               <TableCell>{formatConflictType(conflict.type)}</TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">

@@ -1019,6 +1019,8 @@ describe("DriveModule", () => {
           bindingId: "binding-conflict",
           relativePath: "spec.md",
           type: "both_modified",
+          localSummary: "本地：文件，路径 spec.md，大小 12 B",
+          remoteSummary: "云端：文件，路径 /Docs/spec.md，版本 v2",
           createdAt: "2026-06-28T00:00:00.000Z",
         }],
       },
@@ -1033,6 +1035,13 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("继续同步 Paused").textContent).toContain("继续同步")
     expect(getButtonByLabel("重试同步 Error").textContent).toContain("重试同步")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步失败，请查看同步记录")
+
+    await clickButtonByLabel("处理同步冲突 Conflict")
+
+    const detailDialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+      .find((candidate) => candidate.textContent?.includes("本地：文件，路径 spec.md，大小 12 B"))
+    if (!detailDialog) throw new Error("Drive sync conflict detail dialog not found")
+    expect(detailDialog.textContent).toContain("云端：文件，路径 /Docs/spec.md，版本 v2")
   })
 
   it("filters drive sync objects by status tabs", async () => {
@@ -3666,6 +3675,8 @@ function createDriveSyncSnapshot(
     bindings: entries.bindings ?? [],
     conflicts: (entries.conflicts ?? []).map((conflict) => ({
       ...conflict,
+      localSummary: conflict.localSummary ?? null,
+      remoteSummary: conflict.remoteSummary ?? null,
       availableActions: conflict.availableActions ?? defaultConflictActions(conflict.type),
     })),
     operations: entries.operations ?? [],
@@ -3674,8 +3685,8 @@ function createDriveSyncSnapshot(
 }
 
 type DriveSyncConflictFixture =
-  Omit<DriveSyncSnapshotDto["conflicts"][number], "availableActions">
-  & Partial<Pick<DriveSyncSnapshotDto["conflicts"][number], "availableActions">>
+  Omit<DriveSyncSnapshotDto["conflicts"][number], "availableActions" | "localSummary" | "remoteSummary">
+  & Partial<Pick<DriveSyncSnapshotDto["conflicts"][number], "availableActions" | "localSummary" | "remoteSummary">>
 
 function defaultConflictActions(type: string): DriveSyncSnapshotDto["conflicts"][number]["availableActions"] {
   return type === "delete_vs_modify"
