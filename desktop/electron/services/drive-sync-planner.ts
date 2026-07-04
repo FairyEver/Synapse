@@ -270,7 +270,7 @@ export function planDriveSyncRemoteChanges(input: {
     baseline: DriveSyncBaselineEntryV1 | undefined,
   ) => boolean
 }): DriveSyncPlanResult {
-  const baselineByRemoteId = new Map(
+  const baselineByRemoteId = new Map<string, DriveSyncBaselineEntryV1>(
     input.baseline
       .filter((entry) => entry.deletedAt === null)
       .map((entry) => [entry.remoteItemId, entry] as const),
@@ -330,6 +330,7 @@ export function planDriveSyncRemoteChanges(input: {
         remotePathHint: change.pathHint ?? null,
         remoteItemKind: change.itemKind ?? null,
       }))
+      if (baseline) baselineByRemoteId.set(change.itemId, { ...baseline, relativePath })
       continue
     }
 

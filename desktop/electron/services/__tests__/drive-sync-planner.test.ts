@@ -247,6 +247,33 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("uses the new remote path for later updates in the same change page", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [baseline({ relativePath: "z.md", remoteItemId: "remote-file" })],
+      changes: [
+        remoteChange({ itemId: "remote-file", type: "renamed", pathHint: "/Docs/a.md" }),
+        remoteChange({ itemId: "remote-file", type: "content_updated", pathHint: "/Docs/a.md" }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "move_local",
+        relativePath: "a.md",
+        localPath: "/Users/me/Docs/a.md",
+        driveItemId: "remote-file",
+      }),
+      expect.objectContaining({
+        kind: "download",
+        relativePath: "a.md",
+        localPath: "/Users/me/Docs/a.md",
+        driveItemId: "remote-file",
+      }),
+    ])
+  })
+
   it("keeps nested remote paths and item kinds from change metadata", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),
