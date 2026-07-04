@@ -9,15 +9,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
-import { FolderOpen, Trash2 } from "lucide-react"
+import { ChevronsUpDown, FolderOpen, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import type {
   WorkflowParam,
@@ -58,6 +67,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
     text: params.filter((param) => param.type === "text").length,
     file: params.filter((param) => param.type === "file").length,
     directory: params.filter((param) => param.type === "directory").length,
+    option: params.filter((param) => param.type === "option").length,
   }), [params])
 
   const selectedPreset = useMemo(
@@ -107,13 +117,22 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   function validate(): boolean {
     const next: Record<string, string> = {}
     for (const param of params) {
-      if (param.default !== null) continue
       const raw = values[param.name]
       if (param.type === "number") {
-        if (raw === "" || Number.isNaN(Number(raw))) {
+        if (param.default === null && (raw === "" || Number.isNaN(Number(raw)))) {
           next[param.name] = "此项为必填"
         }
-      } else if (!raw) {
+      } else if (param.type === "option") {
+        const trimmed = raw?.trim() ?? ""
+        if (param.default === null && !trimmed) {
+          next[param.name] = "此项为必填"
+          continue
+        }
+        const options = normalizeOptionValues(param.options)
+        if (param.allowCustomOption !== true && trimmed && !options.includes(trimmed)) {
+          next[param.name] = "请选择预设选项"
+        }
+      } else if (param.default === null && !raw) {
         next[param.name] = "此项为必填"
       }
     }
@@ -132,6 +151,8 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
         parsed[param.name] = values[param.name]?.trim()
           ? toLocalPathParam(param.type, values[param.name])
           : param.default
+      } else if (param.type === "option") {
+        parsed[param.name] = values[param.name]?.trim() ?? ""
       } else {
         parsed[param.name] = values[param.name]
       }
@@ -166,6 +187,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
         textParamCount: paramCounts.text,
         fileParamCount: paramCounts.file,
         directoryParamCount: paramCounts.directory,
+        optionParamCount: paramCounts.option,
         hasLastValues: Boolean(lastValues),
         selectedPresetId: presetId,
         savedPreset,
@@ -363,6 +385,13 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                             </InputGroupButton>
                           </InputGroupAddon>
                         </InputGroup>
+                      ) : param.type === "option" ? (
+                        <OptionParamControl
+                          param={param}
+                          value={values[param.name] ?? ""}
+                          hasError={!!errors[param.name]}
+                          onChange={(nextValue) => updateValue(param.name, nextValue)}
+                        />
                       ) : (
                         <Textarea
                           id={param.name}
@@ -453,11 +482,100 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
   )
 }
 
+interface OptionParamControlProps {
+  param: WorkflowParam
+  value: string
+  hasError: boolean
+  onChange: (value: string) => void
+}
+
+function OptionParamControl({ param, value, hasError, onChange }: OptionParamControlProps) {
+  const [open, setOpen] = useState(false)
+  const options = useMemo(() => normalizeOptionValues(param.options), [param.options])
+  const trimmedValue = value.trim()
+
+  if (param.allowCustomOption !== true) {
+    return (
+      <Select value={trimmedValue} onValueChange={onChange}>
+        <SelectTrigger id={param.name} className="w-full" aria-invalid={hasError}>
+          <SelectValue placeholder="选择选项" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {options.map((option) => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={param.name}
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-invalid={hasError}
+          className="w-full justify-between"
+          onClick={() => setOpen(true)}
+        >
+          <span className="truncate">{trimmedValue || "选择或输入"}</span>
+          <ChevronsUpDown data-icon="inline-end" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1.5">
+        <Command>
+          <CommandInput
+            id={`${param.name}-input`}
+            aria-label={param.name}
+            value={value}
+            onValueChange={onChange}
+            placeholder="输入或选择"
+            data-track="workflow-run-param-option-input"
+          />
+          <CommandList>
+            <CommandEmpty>无匹配选项</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  data-checked={trimmedValue === option}
+                  onSelect={(selectedValue) => {
+                    onChange(selectedValue)
+                    setOpen(false)
+                  }}
+                >
+                  {option}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function buildInitialValues(params: WorkflowParam[], source?: Record<string, string>): Record<string, string> {
   return Object.fromEntries(params.map((param) => [
     param.name,
     source?.[param.name] ?? paramDefaultInputValue(param.default),
   ]))
+}
+
+function normalizeOptionValues(options?: readonly string[]): string[] {
+  const normalized: string[] = []
+  for (const option of options ?? []) {
+    const value = option.trim()
+    if (value && !normalized.includes(value)) normalized.push(value)
+  }
+  return normalized
 }
 
 function nextPresetName(existing: readonly WorkflowParamPreset[]): string {

@@ -47,6 +47,13 @@ beforeEach(() => {
   if (!HTMLElement.prototype.scrollIntoView) {
     HTMLElement.prototype.scrollIntoView = vi.fn()
   }
+  if (!globalThis.ResizeObserver) {
+    globalThis.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  }
   mocks.presetList.mockResolvedValue([])
   mocks.presetSave.mockResolvedValue({
     id: "preset-saved",
@@ -179,6 +186,7 @@ describe("RunParamsDialog", () => {
         textParamCount: 1,
         fileParamCount: 0,
         directoryParamCount: 0,
+        optionParamCount: 0,
         hasLastValues: true,
         selectedPresetId: undefined,
         savedPreset: false,
@@ -240,6 +248,90 @@ describe("RunParamsDialog", () => {
         directoryParamCount: 1,
       }),
     }))
+  })
+
+  it("submits a selected closed option value", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: false },
+      ],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#report_type")?.click()
+    })
+    await act(async () => {
+      clickOption("周报")
+    })
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith({ report_type: "周报" }, { report_type: "周报" })
+    expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        optionParamCount: 1,
+      }),
+    }))
+  })
+
+  it("accepts a typed custom option value", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
+      ],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#report_type")?.click()
+    })
+    await act(async () => {
+      setControlValue(document.body.querySelector<HTMLInputElement>('input[aria-label="report_type"]'), "季度复盘")
+    })
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith({ report_type: "季度复盘" }, { report_type: "季度复盘" })
+  })
+
+  it("rejects a closed option value outside the option list", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: false },
+      ],
+      lastValues: { report_type: "季度复盘" },
+    })
+
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("请选择预设选项")
+  })
+
+  it("loads preset custom option values unchanged", async () => {
+    mocks.presetList.mockResolvedValue([
+      { id: "preset-1", workflowId: "workflow-1", name: "季度", values: { report_type: "季度复盘" }, createdAt: 1, updatedAt: 2 },
+    ])
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
+      ],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#workflow-run-param-preset")?.click()
+    })
+    await act(async () => {
+      clickOption("季度")
+    })
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith({ report_type: "季度复盘" }, { report_type: "季度复盘" })
   })
 
   it("saves a new preset before running and does not track parameter values", async () => {
