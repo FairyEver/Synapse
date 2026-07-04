@@ -980,7 +980,7 @@ describe("DriveSyncService", () => {
       const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
       const listDriveItemTree = vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => ({
         items: parentId === "folder-1"
-          ? [{ id: "uploaded-spec", name: "spec.md", type: "file", path: "spec.md", depth: 0, size: "4", mimeType: "text/markdown" }]
+          ? [{ id: "uploaded-spec", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 1, size: "4", mimeType: "text/markdown" }]
           : [],
       }))
       const harness = createHarness({
