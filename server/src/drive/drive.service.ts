@@ -1743,8 +1743,17 @@ export class DriveService implements OnApplicationBootstrap {
     }
 
     const validated = await this.validateReorganizationPlan(userId, plan)
+    const changes = await Promise.all(validated.map(async (move) => {
+      const item = await this.requireOwnedItem(userId, move.itemId)
+      const targetParent = move.targetParentId ? await this.requireOwnedFolder(userId, move.targetParentId) : null
+      return {
+        ...move,
+        pathHint: `/${await this.resolveOwnedItemPath(userId, item)}`,
+        currentPathHint: targetParent ? `/${await this.resolveOwnedItemPath(userId, targetParent)}/${move.name}` : `/${move.name}`,
+      }
+    }))
     await this.prisma.$transaction(async (tx) => {
-      for (const move of validated) {
+      for (const move of changes) {
         await tx.driveItem.update({
           where: { id: move.itemId },
           data: { parentId: move.targetParentId },
@@ -1755,6 +1764,8 @@ export class DriveService implements OnApplicationBootstrap {
           parentId: move.targetParentId,
           type: "moved",
           name: move.name,
+          pathHint: move.pathHint,
+          currentPathHint: move.currentPathHint,
           actor: userId,
         }, tx)
       }

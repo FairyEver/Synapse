@@ -3637,6 +3637,8 @@ describe("DriveService", () => {
       parentId: target.id,
       type: "moved",
       name: "report.md",
+      pathHint: "/Parent/report.md",
+      currentPathHint: "/Target/report.md",
       actor: "user-1",
     })])
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
