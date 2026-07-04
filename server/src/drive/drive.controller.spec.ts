@@ -332,7 +332,7 @@ describe("DriveController", () => {
         entryPath: null,
         accessMode: "public",
         expiresIn: "forever",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -382,7 +382,7 @@ describe("DriveController", () => {
         entryPath: null,
         accessMode: "password",
         expiresIn: "3d",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }

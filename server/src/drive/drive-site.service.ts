@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import {
@@ -15,6 +15,8 @@ import {
   type DriveSiteListPageDto,
   type DriveSitePreflightDto,
 } from "@synapse/shared"
+import { AuditLogService } from "../common/audit-log.service"
+import { formatAuditError } from "../common/audit-error"
 import { PrismaService } from "../prisma/prisma.service"
 import {
   DRIVE_ITEM_LIFECYCLE_STATUS,
@@ -39,6 +41,10 @@ import { createDriveSiteId } from "./drive-token"
 import { toDriveSiteDto } from "./drive.types"
 
 type DrivePrismaClient = PrismaService | Prisma.TransactionClient
+
+type DriveAuditContext = {
+  readonly ipAddress?: string
+}
 
 type DriveSiteSourceItem = {
   readonly id: string
@@ -168,11 +174,13 @@ const DRIVE_SITE_SNAPSHOT_PARENT_BATCH_SIZE = 100
 
 @Injectable()
 export class DriveSiteService {
+  private readonly logger = new Logger(DriveSiteService.name)
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async preflightSite(userId: string, sourceFolderItemId: string): Promise<DriveSitePreflightDto> {
@@ -188,7 +196,7 @@ export class DriveSiteService {
     }
   }
 
-  async createSite(userId: string, publicAppUrl: string, input: DriveSiteCreateInput): Promise<DriveSiteDto> {
+  async createSite(userId: string, publicAppUrl: string, input: DriveSiteCreateInput, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
     const snapshot = await this.buildSnapshot(this.prisma, userId, input.sourceFolderItemId)
     const entryPath = this.resolveEntryPath(snapshot, input.entryPath ?? null)
     const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
@@ -208,7 +216,15 @@ export class DriveSiteService {
       },
     })
     await this.publishDeployment(site, snapshot, entryPath)
-    return this.getSiteDto(userId, site.siteId, publicAppUrl, passwordMaterial.password)
+    const dto = await this.getSiteDto(userId, site.siteId, publicAppUrl, passwordMaterial.password)
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.create",
+      targetId: site.id,
+      detail: siteAuditDetail(userId, dto, { sourceFolderItemId: snapshot.sourceFolderItemId }),
+      ipAddress: auditContext.ipAddress,
+    })
+    return dto
   }
 
   async listSites(userId: string, publicAppUrl: string, input: DriveSiteListInput = {}): Promise<DriveSiteListPageDto> {
@@ -270,7 +286,7 @@ export class DriveSiteService {
     return deployments.map((deployment) => deployment.id)
   }
 
-  async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
+  async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
     const site = await this.requireOwnedSite(userId, siteId)
     const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn, site)
     await this.prisma.driveSite.update({
@@ -283,19 +299,39 @@ export class DriveSiteService {
         expiresAt: expiresAtFromInput(input.expiresIn),
       },
     })
-    return this.getSiteDto(userId, siteId, publicAppUrl, passwordMaterial.password)
+    const dto = await this.getSiteDto(userId, siteId, publicAppUrl, passwordMaterial.password)
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.access.update",
+      targetId: site.id,
+      detail: siteAuditDetail(userId, dto, {
+        previousAccessMode: site.accessMode,
+        previousExpiresAt: site.expiresAt?.toISOString() ?? null,
+        passwordEnabled: Boolean(passwordMaterial.passwordHash),
+      }),
+      ipAddress: auditContext.ipAddress,
+    })
+    return dto
   }
 
-  async disableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
-    await this.requireOwnedSite(userId, siteId)
+  async disableSite(userId: string, siteId: string, publicAppUrl: string, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
+    const site = await this.requireOwnedSite(userId, siteId)
     await this.prisma.driveSite.update({
       where: { siteId },
       data: { status: DRIVE_SITE_STATUS.disabled, disabledAt: new Date() },
     })
-    return this.getSiteDto(userId, siteId, publicAppUrl)
+    const dto = await this.getSiteDto(userId, siteId, publicAppUrl)
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.disable",
+      targetId: site.id,
+      detail: siteAuditDetail(userId, dto, { previousStatus: site.status }),
+      ipAddress: auditContext.ipAddress,
+    })
+    return dto
   }
 
-  async enableSite(userId: string, siteId: string, publicAppUrl: string): Promise<DriveSiteDto> {
+  async enableSite(userId: string, siteId: string, publicAppUrl: string, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
     const site = await this.requireOwnedSite(userId, siteId)
     if (site.status === DRIVE_SITE_STATUS.failed || !site.currentDeploymentId) {
       throw new BadRequestException("站点需要重新发布。")
@@ -308,19 +344,45 @@ export class DriveSiteService {
         expiresAt: expiresAtFromInput(site.expiresIn as DriveAccessExpiresIn),
       },
     })
-    return this.getSiteDto(userId, siteId, publicAppUrl)
+    const dto = await this.getSiteDto(userId, siteId, publicAppUrl)
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.enable",
+      targetId: site.id,
+      detail: siteAuditDetail(userId, dto, { previousStatus: site.status }),
+      ipAddress: auditContext.ipAddress,
+    })
+    return dto
   }
 
-  async deleteSite(userId: string, siteId: string): Promise<{ ok: true }> {
-    await this.requireOwnedSite(userId, siteId)
+  async deleteSite(userId: string, siteId: string, auditContext: DriveAuditContext = {}): Promise<{ ok: true }> {
+    const site = await this.requireOwnedSite(userId, siteId)
     await this.prisma.driveSite.update({
       where: { siteId },
       data: { status: DRIVE_SITE_STATUS.deleted, deletedAt: new Date() },
     })
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.delete",
+      targetId: site.id,
+      detail: {
+        userId,
+        siteRecordId: site.id,
+        siteId: site.siteId,
+        name: site.name,
+        previousStatus: site.status,
+        accessMode: site.accessMode,
+        passwordEnabled: Boolean(site.passwordHash),
+        expiresAt: site.expiresAt?.toISOString() ?? null,
+        currentDeploymentId: site.currentDeploymentId,
+        sourceFolderItemId: site.sourceFolderItemId,
+      },
+      ipAddress: auditContext.ipAddress,
+    })
     return { ok: true }
   }
 
-  async republishSite(userId: string, siteId: string, publicAppUrl: string, input: { readonly entryPath?: string | null }): Promise<DriveSiteDto> {
+  async republishSite(userId: string, siteId: string, publicAppUrl: string, input: { readonly entryPath?: string | null }, auditContext: DriveAuditContext = {}): Promise<DriveSiteDto> {
     const site = await this.requireOwnedSite(userId, siteId)
     if (!site.sourceFolderItemId) throw new BadRequestException("来源文件夹不可用。")
     const snapshot = await this.buildSnapshot(this.prisma, userId, site.sourceFolderItemId)
@@ -329,7 +391,19 @@ export class DriveSiteService {
       : null
     const entryPath = this.resolveEntryPath(snapshot, input.entryPath ?? currentDeployment?.entryPath ?? null)
     await this.publishDeployment(site, snapshot, entryPath)
-    return this.getSiteDto(userId, siteId, publicAppUrl)
+    const dto = await this.getSiteDto(userId, siteId, publicAppUrl)
+    await this.recordSiteAudit({
+      userId,
+      action: "drive.site.republish",
+      targetId: site.id,
+      detail: siteAuditDetail(userId, dto, {
+        previousDeploymentId: currentDeployment?.id ?? null,
+        previousEntryPath: currentDeployment?.entryPath ?? null,
+        requestedEntryPath: input.entryPath ?? null,
+      }),
+      ipAddress: auditContext.ipAddress,
+    })
+    return dto
   }
 
   async resolvePublicSite(siteId: string, input: { readonly cookie: string | null; readonly password?: string; readonly relativePath?: string }): Promise<DriveResolvedSiteAccess> {
@@ -670,6 +744,34 @@ export class DriveSiteService {
     }
   }
 
+  private async recordSiteAudit(input: {
+    readonly userId: string
+    readonly action: string
+    readonly targetId: string
+    readonly detail: Record<string, unknown>
+    readonly ipAddress?: string
+  }): Promise<void> {
+    if (!this.auditLog) return
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id: input.userId }, select: { email: true } })
+      await this.auditLog.record({
+        adminEmail: user?.email ?? input.userId,
+        action: input.action,
+        targetType: "drive.site",
+        targetId: input.targetId,
+        detail: redactDriveSiteAuditDetail(input.detail),
+        ipAddress: input.ipAddress ?? "system",
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Failed to record drive site audit log")
+    }
+  }
+
   private decryptStoredPassword(value: string | null | undefined): string | null {
     if (!value) return null
     return decryptDrivePassword(value, this.accessSecret)
@@ -695,6 +797,47 @@ function comparePublicSiteEntries(first: DrivePublicSiteEntryRecord, second: Dri
   if (pathOrder !== 0) return pathOrder
   if (first.kind !== second.kind) return first.kind === "folder" ? -1 : 1
   return (first.id ?? "").localeCompare(second.id ?? "")
+}
+
+function siteAuditDetail(userId: string, site: DriveSiteDto, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    userId,
+    siteRecordId: site.id,
+    siteId: site.siteId,
+    name: site.name,
+    status: site.status,
+    accessMode: site.accessMode,
+    passwordEnabled: site.passwordEnabled,
+    expiresAt: site.expiresAt,
+    sourceFolderItemId: site.sourceFolderItemId,
+    sourceFolderName: site.sourceFolderName,
+    entryPath: site.entryPath,
+    fileCount: site.fileCount,
+    totalBytes: site.totalBytes,
+    lastPublishedAt: site.lastPublishedAt,
+    ...extra,
+  }
+}
+
+function redactDriveSiteAuditDetail(value: Record<string, unknown>): Record<string, unknown> {
+  return redactDriveSiteAuditValue(value) as Record<string, unknown>
+}
+
+function redactDriveSiteAuditValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => redactDriveSiteAuditValue(item))
+  if (!isRecord(value)) return typeof value === "string" && value.includes("password=") ? "[redacted-url]" : value
+  return Object.fromEntries(Object.entries(value).map(([key, entryValue]) => [
+    key,
+    isSensitiveDriveSiteAuditKey(key) ? "[redacted]" : redactDriveSiteAuditValue(entryValue),
+  ]))
+}
+
+function isSensitiveDriveSiteAuditKey(key: string): boolean {
+  return key === "password" || key === "passwordHash" || key === "passwordEncrypted" || key === "url" || key === "urlWithPassword" || key === "cookie"
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === "[object Object]"
 }
 
 function siteListStatusWhere(

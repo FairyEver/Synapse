@@ -273,7 +273,7 @@ export class DriveUserController {
   @Post("/sites")
   createSite(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(driveSiteCreateSchema, body, "站点发布请求无效。")
-    return requireDriveSiteService(this.sites).createSite(request.user!.id, resolveRequestPublicAppUrl(request), parsed)
+    return requireDriveSiteService(this.sites).createSite(request.user!.id, resolveRequestPublicAppUrl(request), parsed, driveAuditContext(request))
   }
 
   @Get("/sites")
@@ -288,28 +288,28 @@ export class DriveUserController {
   @Patch("/sites/:siteId/access")
   updateSiteAccess(@Param("siteId") siteId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(driveSiteAccessUpdateSchema, body, "站点访问设置无效。")
-    return requireDriveSiteService(this.sites).updateSiteAccess(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed)
+    return requireDriveSiteService(this.sites).updateSiteAccess(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed, driveAuditContext(request))
   }
 
   @Post("/sites/:siteId/disable")
   disableSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveSiteService(this.sites).disableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request))
+    return requireDriveSiteService(this.sites).disableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request), driveAuditContext(request))
   }
 
   @Post("/sites/:siteId/enable")
   enableSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveSiteService(this.sites).enableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request))
+    return requireDriveSiteService(this.sites).enableSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request), driveAuditContext(request))
   }
 
   @Post("/sites/:siteId/republish")
   republishSite(@Param("siteId") siteId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(driveSiteRepublishSchema, body, "站点重新发布请求无效。")
-    return requireDriveSiteService(this.sites).republishSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed)
+    return requireDriveSiteService(this.sites).republishSite(request.user!.id, siteId, resolveRequestPublicAppUrl(request), parsed, driveAuditContext(request))
   }
 
   @Delete("/sites/:siteId")
   deleteSite(@Param("siteId") siteId: string, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveSiteService(this.sites).deleteSite(request.user!.id, siteId)
+    return requireDriveSiteService(this.sites).deleteSite(request.user!.id, siteId, driveAuditContext(request))
   }
 
   @Get("/changes")

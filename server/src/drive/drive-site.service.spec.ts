@@ -89,6 +89,54 @@ describe("DriveSiteService", () => {
     await expect(verifyPassword(result.password, stored.passwordHash)).resolves.toBe(true)
   })
 
+  it("records redacted audit logs for Drive Site management mutations", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const auditLog = { record: vi.fn(async (_input: unknown) => undefined) }
+    const service = new DriveSiteService(prisma as never, storage as never, auditLog as never)
+
+    const created = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "password",
+      password: "secret-123",
+      expiresIn: "30d",
+    }, { ipAddress: "127.0.0.1" })
+    await service.updateSiteAccess("user-1", created.siteId, "https://synapse.test", {
+      accessMode: "password",
+      password: "new-secret-456",
+      expiresIn: "7d",
+    }, { ipAddress: "127.0.0.2" })
+    await service.disableSite("user-1", created.siteId, "https://synapse.test", { ipAddress: "127.0.0.3" })
+    await service.enableSite("user-1", created.siteId, "https://synapse.test", { ipAddress: "127.0.0.4" })
+    await service.republishSite("user-1", created.siteId, "https://synapse.test", { entryPath: "index.html" }, { ipAddress: "127.0.0.5" })
+    await service.deleteSite("user-1", created.siteId, { ipAddress: "127.0.0.6" })
+
+    expect(auditLog.record.mock.calls.map(([input]) => (input as { readonly action: string }).action)).toEqual([
+      "drive.site.create",
+      "drive.site.access.update",
+      "drive.site.disable",
+      "drive.site.enable",
+      "drive.site.republish",
+      "drive.site.delete",
+    ])
+    expect(auditLog.record).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      adminEmail: "owner@example.com",
+      targetType: "drive.site",
+      ipAddress: "127.0.0.1",
+      detail: expect.objectContaining({
+        siteId: created.siteId,
+        accessMode: "password",
+        passwordEnabled: true,
+      }),
+    }))
+    const auditPayload = JSON.stringify(auditLog.record.mock.calls)
+    expect(auditPayload).not.toContain("secret-123")
+    expect(auditPayload).not.toContain("new-secret-456")
+    expect(auditPayload).not.toContain("password=")
+  })
+
   it("rejects forgeable legacy cookies for protected sites", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()
@@ -564,6 +612,11 @@ function createMemoryPrisma(seed: {
   const folders: MemoryFolder[] = [...(seed.folders ?? [])]
   let deploymentCounter = 0
   return {
+    user: {
+      async findUnique() {
+        return { email: "owner@example.com" }
+      },
+    },
     driveItem: {
       async findFirst(args: { readonly where: Record<string, unknown> }) {
         return items.find((item) => (
