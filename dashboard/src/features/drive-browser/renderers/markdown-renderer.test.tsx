@@ -388,6 +388,28 @@ describe('DriveMarkdownRenderer', () => {
     expect(textarea()).not.toBeNull()
   })
 
+  it('clears pending comment state when the current markdown file changes', async () => {
+    const { rerender } = renderMarkdown()
+    selectStrongText()
+    await act(async () => {
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    })
+    await click(buttonWithText('添加评论'))
+    await inputValue(textarea(), 'Old file comment')
+
+    rerender({
+      currentItem: current({ id: 'item-2', name: 'other.md' }),
+      annotationContext: { context: 'owner', itemId: 'item-2' },
+      edit: editable({ currentVersionId: 'version-2' }),
+    })
+    await act(async () => undefined)
+
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(document.body.textContent).not.toContain('添加评论')
+    expect(pendingOverlay()).toBeNull()
+    expect(annotationsMock.createThread).not.toHaveBeenCalled()
+  })
+
   it('clears the pending marker when the add comment dialog is cancelled', async () => {
     renderMarkdown()
     selectStrongText()

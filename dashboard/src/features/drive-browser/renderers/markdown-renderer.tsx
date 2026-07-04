@@ -83,6 +83,7 @@ export function DriveMarkdownRenderer({
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
+  const annotationStateKey = driveMarkdownAnnotationStateKey(current.id, edit?.currentVersionId ?? null, effectiveAnnotationContext)
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
   const resolvedImageSourceContext = useMemo(
     () => imageSourceContext ?? driveMarkdownImageSourceContextFromAnnotation(current, annotationContext),
@@ -105,6 +106,19 @@ export function DriveMarkdownRenderer({
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
+
+  useEffect(() => {
+    setActiveThreadId(null)
+    setPendingTarget(null)
+    setSelectionPopover(null)
+    setCommentDialogOpen(false)
+    setCommentBody('')
+    setCommentCreateError(null)
+    setThreadAnchorTopById({})
+    setAnnotationOverlayRects([])
+    window.getSelection()?.removeAllRanges()
+  }, [annotationStateKey])
+
   const annotated = useMemo(
     () => renderMarkdownAnnotationHtml(renderedHtml, annotations.threads),
     [annotations.threads, renderedHtml]
@@ -610,6 +624,18 @@ function driveMarkdownImageSourceContextFromAnnotation(
     }
   }
   return { context: 'owner', itemId: current.id }
+}
+
+function driveMarkdownAnnotationStateKey(
+  currentId: string,
+  currentVersionId: string | null,
+  annotationContext: DriveAnnotationContext | undefined
+): string {
+  if (!annotationContext) return `${currentId}\0${currentVersionId ?? ''}\0none`
+  if (annotationContext.context === 'owner') {
+    return `${currentId}\0${currentVersionId ?? ''}\0owner\0${annotationContext.itemId ?? ''}`
+  }
+  return `${currentId}\0${currentVersionId ?? ''}\0share\0${annotationContext.shareId}\0${annotationContext.itemId ?? ''}`
 }
 
 function countMarkdownComments(threads: readonly MarkdownCommentsRailThread[]): number {
