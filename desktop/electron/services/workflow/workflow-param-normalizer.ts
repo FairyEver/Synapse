@@ -103,7 +103,7 @@ function normalizeResourceInput(
   return { value: ref }
 }
 
-async function statLocalResource(param: WorkflowParam, resourcePath: string): Promise<{} | { error: ValidationError }> {
+async function statLocalResource(param: WorkflowParam, resourcePath: string): Promise<Record<string, never> | { error: ValidationError }> {
   try {
     const stat = await lstat(resourcePath)
     if (param.type === "file" && !stat.isFile()) return paramError(param, "必须是文件")

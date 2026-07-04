@@ -30,9 +30,6 @@ const isOptionalString = (value: unknown): boolean =>
 const isOptionalBoolean = (value: unknown): boolean =>
   value === undefined || typeof value === "boolean"
 
-const isOptionalNumber = (value: unknown): boolean =>
-  value === undefined || typeof value === "number"
-
 const isPlainRecord = <T extends Record<string, unknown>>(value: unknown): value is T => {
   return isAnyRecord<T>(value) && !Array.isArray(value)
 }
