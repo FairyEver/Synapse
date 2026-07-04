@@ -3224,6 +3224,78 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("records a conflict instead of uploading when a matching remote change is still unpolled", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "first", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveChanges: vi.fn(async () => ({
+            items: [{
+              id: "change-remote-first",
+              sequence: "43",
+              itemId: "remote-spec",
+              parentId: "drive-root",
+              type: "content_updated",
+              versionId: "remote-version",
+              etag: "remote-etag",
+              name: "spec.md",
+              pathHint: "/Docs/spec.md",
+              actor: "web",
+              occurredAt: "2026-06-28T00:00:00.000Z",
+            }],
+            nextCursor: "43",
+            hasMore: false,
+            resyncRequired: false,
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      const stats = await lstat(localPath)
+      await harness.baseline.upsert({
+        id: `${binding.id}:spec.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        kind: "file",
+        remoteItemId: "remote-spec",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: stats.size,
+        localMtimeMs: stats.mtimeMs,
+        localHash: await hashDriveSyncFile(localPath),
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+      await writeFile(localPath, "local second", "utf8")
+
+      await service.rescanBinding(binding.id)
+
+      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+      await expect(harness.conflicts.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, relativePath: "spec.md", type: "both_modified", status: "open" }),
+      )
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        remoteCursor: "43",
+        status: "conflict",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("resolves a conflict by keeping the remote file", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

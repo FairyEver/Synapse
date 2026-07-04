@@ -1298,12 +1298,19 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
 
     for (const [bindingId, bindingChanges] of changesByBinding) {
-      const binding = await requireBinding(bindingId)
+      let binding = await requireBinding(bindingId)
       if (binding.status !== "active") continue
       const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
       if (!rootReady) continue
-      const baseline = await baselineStore.listByBinding(bindingId)
-      const changesForPlan = await localChangesForPlanning(binding, baseline, bindingChanges)
+      let baseline = await baselineStore.listByBinding(bindingId)
+      let changesForPlan = await localChangesForPlanning(binding, baseline, bindingChanges)
+      if (hasBaselineBackedLocalChanges(baseline, changesForPlan)) {
+        await pollActiveBindingRemoteChanges(binding, true)
+        binding = await requireBinding(bindingId)
+        if (binding.status !== "active") continue
+        baseline = await baselineStore.listByBinding(bindingId)
+        changesForPlan = await localChangesForPlanning(binding, baseline, bindingChanges)
+      }
       const plan = planDriveSyncLocalChanges({
         binding,
         baseline,
@@ -1345,6 +1352,18 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     )) return true
     return changes.some((change) => change.kind === "created")
       && changes.some((change) => change.kind === "deleted")
+  }
+
+  function hasBaselineBackedLocalChanges(
+    baseline: readonly DriveSyncBaselineEntryV1[],
+    changes: readonly DriveSyncLocalChange[],
+  ): boolean {
+    const activePaths = new Set(
+      baseline
+        .filter((entry) => entry.deletedAt === null)
+        .map((entry) => entry.relativePath),
+    )
+    return changes.some((change) => activePaths.has(change.relativePath))
   }
 
   async function handleMissingFileBindingRoot(input: {
