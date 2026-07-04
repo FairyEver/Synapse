@@ -116,7 +116,7 @@ type DriveAccountServicePort = {
     readonly outputPath: string
   }) => Promise<unknown>
   readonly restoreDriveFileVersion: (itemId: string, versionId: string) => Promise<DriveItemDto>
-  readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ ok: true }>
+  readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ readonly ok: true; readonly deletePending?: boolean }>
   readonly updateDriveFileVersionPin: (itemId: string, versionId: string, isPinned: boolean) => Promise<DriveFileVersionDto>
   readonly resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
   readonly listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>

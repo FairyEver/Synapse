@@ -65,6 +65,7 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(deleteTool?.description).toContain("not pending cleanup")
     expect(deleteTool?.description).toContain("not pinned")
     expect(deleteTool?.description).toContain("drive_file_version_pin_update")
+    expect(deleteTool?.description).toContain("deletePending")
   })
 
   it("requires an explicit parent id for item moves", () => {
@@ -971,7 +972,7 @@ describe("createDriveCapabilityDispatcher", () => {
         page: drivePage(),
       })),
       restoreDriveFileVersion: vi.fn(async () => driveItem({ id: "item-1" })),
-      deleteDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
+      deleteDriveFileVersion: vi.fn(async () => ({ ok: true as const, deletePending: true })),
       updateDriveFileVersionPin: vi.fn(async () => driveFileVersion({ id: "version-1", isPinned: true })),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
@@ -996,7 +997,7 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.file_version.delete", {
       itemId: "item-1",
       versionId: "version-1",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, deletePending: true } })
     await expect(dispatcher.dispatch("drive.file_version_pin.update", {
       itemId: "item-1",
       versionId: "version-1",

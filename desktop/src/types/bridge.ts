@@ -170,6 +170,11 @@ export type DriveLocalUploadResult = {
   readonly message?: string
 }
 
+export type DriveFileVersionDeleteResult = {
+  readonly ok: true
+  readonly deletePending?: boolean
+}
+
 export type DrivePublicAssetLocalFile = {
   readonly path: string
   readonly name: string
@@ -1054,7 +1059,7 @@ export type SynapseBridge = {
     listDriveFileVersions: (input: { itemId: string } & DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
     downloadDriveFileVersion: (input: { itemId: string; versionId: string; outputPath: string }) => Promise<{ ok: true; path: string }>
     restoreDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveItemDto>
-    deleteDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<{ ok: true }>
+    deleteDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveFileVersionDeleteResult>
     updateDriveFileVersionPin: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto>
     resolveDriveLink: (input: DriveLinkResolveInput) => Promise<DriveLinkResolveDto>
     listDriveLink: (input: DriveLinkListInput) => Promise<DriveLinkListDto>

@@ -360,6 +360,11 @@ Input:
 - `itemId` required: Drive file item id.
 - `versionId` required.
 
+Output:
+
+- `ok`: `true` when the delete request was accepted.
+- `deletePending`: optional. When `true`, physical cleanup is still pending; report it as cleanup in progress.
+
 ### `app_drive_file_version_pin_update`
 
 Keep or unkeep a non-current historical file version that is not pending cleanup.

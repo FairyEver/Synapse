@@ -2242,7 +2242,7 @@ describe("AccountService", () => {
         if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "PATCH") {
           return jsonResponse({ ...fileVersion, isPinned: true })
         }
-        if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "DELETE") return jsonResponse({ ok: true })
+        if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "DELETE") return jsonResponse({ ok: true, deletePending: true })
         if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
         if (String(url).endsWith("/drive/shares")) {
           return jsonResponse({
@@ -2281,7 +2281,7 @@ describe("AccountService", () => {
       ...fileVersion,
       isPinned: true,
     })
-    await expect(service.deleteDriveFileVersion("item-1", "version-1")).resolves.toEqual({ ok: true })
+    await expect(service.deleteDriveFileVersion("item-1", "version-1")).resolves.toEqual({ ok: true, deletePending: true })
     await expect(service.listDriveShares()).resolves.toEqual({
       items: [expectedShare],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },

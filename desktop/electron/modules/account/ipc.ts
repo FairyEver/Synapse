@@ -578,6 +578,7 @@ const driveTrashItemSchemaInput = z.object({
   assetId: z.string().optional(),
 })
 const okSchema = z.object({ ok: z.literal(true) })
+const driveFileVersionDeleteResultSchema = okSchema.extend({ deletePending: z.boolean().optional() })
 
 const accountStateSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unauthenticated") }),
@@ -1024,7 +1025,7 @@ export const accountIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:account:drive:file-versions:delete",
       request: driveFileVersionIdSchema,
-      response: okSchema,
+      response: driveFileVersionDeleteResultSchema,
       handler: async (_ctx, input) => {
         const parsed = driveFileVersionIdSchema.parse(input)
         return accountService.deleteDriveFileVersion(parsed.itemId, parsed.versionId)

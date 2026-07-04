@@ -829,8 +829,8 @@ export class AccountService {
     )
   }
 
-  async deleteDriveFileVersion(itemId: string, versionId: string): Promise<{ ok: true }> {
-    return this.requestAuthenticatedJson<{ ok: true }>(
+  async deleteDriveFileVersion(itemId: string, versionId: string): Promise<{ readonly ok: true; readonly deletePending?: boolean }> {
+    return this.requestAuthenticatedJson<{ readonly ok: true; readonly deletePending?: boolean }>(
       "DELETE",
       `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}`,
       undefined,

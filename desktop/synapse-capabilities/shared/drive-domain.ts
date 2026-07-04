@@ -284,7 +284,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_version_delete",
-      description: "Delete a non-current Synapse Drive file version that is not pending cleanup and is not pinned. Current versions cannot be deleted with this tool; unpin retained versions with drive_file_version_pin_update before deleting.",
+      description: "Delete a non-current Synapse Drive file version that is not pending cleanup and is not pinned. Current versions cannot be deleted with this tool; unpin retained versions with drive_file_version_pin_update before deleting. If the result has deletePending: true, report that physical cleanup is still pending.",
       inputSchema: {
         type: "object",
         properties: {
