@@ -364,10 +364,6 @@ export class DriveService implements OnApplicationBootstrap {
     const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
     this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能恢复当前版本。")
-    const usage = await ensureUsage(this.prisma, userId)
-    if (usage.usedBytes + usage.reservedBytes + version.size > usage.quotaBytes) {
-      throw new BadRequestException("云盘空间不足。")
-    }
     const nextVersionId = createDriveFileVersionId()
     const nextStorageKey = driveVersionStorageKey(item.id, nextVersionId)
     let copied = false
@@ -380,6 +376,7 @@ export class DriveService implements OnApplicationBootstrap {
       })
       copied = true
       const restored = await this.prisma.$transaction(async (tx) => {
+        await reserveDriveUsageBytes(tx, userId, version.size)
         await createDriveFileVersion(tx, {
           id: nextVersionId,
           itemId: item.id,
@@ -393,7 +390,7 @@ export class DriveService implements OnApplicationBootstrap {
           createdBy: userId,
         })
         await updateDriveUsageAfterUploadCompletion(tx, userId, {
-          reservedBytes: 0n,
+          reservedBytes: version.size,
           usedBytesDelta: version.size,
         })
         const restored = await tx.driveItem.update({

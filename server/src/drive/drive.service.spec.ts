@@ -456,6 +456,36 @@ describe("DriveService", () => {
     })]))
   })
 
+  it("rejects restore when the atomic quota reservation fails", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const v1 = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/markdown", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const executeRaw = vi.spyOn(prisma, "$executeRaw").mockResolvedValueOnce(0)
+
+    await expect(service.restoreFileVersion("user-1", first.id, v1.id)).rejects.toThrow("云盘空间不足。")
+
+    expect(executeRaw).toHaveBeenCalled()
+    const copiedKey = vi.mocked(storage.copyObject).mock.calls.at(-1)?.[0].toKey
+    expect(copiedKey).toContain("/versions/")
+    expect(deleteObject).toHaveBeenCalledWith(copiedKey)
+    const versions = await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })
+    expect(versions.items.map((version) => version.versionNumber)).toEqual([2, 1])
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(16n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("rejects restoring the current file version", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
