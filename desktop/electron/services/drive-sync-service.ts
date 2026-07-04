@@ -958,6 +958,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return name
   }
 
+  async function assertNoRemoteFolderUploadRootConflict(parentId: string | null, name: string): Promise<void> {
+    let offset: number | null = 0
+    while (offset !== null) {
+      const page = await deps.accountService.listDriveItemTree({ parentId, offset, limit: 200 })
+      const item = page.items.find((candidate) => isDirectRemoteFolderMatch(candidate, parentId, name))
+      if (item) throw new Error("目标云盘位置已存在同名文件夹，请改用绑定已有云盘文件夹。")
+      offset = page.nextOffset ?? null
+    }
+  }
+
   async function downloadInitialFolder(binding: DriveSyncBindingDto, drivePathHint?: string | null): Promise<void> {
     await createDriveSyncDirectoryTarget(binding.localPath, binding.localPath)
     await assertRemoteFolderTreeLocallyRepresentable({
@@ -1058,6 +1068,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function uploadInitialFolder(binding: DriveSyncBindingDto, targetParentId: string | null, drivePathHint: string | null): Promise<string> {
+    await assertNoRemoteFolderUploadRootConflict(targetParentId, binding.driveItemName)
     const snapshot = await scanDriveSyncLocalTree({
       rootPath: binding.localPath,
       rules: binding.excludeRules,
@@ -2129,6 +2140,21 @@ function isDirectUploadedRemoteMatch(
     && item.type === expectedType
     && item.path === expectedPath
     && item.depth === expectedDepth
+}
+
+function isDirectRemoteFolderMatch(
+  item: Partial<DriveItemTreeListPageDto["items"][number]> & {
+    readonly name: string
+    readonly type: string
+  },
+  parentId: string | null,
+  name: string,
+): boolean {
+  if (item.name !== name || item.type !== "folder") return false
+  if (Object.hasOwn(item, "parentId")) return (item.parentId ?? null) === parentId
+  if (typeof item.depth === "number") return item.depth === 0
+  if (typeof item.path === "string") return normalizeRemoteTreePathSegments(item.path) === name
+  return true
 }
 
 function isRunningOperationStatus(status: DriveSyncOperationStatus): boolean {

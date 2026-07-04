@@ -1386,11 +1386,14 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "notes", "spec.md"), "local spec", "utf8")
       await writeFile(path.join(tempDir, "secrets", "token.txt"), "secret", "utf8")
       const uploadDriveLocalItems = vi.fn(async (_input: Parameters<DriveSyncAccountService["uploadDriveLocalItems"]>[0]) => ({ completed: 1, failed: 0, skipped: 0 }))
+      let rootListCalls = 0
       const harness = createHarness({
         accountService: {
           uploadDriveLocalItems,
           listDriveItemTree: vi.fn(async ({ parentId, offset }: { parentId?: string | null; offset?: number | null }) => {
             if (parentId === null || parentId === undefined) {
+              rootListCalls += 1
+              if (rootListCalls === 1) return { items: [], nextOffset: null }
               return {
                 items: [
                   { id: "nested-docs", name: "Docs", type: "folder", path: "Archive/Docs", depth: 1 },
@@ -1473,17 +1476,62 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("rejects local folder uploads when the target parent already contains the same folder", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "local.md"), "local", "utf8")
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const createDriveFolder = vi.fn(async ({ name }: { readonly name: string }) => ({ id: `remote-${name}`, name, type: "folder" }))
+      const harness = createHarness({
+        accountService: {
+          uploadDriveLocalItems,
+          createDriveFolder,
+          listDriveItemTree: vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => {
+            if (parentId === "target-parent") {
+              return {
+                items: [
+                  { id: "existing-docs", parentId: "target-parent", name: "Docs", type: "folder", path: "Docs", depth: 0 },
+                ],
+                nextOffset: null,
+              }
+            }
+            return { items: [], nextOffset: null }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      await expect(service.createSafeBinding({
+        driveItemId: "new-docs",
+        driveItemName: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        targetParentId: "target-parent",
+        direction: "local_to_remote",
+      })).rejects.toThrow("目标云盘位置已存在同名文件夹")
+      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+      expect(createDriveFolder).not.toHaveBeenCalled()
+      await expect(harness.bindings.list()).resolves.toEqual([])
+      await expect(harness.baseline.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("records uploaded folder baselines by recursive remote paths instead of duplicate names", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
       await mkdir(path.join(tempDir, "docs"), { recursive: true })
       await writeFile(path.join(tempDir, "README.md"), "root", "utf8")
       await writeFile(path.join(tempDir, "docs", "README.md"), "nested", "utf8")
+      let rootListCalls = 0
       const harness = createHarness({
         accountService: {
           uploadDriveLocalItems: vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 })),
           listDriveItemTree: vi.fn(async ({ parentId }: { readonly parentId?: string | null }) => {
             if (parentId === null || parentId === undefined) {
+              rootListCalls += 1
+              if (rootListCalls === 1) return { items: [], nextOffset: null }
               return { items: [{ id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0 }] }
             }
             if (parentId === "remote-docs") {
