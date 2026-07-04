@@ -1484,6 +1484,12 @@ describe("DriveService", () => {
     })
 
     const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    const editableShare = await service.createShare("user-1", file.id, "https://synapse.test", {
+      accessMode: "link_edit",
+      editorEmails: [],
+      expiresIn: "30d",
+      passwordEnabled: false,
+    })
     await service.disableShare("user-1", share.shareId)
 
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(share.shareId)
@@ -2637,8 +2643,22 @@ describe("DriveService", () => {
       actorUserId: "reader-1",
     })
 
-    expect(snapshot.annotation).toEqual({ canComment: false, reason: "login_required" })
-    expect(loggedInSnapshot.annotation).toEqual({ canComment: true, reason: null })
+    expect(snapshot.annotation).toEqual({ canComment: false, reason: "permission_denied" })
+    expect(loggedInSnapshot.annotation).toEqual({ canComment: false, reason: "permission_denied" })
+
+    const editableShare = await service.createShare("user-1", file.id, "https://synapse.test", {
+      accessMode: "link_edit",
+      editorEmails: [],
+      expiresIn: "30d",
+      passwordEnabled: false,
+    })
+    const editableLoggedInSnapshot = await service.getShareBrowserSnapshot({
+      shareId: editableShare.shareId,
+      password: editableShare.password ?? undefined,
+      actorUserId: "reader-1",
+    })
+
+    expect(editableLoggedInSnapshot.annotation).toEqual({ canComment: true, reason: null })
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: "# Notes\n\n## Shared",

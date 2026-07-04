@@ -1918,8 +1918,8 @@ export class DriveService implements OnApplicationBootstrap {
       }),
       annotation: buildDriveBrowserAnnotationCapability({
         item: current,
-        canComment: Boolean(input.actorUserId),
-        reason: input.actorUserId ? null : "login_required",
+        canComment: shareWrite.canWrite,
+        reason: shareWrite.canWrite ? null : shareWrite.loginRequired ? "login_required" : "permission_denied",
       }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
