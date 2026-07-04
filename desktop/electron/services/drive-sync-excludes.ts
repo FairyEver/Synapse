@@ -51,11 +51,15 @@ export function parseGitignoreForDriveSync(content: string): readonly string[] {
 }
 
 function matchesRule(relativePath: string, rawRule: string): boolean {
-  const rule = normalizeRelativePath(rawRule.trim())
+  const raw = rawRule.trim().replaceAll("\\", "/")
+  const rootAnchored = raw.startsWith("/")
+  const rule = normalizeRelativePath(raw)
   if (!rule) return false
   if (rule.endsWith("/**")) {
     const directory = rule.slice(0, -3)
-    return matchesDirectoryRule(relativePath, directory)
+    return rootAnchored
+      ? matchesRootDirectoryRule(relativePath, directory)
+      : matchesDirectoryRule(relativePath, directory)
   }
   if (rule.startsWith("*.")) {
     return basename(relativePath).endsWith(rule.slice(1))
@@ -63,7 +67,12 @@ function matchesRule(relativePath: string, rawRule: string): boolean {
   if (rule.includes("*")) {
     return globToRegExp(rule).test(relativePath)
   }
+  if (rootAnchored) return relativePath === rule
   return relativePath === rule || basename(relativePath) === rule
+}
+
+function matchesRootDirectoryRule(relativePath: string, directory: string): boolean {
+  return relativePath === directory || relativePath.startsWith(`${directory}/`)
 }
 
 function matchesDirectoryRule(relativePath: string, directory: string): boolean {

@@ -60,6 +60,18 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded(".gitignore", rules)).toBe(false)
   })
 
+  it("keeps gitignore root-anchored rules scoped to the sync root", () => {
+    const rules = {
+      ...createDefaultDriveSyncExcludeRules(),
+      importedGitignore: ["/config.yml", "/secrets/**"],
+    }
+
+    expect(isDriveSyncExcluded("config.yml", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/config.yml", rules)).toBe(false)
+    expect(isDriveSyncExcluded("secrets/token.txt", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/secrets/token.txt", rules)).toBe(false)
+  })
+
   it("parses gitignore content into copied binding rules", () => {
     expect(parseGitignoreForDriveSync("# comment\n\nsecrets/\n!important.md\n*.tmp\n")).toEqual(["secrets/**", "*.tmp"])
   })
