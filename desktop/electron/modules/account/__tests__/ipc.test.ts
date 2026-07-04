@@ -64,6 +64,14 @@ vi.mock("../../../services/account-service", () => ({
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
     getDriveShare: vi.fn(async () => ({})),
+    materializeDriveLink: vi.fn(async () => ({
+      localRootPath: "/tmp/intake",
+      manifestPath: "/tmp/intake/manifest.json",
+      entryPath: "/tmp/intake/content/index.html",
+      files: [],
+      skipped: [],
+      warnings: [],
+    })),
     listDriveShares: async () => [],
     listDrivePublicAssets: async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 }),
     getDrivePublicAsset: async () => ({}),
@@ -984,6 +992,77 @@ describe("accountIpcModule", () => {
       }),
     }))
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+  })
+
+  it("guards drive link materialize cache writes with fs write permission and audit", async () => {
+    const { auditSink, ctx, permissionGuard } = createAccountSecurityContext()
+    vi.mocked(accountService.materializeDriveLink).mockClear()
+    vi.mocked(accountService.materializeDriveLink).mockResolvedValueOnce({
+      localRootPath: "/tmp/intake",
+      manifestPath: "/tmp/intake/manifest.json",
+      entryPath: "/tmp/intake/content/index.html",
+      files: [{ relativePath: "index.html", kind: "html", size: "12" }],
+      skipped: [],
+      warnings: [],
+    })
+
+    await accountIpcModule.methods.materializeDriveLink.handler(ctx, {
+      url: "https://synapse.test/share/shr_123?password=secret-token",
+      password: "secret-password",
+      scope: "all",
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "synapse-drive:link-intake-cache",
+      context: {
+        source: "account.driveLinkMaterialize.write",
+        url: "https://synapse.test/share/shr_123?password=%5Bredacted%5D",
+        scope: "all",
+      },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/intake",
+      metadata: expect.objectContaining({
+        source: "account.driveLinkMaterialize.write",
+        manifestPath: "/tmp/intake/manifest.json",
+        entryPath: "/tmp/intake/content/index.html",
+        fileCount: 1,
+      }),
+    }))
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain("secret-password")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-password")
+  })
+
+  it("stops drive link materialize when cache write permission is denied", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+    vi.mocked(accountService.materializeDriveLink).mockClear()
+
+    await expect(accountIpcModule.methods.materializeDriveLink.handler(ctx, {
+      url: "https://synapse.test/share/shr_123",
+      scope: "text",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "synapse-drive:link-intake-cache",
+      metadata: expect.objectContaining({
+        source: "account.driveLinkMaterialize.write",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(accountService.materializeDriveLink).not.toHaveBeenCalled()
   })
 
   it("validates drive share bridge schemas", () => {

@@ -342,10 +342,28 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             data: await deps.accountService.readDriveLinkText(parseDriveLinkReadTextInput(params)),
           }))
         case "drive.link.materialize":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.materializeDriveLink(parseDriveLinkMaterializeInput(params)),
-          }))
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const input = parseDriveLinkMaterializeInput(params)
+            const cacheAudit = await authorizeDriveLinkMaterializeCacheWrite(deps, action, input, context)
+            try {
+              const data = await deps.accountService.materializeDriveLink(input)
+              recordDriveLinkMaterializeCacheWrite(deps, cacheAudit, "allowed", {
+                localRootPath: data.localRootPath,
+                manifestPath: data.manifestPath,
+                entryPath: data.entryPath,
+                fileCount: data.files.length,
+                skippedCount: data.skipped.length,
+                warningCount: data.warnings.length,
+              })
+              return { ok: true, data }
+            } catch (error) {
+              recordDriveLinkMaterializeCacheWrite(deps, cacheAudit, "failed", {
+                errorName: error instanceof Error ? error.name : typeof error,
+                errorLength: String(error).length,
+              })
+              throw error
+            }
+          })
         case "drive.link.download_file":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkDownloadFileInput(params)
@@ -1121,6 +1139,62 @@ async function authorizeFileWrite(
     resource: outputPath,
     outcome: "allowed",
     metadata,
+  })
+}
+
+type DriveLinkMaterializeCacheAudit = {
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
+async function authorizeDriveLinkMaterializeCacheWrite(
+  deps: DriveCapabilityDispatcherDeps,
+  action: string,
+  input: DriveLinkMaterializeInput,
+  context: DispatchContext,
+): Promise<DriveLinkMaterializeCacheAudit> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const resource = "synapse-drive:link-intake-cache"
+  const metadata = {
+    source: context.source ?? "api",
+    driveAction: action,
+    url: maskDriveBrowserUrl(input.url),
+    scope: input.scope ?? "text",
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "fs.write",
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "fs.write",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: { ...metadata, reason: permission.reason, policyId: permission.policyId },
+    })
+    throw new Error(permission.reason)
+  }
+  return { actor, resource, metadata }
+}
+
+function recordDriveLinkMaterializeCacheWrite(
+  deps: DriveCapabilityDispatcherDeps,
+  audit: DriveLinkMaterializeCacheAudit,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps.auditSink?.record({
+    action: "fs.write",
+    actor: audit.actor,
+    resource: typeof metadata.localRootPath === "string" ? metadata.localRootPath : audit.resource,
+    outcome,
+    metadata: { ...audit.metadata, ...metadata },
   })
 }
 

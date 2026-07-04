@@ -280,10 +280,43 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService({
       materializeDriveLink: vi.fn(async () => materialized),
     })
-    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
 
-    await expect(dispatcher.dispatch("drive.link.materialize", { url: "https://synapse.test/share/shr_123", scope: "text" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("drive.link.materialize", {
+      url: "https://synapse.test/share/shr_123?password=secret-token",
+      password: "secret-password",
+      scope: "text",
+    }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: materialized })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "synapse-drive:link-intake-cache",
+      context: expect.objectContaining({
+        driveAction: "drive.link.materialize",
+        scope: "text",
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/intake",
+      metadata: expect.objectContaining({
+        driveAction: "drive.link.materialize",
+        manifestPath: "/tmp/intake/manifest.json",
+        entryPath: "/tmp/intake/content/req.md",
+        fileCount: 0,
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-password")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-password")
   })
 
   it("authorizes and audits Drive item reads", async () => {

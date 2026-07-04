@@ -66,7 +66,7 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
    - If `access.status` is `password_required`, stop and ask for the password. A protected result may use `root.type: "protected"` until access is unlocked.
 2. If the result is a folder or site, call `app_drive_link_list` before reading content.
 3. For Markdown, HTML source, JSON, or text, call `app_drive_link_read_text`. For `/share` children, prefer the `itemId` returned by `app_drive_link_list`; use `path` mainly for `/sites` assets or as a share fallback.
-4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`. The returned `files` and manifest include materialized folders, including empty folders.
+4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`. The returned `files` and manifest include materialized folders, including empty folders. This writes to the local Drive link intake cache and is subject to local write permission and audit.
 5. For one specific linked file or public asset, call `app_drive_link_download_file`. For `/share` children, prefer the listed `itemId`; for `/sites`, pass the site-relative `path`.
 
 Do not use these tools to edit shared files, create comments, import shared content into the user's Drive, or crawl arbitrary websites.

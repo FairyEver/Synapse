@@ -342,7 +342,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_materialize",
-      description: "Download a Drive link into the local Drive link intake cache. Use for HTML prototypes, folders, assets, or local analysis tools.",
+      description: "Download a Drive link into the local Drive link intake cache. Use for HTML prototypes, folders, assets, or local analysis tools; this writes local cache files and is audited as a local write.",
       inputSchema: {
         type: "object",
         properties: {
