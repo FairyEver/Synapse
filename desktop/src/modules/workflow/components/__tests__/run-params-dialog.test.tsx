@@ -300,6 +300,23 @@ describe("RunParamsDialog", () => {
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("季度复盘")
   })
 
+  it("shows all custom-enabled option choices when a default value is selected", async () => {
+    await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: "日报", options: ["日报", "周报"], allowCustomOption: true },
+      ],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#report_type")?.click()
+    })
+
+    const options = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+      .map((option) => option.textContent?.trim())
+    expect(options).toContain("日报")
+    expect(options).toContain("周报")
+  })
+
   it("does not track selected custom-enabled option values", async () => {
     const { onConfirm } = await renderDialog({
       params: [

@@ -491,13 +491,14 @@ interface OptionParamControlProps {
 
 function OptionParamControl({ param, value, hasError, onChange }: OptionParamControlProps) {
   const [open, setOpen] = useState(false)
+  const [searchValue, setSearchValue] = useState("")
   const options = useMemo(() => normalizeOptionValues(param.options), [param.options])
   const trimmedValue = value.trim()
   const visibleOptions = useMemo(() => {
-    const search = trimmedValue.toLocaleLowerCase()
+    const search = searchValue.trim().toLocaleLowerCase()
     if (!search) return options
     return options.filter((option) => option.toLocaleLowerCase().includes(search))
-  }, [options, trimmedValue])
+  }, [options, searchValue])
 
   if (param.allowCustomOption !== true) {
     return (
@@ -517,7 +518,13 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (nextOpen) setSearchValue("")
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           id={param.name}
@@ -537,8 +544,11 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
           <CommandInput
             id={`${param.name}-input`}
             aria-label={param.name}
-            value={value}
-            onValueChange={onChange}
+            value={searchValue}
+            onValueChange={(nextValue) => {
+              setSearchValue(nextValue)
+              onChange(nextValue)
+            }}
             placeholder="输入或选择"
             data-track="workflow-run-param-option-input"
           />
