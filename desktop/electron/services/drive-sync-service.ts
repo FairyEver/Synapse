@@ -125,6 +125,10 @@ export interface DriveSyncCreateBindingInput {
   readonly deferWatcher?: boolean
 }
 
+type DriveSyncCreateBindingInternalInput = DriveSyncCreateBindingInput & {
+  readonly skipLocalAuthorization?: boolean
+}
+
 type DriveSyncLocalPermissionSource =
   | "driveSync.previewBinding"
   | "driveSync.createBinding"
@@ -261,22 +265,24 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return toBindingDto(entry)
   }
 
-  async function createBinding(input: DriveSyncCreateBindingInput): Promise<DriveSyncBindingDto> {
+  async function createBinding(input: DriveSyncCreateBindingInternalInput): Promise<DriveSyncBindingDto> {
     const localPath = normalizeLocalPath(preserveRequiredString(input.localPath, "本地路径不能为空。"))
     const driveItemId = normalizeRequiredString(input.driveItemId, "云盘条目不能为空。")
     const driveItemName = preserveRequiredString(input.driveItemName, "云盘条目名称不能为空。")
     if (input.kind !== "file" && input.kind !== "folder") throw new Error("云盘条目类型无效。")
-    await authorizeLocalPath({
-      action: "fs.read.outside-userdata",
-      localPath,
-      source: "driveSync.createBinding",
-      metadata: {
-        driveItemId,
-        driveItemName,
-        direction: "bind_existing",
-        kind: input.kind,
-      },
-    })
+    if (!input.skipLocalAuthorization) {
+      await authorizeLocalPath({
+        action: "fs.read.outside-userdata",
+        localPath,
+        source: "driveSync.createBinding",
+        metadata: {
+          driveItemId,
+          driveItemName,
+          direction: "bind_existing",
+          kind: input.kind,
+        },
+      })
+    }
 
     const activeBindings = (await deps.bindings.list()).filter((binding) => binding.status !== "removed")
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
@@ -598,6 +604,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       excludeRules: input.excludeRules ?? [],
       importedGitignoreRules,
       deferWatcher: true,
+      skipLocalAuthorization: true,
     })
 
     try {
@@ -736,6 +743,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       excludeRules: input.excludeRules ?? [],
       importedGitignoreRules: preview.importedGitignoreRules,
       deferWatcher: true,
+      skipLocalAuthorization: true,
     })
     for (const entry of prepared) {
       await baselineStore.upsert({ ...entry, bindingId: binding.id })

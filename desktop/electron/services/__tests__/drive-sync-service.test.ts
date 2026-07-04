@@ -176,6 +176,68 @@ describe("DriveSyncService", () => {
     await expect(harness.bindings.list()).resolves.toEqual([])
   })
 
+  it("does not require read permission after remote-to-local safe binding write authorization", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "report.md")
+      const permissionGuard: PermissionGuard = {
+        registerPolicy: vi.fn(),
+        check: vi.fn(async (input: Parameters<PermissionGuard["check"]>[0]) => {
+          if (input.action === "fs.write.outside-userdata") return { allowed: true as const }
+          return { allowed: false as const, reason: "read denied by test" }
+        }),
+      }
+      const auditSink: AuditSink = {
+        record: vi.fn(),
+        list: vi.fn(() => []),
+        clearForTests: vi.fn(),
+      }
+      const harness = createHarness({
+        permissionGuard,
+        auditSink,
+        accountService: {
+          downloadDriveFile: vi.fn(async ({ outputPath }: { readonly outputPath: string }) => {
+            await writeFile(outputPath, "remote report", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+
+      const binding = await service.createSafeBinding({
+        driveItemId: "remote-file",
+        driveItemName: "report.md",
+        kind: "file",
+        localPath,
+        direction: "remote_to_local",
+      })
+
+      expect(binding).toMatchObject({ status: "active", driveItemId: "remote-file" })
+      expect(permissionGuard.check).toHaveBeenCalledTimes(1)
+      expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write.outside-userdata",
+        actor: { kind: "user" },
+        resource: localPath,
+        context: expect.objectContaining({
+          source: "driveSync.createSafeBinding",
+          direction: "remote_to_local",
+        }),
+      }))
+      expect(auditSink.record).toHaveBeenCalledTimes(1)
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write.outside-userdata",
+        outcome: "allowed",
+        metadata: expect.objectContaining({
+          source: "driveSync.createSafeBinding",
+          direction: "remote_to_local",
+        }),
+      }))
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote report")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("exposes binding last errors in snapshots", async () => {
     const service = createDriveSyncService(createHarness().deps)
     const binding = await service.createBinding({
