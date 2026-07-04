@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import type { DriveBrowserSnapshotDto, DrivePublicAssetDto, DrivePublicAssetListPageDto, DriveUsageDto } from '@synapse/shared'
+import type { DriveBrowserSnapshotDto, DrivePublicAssetDto, DrivePublicAssetListPageDto, DriveTrashItemDto, DriveTrashListPageDto, DriveUsageDto } from '@synapse/shared'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { DirectionProvider } from '@/context/direction-provider'
 import { LayoutProvider } from '@/context/layout-provider'
@@ -595,6 +595,32 @@ describe('DriveConsolePage', () => {
     expect(driveApi.listTrash).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
 
+  it('loads more trash items from the next page', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listTrash)
+      .mockResolvedValueOnce(trashPage(
+        [trashItem({ id: 'trash-first', name: 'first.md' })],
+        { hasMore: true, nextOffset: 50, total: 51 },
+      ))
+      .mockResolvedValueOnce(trashPage(
+        [trashItem({ id: 'trash-second', name: 'second.md' })],
+        { offset: 50, hasMore: false, nextOffset: null, total: 51 },
+      ))
+    await render(<DriveConsolePage />)
+
+    await click(tabTrigger('回收站'))
+    await act(async () => undefined)
+    expect(document.body.textContent).toContain('first.md')
+    expect(document.body.textContent).not.toContain('second.md')
+
+    await click(button('加载更多'))
+
+    expect(driveApi.listTrash).toHaveBeenLastCalledWith({ offset: 50, limit: 50 })
+    expect(document.body.textContent).toContain('first.md')
+    expect(document.body.textContent).toContain('second.md')
+  })
+
   it('opens site management from the toolbar', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -804,6 +830,36 @@ function publicAssetPage(
   items: readonly DrivePublicAssetDto[],
   page: Partial<DrivePublicAssetListPageDto['page']> & { readonly total?: number } = {},
 ): DrivePublicAssetListPageDto {
+  return {
+    items,
+    total: page.total ?? items.length,
+    page: {
+      offset: page.offset ?? 0,
+      limit: page.limit ?? 50,
+      hasMore: page.hasMore ?? false,
+      nextOffset: page.nextOffset ?? null,
+    },
+  }
+}
+
+function trashItem(overrides: Partial<DriveTrashItemDto> = {}): DriveTrashItemDto {
+  return {
+    id: 'trash-1',
+    kind: 'normal',
+    name: 'old.md',
+    type: 'file',
+    size: '10',
+    mimeType: 'text/markdown',
+    originalPath: '/old.md',
+    trashedAt: '2026-06-29T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function trashPage(
+  items: readonly DriveTrashItemDto[],
+  page: Partial<DriveTrashListPageDto['page']> & { readonly total?: number } = {},
+): DriveTrashListPageDto {
   return {
     items,
     total: page.total ?? items.length,

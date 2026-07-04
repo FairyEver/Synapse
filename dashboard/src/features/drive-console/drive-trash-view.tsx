@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { DriveTrashItemDto } from '@synapse/shared'
+import type { DriveTrashItemDto, DriveTrashListPageDto } from '@synapse/shared'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -8,15 +8,20 @@ import { driveApi } from '@/lib/api'
 
 export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promise<void> }) {
   const [items, setItems] = useState<DriveTrashItemDto[]>([])
+  const [page, setPage] = useState<DriveTrashListPageDto['page']>({ offset: 0, limit: 50, hasMore: false, nextOffset: null })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DriveTrashItemDto | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const load = async () => {
     setLoading(true)
     try {
-      const page = await driveApi.listTrash({ offset: 0, limit: 50 })
-      setItems([...page.items])
+      const nextPage = await driveApi.listTrash({ offset: 0, limit: 50 })
+      setItems([...nextPage.items])
+      setPage(nextPage.page)
+    } catch (error) {
+      toast(errorMessage(error, '回收站加载失败'))
     } finally {
       setLoading(false)
     }
@@ -25,6 +30,20 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
   useEffect(() => {
     void load()
   }, [])
+
+  const loadMore = async () => {
+    if (!page.hasMore || page.nextOffset === null) return
+    setLoadingMore(true)
+    try {
+      const nextPage = await driveApi.listTrash({ offset: page.nextOffset, limit: page.limit })
+      setItems((current) => [...current, ...nextPage.items])
+      setPage(nextPage.page)
+    } catch (error) {
+      toast(errorMessage(error, '回收站加载失败'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const restoreItem = async (item: DriveTrashItemDto) => {
     try {
@@ -98,6 +117,13 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
             ))}
           </TableBody>
         </Table>
+        {page.hasMore ? (
+          <div className='flex justify-end border-t p-3'>
+            <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={() => { void loadMore() }}>
+              {loadingMore ? '加载中' : '加载更多'}
+            </Button>
+          </div>
+        ) : null}
       </div>
       <ConfirmDialog
         open={deleteTarget !== null}
