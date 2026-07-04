@@ -196,4 +196,19 @@ describe("workflowCallNodeExecutor", () => {
     expect(result.status).toBe("failed")
     expect(result.error).toBe("子工作流执行失败：调用链包含循环：A -> B -> A")
   })
+
+  it("surfaces failed child workflow run errors", async () => {
+    const childResult = {
+      status: "failed",
+      output: "",
+      durationMs: 12,
+      nodeResults: {},
+      error: "参数「report_type」必须是预设选项之一",
+    } as WorkflowRunResult & { error: string }
+
+    const result = await workflowCallNodeExecutor.execute(makeInput({}, deps(childResult)))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("子工作流执行失败：参数「report_type」必须是预设选项之一")
+  })
 })
