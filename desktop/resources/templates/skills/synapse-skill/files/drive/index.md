@@ -78,7 +78,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 1. If the user did not specify a target folder, omit `parentId` so the file or folder is uploaded to the Drive root directory.
 2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false.
 3. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
-4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
+4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve `uploadedFiles[].relativePath` and `createdDirectories[].relativePath` from the result.
    - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
    - Empty subdirectories inside the local folder are preserved in Drive.

@@ -55,6 +55,8 @@ describe("createDriveCapabilityDispatcher", () => {
   it("documents empty directory preservation for folder uploads", () => {
     const uploadTool = buildDriveTools().find((tool) => tool.name === "drive_folder_upload")
     expect(uploadTool?.description).toContain("empty subdirectories")
+    expect(uploadTool?.description).toContain("uploadedFiles")
+    expect(uploadTool?.description).toContain("createdDirectories")
   })
 
   it("documents pinned version handling before version deletion", () => {
@@ -1364,6 +1366,11 @@ describe("createDriveCapabilityDispatcher", () => {
           },
         ],
       })),
+      completeDriveUpload: vi.fn(async (sessionId: string) =>
+        sessionId === "session-a"
+          ? driveItem({ id: "file-a", name: "a.txt" })
+          : driveItem({ id: "file-b", name: "b.txt" })
+      ),
     })
     const auditSink = createAuditSink()
     const fetchImpl = vi.fn(async (url: RequestInfo | URL) => ({ ok: !String(url).endsWith("/b") }) as Response)
@@ -1402,6 +1409,8 @@ describe("createDriveCapabilityDispatcher", () => {
         root,
         completed: 1,
         failed: 1,
+        uploadedFiles: [{ relativePath: "a.txt", item: driveItem({ id: "file-a", name: "a.txt" }) }],
+        createdDirectories: [],
         failures: [{ relativePath: "b.txt", error: "Drive upload failed." }],
       },
       errors: [{ relativePath: "b.txt", error: "Drive upload failed." }],
@@ -1469,9 +1478,17 @@ describe("createDriveCapabilityDispatcher", () => {
       fetch: vi.fn(async () => ({ ok: true }) as Response),
     })
 
-    await expect(dispatcher.dispatch("drive.folder.upload", {
+    const result = await dispatcher.dispatch("drive.folder.upload", {
       folderPath: "/tmp/project",
-    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+    }, { source: "mcp-stdio" })
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        uploadedFiles: [{ relativePath: "docs/keep.md" }],
+        createdDirectories: [{ relativePath: "docs" }, { relativePath: "docs/empty" }],
+      },
+    })
 
     expect(accountService.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
@@ -1512,6 +1529,8 @@ describe("createDriveCapabilityDispatcher", () => {
         rootCreated: true,
         completed: 0,
         failed: 0,
+        uploadedFiles: [],
+        createdDirectories: [],
         failures: [],
         cleanupRootDeleted: false,
         cleanupRootDeleteFailed: false,

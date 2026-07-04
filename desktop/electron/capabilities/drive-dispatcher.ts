@@ -566,6 +566,8 @@ async function uploadFolder(
         rootCreated: true,
         completed: 0,
         failed: 0,
+        uploadedFiles: [],
+        createdDirectories: [],
         failures: [],
         cleanupRootDeleted: false,
         cleanupRootDeleteFailed: false,
@@ -584,6 +586,7 @@ async function uploadFolder(
     })),
   })
   const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
+  const uploadedFiles: Array<{ readonly relativePath: string; readonly item: DriveItemDto }> = []
   const failures: Array<{ readonly relativePath: string; readonly error: string }> = []
   let completed = 0
   let cleanupRootDeleted = false
@@ -597,7 +600,8 @@ async function uploadFolder(
     }
     try {
       await putPreparedUploadFromPath(fetchImpl, fileSystem, preparedEntry.upload, entry.absolutePath, entry.sizeBytes)
-      await completeDriveUploadWithRetry(deps.accountService, preparedEntry.sessionId)
+      const item = await completeDriveUploadWithRetry(deps.accountService, preparedEntry.sessionId)
+      uploadedFiles.push({ relativePath: entry.relativePath, item })
       completed += 1
     } catch (error) {
       await deps.accountService.cancelDriveUpload(preparedEntry.sessionId).catch(() => undefined)
@@ -619,6 +623,8 @@ async function uploadFolder(
     rootCreated: prepared.rootCreated,
     completed,
     failed: failures.length,
+    uploadedFiles,
+    createdDirectories: entries.directories,
     failures,
     cleanupRootDeleted,
     cleanupRootDeleteFailed,

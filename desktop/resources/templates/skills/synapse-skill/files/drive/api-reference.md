@@ -49,6 +49,13 @@ Input:
 - `parentId` optional: target folder id. Omit or pass `null` for Drive root.
 - `folderName` optional: Drive folder name; defaults to local basename.
 
+Output:
+
+- `root`: root Drive folder item.
+- `uploadedFiles`: successful file uploads, each with `relativePath` and `item`.
+- `createdDirectories`: preserved directory paths, each with `relativePath`.
+- `failures`: failed file uploads, each with `relativePath` and `error`.
+
 ### `app_drive_folder_create`
 
 Create a Drive folder.
