@@ -444,6 +444,93 @@ describe("drive sync executor", () => {
     ])
   })
 
+  it("rejects remote moves with cloud-invalid names before moving the remote item", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await writeFile(path.join(tempDir, "CON.md"), "remote", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old.md",
+      kind: "file",
+      remoteItemId: "remote-old",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 6,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+    const accountService = createAccountService({
+      renameDriveItem: vi.fn(async () => {
+        throw new Error("文件名无效。")
+      }),
+    })
+
+    await expect(executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_remote",
+        relativePath: "CON.md",
+        driveItemId: "remote-old",
+        localPath: path.join(tempDir, "CON.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })).rejects.toThrow("文件名无效。")
+
+    expect(accountService.moveDriveItem).not.toHaveBeenCalled()
+    expect(accountService.renameDriveItem).not.toHaveBeenCalled()
+    await expect(namespace.list()).resolves.toEqual([
+      expect.objectContaining({ relativePath: "old.md", remoteItemId: "remote-old", kind: "file", deletedAt: null }),
+    ])
+  })
+
+  it("rejects remote moves with target name conflicts before moving the remote item", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })
+    await writeFile(path.join(tempDir, "new.md"), "remote", "utf8")
+    await store.upsert({
+      bindingId: "binding-1",
+      relativePath: "old.md",
+      kind: "file",
+      remoteItemId: "remote-old",
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: 6,
+      localMtimeMs: 1,
+      localHash: "sha256:old",
+      deletedAt: null,
+    })
+    const accountService = createAccountService({
+      listDriveItemTree: vi.fn(async () => ({
+        items: [{ id: "remote-other", name: "new.md", type: "file", parentId: "drive-root", path: "Docs/new.md", depth: 1 }],
+        nextOffset: null,
+      })),
+    })
+
+    await expect(executeDriveSyncOperation({
+      binding: binding({ localPath: tempDir }),
+      operation: operation({
+        kind: "move_remote",
+        relativePath: "new.md",
+        driveItemId: "remote-old",
+        localPath: path.join(tempDir, "new.md"),
+      }),
+      baselineStore: store,
+      accountService,
+      recordOperation: async () => undefined,
+      trashLocalPath: vi.fn(),
+    })).rejects.toThrow("目标位置已有同名文件。")
+
+    expect(accountService.moveDriveItem).not.toHaveBeenCalled()
+    expect(accountService.renameDriveItem).not.toHaveBeenCalled()
+    await expect(namespace.list()).resolves.toEqual([
+      expect.objectContaining({ relativePath: "old.md", remoteItemId: "remote-old", kind: "file", deletedAt: null }),
+    ])
+  })
+
   it("moves remote folders and rewrites descendant baselines for local folder renames", async () => {
     const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
     const store = createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow })

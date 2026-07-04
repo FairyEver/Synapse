@@ -290,9 +290,18 @@ async function moveRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
   const driveItemId = requireDriveItemId(deps.operation)
   const localPath = requireLocalPath(deps.operation)
   const stats = await lstat(localPath)
+  const targetName = path.basename(localPath)
+  const targetKind = stats.isDirectory() ? "folder" : "file"
+  assertValidDriveSyncRemoteName(targetName)
   const parentId = await parentRemoteId(deps)
+  await assertNoRemoteMoveNameConflict(deps, {
+    parentId,
+    name: targetName,
+    kind: targetKind,
+    driveItemId,
+  })
   await deps.accountService.moveDriveItem(driveItemId, parentId)
-  await deps.accountService.renameDriveItem(driveItemId, path.basename(localPath))
+  await deps.accountService.renameDriveItem(driveItemId, targetName)
 
   const existing = (await deps.baselineStore.listByBinding(deps.binding.id))
     .find((entry) => entry.remoteItemId === driveItemId && entry.deletedAt === null)
@@ -312,6 +321,45 @@ async function moveRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
     localHash: stats.isFile() ? await hashDriveSyncFile(localPath) : null,
     deletedAt: null,
   })
+}
+
+async function assertNoRemoteMoveNameConflict(
+  deps: DriveSyncExecutorDeps,
+  input: {
+    readonly parentId: string | null
+    readonly name: string
+    readonly kind: "file" | "folder"
+    readonly driveItemId: string
+  },
+): Promise<void> {
+  let offset: number | null = 0
+  while (offset !== null) {
+    const page = await deps.accountService.listDriveItemTree({ parentId: input.parentId, offset, limit: 200 })
+    const conflict = page.items.find((item) =>
+      item.id !== input.driveItemId
+      && item.name === input.name
+      && item.type === input.kind
+      && (item.parentId ?? null) === input.parentId,
+    )
+    if (conflict) throw new Error(input.kind === "folder" ? "目标位置已有同名文件夹。" : "目标位置已有同名文件。")
+    offset = page.nextOffset ?? null
+  }
+}
+
+function assertValidDriveSyncRemoteName(value: string): void {
+  if (!isValidDriveSyncRemoteName(value)) throw new Error("文件名无效。")
+}
+
+function isValidDriveSyncRemoteName(value: string): boolean {
+  const name = value.normalize("NFC")
+  if (!name) return false
+  if (name !== name.trim()) return false
+  if (name.length > 255) return false
+  if (name === "." || name === "..") return false
+  if (/[<>:"/\\|?*\x00-\x1f]/u.test(name)) return false
+  if (/[. ]$/u.test(name)) return false
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(name)) return false
+  return true
 }
 
 async function rewriteDescendantBaselines(
