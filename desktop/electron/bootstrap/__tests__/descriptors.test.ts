@@ -734,6 +734,175 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/child-params")
   })
 
+  it("nested workflow calls reject invalid closed option params before engine run", async () => {
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const workflowService = { get: vi.fn() }
+    const snapshotService = { save: vi.fn(async () => undefined) }
+    const containers = { open: vi.fn() }
+    const permissionGuard = { check: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((serviceId: string) => {
+          if (serviceId === "core.workflow") return workflowService
+          if (serviceId === "core.workflow.snapshots") return snapshotService
+          if (serviceId === "core.project-containers") return containers
+          if (serviceId === "core.permission-guard") return permissionGuard
+          if (serviceId === "core.audit-sink") return auditSink
+          throw new Error(`Unexpected service id: ${serviceId}`)
+        }),
+      },
+    }
+    const childDefinition = {
+      id: "child-workflow",
+      name: "Child Workflow",
+      version: "v1",
+      params: [
+        { name: "report_type", type: "option" as const, default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+      nodes: [
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 0, y: 0 },
+          config: { outputType: "text", template: "child-output", variables: [] },
+        },
+      ],
+      edges: [],
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      run: ReturnType<typeof vi.fn>
+      runtimeDeps: {
+        workflowCall?: {
+          runWorkflow: (input: {
+            definition: typeof childDefinition
+            params: Record<string, unknown>
+            projectId?: string
+            triggerSource: string
+            abortSignal: AbortSignal
+            parentRunId: string
+            callStack: Array<{ workflowId: string; workflowName?: string }>
+          }) => Promise<{ runId: string; result: { status: string; nodeResults: Record<string, unknown>; durationMs: number; error?: string } }>
+        }
+      }
+    }
+    engine.run = vi.fn()
+
+    const result = await engine.runtimeDeps.workflowCall?.runWorkflow({
+      definition: childDefinition,
+      params: { report_type: "月报" },
+      projectId: "repo-1",
+      triggerSource: "workflow-call",
+      abortSignal: new AbortController().signal,
+      parentRunId: "parent-run",
+      callStack: [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
+    })
+
+    expect(result?.result.status).toBe("failed")
+    expect(result?.result.error).toContain("参数「report_type」必须是预设选项之一")
+    expect(result?.result.nodeResults).toEqual({})
+    expect(engine.run).not.toHaveBeenCalled()
+    expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
+      runId: result?.runId,
+      workflowId: "child-workflow",
+      status: "failed",
+      params: { report_type: "月报" },
+      nodeResults: {},
+      error: "参数「report_type」必须是预设选项之一",
+    }))
+  })
+
+  it("nested workflow calls pass normalized option params into engine", async () => {
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const workflowService = { get: vi.fn() }
+    const snapshotService = { save: vi.fn(async () => undefined) }
+    const containers = { open: vi.fn() }
+    const permissionGuard = { check: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((serviceId: string) => {
+          if (serviceId === "core.workflow") return workflowService
+          if (serviceId === "core.workflow.snapshots") return snapshotService
+          if (serviceId === "core.project-containers") return containers
+          if (serviceId === "core.permission-guard") return permissionGuard
+          if (serviceId === "core.audit-sink") return auditSink
+          throw new Error(`Unexpected service id: ${serviceId}`)
+        }),
+      },
+    }
+    const childDefinition = {
+      id: "child-workflow",
+      name: "Child Workflow",
+      version: "v1",
+      params: [
+        { name: "report_type", type: "option" as const, default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ],
+      nodes: [
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 0, y: 0 },
+          config: { outputType: "text", template: "child-output", variables: [] },
+        },
+      ],
+      edges: [],
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      run: ReturnType<typeof vi.fn>
+      runtimeDeps: {
+        workflowCall?: {
+          runWorkflow: (input: {
+            definition: typeof childDefinition
+            params: Record<string, unknown>
+            projectId?: string
+            triggerSource: string
+            abortSignal: AbortSignal
+            parentRunId: string
+            callStack: Array<{ workflowId: string; workflowName?: string }>
+          }) => Promise<{ runId: string; result: { status: string; nodeResults: Record<string, unknown>; durationMs: number } }>
+        }
+      }
+    }
+    engine.run = vi.fn(async () => ({ status: "completed", nodeResults: {}, durationMs: 1 }))
+
+    await engine.runtimeDeps.workflowCall?.runWorkflow({
+      definition: childDefinition,
+      params: { report_type: " 周报 " },
+      projectId: "repo-1",
+      triggerSource: "workflow-call",
+      abortSignal: new AbortController().signal,
+      parentRunId: "parent-run",
+      callStack: [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
+    })
+
+    expect(engine.run).toHaveBeenCalledWith(
+      childDefinition,
+      { report_type: "周报" },
+      expect.any(String),
+      expect.any(Function),
+      expect.any(AbortSignal),
+      "repo-1",
+      "workflow-call",
+      undefined,
+      [{ workflowId: "parent", workflowName: "Parent" }, { workflowId: "child-workflow", workflowName: "Child Workflow" }],
+      undefined,
+    )
+    expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
+      workflowId: "child-workflow",
+      status: "completed",
+      params: { report_type: "周报" },
+    }))
+  })
+
   it("workflow Agent dependency converts node timeout minutes to milliseconds", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {

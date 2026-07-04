@@ -2087,10 +2087,43 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           const snapshots = registry.get<RunSnapshotService>("core.workflow.snapshots")
           const runId = randomUUID()
           const startedAt = Date.now()
+          const normalizedParams = await normalizeWorkflowRunParams(input.definition, input.params)
+          if (normalizedParams.errors.length > 0) {
+            const endedAt = Date.now()
+            const error = normalizedParams.errors.map((validationError) => validationError.message).join("；")
+            const result = {
+              status: "failed" as const,
+              nodeResults: {},
+              durationMs: endedAt - startedAt,
+              error,
+            }
+            try {
+              await snapshots.save(sanitizeWorkflowRunSnapshot({
+                runId,
+                workflowId: input.definition.id,
+                version: input.definition.version,
+                startedAt,
+                endedAt,
+                status: "failed",
+                params: input.params,
+                nodeResults: {},
+                definition: input.definition,
+                error,
+              }))
+            } catch (err) {
+              engineLogger.warn("failed to persist nested workflow run snapshot", {
+                runId,
+                workflowId: input.definition.id,
+                boundary: "workflow-call-snapshot",
+                ...capabilityRejectionDiagnostic(err),
+              })
+            }
+            return { runId, result }
+          }
           let workflowError: string | undefined
           const result = await workflowEngine.run(
             input.definition,
-            input.params,
+            normalizedParams.params,
             runId,
             (event) => {
               if (event.type === "workflow:failed") {
@@ -2113,7 +2146,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
               startedAt,
               endedAt,
               status: result.status,
-              params: input.params,
+              params: normalizedParams.params,
               nodeResults: result.nodeResults,
               definition: input.definition,
               ...(workflowError ? { error: workflowError } : {}),
