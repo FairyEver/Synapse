@@ -2422,6 +2422,86 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("ignores watcher events for files written by a remote folder download", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const harness = createHarness({
+        watch,
+        accountService: {
+          uploadDriveLocalItems,
+          listDriveChanges: vi.fn()
+            .mockResolvedValueOnce({
+              items: [{
+                id: "change-1",
+                sequence: "43",
+                itemId: "remote-project",
+                parentId: "drive-root",
+                type: "moved",
+                itemKind: "folder",
+                versionId: null,
+                etag: null,
+                name: "Project",
+                pathHint: "/Docs/Project",
+                actor: "user",
+                occurredAt: "2026-06-28T00:00:00.000Z",
+              }],
+              nextCursor: "43",
+              hasMore: false,
+              resyncRequired: false,
+            })
+            .mockResolvedValue({
+              items: [],
+              nextCursor: "43",
+              hasMore: false,
+              resyncRequired: false,
+            }),
+          listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
+            if (parentId === "remote-project") {
+              return {
+                items: [
+                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/Project/notes" },
+                  { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
+                ],
+                nextOffset: null,
+              }
+            }
+            return { items: [], nextOffset: null }
+          }),
+          downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+            await writeFile(outputPath, itemId, "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+
+      await service.pollRemoteChanges(binding.id)
+      emitRawEvent(rawEvent, "change", "Project/notes/spec.md")
+      await waitForTimeout(650)
+
+      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", relativePath: "Project/notes/spec.md" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("updates the remote root path after the synced drive folder moves", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

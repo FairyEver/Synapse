@@ -22,6 +22,7 @@ export interface DriveSyncExecutorDeps {
   readonly accountService: DriveSyncAccountService
   readonly recordOperation: (input: DriveSyncRecordOperationInput) => Promise<unknown>
   readonly trashLocalPath: (localPath: string) => Promise<void>
+  readonly markSelfWrite?: (input: { readonly bindingId: string; readonly relativePath: string }) => void
 }
 
 export async function executeDriveSyncOperation(deps: DriveSyncExecutorDeps): Promise<void> {
@@ -70,6 +71,7 @@ async function downloadRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
 async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
   const requestedLocalPath = requireLocalPath(deps.operation)
   const driveItemId = requireDriveItemId(deps.operation)
+  markSelfWrite(deps, deps.operation.relativePath)
   const localPath = await writeDriveSyncFileTarget(
     driveSyncLocalWriteRootPath(deps.binding),
     requestedLocalPath,
@@ -93,6 +95,7 @@ async function downloadFile(deps: DriveSyncExecutorDeps): Promise<void> {
 async function downloadFolder(deps: DriveSyncExecutorDeps): Promise<void> {
   const requestedLocalPath = requireLocalPath(deps.operation)
   const driveItemId = requireDriveItemId(deps.operation)
+  markSelfWrite(deps, deps.operation.relativePath)
   const localPath = await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), requestedLocalPath)
   const stats = await lstat(localPath)
   await deps.baselineStore.upsert({
@@ -130,6 +133,7 @@ async function downloadFolderDescendants(
       const relativePath = downloadedFolderChildRelativePath(input.rootRelativePath, rootName, item.path ?? item.name, deps.operation.remotePathHint)
       if (!relativePath || isDriveSyncExcluded(relativePath, deps.binding.excludeRules)) continue
       const localPath = path.join(deps.binding.localPath, relativePath)
+      markSelfWrite(deps, relativePath)
       if (item.type === "folder") {
         await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), localPath)
         const stats = await lstat(localPath)
@@ -168,6 +172,10 @@ async function downloadFolderDescendants(
     }
     offset = page.nextOffset ?? null
   }
+}
+
+function markSelfWrite(deps: DriveSyncExecutorDeps, relativePath: string): void {
+  deps.markSelfWrite?.({ bindingId: deps.binding.id, relativePath })
 }
 
 async function uploadLocalItem(deps: DriveSyncExecutorDeps): Promise<void> {

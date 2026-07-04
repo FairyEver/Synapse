@@ -1455,6 +1455,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           accountService: deps.accountService,
           recordOperation,
           trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
+          markSelfWrite: (input) => localWatcher.markSelfWrite(input),
         })
         await updateBindingDrivePathHintAfterRootMove(binding, operation)
         await rememberPendingRemoteEcho(operation)
