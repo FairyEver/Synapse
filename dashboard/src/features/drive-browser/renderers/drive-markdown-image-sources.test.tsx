@@ -10,7 +10,10 @@ import type {
   DriveDocumentImageSourcesDto,
 } from '@synapse/shared'
 import { driveBrowserApi } from '@/lib/api'
-import { useDriveMarkdownImageSources } from './drive-markdown-image-sources'
+import {
+  useDriveMarkdownImageSources,
+  type DriveMarkdownImageSourceContext,
+} from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -58,18 +61,47 @@ describe('useDriveMarkdownImageSources', () => {
     expect(document.body.textContent).toContain('图片转存已完成，预览刷新失败，请手动刷新。')
     expect(document.body.textContent).not.toContain('图片转存失败。')
   })
+
+  it('hides image sources for read-only share markdown', () => {
+    const scanShareImageSources = vi.spyOn(driveBrowserApi, 'scanShareImageSources').mockResolvedValue(imageSources())
+
+    renderImageSources({
+      reload: vi.fn(),
+      context: { context: 'share', shareId: 'share-1', itemId: 'item-1' },
+      edit: editable({ canEdit: false, currentVersionId: null, reason: 'permission_denied' }),
+    })
+
+    expect(document.body.textContent).not.toContain('图片来源')
+    expect(scanShareImageSources).not.toHaveBeenCalled()
+  })
 })
 
-function renderImageSources({ reload }: { readonly reload: DriveRendererEditContext['reload'] }) {
+function renderImageSources({
+  reload,
+  context,
+  edit,
+}: {
+  readonly reload: DriveRendererEditContext['reload']
+  readonly context?: DriveMarkdownImageSourceContext
+  readonly edit?: DriveBrowserEditDto | null
+}) {
   act(() => {
-    root?.render(<ImageSourcesHarness reload={reload} />)
+    root?.render(<ImageSourcesHarness reload={reload} context={context} edit={edit} />)
   })
 }
 
-function ImageSourcesHarness({ reload }: { readonly reload: DriveRendererEditContext['reload'] }) {
+function ImageSourcesHarness({
+  reload,
+  context,
+  edit,
+}: {
+  readonly reload: DriveRendererEditContext['reload']
+  readonly context?: DriveMarkdownImageSourceContext
+  readonly edit?: DriveBrowserEditDto | null
+}) {
   const { toolbarItem, panel } = useDriveMarkdownImageSources({
-    context: { context: 'owner', itemId: 'item-1' },
-    edit: editable(),
+    context: context ?? { context: 'owner', itemId: 'item-1' },
+    edit: edit === undefined ? editable() : edit,
     editContext: {
       reload,
       reloading: false,

@@ -64,10 +64,11 @@ export function useDriveMarkdownImageSources({
   const [importFailures, setImportFailures] = useState<readonly DriveDocumentImageImportFailure[]>([])
   const currentVersionId = edit?.currentVersionId ?? sources?.versionId ?? null
   const importableCount = sources?.summary.importable ?? 0
-  const canImport = Boolean(sources?.canImport && currentVersionId && editContext && !disabled)
+  const canUseImageSources = Boolean(context && edit?.canEdit && edit.currentVersionId && editContext)
+  const canImport = Boolean(sources?.canImport && canUseImageSources && currentVersionId && !disabled)
 
   const scan = useCallback(async () => {
-    if (!context || !editContext || !sourceCacheKey) {
+    if (!context || !canUseImageSources || !sourceCacheKey) {
       setScanResult(null)
       return
     }
@@ -82,10 +83,10 @@ export function useDriveMarkdownImageSources({
     } finally {
       setLoading(false)
     }
-  }, [context, editContext, sourceCacheKey])
+  }, [canUseImageSources, context, sourceCacheKey])
 
   const importSources = useCallback(async (srcValues: readonly string[]) => {
-    if (!context || !currentVersionId || !editContext || srcValues.length === 0 || disabled) return
+    if (!context || !currentVersionId || !canUseImageSources || !editContext || srcValues.length === 0 || disabled) return
     const body: DriveDocumentImageImportRequest = {
       baseVersionId: currentVersionId,
       sources: srcValues.map((src) => ({ src })),
@@ -118,7 +119,7 @@ export function useDriveMarkdownImageSources({
     } finally {
       setImporting(false)
     }
-  }, [context, currentVersionId, disabled, editContext, scan])
+  }, [canUseImageSources, context, currentVersionId, disabled, editContext, scan])
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) {
@@ -132,7 +133,7 @@ export function useDriveMarkdownImageSources({
   }, [disabled, loading, scan, sources])
 
   const toolbarItem = useMemo<DriveRendererToolbarItem | null>(() => {
-    if (!context || !editContext) return null
+    if (!canUseImageSources) return null
     const count = sources && importableCount > 0 ? ` ${importableCount}` : ''
     return {
       kind: 'button',
@@ -143,7 +144,7 @@ export function useDriveMarkdownImageSources({
       disabled: disabled || loading,
       onClick: () => handleOpenChange(true),
     }
-  }, [context, disabled, editContext, handleOpenChange, importableCount, loading, sources])
+  }, [canUseImageSources, disabled, handleOpenChange, importableCount, loading, sources])
 
   return {
     toolbarItem,
