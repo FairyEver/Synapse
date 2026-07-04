@@ -2190,6 +2190,91 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("updates the remote root path after the synced drive folder moves", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const listDriveChanges = vi.fn()
+        .mockResolvedValueOnce({
+          items: [{
+            id: "change-1",
+            sequence: "42",
+            itemId: "drive-root",
+            parentId: "archive",
+            type: "moved",
+            itemKind: "folder",
+            versionId: null,
+            etag: null,
+            name: "Docs",
+            pathHint: "/Archive/Docs",
+            actor: "user",
+            occurredAt: "2026-06-28T00:00:00.000Z",
+          }],
+          nextCursor: "42",
+          hasMore: true,
+          resyncRequired: false,
+        })
+        .mockResolvedValueOnce({
+          items: [{
+            id: "change-2",
+            sequence: "43",
+            itemId: "remote-spec",
+            parentId: "drive-root",
+            type: "content_updated",
+            versionId: null,
+            etag: null,
+            name: "spec.md",
+            pathHint: "/Archive/Docs/spec.md",
+            actor: "user",
+            occurredAt: "2026-06-28T00:00:01.000Z",
+          }],
+          nextCursor: "43",
+          hasMore: false,
+          resyncRequired: false,
+        })
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges,
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        remoteCursor: "41",
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+
+      await service.pollRemoteChanges(binding.id)
+
+      expect(listDriveChanges).toHaveBeenNthCalledWith(1, {
+        cursor: "41",
+        limit: 100,
+        rootItemId: "drive-root",
+        rootPathHint: "/Docs",
+      })
+      expect(listDriveChanges).toHaveBeenNthCalledWith(2, {
+        cursor: "42",
+        limit: 100,
+        rootItemId: "drive-root",
+        rootPathHint: "/Archive/Docs",
+      })
+      await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("remote")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        drivePathHint: "/Archive/Docs",
+        remoteCursor: "43",
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("blocks remote downloads through symlinked local folders during polling", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     const outsideDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-outside-"))

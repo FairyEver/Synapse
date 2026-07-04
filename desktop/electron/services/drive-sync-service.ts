@@ -1417,6 +1417,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           recordOperation,
           trashLocalPath: deps.trashLocalPath ?? moveLocalPathToRecoverableTrash,
         })
+        await updateBindingDrivePathHintAfterRootMove(binding, operation)
         await rememberPendingRemoteEcho(operation)
       } catch (error) {
         await updateBindingStatus(operation.bindingId, "error", errorMessage(error))
@@ -1424,6 +1425,28 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         if (options.throwOnError) throw error
       }
     }
+  }
+
+  async function updateBindingDrivePathHintAfterRootMove(
+    binding: DriveSyncBindingEntryV1,
+    operation: DriveSyncPlannedOperation,
+  ): Promise<void> {
+    if (
+      operation.kind !== "move_local"
+      || operation.driveItemId !== binding.driveItemId
+      || operation.remotePathHint === null
+      || operation.remotePathHint === binding.drivePathHint
+    ) {
+      return
+    }
+    const current = await requireBinding(binding.id)
+    if (current.driveItemId !== binding.driveItemId || current.drivePathHint === operation.remotePathHint) return
+    await deps.bindings.upsert({
+      ...current,
+      drivePathHint: operation.remotePathHint,
+      updatedAt: timestamp(),
+    })
+    await emitChanged()
   }
 
   async function authorizeOperationLocalPath(

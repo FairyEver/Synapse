@@ -18,6 +18,7 @@ export async function pollDriveSyncRemoteChanges(input: {
   readonly limit?: number
 }): Promise<void> {
   const limit = input.limit ?? 100
+  let binding = input.binding
   let cursor = input.binding.remoteCursor
   const seenChangeIds = new Set<string>()
 
@@ -25,18 +26,18 @@ export async function pollDriveSyncRemoteChanges(input: {
     const page = await input.accountService.listDriveChanges({
       cursor,
       limit,
-      rootItemId: input.binding.driveItemId,
-      rootPathHint: input.binding.drivePathHint,
+      rootItemId: binding.driveItemId,
+      rootPathHint: binding.drivePathHint,
     })
     if (page.resyncRequired) {
       await input.onOperations([{
-        bindingId: input.binding.id,
+        bindingId: binding.id,
         kind: "resync",
-        driveItemId: input.binding.driveItemId,
+        driveItemId: binding.driveItemId,
         relativePath: "",
-        localPath: input.binding.localPath,
-        remotePathHint: input.binding.drivePathHint,
-        remoteItemKind: input.binding.kind,
+        localPath: binding.localPath,
+        remotePathHint: binding.drivePathHint,
+        remoteItemKind: binding.kind,
       }])
       return
     }
@@ -47,7 +48,7 @@ export async function pollDriveSyncRemoteChanges(input: {
       return true
     })
     const plan = planDriveSyncRemoteChanges({
-      binding: input.binding,
+      binding,
       baseline: input.baseline,
       changes,
       localChangedPaths: input.localChangedPaths,
@@ -55,9 +56,24 @@ export async function pollDriveSyncRemoteChanges(input: {
     })
     if (plan.operations.length > 0) await input.onOperations(plan.operations)
     if (plan.conflicts.length > 0) await input.onConflicts(plan.conflicts)
+    binding = bindingAfterRootMove(binding, plan.operations)
 
     cursor = page.nextCursor
-    await input.updateBindingCursor(input.binding.id, cursor)
+    await input.updateBindingCursor(binding.id, cursor)
     if (!page.hasMore) return
   }
+}
+
+function bindingAfterRootMove(
+  binding: DriveSyncBindingEntryV1,
+  operations: readonly DriveSyncPlannedOperation[],
+): DriveSyncBindingEntryV1 {
+  const rootMove = operations.find((operation) =>
+    operation.kind === "move_local"
+    && operation.driveItemId === binding.driveItemId
+    && operation.remotePathHint !== null
+    && operation.remotePathHint !== binding.drivePathHint,
+  )
+  if (!rootMove?.remotePathHint) return binding
+  return { ...binding, drivePathHint: rootMove.remotePathHint }
 }
