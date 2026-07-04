@@ -28,14 +28,19 @@ export function DriveSiteCreateDialog({
   readonly onOpenChange: (open: boolean) => void
 }) {
   const [preflight, setPreflight] = useState<DriveSitePreflightDto | null>(null)
+  const [entryPath, setEntryPath] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     setPreflight(null)
+    setEntryPath('')
     if (!open || !folder) return
     let cancelled = false
     void driveApi.preflightSite(folder.id).then((result) => {
-      if (!cancelled) setPreflight(result)
+      if (!cancelled) {
+        setPreflight(result)
+        setEntryPath(result.defaultEntryPath ?? '')
+      }
     }).catch((error: unknown) => {
       if (!cancelled) toast(errorMessage(error, '站点检查失败'))
     })
@@ -44,16 +49,16 @@ export function DriveSiteCreateDialog({
     }
   }, [folder, open])
 
-  const canPublish = Boolean(folder && preflight && preflight.sourceFolderItemId === folder.id)
+  const canPublish = Boolean(folder && preflight && preflight.sourceFolderItemId === folder.id && entryPath)
 
   const publishSite = async () => {
-    if (submitting || !folder || !preflight || preflight.sourceFolderItemId !== folder.id) return
+    if (submitting || !folder || !preflight || preflight.sourceFolderItemId !== folder.id || !entryPath) return
     setSubmitting(true)
     try {
       await driveApi.createSite({
         sourceFolderItemId: folder.id,
         name: folder.name,
-        entryPath: preflight.defaultEntryPath,
+        entryPath,
         accessMode: 'public',
         expiresIn: 'forever',
       })
@@ -72,7 +77,26 @@ export function DriveSiteCreateDialog({
         <DialogHeader>
           <DialogTitle>发布站点</DialogTitle>
         </DialogHeader>
-        <div className='text-sm text-muted-foreground'>{folder?.name}</div>
+        <div className='grid gap-3'>
+          <div className='text-sm text-muted-foreground'>{folder?.name}</div>
+          {preflight?.htmlFiles.length ? (
+            <div className='grid gap-2'>
+              <label className='text-sm font-medium'>入口页</label>
+              <Select value={entryPath} onValueChange={setEntryPath}>
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder='选择入口页' />
+                </SelectTrigger>
+                <SelectContent>
+                  {preflight.htmlFiles.map((htmlFile) => (
+                    <SelectItem key={htmlFile} value={htmlFile}>{htmlFile}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : preflight ? (
+            <div className='text-sm text-muted-foreground'>没有 HTML 文件</div>
+          ) : null}
+        </div>
         <DialogFooter>
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>取消</Button>
           <Button

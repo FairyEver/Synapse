@@ -257,6 +257,33 @@ describe('Drive site dialogs', () => {
     })
   })
 
+  it('creates a site with a selected non-default entry page', async () => {
+    vi.mocked(driveApi.preflightSite).mockResolvedValue({
+      sourceFolderItemId: 'folder-1',
+      sourceFolderName: '站点',
+      htmlFiles: ['home.html', 'docs/start.html'],
+      defaultEntryPath: null,
+      fileCount: 2,
+      totalBytes: '20',
+      includesJavaScript: false,
+    })
+    vi.mocked(driveApi.createSite).mockResolvedValue({} as never)
+    render(<DriveSiteCreateDialog folder={{ id: 'folder-1', name: '站点' } as never} open onOpenChange={() => undefined} onCreated={async () => undefined} />)
+    await flush()
+
+    expect(textButton('发布')).toHaveProperty('disabled', true)
+    await selectOption('docs/start.html')
+    await click(textButton('发布'))
+
+    expect(driveApi.createSite).toHaveBeenCalledWith({
+      sourceFolderItemId: 'folder-1',
+      name: '站点',
+      entryPath: 'docs/start.html',
+      accessMode: 'public',
+      expiresIn: 'forever',
+    })
+  })
+
   it('lists sites and disables one', async () => {
     vi.mocked(driveApi.listSites).mockResolvedValue({
       items: [{ id: 'db-1', siteId: 'site-1', name: 'Docs', status: 'active', accessMode: 'public', url: '/sites/site-1', urlWithPassword: '/sites/site-1', passwordEnabled: false, password: null, expiresAt: null, sourceFolderItemId: 'folder-1', sourceFolderName: '站点', entryPath: 'index.html', fileCount: 1, totalBytes: '10', createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z', lastPublishedAt: '2026-06-29T00:00:00.000Z' }],
@@ -391,6 +418,32 @@ function lastTextButton(text: string) {
 async function click(element: HTMLElement) {
   await act(async () => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+async function selectOption(text: string) {
+  const elementPrototype = HTMLElement.prototype as HTMLElement['__proto__'] & {
+    hasPointerCapture?: () => boolean
+    setPointerCapture?: () => void
+    releasePointerCapture?: () => void
+    scrollIntoView?: () => void
+  }
+  elementPrototype.hasPointerCapture ??= () => false
+  elementPrototype.setPointerCapture ??= () => undefined
+  elementPrototype.releasePointerCapture ??= () => undefined
+  elementPrototype.scrollIntoView ??= () => undefined
+  const trigger = document.querySelector('button[role="combobox"]')
+  if (!(trigger instanceof HTMLElement)) throw new Error('missing select trigger')
+  await act(async () => {
+    trigger.focus()
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+  })
+  await flush()
+  const option = Array.from(document.querySelectorAll('[role="option"]')).find((item) => item.textContent?.includes(text))
+  if (!(option instanceof HTMLElement)) throw new Error(`missing option ${text}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, button: 0 }))
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 
