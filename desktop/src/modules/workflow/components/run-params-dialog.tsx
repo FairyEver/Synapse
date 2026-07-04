@@ -517,19 +517,18 @@ function OptionParamControl({ param, value, hasError, onChange }: OptionParamCon
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <button
           id={param.name}
           type="button"
-          variant="outline"
           role="combobox"
           aria-expanded={open}
           aria-invalid={hasError}
-          className="w-full justify-between"
+          className="inline-flex h-8 w-full shrink-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-muted aria-expanded:text-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:border-input dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
           onClick={() => setOpen(true)}
         >
           <span className="truncate">{trimmedValue || "选择或输入"}</span>
-          <ChevronsUpDown data-icon="inline-end" />
-        </Button>
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" data-icon="inline-end" />
+        </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1.5">
         <Command>

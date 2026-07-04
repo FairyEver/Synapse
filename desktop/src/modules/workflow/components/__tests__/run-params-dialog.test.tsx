@@ -316,6 +316,33 @@ describe("RunParamsDialog", () => {
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("日报")
   })
 
+  it("does not track populated custom option trigger values", async () => {
+    const { onConfirm } = await renderDialog({
+      params: [
+        { name: "report_type", type: "option", default: null, options: ["日报"], allowCustomOption: true },
+      ],
+    })
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("#report_type")?.click()
+    })
+    await act(async () => {
+      clickOption("日报")
+    })
+    await act(async () => {
+      const trigger = document.body.querySelector<HTMLButtonElement>("#report_type")
+      expect(trigger).toBeTruthy()
+      Object.defineProperty(trigger, "innerText", { configurable: true, value: "日报" })
+      trigger?.click()
+    })
+    await act(async () => {
+      document.body.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onConfirm).toHaveBeenCalledWith({ report_type: "日报" }, { report_type: "日报" })
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("日报")
+  })
+
   it("rejects a closed option value outside the option list", async () => {
     const { onConfirm } = await renderDialog({
       params: [
