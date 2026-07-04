@@ -299,7 +299,7 @@ async function scanFileBinding(
 
 function eventRelativePath(binding: DriveSyncBindingEntryV1, filename: string | Buffer | null): string | null {
   if (binding.kind === "file") {
-    if (!filename) return ""
+    if (!filename) return null
     return path.basename(String(filename)) === path.basename(binding.localPath) ? "" : null
   }
   if (!filename) return null

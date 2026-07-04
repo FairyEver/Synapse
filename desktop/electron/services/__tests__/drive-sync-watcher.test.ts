@@ -148,6 +148,50 @@ describe("drive sync watcher", () => {
     expect(changes).toEqual([])
   })
 
+  it("ignores single-file watcher events without a filename", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const fakeWatch = createFakeWatch()
+    const filePath = path.join(tempDir, "tracked.md")
+    await writeFile(filePath, "tracked", "utf8")
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+    })
+    watcher.reconcile([binding({ localPath: filePath, kind: "file" })])
+
+    fakeWatch.emit(tempDir, "change", null)
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([])
+  })
+
+  it("maps single-file watcher events for the tracked filename to the binding root", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const fakeWatch = createFakeWatch()
+    const filePath = path.join(tempDir, "tracked.md")
+    await writeFile(filePath, "tracked", "utf8")
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+    })
+    watcher.reconcile([binding({ localPath: filePath, kind: "file" })])
+
+    await writeFile(filePath, "changed", "utf8")
+    fakeWatch.emit(tempDir, "change", "tracked.md")
+    await vi.runAllTimersAsync()
+
+    expect(changes).toEqual([[
+      expect.objectContaining({
+        bindingId: "binding-1",
+        relativePath: "",
+        kind: "modified",
+        localKind: "file",
+      }),
+    ]])
+  })
+
   it("requeues local changes when flush handling fails", async () => {
     const changes: Array<readonly DriveSyncLocalChange[]> = []
     const errors: unknown[] = []
@@ -256,13 +300,13 @@ function createFakeWatch() {
   }
 }
 
-function binding(input: { readonly localPath: string }): DriveSyncBindingEntryV1 {
+function binding(input: { readonly localPath: string; readonly kind?: "file" | "folder" }): DriveSyncBindingEntryV1 {
   return {
     id: "binding-1",
     schemaVersion: 1,
     driveItemId: "drive-item-1",
     driveItemName: "Folder",
-    kind: "folder",
+    kind: input.kind ?? "folder",
     drivePathHint: "/Folder",
     localPath: input.localPath,
     status: "active",
