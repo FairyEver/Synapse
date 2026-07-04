@@ -1673,18 +1673,25 @@ describe("DriveSyncService", () => {
               }
             }
             if (parentId === "remote-docs") {
-              if (offset === 1) {
-                return { items: [{ id: "remote-more", name: "more", type: "folder" }], nextOffset: 2 }
+              if (offset === 3) {
+                return {
+                  items: [
+                    { id: "remote-gitignore", name: ".gitignore", type: "file", path: "Docs/.gitignore", depth: 1 },
+                    { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/notes/spec.md", depth: 2 },
+                  ],
+                  nextOffset: null,
+                }
               }
-              if (offset === 2) {
-                return { items: [{ id: "remote-gitignore", name: ".gitignore", type: "file" }], nextOffset: null }
+              return {
+                items: [
+                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/notes", depth: 1 },
+                  { id: "remote-more", name: "more", type: "folder", path: "Docs/more", depth: 1 },
+                  { id: "remote-readme", name: "readme.md", type: "file", path: "Docs/more/readme.md", depth: 2 },
+                ],
+                nextOffset: 3,
               }
-              return { items: [{ id: "remote-notes", name: "notes", type: "folder" }], nextOffset: 1 }
             }
-            if (parentId === "remote-more") {
-              return { items: [{ id: "remote-readme", name: "readme.md", type: "file" }] }
-            }
-            return { items: [{ id: "remote-spec", name: "spec.md", type: "file" }] }
+            return { items: [] }
           }),
           createDriveFolder: vi.fn(async ({ name }: { name: string }) => ({ id: `remote-${name}`, name, type: "folder" })),
         },
@@ -1733,6 +1740,8 @@ describe("DriveSyncService", () => {
       expect(harness.deps.accountService.createDriveFolder).toHaveBeenCalledWith({ parentId: "remote-docs", name: "empty" })
       expect(harness.deps.accountService.createDriveFolder).not.toHaveBeenCalledWith({ parentId: "remote-docs", name: "more" })
       expect(harness.deps.accountService.createDriveFolder).not.toHaveBeenCalledWith({ parentId: "remote-docs", name: "secrets" })
+      expect(harness.deps.accountService.listDriveItemTree).not.toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-more" }))
+      expect(harness.deps.accountService.listDriveItemTree).not.toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-notes" }))
       await expect(harness.baseline.list()).resolves.not.toContainEqual(
         expect.objectContaining({ relativePath: ".git/config" }),
       )
