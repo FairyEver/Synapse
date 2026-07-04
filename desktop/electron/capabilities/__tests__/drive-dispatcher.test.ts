@@ -893,6 +893,66 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/project.zip" })
   })
 
+  it("preserves trailing whitespace in Drive download output paths", async () => {
+    const accountService = createAccountService({
+      downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "/tmp/report.md " })),
+      downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const, path: "/tmp/report-v1.md " })),
+      downloadDriveLinkFile: vi.fn(async () => ({ localPath: "/tmp/shared.md ", mimeType: "text/markdown", size: "12" })),
+      downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "/tmp/project.zip " })),
+    })
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.file_download.create", {
+      itemId: "item-1",
+      outputPath: "/tmp/report.md ",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("drive.file_version_download.create", {
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md ",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("drive.link.download_file", {
+      url: "https://synapse.local/share/link-1",
+      outputPath: "/tmp/shared.md ",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("drive.folder_zip.create", {
+      itemId: "folder-1",
+      outputPath: "/tmp/project.zip ",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/tmp/report.md ",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/tmp/report-v1.md ",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/tmp/shared.md ",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/tmp/project.zip ",
+    }))
+    expect(accountService.downloadDriveFile).toHaveBeenCalledWith({ itemId: "item-1", outputPath: "/tmp/report.md " })
+    expect(accountService.downloadDriveFileVersion).toHaveBeenCalledWith({
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md ",
+    })
+    expect(accountService.downloadDriveLinkFile).toHaveBeenCalledWith({
+      url: "https://synapse.local/share/link-1",
+      outputPath: "/tmp/shared.md ",
+    })
+    expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/project.zip " })
+  })
+
   it("manages Drive file versions", async () => {
     const accountService = createAccountService({
       listDriveFileVersions: vi.fn(async () => ({
@@ -1052,6 +1112,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService()
     const fileStream = Readable.from(["test"])
     const readFile = vi.fn(async () => Buffer.from("test"))
+    const filePath = "/tmp/report.md "
     const auditSink = createAuditSink()
     const permissionGuard = {
       registerPolicy: vi.fn(),
@@ -1072,14 +1133,14 @@ describe("createDriveCapabilityDispatcher", () => {
     })
 
     const result = await dispatcher.dispatch("drive.file.upload", {
-      filePath: "/tmp/report.md",
+      filePath,
     }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })
 
     expect(result).toEqual({ ok: true, data: driveItem({ id: "item-1", name: "report.md" }) })
     expect(JSON.stringify(result)).not.toContain("X-Amz-Signature")
     expect(accountService.prepareDriveUpload).toHaveBeenCalledWith({
       parentId: null,
-      name: "report.md",
+      name: "report.md ",
       size: "4",
       mimeType: null,
     })
@@ -1093,13 +1154,13 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
-      resource: "/tmp/report.md",
+      resource: filePath,
       context: { source: "mcp-stdio", driveAction: "drive.upload" },
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "allowed",
-      resource: "/tmp/report.md",
+      resource: filePath,
       metadata: expect.objectContaining({ driveAction: "drive.upload" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({

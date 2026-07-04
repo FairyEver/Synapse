@@ -519,7 +519,7 @@ async function uploadFile(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  const filePath = requireString(params, "filePath")
+  const filePath = requireLocalPath(params, "filePath")
   await authorizeFileRead(deps, filePath, context)
   const fileStat = await requireLocalUploadFile(fileSystem, filePath)
 
@@ -547,7 +547,7 @@ async function uploadFolder(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  const folderPath = requireString(params, "folderPath")
+  const folderPath = requireLocalPath(params, "folderPath")
   await authorizeFileRead(deps, folderPath, context)
   const folderStat = await fileSystem.lstat(folderPath)
   if (folderStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
@@ -661,7 +661,7 @@ async function uploadPublicAsset(
   context: DispatchContext,
   action: string,
 ): Promise<DispatchResult> {
-  const filePath = requireString(params, "filePath")
+  const filePath = requireLocalPath(params, "filePath")
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
@@ -692,7 +692,7 @@ async function replacePublicAsset(
   action: string,
 ): Promise<DispatchResult> {
   const assetId = requireString(params, "assetId")
-  const filePath = requireString(params, "filePath")
+  const filePath = requireLocalPath(params, "filePath")
   const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   await requireLocalUploadFile(fileSystem, filePath)
@@ -1127,11 +1127,19 @@ function requireString(params: Record<string, unknown>, key: string): string {
 }
 
 function requireAbsoluteOutputPath(params: Record<string, unknown>): string {
-  const outputPath = requireString(params, "outputPath")
+  const outputPath = requireLocalPath(params, "outputPath")
   if (!path.isAbsolute(outputPath)) {
     throw new Error("Missing or invalid 'outputPath': expected absolute local output path")
   }
   return outputPath
+}
+
+function requireLocalPath(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  }
+  return value
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -1290,11 +1298,19 @@ function parseDriveLinkDownloadFileInput(params: Record<string, unknown>): Drive
 }
 
 function optionalAbsoluteOutputPath(params: Record<string, unknown>): string | undefined {
-  const outputPath = optionalString(params.outputPath)
+  const outputPath = optionalLocalPath(params.outputPath, "outputPath")
   if (outputPath !== undefined && !path.isAbsolute(outputPath)) {
     throw new Error("Missing or invalid 'outputPath': expected absolute local output path")
   }
   return outputPath
+}
+
+function optionalLocalPath(value: unknown, key: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined
+  if (typeof value !== "string") {
+    throw new Error(`Missing or invalid '${key}': expected string`)
+  }
+  return value
 }
 
 function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterializeInput["scope"] {
