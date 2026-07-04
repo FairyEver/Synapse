@@ -3170,7 +3170,7 @@ export class DriveService implements OnApplicationBootstrap {
         }))
       for (const version of candidates) {
         const claimed = await this.prisma.driveFileVersion.updateMany({
-          where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false },
+          where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false, isPinned: false },
           data: { deletePending: true },
         })
         if (claimed.count === 0) continue
