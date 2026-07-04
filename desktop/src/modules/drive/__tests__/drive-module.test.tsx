@@ -559,6 +559,21 @@ describe("DriveModule", () => {
     expect(queryButtonByLabel("同步状态：1 个冲突")).toBeNull()
   })
 
+  it("shows paused-only drive sync bindings in the top toolbar", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 0 },
+      { bindings: [createDriveSyncBinding({ id: "binding-paused", driveItemName: "Paused", status: "paused" })] },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const button = getButtonByLabel("同步状态：1 个暂停")
+    expect(button.dataset.variant).toBe("outline")
+    expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("secondary")
+    expect(queryButtonByLabel("同步状态：暂无同步绑定")).toBeNull()
+  })
+
   it("shows drive sync errors as a recoverable badge", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { errorCount: 11 },

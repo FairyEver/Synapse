@@ -889,13 +889,16 @@ export function DriveSyncStatusButton({
   const conflictCount = countVisibleDriveSyncConflicts(snapshot)
   const errorCount = summary?.errorCount ?? 0
   const activeCount = summary?.activeBindingCount ?? 0
+  const pausedCount = snapshot?.bindings.filter((binding) => binding.status === "paused").length ?? 0
   const badge = conflictCount > 0
     ? { label: String(conflictCount), variant: "destructive" as const, message: `${conflictCount} 个冲突` }
     : errorCount > 0
       ? { label: String(errorCount), variant: "outline" as const, message: `${errorCount} 个错误` }
       : activeCount > 0
         ? { label: String(activeCount), variant: "secondary" as const, message: `${activeCount} 个绑定` }
-        : null
+        : pausedCount > 0
+          ? { label: String(pausedCount), variant: "secondary" as const, message: `${pausedCount} 个暂停` }
+          : null
   const message = badge?.message ?? "暂无同步绑定"
   return (
     <Button type="button" variant={conflictCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={onOpen}>
