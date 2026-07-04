@@ -148,6 +148,18 @@ type DrivePublicShareValue = {
   readonly editorEmails: readonly string[]
 }
 
+export type DriveShareAnnotationAccess = {
+  readonly item: {
+    readonly id: string
+    readonly userId: string
+    readonly name: string
+    readonly type: string
+    readonly mimeType: string | null
+    readonly storageKey: string | null
+  }
+  readonly canComment: boolean
+}
+
 type DriveRenderedAssetValue = {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
@@ -1924,6 +1936,34 @@ export class DriveService implements OnApplicationBootstrap {
       }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
+    }
+  }
+
+  async resolveShareAnnotationAccess(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+    readonly actorUserId?: string | null
+  }): Promise<DriveShareAnnotationAccess> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    const shareWrite = await this.resolveShareWriteSnapshotState(share, input.actorUserId ?? null)
+    return {
+      item: {
+        id: current.id,
+        userId: current.userId,
+        name: current.name,
+        type: current.type,
+        mimeType: current.mimeType,
+        storageKey: current.storageKey,
+      },
+      canComment: isCommentableMarkdownItem(current) && shareWrite.canWrite,
     }
   }
 

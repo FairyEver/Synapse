@@ -22,7 +22,7 @@ describe("DriveAnnotationService", () => {
     prisma.driveAnnotationComment.update.mockResolvedValue(commentRecord({ body: "updated", createdByUserId: "owner-1" }))
     prisma.user.findUnique.mockImplementation(async ({ where }: { readonly where: { readonly id: string } }) => ({ email: `${where.id}@example.com` }))
     auditLog.record.mockResolvedValue(undefined)
-    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot())
+    drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: true })
   })
 
   it("lists visible owner annotations with author metadata and permissions", async () => {
@@ -242,12 +242,13 @@ describe("DriveAnnotationService", () => {
       body: createInput({ baseVersionId: "version-1" }),
     })
 
-    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+    expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith(expect.objectContaining({
       shareId: "share-1",
       itemId: "item-1",
       cookie: "cookie",
       actorUserId: "reader-1",
     }))
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
     expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ createdByUserId: "reader-1" }),
     }))
@@ -283,7 +284,7 @@ describe("DriveAnnotationService", () => {
   })
 
   it("allows share annotation writes when the share can be commented but cannot be edited", async () => {
-    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false, canComment: true }))
+    drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: true })
     const ownComment = commentRecord({ createdByUserId: "reader-1" })
     prisma.driveAnnotationComment.findFirst.mockResolvedValue(ownComment)
     prisma.driveAnnotationComment.update.mockResolvedValue({ ...ownComment, body: "updated" })
@@ -335,7 +336,7 @@ describe("DriveAnnotationService", () => {
   })
 
   it("records share annotation write audits with share context redacted", async () => {
-    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: false, canComment: true }))
+    drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: true })
     const ownComment = commentRecord({ createdByUserId: "reader-1" })
     prisma.driveAnnotationComment.findFirst.mockResolvedValue(ownComment)
     prisma.driveAnnotationComment.update.mockResolvedValue({ ...ownComment, body: "updated" })
@@ -414,7 +415,7 @@ describe("DriveAnnotationService", () => {
   })
 
   it("rejects share annotation writes when the share cannot be commented", async () => {
-    drive.getShareBrowserSnapshot.mockResolvedValue(shareSnapshot({ canEdit: true, canComment: false }))
+    drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: false })
 
     await expect(service.createShareAnnotation({
       actorUserId: "reader-1",
@@ -443,9 +444,10 @@ describe("DriveAnnotationService", () => {
       cookie: "cookie",
     })
 
-    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+    expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: "reader-1",
     }))
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
     expect(prisma.driveAnnotationThread.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         itemId: "item-1",
@@ -591,29 +593,6 @@ function markdownItem() {
   }
 }
 
-function shareSnapshot(input: { readonly canEdit?: boolean; readonly canComment?: boolean } = {}) {
-  return {
-    context: "share",
-    surface: "standalone",
-    current: {
-      id: "item-1",
-      name: "notes.md",
-      type: "file",
-      mimeType: "text/markdown",
-    },
-    edit: {
-      canEdit: input.canEdit ?? true,
-      editorKind: "text",
-      reason: null,
-      currentVersionId: "version-1",
-    },
-    annotation: {
-      canComment: input.canComment ?? true,
-      reason: null,
-    },
-  }
-}
-
 function threadRecord(input: {
   readonly baseVersionId?: string | null
   readonly comments?: readonly ReturnType<typeof commentRecord>[]
@@ -681,5 +660,6 @@ function createPrismaMock() {
 function createDriveServiceMock() {
   return {
     getShareBrowserSnapshot: vi.fn(),
+    resolveShareAnnotationAccess: vi.fn(),
   }
 }

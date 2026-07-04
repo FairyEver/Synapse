@@ -458,18 +458,12 @@ export class DriveAnnotationService {
     readonly cookie?: string | null
     readonly actorUserId?: string | null
   }): Promise<ShareAnnotationAccess> {
-    const snapshot = await this.drive.getShareBrowserSnapshot({
+    return this.drive.resolveShareAnnotationAccess({
       shareId: input.shareId,
       itemId: input.itemId,
       cookie: input.cookie ?? undefined,
       actorUserId: input.actorUserId ?? null,
     })
-    const item = await this.prisma.driveItem.findFirst({
-      where: { id: snapshot.current.id, deletedAt: null },
-      select: { id: true, userId: true, name: true, type: true, mimeType: true, storageKey: true },
-    })
-    if (!item) throw new NotFoundException("文件未找到")
-    return { item, canComment: Boolean(snapshot.annotation?.canComment) }
   }
 
   private async requireThread(itemId: string, threadId: string): Promise<AnnotationThreadRecord> {
