@@ -768,7 +768,7 @@ describe("AccountService", () => {
           { path: secondPath, relativePath: "docs/b.md", mimeType: null },
         ],
       }],
-    })).resolves.toEqual({ completed: 2, failed: 0, skipped: 0 })
+    })).resolves.toEqual({ completed: 2, completedDirectories: 1, failed: 0, skipped: 0 })
 
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
@@ -800,7 +800,7 @@ describe("AccountService", () => {
         ],
         files: [],
       }],
-    })).resolves.toEqual({ completed: 0, failed: 0, skipped: 0 })
+    })).resolves.toEqual({ completed: 0, completedDirectories: 3, failed: 0, skipped: 0 })
 
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,

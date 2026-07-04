@@ -164,6 +164,7 @@ export type DriveLocalUploadRequest = {
 
 export type DriveLocalUploadResult = {
   readonly completed: number
+  readonly completedDirectories?: number
   readonly failed: number
   readonly skipped: number
   readonly message?: string

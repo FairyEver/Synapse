@@ -3349,19 +3349,27 @@ function formatDriveShareAccessSummary(item: {
 }
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {
+  const completedLabel = formatUploadCompleted(result)
   if (result.failed === 0) {
     return result.skipped > 0
-      ? `已上传 ${result.completed} 个文件，跳过 ${result.skipped} 个`
-      : `已上传 ${result.completed} 个文件`
+      ? `已上传 ${completedLabel}，跳过 ${result.skipped} 个`
+      : `已上传 ${completedLabel}`
   }
   return result.message
-    ? `上传完成 ${result.completed} 个，失败 ${result.failed} 个：${result.message}`
-    : `上传完成 ${result.completed} 个，失败 ${result.failed} 个`
+    ? `上传完成 ${completedLabel}，失败 ${result.failed} 个：${result.message}`
+    : `上传完成 ${completedLabel}，失败 ${result.failed} 个`
 }
 
 function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLocalUploadResult {
   if (skipped === 0) return result
   return { ...result, skipped: result.skipped + skipped }
+}
+
+function formatUploadCompleted(result: DriveLocalUploadResult): string {
+  const parts: string[] = []
+  if (result.completed > 0) parts.push(`${result.completed} 个文件`)
+  if ((result.completedDirectories ?? 0) > 0) parts.push(`${result.completedDirectories} 个文件夹`)
+  return parts.length > 0 ? parts.join("、") : "0 个文件"
 }
 
 function countDriveLocalUploadItems(items: readonly DriveLocalUploadItem[]): number {

@@ -2283,6 +2283,7 @@ describe("DriveModule", () => {
   })
 
   it("preserves empty directories when dropping folders", async () => {
+    mocks.uploadDriveLocalItems.mockResolvedValueOnce({ completed: 0, completedDirectories: 4, failed: 0, skipped: 0 })
     await render(<DriveModule />)
     await flushAct()
 
@@ -2312,6 +2313,7 @@ describe("DriveModule", () => {
         files: [],
       }],
     })
+    expect(mocks.toast).toHaveBeenCalledWith("已上传 4 个文件夹")
   })
 
   it("stops expanding dropped folders when the local upload file limit is reached", async () => {

@@ -890,6 +890,7 @@ export class AccountService {
 
   async uploadDriveLocalItems(input: DriveLocalUploadRequest): Promise<DriveLocalUploadResult> {
     let completed = 0
+    let completedDirectories = 0
     let failed = 0
     let skipped = 0
     let firstError: string | undefined
@@ -899,6 +900,7 @@ export class AccountService {
         ? await this.uploadDriveLocalFile(input.parentId ?? null, item)
         : await this.uploadDriveLocalFolder(input.parentId ?? null, item)
       completed += result.completed
+      completedDirectories += result.completedDirectories ?? 0
       failed += result.failed
       skipped += result.skipped
       firstError ??= result.message
@@ -906,6 +908,7 @@ export class AccountService {
 
     return {
       completed,
+      ...(completedDirectories > 0 ? { completedDirectories } : {}),
       failed,
       skipped,
       ...(firstError ? { message: firstError } : {}),
@@ -1168,6 +1171,7 @@ export class AccountService {
 
     return {
       completed,
+      ...(failed === 0 ? { completedDirectories: 1 + directories.length } : {}),
       failed,
       skipped,
       ...(firstError ? { message: firstError } : {}),
