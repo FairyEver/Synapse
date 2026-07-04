@@ -106,7 +106,7 @@ When using Codex `--json` or raw MCP event logs for debugging, remember tool arg
 14. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `app_drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
 15. Use `app_drive_folder_path_ensure` to create or reuse target category folders, then call `app_drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
 16. Apply organization changes only with `app_drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
-17. For file history, call `app_drive_file_version_list` first. Use `app_drive_file_version_restore` only when the user wants that version to become current, `app_drive_file_version_delete` only for non-current versions the user wants removed, and `app_drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup. Skip versions marked `deletePending` or shown as pending cleanup; they cannot be downloaded, restored, pinned, or deleted again until cleanup retry finishes.
+17. For file history, call `app_drive_file_version_list` first. Use `app_drive_file_version_restore` only when the user wants that version to become current, `app_drive_file_version_delete` only for non-current, unpinned versions the user wants removed, and `app_drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup. Skip versions marked `deletePending` or shown as pending cleanup; they cannot be downloaded, restored, pinned, or deleted again until cleanup retry finishes. If a historical version is pinned/retained, call `app_drive_file_version_pin_update` with `isPinned: false` before deleting it.
 18. Use `app_drive_trash_list` to inspect user-visible trash. Restore rows from that list with `app_drive_item_restore`; pass `kind` and `assetId` when the row kind is `public_asset`. Use `app_drive_direct_link_restore` only when the user directly provides a public asset id. Use `app_drive_trash_delete` only when the user clearly asks to remove an item from their visible trash.
 19. Report the final item name, item id, share URL, public asset URL, or site URL when one was created.
 
@@ -126,7 +126,7 @@ Sites use `/sites/<siteId>/` and are read-only static snapshots copied from a Dr
 
 Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 
-File versions are full-copy history for owned Drive files. Public share links always point to the current file and do not expose version history. Restoring a version creates a new current version; deleting a historical version cannot be undone. Versions marked `deletePending` are cleanup placeholders and are not actionable.
+File versions are full-copy history for owned Drive files. Public share links always point to the current file and do not expose version history. Restoring a version creates a new current version; deleting a historical version cannot be undone. Versions marked `deletePending` are cleanup placeholders and are not actionable. Pinned/retained versions must be unpinned before deletion.
 
 Public asset access logs are admin-only and are not available through MCP. Do not invent or request access-log tools.
 

@@ -346,7 +346,7 @@ Input:
 
 ### `app_drive_file_version_delete`
 
-Delete a non-current historical file version that is not pending cleanup. Current versions cannot be deleted.
+Delete a non-current historical file version that is not pending cleanup and is not pinned. Current versions cannot be deleted. If the version is pinned/retained, call `app_drive_file_version_pin_update` with `isPinned: false` before deleting it.
 
 Input:
 

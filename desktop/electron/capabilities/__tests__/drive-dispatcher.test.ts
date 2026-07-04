@@ -57,6 +57,14 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(uploadTool?.description).toContain("empty subdirectories")
   })
 
+  it("documents pinned version handling before version deletion", () => {
+    const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_file_version_delete")
+    expect(deleteTool?.description).toContain("Current versions cannot be deleted")
+    expect(deleteTool?.description).toContain("not pending cleanup")
+    expect(deleteTool?.description).toContain("not pinned")
+    expect(deleteTool?.description).toContain("drive_file_version_pin_update")
+  })
+
   it("requires an explicit parent id for item moves", () => {
     const moveTool = buildDriveTools().find((tool) => tool.name === "drive_item_move")
     expect(moveTool?.inputSchema.required).toContain("parentId")
