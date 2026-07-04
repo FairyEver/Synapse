@@ -1,6 +1,6 @@
 import { lstat, readFile } from "node:fs/promises"
 import path from "node:path"
-import type { DriveSyncBindingPreviewDto, DriveSyncInitialDirection } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { DriveSyncBindingPreviewDto, DriveSyncExcludeRulesDto, DriveSyncInitialDirection } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DriveSyncBindingEntryV1 } from "../runtime/data-repo"
 import { createDefaultDriveSyncExcludeRules, parseGitignoreForDriveSync } from "./drive-sync-excludes"
 import { formatDriveSyncSkippedLocalEntries, inspectDriveSyncLocalPath, scanDriveSyncLocalTreeDetailed } from "./drive-sync-local-snapshot"
@@ -73,7 +73,14 @@ export async function previewDriveSyncBinding(input: {
       }
       return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules)
     }
-    if (local.kind === "missing" || (local.kind === "folder" && local.empty === true)) {
+    const targetReady = local.kind === "missing"
+      || (local.kind === "folder" && await isRemoteDownloadTargetEffectivelyEmpty(
+        localPath,
+        local.empty,
+        input.excludeRules ?? [],
+        importedGitignoreRules,
+      ))
+    if (targetReady) {
       return ready(localPath, local.kind, local.empty, "remote_to_local", importedGitignoreRules)
     }
     const reason = local.kind === "file"
@@ -177,16 +184,38 @@ async function findSkippedLocalFolderReason(
   userRules: readonly string[],
   importedGitignoreRules: readonly string[],
 ): Promise<string | null> {
-  const defaults = createDefaultDriveSyncExcludeRules()
   const snapshot = await scanDriveSyncLocalTreeDetailed({
     rootPath: localPath,
-    rules: {
-      forced: defaults.forced,
-      defaults: defaults.defaults,
-      importedGitignore: importedGitignoreRules,
-      user: userRules,
-    },
+    rules: createPreviewExcludeRules(userRules, importedGitignoreRules),
     hashFiles: false,
   })
   return formatDriveSyncSkippedLocalEntries(snapshot.skipped)
+}
+
+async function isRemoteDownloadTargetEffectivelyEmpty(
+  localPath: string,
+  localEmpty: boolean | null,
+  userRules: readonly string[],
+  importedGitignoreRules: readonly string[],
+): Promise<boolean> {
+  if (localEmpty === true) return true
+  const snapshot = await scanDriveSyncLocalTreeDetailed({
+    rootPath: localPath,
+    rules: createPreviewExcludeRules(userRules, importedGitignoreRules),
+    hashFiles: false,
+  })
+  return snapshot.entries.length === 0 && snapshot.skipped.length === 0
+}
+
+function createPreviewExcludeRules(
+  userRules: readonly string[],
+  importedGitignoreRules: readonly string[],
+): DriveSyncExcludeRulesDto {
+  const defaults = createDefaultDriveSyncExcludeRules()
+  return {
+    forced: defaults.forced,
+    defaults: defaults.defaults,
+    importedGitignore: importedGitignoreRules,
+    user: userRules,
+  }
 }

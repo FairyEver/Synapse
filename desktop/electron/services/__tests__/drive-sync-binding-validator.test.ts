@@ -134,6 +134,27 @@ describe("drive sync binding validator", () => {
     })).resolves.toMatchObject({ status: "blocked", direction: null, localKind: "folder", localEmpty: false })
   })
 
+  it("allows remote folders to download into targets containing only excluded files", async () => {
+    const targetFolder = path.join(tempDir, "target")
+    await mkdir(targetFolder)
+    await writeFile(path.join(targetFolder, ".DS_Store"), "finder", "utf8")
+    await writeFile(path.join(targetFolder, "sync.log"), "log", "utf8")
+
+    await expect(previewDriveSyncBinding({
+      driveItemId: "folder-1",
+      driveItemName: "Docs",
+      kind: "folder",
+      localPath: targetFolder,
+      remoteExists: true,
+      activeBindings: [],
+    })).resolves.toMatchObject({
+      status: "ready",
+      direction: "remote_to_local",
+      localKind: "folder",
+      localEmpty: false,
+    })
+  })
+
   it("blocks type mismatch and duplicate bindings", async () => {
     const filePath = path.join(tempDir, "spec.md")
     await writeFile(filePath, "spec", "utf8")
