@@ -236,8 +236,8 @@ export class DriveSiteService {
   }
 
   async updateSiteAccess(userId: string, siteId: string, publicAppUrl: string, input: DriveSiteAccessUpdateInput): Promise<DriveSiteDto> {
-    await this.requireOwnedSite(userId, siteId)
-    const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn)
+    const site = await this.requireOwnedSite(userId, siteId)
+    const passwordMaterial = await this.resolvePasswordMaterial(input.accessMode, input.password ?? null, input.expiresIn, site)
     await this.prisma.driveSite.update({
       where: { siteId },
       data: {
@@ -565,6 +565,7 @@ export class DriveSiteService {
     accessMode: DriveSiteAccessMode,
     password: string | null,
     expiresIn: DriveAccessExpiresIn,
+    existing?: { readonly passwordHash: string | null; readonly passwordEncrypted: string | null },
   ): Promise<{ readonly password: string | null; readonly passwordHash: string | null; readonly passwordEncrypted: string | null }> {
     if (accessMode === DRIVE_SITE_ACCESS_MODE.public) {
       return { password: null, passwordHash: null, passwordEncrypted: null }
@@ -574,6 +575,14 @@ export class DriveSiteService {
         password,
         passwordHash: await bcrypt.hash(password, 12),
         passwordEncrypted: encryptDrivePassword(password, this.accessSecret),
+      }
+    }
+    const existingPassword = this.decryptStoredPassword(existing?.passwordEncrypted)
+    if (existing?.passwordHash && existing.passwordEncrypted && existingPassword) {
+      return {
+        password: existingPassword,
+        passwordHash: existing.passwordHash,
+        passwordEncrypted: existing.passwordEncrypted,
       }
     }
     const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn }, this.accessSecret)

@@ -343,6 +343,37 @@ describe("DriveSiteService", () => {
       .resolves.toMatchObject({ status: "disabled" })
   })
 
+  it("preserves an existing protected site password when access settings omit password", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+    const created = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "password",
+      password: "secret-123",
+      expiresIn: "30d",
+    })
+    const cookie = await service.createSiteAccessCookie(created.siteId, "secret-123")
+    expect(cookie).toEqual(expect.any(String))
+
+    const updated = await service.updateSiteAccess("user-1", created.siteId, "https://synapse.test", {
+      accessMode: "password",
+      expiresIn: "7d",
+    })
+
+    expect(updated.passwordEnabled).toBe(true)
+    expect(updated.password).toBe("secret-123")
+    expect(updated.urlWithPassword).toBe(`${updated.url}?password=secret-123`)
+    expect(updated.expiresIn).toBe("7d")
+    await expect(service.createSiteAccessCookie(created.siteId, "secret-123")).resolves.toEqual(expect.any(String))
+    await expect(service.resolvePublicSite(created.siteId, { cookie })).resolves.toMatchObject({
+      status: "ok",
+      asset: { relativePath: "index.html" },
+    })
+  })
+
   it("generates a readable password when legacy protected site access is saved without one", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
