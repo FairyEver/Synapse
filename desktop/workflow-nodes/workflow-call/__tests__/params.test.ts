@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+
 import {
   buildWorkflowCallParams,
   extractWorkflowCallTemplateVariables,
@@ -87,6 +90,32 @@ describe("workflow call params", () => {
 
     expect(result.params).toEqual({})
     expect(result.errors).toEqual(["子工作流参数「limit」缺少必填值"])
+  })
+
+  it("renders option params from templates as strings", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([
+        { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ]),
+      paramTemplates: { report_type: "{{kind}}" },
+      resolvedVariables: { kind: "周报" },
+    })
+
+    expect(result.params).toEqual({ report_type: "周报" })
+    expect(result.errors).toEqual([])
+  })
+
+  it("reports blank required option params as missing values", () => {
+    const result = buildWorkflowCallParams({
+      childDefinition: child([
+        { name: "report_type", type: "option", default: null, options: ["日报", "周报"], allowCustomOption: false },
+      ]),
+      paramTemplates: { report_type: "{{kind}}" },
+      resolvedVariables: { kind: "   " },
+    })
+
+    expect(result.params).toEqual({})
+    expect(result.errors).toEqual(["子工作流参数「report_type」缺少必填值"])
   })
 
   it("reports template interpolation errors", () => {

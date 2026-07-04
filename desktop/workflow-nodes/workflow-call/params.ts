@@ -91,7 +91,7 @@ function renderTemplateParam(
     return { error: `子工作流参数「${param.name}」模板变量解析失败：${message}` }
   }
 
-  if (param.type === "text" || param.type === "file" || param.type === "directory") {
+  if (param.type === "text" || param.type === "file" || param.type === "directory" || param.type === "option") {
     if (rendered.trim().length === 0 && !paramHasDefault(param)) {
       return { error: `子工作流参数「${param.name}」缺少必填值` }
     }
