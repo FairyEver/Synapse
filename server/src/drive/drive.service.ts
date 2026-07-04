@@ -1182,7 +1182,7 @@ export class DriveService implements OnApplicationBootstrap {
   async moveItem(userId: string, itemId: string, parentId: string | null, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     if (parentId === item.id) throw new BadRequestException("不能移动到自身。")
-    if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const targetParent = parentId ? await this.requireOwnedFolder(userId, parentId) : null
     if (item.type === DRIVE_ITEM_TYPE.folder) {
       await this.assertNoFolderCycle(item.id, parentId)
     }
@@ -1195,6 +1195,9 @@ export class DriveService implements OnApplicationBootstrap {
       userId,
     })
     const previousPathHint = `/${await this.resolveOwnedItemPath(userId, item)}`
+    const nextPathHint = targetParent
+      ? `/${await this.resolveOwnedItemPath(userId, targetParent)}/${item.name}`
+      : `/${item.name}`
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.driveItem.update({
         where: { id: item.id },
@@ -1208,6 +1211,7 @@ export class DriveService implements OnApplicationBootstrap {
         type: "moved",
         name: next.name,
         pathHint: previousPathHint,
+        currentPathHint: nextPathHint,
         actor: userId,
       }, tx)
       return next

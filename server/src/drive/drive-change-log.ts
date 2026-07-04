@@ -8,6 +8,7 @@ import type {
   DriveItemType,
 } from "@synapse/shared"
 import { PrismaService } from "../prisma/prisma.service"
+import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_ITEM_TYPE } from "./drive.constants"
 
 type DriveChangePrisma = PrismaService | Prisma.TransactionClient
 
@@ -20,6 +21,7 @@ export type DriveChangeAppendInput = {
   readonly etag?: string | null
   readonly name?: string | null
   readonly pathHint?: string | null
+  readonly currentPathHint?: string | null
   readonly itemKind?: DriveItemType | null
   readonly actor?: string | null
 }
@@ -46,7 +48,7 @@ export class DriveChangeLogService {
     })
     return toDriveChangeDto(change, {
       itemKind: input.itemKind ?? itemMetadata?.itemKind ?? null,
-      pathHint: change.pathHint ?? itemMetadata?.pathHint ?? null,
+      pathHint: input.currentPathHint ?? itemMetadata?.pathHint ?? null,
     })
   }
 
@@ -54,7 +56,7 @@ export class DriveChangeLogService {
     if (input.cursor === "latest") return this.currentCursor(userId)
     const limit = Math.max(1, Math.min(Math.floor(input.limit ?? 100), 500))
     const cursor = parseCursor(input.cursor)
-    const scopeWhere = driveChangeScopeWhere(input)
+    const scopeWhere = await driveChangeScopeWhere(this.prisma, userId, input)
     const rows = await this.prisma.driveChange.findMany({
       where: { userId, sequence: { gt: cursor }, ...scopeWhere },
       orderBy: { sequence: "asc" },
@@ -95,12 +97,18 @@ function parseCursor(cursor: string | null | undefined): bigint {
   return BigInt(cursor)
 }
 
-function driveChangeScopeWhere(input: DriveChangeListInput): Prisma.DriveChangeWhereInput {
+async function driveChangeScopeWhere(
+  client: DriveChangePrisma,
+  userId: string,
+  input: DriveChangeListInput,
+): Promise<Prisma.DriveChangeWhereInput> {
   const rootItemId = normalizeScopeValue(input.rootItemId)
   const rootPathHint = normalizeRootPathHint(input.rootPathHint)
   const conditions: Prisma.DriveChangeWhereInput[] = []
   if (rootItemId) {
     conditions.push({ itemId: rootItemId }, { parentId: rootItemId })
+    const scopedFolderIds = await resolveScopedFolderIds(client, userId, rootItemId)
+    if (scopedFolderIds.length > 0) conditions.push({ parentId: { in: scopedFolderIds } })
   }
   if (rootPathHint) {
     conditions.push(
@@ -109,6 +117,34 @@ function driveChangeScopeWhere(input: DriveChangeListInput): Prisma.DriveChangeW
     )
   }
   return conditions.length > 0 ? { OR: conditions } : {}
+}
+
+async function resolveScopedFolderIds(
+  client: DriveChangePrisma,
+  userId: string,
+  rootItemId: string,
+): Promise<string[]> {
+  const scoped = new Set<string>([rootItemId])
+  let pending = [rootItemId]
+  while (pending.length > 0) {
+    const rows = await client.driveItem.findMany({
+      where: {
+        userId,
+        parentId: { in: pending },
+        type: DRIVE_ITEM_TYPE.folder,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      },
+      select: { id: true },
+    })
+    pending = []
+    for (const row of rows) {
+      if (scoped.has(row.id)) continue
+      scoped.add(row.id)
+      pending.push(row.id)
+    }
+  }
+  return [...scoped]
 }
 
 function normalizeScopeValue(value: string | null | undefined): string | null {
@@ -204,6 +240,7 @@ function toDriveChangeDto(change: {
     etag: change.etag,
     name: change.name,
     pathHint: change.pathHint ?? metadata?.pathHint ?? null,
+    currentPathHint: metadata?.pathHint ?? change.pathHint ?? null,
     itemKind: metadata?.itemKind ?? null,
     actor: change.actor,
     occurredAt: change.occurredAt.toISOString(),

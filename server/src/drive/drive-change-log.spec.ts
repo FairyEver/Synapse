@@ -101,6 +101,7 @@ describe("DriveChangeLogService", () => {
         etag: null,
         name: "next.md",
         pathHint: "/Docs/next.md",
+        currentPathHint: "/Docs/next.md",
         itemKind: "file",
         actor: "user-1",
         occurredAt: "2026-06-28T08:01:00.000Z",
@@ -168,6 +169,69 @@ describe("DriveChangeLogService", () => {
           { parentId: "drive-root" },
           { pathHint: "/Docs" },
           { pathHint: { startsWith: "/Docs/" } },
+        ]),
+      }),
+    }))
+  })
+
+  it("includes changes moved into nested folders under a scoped root", async () => {
+    const items = [
+      { id: "drive-root", parentId: null, type: "folder", name: "Docs" },
+      { id: "nested", parentId: "drive-root", type: "folder", name: "Nested" },
+      { id: "remote-report", parentId: "nested", type: "file", name: "report.md" },
+    ]
+    const prisma = {
+      driveItem: {
+        findMany: vi.fn(async ({ where }) => {
+          if (where.parentId?.in) {
+            const parentIds = new Set(where.parentId.in)
+            return items
+              .filter((item) => item.type === "folder" && parentIds.has(item.parentId ?? ""))
+              .map((item) => ({ id: item.id }))
+          }
+          const ids = new Set(where.id.in)
+          return items.filter((item) => ids.has(item.id))
+        }),
+      },
+      driveChange: {
+        findMany: vi.fn(async () => [
+          {
+            id: "chg_2",
+            sequence: 2n,
+            userId: "user-1",
+            itemId: "remote-report",
+            parentId: "nested",
+            type: "moved",
+            versionId: null,
+            etag: null,
+            name: "report.md",
+            pathHint: "/Archive/report.md",
+            actor: "user-1",
+            occurredAt: new Date("2026-06-28T08:02:00.000Z"),
+          },
+        ]),
+      },
+    }
+    const service = new DriveChangeLogService(prisma as never)
+
+    await expect(service.list("user-1", {
+      cursor: "1",
+      limit: 50,
+      rootItemId: "drive-root",
+      rootPathHint: "/Docs",
+    })).resolves.toMatchObject({
+      items: [{
+        id: "chg_2",
+        pathHint: "/Archive/report.md",
+        currentPathHint: "/Docs/Nested/report.md",
+      }],
+      nextCursor: "2",
+      hasMore: false,
+    })
+    expect(prisma.driveChange.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { parentId: { in: ["drive-root", "nested"] } },
         ]),
       }),
     }))

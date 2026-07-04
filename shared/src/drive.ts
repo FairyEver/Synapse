@@ -176,6 +176,7 @@ export interface DriveChangeDto {
   readonly etag?: string | null
   readonly name?: string | null
   readonly pathHint?: string | null
+  readonly currentPathHint?: string | null
   readonly itemKind?: DriveItemType | null
   readonly actor?: string | null
   readonly occurredAt: string

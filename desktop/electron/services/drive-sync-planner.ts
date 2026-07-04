@@ -282,9 +282,14 @@ export function planDriveSyncRemoteChanges(input: {
   for (const change of input.changes) {
     const baseline = baselineByRemoteId.get(change.itemId)
     if (input.binding.kind === "file" && !baseline && change.itemId !== input.binding.driveItemId) continue
+    const hasCurrentPathHint = change.currentPathHint !== undefined && change.currentPathHint !== null
+    const currentChange = currentPathChange(change)
+    const currentRelativePath = remoteRelativePath(input.binding, currentChange)
+    const previousRelativePath = remoteRelativePath(input.binding, change)
+    const isRemoteMoveOutsideRoot = change.type === "moved" && baseline && hasCurrentPathHint && currentRelativePath === null
     const relativePath = change.type === "renamed" || change.type === "moved"
-      ? remoteRelativePath(input.binding, change)
-      : baseline?.relativePath ?? remoteRelativePath(input.binding, change)
+      ? (hasCurrentPathHint ? currentRelativePath : previousRelativePath) ?? (isRemoteMoveOutsideRoot ? baseline.relativePath : null)
+      : baseline?.relativePath ?? currentRelativePath
     if (relativePath === null) continue
     if (isDriveSyncExcluded(relativePath, input.binding.excludeRules)) continue
     if (input.shouldIgnoreChange?.(change, relativePath, baseline)) continue
@@ -320,6 +325,18 @@ export function planDriveSyncRemoteChanges(input: {
       }))
       continue
     }
+    if (isRemoteMoveOutsideRoot) {
+      operations.push(plannedOperation({
+        binding: input.binding,
+        kind: "delete_local",
+        relativePath,
+        localPath,
+        driveItemId: change.itemId,
+        remotePathHint: change.pathHint ?? null,
+        remoteItemKind: change.itemKind ?? null,
+      }))
+      continue
+    }
     if (change.type === "renamed" || change.type === "moved") {
       operations.push(plannedOperation({
         binding: input.binding,
@@ -327,7 +344,7 @@ export function planDriveSyncRemoteChanges(input: {
         relativePath,
         localPath,
         driveItemId: change.itemId,
-        remotePathHint: change.pathHint ?? null,
+        remotePathHint: currentChange.pathHint ?? null,
         remoteItemKind: change.itemKind ?? null,
       }))
       if (baseline) baselineByRemoteId.set(change.itemId, { ...baseline, relativePath })
@@ -346,6 +363,11 @@ export function planDriveSyncRemoteChanges(input: {
   }
 
   return sortPlan({ operations, conflicts })
+}
+
+function currentPathChange(change: DriveChangeDto): DriveChangeDto {
+  if (!change.currentPathHint || change.currentPathHint === change.pathHint) return change
+  return { ...change, pathHint: change.currentPathHint }
 }
 
 function activeBaselineByPath(entries: readonly DriveSyncBaselineEntryV1[]): Map<string, DriveSyncBaselineEntryV1> {

@@ -41,6 +41,7 @@ function createDriveChangeLogMock(): Pick<DriveChangeLogService, "append"> & {
     etag: input.etag ?? null,
     name: input.name ?? null,
     pathHint: input.pathHint ?? null,
+    currentPathHint: input.currentPathHint ?? input.pathHint ?? null,
     actor: input.actor ?? null,
     occurredAt: "2026-06-28T00:00:00.000Z",
   }))
@@ -1847,6 +1848,7 @@ describe("DriveService", () => {
       parentId: target.id,
       type: "moved",
       pathHint: "/来源/report.txt",
+      currentPathHint: "/目标/report.txt",
     }), expect.anything())
   })
 

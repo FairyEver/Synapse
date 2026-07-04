@@ -247,6 +247,57 @@ describe("drive sync planner", () => {
     ])
   })
 
+  it("uses current moved-in paths when the change keeps the previous path hint", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [],
+      changes: [
+        remoteChange({
+          itemId: "remote-report",
+          type: "moved",
+          pathHint: "/Archive/report.md",
+          currentPathHint: "/Docs/Nested/report.md",
+        }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "move_local",
+        relativePath: "Nested/report.md",
+        localPath: "/Users/me/Docs/Nested/report.md",
+        driveItemId: "remote-report",
+        remotePathHint: "/Docs/Nested/report.md",
+      }),
+    ])
+  })
+
+  it("deletes local copies when remote items move outside the synced root", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "/Docs" }),
+      baseline: [baseline({ relativePath: "report.md", remoteItemId: "remote-report" })],
+      changes: [
+        remoteChange({
+          itemId: "remote-report",
+          type: "moved",
+          pathHint: "/Docs/report.md",
+          currentPathHint: "/Archive/report.md",
+        }),
+      ],
+    })
+
+    expect(result.conflicts).toEqual([])
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        kind: "delete_local",
+        relativePath: "report.md",
+        localPath: "/Users/me/Docs/report.md",
+        driveItemId: "remote-report",
+      }),
+    ])
+  })
+
   it("uses the new remote path for later updates in the same change page", () => {
     const result = planDriveSyncRemoteChanges({
       binding: binding({ drivePathHint: "/Docs" }),
@@ -473,6 +524,7 @@ function localChange(input: Partial<DriveSyncLocalChange> & {
 
 function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
   readonly pathHint: string | null
+  readonly currentPathHint?: string | null
   readonly name?: string | null
   readonly itemKind?: DriveChangeDto["itemKind"]
 }): DriveChangeDto {
@@ -486,6 +538,7 @@ function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
     etag: null,
     name: input.name ?? input.pathHint?.split("/").at(-1) ?? null,
     pathHint: input.pathHint,
+    currentPathHint: input.currentPathHint,
     itemKind: input.itemKind ?? null,
     actor: "user",
     occurredAt: "2026-06-28T00:00:00.000Z",
