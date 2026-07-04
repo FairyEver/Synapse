@@ -177,6 +177,9 @@ describe("drive sync watcher", () => {
     })])
 
     await vi.advanceTimersByTimeAsync(1)
+    expect(changes).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(1)
 
     expect(changes).toHaveLength(2)
     expect(changes[1]).toEqual([

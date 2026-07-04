@@ -413,6 +413,61 @@ describe("DriveSyncService", () => {
     })
   })
 
+  it("reuses retry-wait operations for the same local path", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({
+      driveItemId: "drive-item-1",
+      driveItemName: "产品文档",
+      kind: "folder",
+      drivePathHint: "/产品文档",
+      localPath: "/Users/me/docs",
+      deferWatcher: true,
+    })
+
+    const first = await service.recordOperation({
+      bindingId: binding.id,
+      kind: "upload",
+      status: "retry_wait",
+      driveItemId: null,
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: null,
+      message: "稍后重试",
+    })
+    const second = await service.recordOperation({
+      bindingId: binding.id,
+      kind: "upload",
+      status: "retry_wait",
+      driveItemId: null,
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: null,
+      message: "再次重试",
+    })
+    const running = await service.recordOperation({
+      bindingId: binding.id,
+      kind: "upload",
+      status: "running",
+      driveItemId: null,
+      relativePath: "spec.md",
+      localPath: "/Users/me/docs/spec.md",
+      remotePathHint: null,
+      message: null,
+    })
+
+    expect(second.id).toBe(first.id)
+    expect(running.id).toBe(first.id)
+    await expect(harness.operations.list({ bindingId: binding.id })).resolves.toMatchObject([
+      {
+        id: first.id,
+        status: "running",
+        relativePath: "spec.md",
+        startedAt: "2026-06-28T00:00:00.000Z",
+      },
+    ])
+  })
+
   it("updates binding last synced time after a successful operation", async () => {
     const harness = createHarness()
     const service = createDriveSyncService(harness.deps)

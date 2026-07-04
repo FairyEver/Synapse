@@ -36,6 +36,7 @@ export interface DriveSyncWatcherDeps {
     readonly error: unknown
   }) => void | Promise<void>
   readonly debounceMs?: number
+  readonly maxRetryDelayMs?: number
   readonly watch?: DriveSyncWatchFactory
 }
 
@@ -54,9 +55,11 @@ interface WatchEntry {
 export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
   const watch = deps.watch ?? defaultWatch
   const debounceMs = deps.debounceMs ?? 500
+  const maxRetryDelayMs = Math.max(debounceMs, deps.maxRetryDelayMs ?? 30_000)
   const entries = new Map<string, WatchEntry>()
   const pending = new Map<string, Map<string, DriveSyncLocalChange>>()
   const timers = new Map<string, NodeJS.Timeout>()
+  const flushRetryAttempts = new Map<string, number>()
   const selfWrites = new Map<string, number>()
 
   function reconcile(bindings: readonly DriveSyncBindingEntryV1[]): void {
@@ -81,6 +84,7 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     for (const timer of timers.values()) clearTimeout(timer)
     timers.clear()
     pending.clear()
+    flushRetryAttempts.clear()
     selfWrites.clear()
   }
 
@@ -155,6 +159,7 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     if (!entry) return
     entry.watcher.close()
     entries.delete(bindingId)
+    flushRetryAttempts.delete(bindingId)
   }
 
   function handleRawEvent(
@@ -190,16 +195,16 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const byPath = pending.get(binding.id) ?? new Map<string, DriveSyncLocalChange>()
     byPath.set(relativePath, localChange(binding.id, relativePath, kind, localPath, localKind))
     pending.set(binding.id, byPath)
-    scheduleFlush(binding.id)
+    scheduleFlush(binding.id, currentFlushDelay(binding.id))
   }
 
-  function scheduleFlush(bindingId: string): void {
+  function scheduleFlush(bindingId: string, delayMs = debounceMs): void {
     const existingTimer = timers.get(bindingId)
     if (existingTimer) clearTimeout(existingTimer)
     timers.set(bindingId, setTimeout(() => {
       timers.delete(bindingId)
       void flush(bindingId)
-    }, debounceMs))
+    }, delayMs))
   }
 
   async function flush(bindingId: string): Promise<void> {
@@ -209,11 +214,23 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     const changes = [...byPath.values()].sort(compareChanges)
     try {
       await deps.onChanges(changes)
+      flushRetryAttempts.delete(bindingId)
     } catch (error) {
       requeueChanges(bindingId, changes)
-      reportFlushError(bindingId, changes, error)
-      scheduleFlush(bindingId)
+      await reportFlushError(bindingId, changes, error)
+      const attempt = (flushRetryAttempts.get(bindingId) ?? 0) + 1
+      flushRetryAttempts.set(bindingId, attempt)
+      scheduleFlush(bindingId, retryDelay(attempt))
     }
+  }
+
+  function currentFlushDelay(bindingId: string): number {
+    const attempt = flushRetryAttempts.get(bindingId) ?? 0
+    return attempt === 0 ? debounceMs : retryDelay(attempt)
+  }
+
+  function retryDelay(attempt: number): number {
+    return Math.min(maxRetryDelayMs, debounceMs * (2 ** Math.min(attempt, 10)))
   }
 
   function requeueChanges(bindingId: string, changes: readonly DriveSyncLocalChange[]): void {
@@ -222,8 +239,8 @@ export function createDriveSyncWatcher(deps: DriveSyncWatcherDeps) {
     pending.set(bindingId, byPath)
   }
 
-  function reportFlushError(bindingId: string, changes: readonly DriveSyncLocalChange[], error: unknown): void {
-    void Promise.resolve(deps.onFlushError?.({
+  async function reportFlushError(bindingId: string, changes: readonly DriveSyncLocalChange[], error: unknown): Promise<void> {
+    await Promise.resolve(deps.onFlushError?.({
       bindingId,
       changes,
       error,

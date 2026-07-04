@@ -1810,7 +1810,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function recordOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationDto> {
     const binding = await requireBinding(input.bindingId)
     const now = timestamp()
-    const existing = input.id ? await deps.operations.get(input.id) : null
+    const existing = input.id
+      ? await deps.operations.get(input.id)
+      : await findReusableRetryOperation(input)
     const entry: DriveSyncOperationEntryV1 = {
       id: existing?.id ?? input.id ?? createId("drive-sync-operation"),
       schemaVersion: 1,
@@ -1838,6 +1840,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
     await emitChanged()
     return toOperationDto(entry)
+  }
+
+  async function findReusableRetryOperation(input: DriveSyncRecordOperationInput): Promise<DriveSyncOperationEntryV1 | null> {
+    if (input.status !== "retry_wait" && input.status !== "running") return null
+    const retryOperations = (await deps.operations.list({ bindingId: input.bindingId }))
+      .filter((operation) => operation.status === "retry_wait" && operation.relativePath === input.relativePath)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    return retryOperations[0] ?? null
   }
 
   async function pruneOperationsForBinding(bindingId: string): Promise<void> {
