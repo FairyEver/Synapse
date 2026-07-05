@@ -72,6 +72,7 @@ vi.mock("../../../services/account-service", () => ({
       skipped: [],
       warnings: [],
     })),
+    downloadDriveLinkFile: vi.fn(async () => ({ localPath: "/tmp/intake/content/download", mimeType: "text/markdown", size: "12" })),
     listDriveShares: async () => [],
     listDrivePublicAssets: async () => ({ items: [], page: { offset: 0, limit: 20, hasMore: false, nextOffset: null }, total: 0 }),
     getDrivePublicAsset: async () => ({}),
@@ -1063,6 +1064,73 @@ describe("accountIpcModule", () => {
       }),
     }))
     expect(accountService.materializeDriveLink).not.toHaveBeenCalled()
+  })
+
+  it("guards default drive link downloads with cache write permission and audit", async () => {
+    const { auditSink, ctx, permissionGuard } = createAccountSecurityContext()
+    vi.mocked(accountService.downloadDriveLinkFile).mockClear()
+    vi.mocked(accountService.downloadDriveLinkFile).mockResolvedValueOnce({
+      localPath: "/tmp/intake/content/download",
+      mimeType: "text/markdown",
+      size: "12",
+    })
+
+    await accountIpcModule.methods.downloadDriveLinkFile.handler(ctx, {
+      url: "https://synapse.test/share/shr_123?password=secret-token",
+      password: "secret-password",
+      path: "docs/report.md",
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "synapse-drive:link-intake-cache",
+      context: {
+        source: "account.driveLinkDownload.write",
+        url: "https://synapse.test/share/shr_123?password=%5Bredacted%5D",
+        path: "docs/report.md",
+        itemId: null,
+      },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/intake/content/download",
+      metadata: expect.objectContaining({
+        source: "account.driveLinkDownload.write",
+        localPath: "/tmp/intake/content/download",
+        size: "12",
+      }),
+    }))
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(permissionGuard.check.mock.calls)).not.toContain("secret-password")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-password")
+  })
+
+  it("stops default drive link downloads when cache write permission is denied", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+    vi.mocked(accountService.downloadDriveLinkFile).mockClear()
+
+    await expect(accountIpcModule.methods.downloadDriveLinkFile.handler(ctx, {
+      url: "https://synapse.test/share/shr_123",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "synapse-drive:link-intake-cache",
+      metadata: expect.objectContaining({
+        source: "account.driveLinkDownload.write",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(accountService.downloadDriveLinkFile).not.toHaveBeenCalled()
   })
 
   it("validates drive share bridge schemas", () => {

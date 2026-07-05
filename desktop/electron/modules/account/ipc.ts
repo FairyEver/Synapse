@@ -627,6 +627,8 @@ type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUplo
 type DriveFileVersionDownloadRequestForIpc = z.infer<typeof driveFileVersionDownloadSchema>
 type DriveLinkMaterializeRequestForIpc = z.infer<typeof driveLinkMaterializeSchema>
 type DriveLinkMaterializeResponseForIpc = z.infer<typeof driveLinkMaterializeResponseSchema>
+type DriveLinkDownloadFileRequestForIpc = z.infer<typeof driveLinkDownloadFileSchema>
+type DriveLinkDownloadFileResponseForIpc = z.infer<typeof driveLinkDownloadFileResponseSchema>
 type DrivePublicAssetUploadRequestForIpc = z.infer<typeof drivePublicAssetUploadSchema>
 type DrivePublicAssetReplaceRequestForIpc = z.infer<typeof drivePublicAssetReplaceSchema>
 
@@ -899,6 +901,61 @@ async function runGuardedDriveLinkMaterialize(options: {
   }
 }
 
+async function runGuardedDriveLinkDownloadCacheWrite(options: {
+  ctx: IpcHandlerContext
+  request: DriveLinkDownloadFileRequestForIpc
+  run(): Promise<DriveLinkDownloadFileResponseForIpc>
+}): Promise<DriveLinkDownloadFileResponseForIpc> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  const resource = "synapse-drive:link-intake-cache"
+  const metadata = {
+    url: sanitizeUrl(options.request.url),
+    path: options.request.path ?? null,
+    itemId: options.request.itemId ?? null,
+  }
+  await checkAccountPermission({
+    ctx: options.ctx,
+    action: "fs.write",
+    resource,
+    source: "account.driveLinkDownload.write",
+    context: metadata,
+  })
+  try {
+    const result = await options.run()
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: result.localPath,
+      outcome: "allowed",
+      metadata: {
+        source: "account.driveLinkDownload.write",
+        ...metadata,
+        localPath: result.localPath,
+        mimeType: result.mimeType,
+        size: result.size,
+      },
+    })
+    return result
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource,
+      outcome: "failed",
+      metadata: {
+        source: "account.driveLinkDownload.write",
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        error: sanitizeError(message),
+        errorLength: message.length,
+      },
+    })
+    throw error
+  }
+}
+
 export const accountIpcModule: IpcModule = {
   id: "account",
   methods: {
@@ -1150,6 +1207,13 @@ export const accountIpcModule: IpcModule = {
             resource: parsed.outputPath,
             source: "account.driveLinkDownload.write",
             context: { url: sanitizeUrl(parsed.url) },
+          })
+        }
+        if (!parsed.outputPath) {
+          return runGuardedDriveLinkDownloadCacheWrite({
+            ctx,
+            request: parsed,
+            run: async () => driveLinkDownloadFileResponseSchema.parse(await accountService.downloadDriveLinkFile(parsed)),
           })
         }
         return accountService.downloadDriveLinkFile(parsed)

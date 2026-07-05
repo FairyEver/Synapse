@@ -203,7 +203,7 @@ Input:
 - `itemId` optional.
 - `outputPath` optional: absolute local output path.
 
-Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache.
+Downloads one linked file or public asset. When `outputPath` is omitted, Synapse writes to the Drive link intake cache; that cache write requires local write permission and is audited with the final local path.
 
 For `/share` children, prefer `itemId` from `app_drive_link_list`; for `/sites`, pass the site-relative `path`.
 Protected `/share` and `/sites` links require `password`; without it, this tool reports that the link needs a password rather than treating the link as missing.

@@ -370,6 +370,24 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkDownloadFileInput(params)
             if (input.outputPath) await authorizeFileWrite(deps, action, maskDriveBrowserUrl(input.url), input.outputPath, context)
+            if (!input.outputPath) {
+              const cacheAudit = await authorizeDriveLinkDownloadCacheWrite(deps, action, input, context)
+              try {
+                const data = await deps.accountService.downloadDriveLinkFile(input)
+                recordDriveLinkDownloadCacheWrite(deps, cacheAudit, "allowed", {
+                  localPath: data.localPath,
+                  mimeType: data.mimeType,
+                  size: data.size,
+                })
+                return { ok: true, data }
+              } catch (error) {
+                recordDriveLinkDownloadCacheWrite(deps, cacheAudit, "failed", {
+                  errorName: error instanceof Error ? error.name : typeof error,
+                  errorLength: String(error).length,
+                })
+                throw error
+              }
+            }
             return {
               ok: true,
               data: await deps.accountService.downloadDriveLinkFile(input),
@@ -1200,6 +1218,57 @@ function recordDriveLinkMaterializeCacheWrite(
     action: "fs.write",
     actor: audit.actor,
     resource: typeof metadata.localRootPath === "string" ? metadata.localRootPath : audit.resource,
+    outcome,
+    metadata: { ...audit.metadata, ...metadata },
+  })
+}
+
+async function authorizeDriveLinkDownloadCacheWrite(
+  deps: DriveCapabilityDispatcherDeps,
+  action: string,
+  input: DriveLinkDownloadFileInput,
+  context: DispatchContext,
+): Promise<DriveLinkMaterializeCacheAudit> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const resource = "synapse-drive:link-intake-cache"
+  const metadata = {
+    source: context.source ?? "api",
+    driveAction: action,
+    url: maskDriveBrowserUrl(input.url),
+    path: input.path ?? null,
+    itemId: input.itemId ?? null,
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "fs.write",
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "fs.write",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: { ...metadata, reason: permission.reason, policyId: permission.policyId },
+    })
+    throw new Error(permission.reason)
+  }
+  return { actor, resource, metadata }
+}
+
+function recordDriveLinkDownloadCacheWrite(
+  deps: DriveCapabilityDispatcherDeps,
+  audit: DriveLinkMaterializeCacheAudit,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps.auditSink?.record({
+    action: "fs.write",
+    actor: audit.actor,
+    resource: typeof metadata.localPath === "string" ? metadata.localPath : audit.resource,
     outcome,
     metadata: { ...audit.metadata, ...metadata },
   })

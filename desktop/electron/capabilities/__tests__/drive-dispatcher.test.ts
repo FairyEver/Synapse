@@ -320,6 +320,85 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-password")
   })
 
+  it("authorizes default Drive link downloads as local cache writes", async () => {
+    const downloaded = { localPath: "/tmp/intake/content/download", mimeType: "text/markdown", size: "12" }
+    const accountService = createAccountService({
+      downloadDriveLinkFile: vi.fn(async () => downloaded),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+    const url = "https://synapse.test/share/shr_123?password=secret-token"
+
+    await expect(dispatcher.dispatch("drive.link.download_file", {
+      url,
+      password: "secret-password",
+      path: "docs/report.md",
+    }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: downloaded })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "synapse-drive:link-intake-cache",
+      context: expect.objectContaining({
+        driveAction: "drive.link.download_file",
+        path: "docs/report.md",
+      }),
+    }))
+    expect(accountService.downloadDriveLinkFile).toHaveBeenCalledWith({
+      url,
+      password: "secret-password",
+      path: "docs/report.md",
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/intake/content/download",
+      metadata: expect.objectContaining({
+        driveAction: "drive.link.download_file",
+        localPath: "/tmp/intake/content/download",
+        size: "12",
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-password")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-password")
+  })
+
+  it("stops default Drive link downloads when cache write permission is denied", async () => {
+    const accountService = createAccountService()
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async (request: { readonly action: string }) =>
+        request.action === "fs.write"
+          ? { allowed: false as const, reason: "denied by policy", policyId: "policy-1" }
+          : { allowed: true as const },
+      ),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.link.download_file", {
+      url: "https://synapse.test/share/shr_123",
+    }, { source: "mcp-stdio" })).rejects.toThrow("denied by policy")
+
+    expect(accountService.downloadDriveLinkFile).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "synapse-drive:link-intake-cache",
+      metadata: expect.objectContaining({
+        driveAction: "drive.link.download_file",
+        reason: "denied by policy",
+        policyId: "policy-1",
+      }),
+    }))
+  })
+
   it("authorizes and audits Drive item reads", async () => {
     const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
     const accountService = createAccountService({
