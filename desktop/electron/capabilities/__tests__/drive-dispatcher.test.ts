@@ -1279,13 +1279,13 @@ describe("createDriveCapabilityDispatcher", () => {
       action: "fs.read.outside-userdata",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: filePath,
-      context: { source: "mcp-stdio", driveAction: "drive.upload" },
+      context: { source: "mcp-stdio", driveAction: "drive.file.upload" },
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "allowed",
       resource: filePath,
-      metadata: expect.objectContaining({ driveAction: "drive.upload" }),
+      metadata: expect.objectContaining({ driveAction: "drive.file.upload" }),
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
@@ -1408,7 +1408,7 @@ describe("createDriveCapabilityDispatcher", () => {
       outcome: "failed",
       resource: "/tmp/report.md",
       metadata: expect.objectContaining({
-        driveAction: "drive.upload",
+        driveAction: "drive.file.upload",
         reason: "permission-check-error",
         errorName: "Error",
       }),
@@ -1532,6 +1532,12 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.completeDriveUpload).toHaveBeenCalledWith("session-a")
     expect(accountService.completeDriveUpload).not.toHaveBeenCalledWith("session-b")
     expect(accountService.cancelDriveUpload).toHaveBeenCalledWith("session-b")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/tmp/project",
+      metadata: expect.objectContaining({ driveAction: "drive.folder.upload" }),
+    }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       outcome: "failed",

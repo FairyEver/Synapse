@@ -558,7 +558,7 @@ async function uploadFile(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const filePath = requireLocalPath(params, "filePath")
-  await authorizeFileRead(deps, filePath, context)
+  await authorizeFileRead(deps, filePath, context, "drive.file.upload")
   const fileStat = await requireLocalUploadFile(fileSystem, filePath)
 
   const prepared = await deps.accountService.prepareDriveUpload({
@@ -586,7 +586,7 @@ async function uploadFolder(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const folderPath = requireLocalPath(params, "folderPath")
-  await authorizeFileRead(deps, folderPath, context)
+  await authorizeFileRead(deps, folderPath, context, "drive.folder.upload")
   const folderStat = await fileSystem.lstat(folderPath)
   if (folderStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
   if (!folderStat.isDirectory()) throw new Error("folderPath must point to a directory.")
