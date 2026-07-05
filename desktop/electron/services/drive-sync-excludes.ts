@@ -115,7 +115,9 @@ function parseDriveSyncExcludeRule(rawRule: string): ParsedDriveSyncExcludeRule 
   if (negated) raw = raw.slice(1)
   if (!raw) return null
   const rootAnchored = raw.startsWith("/")
-  const pattern = normalizeRelativePath(raw)
+  if (/^\/+$/u.test(raw)) return null
+  const normalizedRaw = raw.endsWith("/") ? `${raw.replace(/\/+$/u, "")}/**` : raw
+  const pattern = normalizeRelativePath(normalizedRaw)
   if (!pattern) return null
   return { pattern, negated, rootAnchored }
 }

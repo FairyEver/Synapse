@@ -44,7 +44,7 @@ describe("drive sync exclude utilities", () => {
     const rules = {
       ...createDefaultDriveSyncExcludeRules(),
       importedGitignore: ["secrets/**", "**/*.pem", "docs/**/index.md"],
-      user: ["private/**", "foo/*/bar.md"],
+      user: ["private/**", "foo/*/bar.md", ".tmp/", "cache/", "/root-only/"],
     }
 
     expect(isDriveSyncExcluded("secrets/token.txt", rules)).toBe(true)
@@ -57,7 +57,25 @@ describe("drive sync exclude utilities", () => {
     expect(isDriveSyncExcluded("packages/app/private/note.md", rules)).toBe(true)
     expect(isDriveSyncExcluded("foo/a/bar.md", rules)).toBe(true)
     expect(isDriveSyncExcluded("foo/a/b/bar.md", rules)).toBe(false)
+    expect(isDriveSyncExcluded(".tmp", rules)).toBe(true)
+    expect(isDriveSyncExcluded(".tmp/cache.db", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/.tmp/cache.db", rules)).toBe(true)
+    expect(isDriveSyncExcluded("cache", rules)).toBe(true)
+    expect(isDriveSyncExcluded("cache/data.bin", rules)).toBe(true)
+    expect(isDriveSyncExcluded("root-only/secret.txt", rules)).toBe(true)
+    expect(isDriveSyncExcluded("packages/app/root-only/secret.txt", rules)).toBe(false)
     expect(isDriveSyncExcluded(".gitignore", rules)).toBe(false)
+  })
+
+  it("applies user directory trailing slash negation rules in order", () => {
+    const rules = {
+      ...createDefaultDriveSyncExcludeRules(),
+      user: ["cache/", "!cache/keep/"],
+    }
+
+    expect(isDriveSyncExcluded("cache/tmp.bin", rules)).toBe(true)
+    expect(isDriveSyncExcluded("cache/keep", rules)).toBe(false)
+    expect(isDriveSyncExcluded("cache/keep/file.txt", rules)).toBe(false)
   })
 
   it("keeps gitignore root-anchored rules scoped to the sync root", () => {
