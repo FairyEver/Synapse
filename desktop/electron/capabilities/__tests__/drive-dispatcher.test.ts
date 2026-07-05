@@ -5,6 +5,7 @@ import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
 import {
+  DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES,
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
 } from "../../../src/lib/drive-local-upload-limits"
@@ -1739,6 +1740,44 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("drive.folder.upload", {
       folderPath: "/tmp/large-folder",
     }, { source: "mcp-stdio" })).rejects.toThrow(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件`)
+
+    expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
+  })
+
+  it("rejects MCP folder uploads that exceed the local upload directory limit before preparing sessions", async () => {
+    const accountService = createAccountService()
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem: {
+        lstat: vi.fn(async (target: string) => statLikeForTest({
+          isFile: false,
+          isDirectory: target === "/tmp/many-directories" || target.startsWith("/tmp/many-directories/dir-"),
+          size: 1,
+        })),
+        stat: vi.fn(async () => ({
+          isFile: () => true,
+          isDirectory: () => true,
+          size: 1,
+        })),
+        createReadStream: vi.fn(),
+        readdir: vi.fn(async (directoryPath: string) => {
+          if (directoryPath !== "/tmp/many-directories") return []
+          return Array.from(
+            { length: DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES + 1 },
+            (_, index) => ({
+              name: `dir-${index}`,
+              isDirectory: () => true,
+              isFile: () => false,
+            }),
+          )
+        }),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/many-directories",
+    }, { source: "mcp-stdio" })).rejects.toThrow(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES} 个文件夹`)
 
     expect(accountService.prepareDriveFolderUpload).not.toHaveBeenCalled()
   })

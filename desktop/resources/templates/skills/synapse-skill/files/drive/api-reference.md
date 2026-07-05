@@ -49,6 +49,10 @@ Input:
 - `parentId` optional: target folder id. Omit or pass `null` for Drive root.
 - `folderName` optional: Drive folder name; defaults to local basename.
 
+Limits:
+
+- The local preflight stops before upload when the folder contains more than 1,000 files, more than 1,000 subdirectories, or exceeds the supported folder depth.
+
 Output:
 
 - `root`: root Drive folder item.

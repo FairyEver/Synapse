@@ -54,9 +54,11 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
 import {
+  DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES,
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
   createDriveLocalUploadTooDeepError,
+  createDriveLocalUploadTooManyDirectoriesError,
   createDriveLocalUploadTooManyFilesError,
 } from "../../src/lib/drive-local-upload-limits"
 
@@ -807,6 +809,10 @@ async function listLocalFolderEntries(fileSystem: FileSystemPort, rootPath: stri
       const entryStat = await fileSystem.lstat(absolutePath)
       if (entryStat.isSymbolicLink()) throw new Error("Folder upload does not support symbolic links.")
       if (entryStat.isDirectory()) {
+        if (directories.length >= DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES) {
+          throw createDriveLocalUploadTooManyDirectoriesError()
+        }
+
         directories.push({ relativePath })
         await walk(absolutePath, relativePath, depth + 1)
       } else if (entryStat.isFile()) {
