@@ -145,6 +145,7 @@ type DriveSiteFolderDelegate = {
       >
     }
     readonly orderBy: readonly [{ readonly relativePath: "asc" }, { readonly id: "asc" }]
+    readonly take?: number
   }) => Promise<Array<DriveSiteFolderRecord & { readonly id: string }>>
 }
 
@@ -435,6 +436,7 @@ export class DriveSiteService {
     const context = await this.resolvePublicDeployment(siteId, input)
     if (context.status !== "ok") return context
     const page = normalizeSiteListPage(input)
+    const boundedTake = page.offset + page.limit + 1
     const prefix = input.path ? normalizeDriveSiteRelativePath(input.path) : ""
     const pathFilter = prefix ? `${prefix.replace(/\/$/u, "")}/` : ""
     const where = {
@@ -447,6 +449,7 @@ export class DriveSiteService {
       driveSiteFolderDelegate(this.prisma).findMany({
         where,
         orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+        take: boundedTake,
       }),
       this.prisma.driveSiteAsset.findMany({
         where: {
@@ -456,6 +459,7 @@ export class DriveSiteService {
             : {}),
         },
         orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+        take: boundedTake,
       }),
     ])
     const entries: DrivePublicSiteEntryRecord[] = [

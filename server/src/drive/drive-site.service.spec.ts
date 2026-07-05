@@ -562,6 +562,41 @@ describe("DriveSiteService", () => {
         page: { hasMore: false, nextOffset: null },
       })
   })
+
+  it("bounds public site asset list queries before merging folders and files", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      sites: [createSiteRecord({ currentDeploymentId: "dep-1", siteId: "site_existing" })],
+      deployments: [createDeploymentRecord({ id: "dep-1", driveSiteId: "site-row-1" })],
+      folders: Array.from({ length: 10 }, (_, index) => createFolderRecord({
+        id: `folder-${index}`,
+        deploymentId: "dep-1",
+        relativePath: `folders/${index}`,
+      })),
+      assets: Array.from({ length: 10 }, (_, index) => createAssetRecord({
+        id: `asset-${index}`,
+        deploymentId: "dep-1",
+        relativePath: `files/${index}.html`,
+        storageKey: `drive-sites/site_existing/dep-1/files/${index}.html`,
+      })),
+    })
+    const folderFindMany = vi.spyOn(prisma.driveSiteFolder, "findMany")
+    const assetFindMany = vi.spyOn(prisma.driveSiteAsset, "findMany")
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await expect(service.listPublicSiteAssets("site_existing", { cookie: null, offset: 0, limit: 2 }))
+      .resolves.toMatchObject({
+        status: "ok",
+        entries: [
+          { kind: "file", relativePath: "files/0.html" },
+          { kind: "file", relativePath: "files/1.html" },
+        ],
+        page: { hasMore: true, nextOffset: 2 },
+      })
+
+    expect(folderFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 3 }))
+    expect(assetFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 3 }))
+  })
 })
 
 function createMemoryStorage() {
@@ -757,14 +792,18 @@ function createMemoryPrisma(seed: {
             | { readonly relativePath: { readonly startsWith: string } }
           >
         }
+        readonly skip?: number
+        readonly take?: number
       }) {
-        return folders
+        const filtered = folders
           .filter((folder) => folder.deploymentId === args.where.deploymentId)
           .filter((folder) => {
             if (!args.where.OR) return true
             return args.where.OR.some((condition) => matchesAssetRelativePath(folder.relativePath, condition.relativePath))
           })
           .sort((first, second) => first.relativePath.localeCompare(second.relativePath) || first.id.localeCompare(second.id))
+        const start = args.skip ?? 0
+        return filtered.slice(start, typeof args.take === "number" ? start + args.take : undefined)
       },
     },
     async $transaction(actions: readonly Promise<unknown>[]) {
