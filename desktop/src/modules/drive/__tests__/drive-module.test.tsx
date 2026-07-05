@@ -878,6 +878,27 @@ describe("DriveModule", () => {
     expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
   })
 
+  it("disables manual sync checks for paused bindings", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
+      { activeBindingCount: 0 },
+      { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "paused" })] },
+    ))
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickButtonByLabel("同步状态：1 个暂停")
+    await clickButtonByLabel("更多同步操作 Docs")
+
+    const menuItems = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
+    const localSync = menuItems.find((item) => item.textContent?.trim() === "检查本地变更")
+    const remoteSync = menuItems.find((item) => item.textContent?.trim() === "同步云端变更")
+
+    expect(localSync?.getAttribute("aria-disabled")).toBe("true")
+    expect(remoteSync?.getAttribute("aria-disabled")).toBe("true")
+    expect(mocks.rescanDriveSyncBinding).not.toHaveBeenCalled()
+    expect(mocks.pollDriveSyncRemoteChanges).not.toHaveBeenCalled()
+  })
+
   it("disables binding sync actions while an action is running", async () => {
     const rescan = createDeferred<void>()
     mocks.getDriveSyncSnapshot

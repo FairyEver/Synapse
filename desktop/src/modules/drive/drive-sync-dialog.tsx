@@ -712,6 +712,7 @@ function DriveSyncBindingActions({
 }) {
   const canPause = binding.status === "active" || binding.status === "conflict"
   const primaryAction = getBindingPrimaryAction(binding, conflictCount)
+  const manualSyncDisabled = isPending || binding.status === "paused"
   const runRetry = () => runBindingAction(
     binding.id,
     async () => {
@@ -757,10 +758,10 @@ function DriveSyncBindingActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem disabled={isPending} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
+          <DropdownMenuItem disabled={manualSyncDisabled} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.rescanBinding({ id: binding.id }), "已检查本地变更") }}>
             检查本地变更
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={isPending} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
+          <DropdownMenuItem disabled={manualSyncDisabled} onClick={() => { void runBindingAction(binding.id, () => requireSynapseBridge().driveSync.pollRemoteChanges({ id: binding.id }), "已同步云端变更") }}>
             同步云端变更
           </DropdownMenuItem>
           <DropdownMenuSeparator />
