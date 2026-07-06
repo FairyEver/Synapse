@@ -739,7 +739,7 @@ describe("DriveService", () => {
     })
     const originalUpdateMany = prisma.driveFileVersion.updateMany.bind(prisma.driveFileVersion)
     let pinnedDuringClaim = false
-    prisma.driveFileVersion.updateMany = vi.fn(async (args: Parameters<typeof originalUpdateMany>[0]) => {
+    const updateManyWithConcurrentPin = vi.fn(async (args: { readonly where?: { readonly id?: string } }) => {
       if (!pinnedDuringClaim && args?.where?.id === oldVersion.id) {
         pinnedDuringClaim = true
         await prisma.driveFileVersion.update({
@@ -747,8 +747,9 @@ describe("DriveService", () => {
           data: { isPinned: true },
         })
       }
-      return originalUpdateMany(args)
-    }) as typeof prisma.driveFileVersion.updateMany
+      return originalUpdateMany(args as Parameters<typeof originalUpdateMany>[0])
+    })
+    prisma.driveFileVersion.updateMany = updateManyWithConcurrentPin as typeof prisma.driveFileVersion.updateMany
 
     await (service as unknown as {
       cleanupFileVersionsAfterChange: (userId: string, itemId: string) => Promise<void>

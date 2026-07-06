@@ -193,7 +193,6 @@ export class DriveUserController {
       name: parsed.name,
       size: parsed.size,
       mimeType: parsed.mimeType ?? null,
-      expectedItemId: parsed.expectedItemId ?? null,
       publicAppUrl: resolveRequestPublicAppUrl(request),
     })
   }

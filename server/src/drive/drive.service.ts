@@ -945,6 +945,7 @@ export class DriveService implements OnApplicationBootstrap {
         readonly name: string
         readonly requestedSize: bigint
         readonly mimeType: string | null
+        readonly expectedItemId: string | null
       }> = []
       for (const planned of plannedFiles) {
         const { file, parts, relativePath } = planned
@@ -959,6 +960,7 @@ export class DriveService implements OnApplicationBootstrap {
           name: fileName,
           requestedSize,
           mimeType: file.mimeType ?? null,
+          expectedItemId: null,
         })
       }
 

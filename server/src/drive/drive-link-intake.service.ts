@@ -232,6 +232,7 @@ export class DriveLinkIntakeService {
     if (access.status === "password_required") {
       return passwordRequiredResolve(parsed.itemId ? "share_item" : "share", ref)
     }
+    if (access.status !== "ok") throw new NotFoundException("分享链接不存在。")
 
     if (parsed.itemId) {
       const snapshot = await this.deps.drive.getShareBrowserSnapshot({

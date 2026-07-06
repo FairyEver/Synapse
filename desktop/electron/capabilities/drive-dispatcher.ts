@@ -2,7 +2,6 @@ import path from "node:path"
 import { createReadStream } from "node:fs"
 import { lstat, readdir, stat } from "node:fs/promises"
 
-import { maskDriveBrowserUrl } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DriveAccessExpiresIn,
   DriveAccessSettingsUpdateInput,
@@ -61,6 +60,8 @@ import {
   createDriveLocalUploadTooManyDirectoriesError,
   createDriveLocalUploadTooManyFilesError,
 } from "../../src/lib/drive-local-upload-limits"
+
+const sharedDrivePromise = import("@synapse/shared")
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
@@ -369,7 +370,15 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.link.download_file":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkDownloadFileInput(params)
-            if (input.outputPath) await authorizeFileWrite(deps, action, maskDriveBrowserUrl(input.url), input.outputPath, context)
+            if (input.outputPath) {
+              await authorizeFileWrite(
+                deps,
+                action,
+                await maskDriveBrowserUrlForAudit(input.url),
+                input.outputPath,
+                context,
+              )
+            }
             if (!input.outputPath) {
               const cacheAudit = await authorizeDriveLinkDownloadCacheWrite(deps, action, input, context)
               try {
@@ -1184,7 +1193,7 @@ async function authorizeDriveLinkMaterializeCacheWrite(
   const metadata = {
     source: context.source ?? "api",
     driveAction: action,
-    url: maskDriveBrowserUrl(input.url),
+    url: await maskDriveBrowserUrlForAudit(input.url),
     scope: input.scope ?? "text",
   }
   const permission = await checkCapabilityPermission({
@@ -1234,7 +1243,7 @@ async function authorizeDriveLinkDownloadCacheWrite(
   const metadata = {
     source: context.source ?? "api",
     driveAction: action,
-    url: maskDriveBrowserUrl(input.url),
+    url: await maskDriveBrowserUrlForAudit(input.url),
     path: input.path ?? null,
     itemId: input.itemId ?? null,
   }
@@ -1257,6 +1266,11 @@ async function authorizeDriveLinkDownloadCacheWrite(
     throw new Error(permission.reason)
   }
   return { actor, resource, metadata }
+}
+
+async function maskDriveBrowserUrlForAudit(value: string): Promise<string> {
+  const { maskDriveBrowserUrl } = await sharedDrivePromise
+  return maskDriveBrowserUrl(value)
 }
 
 function recordDriveLinkDownloadCacheWrite(

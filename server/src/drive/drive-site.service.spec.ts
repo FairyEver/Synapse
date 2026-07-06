@@ -509,7 +509,8 @@ describe("DriveSiteService", () => {
     const result = await service.republishSite("user-1", "site_disabled", "https://synapse.test", { entryPath: "index.html" })
 
     expect(result.status).toBe("disabled")
-    expect(result.currentDeploymentId).not.toBe("dep-old")
+    await expect(prisma.driveSite.findUnique({ where: { siteId: "site_disabled" } }))
+      .resolves.toMatchObject({ currentDeploymentId: expect.not.stringMatching(/^dep-old$/u) })
     await expect(service.resolvePublicSite("site_disabled", { cookie: null }))
       .resolves.toEqual({ status: "disabled" })
   })
