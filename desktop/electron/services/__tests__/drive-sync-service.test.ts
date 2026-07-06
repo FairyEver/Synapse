@@ -27,7 +27,6 @@ describe("DriveSyncService", () => {
       driveItemName: "产品文档",
       drivePathHint: "/产品文档",
       kind: "folder",
-      drivePathHint: "/产品文档",
       localPath: "/Users/me/docs",
       remoteCursor: "42",
       excludeRules: [".git/**"],
