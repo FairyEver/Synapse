@@ -218,6 +218,34 @@ describe("claudeCodeNodeExecutor", () => {
         "--mcp-config",
         mcpConfigPath,
       ]),
+      metadata: expect.objectContaining({
+        externalPathResources: [
+          expect.objectContaining({
+            source: "claude_code.additionalDirectories",
+            kind: "directory",
+            access: "read_write",
+            resolvedPath: extraDir,
+            relativeToCwd: "inside",
+            pathFingerprint: expect.any(String),
+          }),
+          expect.objectContaining({
+            source: "claude_code.settingsPath",
+            kind: "file",
+            access: "read",
+            resolvedPath: settingsPath,
+            relativeToCwd: "inside",
+            pathFingerprint: expect.any(String),
+          }),
+          expect.objectContaining({
+            source: "claude_code.mcpConfigPath",
+            kind: "file",
+            access: "read",
+            resolvedPath: mcpConfigPath,
+            relativeToCwd: "inside",
+            pathFingerprint: expect.any(String),
+          }),
+        ],
+      }),
     }))
   })
 

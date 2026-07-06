@@ -390,6 +390,26 @@ describe("codexNodeExecutor", () => {
         "--image",
         imagePath,
       ]),
+      metadata: expect.objectContaining({
+        externalPathResources: [
+          expect.objectContaining({
+            source: "codex.additionalWritableDirs",
+            kind: "directory",
+            access: "read_write",
+            resolvedPath: writableDir,
+            relativeToCwd: "inside",
+            pathFingerprint: expect.any(String),
+          }),
+          expect.objectContaining({
+            source: "codex.images",
+            kind: "file",
+            access: "read",
+            resolvedPath: imagePath,
+            relativeToCwd: "inside",
+            pathFingerprint: expect.any(String),
+          }),
+        ],
+      }),
     }))
   })
 

@@ -7,6 +7,7 @@ import { sanitizeError, sanitizeErrorPreservingPaths } from "../../electron/serv
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import { workflowNodeLogContext } from "../log-context"
+import { createWorkflowExternalPathResources } from "../path-resource-metadata"
 import type { NodeExecutionInput, NodeExecutionResult, NodeExecutor } from "../types"
 import {
   buildClaudeCodeDebugOutput,
@@ -119,6 +120,29 @@ export const claudeCodeNodeExecutor: NodeExecutor<ClaudeCodeNodeConfig> = {
       }
     }
     const requestConfig: ClaudeCodeNodeConfig = { ...config, ...resolvedPathConfig }
+    const externalPathResources = createWorkflowExternalPathResources([
+      ...requestConfig.additionalDirectories.map((resolvedPath) => ({
+        source: "claude_code.additionalDirectories",
+        path: resolvedPath,
+        cwd,
+        kind: "directory" as const,
+        access: "read_write" as const,
+      })),
+      {
+        source: "claude_code.settingsPath",
+        path: requestConfig.settingsPath,
+        cwd,
+        kind: "file" as const,
+        access: "read" as const,
+      },
+      {
+        source: "claude_code.mcpConfigPath",
+        path: requestConfig.mcpConfigPath,
+        cwd,
+        kind: "file" as const,
+        access: "read" as const,
+      },
+    ])
 
     const actor = context.actor ?? { kind: "system" as const, id: "workflow-engine" }
     const timeoutMs = config.timeoutMins === undefined ? undefined : config.timeoutMins * 60_000
@@ -182,6 +206,7 @@ export const claudeCodeNodeExecutor: NodeExecutor<ClaudeCodeNodeConfig> = {
         workflowRunId: context.runId,
         workflowNodeId: context.nodeId,
         workflowNodeName: context.nodeName,
+        ...(externalPathResources.length > 0 ? { externalPathResources } : {}),
       },
     })
 

@@ -8,6 +8,7 @@ import { sanitizeError } from "../../electron/services/error-sanitize"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import { workflowNodeLogContext } from "../log-context"
+import { createWorkflowExternalPathResources } from "../path-resource-metadata"
 import type { NodeExecutionInput, NodeExecutionResult, NodeExecutor } from "../types"
 import {
   buildCodexDebugOutput,
@@ -120,6 +121,22 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       }
     }
     const requestConfig: CodexNodeConfig = { ...config, ...resolvedPathConfig }
+    const externalPathResources = createWorkflowExternalPathResources([
+      ...requestConfig.additionalWritableDirs.map((resolvedPath) => ({
+        source: "codex.additionalWritableDirs",
+        path: resolvedPath,
+        cwd,
+        kind: "directory" as const,
+        access: "read_write" as const,
+      })),
+      ...requestConfig.images.map((resolvedPath) => ({
+        source: "codex.images",
+        path: resolvedPath,
+        cwd,
+        kind: "file" as const,
+        access: "read" as const,
+      })),
+    ])
 
     const actor = context.actor ?? { kind: "system" as const, id: "workflow-engine" }
     const timeoutMs = config.timeoutMins === undefined ? undefined : config.timeoutMins * 60_000
@@ -207,6 +224,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         workflowNodeName: context.nodeName,
         ...(context.automationId ? { automationId: context.automationId } : {}),
         ...(context.automationRunId ? { automationRunId: context.automationRunId } : {}),
+        ...(externalPathResources.length > 0 ? { externalPathResources } : {}),
       },
     })
 
