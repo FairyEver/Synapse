@@ -456,6 +456,20 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(lstat(unsafeTarget)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("rejects raw export targets whose existing parent symlink resolves inside the raw directory", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
+    const linkTarget = path.join(exportRoot, "raw-link")
+    await symlink(rawRoot, linkTarget, "dir")
+    const unsafeTarget = path.join(linkTarget, "staging")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    await expect(manager.exportEntries(rawRoot, ["brief.md"], unsafeTarget))
+      .rejects.toThrow("导出目标不能位于知识库资料目录内。")
+    await expect(lstat(path.join(rawRoot, "staging"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("rejects raw export targets with names that start with dot-dot", async () => {
     const rawRoot = await tempDir()
     await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")

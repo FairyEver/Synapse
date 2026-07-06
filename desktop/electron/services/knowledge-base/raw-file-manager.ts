@@ -763,12 +763,24 @@ async function assertRawExportTargetOutsideRawRoot(rawRoot: string, targetDirect
   }
 
   const realRawRoot = await realpath(resolvedRawRoot).catch(() => resolvedRawRoot)
-  const realTarget = await realpath(resolvedTarget).catch((error: unknown) => {
-    if (isMissingPathError(error)) return null
-    throw error
-  })
+  const realTarget = await resolveRealPathThroughExistingParent(resolvedTarget)
   if (realTarget && isAbsoluteSameOrDescendant(realRawRoot, realTarget)) {
     throw new Error("导出目标不能位于知识库资料目录内。")
+  }
+}
+
+async function resolveRealPathThroughExistingParent(targetPath: string): Promise<string | null> {
+  let currentPath = targetPath
+  while (true) {
+    try {
+      const realCurrent = await realpath(currentPath)
+      return path.resolve(realCurrent, path.relative(currentPath, targetPath))
+    } catch (error) {
+      if (!isMissingPathError(error)) throw error
+      const parentPath = path.dirname(currentPath)
+      if (parentPath === currentPath) return null
+      currentPath = parentPath
+    }
   }
 }
 
