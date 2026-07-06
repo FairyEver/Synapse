@@ -26,6 +26,7 @@ import {
   AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE,
   AGENT_NO_ACTIVE_PROVIDER_MESSAGE,
 } from "./agent-error-messages"
+import { agentRuntimeErrorMessage } from "./error-message"
 
 export interface AgentCommandRouterDeps {
   readonly projectId: string
@@ -514,21 +515,7 @@ function registeredPromptCommandResult(
   return commandResult(conversation.id, output.content, output.error)
 }
 
-function errorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return truncateRunes(
-    message
-      .replace(
-        /\b(token|secret|api[_-]?key|apikey|authorization|cookie|password|credential)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s'",`;]+)/gi,
-        "$1$2[redacted]",
-      ),
-    240,
-  )
-}
-
-function truncateRunes(value: string, maxLength: number): string {
-  return [...value].slice(0, maxLength).join("")
-}
+const errorMessage = agentRuntimeErrorMessage
 
 export function parseCommand(content: string): ParsedCommand | null {
   const trimmed = content.trim()

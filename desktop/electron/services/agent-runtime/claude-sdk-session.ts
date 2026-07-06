@@ -32,7 +32,8 @@ import {
   webFetchPreflightFailureMeta,
 } from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
-import { errorLogMessage, errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
+import { agentRuntimeErrorMessage } from "./error-message"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import {
   buildClaudeUserMessageContent,
@@ -872,9 +873,7 @@ function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly
   return `Subagent ${agentType} may write only inside: ${roots}.`
 }
 
-function errorMessage(error: unknown): string {
-  return errorLogMessage(error, "SDK query failed")
-}
+const errorMessage = (error: unknown): string => agentRuntimeErrorMessage(error, "SDK query failed")
 
 function errorDiagnosticMessage(error: unknown): string | undefined {
   if (error instanceof Error) return sanitizeDiagnosticText(error.message)

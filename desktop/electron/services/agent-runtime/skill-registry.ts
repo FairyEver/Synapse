@@ -8,6 +8,11 @@ import { normalizeCommandName } from "./command-registry"
 import type { StructuredLogger } from "../../runtime/logging"
 import { errorCode } from "../error-utils"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
+import {
+  agentRuntimeErrorMessage,
+  agentRuntimeErrorSummary,
+  rawAgentRuntimeErrorMessage,
+} from "./error-message"
 
 export interface AgentSkill {
   readonly name: string
@@ -228,28 +233,14 @@ function firstBodyLine(content: string): string | undefined {
     .find(Boolean)
 }
 
-function errorMessage(error: unknown): string {
-  const message = rawErrorMessage(error)
-  return message.length > 240 ? `${message.slice(0, 240)}...` : message
-}
-
-function rawErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
+const errorMessage = agentRuntimeErrorMessage
+const rawErrorMessage = rawAgentRuntimeErrorMessage
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error
 }
 
-function errorSummary(error: unknown): string {
-  return errorMessage(error)
-    .replace(/\bauthorization(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, "authorization$1[redacted]")
-    .replace(/\b(token|secret|api[-_]?key|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1$2[redacted]")
-    .replace(/'[^']*'/g, "'[path redacted]'")
-    .replace(/"[^"]*"/g, "\"[path redacted]\"")
-    .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
-}
+const errorSummary = agentRuntimeErrorSummary
 
 function isMissingPathError(error: unknown): boolean {
   return errorCode(error) === "ENOENT"

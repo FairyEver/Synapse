@@ -15,6 +15,11 @@ import {
   AGENT_COMMAND_NAME_REQUIRED_MESSAGE,
   AGENT_COMMAND_PROMPT_REQUIRED_MESSAGE,
 } from "./agent-error-messages"
+import {
+  agentRuntimeErrorMessage,
+  agentRuntimeErrorSummary,
+  rawAgentRuntimeErrorMessage,
+} from "./error-message"
 
 export type PublishedCommandSource = "builtin" | "custom" | "skill" | "agent-native"
 export type PublishedCommandKind = "builtin" | "prompt" | "exec" | "skill" | "agent-native"
@@ -336,28 +341,14 @@ async function listMarkdownFiles(
   return result
 }
 
-function errorMessage(error: unknown): string {
-  const message = rawErrorMessage(error)
-  return message.length > 240 ? `${message.slice(0, 240)}...` : message
-}
-
-function rawErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
+const errorMessage = agentRuntimeErrorMessage
+const rawErrorMessage = rawAgentRuntimeErrorMessage
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error
 }
 
-function errorSummary(error: unknown): string {
-  return errorMessage(error)
-    .replace(/\bauthorization(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, "authorization$1[redacted]")
-    .replace(/\b(token|secret|api[-_]?key|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1$2[redacted]")
-    .replace(/'[^']*'/g, "'[path redacted]'")
-    .replace(/"[^"]*"/g, "\"[path redacted]\"")
-    .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
-}
+const errorSummary = agentRuntimeErrorSummary
 
 function isMissingPathError(error: unknown): boolean {
   return errorCode(error) === "ENOENT"

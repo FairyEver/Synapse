@@ -99,6 +99,10 @@ import {
 } from "./permission-sanitize"
 import { redactSensitiveText } from "./redaction"
 import { markCancelRequested } from "./turn-outcome"
+import {
+  agentRuntimeErrorMessage,
+  rawAgentRuntimeErrorMessage,
+} from "./error-message"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -1548,24 +1552,22 @@ function summarizePermissionResponseError(error: unknown): { errorName: string; 
 }
 
 function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
+  const rawMessage = rawAgentRuntimeErrorMessage(error)
   if (error instanceof Error) {
     return {
       errorName: error.name || "Error",
-      errorLength: error.message.length,
-      errorMessage: error.message,
+      errorLength: rawMessage.length,
+      errorMessage: errorMessage(error),
     }
   }
-  const message = String(error)
   return {
     errorName: typeof error,
-    errorLength: message.length,
-    errorMessage: message,
+    errorLength: rawMessage.length,
+    errorMessage: errorMessage(error),
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
+const errorMessage = agentRuntimeErrorMessage
 
 function scheduledLiveEventTimeoutMs(timeoutMs: number | undefined): number | undefined {
   return timeoutMs !== undefined && timeoutMs > 0 ? undefined : 0
