@@ -293,6 +293,56 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     })
   })
 
+  it("assigns addresses to updated ingest pages when the Agent omitted them", async () => {
+    const root = await createKnowledgeBaseRoot()
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+    await writeFile(path.join(root, "wiki", "sources", "source.md"), [
+      "---",
+      "type: source",
+      "---",
+      "# Source Summary",
+      "",
+    ].join("\n"), "utf8")
+    await coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [{
+              source: ".raw/source.md",
+              pages_updated: ["wiki/sources/source.md"],
+            }],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })
+
+    const page = await readFile(path.join(root, "wiki", "sources", "source.md"), "utf8")
+    expect(page).toContain("address: c-000010\n")
+    expect(page).toContain("type: source\n")
+    await expect(readFile(path.join(root, ".vault-meta", "address-counter.txt"), "utf8"))
+      .resolves.toBe("11\n")
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.manifest.address_map).toEqual({
+      "wiki/existing.md": "c-000001",
+      "wiki/sources/source.md": "c-000010",
+    })
+  })
+
   it("ignores processed sources that were not in preflight", async () => {
     const root = await createKnowledgeBaseRoot()
     const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })

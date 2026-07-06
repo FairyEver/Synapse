@@ -200,7 +200,7 @@ async function buildFinalManifest(
     if (!source || !isSafeRawPath(item.source)) continue
     const pagesCreated = validatedPages(item.pages_created ?? [], wikiAfter)
     const pagesUpdated = validatedPages(item.pages_updated ?? [], wikiAfter)
-    await ensureAddressesForCreatedPages(projectPath, pagesCreated, addressService)
+    await ensureAddressesForReportedPages(projectPath, [...pagesCreated, ...pagesUpdated], addressService)
     await syncAddressMapFromPages(projectPath, addressMap, [...pagesCreated, ...pagesUpdated])
     sources[item.source] = {
       hash: source.hash,
@@ -219,7 +219,7 @@ async function buildFinalManifest(
   }
 }
 
-async function ensureAddressesForCreatedPages(
+async function ensureAddressesForReportedPages(
   projectPath: string,
   pages: readonly string[],
   addressService: Pick<DragonScaleAddressService, "allocate">,
