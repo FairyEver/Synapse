@@ -309,6 +309,54 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     })
   })
 
+  it("preserves CRLF frontmatter when assigning omitted addresses", async () => {
+    const root = await createKnowledgeBaseRoot()
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+    await writeFile(path.join(root, "wiki", "sources", "source.md"), [
+      "---",
+      "type: source",
+      "---",
+      "# Source Summary",
+      "",
+    ].join("\r\n"), "utf8")
+    await coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [{
+              source: ".raw/source.md",
+              pages_created: ["wiki/sources/source.md"],
+            }],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })
+
+    const page = await readFile(path.join(root, "wiki", "sources", "source.md"), "utf8")
+    expect(page.startsWith("---\r\naddress: c-000010\r\ntype: source\r\n---\r\n")).toBe(true)
+    expect(page.match(/^---\r?$/gm)).toHaveLength(2)
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.manifest.address_map).toEqual({
+      "wiki/existing.md": "c-000001",
+      "wiki/sources/source.md": "c-000010",
+    })
+  })
+
   it("assigns addresses to updated ingest pages when the Agent omitted them", async () => {
     const root = await createKnowledgeBaseRoot()
     const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })

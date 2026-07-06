@@ -10,6 +10,7 @@ import {
   type KnowledgeBaseLintIssue,
   type KnowledgeBaseLintSeverity,
 } from "./lint-addresses"
+import { splitMarkdownFrontmatter } from "./markdown-frontmatter"
 import { readKnowledgeBaseManifest } from "./manifest"
 
 export interface KnowledgeBaseLintPreflightResult {
@@ -369,10 +370,7 @@ async function walkMarkdown(root: string, rootRealPath: string, directoryPath: s
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {
-  if (!content.startsWith("---\n")) return { frontmatter: "", body: content }
-  const end = content.indexOf("\n---", 4)
-  if (end === -1) return { frontmatter: "", body: content }
-  return { frontmatter: content.slice(4, end), body: content.slice(end + "\n---".length) }
+  return splitMarkdownFrontmatter(content)
 }
 
 function extractWikilinks(body: string): readonly string[] {

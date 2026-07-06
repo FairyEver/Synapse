@@ -5,6 +5,7 @@ import path from "node:path"
 
 import { isProcessAlive } from "../../../../database/shared/process-liveness"
 import { atomicWriteTextFile } from "../atomic-write"
+import { frontmatterField, splitMarkdownFrontmatter } from "../markdown-frontmatter"
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
 const vaultLocks = new Map<string, Promise<void>>()
@@ -228,17 +229,10 @@ async function scanMarkdownAddresses(directoryPath: string): Promise<DragonScale
       continue
     }
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue
-    const frontmatter = firstFrontmatterBlock(await readFile(entryPath, "utf8"))
-    const match = frontmatter.match(/^address:\s+(c-[0-9]{6})\s*$/m)
-    if (match?.[1]) addresses.push(match[1] as DragonScaleAddress)
+    const address = frontmatterField(splitMarkdownFrontmatter(await readFile(entryPath, "utf8")).frontmatter, "address")
+    if (address && /^c-[0-9]{6}$/.test(address)) addresses.push(address as DragonScaleAddress)
   }
   return addresses
-}
-
-function firstFrontmatterBlock(content: string): string {
-  if (!content.startsWith("---\n")) return ""
-  const end = content.indexOf("\n---", 4)
-  return end === -1 ? "" : content.slice(4, end)
 }
 
 function formatAddress(value: number): DragonScaleAddress {

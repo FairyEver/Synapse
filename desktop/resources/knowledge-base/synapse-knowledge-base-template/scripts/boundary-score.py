@@ -71,7 +71,7 @@ MAX_BODY_BYTES = 256 * 1024
 # code blocks (4+ spaces) are NOT filtered; in Obsidian usage, indented
 # bullets commonly contain wikilinks and should count as edges.
 
-FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 TYPE_RE = re.compile(r"^type:\s*(\S+)", re.MULTILINE)
 UPDATED_RE = re.compile(r"^updated:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", re.MULTILINE)
 CREATED_RE = re.compile(r"^created:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", re.MULTILINE)

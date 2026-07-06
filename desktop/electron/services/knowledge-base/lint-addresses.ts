@@ -3,6 +3,7 @@ import { lstat, readFile, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
 
 import { DragonScaleAddressService } from "./dragonscale/address-service"
+import { frontmatterField, splitMarkdownFrontmatter } from "./markdown-frontmatter"
 import { readKnowledgeBaseManifest } from "./manifest"
 
 export type KnowledgeBaseLintSeverity = "error" | "warning" | "info"
@@ -274,14 +275,11 @@ function isLegacyPage(page: LintPage, legacy: LegacyConfig): boolean {
 }
 
 function parseFrontmatter(content: string): string {
-  if (!content.startsWith("---\n")) return ""
-  const end = content.indexOf("\n---", 4)
-  return end === -1 ? "" : content.slice(4, end)
+  return splitMarkdownFrontmatter(content).frontmatter
 }
 
 function field(key: "type" | "created" | "address", frontmatter: string): Record<string, string> {
-  const match = new RegExp(`^${key}:\\s*([^\\n]+)`, "m").exec(frontmatter)
-  const value = match?.[1]?.trim().replace(/^["']|["']$/g, "")
+  const value = frontmatterField(frontmatter, key)
   return value ? { [key]: value } : {}
 }
 

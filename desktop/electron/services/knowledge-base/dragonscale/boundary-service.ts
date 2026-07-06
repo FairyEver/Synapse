@@ -5,6 +5,7 @@ import { TextDecoder } from "node:util"
 
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import { createMainLogger } from "../../log-store"
+import { splitMarkdownFrontmatter } from "../markdown-frontmatter"
 import {
   DRAGONSCALE_BOUNDARY_DEFAULT_TOP,
   DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
@@ -58,7 +59,6 @@ const EXCLUDE_FILENAMES = new Set([
   "getting-started.md",
 ])
 const EXCLUDE_PATH_PREFIXES = ["wiki/folds/", "wiki/meta/"]
-const FRONTMATTER_RE = /^---\n(.*?)\n---\n/s
 const TYPE_RE = /^type:\s*(\S+)/m
 const UPDATED_RE = /^updated:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/m
 const CREATED_RE = /^created:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/m
@@ -213,11 +213,7 @@ async function defaultFileSize(filePath: string): Promise<number> {
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {
-  const match = FRONTMATTER_RE.exec(content)
-  if (!match?.[1]) {
-    return { frontmatter: "", body: content }
-  }
-  return { frontmatter: match[1], body: content.slice(match[0].length) }
+  return splitMarkdownFrontmatter(content)
 }
 
 function parseFrontmatterFields(frontmatter: string): ParsedFrontmatter {

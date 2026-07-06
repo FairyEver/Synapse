@@ -6,6 +6,7 @@ import type { AgentMessage } from "../agent-runtime/types"
 import { atomicWriteTextFile } from "./atomic-write"
 import { DragonScaleAddressService } from "./dragonscale/address-service"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
+import { frontmatterField, splitMarkdownFrontmatter, upsertMarkdownFrontmatterField } from "./markdown-frontmatter"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
 import {
   scanKnowledgeBaseSources,
@@ -268,7 +269,7 @@ async function ensurePageAddress(
   if (existing && ADDRESS_PATTERN.test(existing)) return
 
   const { address } = await addressService.allocate(projectPath)
-  await atomicWriteTextFile(filePath, addPageAddress(content, address))
+  await atomicWriteTextFile(filePath, upsertMarkdownFrontmatterField(content, "address", address))
 }
 
 function reportedWikiPages(report: IngestReport): string[] {
@@ -337,27 +338,5 @@ function isAddressExcludedPath(pagePath: string): boolean {
 }
 
 function parsePageFrontmatter(content: string): string {
-  if (!content.startsWith("---\n")) return ""
-  const end = content.indexOf("\n---", 4)
-  return end === -1 ? "" : content.slice(4, end)
-}
-
-function addPageAddress(content: string, address: string): string {
-  if (!content.startsWith("---\n")) {
-    return `---\naddress: ${address}\n---\n${content}`
-  }
-  const end = content.indexOf("\n---", 4)
-  if (end === -1) {
-    return `---\naddress: ${address}\n---\n${content}`
-  }
-  const frontmatter = content.slice(4, end)
-  if (/^address:\s*.+$/mu.test(frontmatter)) {
-    return `${content.slice(0, 4)}${frontmatter.replace(/^address:\s*.+$/mu, `address: ${address}`)}${content.slice(end)}`
-  }
-  return `${content.slice(0, 4)}address: ${address}\n${content.slice(4)}`
-}
-
-function frontmatterField(frontmatter: string, key: "address" | "type"): string | null {
-  const match = new RegExp(`^${key}:\\s*([^\\n]+)`, "mu").exec(frontmatter)
-  return match?.[1]?.trim().replace(/^["']|["']$/g, "") || null
+  return splitMarkdownFrontmatter(content).frontmatter
 }

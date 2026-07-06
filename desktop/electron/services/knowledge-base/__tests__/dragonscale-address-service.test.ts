@@ -89,6 +89,27 @@ describe("DragonScaleAddressService", () => {
       .resolves.toBe("11\n")
   })
 
+  it("recovers a missing counter from CRLF wiki frontmatter", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, "wiki", "concepts"), { recursive: true })
+    await writeFile(path.join(root, "wiki", "concepts", "Alpha.md"), [
+      "---",
+      "type: concept",
+      "address: c-000009",
+      "---",
+      "",
+      "# Alpha",
+      "",
+    ].join("\r\n"))
+    const service = new DragonScaleAddressService()
+
+    const result = await service.allocate(root)
+
+    expect(result.address).toBe("c-000010")
+    await expect(readFile(path.join(root, ".vault-meta", "address-counter.txt"), "utf8"))
+      .resolves.toBe("11\n")
+  })
+
   it("rejects corrupt counters instead of silently resetting", async () => {
     const root = await tempDir()
     await mkdir(path.join(root, ".vault-meta"), { recursive: true })

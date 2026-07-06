@@ -70,7 +70,7 @@ EXIT_SCALE_EXCEEDED = 4
 EXIT_NO_OLLAMA = 10
 EXIT_NO_MODEL = 11
 
-FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 TYPE_RE = re.compile(r"^type:\s*(\S+)", re.MULTILINE)
 
 

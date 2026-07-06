@@ -11,6 +11,7 @@ import {
 } from "./ollama-embedding-provider"
 import { createMainLogger } from "../../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
+import { splitMarkdownFrontmatter } from "../markdown-frontmatter"
 import {
   DRAGONSCALE_TILING_DEFAULT_MODEL,
   DRAGONSCALE_TILING_MAX_BODY_BYTES,
@@ -78,7 +79,6 @@ const EXCLUDE_FILENAMES = new Set([
   "getting-started.md",
 ])
 const EXCLUDE_PATH_PREFIXES = ["wiki/folds/", "wiki/meta/"]
-const FRONTMATTER_RE = /^---\n(.*?)\n---\n/s
 const TYPE_RE = /^type:\s*(\S+)/m
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true })
 const vaultLocks = new Map<string, Promise<void>>()
@@ -468,11 +468,7 @@ async function defaultFileSize(filePath: string): Promise<number> {
 }
 
 function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {
-  const match = FRONTMATTER_RE.exec(content)
-  if (!match?.[1]) {
-    return { frontmatter: "", body: content }
-  }
-  return { frontmatter: match[1], body: content.slice(match[0].length) }
+  return splitMarkdownFrontmatter(content)
 }
 
 function parseType(frontmatter: string): string | undefined {
