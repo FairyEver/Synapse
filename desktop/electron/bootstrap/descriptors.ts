@@ -1504,7 +1504,10 @@ async function listConfiguredProjects() {
   return config.global.projects.map((project) => ({
     projectId: project.id,
     name: project.name,
-    workspacePath: project.path,
+    workspacePath: resolveKnowledgeBaseAwareProjectWorkspacePath(project, {
+      storage: config.global.knowledgeBaseStorage,
+    }),
+    ...(isManagedKnowledgeBaseProject(project) ? { managedKnowledgeBase: true } : undefined),
   }))
 }
 

@@ -390,6 +390,67 @@ describe("bootstrap descriptors (T1.5)", () => {
     }))
   })
 
+  it("global Agent project list resolves managed knowledge base backing directory", async () => {
+    const managedProject = {
+      id: "kb-1",
+      name: "Knowledge Base",
+      path: "synapse-kb://kb-1",
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: "2026-05-24",
+          managed: true,
+          runtimeId: "kb-1",
+        },
+      },
+    }
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: null,
+          repositories: [],
+          global: {
+            knowledgeBaseStorage: { mode: "custom", rootPath: "/kb-root" },
+            projects: [managedProject],
+          },
+        })),
+      },
+    }))
+
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return { open: vi.fn() }
+          if (id === "core.network-registry") return {}
+          if (id === "core.side-channel") return {}
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreBridgeAdapterDescriptor } = await importBootstrap()
+    const bridge = coreBridgeAdapterDescriptor.create(ctx as never) as unknown as {
+      deps: {
+        listProjects(): Promise<ReadonlyArray<{
+          projectId: string
+          name?: string
+          workspacePath?: string
+          managedKnowledgeBase?: boolean
+        }>>
+      }
+    }
+
+    await expect(bridge.deps.listProjects()).resolves.toEqual([{
+      projectId: "kb-1",
+      name: "Knowledge Base",
+      workspacePath: "/kb-root/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    }])
+  })
+
   it("workflow Agent dependency rejects managed knowledge base projects during storage migration", async () => {
     const managedProject = {
       id: "kb-1",

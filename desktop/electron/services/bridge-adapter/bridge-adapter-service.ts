@@ -675,6 +675,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     const container = await this.deps.projectContainers.open(project.projectId, {
       name: project.name,
       workspacePath: project.workspacePath,
+      managedKnowledgeBase: project.managedKnowledgeBase,
     })
     return {
       project,
@@ -1024,6 +1025,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       const container = await this.deps.projectContainers.open(project.projectId, {
         name: project.name,
         workspacePath: project.workspacePath,
+        managedKnowledgeBase: project.managedKnowledgeBase,
       })
       const agent = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
       return (await agent.listPublishedCommands(platform)).map((command) => ({

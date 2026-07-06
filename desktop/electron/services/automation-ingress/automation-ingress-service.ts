@@ -67,6 +67,7 @@ export interface AutomationIngressProjectSummary {
   readonly projectId: string
   readonly name?: string
   readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
 }
 
 export interface AutomationIngressServiceDeps {
@@ -478,6 +479,7 @@ export class AutomationIngressService {
     const container = await this.deps.projectContainers.open(project.projectId, {
       name: project.name,
       workspacePath: project.workspacePath,
+      managedKnowledgeBase: project.managedKnowledgeBase,
     })
     const agent = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
     const content = appendPayloadContext(prompt, body.payload)

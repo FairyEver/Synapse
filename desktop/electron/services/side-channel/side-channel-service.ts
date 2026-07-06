@@ -29,6 +29,7 @@ export interface SideChannelProjectSummary {
   readonly projectId: string
   readonly name?: string
   readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
 }
 
 export interface SideChannelServiceDeps {

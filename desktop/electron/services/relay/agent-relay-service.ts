@@ -49,6 +49,7 @@ export class AgentRelayService {
       const container = await this.deps.projectContainers.open(target.projectId, {
         name: target.name,
         workspacePath: target.workspacePath,
+        managedKnowledgeBase: target.managedKnowledgeBase,
       })
       const agent = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
       const message: AgentMessage = {

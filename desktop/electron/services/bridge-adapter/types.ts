@@ -26,6 +26,7 @@ export interface BridgeProjectSummary {
   readonly projectId: string
   readonly name?: string
   readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
 }
 
 export interface BridgeOutboundDispatcher {

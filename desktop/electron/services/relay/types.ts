@@ -4,6 +4,7 @@ export interface RelayProjectSummary {
   readonly projectId: string
   readonly name?: string
   readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
 }
 
 export interface RelaySendRequest {
@@ -29,4 +30,3 @@ export interface RelaySendResult {
   readonly partialText?: string
   readonly error?: string
 }
-

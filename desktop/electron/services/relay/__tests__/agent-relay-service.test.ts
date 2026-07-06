@@ -215,6 +215,40 @@ describe("AgentRelayService", () => {
     expect(JSON.stringify({ persisted, listed: await service.listRuns() })).not.toContain("bridge:s1")
   })
 
+  it("opens managed knowledge base targets with managed runtime metadata", async () => {
+    const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
+    const agent = successAgent("done")
+    const projectContainers = fakeProjectContainers(agent)
+    const open = vi.spyOn(projectContainers, "open")
+    const service = new AgentRelayService({
+      projectContainers,
+      bindings: new MemoryNamespace<RelayBindingEntryV1>("relay.bindings"),
+      runs,
+      listProjects: async () => [
+        { projectId: "source", name: "Source" },
+        {
+          projectId: "kb-1",
+          name: "Knowledge Base",
+          workspacePath: "/kb-root/knowledge-bases/kb-1",
+          managedKnowledgeBase: true,
+        },
+      ],
+      now: () => new Date("2026-05-14T00:00:00.000Z"),
+    })
+
+    await service.send({
+      sourceProjectId: "source",
+      sourceSessionKey: "bridge:s1",
+      targetProjectId: "kb-1",
+      message: "user prompt body",
+    })
+
+    expect(open).toHaveBeenCalledWith("kb-1", expect.objectContaining({
+      workspacePath: "/kb-root/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    }))
+  })
+
   it("sanitizes legacy relay run session keys from diagnostics output", async () => {
     const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
     const service = new AgentRelayService({
