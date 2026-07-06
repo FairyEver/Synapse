@@ -10,5 +10,6 @@
 - 修复 Bridge、Relay、Webhook 等全局 Agent 入口打开托管知识库时误用虚拟路径的问题，外部入口现在会使用知识库真实运行目录并加载对应 runtime 能力。
 - 修复知识库 `/wiki-ingest` 静默跳过超过扫描上限的原始资料问题，Agent 现在会收到跳过文件及原因并提示用户处理。
 - 修复 Windows/CRLF Markdown frontmatter 在知识库中被误判为空的问题，避免补地址时写出双 YAML 头，并让 DragonScale 与 lint 能识别 CRLF 元数据。
+- 统一知识库内部路径归一化逻辑，避免不同入口对 `/` 和 `\\` 混用路径产生不一致的 manifest、lint 或资料管理结果。
 
 ## 技术调整

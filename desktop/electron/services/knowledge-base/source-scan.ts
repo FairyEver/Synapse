@@ -6,6 +6,7 @@ import path from "node:path"
 
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, type KnowledgeBaseManifestReadResult } from "./manifest"
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "./path-normalize"
 
 const SUPPORTED_SOURCE_EXTENSIONS = new Set([
   ".md",
@@ -198,10 +199,6 @@ async function walkRawSources(
     relativePaths.push(relativePath)
   }
   return { relativePaths, skippedSources }
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/")
 }
 
 function isInternalRawSource(relativePath: string): boolean {

@@ -20,6 +20,10 @@ import {
   KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES,
 } from "../../../config"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
+import {
+  normalizeKnowledgeBaseRawPath as normalizeRawPath,
+  normalizeKnowledgeBaseRelativePath as normalizeRelativePath,
+} from "./path-normalize"
 
 type TrashItem = (targetPath: string) => Promise<void>
 type RawUploadSkipReason = SynapseKnowledgeBaseRawMutationResult["skipped"][number]["reason"]
@@ -581,10 +585,6 @@ function resolveRawPath(rawRoot: string, rawRelativePath: string): string {
   return target
 }
 
-function normalizeRawPath(value: string): string {
-  return value.split("\\").join("/").replace(/^\/+/, "").replace(/\/+$/g, "")
-}
-
 function joinRawPath(parent: string, name: string): string {
   const normalizedParent = normalizeRawPath(parent)
   return normalizedParent && normalizedParent !== "." ? `${normalizedParent}/${name}` : name
@@ -795,8 +795,4 @@ function isFileExistsError(error: unknown): boolean {
     && error !== null
     && "code" in error
     && (error as { readonly code?: unknown }).code === "EEXIST"
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/")
 }

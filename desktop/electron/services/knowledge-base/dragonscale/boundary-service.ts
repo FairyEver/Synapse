@@ -6,6 +6,7 @@ import { TextDecoder } from "node:util"
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import { createMainLogger } from "../../log-store"
 import { splitMarkdownFrontmatter } from "../markdown-frontmatter"
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "../path-normalize"
 import {
   DRAGONSCALE_BOUNDARY_DEFAULT_TOP,
   DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
@@ -372,10 +373,6 @@ function localDateString(date: Date): string {
 
 function generatedTimestamp(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z")
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/").split("\\").join("/")
 }
 
 async function resolveExistingPath(filePath: string): Promise<string> {

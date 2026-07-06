@@ -9,6 +9,10 @@ import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { acquireUrlSource, type FetchUrl, type UrlSourceErrorCode } from "../source-acquisition/url-source"
 import { atomicWriteTextFile } from "./atomic-write"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
+import {
+  normalizeKnowledgeBaseRawPath,
+  normalizeKnowledgeBaseRelativePath as normalizeRelativePath,
+} from "./path-normalize"
 
 export interface StageKnowledgeBaseUrlSourceInput {
   readonly projectPath: string
@@ -74,10 +78,6 @@ function urlAcquisitionFailure(
   return { path: sanitizeUrl(url), reason }
 }
 
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/")
-}
-
 function datePathSegments(date: Date): string[] {
   return [
     String(date.getFullYear()).padStart(4, "0"),
@@ -87,7 +87,7 @@ function datePathSegments(date: Date): string[] {
 }
 
 function normalizeRawDirectoryPath(value: string): string {
-  const normalized = value.split("\\").join("/").replace(/^\/+/, "").replace(/\/+$/g, "")
+  const normalized = normalizeKnowledgeBaseRawPath(value)
   if (!normalized) return ""
   const segments = normalized.split("/").filter(Boolean)
   for (const segment of segments) {

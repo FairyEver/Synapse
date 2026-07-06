@@ -12,6 +12,7 @@ import {
 } from "./lint-addresses"
 import { splitMarkdownFrontmatter } from "./markdown-frontmatter"
 import { readKnowledgeBaseManifest } from "./manifest"
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "./path-normalize"
 
 export interface KnowledgeBaseLintPreflightResult {
   readonly generatedDate: string
@@ -446,10 +447,6 @@ function isInside(rootPath: string, targetPath: string): boolean {
   const target = path.resolve(targetPath)
   const relative = path.relative(root, target)
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/").split("\\").join("/")
 }
 
 function localDateString(date: Date): string {

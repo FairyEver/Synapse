@@ -5,6 +5,7 @@ import path from "node:path"
 import { DragonScaleAddressService } from "./dragonscale/address-service"
 import { frontmatterField, splitMarkdownFrontmatter } from "./markdown-frontmatter"
 import { readKnowledgeBaseManifest } from "./manifest"
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "./path-normalize"
 
 export type KnowledgeBaseLintSeverity = "error" | "warning" | "info"
 
@@ -297,10 +298,6 @@ function isInside(rootPath: string, targetPath: string): boolean {
   const target = path.resolve(targetPath)
   const relative = path.relative(root, target)
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/").split("\\").join("/")
 }
 
 function isMissingPathError(error: unknown): boolean {

@@ -3,6 +3,8 @@ import type { Dirent, Stats } from "node:fs"
 import { lstat, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "./path-normalize"
+
 export interface WikiSnapshotFile {
   readonly path: string
   readonly hash: string
@@ -120,10 +122,6 @@ function normalizeCandidateWikiPaths(root: string, paths: readonly string[] | un
 function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, path.resolve(target))
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(/[\\/]+/u).join("/")
 }
 
 function isSafeWikiMarkdownPath(value: string): boolean {

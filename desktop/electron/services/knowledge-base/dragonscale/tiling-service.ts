@@ -12,6 +12,7 @@ import {
 import { createMainLogger } from "../../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import { splitMarkdownFrontmatter } from "../markdown-frontmatter"
+import { normalizeKnowledgeBaseRelativePath as normalizeRelativePath } from "../path-normalize"
 import {
   DRAGONSCALE_TILING_DEFAULT_MODEL,
   DRAGONSCALE_TILING_MAX_BODY_BYTES,
@@ -882,10 +883,6 @@ function mergeCounts(target: Record<string, number>, source: Record<string, numb
 
 function sumCounts(counts: Record<string, number>): number {
   return Object.values(counts).reduce((sum, value) => sum + value, 0)
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.split(path.sep).join("/").split("\\").join("/")
 }
 
 async function resolveExistingPath(filePath: string): Promise<string> {
