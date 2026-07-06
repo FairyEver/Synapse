@@ -67,6 +67,22 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     expect(prepared.content).not.toContain("additional changed `.raw/` sources were omitted")
   })
 
+  it("includes skipped raw sources in the ingest preflight appendix", async () => {
+    const root = await createKnowledgeBaseRoot()
+    await writeFile(path.join(root, ".raw", "large.md"), "a".repeat(16 * 1024 * 1024 + 1), "utf8")
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    const prepared = await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+
+    expect(prepared.content).toContain("Skipped `.raw/` sources:")
+    expect(prepared.content).toContain("  - .raw/large.md (too-large)")
+    expect(prepared.content).toContain("Tell the user why these sources were skipped")
+  })
+
   it("ignores reported sources omitted from a bounded preflight batch", async () => {
     const root = await createKnowledgeBaseRoot()
     for (let index = 0; index < 125; index += 1) {

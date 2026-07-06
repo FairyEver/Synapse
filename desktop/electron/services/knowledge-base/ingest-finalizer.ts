@@ -7,7 +7,11 @@ import { atomicWriteTextFile } from "./atomic-write"
 import { DragonScaleAddressService } from "./dragonscale/address-service"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
-import { scanKnowledgeBaseSources, type KnowledgeBaseSourceScanItem } from "./source-scan"
+import {
+  scanKnowledgeBaseSources,
+  type KnowledgeBaseSkippedSource,
+  type KnowledgeBaseSourceScanItem,
+} from "./source-scan"
 import { snapshotWikiMarkdown, type WikiSnapshot } from "./wiki-snapshot"
 import { withKnowledgeBaseManifestMutationLock } from "./manifest-mutation-lock"
 
@@ -69,7 +73,7 @@ export class KnowledgeBaseIngestCoordinator {
     })
     return {
       ...message,
-      content: `${message.content}\n\n${buildPreflightAppendix(changedSources, listedSources)}`,
+      content: `${message.content}\n\n${buildPreflightAppendix(changedSources, listedSources, scan.skippedSources)}`,
     }
   }
 
@@ -127,6 +131,7 @@ function selectListedPreflightSources(
 function buildPreflightAppendix(
   changedSources: readonly KnowledgeBaseSourceScanItem[],
   listedSources: readonly KnowledgeBaseSourceScanItem[],
+  skippedSources: readonly KnowledgeBaseSkippedSource[],
 ): string {
   const sourceLines: string[] = []
   for (const source of listedSources) {
@@ -134,6 +139,10 @@ function buildPreflightAppendix(
     sourceLines.push(line)
   }
   const omittedCount = changedSources.length - sourceLines.length
+  const skippedLines = skippedSources
+    .slice(0, PREFLIGHT_SOURCE_LIST_MAX_ITEMS)
+    .map((source) => `  - ${source.relativePath} (${source.reason})`)
+  const omittedSkippedCount = skippedSources.length - skippedLines.length
   return [
     "Synapse ingest preflight:",
     "- Do not edit `.raw/.manifest.json`; Synapse writes manifest facts after this turn.",
@@ -143,6 +152,16 @@ function buildPreflightAppendix(
       ? [
           `- ${omittedCount} additional changed \`.raw/\` sources were omitted from this prompt to keep the ingest turn bounded.`,
           "- Process only the listed sources in this turn; run `/wiki-ingest` again after this batch to continue remaining sources.",
+        ]
+      : []),
+    ...(skippedLines.length > 0
+      ? [
+          "- Skipped `.raw/` sources:",
+          ...skippedLines,
+          ...(omittedSkippedCount > 0
+            ? [`- ${omittedSkippedCount} additional skipped \`.raw/\` sources were omitted from this prompt.`]
+            : []),
+          "- Tell the user why these sources were skipped; do not report skipped sources as processed.",
         ]
       : []),
     "- End with exactly one fenced block tagged `synapse_kb_ingest_report` containing schema `synapse.kb.ingest.report.v1`.",
