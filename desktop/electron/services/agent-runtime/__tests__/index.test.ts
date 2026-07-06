@@ -16,6 +16,13 @@ import {
 import { KNOWLEDGE_BASE_AGENT_CAPABILITIES } from "../../../../src/modules/agent/knowledge-base-commands"
 import type { AgentEvent, AgentMessage } from "../types"
 
+vi.mock("electron", () => ({
+  app: {
+    getAppPath: () => "/tmp/synapse-app",
+    getPath: (name: string) => `/tmp/synapse-${name}`,
+  },
+}))
+
 const createdSessionInputs = vi.hoisted(() => ({
   values: [] as unknown[],
 }))

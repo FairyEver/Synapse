@@ -947,7 +947,7 @@ describe("AccountService", () => {
       }],
     })
 
-    expect(result).toEqual({ completed: 1, failed: 0, skipped: 3 })
+    expect(result).toEqual({ completed: 1, completedDirectories: 1, failed: 0, skipped: 3 })
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: "项目A",
@@ -995,7 +995,7 @@ describe("AccountService", () => {
       }],
     })
 
-    expect(result).toEqual({ completed: 1, failed: 0, skipped: 1 })
+    expect(result).toEqual({ completed: 1, completedDirectories: 1, failed: 0, skipped: 1 })
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: "项目A",

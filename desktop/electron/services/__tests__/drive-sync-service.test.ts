@@ -1680,8 +1680,8 @@ describe("DriveSyncService", () => {
               if (rootListCalls === 1) return { items: [], nextOffset: null }
               return {
                 items: [
-                  { id: "nested-docs", name: "Docs", type: "folder", path: "Archive/Docs", depth: 1 },
-                  { id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0 },
+                  { id: "nested-docs", name: "Docs", type: "folder", path: "Archive/Docs", depth: 1, size: "0" },
+                  { id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0, size: "0" },
                 ],
               }
             }
@@ -1689,17 +1689,17 @@ describe("DriveSyncService", () => {
               if (offset === 3) {
                 return {
                   items: [
-                    { id: "remote-gitignore", name: ".gitignore", type: "file", path: "Docs/.gitignore", depth: 1 },
-                    { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/notes/spec.md", depth: 2 },
+                    { id: "remote-gitignore", name: ".gitignore", type: "file", path: "Docs/.gitignore", depth: 1, size: "9" },
+                    { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/notes/spec.md", depth: 2, size: "4" },
                   ],
                   nextOffset: null,
                 }
               }
               return {
                 items: [
-                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/notes", depth: 1 },
-                  { id: "remote-more", name: "more", type: "folder", path: "Docs/more", depth: 1 },
-                  { id: "remote-readme", name: "readme.md", type: "file", path: "Docs/more/readme.md", depth: 2 },
+                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/notes", depth: 1, size: "0" },
+                  { id: "remote-more", name: "more", type: "folder", path: "Docs/more", depth: 1, size: "0" },
+                  { id: "remote-readme", name: "readme.md", type: "file", path: "Docs/more/readme.md", depth: 2, size: "6" },
                 ],
                 nextOffset: 3,
               }
@@ -1866,13 +1866,13 @@ describe("DriveSyncService", () => {
             if (parentId === null || parentId === undefined) {
               rootListCalls += 1
               if (rootListCalls === 1) return { items: [], nextOffset: null }
-              return { items: [{ id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0 }] }
+              return { items: [{ id: "remote-docs", name: "Docs", type: "folder", path: "Docs", depth: 0, size: "0" }] }
             }
             if (parentId === "remote-docs") {
               return { items: [
-                { id: "remote-root-readme", name: "README.md", type: "file", path: "Docs/README.md", depth: 1 },
-                { id: "remote-docs-folder", name: "docs", type: "folder", path: "Docs/docs", depth: 1 },
-                { id: "remote-nested-readme", name: "README.md", type: "file", path: "Docs/docs/README.md", depth: 2 },
+                { id: "remote-root-readme", name: "README.md", type: "file", path: "Docs/README.md", depth: 1, size: "4" },
+                { id: "remote-docs-folder", name: "docs", type: "folder", path: "Docs/docs", depth: 1, size: "0" },
+                { id: "remote-nested-readme", name: "README.md", type: "file", path: "Docs/docs/README.md", depth: 2, size: "6" },
               ] }
             }
             return { items: [] }
@@ -2471,7 +2471,7 @@ describe("DriveSyncService", () => {
       const createDriveFolder = vi.fn(async () => ({ id: "remote-project", name: "Project", type: "folder" }))
       const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
       const listDriveItemTree = vi.fn(async () => ({
-        items: [{ id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/spec.md", depth: 2 }],
+        items: [{ id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/spec.md", depth: 1 }],
       }))
       const harness = createHarness({
         watch,
