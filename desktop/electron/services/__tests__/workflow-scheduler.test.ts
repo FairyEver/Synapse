@@ -350,6 +350,45 @@ describe("ReactiveScheduler", () => {
     expect(Date.now() - startedAt).toBeLessThan(40)
   })
 
+  it("records cancelled outcomes on abort grace timeout and ignores late task results", async () => {
+    const ctrl = new AbortController()
+    const done: NodeExecOutcome[] = []
+    const cb = makeCallbacks([])
+    cb.onNodeDone = (outcome) => { done.push(outcome) }
+    const results = await new ReactiveScheduler({ cancelGraceMs: 1, runId: "late-run" }).execute(
+      ["a"], [],
+      (id) => ({
+        nodeId: id,
+        execute: async () => {
+          ctrl.abort()
+          await delayed(20, undefined)
+          return ok(id, "late success")
+        },
+      }),
+      cb, ctrl.signal,
+    )
+
+    expect(results.get("a")).toMatchObject({
+      nodeId: "a",
+      status: "cancelled",
+      error: "运行被取消（取消宽限期超时）",
+    })
+    expect(done).toEqual([
+      expect.objectContaining({
+        nodeId: "a",
+        status: "cancelled",
+        error: "运行被取消（取消宽限期超时）",
+      }),
+    ])
+
+    await delayed(25, undefined)
+    expect(results.get("a")?.status).toBe("cancelled")
+    expect(schedLogger.warn).toHaveBeenCalledWith(
+      "scheduler: node settled after abort grace timeout",
+      expect.objectContaining({ nodeId: "a", runId: "late-run" }),
+    )
+  })
+
   it("preserves a completed node result that resolves at the abort grace boundary", async () => {
     vi.useFakeTimers()
     const ctrl = new AbortController()

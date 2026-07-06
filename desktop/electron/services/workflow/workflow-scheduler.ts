@@ -114,6 +114,20 @@ export class ReactiveScheduler {
       if (updated !== 0) return
       skipNodeAndPropagate(nodeId, "upstream failed")
     }
+    const recordCancelledNode = (nodeId: string, error = "运行被取消") => {
+      if (results.has(nodeId)) return
+      const outcome: NodeExecOutcome = { nodeId, status: "cancelled", error }
+      results.set(nodeId, outcome)
+      try {
+        callbacks.onNodeDone(outcome)
+      } catch (err) {
+        logger.error("scheduler: onNodeDone callback threw", {
+          nodeId,
+          error: err instanceof Error ? err.message : String(err),
+          ...(this.runId ? { runId: this.runId } : {}),
+        })
+      }
+    }
 
     const tryStart = (nodeId: string) => {
       if (abortSignal.aborted) return
@@ -233,14 +247,25 @@ export class ReactiveScheduler {
         const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), this.cancelGraceMs))
         const settled = await Promise.race([Promise.allSettled([...running.values()]), timeout])
         if (settled === "timeout") {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0))
+          const timedOutRunning = [...running.entries()]
+          acceptingResults = false
+          for (const [nodeId, promise] of timedOutRunning) {
+            recordCancelledNode(nodeId, "运行被取消（取消宽限期超时）")
+            void promise.then(() => {
+              logger.warn("scheduler: node settled after abort grace timeout", {
+                nodeId,
+                ...(this.runId ? { runId: this.runId } : {}),
+              })
+            })
+          }
           running.clear()
           waitQueue.length = 0
           logger.warn("scheduler: abort grace timeout elapsed", {
             cancelGraceMs: this.cancelGraceMs,
+            runningNodeIds: timedOutRunning.map(([nodeId]) => nodeId),
             ...(this.runId ? { runId: this.runId } : {}),
           })
-          await new Promise<void>((resolve) => setTimeout(resolve, 0))
-          acceptingResults = false
         }
         break
       }
