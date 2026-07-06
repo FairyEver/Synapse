@@ -329,10 +329,22 @@ export class KnowledgeBaseService {
       const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "trashRawEntries")
       await this.preflightRawManifestWrite(manifestSync, projectPath, payload.projectId, "trashRawEntries", payload.relativePaths)
       const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
-      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
+      const changes = result.entries.map((entry) => ({
         from: entry.relativePath,
         kind: entry.kind,
-      })))
+      }))
+      try {
+        await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "trashRawEntries", changes)
+      } catch (error) {
+        logger.warn("Knowledge Base raw trash manifest sync failed after entries were trashed.", {
+          affectedRawPaths: limitRawLogPaths(result.entries.map((entry) => entry.relativePath)),
+          operation: "trashRawEntries",
+          projectId: payload.projectId,
+          rawRelativePaths: limitRawLogPaths(payload.relativePaths),
+          ...knowledgeBaseErrorMeta(error),
+        })
+        throw new Error("知识库资料已移入废纸篓，但资料清单同步失败。请检查 .raw/.manifest.json 后重试。", { cause: error })
+      }
       this.recordRawMutation("trashRawEntries", payload.projectId, result, {
         rawRelativePaths: payload.relativePaths,
       })

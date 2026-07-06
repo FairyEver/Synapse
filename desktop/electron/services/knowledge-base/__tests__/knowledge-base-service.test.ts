@@ -890,6 +890,45 @@ describe("KnowledgeBaseService", () => {
     })
   })
 
+  itSupportsPosixModeBits("reports manifest sync failures after raw entries were trashed", async () => {
+    let rawRoot = ""
+    const trashItem = vi.fn(async () => {
+      await chmod(rawRoot, 0o555)
+    })
+    const { projectId, projectPath, service } = await managedFixture({
+      rawFileManager: new KnowledgeBaseRawFileManager({ trashItem }),
+    })
+    rawRoot = path.join(projectPath, ".raw")
+    await mkdir(path.join(rawRoot, "folder"), { recursive: true })
+    await writeFile(path.join(rawRoot, "folder", "brief.md"), "alpha\n")
+    await writeFile(path.join(rawRoot, ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/folder/brief.md": { hash: "hash-brief" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
+
+    try {
+      await expect(service.trashRawEntries({
+        projectId,
+        relativePaths: ["folder/brief.md"],
+      })).rejects.toThrow("知识库资料已移入废纸篓，但资料清单同步失败。")
+    } finally {
+      await chmod(rawRoot, 0o755)
+    }
+
+    expect(trashItem).toHaveBeenCalledWith(path.join(rawRoot, "folder", "brief.md"))
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Knowledge Base raw trash manifest sync failed after entries were trashed.",
+      expect.objectContaining({
+        affectedRawPaths: ["folder/brief.md"],
+        operation: "trashRawEntries",
+        projectId,
+      }),
+    )
+  })
+
   it("logs raw mutation summaries without full external upload paths", async () => {
     const sourcePath = path.join(await tempDir(), "secret-client-name.md")
     await writeFile(sourcePath, "alpha\n")
