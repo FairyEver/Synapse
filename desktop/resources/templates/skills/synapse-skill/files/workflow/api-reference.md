@@ -59,7 +59,7 @@ No provider needed. Config fields:
 
 ### script
 
-No provider needed. Config fields:
+Requires workflow `defaultProjectId` as the execution project because script config currently has no node-level `projectId`. No provider needed. Config fields:
 
 - `script` (string) — shell script content
 - `shell?` (enum: posix/cmd/powershell) — platform default when omitted: Windows uses `cmd`; macOS/Linux use `posix`. Set `posix` explicitly only when the workflow should require a POSIX shell.
@@ -234,7 +234,7 @@ Create a new empty workflow with a default end node.
 
 **Params:** `name?` (string), `defaultProjectId?` (string), `defaultProviderId?` (string), `defaultModelTier?` (`"default"|"haiku"|"sonnet"|"opus"`), `defaultNodeTimeoutMins?` (number)
 **Returns:** `{ id, versionHash }`
-**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Codex and Claude Code nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex/claude_code node.
+**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Script nodes require workflow `defaultProjectId` as their execution project. Codex and Claude Code nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex/claude_code node.
 
 ### app_workflow_definition_update
 
