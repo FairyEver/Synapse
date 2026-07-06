@@ -473,9 +473,10 @@ export class KnowledgeBaseRawFileManager {
           knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
             reason: budgetFailure,
             relativePath,
-            copiedFiles: budget.copiedFiles,
-            copiedBytes: budget.copiedBytes,
+            copiedFiles: nextBudget.copiedFiles,
+            copiedBytes: nextBudget.copiedBytes,
           })
+          budget = nextBudget
           skipped.push({ path: relativePath, reason: budgetFailure })
           continue
         }

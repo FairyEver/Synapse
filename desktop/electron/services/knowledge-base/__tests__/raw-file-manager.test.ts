@@ -543,6 +543,29 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(readFile(path.join(exportRoot, "会议资料", "02.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("shares consumed export budget across entries after a recursive budget failure", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "会议资料"), { recursive: true })
+    await writeFile(path.join(rawRoot, "会议资料", "01.md"), "1\n", "utf8")
+    await writeFile(path.join(rawRoot, "会议资料", "02.md"), "2\n", "utf8")
+    await writeFile(path.join(rawRoot, "会议资料", "03.md"), "3\n", "utf8")
+    await writeFile(path.join(rawRoot, "after.md"), "after\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      exportLimits: { maxFiles: 2 },
+    })
+
+    const result = await manager.exportEntries(rawRoot, ["会议资料", "after.md"], exportRoot)
+
+    expect(result.entries).toEqual([])
+    expect(result.skipped).toEqual([
+      { path: "会议资料", reason: "too-many-files" },
+      { path: "after.md", reason: "too-many-files" },
+    ])
+    await expect(readFile(path.join(exportRoot, "after.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("skips folder export without partial copies when the recursive depth budget is exceeded", async () => {
     const rawRoot = await tempDir()
     const exportRoot = await tempDir()
