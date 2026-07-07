@@ -51,3 +51,32 @@
 ## Concerns
 
 - The initial app icon is a copied placeholder PNG from `quick-input`; it is valid for manifest/tests, but product polish may want a dedicated icon later.
+
+## Task 7 Fix Report
+
+### Changed Files
+
+- `desktop/src/modules/apps/components/system-app-content.tsx`
+- `desktop/src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+- `.superpowers/sdd/task-7-report.md`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts`
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. `swarm-task` now renders through `SystemAppContent`, and rejected `stopRefill` / `cancelRun` actions surface toast errors instead of failing silently.
+
+### Self-Review
+
+- Kept the host change surgical by following the existing `if (appId === ...)` mapping pattern in `SystemAppContent`.
+- Added a focused host-level test so the missing render path is caught at the shell boundary.
+- Matched existing local error handling in `SwarmTaskModule` by logging and toasting on rejected actions without changing the UI structure.
+
+### Concerns
+
+- None for this fix scope.

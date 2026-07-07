@@ -4,6 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { ReactNode } from "react"
 import type { SwarmRun, SwarmTask, SwarmWorkerRun } from "../../shared/schema"
 
 const swarmTaskFixtures = vi.hoisted(() => {
@@ -102,6 +103,40 @@ vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
 }))
 
+vi.mock("@/modules/apps/components/system-app-window-shell", () => ({
+  SystemAppWindowShell: ({
+    tabs = [],
+    value,
+    onValueChange,
+    actions,
+    children,
+  }: {
+    tabs?: ReadonlyArray<{ id: string; label: string }>
+    value?: string
+    onValueChange?: (value: string) => void
+    actions?: ReactNode
+    children: ReactNode
+  }) => (
+    <div>
+      <div>{actions}</div>
+      <div>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={tab.id === value}
+            onClick={() => onValueChange?.(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div>{children}</div>
+    </div>
+  ),
+}))
+
 vi.mock("sonner", () => ({ toast }))
 
 import { SwarmTaskModule } from "../index"
@@ -119,6 +154,7 @@ beforeEach(() => {
   swarmTaskBridge.listTasks.mockClear()
   swarmTaskBridge.startRun.mockClear()
   swarmTaskBridge.listRuns.mockClear()
+  swarmTaskBridge.getRun.mockClear()
   swarmTaskBridge.listWorkerRuns.mockClear()
   swarmTaskBridge.stopRefill.mockClear()
   swarmTaskBridge.cancelRun.mockClear()
@@ -161,6 +197,24 @@ describe("SwarmTaskModule", () => {
       platform: "automation",
     })
   })
+
+  it("shows errors when stop refill or cancel run fails", async () => {
+    swarmTaskBridge.stopRefill.mockRejectedValueOnce(new Error("停止补位失败"))
+    swarmTaskBridge.cancelRun.mockRejectedValueOnce(new Error("取消运行失败"))
+
+    await renderModule()
+    await clickTab("运行中")
+    await waitForButton("停止补位")
+    await waitForButton("取消运行")
+
+    await clickButton("停止补位")
+    await clickButton("取消运行")
+
+    expect(swarmTaskBridge.stopRefill).toHaveBeenCalledWith("run-1")
+    expect(swarmTaskBridge.cancelRun).toHaveBeenCalledWith("run-1")
+    expect(toast.error).toHaveBeenCalledWith("停止补位失败")
+    expect(toast.error).toHaveBeenCalledWith("取消运行失败")
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -183,4 +237,26 @@ async function clickButton(text: string, index = 0): Promise<void> {
 
 function getTextarea(): HTMLTextAreaElement | null {
   return document.body.querySelector("textarea")
+}
+
+async function clickTab(text: string): Promise<void> {
+  const tab = Array.from(document.body.querySelectorAll("button"))
+    .find((button) => button.getAttribute("role") === "tab" && button.textContent?.trim() === text)
+
+  await act(async () => {
+    tab?.click()
+    await Promise.resolve()
+  })
+}
+
+async function waitForButton(text: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const button = Array.from(document.body.querySelectorAll("button"))
+      .find((item) => item.textContent?.trim() === text || item.getAttribute("aria-label") === text)
+    if (button instanceof HTMLButtonElement) return
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+  throw new Error(`Button not found: ${text}`)
 }

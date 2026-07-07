@@ -25,6 +25,7 @@ import { SkillInstallerModule } from "../../../../app-capabilities/skill-install
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
+import { SwarmTaskModule } from "../../../../app-capabilities/swarm-task/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ScreenshotModule } from "../../../../app-capabilities/screenshot/renderer"
 import { AppLauncherGrid } from "./app-launcher-grid"
@@ -105,6 +106,7 @@ function SystemAppContent({
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />
+  if (appId === "swarm-task") return <SwarmTaskModule />
 
   return null
 }

@@ -172,14 +172,26 @@ export function SwarmTaskModule() {
 
   const stopRefill = useCallback(async () => {
     if (!activeRun) return
-    await swarmTaskBridge.stopRefill(activeRun.id)
-    await reloadRunData(selectedTask)
+    try {
+      await swarmTaskBridge.stopRefill(activeRun.id)
+      await reloadRunData(selectedTask)
+    } catch (error) {
+      const message = errorMessage(error, "停止补位失败")
+      logger.error("Failed to stop swarm task refill.", error)
+      toast.error(message)
+    }
   }, [activeRun, reloadRunData, selectedTask, swarmTaskBridge])
 
   const cancelRun = useCallback(async () => {
     if (!activeRun) return
-    await swarmTaskBridge.cancelRun(activeRun.id)
-    await reloadRunData(selectedTask)
+    try {
+      await swarmTaskBridge.cancelRun(activeRun.id)
+      await reloadRunData(selectedTask)
+    } catch (error) {
+      const message = errorMessage(error, "取消运行失败")
+      logger.error("Failed to cancel swarm task run.", error)
+      toast.error(message)
+    }
   }, [activeRun, reloadRunData, selectedTask, swarmTaskBridge])
 
   return (
