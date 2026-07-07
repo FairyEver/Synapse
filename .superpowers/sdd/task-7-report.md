@@ -128,3 +128,26 @@
 ### Concerns
 
 - None for this fix scope.
+
+## Task 7 Fix Report 4
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. The search empty-match state keeps the task sidebar/search visible, selected task changes clear stale run data before reload, worker rows are filtered to the selected task/run, and missing conversations now show an error toast.
+
+### Self-Review
+
+- Kept the fix in the renderer state path and regression tests.
+
+### Concerns
+
+- None for this fix scope.
