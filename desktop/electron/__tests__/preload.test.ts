@@ -1226,15 +1226,42 @@ describe("preload bridge", () => {
 
   it("maps swarm task bridge methods to swarm task IPC channels", async () => {
     const bridge = await loadPreloadBridge()
+    const swarmTaskConfig = {
+      projectId: "project-1",
+      workspacePath: "/tmp/project-1",
+      prompt: "Do work",
+      presetId: "general",
+      injectOptions: {
+        workerIdentity: true,
+        roundContext: true,
+        runContext: true,
+        outputProtocol: true,
+        parallelContext: true,
+        gitContext: false,
+        customAppendix: "",
+      },
+      runMode: "batch" as const,
+      concurrency: 3,
+      maxRounds: 3,
+      output: {
+        mode: "managed-directory" as const,
+        targetFilePolicy: "append-only" as const,
+      },
+      summary: {
+        enabled: true,
+        injectRecent: false,
+        recentLimit: 3,
+      },
+      handoff: {
+        enabled: false,
+      },
+      agent: {},
+    }
 
     await bridge.swarmTask.listTasks()
     await bridge.swarmTask.createTask({
       name: "Task 1",
-      config: {
-        projectId: "project-1",
-        workspacePath: "/tmp/project-1",
-        prompt: "Do work",
-      },
+      config: swarmTaskConfig,
     })
     await bridge.swarmTask.updateTask({
       taskId: "task-1",
@@ -1258,11 +1285,7 @@ describe("preload bridge", () => {
       "synapse:swarm-task:tasks:create",
       {
         name: "Task 1",
-        config: {
-          projectId: "project-1",
-          workspacePath: "/tmp/project-1",
-          prompt: "Do work",
-        },
+        config: swarmTaskConfig,
       },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(

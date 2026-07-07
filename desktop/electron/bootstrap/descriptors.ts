@@ -107,6 +107,11 @@ import {
   type ProviderService,
 } from "../services/provider"
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
+import {
+  SWARM_TASK_RUNS_NAMESPACE,
+  SWARM_TASKS_NAMESPACE,
+  SWARM_TASK_WORKER_RUNS_NAMESPACE,
+} from "../runtime/data-repo"
 import type {
   AgentPersonaRemoteCacheEntryV1,
   ConversationEntryV1,
@@ -118,9 +123,6 @@ import type {
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
-  SWARM_TASK_RUNS_NAMESPACE,
-  SWARM_TASKS_NAMESPACE,
-  SWARM_TASK_WORKER_RUNS_NAMESPACE,
   SwarmRunEntryV1,
   SwarmTaskEntryV1,
   SwarmWorkerRunEntryV1,

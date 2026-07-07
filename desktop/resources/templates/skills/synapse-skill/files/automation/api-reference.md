@@ -241,6 +241,159 @@ Input:
 
 `automationId` is optional. Returns running item ids, scheduled item ids, and compact runtime state.
 
+## Swarm Tasks
+
+### app_swarm_task_task_list
+
+Input:
+
+```json
+{}
+```
+
+Returns reusable Swarm Task configs. Use this before creating a duplicate task by name.
+
+### app_swarm_task_task_get
+
+Input:
+
+```json
+{ "taskId": "swarm-task:..." }
+```
+
+Returns one Swarm Task config or `null`.
+
+### app_swarm_task_task_create
+
+Input:
+
+```json
+{
+  "name": "Research candidates",
+  "description": "Optional description",
+  "config": {
+    "projectId": "project-id",
+    "workspacePath": "/Users/example/project",
+    "prompt": "Find and summarize candidate approaches.",
+    "presetId": "general",
+    "runMode": "batch",
+    "concurrency": 3,
+    "maxRounds": 3,
+    "injectOptions": {
+      "workerIdentity": true,
+      "roundContext": true,
+      "runContext": true,
+      "outputProtocol": true,
+      "parallelContext": true,
+      "gitContext": false,
+      "customAppendix": ""
+    },
+    "output": {
+      "mode": "managed-directory",
+      "targetFilePolicy": "append-only"
+    },
+    "summary": {
+      "enabled": true,
+      "injectRecent": false,
+      "recentLimit": 3
+    },
+    "handoff": {
+      "enabled": false
+    },
+    "agent": {}
+  }
+}
+```
+
+Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Output `mode` is `managed-directory`, `target-file`, or `both`. Target file policy is `append-only`, `section-update`, or `free-edit`.
+
+### app_swarm_task_task_update
+
+Input:
+
+```json
+{
+  "taskId": "swarm-task:...",
+  "patch": {
+    "name": "New name",
+    "description": "Updated description"
+  }
+}
+```
+
+Returns the updated task. `currentConfig` replaces the saved task config; if you include it, send a full config object. Omit `currentConfig` when changing only name or description.
+
+### app_swarm_task_task_delete
+
+Input:
+
+```json
+{ "taskId": "swarm-task:..." }
+```
+
+Returns:
+
+```json
+{ "ok": true }
+```
+
+### app_swarm_task_run_start
+
+Input:
+
+```json
+{
+  "taskId": "swarm-task:...",
+  "configOverride": {
+    "runMode": "continuous",
+    "concurrency": 2,
+    "maxRounds": 10
+  }
+}
+```
+
+`configOverride` is optional and applies only to this run. The run stores a full config snapshot.
+
+### app_swarm_task_run_stopRefill
+
+Input:
+
+```json
+{ "runId": "swarm-run:..." }
+```
+
+Requests a continuous run to stop launching new workers. Active workers may continue.
+
+### app_swarm_task_run_cancel
+
+Input:
+
+```json
+{ "runId": "swarm-run:..." }
+```
+
+Cancels the run and active workers when possible.
+
+### app_swarm_task_run_list
+
+Input:
+
+```json
+{ "taskId": "swarm-task:...", "limit": 20 }
+```
+
+All fields are optional. Returns recent runs. `limit` caps at 200.
+
+### app_swarm_task_run_get
+
+Input:
+
+```json
+{ "runId": "swarm-run:..." }
+```
+
+Returns one run with workers. Worker records include phase, status, optional summary, optional handoff, and linked Agent `conversationId` when available. Open linked worker conversations as Agent conversations with platform `"swarm"`.
+
 ## Public Summary Boundary
 
 Item summaries include trigger type, trigger summary, executor type, executor title, status, timestamps, and validation issues.
@@ -250,3 +403,5 @@ Item summaries do not include `trigger.config` or `executor.config`.
 Run summaries include id, status, trigger/executor type, timestamps, sanitized result summary, and whitelisted non-secret metrics.
 
 Run summaries do not include logs, raw outputs, Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, Bearer tokens, Basic passwords, cookies, API keys, environment variable values, or raw event payloads.
+
+Swarm Task runs include config snapshots and worker summaries. Treat worker prompts and linked Agent conversation content as conversation data, not as direct terminal output.

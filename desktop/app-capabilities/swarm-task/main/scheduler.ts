@@ -19,13 +19,15 @@ export type SwarmWorkerRunner = (input: SwarmWorkerRunnerInput) => Promise<Swarm
 
 export type SwarmSchedulerResult = {
   readonly status: "success" | "partial" | "failed" | "cancelled"
-  readonly totals: {
-    readonly started: number
-    readonly success: number
-    readonly failed: number
-    readonly cancelled: number
-    readonly timeout: number
-  }
+  readonly totals: SwarmSchedulerTotals
+}
+
+type SwarmSchedulerTotals = {
+  started: number
+  success: number
+  failed: number
+  cancelled: number
+  timeout: number
 }
 
 export type SwarmSchedulerStartInput = {
@@ -145,7 +147,7 @@ async function runWorker(
   input: SwarmWorkerRunnerInput,
 ): Promise<SwarmWorkerRunnerResult> {
   const { abortSignal } = input
-  if (abortSignal.aborted) {
+  if (abortSignal?.aborted) {
     return {
       status: "cancelled",
       resultText: "",

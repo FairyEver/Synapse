@@ -4,9 +4,9 @@ You have access to Synapse Automation MCP tools for managing Automation items an
 
 ## Scope Boundary
 
-Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval or webhook triggers, enablement, manual runs, active run stopping, run history, and Automation runtime state.
+Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval or webhook triggers, enablement, manual runs, active run stopping, run history, Automation runtime state, and Swarm Task app runs.
 
-Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
+Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for direct terminal control, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `synapse-skill/content.md` routing and read the matching `files/<domain>/index.md` attachment before using that domain's tools.
 
 ## Capabilities
 
@@ -20,6 +20,14 @@ Automation MCP exposes these operations:
 - inspect Automation runtime state
 - list registered trigger types
 - list registered executor types
+
+Swarm Task MCP exposes these operations:
+
+- create, list, get, update, and delete reusable Swarm Task configs
+- start one Swarm Task run
+- stop refill for a continuous run
+- cancel one run
+- list and get run state
 
 Read responses intentionally omit raw `trigger.config` and `executor.config`. Do not ask MCP to reveal hidden command text, scripts, Agent prompts, HTTP bodies, tokens, cookies, Authorization values, or environment secrets.
 
@@ -81,6 +89,24 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 - `app_automation_run_list` returns recent run summaries without raw logs or outputs.
 - `app_automation_runtime_inspect` shows which items are scheduled or running.
 - `app_automation_webhook_list` returns Webhook `publicId`, name, enabled state, and delivery status for `builtin.webhook` trigger configuration.
+
+## Swarm Task Rules
+
+Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency, run mode, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
+
+Do not use Swarm Task for direct terminal control. Workers are Agent conversations created by Synapse; worker details live in linked Agent conversations with platform `"swarm"`.
+
+Default flow:
+
+1. Use `app_swarm_task_task_list` to find an existing task by name.
+2. Use `app_swarm_task_task_create` for a new reusable config.
+3. Use `app_swarm_task_task_update` for a focused config change.
+4. Use `app_swarm_task_run_start` to run a saved task. Pass `configOverride` only for this run's temporary changes.
+5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history.
+6. Use `app_swarm_task_run_stopRefill` to stop launching new workers in continuous mode while allowing active workers to finish.
+7. Use `app_swarm_task_run_cancel` to cancel a run.
+
+Summary is enabled by default. Handoff is disabled by default. If handoff is enabled, only the previous round's handoff is passed forward; summaries can include recent previous rounds according to the saved config.
 
 ## API Reference
 

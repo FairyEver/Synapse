@@ -20,8 +20,9 @@ export const swarmTaskTasksSchemaDefinition: NamespaceSchema<SwarmTaskEntryV1> =
   name: SWARM_TASKS_NAMESPACE,
   currentVersion: 1,
   backend: "sqlite",
-  validate(value: unknown) {
-    return swarmTaskSchema.parse(value)
+  migrations: [],
+  validate(value: unknown): value is SwarmTaskEntryV1 {
+    return swarmTaskSchema.safeParse(value).success
   },
 }
 
@@ -29,8 +30,9 @@ export const swarmTaskRunsSchemaDefinition: NamespaceSchema<SwarmRunEntryV1> = {
   name: SWARM_TASK_RUNS_NAMESPACE,
   currentVersion: 1,
   backend: "sqlite",
-  validate(value: unknown) {
-    return swarmRunSchema.parse(value)
+  migrations: [],
+  validate(value: unknown): value is SwarmRunEntryV1 {
+    return swarmRunSchema.safeParse(value).success
   },
 }
 
@@ -38,7 +40,8 @@ export const swarmTaskWorkerRunsSchemaDefinition: NamespaceSchema<SwarmWorkerRun
   name: SWARM_TASK_WORKER_RUNS_NAMESPACE,
   currentVersion: 1,
   backend: "sqlite",
-  validate(value: unknown) {
-    return swarmWorkerRunSchema.parse(value)
+  migrations: [],
+  validate(value: unknown): value is SwarmWorkerRunEntryV1 {
+    return swarmWorkerRunSchema.safeParse(value).success
   },
 }

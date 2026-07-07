@@ -50,18 +50,43 @@ export const swarmAgentConfigSchema = z.object({
   mainThreadPersonaId: z.string().min(1).nullable().optional(),
 }).strict()
 
+const defaultSwarmInjectOptions = () => ({
+  workerIdentity: true,
+  roundContext: true,
+  runContext: true,
+  outputProtocol: true,
+  parallelContext: true,
+  gitContext: false,
+  customAppendix: "",
+})
+
+const defaultSwarmOutputConfig = () => ({
+  mode: "managed-directory" as const,
+  targetFilePolicy: "append-only" as const,
+})
+
+const defaultSwarmSummaryConfig = () => ({
+  enabled: true,
+  injectRecent: false,
+  recentLimit: 3,
+})
+
+const defaultSwarmHandoffConfig = () => ({
+  enabled: false,
+})
+
 export const swarmTaskConfigSchema = z.object({
   projectId: z.string().min(1),
   workspacePath: z.string().min(1),
   prompt: z.string().min(1).max(256 * 1024),
   presetId: z.string().min(1).default("general"),
-  injectOptions: swarmInjectOptionsSchema.default({}),
+  injectOptions: swarmInjectOptionsSchema.default(defaultSwarmInjectOptions),
   runMode: swarmRunModeSchema.default("batch"),
   concurrency: z.number().int().min(1).max(20).default(3),
   maxRounds: z.number().int().min(1).max(500).default(3),
-  output: swarmOutputConfigSchema.default({}),
-  summary: swarmSummaryConfigSchema.default({}),
-  handoff: swarmHandoffConfigSchema.default({}),
+  output: swarmOutputConfigSchema.default(defaultSwarmOutputConfig),
+  summary: swarmSummaryConfigSchema.default(defaultSwarmSummaryConfig),
+  handoff: swarmHandoffConfigSchema.default(defaultSwarmHandoffConfig),
   agent: swarmAgentConfigSchema.default({}),
 }).strict()
 

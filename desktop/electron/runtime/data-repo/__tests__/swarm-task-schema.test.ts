@@ -63,7 +63,7 @@ describe("swarm task DataRepository schemas", () => {
       lastStatus: "success",
     }
 
-    expect(swarmTaskTasksSchemaDefinition.validate(entry)).toEqual(entry)
+    expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(true)
   })
 
   it("validates a run snapshot", () => {
@@ -79,7 +79,7 @@ describe("swarm task DataRepository schemas", () => {
       stopRequested: false,
     }
 
-    expect(swarmTaskRunsSchemaDefinition.validate(entry)).toEqual(entry)
+    expect(swarmTaskRunsSchemaDefinition.validate(entry)).toBe(true)
   })
 
   it("validates a worker run", () => {
@@ -98,7 +98,7 @@ describe("swarm task DataRepository schemas", () => {
       lastMessage: "思考",
     }
 
-    expect(swarmTaskWorkerRunsSchemaDefinition.validate(entry)).toEqual(entry)
+    expect(swarmTaskWorkerRunsSchemaDefinition.validate(entry)).toBe(true)
   })
 
   it("rejects invalid output policies", () => {
@@ -114,6 +114,6 @@ describe("swarm task DataRepository schemas", () => {
       updatedAt: "2026-07-07T00:00:00.000Z",
     }
 
-    expect(() => swarmTaskTasksSchemaDefinition.validate(entry)).toThrow()
+    expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(false)
   })
 })
