@@ -41,6 +41,7 @@ import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
+import { createSwarmTaskCapabilityDispatcher } from "../../app-capabilities/swarm-task/main/dispatcher"
 import { createAgentRuntimeSwarmGateway, createSwarmTaskService, type SwarmTaskService } from "../../app-capabilities/swarm-task/main/service"
 import { SWARM_TASK_SERVICE_ID } from "../../app-capabilities/swarm-task/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
@@ -844,6 +845,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.audit-sink",
     "core.terminal",
     "core.sound-notifier",
+    SWARM_TASK_SERVICE_ID,
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -1000,10 +1002,14 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
       service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
     })
+    const swarmTaskDispatcher = createSwarmTaskCapabilityDispatcher({
+      service: ctx.registry.get<SwarmTaskService>(SWARM_TASK_SERVICE_ID),
+    })
     const appDispatcher = createAppCapabilityDispatcher({
       documentTemplate: documentTemplateDispatcher,
       screenshot: screenshotDispatcher,
       soundNotifier: soundNotifierDispatcher,
+      swarmTask: swarmTaskDispatcher,
     })
 
     const actionRouter = createSynapseActionRouter({

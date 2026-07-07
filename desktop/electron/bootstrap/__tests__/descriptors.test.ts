@@ -133,6 +133,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
+      "core.swarm-task",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
