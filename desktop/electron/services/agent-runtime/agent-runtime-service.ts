@@ -300,8 +300,13 @@ export class AgentRuntimeService {
   async sendNewSession(
     message: AgentMessage,
     name: string,
+    options: {
+      readonly abortSignal?: AbortSignal
+      readonly liveEventTimeoutMs?: number
+      readonly onConversationCreated?: (conversation: ConversationEntryV1) => void
+    } = {},
   ): Promise<AgentRuntimeTurnResult> {
-    return this.conversationRouter.sendNewSession(message, name)
+    return this.conversationRouter.sendNewSession(message, name, options)
   }
 
   hasActiveKnowledgeBaseSession(): boolean {

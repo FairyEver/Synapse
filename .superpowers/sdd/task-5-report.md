@@ -86,3 +86,35 @@ Result:
 ## Concerns
 
 - Because the current `AgentRuntimeService.sendNewSession` API does not expose `abortSignal` or `onConversationCreated`, the gateway cannot publish the conversation id before the turn finishes through that service surface. It now reports the conversation id immediately after `sendNewSession` resolves.
+
+## Task 5 Fix Report
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `desktop/electron/services/agent-runtime/agent-runtime-service.ts`
+- `.superpowers/sdd/task-5-report.md`
+
+### Tests run
+
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/conversation-source.test.ts electron/modules/agent/__tests__/ipc-sessions.test.ts app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts -t "notifies workflow conversation targets when the conversation is created"`
+
+### Result
+
+- `createAgentRuntimeSwarmGateway` now forwards `abortSignal` into `AgentRuntimeService.sendNewSession(...)`.
+- The gateway now passes `onConversationCreated` through the runtime wrapper and publishes `input.onConversationId` as soon as the side conversation is created, before turn completion.
+- `AgentRuntimeService.sendNewSession(...)` now exposes and forwards the existing router options contract instead of collapsing it to two arguments.
+- The swarm gateway unit test now asserts the third options argument and verifies that the published conversation id arrives before the runtime result resolves.
+- Existing workflow IPC coverage remains in place alongside the swarm coverage already present in `ipc-sessions.test.ts`.
+
+### Self-review
+
+- Kept the fix scoped to the approved files.
+- Preserved the existing `swarm` source/platform behavior and did not touch CLI worker or terminal behavior.
+- Used the existing router contract instead of inventing a new runtime API shape.
+
+### Concerns
+
+- The focused `agent-runtime-service` test passes, but it emits existing `log-store` compatibility warnings under Vitest because Electron app globals are not mocked in that test path. The test still exits successfully.

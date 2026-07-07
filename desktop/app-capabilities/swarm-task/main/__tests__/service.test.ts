@@ -140,11 +140,18 @@ function serviceHarness(options?: {
 
 describe("createSwarmTaskService", () => {
   it("creates an Agent Runtime swarm gateway with swarm session metadata", async () => {
-    const sendNewSession = vi.fn(async () => ({
-      conversationId: "conversation-1",
-      resultText: "done",
-      events: [],
-    }))
+    const pendingResult = deferred<{
+      conversationId: string
+      resultText: string
+      events: []
+    }>()
+    const publishedConversationIds: string[] = []
+    const sendNewSession = vi.fn(async (_message, _name, options) => {
+      options?.onConversationCreated?.({
+        id: "conversation-1",
+      } as never)
+      return pendingResult.promise
+    })
     const cancelTurn = vi.fn(async () => ({ status: "graceful-pending" as const }))
     const agent = {
       sendNewSession,
@@ -154,7 +161,7 @@ describe("createSwarmTaskService", () => {
     const gateway = createAgentRuntimeSwarmGateway({ resolveAgent })
     const abortController = new AbortController()
 
-    const result = await gateway.sendWorker({
+    const resultPromise = gateway.sendWorker({
       task: {
         id: "task-1",
         schemaVersion: 1,
@@ -201,32 +208,49 @@ describe("createSwarmTaskService", () => {
       },
       prompt: "Do the work",
       abortSignal: abortController.signal,
-      onConversationId: vi.fn(),
+      onConversationId: (conversationId) => {
+        publishedConversationIds.push(conversationId)
+      },
     })
 
-    expect(resolveAgent).toHaveBeenCalledWith("project-1")
-    expect(sendNewSession).toHaveBeenCalledWith(
-      {
-        projectId: "project-1",
-        sessionKey: "swarm:task-1:run-1",
-        platform: "swarm",
-        content: "Do the work",
-        workspacePath: "/repo",
-        agentType: "claude-code",
-        providerId: "anthropic",
-        modelTier: "sonnet",
-        modeOverride: "acceptEdits",
-        mainThreadPersonaId: "persona-1",
-        userMeta: {
-          swarmTaskId: "task-1",
-          swarmRunId: "run-1",
-          swarmWorkerRunId: "worker-1",
-          swarmRoundIndex: 3,
-          swarmWorkerIndex: 2,
-        },
-      } satisfies AgentMessage,
-      "任务 #3",
-    )
+    await vi.waitFor(() => {
+      expect(resolveAgent).toHaveBeenCalledWith("project-1")
+      expect(sendNewSession).toHaveBeenCalledWith(
+        {
+          projectId: "project-1",
+          sessionKey: "swarm:task-1:run-1",
+          platform: "swarm",
+          content: "Do the work",
+          workspacePath: "/repo",
+          agentType: "claude-code",
+          providerId: "anthropic",
+          modelTier: "sonnet",
+          modeOverride: "acceptEdits",
+          mainThreadPersonaId: "persona-1",
+          userMeta: {
+            swarmTaskId: "task-1",
+            swarmRunId: "run-1",
+            swarmWorkerRunId: "worker-1",
+            swarmRoundIndex: 3,
+            swarmWorkerIndex: 2,
+          },
+        } satisfies AgentMessage,
+        "任务 #3",
+        expect.objectContaining({
+          abortSignal: abortController.signal,
+          onConversationCreated: expect.any(Function),
+        }),
+      )
+      expect(publishedConversationIds).toEqual(["conversation-1"])
+    })
+
+    pendingResult.resolve({
+      conversationId: "conversation-1",
+      resultText: "done",
+      events: [],
+    })
+
+    const result = await resultPromise
     expect(result).toEqual({
       conversationId: "conversation-1",
       resultText: "done",

@@ -84,8 +84,13 @@ export function createAgentRuntimeSwarmGateway(deps: {
           },
         } satisfies AgentMessage,
         `${input.task.name} #${input.worker.roundIndex}`,
+        {
+          abortSignal: input.abortSignal,
+          onConversationCreated: (conversation) => {
+            input.onConversationId?.(conversation.id)
+          },
+        },
       )
-      input.onConversationId?.(result.conversationId)
       return {
         conversationId: result.conversationId,
         resultText: result.resultText,
