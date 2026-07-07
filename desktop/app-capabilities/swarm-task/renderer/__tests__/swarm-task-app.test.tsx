@@ -8,10 +8,10 @@ import type { ReactNode } from "react"
 import type { SwarmRun, SwarmTask, SwarmWorkerRun } from "../../shared/schema"
 
 const swarmTaskFixtures = vi.hoisted(() => {
-  const task: SwarmTask = {
+  const taskA: SwarmTask = {
     id: "task-1",
     schemaVersion: 1,
-    name: "巡检",
+    name: "任务 A",
     currentConfig: {
       projectId: "project-1",
       workspacePath: "/repo",
@@ -40,12 +40,42 @@ const swarmTaskFixtures = vi.hoisted(() => {
     lastStatus: "running",
   }
 
+  const taskB: SwarmTask = {
+    id: "task-2",
+    schemaVersion: 1,
+    name: "任务 B",
+    currentConfig: {
+      projectId: "project-2",
+      workspacePath: "/repo-b",
+      prompt: "Run B.",
+      presetId: "general",
+      injectOptions: {
+        workerIdentity: true,
+        roundContext: true,
+        runContext: true,
+        outputProtocol: true,
+        parallelContext: true,
+        gitContext: false,
+        customAppendix: "",
+      },
+      runMode: "batch",
+      concurrency: 2,
+      maxRounds: 2,
+      output: { mode: "managed-directory", targetFilePolicy: "append-only" },
+      summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+      handoff: { enabled: false },
+      agent: {},
+    },
+    createdAt: "2026-07-07T00:00:00.000Z",
+    updatedAt: "2026-07-07T00:00:00.000Z",
+  }
+
   const run: SwarmRun = {
     id: "run-1",
     schemaVersion: 1,
-    taskId: "task-1",
+    taskId: taskA.id,
     status: "running",
-    configSnapshot: task.currentConfig,
+    configSnapshot: taskA.currentConfig,
     startedAt: "2026-07-07T00:10:00.000Z",
     totals: { started: 1, success: 0, failed: 0, cancelled: 0, timeout: 0 },
     stopRequested: false,
@@ -54,7 +84,7 @@ const swarmTaskFixtures = vi.hoisted(() => {
   const worker: SwarmWorkerRun = {
     id: "worker-1",
     schemaVersion: 1,
-    taskId: "task-1",
+    taskId: taskA.id,
     runId: "run-1",
     workerIndex: 1,
     roundIndex: 1,
@@ -66,11 +96,11 @@ const swarmTaskFixtures = vi.hoisted(() => {
     lastMessage: "处理中",
   }
 
-  return { task, run, worker }
+  return { taskA, taskB, run, worker }
 })
 
 const swarmTaskBridge = vi.hoisted(() => ({
-  listTasks: vi.fn(async () => [swarmTaskFixtures.task]),
+  listTasks: vi.fn(async () => [swarmTaskFixtures.taskA, swarmTaskFixtures.taskB]),
   createTask: vi.fn(),
   updateTask: vi.fn(),
   deleteTask: vi.fn(),
@@ -178,7 +208,7 @@ describe("SwarmTaskModule", () => {
     await renderModule()
 
     expect(swarmTaskBridge.listTasks).toHaveBeenCalled()
-    expect(document.body.textContent).toContain("巡检")
+    expect(document.body.textContent).toContain("任务 A")
     expect(getTextarea()?.value).toBe("Run.")
     expect(document.body.textContent).toContain("运行中")
   })
@@ -215,6 +245,22 @@ describe("SwarmTaskModule", () => {
     expect(toast.error).toHaveBeenCalledWith("停止补位失败")
     expect(toast.error).toHaveBeenCalledWith("取消运行失败")
   })
+
+  it("keeps the detail pane aligned with the filtered task selection", async () => {
+    await renderModule()
+
+    expect(getTextarea()?.value).toBe("Run.")
+
+    await setSearchValue("任务 B")
+
+    await waitForTextareaValue("Run B.")
+    expect(document.body.textContent).toContain("任务 B")
+
+    await clickButton("运行")
+
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledTimes(1)
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-2" })
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -237,6 +283,34 @@ async function clickButton(text: string, index = 0): Promise<void> {
 
 function getTextarea(): HTMLTextAreaElement | null {
   return document.body.querySelector("textarea")
+}
+
+async function setSearchValue(value: string): Promise<void> {
+  const input = document.body.querySelector('input[aria-label="搜索任务"]')
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error("Search input not found")
+  }
+
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+    if (!setter) {
+      throw new Error("Input value setter not found")
+    }
+    setter.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function waitForTextareaValue(value: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (getTextarea()?.value === value) return
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+  throw new Error(`Textarea value not found: ${value}`)
 }
 
 async function clickTab(text: string): Promise<void> {

@@ -108,6 +108,21 @@ export function SwarmTaskModule() {
   )
 
   useEffect(() => {
+    if (filteredTasks.length === 0) {
+      if (selectedTaskId !== null) {
+        setSelectedTaskId(null)
+      }
+      return
+    }
+
+    if (selectedTaskId && filteredTasks.some((task) => task.id === selectedTaskId)) {
+      return
+    }
+
+    setSelectedTaskId(filteredTasks[0].id)
+  }, [filteredTasks, selectedTaskId])
+
+  useEffect(() => {
     if (!selectedTask) {
       setDraftConfig(null)
       setRunHistory([])

@@ -80,3 +80,28 @@
 ### Concerns
 
 - None for this fix scope.
+
+## Task 7 Fix Report 2
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+- `.superpowers/sdd/task-7-report.md`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. When search filters out the current selection, the renderer now reselects the first visible task, so the detail pane and `运行` action stay aligned with the sidebar.
+
+### Self-Review
+
+- Kept the fix local to the renderer state synchronization path and left the sidebar component untouched.
+- Added a focused regression test with two tasks that starts on task A, filters to task B, and verifies `startRun({ taskId: "task-2" })`.
+
+### Concerns
+
+- None for this fix scope.
