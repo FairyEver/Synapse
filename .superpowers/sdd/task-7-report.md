@@ -105,3 +105,26 @@
 ### Concerns
 
 - None for this fix scope.
+
+## Task 7 Fix Report 3
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. Worker conversation jumps now pass `platform: "swarm"`, matching the Agent conversation source added for swarm task sessions.
+
+### Self-Review
+
+- Kept the change to the exact conversation-open payload and assertion.
+
+### Concerns
+
+- None for this fix scope.
