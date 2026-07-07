@@ -5,10 +5,13 @@ import {
   SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
 } from "./screenshot/shared/capability"
 import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
+import { SWARM_TASK_CAPABILITY_IDS } from "./swarm-task/shared/capability"
 
 type AppCapabilitySubDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
 }
+
+const swarmTaskCapabilityIds = new Set<string>(SWARM_TASK_CAPABILITY_IDS)
 
 export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
@@ -16,6 +19,7 @@ export function createAppCapabilityDispatcher(deps: {
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly screenshot: AppCapabilitySubDispatcher
   readonly soundNotifier: AppCapabilitySubDispatcher
+  readonly swarmTask?: AppCapabilitySubDispatcher
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
@@ -27,6 +31,9 @@ export function createAppCapabilityDispatcher(deps: {
       }
       if (action === SOUND_NOTIFIER_PLAY_CAPABILITY_ID) {
         return deps.soundNotifier.dispatch(action, params, context)
+      }
+      if (deps.swarmTask && swarmTaskCapabilityIds.has(action)) {
+        return deps.swarmTask.dispatch(action, params, context)
       }
       throw new Error(`Unknown app action: ${action}`)
     },
