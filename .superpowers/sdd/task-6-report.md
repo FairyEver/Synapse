@@ -74,3 +74,30 @@ Result:
 ## Concerns
 
 - No additional concerns at hand.
+
+## Task 6 Fix Report
+
+### Changed files
+
+- `desktop/electron/preload.ts`
+- `desktop/src/types/bridge.ts`
+- `desktop/electron/__tests__/preload.test.ts`
+- `.superpowers/sdd/task-6-report.md`
+
+### Tests run
+
+- `pnpm --filter @synapse/desktop exec vitest run electron/__tests__/preload.test.ts app-capabilities/swarm-task/main/__tests__/ipc.test.ts electron/bootstrap/__tests__/registry.test.ts electron/bootstrap/__tests__/descriptors.test.ts`
+
+### Result
+
+- Passed: 4 test files, 84 tests.
+
+### Self-review
+
+- Aligned the renderer-facing swarm task bridge with the requested raw-ID API surface.
+- Kept IPC payloads object-based inside preload so the main-process request schemas stay unchanged.
+- Limited the edit scope to the bridge, typings, tests, and this report note.
+
+### Concerns
+
+- No additional concerns at this stage.

@@ -1240,13 +1240,13 @@ describe("preload bridge", () => {
       taskId: "task-1",
       patch: { name: "Task 1 updated" },
     })
-    await bridge.swarmTask.deleteTask({ taskId: "task-1" })
+    await bridge.swarmTask.deleteTask("task-1")
     await bridge.swarmTask.startRun({ taskId: "task-1" })
-    await bridge.swarmTask.stopRefill({ runId: "run-1" })
-    await bridge.swarmTask.cancelRun({ runId: "run-1" })
+    await bridge.swarmTask.stopRefill("run-1")
+    await bridge.swarmTask.cancelRun("run-1")
     await bridge.swarmTask.listRuns({ taskId: "task-1", limit: 5 })
-    await bridge.swarmTask.getRun({ runId: "run-1" })
-    await bridge.swarmTask.listWorkerRuns({ runId: "run-1" })
+    await bridge.swarmTask.getRun("run-1")
+    await bridge.swarmTask.listWorkerRuns("run-1")
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       1,

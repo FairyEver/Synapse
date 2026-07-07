@@ -969,13 +969,13 @@ export type SynapseBridge = {
     listTasks: () => Promise<SwarmTask[]>
     createTask: (input: SwarmTaskCreateInput) => Promise<SwarmTask>
     updateTask: (input: SwarmTaskUpdateInput) => Promise<SwarmTask>
-    deleteTask: (input: { taskId: string }) => Promise<void>
+    deleteTask: (taskId: string) => Promise<void>
     startRun: (input: SwarmRunStartInput) => Promise<SwarmRun>
-    stopRefill: (input: { runId: string }) => Promise<SwarmRun | null>
-    cancelRun: (input: { runId: string }) => Promise<SwarmRun | null>
+    stopRefill: (runId: string) => Promise<SwarmRun | null>
+    cancelRun: (runId: string) => Promise<SwarmRun | null>
     listRuns: (input?: { taskId?: string; limit?: number }) => Promise<SwarmRun[]>
-    getRun: (input: { runId: string }) => Promise<SwarmRun | null>
-    listWorkerRuns: (input: { runId: string }) => Promise<SwarmWorkerRun[]>
+    getRun: (runId: string) => Promise<SwarmRun | null>
+    listWorkerRuns: (runId: string) => Promise<SwarmWorkerRun[]>
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>
