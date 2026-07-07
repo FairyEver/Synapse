@@ -147,7 +147,12 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       return run
     }
     scheduler.stopRefill(runId)
-    const updated: SwarmRun = { ...run, status: "draining", stopRequested: true }
+    const latestRun = await deps.runs.get(runId)
+    if (!latestRun) return null
+    if (terminalRunStatuses.has(latestRun.status)) {
+      return latestRun
+    }
+    const updated: SwarmRun = { ...latestRun, status: "draining", stopRequested: true }
     await deps.runs.upsert(updated)
     return updated
   }
@@ -166,17 +171,26 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         deps.agent.cancelConversation(run.configSnapshot.projectId, conversationId),
       ),
     )
+    const latestRun = await deps.runs.get(runId)
+    if (!latestRun) {
+      await runningRuns.get(runId)?.catch(() => undefined)
+      return null
+    }
+    if (terminalRunStatuses.has(latestRun.status)) {
+      await runningRuns.get(runId)?.catch(() => undefined)
+      return latestRun
+    }
     const updated: SwarmRun = {
-      ...run,
+      ...latestRun,
       status: "cancelled",
       stopRequested: true,
       finishedAt: timestamp(),
     }
     await deps.runs.upsert(updated)
-    const task = await requireTask(run.taskId)
+    const task = await requireTask(latestRun.taskId)
     await deps.tasks.upsert({
       ...task,
-      lastRunId: run.id,
+      lastRunId: latestRun.id,
       lastStatus: "cancelled",
       updatedAt: timestamp(),
     })

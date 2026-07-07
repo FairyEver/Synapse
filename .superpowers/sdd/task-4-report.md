@@ -190,3 +190,36 @@
 ### Concerns
 
 - No additional concerns.
+
+## Task 4 Fix Report 5
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `.superpowers/sdd/task-4-report.md`
+
+### Tests run
+
+1. `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: PASS
+   - Output summary:
+     - `Test Files  1 passed (1)`
+     - `Tests  13 passed (13)`
+
+### Result
+
+- `cancelRun()` now re-reads the run immediately before persisting `cancelled`; if the latest stored run is already terminal, it returns that latest run unchanged and skips the task `lastStatus: "cancelled"` write.
+- `cancelRun()` still snapshots running worker conversation ids before scheduler abort and still calls `cancelConversation(projectId, conversationId)` from that snapshot, so the fast-cancel gateway path stays intact.
+- `stopRefill()` now re-reads the run after touching the scheduler and before persisting `draining`; if the latest stored run is already terminal, it returns that run unchanged instead of overwriting it.
+- Added focused regression tests for both stale-read races by simulating a run that flips to terminal during the first `status` check and verifying the service no longer rewrites the run.
+
+### Self-review
+
+- Kept the fix scoped to the owned service/test files plus this report append.
+- Preserved the existing `startRun()` immediate-return behavior, nested config snapshot merging, live conversation publishing, terminal worker persistence, and fast-cancel conversation snapshot path.
+- Re-ran the exact acceptance command after the fix and confirmed all 13 service tests pass.
+
+### Concerns
+
+- No additional concerns.

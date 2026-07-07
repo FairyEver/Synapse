@@ -24,6 +24,54 @@ function namespace<T extends { id: string }>() {
   }
 }
 
+function terminalRaceRun(initialRun: SwarmRun, terminalStatus: Extract<SwarmRun["status"], "success" | "failed">) {
+  let armed = true
+  let terminalSnapshot: SwarmRun | null = null
+  const items = new Map<string, SwarmRun>()
+  const liveRun = { ...initialRun }
+
+  Object.defineProperty(liveRun, "status", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (armed) {
+        armed = false
+        terminalSnapshot = {
+          ...initialRun,
+          status: terminalStatus,
+          stopRequested: false,
+          finishedAt: "2026-07-07T00:00:00.000Z",
+        }
+        items.set(initialRun.id, terminalSnapshot)
+      }
+      return "running"
+    },
+  })
+
+  items.set(initialRun.id, liveRun)
+
+  return {
+    async list(filter?: Partial<SwarmRun>): Promise<SwarmRun[]> {
+      const values = [...items.values()]
+      if (!filter) return values
+      return values.filter((item) =>
+        Object.entries(filter).every(([key, value]) => item[key as keyof SwarmRun] === value))
+    },
+    async get(id: string): Promise<SwarmRun | null> {
+      return items.get(id) ?? null
+    },
+    async upsert(value: SwarmRun): Promise<void> {
+      items.set(value.id, value)
+    },
+    async remove(id: string): Promise<void> {
+      items.delete(id)
+    },
+    terminalSnapshot() {
+      return terminalSnapshot
+    },
+  }
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   let reject!: (reason?: unknown) => void
@@ -424,6 +472,69 @@ describe("createSwarmTaskService", () => {
     expect(gateway.cancelConversation).not.toHaveBeenCalled()
   })
 
+  it("does not rewrite the run or task when cancelRun sees a terminal run on re-read", async () => {
+    const taskStore = namespace<SwarmTask>()
+    const runningRun: SwarmRun = {
+      id: "run-race",
+      schemaVersion: 1,
+      taskId: "task-race",
+      status: "running",
+      configSnapshot: config,
+      startedAt: "2026-07-07T00:00:00.000Z",
+      totals: { started: 1, success: 0, failed: 0, cancelled: 0, timeout: 0 },
+      outputDirectory: "/repo/swarm-runs/run-race",
+      stopRequested: false,
+    }
+    const runs = terminalRaceRun(runningRun, "success")
+    const workers = namespace<SwarmWorkerRun>()
+    await taskStore.upsert({
+      id: "task-race",
+      schemaVersion: 1,
+      name: "任务",
+      currentConfig: config,
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:00:00.000Z",
+      lastRunId: runningRun.id,
+      lastStatus: "running",
+    })
+    await workers.upsert({
+      id: "worker-race",
+      schemaVersion: 1,
+      taskId: "task-race",
+      runId: runningRun.id,
+      workerIndex: 1,
+      roundIndex: 1,
+      status: "running",
+      sessionKey: "swarm:task-race:run-race",
+      startedAt: "2026-07-07T00:00:00.000Z",
+      lastPhase: "queued",
+      conversationId: "conversation-race",
+    })
+    const gateway: SwarmAgentGateway = {
+      sendWorker: vi.fn(),
+      cancelConversation: vi.fn(async () => undefined),
+    }
+    const service = createSwarmTaskService({
+      tasks: taskStore,
+      runs,
+      workers,
+      agent: gateway,
+      now: () => new Date("2026-07-07T00:00:00.000Z"),
+      idFactory: () => "unused",
+      outputRoot: "/repo/swarm-runs",
+    })
+
+    const result = await service.cancelRun(runningRun.id)
+    const persistedRun = await service.getRun(runningRun.id)
+    const persistedTask = await taskStore.get("task-race")
+
+    expect(gateway.cancelConversation).toHaveBeenCalledWith("project-1", "conversation-race")
+    expect(result).toMatchObject({ status: "success", stopRequested: false })
+    expect(persistedRun).toMatchObject({ status: "success", stopRequested: false })
+    expect(persistedTask).toMatchObject({ lastRunId: runningRun.id, lastStatus: "running" })
+    expect(runs.terminalSnapshot()).toMatchObject({ status: "success", stopRequested: false })
+  })
+
   it("leaves a terminal run unchanged when stopRefill is called", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({ name: "任务", config })
@@ -442,5 +553,48 @@ describe("createSwarmTaskService", () => {
 
     expect(stoppedRun).toMatchObject({ status: "success", stopRequested: false })
     expect(persistedRun).toMatchObject({ status: "success", stopRequested: false })
+  })
+
+  it("does not rewrite a run that becomes terminal before stopRefill persists draining", async () => {
+    const taskStore = namespace<SwarmTask>()
+    const runningRun: SwarmRun = {
+      id: "run-stop-race",
+      schemaVersion: 1,
+      taskId: "task-stop-race",
+      status: "running",
+      configSnapshot: config,
+      startedAt: "2026-07-07T00:00:00.000Z",
+      totals: { started: 1, success: 0, failed: 0, cancelled: 0, timeout: 0 },
+      outputDirectory: "/repo/swarm-runs/run-stop-race",
+      stopRequested: false,
+    }
+    const runs = terminalRaceRun(runningRun, "failed")
+    await taskStore.upsert({
+      id: "task-stop-race",
+      schemaVersion: 1,
+      name: "任务",
+      currentConfig: config,
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:00:00.000Z",
+    })
+    const service = createSwarmTaskService({
+      tasks: taskStore,
+      runs,
+      workers: namespace<SwarmWorkerRun>(),
+      agent: {
+        sendWorker: vi.fn(),
+        cancelConversation: vi.fn(async () => undefined),
+      },
+      now: () => new Date("2026-07-07T00:00:00.000Z"),
+      idFactory: () => "unused",
+      outputRoot: "/repo/swarm-runs",
+    })
+
+    const result = await service.stopRefill(runningRun.id)
+    const persistedRun = await service.getRun(runningRun.id)
+
+    expect(result).toMatchObject({ status: "failed", stopRequested: false })
+    expect(persistedRun).toMatchObject({ status: "failed", stopRequested: false })
+    expect(runs.terminalSnapshot()).toMatchObject({ status: "failed", stopRequested: false })
   })
 })
