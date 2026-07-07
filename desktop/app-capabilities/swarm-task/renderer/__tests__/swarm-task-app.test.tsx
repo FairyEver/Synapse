@@ -261,6 +261,55 @@ describe("SwarmTaskModule", () => {
     expect(swarmTaskBridge.startRun).toHaveBeenCalledTimes(1)
     expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-2" })
   })
+
+  it("keeps search visible when the current query has no matches", async () => {
+    await renderModule()
+
+    await setSearchValue("missing")
+
+    expect(getSearchInput()?.value).toBe("missing")
+    expect(document.body.textContent).toContain("暂无匹配")
+  })
+
+  it("does not render stale workers while loading a newly selected task", async () => {
+    let resolveTaskBRuns: ((runs: SwarmRun[]) => void) | null = null
+    swarmTaskBridge.listRuns.mockImplementation(async ({ taskId }: { taskId: string }) => {
+      if (taskId === "task-2") {
+        return await new Promise<SwarmRun[]>((resolve) => {
+          resolveTaskBRuns = resolve
+        })
+      }
+      return [swarmTaskFixtures.run]
+    })
+
+    await renderModule()
+    await clickTab("运行中")
+    await waitForButton("打开会话")
+
+    agentBridge.openConversation.mockClear()
+
+    await clickTask("任务 B")
+    await clickButton("打开会话")
+
+    expect(agentBridge.openConversation).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveTaskBRuns?.([])
+      await Promise.resolve()
+    })
+  })
+
+  it("shows an error when opening a worker conversation is not handled", async () => {
+    agentBridge.openConversation.mockResolvedValueOnce({ opened: false, reason: "not-found" })
+
+    await renderModule()
+    await clickTab("运行中")
+    await waitForButton("打开会话")
+
+    await clickButton("打开会话")
+
+    expect(toast.error).toHaveBeenCalledWith("会话不存在")
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -285,8 +334,12 @@ function getTextarea(): HTMLTextAreaElement | null {
   return document.body.querySelector("textarea")
 }
 
+function getSearchInput(): HTMLInputElement | null {
+  return document.body.querySelector('input[aria-label="搜索任务"]')
+}
+
 async function setSearchValue(value: string): Promise<void> {
-  const input = document.body.querySelector('input[aria-label="搜索任务"]')
+  const input = getSearchInput()
   if (!(input instanceof HTMLInputElement)) {
     throw new Error("Search input not found")
   }
@@ -319,6 +372,16 @@ async function clickTab(text: string): Promise<void> {
 
   await act(async () => {
     tab?.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickTask(text: string): Promise<void> {
+  const taskButton = Array.from(document.body.querySelectorAll("button"))
+    .find((button) => button.textContent?.includes(text))
+
+  await act(async () => {
+    taskButton?.click()
     await Promise.resolve()
   })
 }

@@ -131,8 +131,23 @@ export function SwarmTaskModule() {
       return
     }
     setDraftConfig(selectedTask.currentConfig)
+    setRunHistory([])
+    setActiveRun(null)
+    setWorkerRuns([])
     void reloadRunData(selectedTask)
   }, [reloadRunData, selectedTask])
+
+  const selectedActiveRun = useMemo(() => {
+    if (!selectedTask || activeRun?.taskId !== selectedTask.id) return null
+    return activeRun
+  }, [activeRun, selectedTask])
+
+  const selectedWorkerRuns = useMemo(() => {
+    if (!selectedTask || !selectedActiveRun) return []
+    return workerRuns.filter((worker) => (
+      worker.taskId === selectedTask.id && worker.runId === selectedActiveRun.id
+    ))
+  }, [selectedActiveRun, selectedTask, workerRuns])
 
   const saveConfig = useCallback(async () => {
     if (!selectedTask || !draftConfig) return
@@ -170,14 +185,17 @@ export function SwarmTaskModule() {
   }, [reloadTasks, selectedTask, swarmTaskBridge])
 
   const openConversation = useCallback(async (worker: SwarmWorkerRun) => {
-    if (!selectedTask?.currentConfig.projectId || !worker.conversationId) return
+    if (!selectedTask?.currentConfig.projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
     try {
-      await agentBridge.openConversation({
+      const result = await agentBridge.openConversation({
         projectId: selectedTask.currentConfig.projectId,
         conversationId: worker.conversationId,
         sessionKey: worker.sessionKey,
         platform: "swarm",
       })
+      if (!result.opened) {
+        toast.error("会话不存在")
+      }
     } catch (error) {
       const message = errorMessage(error, "打开会话失败")
       logger.error("Failed to open swarm worker conversation.", error)
@@ -231,18 +249,18 @@ export function SwarmTaskModule() {
             <AlertDescription>{loadError}</AlertDescription>
           </Alert>
         </div>
-      ) : filteredTasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <Empty className="min-h-full">
           <EmptyHeader>
             <EmptyTitle>暂无任务</EmptyTitle>
           </EmptyHeader>
         </Empty>
-      ) : selectedTask && draftConfig ? (
+      ) : (
         <SidebarContentLayout
           sidebar={(
             <SwarmTaskSidebar
               tasks={filteredTasks}
-              selectedTaskId={selectedTask.id}
+              selectedTaskId={selectedTask?.id ?? null}
               search={search}
               onSearchChange={setSearch}
               onSelectTask={setSelectedTaskId}
@@ -254,31 +272,33 @@ export function SwarmTaskModule() {
           sidebarMinSize={220}
           sidebarMaxSize={360}
         >
-          <SwarmTaskDetail
-            task={selectedTask}
-            activeTab={activeTab}
-            draftConfig={draftConfig}
-            activeRun={activeRun}
-            workerRuns={workerRuns}
-            runHistory={runHistory}
-            loadingRun={loadingRun}
-            saving={saving}
-            running={running}
-            onDraftConfigChange={setDraftConfig}
-            onSaveConfig={() => void saveConfig()}
-            onStartRun={() => void startRun()}
-            onRefreshRun={() => void reloadRunData(selectedTask)}
-            onStopRefill={() => void stopRefill()}
-            onCancelRun={() => void cancelRun()}
-            onOpenConversation={(worker) => void openConversation(worker)}
-          />
+          {selectedTask && draftConfig ? (
+            <SwarmTaskDetail
+              task={selectedTask}
+              activeTab={activeTab}
+              draftConfig={draftConfig}
+              activeRun={selectedActiveRun}
+              workerRuns={selectedWorkerRuns}
+              runHistory={runHistory}
+              loadingRun={loadingRun}
+              saving={saving}
+              running={running}
+              onDraftConfigChange={setDraftConfig}
+              onSaveConfig={() => void saveConfig()}
+              onStartRun={() => void startRun()}
+              onRefreshRun={() => void reloadRunData(selectedTask)}
+              onStopRefill={() => void stopRefill()}
+              onCancelRun={() => void cancelRun()}
+              onOpenConversation={(worker) => void openConversation(worker)}
+            />
+          ) : (
+            <Empty className="min-h-full">
+              <EmptyHeader>
+                <EmptyTitle>暂无匹配</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+          )}
         </SidebarContentLayout>
-      ) : (
-        <Empty className="min-h-full">
-          <EmptyHeader>
-            <EmptyTitle>暂无任务</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
       )}
     </SystemAppWindowShell>
   )
