@@ -1,0 +1,4 @@
+export const SWARM_SUMMARY_OPEN = "<SYNAPSE_SWARM_SUMMARY>" as const
+export const SWARM_SUMMARY_CLOSE = "</SYNAPSE_SWARM_SUMMARY>" as const
+export const SWARM_HANDOFF_OPEN = "<SYNAPSE_SWARM_HANDOFF>" as const
+export const SWARM_HANDOFF_CLOSE = "</SYNAPSE_SWARM_HANDOFF>" as const

@@ -58,6 +58,17 @@ export {
   type AgentPersonaRemoteCacheUserBucketV1,
 } from "./agent-persona-remote-cache"
 export {
+  SWARM_TASK_RUNS_NAMESPACE,
+  SWARM_TASKS_NAMESPACE,
+  SWARM_TASK_WORKER_RUNS_NAMESPACE,
+  swarmTaskRunsSchemaDefinition,
+  swarmTaskTasksSchemaDefinition,
+  swarmTaskWorkerRunsSchemaDefinition,
+  type SwarmRunEntryV1,
+  type SwarmTaskEntryV1,
+  type SwarmWorkerRunEntryV1,
+} from "./swarm-task"
+export {
   reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   type SoundNotifierSettingsEntryV1,
@@ -143,6 +154,11 @@ import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
+import {
+  swarmTaskRunsSchemaDefinition,
+  swarmTaskTasksSchemaDefinition,
+  swarmTaskWorkerRunsSchemaDefinition,
+} from "./swarm-task"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import {
   auditSchema,
@@ -188,6 +204,9 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaItemsSchema,
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
+  swarmTaskTasksSchemaDefinition,
+  swarmTaskRunsSchemaDefinition,
+  swarmTaskWorkerRunsSchemaDefinition,
   soundNotifierSettingsSchemaDefinition,
   secretsSchema,
   providersSchema,
