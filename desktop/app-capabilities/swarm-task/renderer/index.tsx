@@ -158,10 +158,8 @@ export function SwarmTaskModule() {
 
   useEffect(() => {
     if (!selectedTask) {
+      void reloadRunData(null)
       setDraftConfig(null)
-      setRunHistory([])
-      setActiveRun(null)
-      setWorkerRuns([])
       return
     }
     setDraftConfig(selectedTask.currentConfig)
