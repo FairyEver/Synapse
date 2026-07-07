@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import path from "node:path"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
-import type { AgentEvent } from "../../../electron/services/agent-runtime"
+import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
 import {
   swarmRunStartInputSchema,
   swarmTaskConfigSchema,
@@ -56,6 +56,50 @@ export type SwarmTaskServiceDeps = {
 }
 
 export type SwarmTaskService = ReturnType<typeof createSwarmTaskService>
+
+export function createAgentRuntimeSwarmGateway(deps: {
+  readonly resolveAgent: (projectId: string) => Promise<AgentRuntimeService>
+}): SwarmAgentGateway {
+  return {
+    async sendWorker(input) {
+      const agent = await deps.resolveAgent(input.task.currentConfig.projectId)
+      const result = await agent.sendNewSession(
+        {
+          projectId: input.task.currentConfig.projectId,
+          sessionKey: input.worker.sessionKey,
+          platform: "swarm",
+          content: input.prompt,
+          workspacePath: input.task.currentConfig.workspacePath,
+          agentType: "claude-code",
+          providerId: input.task.currentConfig.agent.providerId,
+          modelTier: input.task.currentConfig.agent.modelTier,
+          modeOverride: input.task.currentConfig.agent.permissionMode,
+          mainThreadPersonaId: input.task.currentConfig.agent.mainThreadPersonaId,
+          userMeta: {
+            swarmTaskId: input.task.id,
+            swarmRunId: input.run.id,
+            swarmWorkerRunId: input.worker.id,
+            swarmRoundIndex: input.worker.roundIndex,
+            swarmWorkerIndex: input.worker.workerIndex,
+          },
+        } satisfies AgentMessage,
+        `${input.task.name} #${input.worker.roundIndex}`,
+      )
+      input.onConversationId?.(result.conversationId)
+      return {
+        conversationId: result.conversationId,
+        resultText: result.resultText,
+        status: result.error ? "failed" : "success",
+        events: result.events,
+        error: result.error,
+      }
+    },
+    async cancelConversation(projectId, conversationId) {
+      const agent = await deps.resolveAgent(projectId)
+      await agent.cancelTurn(conversationId)
+    },
+  }
+}
 
 type TerminalWorkerOutcome = {
   readonly status: "success" | "failed" | "cancelled" | "timeout"

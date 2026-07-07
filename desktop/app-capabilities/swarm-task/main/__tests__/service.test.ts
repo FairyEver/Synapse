@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { createSwarmTaskService, type SwarmAgentGateway } from "../service"
+import type { AgentMessage, AgentRuntimeService } from "../../../../electron/services/agent-runtime"
+import { createAgentRuntimeSwarmGateway, createSwarmTaskService, type SwarmAgentGateway } from "../service"
 import type { SwarmRun, SwarmTask, SwarmWorkerRun } from "../../shared/schema"
 
 function namespace<T extends { id: string }>() {
@@ -138,6 +139,107 @@ function serviceHarness(options?: {
 }
 
 describe("createSwarmTaskService", () => {
+  it("creates an Agent Runtime swarm gateway with swarm session metadata", async () => {
+    const sendNewSession = vi.fn(async () => ({
+      conversationId: "conversation-1",
+      resultText: "done",
+      events: [],
+    }))
+    const cancelTurn = vi.fn(async () => ({ status: "graceful-pending" as const }))
+    const agent = {
+      sendNewSession,
+      cancelTurn,
+    } as unknown as AgentRuntimeService
+    const resolveAgent = vi.fn(async () => agent)
+    const gateway = createAgentRuntimeSwarmGateway({ resolveAgent })
+    const abortController = new AbortController()
+
+    const result = await gateway.sendWorker({
+      task: {
+        id: "task-1",
+        schemaVersion: 1,
+        name: "任务",
+        currentConfig: {
+          ...config,
+          agent: {
+            providerId: "anthropic",
+            modelTier: "sonnet",
+            permissionMode: "acceptEdits",
+            mainThreadPersonaId: "persona-1",
+          },
+        },
+        createdAt: "2026-07-07T00:00:00.000Z",
+        updatedAt: "2026-07-07T00:00:00.000Z",
+      },
+      run: {
+        id: "run-1",
+        schemaVersion: 1,
+        taskId: "task-1",
+        status: "running",
+        configSnapshot: {
+          ...config,
+          agent: {
+            providerId: "anthropic",
+            modelTier: "sonnet",
+            permissionMode: "acceptEdits",
+            mainThreadPersonaId: "persona-1",
+          },
+        },
+        startedAt: "2026-07-07T00:00:00.000Z",
+        totals: { started: 0, success: 0, failed: 0, cancelled: 0, timeout: 0 },
+        stopRequested: false,
+      },
+      worker: {
+        id: "worker-1",
+        schemaVersion: 1,
+        taskId: "task-1",
+        runId: "run-1",
+        workerIndex: 2,
+        roundIndex: 3,
+        status: "running",
+        sessionKey: "swarm:task-1:run-1",
+      },
+      prompt: "Do the work",
+      abortSignal: abortController.signal,
+      onConversationId: vi.fn(),
+    })
+
+    expect(resolveAgent).toHaveBeenCalledWith("project-1")
+    expect(sendNewSession).toHaveBeenCalledWith(
+      {
+        projectId: "project-1",
+        sessionKey: "swarm:task-1:run-1",
+        platform: "swarm",
+        content: "Do the work",
+        workspacePath: "/repo",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        modelTier: "sonnet",
+        modeOverride: "acceptEdits",
+        mainThreadPersonaId: "persona-1",
+        userMeta: {
+          swarmTaskId: "task-1",
+          swarmRunId: "run-1",
+          swarmWorkerRunId: "worker-1",
+          swarmRoundIndex: 3,
+          swarmWorkerIndex: 2,
+        },
+      } satisfies AgentMessage,
+      "任务 #3",
+    )
+    expect(result).toEqual({
+      conversationId: "conversation-1",
+      resultText: "done",
+      status: "success",
+      events: [],
+      error: undefined,
+    })
+
+    await gateway.cancelConversation("project-1", "conversation-1")
+
+    expect(cancelTurn).toHaveBeenCalledWith("conversation-1")
+  })
+
   it("creates and lists reusable tasks", async () => {
     const { service } = serviceHarness()
 

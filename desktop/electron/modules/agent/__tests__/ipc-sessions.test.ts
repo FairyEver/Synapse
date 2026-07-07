@@ -423,12 +423,12 @@ describe("agent session IPC methods", () => {
     expect(await conversations.get("orphan-conv")).toBeNull()
   })
 
-  it("opens an existing workflow conversation in the main Agent tab", async () => {
+  it("opens an existing swarm conversation in the main Agent tab", async () => {
     const conversations = createConversationNamespace([
       storedConversation({
-        id: "conv-workflow",
-        platform: "workflow",
-        sessionKey: "workflow:project-1:123",
+        id: "conv-swarm",
+        platform: "swarm",
+        sessionKey: "swarm:task-1:run-1",
       }),
     ])
     const windowManager = createWindowManager()
@@ -442,9 +442,9 @@ describe("agent session IPC methods", () => {
 
     await expect(sessionMethods.openConversation.handler(ctx, {
       projectId: "project-1",
-      conversationId: "conv-workflow",
-      sessionKey: "workflow:project-1:123",
-      platform: "workflow",
+      conversationId: "conv-swarm",
+      sessionKey: "swarm:task-1:run-1",
+      platform: "swarm",
     })).resolves.toEqual({ opened: true })
 
     expect(windowManager.open).toHaveBeenCalledWith("main")
@@ -452,9 +452,9 @@ describe("agent session IPC methods", () => {
       "synapse:open-agent-session",
       {
         projectId: "project-1",
-        conversationId: "conv-workflow",
-        sessionKey: "workflow:project-1:123",
-        sourceFilter: "workflow",
+        conversationId: "conv-swarm",
+        sessionKey: "swarm:task-1:run-1",
+        sourceFilter: "swarm",
       },
       expect.any(Function),
     )
@@ -463,9 +463,9 @@ describe("agent session IPC methods", () => {
     expect(filter?.({ role: "detail" })).toBe(false)
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("Agent conversation opened.", {
       projectId: "project-1",
-      conversationId: "conv-workflow",
-      sessionKey: "workflow:project-1:123",
-      platform: "workflow",
+      conversationId: "conv-swarm",
+      sessionKey: "swarm:task-1:run-1",
+      platform: "swarm",
     })
   })
 

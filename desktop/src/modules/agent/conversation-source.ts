@@ -8,6 +8,7 @@ const CONVERSATION_SOURCE_OPTIONS: Array<{ value: ConversationSourceFilter; labe
   { value: "automation", label: "自动化" },
   { value: "scheduled", label: "历史计划" },
   { value: "workflow", label: "工作流" },
+  { value: "swarm", label: "蜂群任务" },
   { value: "webhook", label: "Webhook" },
   { value: "relay", label: "Relay" },
   { value: "bridge", label: "外部桥接" },
@@ -22,6 +23,7 @@ function conversationSourceForPlatform(
   if (normalized === "automation") return "automation"
   if (normalized === "scheduled") return "scheduled"
   if (normalized === "workflow") return "workflow"
+  if (normalized === "swarm") return "swarm"
   if (normalized === "webhook") return "webhook"
   if (normalized === "relay") return "relay"
   return "bridge"

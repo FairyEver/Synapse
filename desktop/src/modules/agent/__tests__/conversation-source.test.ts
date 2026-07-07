@@ -28,6 +28,7 @@ describe("conversation source filtering", () => {
     expect(conversationSourceForSession(session("automation"))).toBe("automation")
     expect(conversationSourceForSession(session("scheduled"))).toBe("scheduled")
     expect(conversationSourceForSession(session("workflow"))).toBe("workflow")
+    expect(conversationSourceForSession(session("swarm"))).toBe("swarm")
     expect(conversationSourceForSession(session("webhook"))).toBe("webhook")
     expect(conversationSourceForSession(session("relay"))).toBe("relay")
     expect(conversationSourceForSession(session("slack"))).toBe("bridge")
@@ -46,6 +47,7 @@ describe("conversation source filtering", () => {
       session("automation"),
       session("scheduled"),
       session("workflow"),
+      session("swarm"),
       session("slack"),
     ]
 
@@ -53,6 +55,7 @@ describe("conversation source filtering", () => {
     expect(filterSessionsBySource(sessions, "automation").map((item) => item.platform)).toEqual(["automation"])
     expect(filterSessionsBySource(sessions, "scheduled").map((item) => item.platform)).toEqual(["scheduled"])
     expect(filterSessionsBySource(sessions, "workflow").map((item) => item.platform)).toEqual(["workflow"])
+    expect(filterSessionsBySource(sessions, "swarm").map((item) => item.platform)).toEqual(["swarm"])
     expect(filterSessionsBySource(sessions, "bridge").map((item) => item.platform)).toEqual(["slack"])
     expect(filterSessionsBySource(sessions, "all")).toEqual(sessions)
   })
