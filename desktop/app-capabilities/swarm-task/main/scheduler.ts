@@ -49,11 +49,6 @@ type RunControl = {
   abort: AbortController
 }
 
-type RunnerOutcome =
-  | { readonly kind: "result"; readonly value: SwarmWorkerRunnerResult }
-  | { readonly kind: "error"; readonly error: unknown }
-  | { readonly kind: "aborted" }
-
 export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
   const controls = new Map<string, RunControl>()
 
@@ -76,16 +71,16 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
 
     const runRound = async (workerIndex: number, roundIndex: number): Promise<void> => {
       totals.started++
-      const outcome = await runWorkerWithAbort(deps.runner, {
+      const outcome = await runWorker(deps.runner, {
         taskId: input.taskId,
         runId: input.runId,
         workerIndex,
         roundIndex,
         config: input.config,
         abortSignal: control.abort.signal,
-      }, control.abort.signal)
+      })
 
-      if (outcome.kind === "aborted" || outcome.kind === "error" && control.abort.signal.aborted) {
+      if (outcome.kind === "aborted") {
         totals.cancelled++
         return
       }
@@ -135,7 +130,7 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
     }
 
     return {
-      status: classifyTotals(totals),
+      status: classifyTotals(totals, control.abort.signal.aborted),
       totals,
     }
   }
@@ -155,44 +150,45 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
   }
 }
 
-async function runWorkerWithAbort(
+type RunnerOutcome =
+  | { readonly kind: "result"; readonly value: SwarmWorkerRunnerResult }
+  | { readonly kind: "error"; readonly error: unknown }
+  | { readonly kind: "aborted" }
+
+async function runWorker(
   runner: SwarmWorkerRunner,
   input: SwarmWorkerRunnerInput,
-  abortSignal: AbortSignal,
 ): Promise<RunnerOutcome> {
+  const { abortSignal } = input
   if (abortSignal.aborted) {
     return { kind: "aborted" }
   }
 
-  const runnerPromise = runner(input).then<RunnerOutcome>(
-    (value) => ({ kind: "result", value }),
-    (error) => ({ kind: "error", error }),
-  )
-
-  let onAbort: (() => void) | undefined
-  const abortPromise = new Promise<RunnerOutcome>((resolve) => {
-    onAbort = () => resolve({ kind: "aborted" })
-    abortSignal.addEventListener("abort", onAbort, { once: true })
-  })
-
   try {
-    return await Promise.race([runnerPromise, abortPromise])
-  } finally {
-    if (onAbort) {
-      abortSignal.removeEventListener("abort", onAbort)
+    return {
+      kind: "result",
+      value: await runner(input),
+    }
+  } catch (error) {
+    return {
+      kind: "error",
+      error,
     }
   }
 }
 
-function classifyTotals(totals: SwarmSchedulerResult["totals"]): SwarmSchedulerResult["status"] {
-  if (totals.cancelled > 0 && totals.failed === 0 && totals.timeout === 0) {
-    return "cancelled"
-  }
+function classifyTotals(
+  totals: SwarmSchedulerResult["totals"],
+  aborted: boolean,
+): SwarmSchedulerResult["status"] {
   if (totals.started > 0 && totals.success === totals.started) {
     return "success"
   }
   if (totals.success > 0) {
     return "partial"
+  }
+  if (aborted || (totals.cancelled > 0 && totals.failed === 0 && totals.timeout === 0)) {
+    return "cancelled"
   }
   return "failed"
 }

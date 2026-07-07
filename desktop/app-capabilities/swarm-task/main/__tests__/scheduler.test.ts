@@ -91,4 +91,88 @@ describe("createSwarmScheduler", () => {
     expect(result.status).toBe("success")
     expect(runner).toHaveBeenCalledTimes(1)
   })
+
+  it("cancel waits for active runners to drain and delivers abort signal", async () => {
+    let releaseSecond: (() => void) | undefined
+    let abortSeen = false
+    const runner: SwarmWorkerRunner = vi.fn(async (input) => {
+      if (input.roundIndex === 1) {
+        return { status: "success", resultText: "round 1" }
+      }
+
+      input.abortSignal?.addEventListener(
+        "abort",
+        () => {
+          abortSeen = true
+        },
+        { once: true },
+      )
+
+      await new Promise<void>((resolve) => {
+        releaseSecond = resolve
+      })
+
+      return { status: "cancelled", resultText: "round 2" }
+    })
+    const scheduler = createSwarmScheduler({ runner })
+    const promise = scheduler.start({
+      taskId: "task-1",
+      runId: "run-1",
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 2 },
+    })
+
+    let settled = false
+    promise.then(() => {
+      settled = true
+    })
+
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2))
+    await scheduler.cancel("run-1")
+    await Promise.resolve()
+
+    expect(abortSeen).toBe(true)
+    expect(settled).toBe(false)
+
+    releaseSecond?.()
+    const result = await promise
+
+    expect(result.status).toBe("partial")
+    expect(runner).toHaveBeenCalledTimes(2)
+  })
+
+  it("mixed success and cancelled returns partial", async () => {
+    let releaseSecond: (() => void) | undefined
+    const runner: SwarmWorkerRunner = vi.fn(async (input) => {
+      if (input.roundIndex === 1) {
+        return { status: "success", resultText: "round 1" }
+      }
+
+      await new Promise<void>((resolve) => {
+        releaseSecond = resolve
+      })
+
+      return { status: "cancelled", resultText: "round 2" }
+    })
+    const scheduler = createSwarmScheduler({ runner })
+    const promise = scheduler.start({
+      taskId: "task-1",
+      runId: "run-1",
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 2 },
+    })
+
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2))
+    await scheduler.cancel("run-1")
+    releaseSecond?.()
+
+    const result = await promise
+
+    expect(result.status).toBe("partial")
+    expect(result.totals).toMatchObject({
+      started: 2,
+      success: 1,
+      cancelled: 1,
+      failed: 0,
+      timeout: 0,
+    })
+  })
 })
