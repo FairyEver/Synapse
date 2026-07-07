@@ -160,23 +160,38 @@ describe("swarmTaskNodeExecutor", () => {
 
   it("cancels the swarm run when the workflow aborts while waiting", async () => {
     const abortController = new AbortController()
+    let resolveCancel: ((run: SwarmRun) => void) | null = null
     const service = {
       startRun: vi.fn().mockResolvedValue(baseRun),
       getRun: vi.fn(async () => {
         abortController.abort()
         return baseRun
       }),
-      cancelRun: vi.fn().mockResolvedValue(baseRun),
+      cancelRun: vi.fn(async () => await new Promise<SwarmRun>((resolve) => {
+        resolveCancel = resolve
+      })),
     }
 
-    const result = await swarmTaskNodeExecutor.execute(createInput({
+    const resultPromise = swarmTaskNodeExecutor.execute(createInput({
       taskId: "task-1",
       waitForCompletion: true,
       variables: [],
     }, service, abortController))
 
-    expect(result.status).toBe("cancelled")
+    await Promise.resolve()
     expect(service.cancelRun).toHaveBeenCalledWith("run-1")
+
+    let settled = false
+    void resultPromise.finally(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    resolveCancel?.(baseRun)
+    const result = await resultPromise
+
+    expect(result.status).toBe("cancelled")
   })
 })
 

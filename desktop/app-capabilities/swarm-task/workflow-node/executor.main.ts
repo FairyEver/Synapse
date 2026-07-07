@@ -82,10 +82,9 @@ async function waitForTerminalRun(
   abortSignal: AbortSignal,
 ): Promise<SwarmRun> {
   let latest = initialRun
-  let abortCancelRequested = false
+  let abortCancelPromise: Promise<unknown> | undefined
   const cancelOnAbort = () => {
-    abortCancelRequested = true
-    void service.cancelRun(initialRun.id)
+    abortCancelPromise = service.cancelRun(initialRun.id)
   }
   abortSignal.addEventListener("abort", cancelOnAbort, { once: true })
   try {
@@ -104,9 +103,8 @@ async function waitForTerminalRun(
     }
   } catch (error) {
     if (abortSignal.aborted) {
-      if (!abortCancelRequested) {
-        await service.cancelRun(initialRun.id)
-      }
+      abortCancelPromise ??= service.cancelRun(initialRun.id)
+      await abortCancelPromise
     }
     throw error
   } finally {
