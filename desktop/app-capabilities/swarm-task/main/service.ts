@@ -62,19 +62,20 @@ export function createAgentRuntimeSwarmGateway(deps: {
 }): SwarmAgentGateway {
   return {
     async sendWorker(input) {
-      const agent = await deps.resolveAgent(input.task.currentConfig.projectId)
+      const configSnapshot = input.run.configSnapshot
+      const agent = await deps.resolveAgent(configSnapshot.projectId)
       const result = await agent.sendNewSession(
         {
-          projectId: input.task.currentConfig.projectId,
+          projectId: configSnapshot.projectId,
           sessionKey: input.worker.sessionKey,
           platform: "swarm",
           content: input.prompt,
-          workspacePath: input.task.currentConfig.workspacePath,
+          workspacePath: configSnapshot.workspacePath,
           agentType: "claude-code",
-          providerId: input.task.currentConfig.agent.providerId,
-          modelTier: input.task.currentConfig.agent.modelTier,
-          modeOverride: input.task.currentConfig.agent.permissionMode,
-          mainThreadPersonaId: input.task.currentConfig.agent.mainThreadPersonaId,
+          providerId: configSnapshot.agent.providerId,
+          modelTier: configSnapshot.agent.modelTier,
+          modeOverride: configSnapshot.agent.permissionMode,
+          mainThreadPersonaId: configSnapshot.agent.mainThreadPersonaId,
           userMeta: {
             swarmTaskId: input.task.id,
             swarmRunId: input.run.id,

@@ -469,6 +469,52 @@ describe("agent session IPC methods", () => {
     })
   })
 
+  it("opens an existing workflow conversation in the main Agent tab", async () => {
+    const conversations = createConversationNamespace([
+      storedConversation({
+        id: "conv-workflow",
+        platform: "workflow",
+        sessionKey: "workflow:project-1:123",
+      }),
+    ])
+    const windowManager = createWindowManager()
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => conversations),
+      } as unknown as DataRepository,
+      windowManager,
+    })
+
+    await expect(sessionMethods.openConversation.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+    })).resolves.toEqual({ opened: true })
+
+    expect(windowManager.open).toHaveBeenCalledWith("main")
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:open-agent-session",
+      {
+        projectId: "project-1",
+        conversationId: "conv-workflow",
+        sessionKey: "workflow:project-1:123",
+        sourceFilter: "workflow",
+      },
+      expect.any(Function),
+    )
+    const filter = windowManager.broadcast.mock.calls[0]?.[2]
+    expect(filter?.({ role: "main" })).toBe(true)
+    expect(filter?.({ role: "detail" })).toBe(false)
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Agent conversation opened.", {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+    })
+  })
+
   it("does not open the Agent tab when the workflow conversation is gone", async () => {
     const conversations = createConversationNamespace([])
     const windowManager = createWindowManager()

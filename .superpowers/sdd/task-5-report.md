@@ -118,3 +118,33 @@ Result:
 ### Concerns
 
 - The focused `agent-runtime-service` test passes, but it emits existing `log-store` compatibility warnings under Vitest because Electron app globals are not mocked in that test path. The test still exits successfully.
+
+## Task 5 Fix Report 2
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `desktop/electron/modules/agent/__tests__/ipc-sessions.test.ts`
+- `.superpowers/sdd/task-5-report.md`
+
+### Tests run
+
+- `pnpm --filter @synapse/desktop exec vitest run src/modules/agent/__tests__/conversation-source.test.ts electron/modules/agent/__tests__/ipc-sessions.test.ts app-capabilities/swarm-task/main/__tests__/service.test.ts`
+
+### Result
+
+- `createAgentRuntimeSwarmGateway` now resolves the runtime from `input.run.configSnapshot.projectId`.
+- The outbound `AgentMessage` now uses `input.run.configSnapshot` for `projectId`, `workspacePath`, `providerId`, `modelTier`, `modeOverride`, and `mainThreadPersonaId`.
+- The swarm gateway unit test now sets different values in `task.currentConfig` and `run.configSnapshot`, and asserts the snapshot values win.
+- Workflow open-conversation happy-path IPC coverage was restored alongside the existing swarm coverage.
+
+### Self-review
+
+- Kept the fix inside the approved files only.
+- Preserved the existing `abortSignal` and `onConversationCreated` forwarding behavior through `sendNewSession(...)`.
+- Left `swarm` typing/schema behavior untouched outside the requested test coverage restoration.
+
+### Concerns
+
+- No additional concerns.

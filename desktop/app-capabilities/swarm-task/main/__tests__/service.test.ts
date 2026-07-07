@@ -169,11 +169,13 @@ describe("createSwarmTaskService", () => {
         currentConfig: {
           ...config,
           agent: {
-            providerId: "anthropic",
-            modelTier: "sonnet",
-            permissionMode: "acceptEdits",
-            mainThreadPersonaId: "persona-1",
+            providerId: "openai",
+            modelTier: "haiku",
+            permissionMode: "plan",
+            mainThreadPersonaId: "persona-current",
           },
+          projectId: "project-current",
+          workspacePath: "/repo-current",
         },
         createdAt: "2026-07-07T00:00:00.000Z",
         updatedAt: "2026-07-07T00:00:00.000Z",
@@ -185,11 +187,13 @@ describe("createSwarmTaskService", () => {
         status: "running",
         configSnapshot: {
           ...config,
+          projectId: "project-snapshot",
+          workspacePath: "/repo-snapshot",
           agent: {
             providerId: "anthropic",
             modelTier: "sonnet",
             permissionMode: "acceptEdits",
-            mainThreadPersonaId: "persona-1",
+            mainThreadPersonaId: "persona-snapshot",
           },
         },
         startedAt: "2026-07-07T00:00:00.000Z",
@@ -214,19 +218,19 @@ describe("createSwarmTaskService", () => {
     })
 
     await vi.waitFor(() => {
-      expect(resolveAgent).toHaveBeenCalledWith("project-1")
+      expect(resolveAgent).toHaveBeenCalledWith("project-snapshot")
       expect(sendNewSession).toHaveBeenCalledWith(
         {
-          projectId: "project-1",
+          projectId: "project-snapshot",
           sessionKey: "swarm:task-1:run-1",
           platform: "swarm",
           content: "Do the work",
-          workspacePath: "/repo",
+          workspacePath: "/repo-snapshot",
           agentType: "claude-code",
           providerId: "anthropic",
           modelTier: "sonnet",
           modeOverride: "acceptEdits",
-          mainThreadPersonaId: "persona-1",
+          mainThreadPersonaId: "persona-snapshot",
           userMeta: {
             swarmTaskId: "task-1",
             swarmRunId: "run-1",
