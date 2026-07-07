@@ -193,6 +193,32 @@ describe("swarmTaskNodeExecutor", () => {
 
     expect(result.status).toBe("cancelled")
   })
+
+  it("handles rejected swarm cancellation after workflow abort", async () => {
+    const abortController = new AbortController()
+    const unhandled = vi.fn()
+    process.once("unhandledRejection", unhandled)
+    const service = {
+      startRun: vi.fn().mockResolvedValue(baseRun),
+      getRun: vi.fn(async () => {
+        abortController.abort()
+        return baseRun
+      }),
+      cancelRun: vi.fn().mockRejectedValue(new Error("cancel failed")),
+    }
+
+    const result = await swarmTaskNodeExecutor.execute(createInput({
+      taskId: "task-1",
+      waitForCompletion: true,
+      variables: [],
+    }, service, abortController))
+
+    await Promise.resolve()
+    process.removeListener("unhandledRejection", unhandled)
+    expect(result.status).toBe("cancelled")
+    expect(service.cancelRun).toHaveBeenCalledWith("run-1")
+    expect(unhandled).not.toHaveBeenCalled()
+  })
 })
 
 function createInput(
