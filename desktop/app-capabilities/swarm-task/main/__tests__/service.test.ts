@@ -111,6 +111,51 @@ describe("createSwarmTaskService", () => {
     expect(run.outputDirectory).toBe("/repo/swarm-runs/id-2")
   })
 
+  it("merges nested partial config overrides into a full snapshot", async () => {
+    const { service } = serviceHarness()
+    const task = await service.createTask({
+      name: "任务",
+      config: {
+        ...config,
+        injectOptions: {
+          ...config.injectOptions,
+          workerIdentity: false,
+          customAppendix: "keep me",
+        },
+        summary: {
+          enabled: false,
+          injectRecent: false,
+          recentLimit: 7,
+        },
+      },
+    })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: {
+        summary: { injectRecent: true },
+        handoff: { enabled: true },
+        injectOptions: { gitContext: true },
+      },
+    })
+
+    expect(run.configSnapshot.summary).toMatchObject({
+      enabled: false,
+      injectRecent: true,
+      recentLimit: 7,
+    })
+    expect(run.configSnapshot.handoff).toMatchObject({ enabled: true })
+    expect(run.configSnapshot.injectOptions).toMatchObject({
+      workerIdentity: false,
+      roundContext: true,
+      runContext: true,
+      outputProtocol: true,
+      parallelContext: true,
+      gitContext: true,
+      customAppendix: "keep me",
+    })
+  })
+
   it("starts in the background and stores worker summaries", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({ name: "任务", config })
@@ -301,5 +346,25 @@ describe("createSwarmTaskService", () => {
     })
     expect(persistedTask?.updatedAt).toBe(beforeCancelTask?.updatedAt)
     expect(gateway.cancelConversation).not.toHaveBeenCalled()
+  })
+
+  it("leaves a terminal run unchanged when stopRefill is called", async () => {
+    const { service } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    const stoppedRun = await service.stopRefill(run.id)
+    const persistedRun = await service.getRun(run.id)
+
+    expect(stoppedRun).toMatchObject({ status: "success", stopRequested: false })
+    expect(persistedRun).toMatchObject({ status: "success", stopRequested: false })
   })
 })

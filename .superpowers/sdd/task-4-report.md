@@ -125,3 +125,36 @@
 ### Concerns
 
 - No additional concerns.
+
+## Task 4 Fix Report 3
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `.superpowers/sdd/task-4-report.md`
+
+### Tests run
+
+1. `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: PASS
+   - Output summary:
+     - `Test Files  1 passed (1)`
+     - `Tests  10 passed (10)`
+
+### Result
+
+- `startRun()` now builds `configSnapshot` by deep-merging nested override objects onto the task's existing config before validating the final snapshot, so partial overrides keep prior nested values instead of reverting them to schema defaults.
+- Added a regression test proving nested overrides for `summary`, `handoff`, and `injectOptions` preserve the task's existing non-default nested values while still producing a full valid snapshot.
+- `stopRefill()` now returns terminal runs unchanged instead of rewriting `success`, `partial`, `failed`, or `cancelled` runs to `draining`.
+- Added a focused test covering the new terminal-state `stopRefill()` guard.
+
+### Self-review
+
+- Kept the fix scoped to the owned service/test files plus this report append.
+- Preserved the existing `startRun()` behavior of returning the new `running` run immediately after background scheduling begins.
+- Left the live conversation id callback path and prior terminal worker persistence behavior intact.
+
+### Concerns
+
+- No additional concerns.

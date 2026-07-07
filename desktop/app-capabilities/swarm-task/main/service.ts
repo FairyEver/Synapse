@@ -5,11 +5,13 @@ import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { AgentEvent } from "../../../electron/services/agent-runtime"
 import {
   swarmRunStartInputSchema,
+  swarmTaskConfigSchema,
   swarmTaskCreateInputSchema,
   swarmTaskUpdateInputSchema,
   type SwarmRun,
   type SwarmRunStartInput,
   type SwarmTask,
+  type SwarmTaskConfig,
   type SwarmTaskCreateInput,
   type SwarmTaskUpdateInput,
   type SwarmWorkerRun,
@@ -113,14 +115,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     const parsed = swarmRunStartInputSchema.parse(input)
     const task = await requireTask(parsed.taskId)
     const runId = createId()
-    const configSnapshot = {
-      ...task.currentConfig,
-      ...parsed.configOverride,
-      output: {
-        ...task.currentConfig.output,
-        ...parsed.configOverride?.output,
-      },
-    }
+    const configSnapshot = mergeConfigSnapshot(task.currentConfig, input.configOverride)
     const run: SwarmRun = {
       id: runId,
       schemaVersion: 1,
@@ -149,6 +144,9 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     scheduler.stopRefill(runId)
     const run = await deps.runs.get(runId)
     if (!run) return null
+    if (terminalRunStatuses.has(run.status)) {
+      return run
+    }
     const updated: SwarmRun = { ...run, status: "draining", stopRequested: true }
     await deps.runs.upsert(updated)
     return updated
@@ -392,6 +390,40 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     getRun,
     listWorkerRuns,
   }
+}
+
+function mergeConfigSnapshot(
+  base: SwarmTaskConfig,
+  override?: SwarmRunStartInput["configOverride"],
+): SwarmTaskConfig {
+  if (!override) {
+    return base
+  }
+
+  return swarmTaskConfigSchema.parse({
+    ...base,
+    ...override,
+    injectOptions: {
+      ...base.injectOptions,
+      ...override.injectOptions,
+    },
+    output: {
+      ...base.output,
+      ...override.output,
+    },
+    summary: {
+      ...base.summary,
+      ...override.summary,
+    },
+    handoff: {
+      ...base.handoff,
+      ...override.handoff,
+    },
+    agent: {
+      ...base.agent,
+      ...override.agent,
+    },
+  })
 }
 
 function isAbortError(error: unknown): boolean {
