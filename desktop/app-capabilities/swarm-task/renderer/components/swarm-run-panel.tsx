@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../src/components/ui/table"
-import type { SwarmRun, SwarmWorkerRun } from "../../shared/schema"
+import type { SwarmRun, SwarmRunStatus, SwarmWorkerRun } from "../../shared/schema"
 
 type SwarmRunPanelProps = {
   readonly run: SwarmRun | null
@@ -24,6 +24,8 @@ type SwarmRunPanelProps = {
   readonly onCancelRun: () => void
   readonly onOpenConversation: (worker: SwarmWorkerRun) => void
 }
+
+const terminalRunStatuses = new Set<SwarmRunStatus>(["success", "partial", "failed", "cancelled"])
 
 export function SwarmRunPanel({
   run,
@@ -55,7 +57,7 @@ export function SwarmRunPanel({
           <StopCircle data-icon="inline-start" />
           停止补位
         </Button>
-        <Button type="button" variant="outline" onClick={onCancelRun} disabled={loading || run.status !== "running"}>
+        <Button type="button" variant="outline" onClick={onCancelRun} disabled={loading || terminalRunStatuses.has(run.status)}>
           <Square data-icon="inline-start" />
           取消运行
         </Button>

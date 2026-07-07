@@ -81,6 +81,20 @@ const swarmTaskFixtures = vi.hoisted(() => {
     stopRequested: false,
   }
 
+  const runB: SwarmRun = {
+    ...run,
+    id: "run-2",
+    taskId: taskB.id,
+    status: "running",
+    configSnapshot: taskB.currentConfig,
+  }
+
+  const drainingRun: SwarmRun = {
+    ...run,
+    status: "draining",
+    stopRequested: true,
+  }
+
   const worker: SwarmWorkerRun = {
     id: "worker-1",
     schemaVersion: 1,
@@ -96,7 +110,7 @@ const swarmTaskFixtures = vi.hoisted(() => {
     lastMessage: "处理中",
   }
 
-  return { taskA, taskB, run, worker }
+  return { taskA, taskB, run, runB, drainingRun, worker }
 })
 
 const swarmTaskBridge = vi.hoisted(() => ({
@@ -185,6 +199,8 @@ beforeEach(() => {
   swarmTaskBridge.listTasks.mockImplementation(async () => [swarmTaskFixtures.taskA, swarmTaskFixtures.taskB])
   swarmTaskBridge.startRun.mockClear()
   swarmTaskBridge.startRun.mockImplementation(async () => swarmTaskFixtures.run)
+  swarmTaskBridge.createTask.mockClear()
+  swarmTaskBridge.createTask.mockImplementation(async () => swarmTaskFixtures.taskA)
   swarmTaskBridge.listRuns.mockClear()
   swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.run])
   swarmTaskBridge.getRun.mockClear()
@@ -212,6 +228,42 @@ afterEach(() => {
 })
 
 describe("SwarmTaskModule", () => {
+  it("creates and selects a task from the empty state", async () => {
+    swarmTaskBridge.listTasks.mockResolvedValueOnce([])
+    swarmTaskBridge.createTask.mockResolvedValueOnce(swarmTaskFixtures.taskA)
+
+    await renderModule()
+    await clickButton("新建")
+
+    expect(swarmTaskBridge.createTask).toHaveBeenCalledWith({
+      name: "新建任务",
+      config: {
+        projectId: "project-id",
+        workspacePath: "/path/to/workspace",
+        prompt: "填写任务目标",
+        presetId: "general",
+        injectOptions: {
+          workerIdentity: true,
+          roundContext: true,
+          runContext: true,
+          outputProtocol: true,
+          parallelContext: true,
+          gitContext: false,
+          customAppendix: "",
+        },
+        runMode: "batch",
+        concurrency: 1,
+        maxRounds: 1,
+        output: { mode: "managed-directory", targetFilePolicy: "append-only" },
+        summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+        handoff: { enabled: false },
+        agent: {},
+      },
+    })
+    expect(toast.success).toHaveBeenCalledWith("已创建")
+    await waitForTextareaValue("Run.")
+  })
+
   it("loads tasks and selects the first task", async () => {
     await renderModule()
 
@@ -252,6 +304,19 @@ describe("SwarmTaskModule", () => {
     expect(swarmTaskBridge.cancelRun).toHaveBeenCalledWith("run-1")
     expect(toast.error).toHaveBeenCalledWith("停止补位失败")
     expect(toast.error).toHaveBeenCalledWith("取消运行失败")
+  })
+
+  it("can cancel a draining run", async () => {
+    swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.drainingRun])
+    swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.drainingRun)
+
+    await renderModule()
+    await clickTab("运行中")
+    await waitForButton("取消运行")
+
+    await clickButton("取消运行")
+
+    expect(swarmTaskBridge.cancelRun).toHaveBeenCalledWith("run-1")
   })
 
   it("keeps the detail pane aligned with the filtered task selection", async () => {
@@ -336,6 +401,47 @@ describe("SwarmTaskModule", () => {
       resolveTaskBRuns?.([])
       await Promise.resolve()
     })
+  })
+
+  it("keeps newer selected task run data when an older request resolves late", async () => {
+    let resolveTaskARuns: ((runs: SwarmRun[]) => void) | null = null
+    let resolveTaskBRuns: ((runs: SwarmRun[]) => void) | null = null
+    swarmTaskBridge.listRuns.mockImplementation(async ({ taskId }: { taskId: string }) => (
+      await new Promise<SwarmRun[]>((resolve) => {
+        if (taskId === "task-1") {
+          resolveTaskARuns = resolve
+          return
+        }
+        resolveTaskBRuns = resolve
+      })
+    ))
+    swarmTaskBridge.getRun.mockImplementation(async (runId: string) => (
+      runId === "run-2" ? swarmTaskFixtures.runB : swarmTaskFixtures.run
+    ))
+    swarmTaskBridge.listWorkerRuns.mockImplementation(async (runId: string) => (
+      runId === "run-2"
+        ? [{ ...swarmTaskFixtures.worker, id: "worker-2", taskId: "task-2", runId: "run-2", lastMessage: "任务 B worker" }]
+        : [swarmTaskFixtures.worker]
+    ))
+
+    await renderModule()
+    await clickTab("运行中")
+    await clickTask("任务 B")
+
+    await act(async () => {
+      resolveTaskBRuns?.([swarmTaskFixtures.runB])
+      await Promise.resolve()
+    })
+    await waitForButton("打开会话")
+    expect(document.body.textContent).toContain("任务 B worker")
+
+    await act(async () => {
+      resolveTaskARuns?.([swarmTaskFixtures.run])
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("任务 B worker")
+    expect(document.body.textContent).toContain("任务 B")
   })
 
   it("shows an error when opening a worker conversation is not handled", async () => {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { CircleAlert, Play, RefreshCw } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CircleAlert, Play, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
@@ -25,9 +25,33 @@ const tabs = [
   { id: "history", label: "历史" },
 ] as const satisfies ReadonlyArray<{ id: SwarmTaskTab; label: string }>
 
+const defaultTaskConfig: SwarmTaskConfig = {
+  projectId: "project-id",
+  workspacePath: "/path/to/workspace",
+  prompt: "填写任务目标",
+  presetId: "general",
+  injectOptions: {
+    workerIdentity: true,
+    roundContext: true,
+    runContext: true,
+    outputProtocol: true,
+    parallelContext: true,
+    gitContext: false,
+    customAppendix: "",
+  },
+  runMode: "batch",
+  concurrency: 1,
+  maxRounds: 1,
+  output: { mode: "managed-directory", targetFilePolicy: "append-only" },
+  summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+  handoff: { enabled: false },
+  agent: {},
+}
+
 export function SwarmTaskModule() {
   const swarmTaskBridge = useMemo(() => requireBridgeDomain("swarmTask"), [])
   const agentBridge = useMemo(() => requireBridgeDomain("agent"), [])
+  const runDataRequestIdRef = useRef(0)
 
   const [tasks, setTasks] = useState<SwarmTask[]>([])
   const [search, setSearch] = useState("")
@@ -39,6 +63,7 @@ export function SwarmTaskModule() {
   const [workerRuns, setWorkerRuns] = useState<SwarmWorkerRun[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingRun, setLoadingRun] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [loadError, setLoadError] = useState("")
@@ -64,28 +89,37 @@ export function SwarmTaskModule() {
   }, [swarmTaskBridge])
 
   const reloadRunData = useCallback(async (task: SwarmTask | null) => {
+    const requestId = runDataRequestIdRef.current + 1
+    runDataRequestIdRef.current = requestId
+
     if (!task) {
       setRunHistory([])
       setActiveRun(null)
       setWorkerRuns([])
+      setLoadingRun(false)
       return
     }
 
     try {
       setLoadingRun(true)
       const runs = await swarmTaskBridge.listRuns({ taskId: task.id, limit: 20 })
-      setRunHistory(runs)
       const latestRun = task.lastRunId
         ? await swarmTaskBridge.getRun(task.lastRunId)
         : runs[0] ?? null
+      const nextWorkerRuns = latestRun ? await swarmTaskBridge.listWorkerRuns(latestRun.id) : []
+      if (runDataRequestIdRef.current !== requestId) return
+      setRunHistory(runs)
       setActiveRun(latestRun)
-      setWorkerRuns(latestRun ? await swarmTaskBridge.listWorkerRuns(latestRun.id) : [])
+      setWorkerRuns(nextWorkerRuns)
     } catch (error) {
+      if (runDataRequestIdRef.current !== requestId) return
       const message = errorMessage(error, "加载运行失败")
       logger.error("Failed to load swarm task runs.", error)
       toast.error(message)
     } finally {
-      setLoadingRun(false)
+      if (runDataRequestIdRef.current === requestId) {
+        setLoadingRun(false)
+      }
     }
   }, [swarmTaskBridge])
 
@@ -136,6 +170,28 @@ export function SwarmTaskModule() {
     setWorkerRuns([])
     void reloadRunData(selectedTask)
   }, [reloadRunData, selectedTask])
+
+  const createTask = useCallback(async () => {
+    try {
+      setCreating(true)
+      const created = await swarmTaskBridge.createTask({
+        name: "新建任务",
+        config: defaultTaskConfig,
+      })
+      setTasks((current) => [created, ...current.filter((task) => task.id !== created.id)])
+      setSearch("")
+      setSelectedTaskId(created.id)
+      setDraftConfig(created.currentConfig)
+      setActiveTab("config")
+      toast.success("已创建")
+    } catch (error) {
+      const message = errorMessage(error, "创建失败")
+      logger.error("Failed to create swarm task.", error)
+      toast.error(message)
+    } finally {
+      setCreating(false)
+    }
+  }, [swarmTaskBridge])
 
   const selectedActiveRun = useMemo(() => {
     if (!selectedTask || activeRun?.taskId !== selectedTask.id) return null
@@ -238,10 +294,16 @@ export function SwarmTaskModule() {
       value={activeTab}
       onValueChange={setActiveTab}
       actions={(
-        <Button type="button" variant="outline" onClick={() => void reloadTasks()} disabled={loading}>
-          <RefreshCw data-icon="inline-start" />
-          刷新
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={() => void createTask()} disabled={loading || creating}>
+            <Plus data-icon="inline-start" />
+            新建
+          </Button>
+          <Button type="button" variant="outline" onClick={() => void reloadTasks()} disabled={loading}>
+            <RefreshCw data-icon="inline-start" />
+            刷新
+          </Button>
+        </div>
       )}
     >
       {loading ? (
