@@ -182,13 +182,21 @@ let roots: Root[] = []
 
 beforeEach(() => {
   swarmTaskBridge.listTasks.mockClear()
+  swarmTaskBridge.listTasks.mockImplementation(async () => [swarmTaskFixtures.taskA, swarmTaskFixtures.taskB])
   swarmTaskBridge.startRun.mockClear()
+  swarmTaskBridge.startRun.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.listRuns.mockClear()
+  swarmTaskBridge.listRuns.mockImplementation(async () => [swarmTaskFixtures.run])
   swarmTaskBridge.getRun.mockClear()
+  swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.listWorkerRuns.mockClear()
+  swarmTaskBridge.listWorkerRuns.mockImplementation(async () => [swarmTaskFixtures.worker])
   swarmTaskBridge.stopRefill.mockClear()
+  swarmTaskBridge.stopRefill.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.cancelRun.mockClear()
+  swarmTaskBridge.cancelRun.mockImplementation(async () => swarmTaskFixtures.run)
   agentBridge.openConversation.mockClear()
+  agentBridge.openConversation.mockImplementation(async () => ({ opened: true as const, conversationId: "conversation-1" }))
   toast.error.mockClear()
   toast.success.mockClear()
 })
@@ -292,6 +300,37 @@ describe("SwarmTaskModule", () => {
     await clickButton("打开会话")
 
     expect(agentBridge.openConversation).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveTaskBRuns?.([])
+      await Promise.resolve()
+    })
+  })
+
+  it("does not render stale history when an older run request resolves late", async () => {
+    let resolveTaskARuns: ((runs: SwarmRun[]) => void) | null = null
+    let resolveTaskBRuns: ((runs: SwarmRun[]) => void) | null = null
+    swarmTaskBridge.listRuns.mockImplementation(async ({ taskId }: { taskId: string }) => (
+      await new Promise<SwarmRun[]>((resolve) => {
+        if (taskId === "task-1") {
+          resolveTaskARuns = resolve
+          return
+        }
+        resolveTaskBRuns = resolve
+      })
+    ))
+
+    await renderModule()
+    await waitForTextareaValue("Run.")
+    await clickTab("历史")
+    await clickTask("任务 B")
+
+    await act(async () => {
+      resolveTaskARuns?.([swarmTaskFixtures.run])
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("running")
 
     await act(async () => {
       resolveTaskBRuns?.([])

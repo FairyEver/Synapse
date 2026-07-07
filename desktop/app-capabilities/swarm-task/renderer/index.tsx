@@ -149,6 +149,11 @@ export function SwarmTaskModule() {
     ))
   }, [selectedActiveRun, selectedTask, workerRuns])
 
+  const selectedRunHistory = useMemo(() => {
+    if (!selectedTask) return []
+    return runHistory.filter((run) => run.taskId === selectedTask.id)
+  }, [runHistory, selectedTask])
+
   const saveConfig = useCallback(async () => {
     if (!selectedTask || !draftConfig) return
     try {
@@ -279,7 +284,7 @@ export function SwarmTaskModule() {
               draftConfig={draftConfig}
               activeRun={selectedActiveRun}
               workerRuns={selectedWorkerRuns}
-              runHistory={runHistory}
+              runHistory={selectedRunHistory}
               loadingRun={loadingRun}
               saving={saving}
               running={running}
