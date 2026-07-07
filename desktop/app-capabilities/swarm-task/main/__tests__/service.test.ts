@@ -24,6 +24,16 @@ function namespace<T extends { id: string }>() {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 const config = {
   projectId: "project-1",
   workspacePath: "/repo",
@@ -137,5 +147,83 @@ describe("createSwarmTaskService", () => {
 
     expect(workerRuns[0]?.summary).toBe("plain final result")
     expect(workerRuns[0]?.summaryFallback).toBe(true)
+  })
+
+  it("persists cancelled worker state when the gateway aborts during cancelRun", async () => {
+    const pending = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success" | "failed" | "cancelled" | "timeout"
+      events: []
+    }>()
+    const { service, tasks } = serviceHarness({
+      sendWorker: vi.fn(async ({ abortSignal }) => {
+        abortSignal?.addEventListener(
+          "abort",
+          () => {
+            const error = new Error("aborted")
+            error.name = "AbortError"
+            pending.reject(error)
+          },
+          { once: true },
+        )
+        return pending.promise
+      }),
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.listWorkerRuns(run.id)).toHaveLength(1)
+    })
+
+    const cancelledRun = await service.cancelRun(run.id)
+    const workerRuns = await service.listWorkerRuns(run.id)
+    const latestTask = await tasks.get(task.id)
+
+    expect(cancelledRun).toMatchObject({ id: run.id, status: "cancelled" })
+    expect(workerRuns[0]).toMatchObject({ status: "cancelled" })
+    expect(latestTask).toMatchObject({ lastRunId: run.id, lastStatus: "cancelled" })
+  })
+
+  it("persists failed worker state when the gateway rejects", async () => {
+    const pending = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success" | "failed" | "cancelled" | "timeout"
+      events: []
+    }>()
+    const { service, tasks } = serviceHarness({
+      sendWorker: vi.fn(async () => pending.promise),
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.listWorkerRuns(run.id)).toHaveLength(1)
+    })
+    pending.reject(new Error("gateway exploded"))
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "failed" })
+    })
+
+    const workerRuns = await service.listWorkerRuns(run.id)
+    const latestTask = await tasks.get(task.id)
+
+    expect(workerRuns[0]).toMatchObject({
+      status: "failed",
+      error: "gateway exploded",
+      lastMessage: "gateway exploded",
+    })
+    expect(latestTask).toMatchObject({ lastRunId: run.id, lastStatus: "failed" })
   })
 })

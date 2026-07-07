@@ -1,0 +1,94 @@
+# Task 4 Report
+
+## Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+
+## What changed
+
+- Added `createSwarmTaskService(deps)` with the required task, run, and worker APIs:
+  - `listTasks`
+  - `createTask`
+  - `updateTask`
+  - `deleteTask`
+  - `startRun`
+  - `stopRefill`
+  - `cancelRun`
+  - `listRuns`
+  - `getRun`
+  - `listWorkerRuns`
+- Wired the service to the existing shared schemas, `prompt-builder`, and `scheduler`.
+- Implemented background run scheduling so `startRun` persists and returns the new `running` run immediately without waiting for worker completion.
+- Implemented worker record persistence with:
+  - `platform: "swarm"` compatible storage contract via `sessionKey: "swarm:<taskId>:<runId>"`
+  - structured summary extraction through `extractSwarmStructuredOutput`
+  - fallback summaries through `fallbackSummary`
+  - previous handoff propagation through the existing prompt builder contract
+- Added focused tests covering:
+  - reusable task creation/listing
+  - config snapshotting at run start
+  - background completion and worker summary persistence
+  - fallback summary behavior when the structured summary block is absent
+
+## Tests run
+
+1. `pnpm --filter @synapse/desktop test -- desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: noisy/unfocused in this repo shape; the command fanned out into unrelated desktop test execution and was interrupted after showing unrelated failures/warnings outside this task path. Not used as the acceptance signal.
+
+2. `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: PASS
+   - Output summary:
+     - `Test Files  1 passed (1)`
+     - `Tests  4 passed (4)`
+
+## TDD evidence
+
+- Wrote `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts` before creating `desktop/app-capabilities/swarm-task/main/service.ts`.
+- Ran the brief-specified package test command during the red phase and confirmed it was not a useful focused signal because it fanned out into unrelated suite noise.
+- Implemented the minimal service needed to satisfy the new tests.
+- Re-ran the focused Vitest command and confirmed the new service tests passed.
+
+## Self-review
+
+- Kept the change surgical to the two requested source files plus this report.
+- Reused only the existing shared schemas, scheduler, and prompt-builder contracts.
+- Did not introduce CLI workers, shell runners, prompt task classification, or extra data shapes.
+- Ensured worker records persist the required `sessionKey` format and that summaries use the existing structured-output/fallback path instead of passing full prior outputs forward.
+
+## Concerns
+
+- `cancelRun` only asks the gateway to cancel workers that are still stored with `status: "running"` and already have a `conversationId`; if cancellation needs to reach conversations created after a persistence race, that would need an additional targeted test and refinement.
+
+## Task 4 Fix Report
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `.superpowers/sdd/task-4-report.md`
+
+### Tests run
+
+1. `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: PASS
+   - Output summary:
+     - `Test Files  1 passed (1)`
+     - `Tests  6 passed (6)`
+
+### Result
+
+- `createWorkerRunner` now persists a terminal worker row when `deps.agent.sendWorker()` rejects after the worker was initially stored.
+- Abort-driven failures now persist worker `status: "cancelled"` and flow that same terminal outcome back through the scheduler path.
+- Ordinary gateway rejections now persist worker `status: "failed"` with `error` and `lastMessage`, and the run finishes as failed.
+- `cancelRun()` now also persists the parent task `lastRunId` and `lastStatus: "cancelled"` instead of leaving the task stuck on the previous status.
+
+### Self-review
+
+- Kept `startRun()` asynchronous behavior unchanged: it still returns the newly created `running` run immediately after background scheduling starts.
+- Added focused regression tests for gateway abort, gateway rejection, and task status update on `cancelRun()`.
+- Kept the fix contained to the service/test pair plus this report append.
+
+### Concerns
+
+- No additional concerns beyond the pre-existing note above.

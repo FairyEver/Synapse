@@ -54,6 +54,13 @@ export type SwarmTaskServiceDeps = {
 
 export type SwarmTaskService = ReturnType<typeof createSwarmTaskService>
 
+type TerminalWorkerOutcome = {
+  readonly status: "success" | "failed" | "cancelled" | "timeout"
+  readonly resultText: string
+  readonly error?: string
+  readonly conversationId?: string
+}
+
 export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const timestamp = () => (deps.now ?? (() => new Date()))().toISOString()
   const createId = deps.idFactory ?? (() => randomUUID())
@@ -161,6 +168,13 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       finishedAt: timestamp(),
     }
     await deps.runs.upsert(updated)
+    const task = await requireTask(run.taskId)
+    await deps.tasks.upsert({
+      ...task,
+      lastRunId: run.id,
+      lastStatus: "cancelled",
+      updatedAt: timestamp(),
+    })
     await runningRuns.get(runId)?.catch(() => undefined)
     return updated
   }
@@ -263,37 +277,85 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         previousHandoff,
       })
 
-      const result = await deps.agent.sendWorker({
-        task,
-        run,
-        worker,
-        prompt,
-        abortSignal: input.abortSignal,
-      })
+      try {
+        const result = await deps.agent.sendWorker({
+          task,
+          run,
+          worker,
+          prompt,
+          abortSignal: input.abortSignal,
+        })
 
-      const extracted = extractSwarmStructuredOutput(result.resultText)
-      const summary = input.config.summary.enabled
-        ? extracted.summary ?? fallbackSummary(result.resultText)
-        : undefined
-      const summaryFallback = input.config.summary.enabled && !extracted.summary
-      const updated: SwarmWorkerRun = {
-        ...worker,
-        status: result.status,
-        conversationId: result.conversationId,
-        finishedAt: timestamp(),
-        lastPhase: result.status === "success" ? "completed" : "failed",
-        lastMessage: result.error ?? result.resultText.slice(0, 500),
-        ...(summary ? { summary, summaryFallback } : {}),
-        ...(input.config.handoff.enabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
-        ...(result.error ? { error: result.error } : {}),
+        return persistWorkerOutcome({
+          worker,
+          input,
+          outcome: {
+            status: result.status,
+            resultText: result.resultText,
+            error: result.error,
+            conversationId: result.conversationId,
+          },
+        })
+      } catch (error) {
+        const outcome = normalizeWorkerErrorOutcome(error, input.abortSignal)
+        return persistWorkerOutcome({ worker, input, outcome })
       }
-      await deps.workers.upsert(updated)
+    }
+  }
 
+  function normalizeWorkerErrorOutcome(
+    error: unknown,
+    abortSignal?: AbortSignal,
+  ): TerminalWorkerOutcome {
+    if (abortSignal?.aborted || isAbortError(error)) {
       return {
-        status: result.status,
-        resultText: result.resultText,
-        error: result.error,
+        status: "cancelled",
+        resultText: "",
       }
+    }
+
+    return {
+      status: "failed",
+      resultText: "",
+      error: error instanceof Error ? error.message : "worker failed",
+    }
+  }
+
+  async function persistWorkerOutcome(input: {
+    worker: SwarmWorkerRun
+    input: Parameters<SwarmWorkerRunner>[0]
+    outcome: TerminalWorkerOutcome
+  }): Promise<{
+    status: "success" | "failed" | "cancelled" | "timeout"
+    resultText: string
+    error?: string
+  }> {
+    const { worker, outcome } = input
+    const extracted = extractSwarmStructuredOutput(outcome.resultText)
+    const summary = input.input.config.summary.enabled
+      ? extracted.summary ?? fallbackSummary(outcome.resultText)
+      : undefined
+    const summaryFallback = input.input.config.summary.enabled && !extracted.summary
+    const finalMessage =
+      outcome.error ??
+      (outcome.resultText ? outcome.resultText.slice(0, 500) : outcome.status === "cancelled" ? "cancelled" : undefined)
+    const updated: SwarmWorkerRun = {
+      ...worker,
+      status: outcome.status,
+      ...(outcome.conversationId ? { conversationId: outcome.conversationId } : {}),
+      finishedAt: timestamp(),
+      lastPhase: outcome.status === "success" ? "completed" : "failed",
+      ...(finalMessage ? { lastMessage: finalMessage } : {}),
+      ...(summary ? { summary, summaryFallback } : {}),
+      ...(input.input.config.handoff.enabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
+      ...(outcome.error ? { error: outcome.error } : {}),
+    }
+    await deps.workers.upsert(updated)
+
+    return {
+      status: outcome.status,
+      resultText: outcome.resultText,
+      error: outcome.error,
     }
   }
 
@@ -309,4 +371,13 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     getRun,
     listWorkerRuns,
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const { name } = error as { name?: unknown }
+  return name === "AbortError"
 }
