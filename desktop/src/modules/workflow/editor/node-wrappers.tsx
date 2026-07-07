@@ -10,6 +10,7 @@ import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
 import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { DocumentTemplateNodeCard } from "../../../../app-capabilities/document-template/workflow-node/card"
 import { ScreenshotNodeCard } from "../../../../app-capabilities/screenshot/workflow-node/card"
+import { SwarmTaskNodeCard } from "../../../../app-capabilities/swarm-task/workflow-node/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
@@ -21,6 +22,7 @@ import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { DocumentTemplateNodeConfig } from "../../../../app-capabilities/document-template/workflow-node/schema"
 import type { ScreenshotNodeConfig } from "../../../../app-capabilities/screenshot/workflow-node/schema"
+import type { SwarmTaskNodeConfig } from "../../../../app-capabilities/swarm-task/workflow-node/schema"
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -160,6 +162,19 @@ export function ScreenshotNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function SwarmTaskNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="swarm_task_run">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <SwarmTaskNodeCard config={data as SwarmTaskNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
@@ -171,4 +186,5 @@ export const nodeTypes = {
   claude_code: ClaudeCodeNodeWrapper,
   document_template_docx_generate: DocumentTemplateNodeWrapper,
   screenshot_capture: ScreenshotNodeWrapper,
+  swarm_task_run: SwarmTaskNodeWrapper,
 }

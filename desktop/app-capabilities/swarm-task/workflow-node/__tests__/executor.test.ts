@@ -62,6 +62,7 @@ describe("swarmTaskNodeExecutor", () => {
     const service = {
       startRun: vi.fn().mockResolvedValue(baseRun),
       getRun: vi.fn(),
+      cancelRun: vi.fn(),
     }
 
     const result = await swarmTaskNodeExecutor.execute(createInput({
@@ -71,6 +72,7 @@ describe("swarmTaskNodeExecutor", () => {
       maxRoundsOverride: 5,
       concurrencyOverride: 2,
       waitForCompletion: false,
+      variables: [],
     }, service))
 
     expect(result.status).toBe("success")
@@ -104,11 +106,13 @@ describe("swarmTaskNodeExecutor", () => {
       getRun: vi.fn()
         .mockResolvedValueOnce({ ...baseRun, totals: { ...baseRun.totals, started: 1 } })
         .mockResolvedValueOnce(terminalRun),
+      cancelRun: vi.fn(),
     }
 
     const result = await swarmTaskNodeExecutor.execute(createInput({
       taskId: "task-1",
       waitForCompletion: true,
+      variables: [],
     }, service))
 
     expect(result.status).toBe("success")
@@ -127,15 +131,18 @@ describe("swarmTaskNodeExecutor", () => {
     const failedService = {
       startRun: vi.fn().mockResolvedValue(baseRun),
       getRun: vi.fn().mockResolvedValue({ ...baseRun, status: "failed" }),
+      cancelRun: vi.fn(),
     }
     const cancelledService = {
       startRun: vi.fn().mockResolvedValue(baseRun),
       getRun: vi.fn().mockResolvedValue({ ...baseRun, status: "cancelled" }),
+      cancelRun: vi.fn(),
     }
 
     await expect(swarmTaskNodeExecutor.execute(createInput({
       taskId: "task-1",
       waitForCompletion: true,
+      variables: [],
     }, failedService))).resolves.toMatchObject({
       status: "failed",
       error: "蜂群任务执行失败",
@@ -144,10 +151,32 @@ describe("swarmTaskNodeExecutor", () => {
     await expect(swarmTaskNodeExecutor.execute(createInput({
       taskId: "task-1",
       waitForCompletion: true,
+      variables: [],
     }, cancelledService))).resolves.toMatchObject({
       status: "cancelled",
       error: "蜂群任务已取消",
     })
+  })
+
+  it("cancels the swarm run when the workflow aborts while waiting", async () => {
+    const abortController = new AbortController()
+    const service = {
+      startRun: vi.fn().mockResolvedValue(baseRun),
+      getRun: vi.fn(async () => {
+        abortController.abort()
+        return baseRun
+      }),
+      cancelRun: vi.fn().mockResolvedValue(baseRun),
+    }
+
+    const result = await swarmTaskNodeExecutor.execute(createInput({
+      taskId: "task-1",
+      waitForCompletion: true,
+      variables: [],
+    }, service, abortController))
+
+    expect(result.status).toBe("cancelled")
+    expect(service.cancelRun).toHaveBeenCalledWith("run-1")
   })
 })
 
@@ -156,14 +185,16 @@ function createInput(
   service: {
     readonly startRun: ReturnType<typeof vi.fn>
     readonly getRun: ReturnType<typeof vi.fn>
+    readonly cancelRun: ReturnType<typeof vi.fn>
   },
+  abortController = new AbortController(),
 ): NodeExecutionInput<SwarmTaskNodeConfig> {
   return {
     config,
     resolvedVariables: {},
     context: {
       runId: "workflow-run-1",
-      abortSignal: new AbortController().signal,
+      abortSignal: abortController.signal,
     },
     agentDeps: {
       sendToAgent: vi.fn(),

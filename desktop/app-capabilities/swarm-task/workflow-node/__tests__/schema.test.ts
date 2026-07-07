@@ -9,6 +9,7 @@ describe("swarmTaskNodeConfigSchema", () => {
     })).toEqual({
       taskId: "task-1",
       waitForCompletion: false,
+      variables: [],
     })
   })
 
@@ -27,6 +28,7 @@ describe("swarmTaskNodeConfigSchema", () => {
       maxRoundsOverride: 5,
       concurrencyOverride: 2,
       waitForCompletion: true,
+      variables: [],
     })
   })
 })

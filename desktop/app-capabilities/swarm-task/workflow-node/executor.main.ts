@@ -5,7 +5,7 @@ import type { SwarmRun, SwarmTaskConfig } from "../shared/schema"
 import type { SwarmTaskService } from "../main/service"
 import type { SwarmTaskNodeConfig } from "./schema"
 
-type SwarmTaskWorkflowService = Pick<SwarmTaskService, "startRun" | "getRun">
+type SwarmTaskWorkflowService = Pick<SwarmTaskService, "startRun" | "getRun" | "cancelRun">
 
 const TERMINAL_STATUSES = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
 const POLL_INTERVAL_MS = 100
@@ -82,18 +82,35 @@ async function waitForTerminalRun(
   abortSignal: AbortSignal,
 ): Promise<SwarmRun> {
   let latest = initialRun
-  while (!TERMINAL_STATUSES.has(latest.status)) {
+  let abortCancelRequested = false
+  const cancelOnAbort = () => {
+    abortCancelRequested = true
+    void service.cancelRun(initialRun.id)
+  }
+  abortSignal.addEventListener("abort", cancelOnAbort, { once: true })
+  try {
+    while (!TERMINAL_STATUSES.has(latest.status)) {
+      if (abortSignal.aborted) {
+        throw new Error("工作流已取消")
+      }
+      const polled = await service.getRun(initialRun.id)
+      if (!polled) {
+        throw new Error("蜂群任务运行不存在")
+      }
+      latest = polled
+      if (!TERMINAL_STATUSES.has(latest.status)) {
+        await sleep(POLL_INTERVAL_MS, abortSignal)
+      }
+    }
+  } catch (error) {
     if (abortSignal.aborted) {
-      throw new Error("工作流已取消")
+      if (!abortCancelRequested) {
+        await service.cancelRun(initialRun.id)
+      }
     }
-    const polled = await service.getRun(initialRun.id)
-    if (!polled) {
-      throw new Error("蜂群任务运行不存在")
-    }
-    latest = polled
-    if (!TERMINAL_STATUSES.has(latest.status)) {
-      await sleep(POLL_INTERVAL_MS, abortSignal)
-    }
+    throw error
+  } finally {
+    abortSignal.removeEventListener("abort", cancelOnAbort)
   }
   return latest
 }

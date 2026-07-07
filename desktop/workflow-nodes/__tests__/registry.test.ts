@@ -105,6 +105,16 @@ describe("NodeTypeRegistry", () => {
     expect(manifest.type).toBe("swarm_task_run")
   })
 
+  it("registers swarm task card wrappers for editor and runner canvases", async () => {
+    const [{ nodeTypes }, { runnerNodeTypes }] = await Promise.all([
+      import("../../src/modules/workflow/editor/node-wrappers"),
+      import("../../src/modules/workflow/runner/runner-node-wrappers"),
+    ])
+
+    expect(nodeTypes.swarm_task_run).toBeTypeOf("function")
+    expect(runnerNodeTypes.swarm_task_run).toBeTypeOf("function")
+  })
+
   it("registers claude code manifest and executor in main registry", async () => {
     vi.doMock("electron", () => ({
       app: {

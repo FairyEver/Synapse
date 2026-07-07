@@ -5,11 +5,17 @@ import { Switch } from "../../../src/components/ui/switch"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { CollapsibleSection } from "../../../workflow-nodes/collapsible-section"
 import type { NodePanelProps } from "../../../workflow-nodes/panel-registry"
+import { VariableBindingEditor } from "../../../workflow-nodes/variable-binding-editor"
 import type { SwarmTaskNodeConfig } from "./schema"
 
 const DEFAULT_RUN_MODE_VALUE = "__default"
 
-export function SwarmTaskNodePanel({ config, onChange }: NodePanelProps) {
+export function SwarmTaskNodePanel({
+  config,
+  onChange,
+  upstreamNodes,
+  workflowParams,
+}: NodePanelProps) {
   const typedConfig = config as SwarmTaskNodeConfig
   const commit = (patch: Partial<SwarmTaskNodeConfig>) =>
     onChange({ ...typedConfig, ...patch })
@@ -82,6 +88,14 @@ export function SwarmTaskNodePanel({ config, onChange }: NodePanelProps) {
             />
           </div>
         </div>
+      </CollapsibleSection>
+      <CollapsibleSection title="输入映射">
+        <VariableBindingEditor
+          variables={typedConfig.variables ?? []}
+          onChange={(variables) => commit({ variables })}
+          upstreamNodes={upstreamNodes}
+          workflowParams={workflowParams}
+        />
       </CollapsibleSection>
     </div>
   )
