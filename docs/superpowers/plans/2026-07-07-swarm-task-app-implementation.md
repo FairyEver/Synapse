@@ -1193,6 +1193,7 @@ git commit -m "feat: add swarm task scheduler"
 - Produces: `createSwarmTaskService(deps: SwarmTaskServiceDeps): SwarmTaskService`.
 - Produces methods: `listTasks`, `createTask`, `updateTask`, `deleteTask`, `startRun`, `stopRefill`, `cancelRun`, `listRuns`, `getRun`, `listWorkerRuns`.
 - Produces dependency type `SwarmAgentGateway` with `sendWorker(input): Promise<SwarmAgentGatewayResult>` and `cancelConversation(projectId, conversationId): Promise<void>`.
+- `startRun` must return the newly created `running` run immediately after scheduling background work; it must not wait for worker completion.
 
 - [ ] **Step 1: Write failing service tests**
 
@@ -1296,15 +1297,21 @@ describe("createSwarmTaskService", () => {
 
     const run = await service.startRun({ taskId: task.id })
 
+    expect(run.status).toBe("running")
     expect(run.configSnapshot.prompt).toBe("Changed prompt.")
     expect(run.outputDirectory).toBe("/repo/swarm-runs/id-2")
   })
 
-  it("creates fresh worker records and stores summaries", async () => {
+  it("starts in the background and stores worker summaries", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({ name: "任务", config })
 
     const run = await service.startRun({ taskId: task.id })
+    expect(run.status).toBe("running")
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
     const workerRuns = await service.listWorkerRuns(run.id)
 
     expect(workerRuns).toHaveLength(2)
@@ -1324,6 +1331,9 @@ describe("createSwarmTaskService", () => {
     const task = await service.createTask({ name: "任务", config })
 
     const run = await service.startRun({ taskId: task.id })
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
     const workerRuns = await service.listWorkerRuns(run.id)
 
     expect(workerRuns[0]?.summary).toBe("plain final result")
@@ -1398,6 +1408,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const now = () => (deps.now ?? (() => new Date()))().toISOString()
   const id = deps.idFactory ?? (() => randomUUID())
   const scheduler = createSwarmScheduler({ runner: createWorkerRunner() })
+  const runningRuns = new Map<string, Promise<void>>()
 
   async function listTasks(): Promise<SwarmTask[]> {
     return (await deps.tasks.list()).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -1463,17 +1474,40 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     await deps.runs.upsert(run)
     await deps.tasks.upsert({ ...task, lastRunId: run.id, lastStatus: "running", updatedAt: now() })
 
-    const result = await scheduler.start({ taskId: task.id, runId: run.id, config: run.configSnapshot })
-    const finished: SwarmRun = {
-      ...run,
-      status: result.status,
-      totals: result.totals,
-      finishedAt: now(),
+    const promise = finishRunInBackground(task.id, run)
+    runningRuns.set(run.id, promise)
+    void promise.finally(() => {
+      runningRuns.delete(run.id)
+    })
+    return run
+  }
+
+  async function finishRunInBackground(taskId: string, run: SwarmRun): Promise<void> {
+    try {
+      const result = await scheduler.start({ taskId, runId: run.id, config: run.configSnapshot })
+      const latestRun = await deps.runs.get(run.id)
+      if (!latestRun || latestRun.status === "cancelled") return
+      const finished: SwarmRun = {
+        ...latestRun,
+        status: result.status,
+        totals: result.totals,
+        finishedAt: now(),
+      }
+      await deps.runs.upsert(finished)
+      const latestTask = await requireTask(taskId)
+      await deps.tasks.upsert({ ...latestTask, lastRunId: run.id, lastStatus: finished.status, updatedAt: now() })
+    } catch (error) {
+      const latestRun = await deps.runs.get(run.id)
+      if (!latestRun) return
+      const failed: SwarmRun = {
+        ...latestRun,
+        status: "failed",
+        finishedAt: now(),
+      }
+      await deps.runs.upsert(failed)
+      const latestTask = await requireTask(taskId)
+      await deps.tasks.upsert({ ...latestTask, lastRunId: run.id, lastStatus: "failed", updatedAt: now() })
     }
-    await deps.runs.upsert(finished)
-    const latestTask = await requireTask(task.id)
-    await deps.tasks.upsert({ ...latestTask, lastRunId: run.id, lastStatus: finished.status, updatedAt: now() })
-    return finished
   }
 
   async function stopRefill(runId: string): Promise<SwarmRun | null> {
@@ -1494,6 +1528,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       worker.conversationId ? deps.agent.cancelConversation(run.configSnapshot.projectId, worker.conversationId) : Promise.resolve()))
     const updated: SwarmRun = { ...run, status: "cancelled", stopRequested: true, finishedAt: now() }
     await deps.runs.upsert(updated)
+    await runningRuns.get(runId)?.catch(() => undefined)
     return updated
   }
 
