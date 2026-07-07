@@ -33,6 +33,7 @@ describe("system app registry", () => {
       "editor-scan",
       "usage-monitor",
       "model-price",
+      "swarm-task",
     ])
   })
 
@@ -65,6 +66,16 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 15 },
       capabilities: {
         primaryMcpPrefix: "app_agent_personas",
+      },
+    })
+    expect(getSystemAppManifest("swarm-task")).toMatchObject({
+      id: "swarm-task",
+      namespace: "swarm_task",
+      name: "蜂群任务",
+      windowTitle: "蜂群任务",
+      dock: { pinnedByDefault: false, order: 340 },
+      capabilities: {
+        primaryMcpPrefix: "app_swarm_task",
       },
     })
   })

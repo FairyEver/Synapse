@@ -17,6 +17,7 @@ import { resourceRepositoryAppManifest } from "@/modules/resource-repository/app
 import { settingsAppManifest } from "@/modules/settings/app-manifest"
 import { usageMonitorAppManifest } from "@/modules/usage-analysis/app-manifest"
 import { workflowAppManifest } from "@/modules/workflow/app-manifest"
+import { swarmTaskAppManifest } from "../../../app-capabilities/swarm-task/renderer/app-manifest"
 import { launcherAppManifest } from "./launcher-app-manifest"
 import type { SynapseSystemAppManifest } from "./types"
 import { isSystemAppId } from "./types"
@@ -42,6 +43,7 @@ const systemApps = [
   editorScanAppManifest,
   usageMonitorAppManifest,
   modelPriceAppManifest,
+  swarmTaskAppManifest,
 ] as const satisfies readonly SynapseSystemAppManifest[]
 
 export function listSystemApps(): readonly SynapseSystemAppManifest[] {
