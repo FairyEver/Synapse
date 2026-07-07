@@ -277,6 +277,76 @@ describe("createSwarmTaskService", () => {
     expect(await service.listTasks()).toHaveLength(1)
   })
 
+  it("deletes a terminal task with its runs and worker records", async () => {
+    const { service, runs, workers } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+    const run: SwarmRun = {
+      id: "run-delete",
+      schemaVersion: 1,
+      taskId: task.id,
+      status: "success",
+      configSnapshot: config,
+      startedAt: "2026-07-07T00:00:00.000Z",
+      finishedAt: "2026-07-07T00:01:00.000Z",
+      totals: { started: 1, success: 1, failed: 0, cancelled: 0, timeout: 0 },
+      outputDirectory: "/repo/swarm-runs/run-delete",
+      stopRequested: false,
+    }
+    await runs.upsert(run)
+    await workers.upsert({
+      id: "worker-delete",
+      schemaVersion: 1,
+      taskId: task.id,
+      runId: run.id,
+      workerIndex: 1,
+      roundIndex: 1,
+      status: "success",
+      sessionKey: `swarm:${task.id}:${run.id}`,
+      startedAt: "2026-07-07T00:00:00.000Z",
+      finishedAt: "2026-07-07T00:01:00.000Z",
+    })
+
+    await service.deleteTask(task.id)
+
+    expect(await service.listTasks()).toEqual([])
+    expect(await service.listRuns(task.id)).toEqual([])
+    expect(await service.listWorkerRuns(run.id)).toEqual([])
+  })
+
+  it("rejects deleting a task with an active run", async () => {
+    const { service, tasks, runs, workers } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+    const run: SwarmRun = {
+      id: "run-active",
+      schemaVersion: 1,
+      taskId: task.id,
+      status: "running",
+      configSnapshot: config,
+      startedAt: "2026-07-07T00:00:00.000Z",
+      totals: { started: 1, success: 0, failed: 0, cancelled: 0, timeout: 0 },
+      outputDirectory: "/repo/swarm-runs/run-active",
+      stopRequested: false,
+    }
+    await runs.upsert(run)
+    await workers.upsert({
+      id: "worker-active",
+      schemaVersion: 1,
+      taskId: task.id,
+      runId: run.id,
+      workerIndex: 1,
+      roundIndex: 1,
+      status: "running",
+      sessionKey: `swarm:${task.id}:${run.id}`,
+      startedAt: "2026-07-07T00:00:00.000Z",
+    })
+
+    await expect(service.deleteTask(task.id)).rejects.toThrow("请先取消运行")
+
+    expect(await tasks.get(task.id)).toMatchObject({ id: task.id })
+    expect(await runs.get(run.id)).toMatchObject({ id: run.id, status: "running" })
+    expect(await workers.get("worker-active")).toMatchObject({ id: "worker-active", status: "running" })
+  })
+
   it("snapshots config when starting a run", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({ name: "任务", config })

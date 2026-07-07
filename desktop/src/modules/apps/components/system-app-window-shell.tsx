@@ -89,7 +89,7 @@ function SystemAppWindowShell<T extends string>({
           <div className="min-w-0" aria-hidden="true" />
         )}
         <div data-system-app-window-actions className="min-w-0 justify-self-end">
-          {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+          {actions ? <div className="flex items-center justify-end gap-2 whitespace-nowrap">{actions}</div> : null}
         </div>
       </div>
       <div className="min-h-0 min-w-0 flex-1">

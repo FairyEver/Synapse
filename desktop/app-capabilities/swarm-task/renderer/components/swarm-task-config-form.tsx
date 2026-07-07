@@ -12,19 +12,20 @@ type SwarmTaskConfigFormProps = {
 
 export function SwarmTaskConfigForm({ value, onChange }: SwarmTaskConfigFormProps) {
   return (
-    <FieldGroup className="grid gap-4 p-4 sm:p-5">
+    <FieldGroup className="mx-auto grid w-full max-w-3xl gap-5 p-3 sm:p-5">
       <Field className="grid gap-2">
-        <FieldLabel>提示词</FieldLabel>
+        <FieldLabel>任务目标</FieldLabel>
         <FieldContent>
           <Textarea
-            rows={10}
+            rows={8}
+            className="min-h-56 resize-y"
             value={value.prompt}
             onChange={(event) => onChange({ ...value, prompt: event.target.value })}
           />
         </FieldContent>
       </Field>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
         <Field className="grid gap-2">
           <FieldLabel>项目</FieldLabel>
           <FieldContent>
@@ -43,13 +44,11 @@ export function SwarmTaskConfigForm({ value, onChange }: SwarmTaskConfigFormProp
             />
           </FieldContent>
         </Field>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-4">
         <Field className="grid gap-2">
           <FieldLabel>运行模式</FieldLabel>
           <FieldContent>
             <NativeSelect
+              className="w-full"
               value={value.runMode}
               onChange={(event) => onChange({ ...value, runMode: event.target.value as SwarmTaskConfig["runMode"] })}
             >
@@ -59,33 +58,10 @@ export function SwarmTaskConfigForm({ value, onChange }: SwarmTaskConfigFormProp
           </FieldContent>
         </Field>
         <Field className="grid gap-2">
-          <FieldLabel>并发</FieldLabel>
-          <FieldContent>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              value={String(value.concurrency)}
-              onChange={(event) => onChange({ ...value, concurrency: clampNumber(event.target.value, value.concurrency, 1, 20) })}
-            />
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
-          <FieldLabel>轮次</FieldLabel>
-          <FieldContent>
-            <Input
-              type="number"
-              min={1}
-              max={500}
-              value={String(value.maxRounds)}
-              onChange={(event) => onChange({ ...value, maxRounds: clampNumber(event.target.value, value.maxRounds, 1, 500) })}
-            />
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
           <FieldLabel>输出</FieldLabel>
           <FieldContent>
             <NativeSelect
+              className="w-full"
               value={value.output.mode}
               onChange={(event) => onChange({
                 ...value,
@@ -98,41 +74,70 @@ export function SwarmTaskConfigForm({ value, onChange }: SwarmTaskConfigFormProp
             </NativeSelect>
           </FieldContent>
         </Field>
+        <Field className="grid gap-2">
+          <FieldLabel>并发</FieldLabel>
+          <FieldContent>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              className="tabular-nums"
+              value={String(value.concurrency)}
+              onChange={(event) => onChange({ ...value, concurrency: clampNumber(event.target.value, value.concurrency, 1, 20) })}
+            />
+          </FieldContent>
+        </Field>
+        <Field className="grid gap-2">
+          <FieldLabel>轮次</FieldLabel>
+          <FieldContent>
+            <Input
+              type="number"
+              min={1}
+              max={500}
+              className="tabular-nums"
+              value={String(value.maxRounds)}
+              onChange={(event) => onChange({ ...value, maxRounds: clampNumber(event.target.value, value.maxRounds, 1, 500) })}
+            />
+          </FieldContent>
+        </Field>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4">
-        <SwitchField
-          label="最近摘要"
-          checked={value.summary.injectRecent}
-          onCheckedChange={(checked) => onChange({
-            ...value,
-            summary: { ...value.summary, injectRecent: checked },
-          })}
-        />
-        <SwitchField
-          label="摘要"
-          checked={value.summary.enabled}
-          onCheckedChange={(checked) => onChange({
-            ...value,
-            summary: { ...value.summary, enabled: checked },
-          })}
-        />
-        <SwitchField
-          label="交接"
-          checked={value.handoff.enabled}
-          onCheckedChange={(checked) => onChange({
-            ...value,
-            handoff: { enabled: checked },
-          })}
-        />
-        <SwitchField
-          label="Git 上下文"
-          checked={value.injectOptions.gitContext}
-          onCheckedChange={(checked) => onChange({
-            ...value,
-            injectOptions: { ...value.injectOptions, gitContext: checked },
-          })}
-        />
+      <div className="grid min-w-0 gap-2">
+        <div className="text-sm font-medium text-foreground">上下文</div>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+          <SwitchField
+            label="最近摘要"
+            checked={value.summary.injectRecent}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              summary: { ...value.summary, injectRecent: checked },
+            })}
+          />
+          <SwitchField
+            label="摘要"
+            checked={value.summary.enabled}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              summary: { ...value.summary, enabled: checked },
+            })}
+          />
+          <SwitchField
+            label="交接"
+            checked={value.handoff.enabled}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              handoff: { enabled: checked },
+            })}
+          />
+          <SwitchField
+            label="Git 上下文"
+            checked={value.injectOptions.gitContext}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              injectOptions: { ...value.injectOptions, gitContext: checked },
+            })}
+          />
+        </div>
       </div>
     </FieldGroup>
   )
@@ -148,12 +153,12 @@ function SwitchField({
   readonly onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <Field orientation="horizontal" className="items-center justify-between rounded-md border px-3 py-2">
-      <FieldLabel>{label}</FieldLabel>
-      <FieldContent>
+    <div className="grid min-h-10 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border px-3">
+      <span className="min-w-0 truncate text-sm font-medium leading-snug">{label}</span>
+      <div className="flex h-10 items-center justify-center">
         <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
-      </FieldContent>
-    </Field>
+      </div>
+    </div>
   )
 }
 

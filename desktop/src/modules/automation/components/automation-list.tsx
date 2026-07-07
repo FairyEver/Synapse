@@ -67,7 +67,7 @@ function AutomationList({
           <col className="w-36" />
           <col className="w-24" />
           <col className="w-16" />
-          <col className="w-28" />
+          <col className="w-36" />
         </colgroup>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

@@ -120,6 +120,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const scheduler = createSwarmScheduler({ runner: createWorkerRunner() })
   const runningRuns = new Map<string, Promise<void>>()
   const terminalRunStatuses = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
+  const activeRunStatuses = new Set<SwarmRun["status"]>(["running", "draining"])
 
   async function listTasks(): Promise<SwarmTask[]> {
     return (await deps.tasks.list()).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -158,6 +159,15 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   }
 
   async function deleteTask(taskId: string): Promise<void> {
+    await requireTask(taskId)
+    const runs = await deps.runs.list({ taskId } as Partial<SwarmRun>)
+    if (runs.some((run) => activeRunStatuses.has(run.status))) {
+      throw new Error("请先取消运行后再删除任务")
+    }
+
+    const workers = await deps.workers.list({ taskId } as Partial<SwarmWorkerRun>)
+    await Promise.all(workers.map((worker) => deps.workers.remove(worker.id)))
+    await Promise.all(runs.map((run) => deps.runs.remove(run.id)))
     await deps.tasks.remove(taskId)
   }
 

@@ -301,6 +301,33 @@ describe("AutomationModule", () => {
     expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
   })
 
+  it("opens the editor window from the explicit row edit action", async () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+    mocks.openEditorWindow.mockResolvedValue(undefined)
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+    const editButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.getAttribute("aria-label") === "编辑自动化 Daily report")
+    expect(editButton).not.toBeNull()
+
+    await act(async () => {
+      editButton?.click()
+    })
+
+    expect(mocks.openEditorWindow).toHaveBeenCalledTimes(1)
+    expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
+  })
+
   it("allows stopping a running automation without opening the editor", async () => {
     const refresh = vi.fn()
     mocks.useAutomationItems.mockReturnValue({

@@ -88,7 +88,7 @@ function EmbeddedSystemAppShellInner({
           <div className="min-w-0" aria-hidden="true" />
         )}
         <div data-embedded-system-app-actions className="min-w-0 justify-self-end">
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
             {slot?.actions}
             {launcherMode ? (
               <TooltipProvider>
@@ -97,7 +97,7 @@ function EmbeddedSystemAppShellInner({
                     <Button
                       type="button"
                       variant="outline"
-                      size="icon-sm"
+                      size="icon"
                       aria-label="新窗口打开"
                       onClick={onOpenWindow}
                     >

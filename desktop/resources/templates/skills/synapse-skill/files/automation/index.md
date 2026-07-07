@@ -105,6 +105,7 @@ Default flow:
 5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history.
 6. Use `app_swarm_task_run_stopRefill` to stop launching new workers in continuous mode while allowing active workers to finish.
 7. Use `app_swarm_task_run_cancel` to cancel a run.
+8. Use `app_swarm_task_task_delete` only when the task has no running or draining run; it removes the saved task and its run history.
 
 Summary is enabled by default. Handoff is disabled by default. If handoff is enabled, only the previous round's handoff is passed forward; summaries can include recent previous rounds according to the saved config.
 

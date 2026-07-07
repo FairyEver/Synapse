@@ -149,33 +149,17 @@ vi.mock("@/app-shell/logging", () => ({
 
 vi.mock("@/modules/apps/components/system-app-window-shell", () => ({
   SystemAppWindowShell: ({
-    tabs = [],
-    value,
-    onValueChange,
+    tabs,
     actions,
     children,
   }: {
     tabs?: ReadonlyArray<{ id: string; label: string }>
-    value?: string
-    onValueChange?: (value: string) => void
     actions?: ReactNode
     children: ReactNode
   }) => (
     <div>
-      <div>{actions}</div>
-      <div>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={tab.id === value}
-            onClick={() => onValueChange?.(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <div data-testid="app-actions">{actions}</div>
+      {tabs ? <div data-testid="app-tabs">{tabs.map((tab) => tab.label).join(",")}</div> : null}
       <div>{children}</div>
     </div>
   ),
@@ -211,6 +195,8 @@ beforeEach(() => {
   swarmTaskBridge.stopRefill.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.cancelRun.mockClear()
   swarmTaskBridge.cancelRun.mockImplementation(async () => swarmTaskFixtures.run)
+  swarmTaskBridge.deleteTask.mockClear()
+  swarmTaskBridge.deleteTask.mockImplementation(async () => undefined)
   agentBridge.openConversation.mockClear()
   agentBridge.openConversation.mockImplementation(async () => ({ opened: true as const, conversationId: "conversation-1" }))
   toast.error.mockClear()
@@ -233,7 +219,7 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.createTask.mockResolvedValueOnce(swarmTaskFixtures.taskA)
 
     await renderModule()
-    await clickButton("新建")
+    await clickButton("新建任务")
 
     expect(swarmTaskBridge.createTask).toHaveBeenCalledWith({
       name: "新建任务",
@@ -261,25 +247,49 @@ describe("SwarmTaskModule", () => {
       },
     })
     expect(toast.success).toHaveBeenCalledWith("已创建")
+    await clickTab("配置")
     await waitForTextareaValue("Run.")
   })
 
-  it("loads tasks and selects the first task", async () => {
+  it("loads tasks into the overview without app-level tabs", async () => {
     await renderModule()
 
     expect(swarmTaskBridge.listTasks).toHaveBeenCalled()
+    expect(document.querySelector("[data-testid='app-tabs']")).toBeNull()
     expect(document.body.textContent).toContain("任务 A")
-    expect(getTextarea()?.value).toBe("Run.")
+    expect(document.body.textContent).toContain("当前任务")
+    expect(document.body.textContent).toContain("最近运行")
+    expect(document.body.textContent).toContain("project-1")
+    expect(getTextarea()).toBeNull()
     expect(document.body.textContent).toContain("运行中")
   })
 
-  it("starts the selected task and opens worker conversations", async () => {
-    await renderModule()
+  it("saves and starts the selected task from the config tab", async () => {
+    swarmTaskBridge.updateTask.mockResolvedValueOnce({
+      ...swarmTaskFixtures.taskA,
+      currentConfig: { ...swarmTaskFixtures.taskA.currentConfig, prompt: "Run." },
+    })
 
-    await clickButton("运行")
+    await renderModule()
+    await clickTab("配置")
+
+    expect(getTextarea()?.value).toBe("Run.")
+    await clickButton("保存配置")
+    await clickButton("运行任务")
+
+    expect(swarmTaskBridge.updateTask).toHaveBeenCalledWith({
+      taskId: "task-1",
+      patch: { currentConfig: swarmTaskFixtures.taskA.currentConfig },
+    })
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-1" })
+  })
+
+  it("opens worker conversations from the run tab", async () => {
+    await renderModule()
+    await clickTab("运行")
+    await waitForButton("打开会话")
     await clickButton("打开会话")
 
-    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-1" })
     expect(agentBridge.openConversation).toHaveBeenCalledWith({
       projectId: "project-1",
       conversationId: "conversation-1",
@@ -293,7 +303,7 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.cancelRun.mockRejectedValueOnce(new Error("取消运行失败"))
 
     await renderModule()
-    await clickTab("运行中")
+    await clickTab("运行")
     await waitForButton("停止补位")
     await waitForButton("取消运行")
 
@@ -311,7 +321,7 @@ describe("SwarmTaskModule", () => {
     swarmTaskBridge.getRun.mockImplementation(async () => swarmTaskFixtures.drainingRun)
 
     await renderModule()
-    await clickTab("运行中")
+    await clickTab("运行")
     await waitForButton("取消运行")
 
     await clickButton("取消运行")
@@ -319,29 +329,62 @@ describe("SwarmTaskModule", () => {
     expect(swarmTaskBridge.cancelRun).toHaveBeenCalledWith("run-1")
   })
 
-  it("keeps the detail pane aligned with the filtered task selection", async () => {
+  it("reruns the selected task from the history tab", async () => {
+    await renderModule()
+    await clickTab("历史")
+    await clickButton("再运行当前任务")
+
+    expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-1" })
+  })
+
+  it("deletes the selected terminal task after confirmation", async () => {
+    swarmTaskBridge.listTasks
+      .mockResolvedValueOnce([swarmTaskFixtures.taskA, swarmTaskFixtures.taskB])
+      .mockResolvedValueOnce([swarmTaskFixtures.taskA])
+
+    await renderModule()
+    await clickTask("任务 B")
+    await clickButton("删除任务")
+    await clickButton("删除")
+
+    expect(swarmTaskBridge.deleteTask).toHaveBeenCalledWith("task-2")
+    expect(swarmTaskBridge.listTasks).toHaveBeenCalledTimes(2)
+    expect(toast.success).toHaveBeenCalledWith("已删除")
+  })
+
+  it("does not delete a task with a running or draining status from the toolbar", async () => {
+    await renderModule()
+    const deleteButton = await waitForButton("删除任务")
+
+    expect(deleteButton.disabled).toBe(true)
+
+    await clickButton("删除任务")
+
+    expect(swarmTaskBridge.deleteTask).not.toHaveBeenCalled()
+  })
+
+  it("does not render task search", async () => {
     await renderModule()
 
+    expect(document.querySelector('input[aria-label="搜索任务"]')).toBeNull()
+    expect(document.body.textContent).not.toContain("搜索任务")
+  })
+
+  it("keeps the detail pane aligned with the selected task", async () => {
+    await renderModule()
+
+    await clickTab("配置")
     expect(getTextarea()?.value).toBe("Run.")
 
-    await setSearchValue("任务 B")
+    await clickTask("任务 B")
 
     await waitForTextareaValue("Run B.")
     expect(document.body.textContent).toContain("任务 B")
 
-    await clickButton("运行")
+    await clickButton("运行任务")
 
     expect(swarmTaskBridge.startRun).toHaveBeenCalledTimes(1)
     expect(swarmTaskBridge.startRun).toHaveBeenCalledWith({ taskId: "task-2" })
-  })
-
-  it("keeps search visible when the current query has no matches", async () => {
-    await renderModule()
-
-    await setSearchValue("missing")
-
-    expect(getSearchInput()?.value).toBe("missing")
-    expect(document.body.textContent).toContain("暂无匹配")
   })
 
   it("does not render stale workers while loading a newly selected task", async () => {
@@ -356,7 +399,7 @@ describe("SwarmTaskModule", () => {
     })
 
     await renderModule()
-    await clickTab("运行中")
+    await clickTab("运行")
     await waitForButton("打开会话")
 
     agentBridge.openConversation.mockClear()
@@ -386,7 +429,6 @@ describe("SwarmTaskModule", () => {
     ))
 
     await renderModule()
-    await waitForTextareaValue("Run.")
     await clickTab("历史")
     await clickTask("任务 B")
 
@@ -425,7 +467,7 @@ describe("SwarmTaskModule", () => {
     ))
 
     await renderModule()
-    await clickTab("运行中")
+    await clickTab("运行")
     await clickTask("任务 B")
 
     await act(async () => {
@@ -448,7 +490,7 @@ describe("SwarmTaskModule", () => {
     agentBridge.openConversation.mockResolvedValueOnce({ opened: false, reason: "not-found" })
 
     await renderModule()
-    await clickTab("运行中")
+    await clickTab("运行")
     await waitForButton("打开会话")
 
     await clickButton("打开会话")
@@ -479,28 +521,6 @@ function getTextarea(): HTMLTextAreaElement | null {
   return document.body.querySelector("textarea")
 }
 
-function getSearchInput(): HTMLInputElement | null {
-  return document.body.querySelector('input[aria-label="搜索任务"]')
-}
-
-async function setSearchValue(value: string): Promise<void> {
-  const input = getSearchInput()
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error("Search input not found")
-  }
-
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
-    if (!setter) {
-      throw new Error("Input value setter not found")
-    }
-    setter.call(input, value)
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-    input.dispatchEvent(new Event("change", { bubbles: true }))
-    await Promise.resolve()
-  })
-}
-
 async function waitForTextareaValue(value: string): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (getTextarea()?.value === value) return
@@ -512,11 +532,10 @@ async function waitForTextareaValue(value: string): Promise<void> {
 }
 
 async function clickTab(text: string): Promise<void> {
-  const tab = Array.from(document.body.querySelectorAll("button"))
-    .find((button) => button.getAttribute("role") === "tab" && button.textContent?.trim() === text)
+  const tab = await waitForButton(text)
 
   await act(async () => {
-    tab?.click()
+    tab.click()
     await Promise.resolve()
   })
 }
@@ -531,11 +550,11 @@ async function clickTask(text: string): Promise<void> {
   })
 }
 
-async function waitForButton(text: string): Promise<void> {
+async function waitForButton(text: string): Promise<HTMLButtonElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const button = Array.from(document.body.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === text || item.getAttribute("aria-label") === text)
-    if (button instanceof HTMLButtonElement) return
+    if (button instanceof HTMLButtonElement) return button
     await act(async () => {
       await Promise.resolve()
     })

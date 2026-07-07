@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "../../../../src/components/ui/table"
 import type { SwarmRun, SwarmRunStatus, SwarmWorkerRun } from "../../shared/schema"
+import { formatRunStatus, formatRunTotals, formatWorkerPhase, formatWorkerStatus } from "../swarm-task-format"
 
 type SwarmRunPanelProps = {
   readonly run: SwarmRun | null
@@ -47,50 +48,72 @@ export function SwarmRunPanel({
   }
 
   return (
-    <div className="grid h-full min-h-0 gap-4 p-4 sm:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" onClick={onRefresh} disabled={loading}>
-          <RefreshCw data-icon="inline-start" />
-          刷新
-        </Button>
-        <Button type="button" variant="outline" onClick={onStopRefill} disabled={loading || run.stopRequested}>
-          <StopCircle data-icon="inline-start" />
-          停止补位
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancelRun} disabled={loading || terminalRunStatuses.has(run.status)}>
-          <Square data-icon="inline-start" />
-          取消运行
-        </Button>
-        <div className="text-sm text-muted-foreground">
-          {run.status} / {run.totals.started} workers
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 text-sm">
+          <span className="font-medium text-foreground">{formatRunStatus(run.status)}</span>
+          <span className="ml-3 text-muted-foreground tabular-nums">{formatRunTotals(run)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="transition-transform active:scale-[0.96]"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
+            刷新
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="transition-transform active:scale-[0.96]"
+            onClick={onStopRefill}
+            disabled={loading || run.stopRequested}
+          >
+            <StopCircle data-icon="inline-start" />
+            停止补位
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="transition-transform active:scale-[0.96]"
+            onClick={onCancelRun}
+            disabled={loading || terminalRunStatuses.has(run.status)}
+          >
+            <Square data-icon="inline-start" />
+            取消运行
+          </Button>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-md border">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card">
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-20">Worker</TableHead>
-              <TableHead className="w-20">轮次</TableHead>
-              <TableHead className="w-28">状态</TableHead>
-              <TableHead className="w-28">阶段</TableHead>
-              <TableHead>消息</TableHead>
-              <TableHead className="w-28 text-right">操作</TableHead>
+              <TableHead className="sticky top-0 z-10 w-20 bg-card text-right">Worker</TableHead>
+              <TableHead className="sticky top-0 z-10 w-20 bg-card text-right">轮次</TableHead>
+              <TableHead className="sticky top-0 z-10 w-28 bg-card">状态</TableHead>
+              <TableHead className="sticky top-0 z-10 w-28 bg-card">阶段</TableHead>
+              <TableHead className="sticky top-0 z-10 bg-card">消息</TableHead>
+              <TableHead className="sticky top-0 z-10 w-28 bg-card text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {workers.map((worker) => (
               <TableRow key={worker.id}>
-                <TableCell>{worker.workerIndex}</TableCell>
-                <TableCell>{worker.roundIndex}</TableCell>
-                <TableCell>{worker.status}</TableCell>
-                <TableCell>{worker.lastPhase ?? "-"}</TableCell>
+                <TableCell className="text-right tabular-nums">{worker.workerIndex}</TableCell>
+                <TableCell className="text-right tabular-nums">{worker.roundIndex}</TableCell>
+                <TableCell>{formatWorkerStatus(worker.status)}</TableCell>
+                <TableCell>{formatWorkerPhase(worker.lastPhase)}</TableCell>
                 <TableCell className="truncate">{worker.lastMessage ?? "-"}</TableCell>
                 <TableCell className="text-right">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
+                    className="transition-transform active:scale-[0.96]"
                     aria-label="打开会话"
                     disabled={!worker.conversationId}
                     onClick={() => onOpenConversation(worker)}

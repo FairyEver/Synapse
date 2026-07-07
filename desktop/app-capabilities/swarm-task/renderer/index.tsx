@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CircleAlert, Play, Plus, RefreshCw } from "lucide-react"
+import { CircleAlert, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
 import {
   Empty,
@@ -18,12 +28,6 @@ import { SwarmTaskDetail, type SwarmTaskTab } from "./components/swarm-task-deta
 import { SwarmTaskSidebar } from "./components/swarm-task-sidebar"
 
 const logger = createRendererLogger("swarm-task.app")
-
-const tabs = [
-  { id: "config", label: "配置" },
-  { id: "active", label: "运行中" },
-  { id: "history", label: "历史" },
-] as const satisfies ReadonlyArray<{ id: SwarmTaskTab; label: string }>
 
 const defaultTaskConfig: SwarmTaskConfig = {
   projectId: "project-id",
@@ -54,9 +58,8 @@ export function SwarmTaskModule() {
   const runDataRequestIdRef = useRef(0)
 
   const [tasks, setTasks] = useState<SwarmTask[]>([])
-  const [search, setSearch] = useState("")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<SwarmTaskTab>("config")
+  const [activeTab, setActiveTab] = useState<SwarmTaskTab>("overview")
   const [draftConfig, setDraftConfig] = useState<SwarmTaskConfig | null>(null)
   const [runHistory, setRunHistory] = useState<SwarmRun[]>([])
   const [activeRun, setActiveRun] = useState<SwarmRun | null>(null)
@@ -66,6 +69,8 @@ export function SwarmTaskModule() {
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [loadError, setLoadError] = useState("")
 
   const reloadTasks = useCallback(async () => {
@@ -127,34 +132,25 @@ export function SwarmTaskModule() {
     void reloadTasks()
   }, [reloadTasks])
 
-  const filteredTasks = useMemo(() => {
-    const keyword = search.trim().toLowerCase()
-    if (keyword.length === 0) return tasks
-    return tasks.filter((task) => {
-      const source = `${task.name} ${task.currentConfig.workspacePath}`.toLowerCase()
-      return source.includes(keyword)
-    })
-  }, [search, tasks])
-
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, tasks],
   )
 
   useEffect(() => {
-    if (filteredTasks.length === 0) {
+    if (tasks.length === 0) {
       if (selectedTaskId !== null) {
         setSelectedTaskId(null)
       }
       return
     }
 
-    if (selectedTaskId && filteredTasks.some((task) => task.id === selectedTaskId)) {
+    if (selectedTaskId && tasks.some((task) => task.id === selectedTaskId)) {
       return
     }
 
-    setSelectedTaskId(filteredTasks[0].id)
-  }, [filteredTasks, selectedTaskId])
+    setSelectedTaskId(tasks[0].id)
+  }, [tasks, selectedTaskId])
 
   useEffect(() => {
     if (!selectedTask) {
@@ -177,7 +173,6 @@ export function SwarmTaskModule() {
         config: defaultTaskConfig,
       })
       setTasks((current) => [created, ...current.filter((task) => task.id !== created.id)])
-      setSearch("")
       setSelectedTaskId(created.id)
       setDraftConfig(created.currentConfig)
       setActiveTab("config")
@@ -207,6 +202,13 @@ export function SwarmTaskModule() {
     if (!selectedTask) return []
     return runHistory.filter((run) => run.taskId === selectedTask.id)
   }, [runHistory, selectedTask])
+
+  const deleteDisabled = useMemo(() => (
+    !selectedTask
+    || deleting
+    || isActiveRunStatus(selectedTask.lastStatus)
+    || isActiveRunStatus(selectedActiveRun?.status)
+  ), [deleting, selectedActiveRun, selectedTask])
 
   const saveConfig = useCallback(async () => {
     if (!selectedTask || !draftConfig) return
@@ -286,86 +288,129 @@ export function SwarmTaskModule() {
     }
   }, [activeRun, reloadRunData, selectedTask, swarmTaskBridge])
 
+  const deleteTask = useCallback(async () => {
+    if (!selectedTask) return
+    try {
+      setDeleting(true)
+      await swarmTaskBridge.deleteTask(selectedTask.id)
+      setDeleteConfirmOpen(false)
+      toast.success("已删除")
+      await reloadTasks()
+    } catch (error) {
+      const message = errorMessage(error, "删除失败")
+      logger.error("Failed to delete swarm task.", error)
+      toast.error(message)
+    } finally {
+      setDeleting(false)
+    }
+  }, [reloadTasks, selectedTask, swarmTaskBridge])
+
   return (
-    <SystemAppWindowShell
-      tabs={tabs}
-      value={activeTab}
-      onValueChange={setActiveTab}
-      actions={(
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => void createTask()} disabled={loading || creating}>
-            <Plus data-icon="inline-start" />
-            新建
-          </Button>
-          <Button type="button" variant="outline" onClick={() => void reloadTasks()} disabled={loading}>
-            <RefreshCw data-icon="inline-start" />
-            刷新
-          </Button>
-        </div>
-      )}
-    >
-      {loading ? (
-        <SwarmTaskLoadingState />
-      ) : loadError ? (
-        <div className="p-4">
-          <Alert variant="destructive">
-            <CircleAlert />
-            <AlertTitle>加载失败</AlertTitle>
-            <AlertDescription>{loadError}</AlertDescription>
-          </Alert>
-        </div>
-      ) : tasks.length === 0 ? (
-        <Empty className="min-h-full">
-          <EmptyHeader>
-            <EmptyTitle>暂无任务</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <SidebarContentLayout
-          sidebar={(
-            <SwarmTaskSidebar
-              tasks={filteredTasks}
-              selectedTaskId={selectedTask?.id ?? null}
-              search={search}
-              onSearchChange={setSearch}
-              onSelectTask={setSelectedTaskId}
-            />
-          )}
-          contentScrollable={false}
-          sidebarResizable
-          sidebarDefaultSize={260}
-          sidebarMinSize={220}
-          sidebarMaxSize={360}
-        >
-          {selectedTask && draftConfig ? (
-            <SwarmTaskDetail
-              task={selectedTask}
-              activeTab={activeTab}
-              draftConfig={draftConfig}
-              activeRun={selectedActiveRun}
-              workerRuns={selectedWorkerRuns}
-              runHistory={selectedRunHistory}
-              loadingRun={loadingRun}
-              saving={saving}
-              running={running}
-              onDraftConfigChange={setDraftConfig}
-              onSaveConfig={() => void saveConfig()}
-              onStartRun={() => void startRun()}
-              onRefreshRun={() => void reloadRunData(selectedTask)}
-              onStopRefill={() => void stopRefill()}
-              onCancelRun={() => void cancelRun()}
-              onOpenConversation={(worker) => void openConversation(worker)}
-            />
-          ) : (
-            <Empty className="min-h-full">
-              <EmptyHeader>
-                <EmptyTitle>暂无匹配</EmptyTitle>
-              </EmptyHeader>
-            </Empty>
-          )}
-        </SidebarContentLayout>
-      )}
-    </SystemAppWindowShell>
+    <>
+      <SystemAppWindowShell
+        actions={(
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <Button type="button" variant="destructive" onClick={() => setDeleteConfirmOpen(true)} disabled={loading || deleteDisabled}>
+              <Trash2 data-icon="inline-start" />
+              删除任务
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void createTask()} disabled={loading || creating}>
+              <Plus data-icon="inline-start" />
+              新建任务
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void reloadTasks()} disabled={loading}>
+              <RefreshCw data-icon="inline-start" />
+              刷新
+            </Button>
+          </div>
+        )}
+      >
+        {loading ? (
+          <SwarmTaskLoadingState />
+        ) : loadError ? (
+          <div className="p-4">
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertTitle>加载失败</AlertTitle>
+              <AlertDescription>{loadError}</AlertDescription>
+            </Alert>
+          </div>
+        ) : tasks.length === 0 ? (
+          <Empty className="min-h-full">
+            <EmptyHeader>
+              <EmptyTitle>暂无任务</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <SidebarContentLayout
+            sidebar={(
+              <SwarmTaskSidebar
+                tasks={tasks}
+                selectedTaskId={selectedTask?.id ?? null}
+                onSelectTask={setSelectedTaskId}
+              />
+            )}
+            contentScrollable={false}
+            sidebarResizable
+            sidebarDefaultSize={260}
+            sidebarMinSize={220}
+            sidebarMaxSize={360}
+          >
+            {selectedTask && draftConfig ? (
+              <SwarmTaskDetail
+                task={selectedTask}
+                activeTab={activeTab}
+                onActiveTabChange={setActiveTab}
+                draftConfig={draftConfig}
+                activeRun={selectedActiveRun}
+                workerRuns={selectedWorkerRuns}
+                runHistory={selectedRunHistory}
+                loadingRun={loadingRun}
+                saving={saving}
+                running={running}
+                onDraftConfigChange={setDraftConfig}
+                onSaveConfig={() => void saveConfig()}
+                onStartRun={() => void startRun()}
+                onRefreshRun={() => void reloadRunData(selectedTask)}
+                onStopRefill={() => void stopRefill()}
+                onCancelRun={() => void cancelRun()}
+                onOpenConversation={(worker) => void openConversation(worker)}
+              />
+            ) : (
+              <Empty className="min-h-full">
+                <EmptyHeader>
+                  <EmptyTitle>暂无任务</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
+            )}
+          </SidebarContentLayout>
+        )}
+      </SystemAppWindowShell>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除任务？</AlertDialogTitle>
+            <AlertDialogDescription>
+              会删除当前任务及运行历史。已创建的 Agent 会话不会被删除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault()
+                void deleteTask()
+              }}
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -381,17 +426,8 @@ function SwarmTaskLoadingState() {
         </div>
       </div>
       <div className="p-4">
-        <div className="flex items-center justify-between gap-3 border-b pb-3">
-          <div className="grid gap-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-4 w-48" />
-          </div>
-          <Button type="button" disabled>
-            <Play data-icon="inline-start" />
-            运行
-          </Button>
-        </div>
         <div className="mt-4 grid gap-3">
+          <Skeleton className="h-8 w-64" />
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -404,4 +440,8 @@ function SwarmTaskLoadingState() {
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message
   return fallback
+}
+
+function isActiveRunStatus(status: SwarmRun["status"] | undefined): boolean {
+  return status === "running" || status === "draining"
 }

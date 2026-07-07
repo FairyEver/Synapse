@@ -325,6 +325,8 @@ Returns the updated task. `currentConfig` replaces the saved task config; if you
 
 ### app_swarm_task_task_delete
 
+Deletes a Swarm Task and its run history. If the task has a running or draining run, cancel it first.
+
 Input:
 
 ```json

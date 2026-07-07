@@ -64,6 +64,7 @@ describe("EmbeddedSystemAppShell", () => {
     const buttons = Array.from(actions?.querySelectorAll("button") ?? [])
     expect(buttons[0]?.textContent).toContain("右侧操作")
     expect(buttons.at(-1)?.getAttribute("aria-label")).toBe("新窗口打开")
+    expect(buttons.at(-1)?.getAttribute("data-size")).toBe("icon")
   })
 
   it("keeps only the open window action when no slot is registered", async () => {

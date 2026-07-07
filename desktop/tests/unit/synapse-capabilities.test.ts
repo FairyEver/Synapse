@@ -32,6 +32,7 @@ import {
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
+import { SWARM_TASK_MCP_TOOL_NAMES } from "../../app-capabilities/swarm-task/shared/capability"
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
@@ -64,6 +65,7 @@ describe("App capability domain", () => {
       SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
       SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+      ...Object.values(SWARM_TASK_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")

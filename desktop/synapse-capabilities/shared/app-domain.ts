@@ -731,7 +731,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.taskDelete,
-      description: "Delete a Swarm Task by id.",
+      description: "Delete a Swarm Task and its run history by id. Fails while the task has a running or draining run.",
       inputSchema: {
         type: "object",
         properties: {

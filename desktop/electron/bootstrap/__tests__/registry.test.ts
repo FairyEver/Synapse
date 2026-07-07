@@ -254,6 +254,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.sound-notifier",
+      "core.swarm-task",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FolderOpen, LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -69,6 +69,32 @@ function createIdleTargetState(): InstallTargetState {
   }
 }
 
+function createTargetSelectionKey(selection: EditorWriteTargetSelection): string {
+  const target = selection.activeTarget
+  const targetKey = target
+    ? [
+        target.status,
+        target.editorId,
+        target.label,
+        target.scope,
+        target.contentType,
+        target.message ?? "",
+        target.targetKind ?? "",
+        target.targetPath ?? "",
+        target.status === "ready" ? String(target.targetExists) : "",
+        target.status === "conflict" ? target.conflictContentId : "",
+      ].join("\u0000")
+    : "none"
+
+  return [
+    selection.scope,
+    selection.projectPath,
+    selection.activeTargetState.error ?? "",
+    String(selection.activeTargetState.isLoading),
+    targetKey,
+  ].join("\u0001")
+}
+
 function EditorWriteTargetSelector({
   actionKind,
   contentType,
@@ -89,6 +115,8 @@ function EditorWriteTargetSelector({
   const [customProjectPath, setCustomProjectPath] = useState("")
   const [globalTargetState, setGlobalTargetState] = useState<InstallTargetState>(createIdleTargetState)
   const [projectTargetState, setProjectTargetState] = useState<InstallTargetState>(createIdleTargetState)
+  const lastSelectionKeyRef = useRef<string | null>(null)
+  const onSelectionChangeRef = useRef(onSelectionChange)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const selectedProject = projects.find((project) => project.id === projectSelection) ?? null
@@ -278,12 +306,23 @@ function EditorWriteTargetSelector({
   }, [editor.supportsProject, globalScopeDisabled, scope])
 
   useEffect(() => {
-    onSelectionChange({
+    onSelectionChangeRef.current = onSelectionChange
+  }, [onSelectionChange])
+
+  useEffect(() => {
+    const nextSelection = {
       activeTarget,
       activeTargetState,
       projectPath,
       scope,
-    })
+    }
+    const nextSelectionKey = createTargetSelectionKey(nextSelection)
+    if (lastSelectionKeyRef.current === nextSelectionKey) {
+      return
+    }
+
+    lastSelectionKeyRef.current = nextSelectionKey
+    onSelectionChangeRef.current(nextSelection)
   }, [activeTarget, activeTargetState, onSelectionChange, projectPath, scope])
 
   const handleBrowseDirectory = async () => {

@@ -1,4 +1,4 @@
-import { History, Loader2, Play, Square, Trash2 } from "lucide-react"
+import { History, Loader2, Pencil, Play, Square, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -115,6 +115,22 @@ function AutomationListRow({
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`编辑自动化 ${item.name}`}
+                onClick={() => {
+                  onOpen()
+                }}
+              >
+                <Pencil />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>编辑</TooltipContent>
+          </Tooltip>
           {activeRunning ? (
             <Tooltip>
               <TooltipTrigger asChild>
