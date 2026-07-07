@@ -1223,4 +1223,90 @@ describe("preload bridge", () => {
       expect.any(Function),
     )
   })
+
+  it("maps swarm task bridge methods to swarm task IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.swarmTask.listTasks()
+    await bridge.swarmTask.createTask({
+      name: "Task 1",
+      config: {
+        projectId: "project-1",
+        workspacePath: "/tmp/project-1",
+        prompt: "Do work",
+      },
+    })
+    await bridge.swarmTask.updateTask({
+      taskId: "task-1",
+      patch: { name: "Task 1 updated" },
+    })
+    await bridge.swarmTask.deleteTask({ taskId: "task-1" })
+    await bridge.swarmTask.startRun({ taskId: "task-1" })
+    await bridge.swarmTask.stopRefill({ runId: "run-1" })
+    await bridge.swarmTask.cancelRun({ runId: "run-1" })
+    await bridge.swarmTask.listRuns({ taskId: "task-1", limit: 5 })
+    await bridge.swarmTask.getRun({ runId: "run-1" })
+    await bridge.swarmTask.listWorkerRuns({ runId: "run-1" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      1,
+      "synapse:swarm-task:tasks:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      2,
+      "synapse:swarm-task:tasks:create",
+      {
+        name: "Task 1",
+        config: {
+          projectId: "project-1",
+          workspacePath: "/tmp/project-1",
+          prompt: "Do work",
+        },
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      3,
+      "synapse:swarm-task:tasks:update",
+      {
+        taskId: "task-1",
+        patch: { name: "Task 1 updated" },
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      4,
+      "synapse:swarm-task:tasks:delete",
+      { taskId: "task-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      5,
+      "synapse:swarm-task:runs:start",
+      { taskId: "task-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      6,
+      "synapse:swarm-task:runs:stop-refill",
+      { runId: "run-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      7,
+      "synapse:swarm-task:runs:cancel",
+      { runId: "run-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      8,
+      "synapse:swarm-task:runs:list",
+      { taskId: "task-1", limit: 5 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      9,
+      "synapse:swarm-task:runs:get",
+      { runId: "run-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
+      10,
+      "synapse:swarm-task:worker-runs:list",
+      { runId: "run-1" },
+    )
+  })
 })

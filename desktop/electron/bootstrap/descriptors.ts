@@ -41,6 +41,8 @@ import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
 import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
+import { createAgentRuntimeSwarmGateway, createSwarmTaskService, type SwarmTaskService } from "../../app-capabilities/swarm-task/main/service"
+import { SWARM_TASK_SERVICE_ID } from "../../app-capabilities/swarm-task/shared/capability"
 import { createTerminalCapabilityDispatcher } from "../../app-capabilities/terminal/main/dispatcher"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createTerminalStore } from "../../app-capabilities/terminal/main/store"
@@ -66,6 +68,7 @@ import { logStore, createMainLogger } from "../services/log-store"
 import {
   assertKnowledgeBaseStorageMigrationInactive,
   KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR,
+  resolveProjectAgent,
 } from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
@@ -114,6 +117,12 @@ import type {
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
+  SWARM_TASK_RUNS_NAMESPACE,
+  SWARM_TASKS_NAMESPACE,
+  SWARM_TASK_WORKER_RUNS_NAMESPACE,
+  SwarmRunEntryV1,
+  SwarmTaskEntryV1,
+  SwarmWorkerRunEntryV1,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -404,6 +413,27 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
       }
     })
     return service
+  },
+}
+
+export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
+  id: SWARM_TASK_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.project-containers"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createSwarmTaskService({
+      tasks: dataRepository.namespace<SwarmTaskEntryV1>(SWARM_TASKS_NAMESPACE),
+      runs: dataRepository.namespace<SwarmRunEntryV1>(SWARM_TASK_RUNS_NAMESPACE),
+      workers: dataRepository.namespace<SwarmWorkerRunEntryV1>(SWARM_TASK_WORKER_RUNS_NAMESPACE),
+      outputRoot: path.join(app.getPath("userData"), "swarm-runs"),
+      agent: createAgentRuntimeSwarmGateway({
+        resolveAgent: async (projectId) => {
+          const { agent } = await resolveProjectAgent(ctx.registry.get.bind(ctx.registry), projectId)
+          return agent
+        },
+      }),
+    })
   },
 }
 

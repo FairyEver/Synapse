@@ -45,6 +45,14 @@ import type {
   SynapseSoundNotifierSettingsPatch,
 } from "./sound-notifier"
 import type {
+  SwarmRun,
+  SwarmRunStartInput,
+  SwarmTask,
+  SwarmTaskCreateInput,
+  SwarmTaskUpdateInput,
+  SwarmWorkerRun,
+} from "../../app-capabilities/swarm-task/shared/schema"
+import type {
   ScreenshotArtifact,
   ScreenshotCaptureInput,
   ScreenshotCaptureToFileInput,
@@ -956,6 +964,18 @@ export type SynapseBridge = {
     preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
     onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
     onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
+  }
+  swarmTask: {
+    listTasks: () => Promise<SwarmTask[]>
+    createTask: (input: SwarmTaskCreateInput) => Promise<SwarmTask>
+    updateTask: (input: SwarmTaskUpdateInput) => Promise<SwarmTask>
+    deleteTask: (input: { taskId: string }) => Promise<void>
+    startRun: (input: SwarmRunStartInput) => Promise<SwarmRun>
+    stopRefill: (input: { runId: string }) => Promise<SwarmRun | null>
+    cancelRun: (input: { runId: string }) => Promise<SwarmRun | null>
+    listRuns: (input?: { taskId?: string; limit?: number }) => Promise<SwarmRun[]>
+    getRun: (input: { runId: string }) => Promise<SwarmRun | null>
+    listWorkerRuns: (input: { runId: string }) => Promise<SwarmWorkerRun[]>
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>

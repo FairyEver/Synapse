@@ -306,6 +306,18 @@ export const IPC_CHANNELS = {
     "changed": "synapse:sound-notifier:changed",
     "playRequested": "synapse:sound-notifier:play-requested",
   },
+  "swarmTask": {
+    "listTasks": "synapse:swarm-task:tasks:list",
+    "createTask": "synapse:swarm-task:tasks:create",
+    "updateTask": "synapse:swarm-task:tasks:update",
+    "deleteTask": "synapse:swarm-task:tasks:delete",
+    "startRun": "synapse:swarm-task:runs:start",
+    "stopRefill": "synapse:swarm-task:runs:stop-refill",
+    "cancelRun": "synapse:swarm-task:runs:cancel",
+    "listRuns": "synapse:swarm-task:runs:list",
+    "getRun": "synapse:swarm-task:runs:get",
+    "listWorkerRuns": "synapse:swarm-task:worker-runs:list",
+  },
   "terminal": {
     "listGroups": "synapse:terminal:group:list",
     "createGroup": "synapse:terminal:group:create",

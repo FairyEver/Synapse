@@ -99,6 +99,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.relay",
         "core.side-channel",
         "core.sound-notifier",
+        "core.swarm-task",
         "core.terminal",
         "core.update",
         "core.usage-analysis",
@@ -148,6 +149,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
+    expect(byId.get("core.swarm-task")?.dependsOn).toEqual(["core.data-repository", "core.project-containers"])
     expect(byId.get("core.drive-sync")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -294,6 +296,8 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.event-bus")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
+    expect(idx("core.data-repository")).toBeLessThan(idx("core.swarm-task"))
+    expect(idx("core.project-containers")).toBeLessThan(idx("core.swarm-task"))
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.automation"))

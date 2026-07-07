@@ -185,6 +185,17 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAutomationDescriptor.stop).toBeTypeOf("function")
   })
 
+  it("coreSwarmTaskDescriptor is degraded and depends on data repository plus project containers", async () => {
+    const { coreSwarmTaskDescriptor } = await importBootstrap()
+    expect(coreSwarmTaskDescriptor.id).toBe("core.swarm-task")
+    expect(coreSwarmTaskDescriptor.criticality).toBe("degraded")
+    expect(coreSwarmTaskDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.project-containers",
+    ])
+    expect(coreSwarmTaskDescriptor.create).toBeTypeOf("function")
+  })
+
   it("coreWorkflowEngineDescriptor redacts infrastructure errors from Agent dependency logs and result", async () => {
     const logger = {
       error: vi.fn(),
