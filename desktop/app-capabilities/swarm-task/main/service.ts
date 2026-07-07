@@ -141,12 +141,12 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   }
 
   async function stopRefill(runId: string): Promise<SwarmRun | null> {
-    scheduler.stopRefill(runId)
     const run = await deps.runs.get(runId)
     if (!run) return null
     if (terminalRunStatuses.has(run.status)) {
       return run
     }
+    scheduler.stopRefill(runId)
     const updated: SwarmRun = { ...run, status: "draining", stopRequested: true }
     await deps.runs.upsert(updated)
     return updated
@@ -159,12 +159,13 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       return run
     }
 
+    const activeConversationIds = await snapshotActiveWorkerConversationIds(run.id)
     await scheduler.cancel(runId)
-    const activeWorkers = await deps.workers.list({ runId, status: "running" } as Partial<SwarmWorkerRun>)
-    await Promise.all(activeWorkers.map((worker) =>
-      worker.conversationId
-        ? deps.agent.cancelConversation(run.configSnapshot.projectId, worker.conversationId)
-        : Promise.resolve()))
+    await Promise.all(
+      activeConversationIds.map((conversationId) =>
+        deps.agent.cancelConversation(run.configSnapshot.projectId, conversationId),
+      ),
+    )
     const updated: SwarmRun = {
       ...run,
       status: "cancelled",
@@ -244,6 +245,11 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     const task = await deps.tasks.get(taskId)
     if (!task) throw new Error(`Swarm task not found: ${taskId}`)
     return task
+  }
+
+  async function snapshotActiveWorkerConversationIds(runId: string): Promise<string[]> {
+    const activeWorkers = await deps.workers.list({ runId, status: "running" } as Partial<SwarmWorkerRun>)
+    return [...new Set(activeWorkers.flatMap((worker) => (worker.conversationId ? [worker.conversationId] : [])))]
   }
 
   function createWorkerRunner(): SwarmWorkerRunner {

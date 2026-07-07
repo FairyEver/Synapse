@@ -57,10 +57,13 @@ const config = {
   agent: {},
 }
 
-function serviceHarness(agent?: Partial<SwarmAgentGateway>) {
+function serviceHarness(options?: {
+  agent?: Partial<SwarmAgentGateway>
+  workers?: ReturnType<typeof namespace<SwarmWorkerRun>>
+}) {
   const tasks = namespace<SwarmTask>()
   const runs = namespace<SwarmRun>()
-  const workers = namespace<SwarmWorkerRun>()
+  const workers = options?.workers ?? namespace<SwarmWorkerRun>()
   const gateway: SwarmAgentGateway = {
     sendWorker: vi.fn(async () => ({
       conversationId: "conversation-1",
@@ -69,7 +72,7 @@ function serviceHarness(agent?: Partial<SwarmAgentGateway>) {
       events: [],
     })),
     cancelConversation: vi.fn(async () => undefined),
-    ...agent,
+    ...options?.agent,
   }
   const service = createSwarmTaskService({
     tasks,
@@ -175,12 +178,14 @@ describe("createSwarmTaskService", () => {
 
   it("stores fallback summary when summary block is missing", async () => {
     const { service } = serviceHarness({
-      sendWorker: vi.fn(async () => ({
-        conversationId: "conversation-1",
-        resultText: "plain final result",
-        status: "success",
-        events: [],
-      })),
+      agent: {
+        sendWorker: vi.fn(async () => ({
+          conversationId: "conversation-1",
+          resultText: "plain final result",
+          status: "success",
+          events: [],
+        })),
+      },
     })
     const task = await service.createTask({ name: "任务", config })
 
@@ -202,18 +207,20 @@ describe("createSwarmTaskService", () => {
       events: []
     }>()
     const { service, tasks } = serviceHarness({
-      sendWorker: vi.fn(async ({ abortSignal }) => {
-        abortSignal?.addEventListener(
-          "abort",
-          () => {
-            const error = new Error("aborted")
-            error.name = "AbortError"
-            pending.reject(error)
-          },
-          { once: true },
-        )
-        return pending.promise
-      }),
+      agent: {
+        sendWorker: vi.fn(async ({ abortSignal }) => {
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("aborted")
+              error.name = "AbortError"
+              pending.reject(error)
+            },
+            { once: true },
+          )
+          return pending.promise
+        }),
+      },
     })
     const task = await service.createTask({ name: "任务", config })
 
@@ -243,7 +250,9 @@ describe("createSwarmTaskService", () => {
       events: []
     }>()
     const { service, tasks } = serviceHarness({
-      sendWorker: vi.fn(async () => pending.promise),
+      agent: {
+        sendWorker: vi.fn(async () => pending.promise),
+      },
     })
     const task = await service.createTask({ name: "任务", config })
 
@@ -280,19 +289,21 @@ describe("createSwarmTaskService", () => {
       events: []
     }>()
     const { service, gateway } = serviceHarness({
-      sendWorker: vi.fn(async ({ onConversationId, abortSignal }) => {
-        await onConversationId?.("conversation-live")
-        abortSignal?.addEventListener(
-          "abort",
-          () => {
-            const error = new Error("aborted")
+      agent: {
+        sendWorker: vi.fn(async ({ onConversationId, abortSignal }) => {
+          await onConversationId?.("conversation-live")
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("aborted")
             error.name = "AbortError"
             pending.reject(error)
           },
           { once: true },
-        )
-        return pending.promise
-      }),
+          )
+          return pending.promise
+        }),
+      },
     })
     const task = await service.createTask({ name: "任务", config })
 
@@ -318,6 +329,71 @@ describe("createSwarmTaskService", () => {
       status: "cancelled",
       conversationId: "conversation-live",
     })
+  })
+
+  it("cancels the published conversation even if the worker persists cancelled immediately after abort", async () => {
+    const baseWorkers = namespace<SwarmWorkerRun>()
+    const delayedWorkers = {
+      ...baseWorkers,
+      async list(filter?: Partial<SwarmWorkerRun>): Promise<SwarmWorkerRun[]> {
+        if (filter?.runId && filter.status === "running") {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+        }
+        return baseWorkers.list(filter)
+      },
+    }
+    const pending = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success" | "failed" | "cancelled" | "timeout"
+      events: []
+    }>()
+    const { service, gateway } = serviceHarness({
+      agent: {
+        sendWorker: vi.fn(async ({ onConversationId, abortSignal }) => {
+          await onConversationId?.("conversation-race")
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("aborted")
+              error.name = "AbortError"
+              pending.reject(error)
+            },
+            { once: true },
+          )
+          return pending.promise
+        }),
+      },
+      workers: delayedWorkers,
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      const workerRuns = await service.listWorkerRuns(run.id)
+      expect(workerRuns[0]).toMatchObject({
+        status: "running",
+        conversationId: "conversation-race",
+      })
+    })
+
+    const cancelledRun = await service.cancelRun(run.id)
+
+    await vi.waitFor(async () => {
+      const workerRuns = await service.listWorkerRuns(run.id)
+      expect(workerRuns[0]).toMatchObject({
+        status: "cancelled",
+        conversationId: "conversation-race",
+      })
+    })
+
+    expect(gateway.cancelConversation).toHaveBeenCalledTimes(1)
+    expect(gateway.cancelConversation).toHaveBeenCalledWith("project-1", "conversation-race")
+    expect(cancelledRun).toMatchObject({ status: "cancelled" })
   })
 
   it("leaves an already successful run unchanged when cancelRun is called", async () => {
