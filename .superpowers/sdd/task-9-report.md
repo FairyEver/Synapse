@@ -37,3 +37,35 @@
 ## Concerns
 
 - Full desktop suite was not run in this task.
+
+## Task 9 Fix Report
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/workflow-node/schema.ts`
+- `desktop/app-capabilities/swarm-task/workflow-node/manifest.ts`
+- `desktop/app-capabilities/swarm-task/workflow-node/panel.tsx`
+- `desktop/app-capabilities/swarm-task/workflow-node/executor.main.ts`
+- `desktop/app-capabilities/swarm-task/workflow-node/__tests__/schema.test.ts`
+- `desktop/app-capabilities/swarm-task/workflow-node/__tests__/executor.test.ts`
+- `desktop/src/modules/workflow/editor/node-wrappers.tsx`
+- `desktop/src/modules/workflow/runner/runner-node-wrappers.tsx`
+- `desktop/workflow-nodes/__tests__/registry.test.ts`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/workflow-node/__tests__/schema.test.ts app-capabilities/swarm-task/workflow-node/__tests__/executor.test.ts workflow-nodes/__tests__/registry.test.ts electron/bootstrap/__tests__/descriptors.test.ts`
+
+### Result
+
+- Passed. 4 files, 63 tests.
+
+### Self-Review
+
+- Added variable binding support for interpolation.
+- Registered the card wrappers in editor and runner canvases.
+- Made workflow abort wait for `cancelRun` so spawned swarm runs are stopped deterministically.
+
+### Concerns
+
+- Full desktop suite was not run in this fix scope.
