@@ -2120,6 +2120,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const { config, repo, proj } = await loadWorkflowProject(projectId)
         return resolveWorkflowProjectWorkspacePath(config, repo, proj)
       },
+      resolveService: <T>(serviceId: string) => registry.get<T>(serviceId),
       workflowCall: {
         getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
         runWorkflow: async (input) => {

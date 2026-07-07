@@ -6,13 +6,6 @@ import type { SwarmTaskService } from "../main/service"
 import type { SwarmTaskNodeConfig } from "./schema"
 
 type SwarmTaskWorkflowService = Pick<SwarmTaskService, "startRun" | "getRun">
-type SwarmTaskRuntimeDeps = NodeRuntimeDeps & {
-  readonly resolveService?: <T>(serviceId: string) => T
-  readonly resolve?: <T>(serviceId: string) => T
-  readonly serviceRegistry?: {
-    readonly get: <T>(serviceId: string) => T
-  }
-}
 
 const TERMINAL_STATUSES = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
 const POLL_INTERVAL_MS = 100
@@ -60,11 +53,7 @@ export const swarmTaskNodeExecutor: NodeExecutor<SwarmTaskNodeConfig> = {
 }
 
 function resolveSwarmTaskService(runtimeDeps: NodeRuntimeDeps | undefined): SwarmTaskWorkflowService | undefined {
-  const deps = runtimeDeps as SwarmTaskRuntimeDeps | undefined
-  if (deps?.resolveService) return deps.resolveService<SwarmTaskWorkflowService>(SWARM_TASK_SERVICE_ID)
-  if (deps?.resolve) return deps.resolve<SwarmTaskWorkflowService>(SWARM_TASK_SERVICE_ID)
-  if (deps?.serviceRegistry) return deps.serviceRegistry.get<SwarmTaskWorkflowService>(SWARM_TASK_SERVICE_ID)
-  return undefined
+  return runtimeDeps?.resolveService?.<SwarmTaskWorkflowService>(SWARM_TASK_SERVICE_ID)
 }
 
 function buildConfigOverride(

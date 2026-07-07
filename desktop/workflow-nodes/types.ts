@@ -82,6 +82,7 @@ export interface NodeRuntimeDeps {
   permissionGuard?: PermissionGuard
   auditSink?: AuditSink
   resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
+  resolveService?: <T>(serviceId: string) => T
   workflowCall?: WorkflowCallRuntimeDeps
 }
 

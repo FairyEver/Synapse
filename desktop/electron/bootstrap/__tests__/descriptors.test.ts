@@ -157,6 +157,38 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })
 
+  it("coreWorkflowEngineDescriptor exposes service resolver to workflow nodes", async () => {
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+    const swarmTaskService = { startRun: vi.fn(), getRun: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          if (id === "core.swarm-task") return swarmTaskService
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      runtimeDeps?: {
+        resolveService?: <T>(serviceId: string) => T
+      }
+    }
+
+    expect(engine.runtimeDeps?.resolveService?.("core.swarm-task")).toBe(swarmTaskService)
+  })
+
   it("gitAccessServiceDescriptor is degraded and depends on Git access foundations", async () => {
     const { gitAccessServiceDescriptor } = await importBootstrap()
     expect(gitAccessServiceDescriptor.id).toBe("git.access-service")
