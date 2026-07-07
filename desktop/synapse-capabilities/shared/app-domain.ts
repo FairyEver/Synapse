@@ -43,6 +43,20 @@ import {
   SOUND_NOTIFIER_MIN_REPEAT_COUNT,
   SOUND_NOTIFIER_PRESET_IDS,
 } from "../../app-capabilities/sound-notifier/shared/defaults"
+import {
+  SWARM_TASK_CAPABILITY_IDS,
+  SWARM_TASK_MCP_TOOL_NAMES,
+  SWARM_TASK_RUN_CANCEL_CAPABILITY_ID,
+  SWARM_TASK_RUN_GET_CAPABILITY_ID,
+  SWARM_TASK_RUN_LIST_CAPABILITY_ID,
+  SWARM_TASK_RUN_START_CAPABILITY_ID,
+  SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID,
+  SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
+  SWARM_TASK_TASK_DELETE_CAPABILITY_ID,
+  SWARM_TASK_TASK_GET_CAPABILITY_ID,
+  SWARM_TASK_TASK_LIST_CAPABILITY_ID,
+  SWARM_TASK_TASK_UPDATE_CAPABILITY_ID,
+} from "../../app-capabilities/swarm-task/shared/capability"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
@@ -178,6 +192,12 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     description: "Play a semantic Sound Notifier reminder on the local computer.",
     mutates: false,
   },
+  ...SWARM_TASK_CAPABILITY_IDS.map((id): CapabilityDefinition => ({
+    id,
+    title: swarmTaskCapabilityTitle(id),
+    description: swarmTaskCapabilityDescription(id),
+    mutates: !id.endsWith(".list") && !id.endsWith(".get"),
+  })),
 ]
 
 export const APP_DOMAIN: CapabilityDomainDefinition = {
@@ -208,6 +228,16 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [SCREENSHOT_CAPTURE_MCP_TOOL_NAME]: SCREENSHOT_CAPTURE_CAPABILITY_ID,
   [SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME]: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
   [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.taskCreate]: SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.taskList]: SWARM_TASK_TASK_LIST_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.taskGet]: SWARM_TASK_TASK_GET_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.taskUpdate]: SWARM_TASK_TASK_UPDATE_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.taskDelete]: SWARM_TASK_TASK_DELETE_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.runStart]: SWARM_TASK_RUN_START_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.runStopRefill]: SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.runCancel]: SWARM_TASK_RUN_CANCEL_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.runList]: SWARM_TASK_RUN_LIST_CAPABILITY_ID,
+  [SWARM_TASK_MCP_TOOL_NAMES.runGet]: SWARM_TASK_RUN_GET_CAPABILITY_ID,
 }
 
 const stringField = (description: string, options?: { minLength?: number; maxLength?: number }) => ({
@@ -257,6 +287,82 @@ const screenshotCaptureProperties = {
     type: "boolean",
     description: "When true, Synapse hides the current focused Synapse window before capture when available.",
   },
+} as const
+
+const swarmTaskConfigSchema = {
+  type: "object",
+  properties: {
+    projectId: stringField("Agent project id.", { minLength: 1 }),
+    workspacePath: stringField("Absolute workspace path used by swarm workers.", { minLength: 1 }),
+    prompt: stringField("Worker prompt.", { minLength: 1, maxLength: 256 * 1024 }),
+    presetId: stringField("Optional preset id. Defaults to general.", { minLength: 1 }),
+    injectOptions: {
+      type: "object",
+      properties: {
+        workerIdentity: booleanField("Inject worker identity."),
+        roundContext: booleanField("Inject round context."),
+        runContext: booleanField("Inject run context."),
+        outputProtocol: booleanField("Inject output protocol."),
+        parallelContext: booleanField("Inject parallel context."),
+        gitContext: booleanField("Inject git context."),
+        customAppendix: stringField("Custom prompt appendix.", { maxLength: 16 * 1024 }),
+      },
+      additionalProperties: false,
+    },
+    runMode: {
+      type: "string",
+      enum: ["batch", "continuous"],
+      description: "batch runs a bounded swarm; continuous can refill workers.",
+    },
+    concurrency: positiveIntField("Maximum parallel workers.", 20),
+    maxRounds: positiveIntField("Maximum rounds.", 500),
+    output: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["managed-directory", "target-file", "both"],
+          description: "Where workers write outputs.",
+        },
+        managedDirectory: stringField("Optional managed output directory.", { minLength: 1 }),
+        targetFile: stringField("Optional target output file.", { minLength: 1 }),
+        targetFilePolicy: {
+          type: "string",
+          enum: ["append-only", "section-update", "free-edit"],
+          description: "How workers may write the target file.",
+        },
+      },
+      additionalProperties: false,
+    },
+    summary: {
+      type: "object",
+      properties: {
+        enabled: booleanField("Ask workers to emit a summary."),
+        injectRecent: booleanField("Inject recent summaries into later rounds."),
+        recentLimit: positiveIntField("Number of recent summaries to inject.", 20),
+      },
+      additionalProperties: false,
+    },
+    handoff: {
+      type: "object",
+      properties: {
+        enabled: booleanField("Ask each worker to leave a handoff for the next round."),
+      },
+      additionalProperties: false,
+    },
+    agent: {
+      type: "object",
+      properties: {
+        providerId: stringField("Optional provider id.", { minLength: 1 }),
+        modelTier: stringField("Optional model tier.", { minLength: 1 }),
+        permissionMode: stringField("Optional permission mode.", { minLength: 1 }),
+        mainThreadPersonaId: stringField("Optional persona id.", { minLength: 1 }),
+      },
+      additionalProperties: false,
+    },
+  },
+  required: ["projectId", "workspacePath", "prompt"],
+  additionalProperties: false,
 } as const
 
 export function buildAppTools(): McpToolDefinition[] {
@@ -571,5 +677,188 @@ export function buildAppTools(): McpToolDefinition[] {
         additionalProperties: false,
       },
     },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.taskCreate,
+      description: "Create a reusable Swarm Task configuration.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Task name.", { minLength: 1, maxLength: 120 }),
+          description: stringField("Optional task description.", { maxLength: 4096 }),
+          config: swarmTaskConfigSchema,
+        },
+        required: ["name", "config"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.taskList,
+      description: "List reusable Swarm Tasks.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.taskGet,
+      description: "Get one Swarm Task by id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: stringField("Swarm Task id.", { minLength: 1 }),
+        },
+        required: ["taskId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.taskUpdate,
+      description: "Update a Swarm Task name, description, or current configuration.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: stringField("Swarm Task id.", { minLength: 1 }),
+          patch: {
+            type: "object",
+            properties: {
+              name: stringField("Optional task name.", { minLength: 1, maxLength: 120 }),
+              description: stringField("Optional task description.", { maxLength: 4096 }),
+              currentConfig: swarmTaskConfigSchema,
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ["taskId", "patch"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.taskDelete,
+      description: "Delete a Swarm Task by id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: stringField("Swarm Task id.", { minLength: 1 }),
+        },
+        required: ["taskId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.runStart,
+      description: "Start a Swarm Task run.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: stringField("Swarm Task id.", { minLength: 1 }),
+          configOverride: {
+            type: "object",
+            description: "Optional partial config override for this run.",
+            additionalProperties: true,
+          },
+        },
+        required: ["taskId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.runStopRefill,
+      description: "Stop refilling a running Swarm Task run.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          runId: stringField("Swarm run id.", { minLength: 1 }),
+        },
+        required: ["runId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.runCancel,
+      description: "Cancel a nonterminal Swarm Task run.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          runId: stringField("Swarm run id.", { minLength: 1 }),
+        },
+        required: ["runId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.runList,
+      description: "List Swarm Task runs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: stringField("Optional Swarm Task id.", { minLength: 1 }),
+          limit: positiveIntField("Optional maximum runs to return.", 200),
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SWARM_TASK_MCP_TOOL_NAMES.runGet,
+      description: "Get one Swarm Task run by id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          runId: stringField("Swarm run id.", { minLength: 1 }),
+        },
+        required: ["runId"],
+        additionalProperties: false,
+      },
+    },
   ]
+}
+
+function swarmTaskCapabilityTitle(id: string): string {
+  switch (id) {
+    case SWARM_TASK_TASK_CREATE_CAPABILITY_ID:
+      return "Create Swarm Task"
+    case SWARM_TASK_TASK_LIST_CAPABILITY_ID:
+      return "List Swarm Tasks"
+    case SWARM_TASK_TASK_GET_CAPABILITY_ID:
+      return "Get Swarm Task"
+    case SWARM_TASK_TASK_UPDATE_CAPABILITY_ID:
+      return "Update Swarm Task"
+    case SWARM_TASK_TASK_DELETE_CAPABILITY_ID:
+      return "Delete Swarm Task"
+    case SWARM_TASK_RUN_START_CAPABILITY_ID:
+      return "Start Swarm Task run"
+    case SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID:
+      return "Stop Swarm Task refill"
+    case SWARM_TASK_RUN_CANCEL_CAPABILITY_ID:
+      return "Cancel Swarm Task run"
+    case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
+      return "List Swarm Task runs"
+    case SWARM_TASK_RUN_GET_CAPABILITY_ID:
+      return "Get Swarm Task run"
+    default:
+      return "Swarm Task action"
+  }
+}
+
+function swarmTaskCapabilityDescription(id: string): string {
+  switch (id) {
+    case SWARM_TASK_TASK_CREATE_CAPABILITY_ID:
+      return "Create a reusable Swarm Task configuration."
+    case SWARM_TASK_TASK_LIST_CAPABILITY_ID:
+      return "List reusable Swarm Tasks."
+    case SWARM_TASK_TASK_GET_CAPABILITY_ID:
+      return "Get one Swarm Task configuration."
+    case SWARM_TASK_TASK_UPDATE_CAPABILITY_ID:
+      return "Update a Swarm Task configuration."
+    case SWARM_TASK_TASK_DELETE_CAPABILITY_ID:
+      return "Delete a Swarm Task configuration."
+    case SWARM_TASK_RUN_START_CAPABILITY_ID:
+      return "Start a Swarm Task run."
+    case SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID:
+      return "Stop refill for a Swarm Task run."
+    case SWARM_TASK_RUN_CANCEL_CAPABILITY_ID:
+      return "Cancel a Swarm Task run."
+    case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
+      return "List Swarm Task runs."
+    case SWARM_TASK_RUN_GET_CAPABILITY_ID:
+      return "Get one Swarm Task run."
+    default:
+      return "Run a Swarm Task capability."
+  }
 }

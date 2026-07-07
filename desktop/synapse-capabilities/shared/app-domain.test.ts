@@ -16,8 +16,15 @@ import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
+import {
+  SWARM_TASK_CAPABILITY_IDS,
+  SWARM_TASK_MCP_TOOL_NAMES,
+  SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
+  SWARM_TASK_TASK_LIST_CAPABILITY_ID,
+} from "../../app-capabilities/swarm-task/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
+import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
 
 describe("App capability domain", () => {
   it("allows terminal session write and stop capability ids", () => {
@@ -164,5 +171,48 @@ describe("App capability domain", () => {
       .not.toContain("volume")
     expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
       .toContain("legacy")
+  })
+
+  it("registers Swarm Task MCP tools in the app domain and global registry", () => {
+    const appCapabilityIds = APP_DOMAIN.capabilities.map((capability) => capability.id)
+    const appToolNames = buildAppTools().map((tool) => tool.name)
+    const allToolNames = buildAllMcpTools().map((tool) => tool.name)
+
+    for (const capabilityId of SWARM_TASK_CAPABILITY_IDS) {
+      expect(appCapabilityIds).toContain(capabilityId)
+      expect(getActionDomainId(capabilityId)).toBe("app")
+    }
+
+    expect(APP_MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskCreate]).toBe(SWARM_TASK_TASK_CREATE_CAPABILITY_ID)
+    expect(APP_MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskList]).toBe(SWARM_TASK_TASK_LIST_CAPABILITY_ID)
+    expect(MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskCreate]).toBe(SWARM_TASK_TASK_CREATE_CAPABILITY_ID)
+    expect(MCP_TOOL_ACTIONS[SWARM_TASK_MCP_TOOL_NAMES.taskList]).toBe(SWARM_TASK_TASK_LIST_CAPABILITY_ID)
+    expect(appToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
+    expect(allToolNames).toEqual(expect.arrayContaining(Object.values(SWARM_TASK_MCP_TOOL_NAMES)))
+  })
+
+  it("defines Swarm Task create and start schemas", () => {
+    const tools = new Map(buildAppTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.taskCreate)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        name: expect.objectContaining({ type: "string", minLength: 1, maxLength: 120 }),
+        config: expect.objectContaining({
+          type: "object",
+          required: ["projectId", "workspacePath", "prompt"],
+        }),
+      },
+      required: ["name", "config"],
+      additionalProperties: false,
+    })
+    expect(tools.get(SWARM_TASK_MCP_TOOL_NAMES.runStart)?.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        taskId: expect.objectContaining({ type: "string", minLength: 1 }),
+      },
+      required: ["taskId"],
+      additionalProperties: false,
+    })
   })
 })
