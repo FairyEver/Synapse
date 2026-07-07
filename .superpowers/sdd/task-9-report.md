@@ -27,7 +27,7 @@
 
 ## Result
 
-- Passed. 4 files, 63 tests.
+- Passed. 4 files, 64 tests.
 
 ## Self-Review
 
@@ -65,6 +65,7 @@
 - Added variable binding support for interpolation.
 - Registered the card wrappers in editor and runner canvases.
 - Made workflow abort wait for `cancelRun` so spawned swarm runs are stopped deterministically.
+- Handles rejected `cancelRun` promises without unhandled rejection while still returning the workflow node as cancelled.
 
 ### Concerns
 
