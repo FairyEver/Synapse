@@ -151,3 +151,26 @@
 ### Concerns
 
 - None for this fix scope.
+
+## Task 7 Fix Report 5
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. Run history is now filtered to the selected task so older async run-list responses cannot render stale history after selection changes.
+
+### Self-Review
+
+- Added a focused late-response regression test and reset bridge mock implementations between tests.
+
+### Concerns
+
+- None for this fix scope.
