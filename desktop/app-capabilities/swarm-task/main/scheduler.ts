@@ -80,27 +80,17 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
         abortSignal: control.abort.signal,
       })
 
-      if (outcome.kind === "aborted") {
-        totals.cancelled++
-        return
-      }
-
-      if (outcome.kind === "error") {
-        totals.failed++
-        return
-      }
-
-      if (outcome.value.status === "success") {
+      if (outcome.status === "success") {
         totals.success++
         return
       }
 
-      if (outcome.value.status === "failed") {
+      if (outcome.status === "failed") {
         totals.failed++
         return
       }
 
-      if (outcome.value.status === "cancelled") {
+      if (outcome.status === "cancelled") {
         totals.cancelled++
         return
       }
@@ -130,7 +120,7 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
     }
 
     return {
-      status: classifyTotals(totals, control.abort.signal.aborted),
+      status: classifyTotals(totals),
       totals,
     }
   }
@@ -150,44 +140,53 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
   }
 }
 
-type RunnerOutcome =
-  | { readonly kind: "result"; readonly value: SwarmWorkerRunnerResult }
-  | { readonly kind: "error"; readonly error: unknown }
-  | { readonly kind: "aborted" }
-
 async function runWorker(
   runner: SwarmWorkerRunner,
   input: SwarmWorkerRunnerInput,
-): Promise<RunnerOutcome> {
+): Promise<SwarmWorkerRunnerResult> {
   const { abortSignal } = input
   if (abortSignal.aborted) {
-    return { kind: "aborted" }
+    return {
+      status: "cancelled",
+      resultText: "",
+    }
   }
 
   try {
-    return {
-      kind: "result",
-      value: await runner(input),
-    }
+    return await runner(input)
   } catch (error) {
+    if (isAbortError(error)) {
+      return {
+        status: "cancelled",
+        resultText: "",
+      }
+    }
+
     return {
-      kind: "error",
-      error,
+      status: "failed",
+      resultText: "",
+      error: error instanceof Error ? error.message : "worker failed",
     }
   }
 }
 
-function classifyTotals(
-  totals: SwarmSchedulerResult["totals"],
-  aborted: boolean,
-): SwarmSchedulerResult["status"] {
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const { name } = error as { name?: unknown }
+  return name === "AbortError"
+}
+
+function classifyTotals(totals: SwarmSchedulerResult["totals"]): SwarmSchedulerResult["status"] {
   if (totals.started > 0 && totals.success === totals.started) {
     return "success"
   }
   if (totals.success > 0) {
     return "partial"
   }
-  if (aborted || (totals.cancelled > 0 && totals.failed === 0 && totals.timeout === 0)) {
+  if (totals.started > 0 && totals.cancelled === totals.started && totals.failed === 0 && totals.timeout === 0) {
     return "cancelled"
   }
   return "failed"

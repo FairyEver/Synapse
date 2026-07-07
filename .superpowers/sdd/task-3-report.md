@@ -49,3 +49,20 @@
 - Removed the artificial cancel shortcut so active runners now decide their own outcome and `start(...)` drains before resolving.
 - Updated result classification so mixed success plus cancelled work reports `partial` instead of `cancelled`.
 - Added regression coverage for cancel delivery, drain behavior, and mixed success/cancel classification.
+
+## Task 3 Fix Report 2
+
+### Changed files
+- `desktop/app-capabilities/swarm-task/main/scheduler.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/scheduler.test.ts`
+
+### Tests run
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/scheduler.test.ts`
+
+### Result
+- Passed: 1 file, 7 tests.
+
+### Self-review
+- Removed the aborted-run shortcut from final classification so failure and timeout outcomes are no longer hidden behind `cancelled`.
+- Normalized AbortError-style rejections to `cancelled` while keeping ordinary post-abort failures classified as `failed`.
+- Added focused regressions for post-abort failure and abort-triggered cancellation, matching the review findings.
