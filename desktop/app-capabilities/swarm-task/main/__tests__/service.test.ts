@@ -226,4 +226,80 @@ describe("createSwarmTaskService", () => {
     })
     expect(latestTask).toMatchObject({ lastRunId: run.id, lastStatus: "failed" })
   })
+
+  it("cancels an in-flight worker by conversation id published before gateway resolution", async () => {
+    const pending = deferred<{
+      conversationId: string
+      resultText: string
+      status: "success" | "failed" | "cancelled" | "timeout"
+      events: []
+    }>()
+    const { service, gateway } = serviceHarness({
+      sendWorker: vi.fn(async ({ onConversationId, abortSignal }) => {
+        await onConversationId?.("conversation-live")
+        abortSignal?.addEventListener(
+          "abort",
+          () => {
+            const error = new Error("aborted")
+            error.name = "AbortError"
+            pending.reject(error)
+          },
+          { once: true },
+        )
+        return pending.promise
+      }),
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      const workerRuns = await service.listWorkerRuns(run.id)
+      expect(workerRuns[0]).toMatchObject({
+        status: "running",
+        conversationId: "conversation-live",
+      })
+    })
+
+    const cancelledRun = await service.cancelRun(run.id)
+    const workerRuns = await service.listWorkerRuns(run.id)
+
+    expect(gateway.cancelConversation).toHaveBeenCalledWith("project-1", "conversation-live")
+    expect(cancelledRun).toMatchObject({ status: "cancelled" })
+    expect(workerRuns[0]).toMatchObject({
+      status: "cancelled",
+      conversationId: "conversation-live",
+    })
+  })
+
+  it("leaves an already successful run unchanged when cancelRun is called", async () => {
+    const { service, tasks, gateway } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    const beforeCancelTask = await tasks.get(task.id)
+    const cancelledRun = await service.cancelRun(run.id)
+    const persistedRun = await service.getRun(run.id)
+    const persistedTask = await tasks.get(task.id)
+
+    expect(cancelledRun).toMatchObject({ status: "success" })
+    expect(persistedRun).toMatchObject({ status: "success" })
+    expect(persistedTask).toMatchObject({
+      lastRunId: run.id,
+      lastStatus: "success",
+    })
+    expect(persistedTask?.updatedAt).toBe(beforeCancelTask?.updatedAt)
+    expect(gateway.cancelConversation).not.toHaveBeenCalled()
+  })
 })

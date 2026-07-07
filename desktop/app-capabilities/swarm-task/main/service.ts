@@ -35,6 +35,7 @@ export type SwarmAgentGatewayInput = {
   readonly worker: SwarmWorkerRun
   readonly prompt: string
   readonly abortSignal?: AbortSignal
+  readonly onConversationId?: (conversationId: string) => Promise<void> | void
 }
 
 export type SwarmAgentGateway = {
@@ -66,6 +67,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   const createId = deps.idFactory ?? (() => randomUUID())
   const scheduler = createSwarmScheduler({ runner: createWorkerRunner() })
   const runningRuns = new Map<string, Promise<void>>()
+  const terminalRunStatuses = new Set<SwarmRun["status"]>(["success", "partial", "failed", "cancelled"])
 
   async function listTasks(): Promise<SwarmTask[]> {
     return (await deps.tasks.list()).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -153,9 +155,13 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
   }
 
   async function cancelRun(runId: string): Promise<SwarmRun | null> {
-    await scheduler.cancel(runId)
     const run = await deps.runs.get(runId)
     if (!run) return null
+    if (terminalRunStatuses.has(run.status)) {
+      return run
+    }
+
+    await scheduler.cancel(runId)
     const activeWorkers = await deps.workers.list({ runId, status: "running" } as Partial<SwarmWorkerRun>)
     await Promise.all(activeWorkers.map((worker) =>
       worker.conversationId
@@ -284,6 +290,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
           worker,
           prompt,
           abortSignal: input.abortSignal,
+          onConversationId: (conversationId) => persistWorkerConversationId(worker.id, conversationId),
         })
 
         return persistWorkerOutcome({
@@ -331,6 +338,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     error?: string
   }> {
     const { worker, outcome } = input
+    const latestWorker = (await deps.workers.get(worker.id)) ?? worker
     const extracted = extractSwarmStructuredOutput(outcome.resultText)
     const summary = input.input.config.summary.enabled
       ? extracted.summary ?? fallbackSummary(outcome.resultText)
@@ -340,9 +348,11 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       outcome.error ??
       (outcome.resultText ? outcome.resultText.slice(0, 500) : outcome.status === "cancelled" ? "cancelled" : undefined)
     const updated: SwarmWorkerRun = {
-      ...worker,
+      ...latestWorker,
       status: outcome.status,
-      ...(outcome.conversationId ? { conversationId: outcome.conversationId } : {}),
+      ...((outcome.conversationId ?? latestWorker.conversationId)
+        ? { conversationId: outcome.conversationId ?? latestWorker.conversationId }
+        : {}),
       finishedAt: timestamp(),
       lastPhase: outcome.status === "success" ? "completed" : "failed",
       ...(finalMessage ? { lastMessage: finalMessage } : {}),
@@ -357,6 +367,17 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       resultText: outcome.resultText,
       error: outcome.error,
     }
+  }
+
+  async function persistWorkerConversationId(workerId: string, conversationId: string): Promise<void> {
+    const worker = await deps.workers.get(workerId)
+    if (!worker || worker.conversationId === conversationId) {
+      return
+    }
+    await deps.workers.upsert({
+      ...worker,
+      conversationId,
+    })
   }
 
   return {

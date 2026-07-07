@@ -92,3 +92,36 @@
 ### Concerns
 
 - No additional concerns beyond the pre-existing note above.
+
+## Task 4 Fix Report 2
+
+### Changed files
+
+- `desktop/app-capabilities/swarm-task/main/service.ts`
+- `desktop/app-capabilities/swarm-task/main/__tests__/service.test.ts`
+- `.superpowers/sdd/task-4-report.md`
+
+### Tests run
+
+1. `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/main/__tests__/service.test.ts`
+   - Result: PASS
+   - Output summary:
+     - `Test Files  1 passed (1)`
+     - `Tests  8 passed (8)`
+
+### Result
+
+- Added `onConversationId` to the swarm agent gateway input so worker conversations can be published before `sendWorker()` resolves.
+- `createWorkerRunner()` now persists the live `conversationId` onto the running worker row immediately, which lets `cancelRun()` call `cancelConversation(projectId, conversationId)` for in-flight workers.
+- Worker terminal persistence now merges against the latest stored worker row, so an early published `conversationId` survives later cancellation and failure writes.
+- `cancelRun()` now returns already terminal runs unchanged instead of rewriting `success`, `partial`, `failed`, or `cancelled` runs to `cancelled`, which also preserves the parent task's last status history.
+
+### Self-review
+
+- Kept the change confined to the requested service/test files plus the report append.
+- Preserved the existing `startRun()` behavior of returning the new `running` run immediately after background scheduling begins.
+- Preserved the prior gateway-rejection persistence behavior while tightening the live cancellation path around conversation ids.
+
+### Concerns
+
+- No additional concerns.
