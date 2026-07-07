@@ -174,3 +174,28 @@
 ### Concerns
 
 - None for this fix scope.
+
+## Task 7 Fix Report 6
+
+### Changed Files
+
+- `desktop/app-capabilities/swarm-task/renderer/index.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/components/swarm-run-panel.tsx`
+- `desktop/app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx`
+
+### Tests Run
+
+- `pnpm --filter @synapse/desktop exec vitest run app-capabilities/swarm-task/renderer/__tests__/swarm-task-app.test.tsx src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-content-launcher.test.tsx`
+
+### Result
+
+- Passed. Added a `新建` action, allowed cancelling nonterminal runs including `draining`, guarded run-data reloads with a request token, and invalidated pending run-data writes when selection becomes empty.
+
+### Self-Review
+
+- Kept the new task defaults minimal and editable because no project-list bridge exists in this renderer scope.
+- Added focused regression coverage for creation, draining cancellation, and reverse late-response run-data ordering.
+
+### Concerns
+
+- None for this fix scope.
