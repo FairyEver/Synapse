@@ -224,7 +224,7 @@ describe("SwarmTaskModule", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       sessionKey: "session-1",
-      platform: "automation",
+      platform: "swarm",
     })
   })
 

@@ -176,7 +176,7 @@ export function SwarmTaskModule() {
         projectId: selectedTask.currentConfig.projectId,
         conversationId: worker.conversationId,
         sessionKey: worker.sessionKey,
-        platform: "automation",
+        platform: "swarm",
       })
     } catch (error) {
       const message = errorMessage(error, "打开会话失败")
