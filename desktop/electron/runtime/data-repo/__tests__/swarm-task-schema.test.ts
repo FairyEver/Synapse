@@ -5,6 +5,7 @@ import {
   swarmTaskWorkerRunsSchemaDefinition,
 } from "../schemas/swarm-task"
 import { allSchemas } from "../schemas"
+import { normalizeSwarmTaskConfig } from "../../../../app-capabilities/swarm-task/shared/schema"
 
 const baseConfig = {
   projectId: "project-1",
@@ -66,6 +67,70 @@ describe("swarm task DataRepository schemas", () => {
     expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(true)
   })
 
+  it("validates the simplified config without workspace or output fields", () => {
+    const entry = {
+      id: "task-1",
+      schemaVersion: 1,
+      name: "巡检",
+      currentConfig: {
+        projectId: "project-1",
+        prompt: "Run the task.",
+        presetId: "general",
+        injectOptions: {
+          workerIdentity: true,
+          roundContext: true,
+          runContext: true,
+          parallelContext: true,
+          customAppendix: "",
+        },
+        runMode: "continuous",
+        concurrency: 3,
+        maxRounds: 9,
+        summary: {
+          enabled: true,
+          injectRecent: true,
+          recentLimit: 3,
+        },
+        handoff: {
+          enabled: false,
+        },
+        summaryFile: {
+          enabled: true,
+          path: "reports/swarm.md",
+        },
+        agent: {
+          providerId: "provider-1",
+          modelTier: "default",
+          permissionMode: "default",
+          mainThreadPersonaId: null,
+        },
+      },
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:00:00.000Z",
+    }
+
+    expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(true)
+  })
+
+  it("normalizes legacy output target files to summaryFile", () => {
+    const config = normalizeSwarmTaskConfig({
+      ...baseConfig,
+      output: {
+        mode: "target-file",
+        targetFile: "reports/legacy.md",
+        targetFilePolicy: "append-only",
+      },
+    })
+
+    expect(config.summaryFile).toEqual({
+      enabled: true,
+      path: "reports/legacy.md",
+    })
+    expect("workspacePath" in config).toBe(false)
+    expect("output" in config).toBe(false)
+    expect(config.injectOptions).not.toHaveProperty("gitContext")
+  })
+
   it("validates a run snapshot", () => {
     const entry = {
       id: "run-1",
@@ -109,6 +174,22 @@ describe("swarm task DataRepository schemas", () => {
       currentConfig: {
         ...baseConfig,
         output: { mode: "target-file", targetFilePolicy: "overwrite" },
+      },
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:00:00.000Z",
+    }
+
+    expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(false)
+  })
+
+  it("rejects summary file paths outside the project", () => {
+    const entry = {
+      id: "task-1",
+      schemaVersion: 1,
+      name: "bad",
+      currentConfig: {
+        ...normalizeSwarmTaskConfig(baseConfig),
+        summaryFile: { enabled: true, path: "../outside.md" },
       },
       createdAt: "2026-07-07T00:00:00.000Z",
       updatedAt: "2026-07-07T00:00:00.000Z",
