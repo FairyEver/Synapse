@@ -1,5 +1,4 @@
-import { MoreHorizontal, Trash2 } from "lucide-react"
-import { Badge } from "../../../../src/components/ui/badge"
+import { Circle, CircleAlert, LoaderCircle, MoreHorizontal, Trash2, type LucideIcon } from "lucide-react"
 import { Button } from "../../../../src/components/ui/button"
 import {
   DropdownMenu,
@@ -20,6 +19,12 @@ type SwarmTaskSidebarProps = {
   readonly onDeleteTask: (task: SwarmTask) => void
 }
 
+type TaskStatusIcon = {
+  readonly Icon: LucideIcon
+  readonly label: string
+  readonly className: string
+}
+
 export function SwarmTaskSidebar({
   tasks,
   selectedTaskId,
@@ -33,6 +38,7 @@ export function SwarmTaskSidebar({
         <div className="grid">
           {tasks.map((task) => {
             const active = task.id === selectedTaskId
+            const statusIcon = getTaskStatusIcon(task.lastStatus)
             return (
               <div
                 key={task.id}
@@ -47,12 +53,14 @@ export function SwarmTaskSidebar({
                   aria-current={active ? "page" : undefined}
                   className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
                 >
-                  <span className="min-w-0 truncate text-sm font-medium">{task.name}</span>
-                  {task.lastStatus ? (
-                    <Badge variant="outline" className="shrink-0 text-muted-foreground">
-                      {formatRunStatus(task.lastStatus)}
-                    </Badge>
-                  ) : null}
+                  <span
+                    className="flex size-4 shrink-0 items-center justify-center"
+                    aria-label={statusIcon.label}
+                    title={statusIcon.label}
+                  >
+                    <statusIcon.Icon className={cn("size-3.5", statusIcon.className)} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{task.name}</span>
                 </button>
                 <DropdownMenu data-track="swarm-task-row-menu">
                   <DropdownMenuTrigger asChild>
@@ -91,4 +99,26 @@ export function SwarmTaskSidebar({
 
 function isActiveRunStatus(status: SwarmTask["lastStatus"]): boolean {
   return status === "running" || status === "draining"
+}
+
+function getTaskStatusIcon(status: SwarmTask["lastStatus"]): TaskStatusIcon {
+  if (isActiveRunStatus(status)) {
+    return {
+      Icon: LoaderCircle,
+      label: status ? formatRunStatus(status) : "未运行",
+      className: "animate-spin text-foreground",
+    }
+  }
+  if (status === "failed" || status === "partial") {
+    return {
+      Icon: CircleAlert,
+      label: formatRunStatus(status),
+      className: "text-destructive",
+    }
+  }
+  return {
+    Icon: Circle,
+    label: status ? formatRunStatus(status) : "未运行",
+    className: "text-muted-foreground",
+  }
 }

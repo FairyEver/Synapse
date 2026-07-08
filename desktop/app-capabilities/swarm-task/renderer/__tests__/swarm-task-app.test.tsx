@@ -583,7 +583,8 @@ describe("SwarmTaskModule", () => {
     await clickButton("刷新", 0)
 
     await waitForText("已完成")
-    expect(taskButtonByText("任务 A")?.textContent).toContain("完成")
+    expect(taskStatusIcon("任务 A", "完成")).toBeTruthy()
+    expect(taskButtonByText("任务 A")?.textContent).not.toContain("完成")
   })
 
   it("refreshes the current run when a swarm task change event arrives", async () => {
@@ -608,7 +609,8 @@ describe("SwarmTaskModule", () => {
     })
 
     await waitForText("已完成")
-    expect(taskButtonByText("任务 A")?.textContent).toContain("完成")
+    expect(taskStatusIcon("任务 A", "完成")).toBeTruthy()
+    expect(taskButtonByText("任务 A")?.textContent).not.toContain("完成")
   })
 
   it("polls while the selected run is active and stops after it reaches a terminal state", async () => {
@@ -992,6 +994,10 @@ async function selectOption(triggerLabel: string, optionText: string): Promise<v
 function taskButtonByText(text: string): HTMLButtonElement | undefined {
   return Array.from(document.body.querySelectorAll("button"))
     .find((button) => button.textContent?.includes(text))
+}
+
+function taskStatusIcon(taskName: string, statusLabel: string): HTMLElement | null {
+  return taskButtonByText(taskName)?.querySelector(`[aria-label="${statusLabel}"]`) ?? null
 }
 
 function getOptionItem(value: string): HTMLElement {
