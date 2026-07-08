@@ -1253,25 +1253,19 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
     const swarmTaskConfig = {
       projectId: "project-1",
-      workspacePath: "/tmp/project-1",
       prompt: "Do work",
       presetId: "general",
       injectOptions: {
         workerIdentity: true,
         roundContext: true,
         runContext: true,
-        outputProtocol: true,
         parallelContext: true,
-        gitContext: false,
         customAppendix: "",
       },
       runMode: "batch" as const,
       concurrency: 3,
       maxRounds: 3,
-      output: {
-        mode: "managed-directory" as const,
-        targetFilePolicy: "append-only" as const,
-      },
+      summaryFile: { enabled: false, path: "" },
       summary: {
         enabled: true,
         injectRecent: false,
