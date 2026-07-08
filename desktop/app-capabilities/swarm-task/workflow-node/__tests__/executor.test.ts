@@ -24,28 +24,21 @@ const baseRun: SwarmRun = {
     projectId: "project-1",
     prompt: "Run.",
     presetId: "general",
-    injectOptions: {
-      workerIdentity: true,
-      roundContext: true,
-      runContext: true,
-      parallelContext: true,
+    promptInjection: {
+      sequenceBatch: { enabled: false },
+      previousHandoff: { enabled: false },
+      summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+      fileWrite: {
+        enabled: false,
+        path: "",
+        mode: "append-only",
+        lock: { enabled: true },
+      },
       customAppendix: "",
     },
     runMode: "batch",
     concurrency: 3,
     maxRounds: 3,
-    summary: {
-      enabled: true,
-      injectRecent: false,
-      recentLimit: 3,
-    },
-    handoff: {
-      enabled: false,
-    },
-    summaryFile: {
-      enabled: false,
-      path: "",
-    },
     agent: {},
   },
   startedAt: "2026-07-07T00:00:00.000Z",

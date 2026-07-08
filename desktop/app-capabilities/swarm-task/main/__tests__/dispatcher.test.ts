@@ -19,19 +19,21 @@ const baseConfig = {
   projectId: "project-1",
   prompt: "Run.",
   presetId: "general",
-  injectOptions: {
-    workerIdentity: true,
-    roundContext: true,
-    runContext: true,
-    parallelContext: true,
+  promptInjection: {
+    sequenceBatch: { enabled: false },
+    previousHandoff: { enabled: false },
+    summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+    fileWrite: {
+      enabled: false,
+      path: "",
+      mode: "append-only" as const,
+      lock: { enabled: true },
+    },
     customAppendix: "",
   },
   runMode: "batch" as const,
   concurrency: 2,
   maxRounds: 2,
-  summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-  handoff: { enabled: false },
-  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -98,6 +100,8 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(JSON.stringify(task)).not.toContain("workspacePath")
     expect(JSON.stringify(task)).not.toContain("gitContext")
     expect(JSON.stringify(task)).not.toContain("targetFilePolicy")
+    expect(JSON.stringify(task)).not.toContain("injectOptions")
+    expect(JSON.stringify(task)).not.toContain("summaryFile")
   })
 
   it("routes run actions through the swarm task service", async () => {
