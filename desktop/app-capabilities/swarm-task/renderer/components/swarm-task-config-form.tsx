@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "../../../../src/components/ui/switch"
 import { Textarea } from "../../../../src/components/ui/textarea"
 import type { SynapseProjectConfig } from "../../../../src/types/config"
-import type { SwarmTaskConfig } from "../../shared/schema"
+import { isSwarmFileWritePathAllowed, type SwarmTaskConfig } from "../../shared/schema"
 
 type SwarmTaskConfigFormProps = {
   readonly value: SwarmTaskConfig
@@ -37,18 +37,18 @@ const runModeOptions: ReadonlyArray<DescribedOption<SwarmTaskConfig["runMode"]>>
   {
     value: "batch",
     label: "批量",
-    summary: "按固定轮次启动 worker。",
-    description: "按并发数启动一批 worker，完成设定轮次后结束。",
+    summary: "按总轮次运行。",
+    description: "最多同时运行并发上限个 worker，完成总轮次后结束。",
     bestFor: "一次性拆解、评审或生成结果明确的任务。",
-    risk: "结束后不会自动补位，需要手动再次运行。",
+    risk: "停止新轮次后只等待已启动 worker 收尾。",
   },
   {
     value: "continuous",
     label: "持续",
     summary: "持续补位运行。",
-    description: "worker 完成后按并发设置持续补位，直到手动停止。",
+    description: "worker 完成后按并发上限补位，达到轮次上限或手动停止后收尾。",
     bestFor: "持续收集、巡检或长时间推进的任务。",
-    risk: "可能持续消耗模型额度，运行前确认目标和停止条件。",
+    risk: "可能持续消耗模型额度，运行前确认轮次上限和停止条件。",
   },
 ]
 
@@ -59,6 +59,11 @@ export function SwarmTaskConfigForm({
 }: SwarmTaskConfigFormProps) {
   const selectedProject = projects.find((project) => project.id === value.projectId)
   const projectUnavailable = Boolean(value.projectId) && !selectedProject
+  const fileWritePath = value.promptInjection.fileWrite.path.trim()
+  const fileWritePathInvalid = value.promptInjection.fileWrite.enabled
+    && Boolean(fileWritePath)
+    && !isSwarmFileWritePathAllowed(fileWritePath)
+  const maxRoundsLabel = value.runMode === "continuous" ? "轮次上限" : "总轮次"
 
   return (
     <FieldGroup className="mx-auto grid w-full max-w-3xl gap-6 px-3 pb-3 sm:px-5 sm:pb-5">
@@ -120,9 +125,10 @@ export function SwarmTaskConfigForm({
             </FieldContent>
           </Field>
           <Field className="grid gap-2">
-            <FieldLabel>并发</FieldLabel>
+            <FieldLabel>并发上限</FieldLabel>
             <FieldContent>
               <Input
+                aria-label="并发上限"
                 type="number"
                 min={1}
                 max={20}
@@ -133,9 +139,10 @@ export function SwarmTaskConfigForm({
             </FieldContent>
           </Field>
           <Field className="grid gap-2">
-            <FieldLabel>轮次</FieldLabel>
+            <FieldLabel>{maxRoundsLabel}</FieldLabel>
             <FieldContent>
               <Input
+                aria-label={maxRoundsLabel}
                 type="number"
                 min={1}
                 max={500}
@@ -202,9 +209,11 @@ export function SwarmTaskConfigForm({
         </div>
       </ConfigSection>
 
-      <ConfigSection title="文件">
-        <div className="grid min-w-0 gap-3">
-          <SwitchField
+      <ConfigSection
+        title="文件"
+        action={
+          <SectionSwitch
+            id="swarm-task-file-write-enabled"
             label="文件写入"
             checked={value.promptInjection.fileWrite.enabled}
             onCheckedChange={(checked) => onChange({
@@ -218,74 +227,87 @@ export function SwarmTaskConfigForm({
               },
             })}
           />
-          {value.promptInjection.fileWrite.enabled ? (
-            <>
-              <Field className="grid gap-2">
-                <FieldLabel htmlFor="swarm-task-file-write-path">文件路径</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id="swarm-task-file-write-path"
-                    aria-label="文件路径"
-                    value={value.promptInjection.fileWrite.path}
-                    onChange={(event) => onChange({
-                      ...value,
-                      promptInjection: {
-                        ...value.promptInjection,
-                        fileWrite: {
-                          ...value.promptInjection.fileWrite,
-                          path: event.target.value,
-                        },
-                      },
-                    })}
-                  />
-                  <p className="text-xs text-muted-foreground">相对项目路径</p>
-                </FieldContent>
-              </Field>
-              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <Field className="grid gap-2">
-                  <FieldLabel>写入方式</FieldLabel>
-                  <FieldContent>
-                    <Select
-                      value={value.promptInjection.fileWrite.mode}
-                      onValueChange={(mode) => onChange({
-                        ...value,
-                        promptInjection: {
-                          ...value.promptInjection,
-                          fileWrite: {
-                            ...value.promptInjection.fileWrite,
-                            mode: mode as SwarmTaskConfig["promptInjection"]["fileWrite"]["mode"],
-                          },
-                        },
-                      })}
-                    >
-                      <SelectTrigger className="w-full" aria-label="写入方式">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="append-only">只追加</SelectItem>
-                        <SelectItem value="update">允许更新</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldContent>
-                </Field>
-                <SwitchField
-                  label="文件锁"
-                  checked={value.promptInjection.fileWrite.lock.enabled}
-                  onCheckedChange={(checked) => onChange({
+        }
+      >
+        {value.promptInjection.fileWrite.enabled ? (
+          <div className="grid min-w-0 gap-4">
+            <Field className="grid gap-2">
+              <FieldLabel htmlFor="swarm-task-file-write-path">文件路径</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="swarm-task-file-write-path"
+                  aria-label="文件路径"
+                  aria-invalid={fileWritePathInvalid}
+                  value={value.promptInjection.fileWrite.path}
+                  onChange={(event) => onChange({
                     ...value,
                     promptInjection: {
                       ...value.promptInjection,
                       fileWrite: {
                         ...value.promptInjection.fileWrite,
-                        lock: { enabled: checked },
+                        path: event.target.value,
                       },
                     },
                   })}
                 />
-              </div>
-            </>
-          ) : null}
-        </div>
+                <p className="text-xs text-muted-foreground">项目相对路径或绝对路径</p>
+                {fileWritePathInvalid ? (
+                  <p className="text-xs text-destructive">路径不能包含 ..</p>
+                ) : null}
+              </FieldContent>
+            </Field>
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <Field className="grid gap-2">
+                <FieldLabel>写入方式</FieldLabel>
+                <FieldContent>
+                  <Select
+                    value={value.promptInjection.fileWrite.mode}
+                    onValueChange={(mode) => onChange({
+                      ...value,
+                      promptInjection: {
+                        ...value.promptInjection,
+                        fileWrite: {
+                          ...value.promptInjection.fileWrite,
+                          mode: mode as SwarmTaskConfig["promptInjection"]["fileWrite"]["mode"],
+                        },
+                      },
+                    })}
+                  >
+                    <SelectTrigger className="w-full" aria-label="写入方式">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="append-only">只追加</SelectItem>
+                      <SelectItem value="update">允许更新</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field className="grid gap-2">
+                <FieldLabel htmlFor="swarm-task-file-write-lock">文件锁</FieldLabel>
+                <FieldContent>
+                  <div className="flex h-9 items-center">
+                    <Switch
+                      id="swarm-task-file-write-lock"
+                      checked={value.promptInjection.fileWrite.lock.enabled}
+                      onCheckedChange={(checked) => onChange({
+                        ...value,
+                        promptInjection: {
+                          ...value.promptInjection,
+                          fileWrite: {
+                            ...value.promptInjection.fileWrite,
+                            lock: { enabled: checked },
+                          },
+                        },
+                      })}
+                      aria-label="文件锁"
+                    />
+                  </div>
+                </FieldContent>
+              </Field>
+            </div>
+          </div>
+        ) : null}
       </ConfigSection>
     </FieldGroup>
   )
@@ -293,15 +315,20 @@ export function SwarmTaskConfigForm({
 
 function ConfigSection({
   title,
+  action,
   children,
 }: {
   readonly title: string
+  readonly action?: ReactNode
   readonly children: ReactNode
 }) {
   return (
     <section className="grid gap-3">
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      <div className="grid min-w-0 gap-4">{children}</div>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        {action}
+      </div>
+      {children ? <div className="grid min-w-0 gap-4">{children}</div> : null}
     </section>
   )
 }
@@ -325,8 +352,7 @@ function DescribedOptionMenu<T extends string>({
         <Button
           type="button"
           variant="outline"
-          size="lg"
-          className="w-full justify-between px-3 font-normal"
+          className="w-full justify-between font-normal"
           aria-label={`${label}：${selectedOption.label}`}
         >
           <span className="min-w-0 truncate text-left">{selectedOption.label}</span>
@@ -399,6 +425,27 @@ function SwitchField({
       <div className="flex h-10 items-center justify-center">
         <Switch disabled={disabled} checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
       </div>
+    </div>
+  )
+}
+
+function SectionSwitch({
+  id,
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  readonly id: string
+  readonly label: string
+  readonly checked: boolean
+  readonly onCheckedChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex min-h-10 shrink-0 items-center gap-2">
+      <FieldLabel htmlFor={id} className="text-sm font-medium">
+        {label}
+      </FieldLabel>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
     </div>
   )
 }

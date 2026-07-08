@@ -29,6 +29,13 @@ export const swarmWorkerPhaseSchema = z.enum([
 
 export const swarmFileWriteModeSchema = z.enum(["append-only", "update"])
 
+export function isSwarmFileWritePathAllowed(value: string): boolean {
+  const normalizedPath = value.trim()
+  if (!normalizedPath) return true
+  if (normalizedPath.includes("\0")) return false
+  return !normalizedPath.split(/[\\/]+/).includes("..")
+}
+
 export const swarmPromptInjectionSequenceBatchSchema = z.object({
   enabled: z.boolean().default(false),
 }).strict()
@@ -60,15 +67,11 @@ export const swarmPromptInjectionFileWriteSchema = z.object({
     })
     return
   }
-  if (
-    normalizedPath.startsWith("/")
-    || /^[A-Za-z]:[\\/]/.test(normalizedPath)
-    || normalizedPath.split(/[\\/]+/).includes("..")
-  ) {
+  if (!isSwarmFileWritePathAllowed(normalizedPath)) {
     ctx.addIssue({
       code: "custom",
       path: ["path"],
-      message: "file write path must stay inside the project",
+      message: "file write path is invalid",
     })
   }
 })

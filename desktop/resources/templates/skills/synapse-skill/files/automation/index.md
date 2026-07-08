@@ -92,7 +92,9 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 
 ## Swarm Task Rules
 
-Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency, run mode, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
+Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency limit, run mode, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
+
+In `batch` mode, `maxRounds` is the total number of worker rounds and `concurrency` is only the simultaneous worker limit. In `continuous` mode, workers refill by concurrency slot until `maxRounds` is reached or new workers are stopped.
 
 Do not use Swarm Task for direct terminal control. Workers are Agent conversations created by Synapse; worker details live in linked Agent conversations with platform `"swarm"`.
 
@@ -103,7 +105,7 @@ Default flow:
 3. Use `app_swarm_task_task_update` for a focused config change.
 4. Use `app_swarm_task_run_start` to run a saved task. Pass `configOverride` only for this run's temporary changes.
 5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history.
-6. Use `app_swarm_task_run_stopRefill` to stop launching new workers in continuous mode while allowing active workers to finish.
+6. Use `app_swarm_task_run_stopRefill` to stop launching new workers while allowing active workers to finish.
 7. Use `app_swarm_task_run_cancel` to cancel a run.
 8. Use `app_swarm_task_task_delete` only when the task has no running or draining run; it removes the saved task and its run history.
 

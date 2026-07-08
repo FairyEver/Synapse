@@ -47,6 +47,8 @@ export function SwarmRunPanel({
     )
   }
 
+  const stopNewWorkersLabel = run.configSnapshot.runMode === "continuous" ? "停止补位" : "停止新轮次"
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
@@ -70,10 +72,10 @@ export function SwarmRunPanel({
             variant="outline"
             className="transition-transform active:scale-[0.96]"
             onClick={onStopRefill}
-            disabled={loading || run.stopRequested}
+            disabled={loading || run.stopRequested || terminalRunStatuses.has(run.status)}
           >
             <StopCircle data-icon="inline-start" />
-            停止补位
+            {stopNewWorkersLabel}
           </Button>
           <Button
             type="button"

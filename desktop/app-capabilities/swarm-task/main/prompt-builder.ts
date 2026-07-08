@@ -131,7 +131,7 @@ function fileWriteSection(config: SwarmTaskConfig): string {
   if (fileWrite.lock.enabled) {
     lines.push(
       "",
-      `Before changing the file, acquire an atomic project-local lock directory named ${path}.lock. Release the lock after the write finishes. If the lock cannot be acquired, wait and retry instead of writing concurrently.`,
+      `Before changing the file, acquire an atomic lock directory named ${path}.lock. Release the lock after the write finishes. If the lock cannot be acquired, wait and retry instead of writing concurrently.`,
     )
   }
 

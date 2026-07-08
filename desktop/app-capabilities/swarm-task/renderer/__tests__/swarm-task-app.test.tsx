@@ -418,6 +418,8 @@ describe("SwarmTaskModule", () => {
     expect(document.body.textContent).toContain("当前任务")
     expect(document.body.textContent).toContain("最近运行")
     expect(document.body.textContent).toContain("项目一")
+    expect(document.body.textContent).toContain("并发上限")
+    expect(document.body.textContent).toContain("总轮次")
     expect(document.body.textContent).not.toContain("project-id")
     expect(getTextarea()).toBeNull()
     expect(document.body.textContent).toContain("运行中")
@@ -513,6 +515,10 @@ describe("SwarmTaskModule", () => {
     await renderModule()
     await clickTab("配置")
 
+    const runModeTrigger = await waitForButton("运行模式：批量")
+    expect(runModeTrigger.className).toContain("h-8")
+    expect(runModeTrigger.className).not.toContain("h-9")
+
     await openButtonMenu("运行模式：批量")
 
     const item = getOptionItem("continuous")
@@ -525,12 +531,13 @@ describe("SwarmTaskModule", () => {
 
     expect(document.body.textContent).toContain("continuous")
     expect(document.body.textContent).toContain("会发生什么")
-    expect(document.body.textContent).toContain("直到手动停止")
+    expect(document.body.textContent).toContain("达到轮次上限或手动停止后收尾")
     expect(getHoverCardContent()?.className).toContain("w-72")
 
     await clickOptionItem("continuous")
 
     expect(await waitForButton("运行模式：持续")).toBeTruthy()
+    expect(await waitForInput("轮次上限")).toBeTruthy()
   })
 
   it("shows grouped config fields and prompt injection controls", async () => {
@@ -539,6 +546,8 @@ describe("SwarmTaskModule", () => {
 
     expect(document.body.textContent).toContain("任务")
     expect(document.body.textContent).toContain("运行")
+    expect(document.body.textContent).toContain("并发上限")
+    expect(document.body.textContent).toContain("总轮次")
     expect(document.body.textContent).toContain("注入")
     expect(document.body.textContent).toContain("文件")
     expect(document.body.textContent).toContain("序列和批次")
@@ -563,6 +572,35 @@ describe("SwarmTaskModule", () => {
 
     expect((await waitForButton("保存配置")).disabled).toBe(false)
     expect((await waitForButton("运行任务")).disabled).toBe(false)
+  })
+
+  it("allows absolute file write paths before saving", async () => {
+    await renderModule()
+    await clickTab("配置")
+
+    await clickSwitch("文件写入")
+    await setInputValue(await waitForInput("文件路径"), "/Users/liyang/Downloads/demo.md")
+
+    expect((await waitForButton("保存配置")).disabled).toBe(false)
+    expect((await waitForButton("运行任务")).disabled).toBe(false)
+  })
+
+  it("rejects file write paths with parent traversal before saving", async () => {
+    await renderModule()
+    await clickTab("配置")
+
+    await clickSwitch("文件写入")
+    await setInputValue(await waitForInput("文件路径"), "../demo.md")
+
+    expect((await waitForButton("保存配置")).disabled).toBe(true)
+    expect((await waitForButton("运行任务")).disabled).toBe(true)
+    expect(document.body.textContent).toContain("路径不能包含 ..")
+
+    await clickButton("保存配置")
+    await clickButton("运行任务")
+
+    expect(swarmTaskBridge.updateTask).not.toHaveBeenCalled()
+    expect(swarmTaskBridge.startRun).not.toHaveBeenCalled()
   })
 
   it("opens worker conversations from the run tab", async () => {
@@ -656,16 +694,34 @@ describe("SwarmTaskModule", () => {
 
     await renderModule()
     await clickTab("运行")
-    await waitForButton("停止补位")
+    await waitForButton("停止新轮次")
     await waitForButton("取消运行")
 
-    await clickButton("停止补位")
+    await clickButton("停止新轮次")
     await clickButton("取消运行")
 
     expect(swarmTaskBridge.stopRefill).toHaveBeenCalledWith("run-1")
     expect(swarmTaskBridge.cancelRun).toHaveBeenCalledWith("run-1")
     expect(toast.error).toHaveBeenCalledWith("停止补位失败")
     expect(toast.error).toHaveBeenCalledWith("取消运行失败")
+  })
+
+  it("shows the refill stop action for continuous runs", async () => {
+    const continuousRun: SwarmRun = {
+      ...swarmTaskFixtures.run,
+      configSnapshot: {
+        ...swarmTaskFixtures.run.configSnapshot,
+        runMode: "continuous",
+      },
+    }
+    swarmTaskBridge.listRuns.mockImplementation(async () => [continuousRun])
+    swarmTaskBridge.getRun.mockImplementation(async () => continuousRun)
+
+    await renderModule()
+    await clickTab("运行")
+
+    expect(await waitForButton("停止补位")).toBeTruthy()
+    expect(waitForButtonSync("停止新轮次")).toBeUndefined()
   })
 
   it("can cancel a draining run", async () => {

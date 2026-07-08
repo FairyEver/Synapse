@@ -305,7 +305,7 @@ Input:
 }
 ```
 
-Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Workers run in the selected project path. `promptInjection` controls optional prompt context only; Synapse does not merge files or guarantee worker file writes.
+Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is the simultaneous worker limit, 1-20. In `batch` mode, `maxRounds` is the total worker rounds. In `continuous` mode, `maxRounds` is the refill safety limit. Workers run in the selected project path. `promptInjection` controls optional prompt context only; Synapse does not merge files or guarantee worker file writes. `fileWrite.path` accepts a project-relative path or an absolute path.
 
 ### app_swarm_task_task_update
 
@@ -364,7 +364,7 @@ Input:
 { "runId": "swarm-run:..." }
 ```
 
-Requests a continuous run to stop launching new workers. Active workers may continue.
+Requests the run to stop launching new workers. Active workers may continue.
 
 ### app_swarm_task_run_cancel
 

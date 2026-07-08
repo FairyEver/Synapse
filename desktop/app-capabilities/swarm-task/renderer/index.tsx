@@ -35,7 +35,7 @@ import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseProjectConfig } from "../../../src/types/config"
-import type { SwarmRun, SwarmTask, SwarmTaskConfig, SwarmWorkerRun } from "../shared/schema"
+import { isSwarmFileWritePathAllowed, type SwarmRun, type SwarmTask, type SwarmTaskConfig, type SwarmWorkerRun } from "../shared/schema"
 import { SwarmTaskDetail, type SwarmTaskTab } from "./components/swarm-task-detail"
 import { SwarmTaskSidebar } from "./components/swarm-task-sidebar"
 
@@ -327,7 +327,10 @@ export function SwarmTaskModule() {
     Boolean(draftConfig?.prompt.trim())
     && Boolean(draftConfig?.projectId)
     && projects.some((project) => project.id === draftConfig?.projectId)
-    && (!draftConfig?.promptInjection.fileWrite.enabled || Boolean(draftConfig.promptInjection.fileWrite.path.trim()))
+    && (!draftConfig?.promptInjection.fileWrite.enabled || (
+      Boolean(draftConfig.promptInjection.fileWrite.path.trim())
+      && isSwarmFileWritePathAllowed(draftConfig.promptInjection.fileWrite.path)
+    ))
   ), [draftConfig, projects])
 
   const saveConfig = useCallback(async () => {
@@ -386,11 +389,12 @@ export function SwarmTaskModule() {
 
   const stopRefill = useCallback(async () => {
     if (!activeRun) return
+    const fallbackMessage = activeRun.configSnapshot.runMode === "continuous" ? "停止补位失败" : "停止新轮次失败"
     try {
       await swarmTaskBridge.stopRefill(activeRun.id)
       await refreshCurrentSnapshot()
     } catch (error) {
-      const message = errorMessage(error, "停止补位失败")
+      const message = errorMessage(error, fallbackMessage)
       logger.error("Failed to stop swarm task refill.", error)
       toast.error(message)
     }

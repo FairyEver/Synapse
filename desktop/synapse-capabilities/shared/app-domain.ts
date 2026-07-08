@@ -760,7 +760,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SWARM_TASK_MCP_TOOL_NAMES.runStopRefill,
-      description: "Stop refilling a running Swarm Task run.",
+      description: "Stop launching new workers for a running Swarm Task run and let active workers finish.",
       inputSchema: {
         type: "object",
         properties: {
@@ -824,7 +824,7 @@ function swarmTaskCapabilityTitle(id: string): string {
     case SWARM_TASK_RUN_START_CAPABILITY_ID:
       return "Start Swarm Task run"
     case SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID:
-      return "Stop Swarm Task refill"
+      return "Stop Swarm Task new workers"
     case SWARM_TASK_RUN_CANCEL_CAPABILITY_ID:
       return "Cancel Swarm Task run"
     case SWARM_TASK_RUN_LIST_CAPABILITY_ID:
@@ -851,7 +851,7 @@ function swarmTaskCapabilityDescription(id: string): string {
     case SWARM_TASK_RUN_START_CAPABILITY_ID:
       return "Start a Swarm Task run."
     case SWARM_TASK_RUN_STOP_REFILL_CAPABILITY_ID:
-      return "Stop refill for a Swarm Task run."
+      return "Stop launching new workers for a Swarm Task run."
     case SWARM_TASK_RUN_CANCEL_CAPABILITY_ID:
       return "Cancel a Swarm Task run."
     case SWARM_TASK_RUN_LIST_CAPABILITY_ID:

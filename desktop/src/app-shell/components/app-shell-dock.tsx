@@ -48,7 +48,7 @@ export function AppShellDock({
         className="flex min-w-0 justify-center"
       >
         <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
-          <div className="flex min-w-max items-center justify-center gap-1">
+          <div className="flex min-w-max items-center justify-center gap-1.5">
             {apps.map((app) => {
               const active = app.id === value
 
@@ -91,7 +91,7 @@ function DockButton({
       type="button"
       variant="ghost"
       size="icon"
-      className="relative h-12 w-11 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
+      className="relative size-12 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
       aria-label={app.name}
       aria-current={active ? "page" : undefined}
       onClick={() => onValueChange(app.id)}

@@ -113,14 +113,10 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
         const sequenceIndex = nextRound
         nextRound++
         await runRound(slotIndex, sequenceIndex)
-        if (input.config.runMode === "batch") return
       }
     }
 
-    const slotCount =
-      input.config.runMode === "batch"
-        ? Math.min(input.config.concurrency, input.config.maxRounds)
-        : input.config.concurrency
+    const slotCount = Math.min(input.config.concurrency, input.config.maxRounds)
 
     try {
       await Promise.all(Array.from({ length: slotCount }, (_, index) => runSlot(index + 1)))

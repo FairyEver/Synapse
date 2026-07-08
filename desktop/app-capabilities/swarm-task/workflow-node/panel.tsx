@@ -76,13 +76,13 @@ export function SwarmTaskNodePanel({
           <div className="grid grid-cols-2 gap-2">
             <NumberOverrideInput
               id="swarm-task-node-max-rounds"
-              label="最大轮次"
+              label={typedConfig.runModeOverride === "continuous" ? "轮次上限" : "总轮次"}
               value={typedConfig.maxRoundsOverride}
               onChange={(maxRoundsOverride) => commit({ maxRoundsOverride })}
             />
             <NumberOverrideInput
               id="swarm-task-node-concurrency"
-              label="并发数"
+              label="并发上限"
               value={typedConfig.concurrencyOverride}
               onChange={(concurrencyOverride) => commit({ concurrencyOverride })}
             />
