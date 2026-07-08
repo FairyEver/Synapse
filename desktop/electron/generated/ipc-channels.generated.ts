@@ -100,6 +100,9 @@ export const IPC_CHANNELS = {
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
   },
+  "synapse-skill": {
+    "prepareInstallSource": "synapse:synapse-skill:install-source:prepare",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",

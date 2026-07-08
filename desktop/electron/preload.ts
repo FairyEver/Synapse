@@ -85,6 +85,9 @@ const IPC_CHANNELS = {
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
   },
+  "synapse-skill": {
+    "prepareInstallSource": "synapse:synapse-skill:install-source:prepare",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",
@@ -1182,6 +1185,9 @@ const synapseBridge: SynapseBridge = {
     installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
     prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),
     prepareInlineRuleSource: invoke(IPC_CHANNELS.installers.prepareInlineRuleSource),
+  },
+  synapseSkill: {
+    prepareInstallSource: invoke(IPC_CHANNELS["synapse-skill"].prepareInstallSource),
   },
   config: {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),
