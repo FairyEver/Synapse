@@ -130,6 +130,7 @@ function SwarmTaskOverview({
   const config = task.currentConfig
   const project = projects.find((item) => item.id === config.projectId)
   const projectName = project?.name ?? (config.projectId ? "项目不可用" : "未选择项目")
+  const roundLabel = config.runMode === "batch" ? "批次数" : "每槽轮次"
 
   return (
     <div className="mx-auto grid w-full max-w-3xl gap-4 px-3 pb-3 sm:px-5 sm:pb-5">
@@ -141,8 +142,9 @@ function SwarmTaskOverview({
             ["状态", formatRunStatus(task.lastStatus)],
             ["项目", projectName],
             ["运行模式", formatRunMode(config.runMode)],
-            ["并发", String(config.concurrency)],
-            ["轮次", String(config.maxRounds)],
+            ["并发上限", String(config.concurrency)],
+            [roundLabel, String(config.maxRounds)],
+            ["计划 worker", String(config.concurrency * config.maxRounds)],
             ...(config.promptInjection.fileWrite.enabled
               ? [["文件", config.promptInjection.fileWrite.path]] as ReadonlyArray<readonly [string, string]>
               : []),

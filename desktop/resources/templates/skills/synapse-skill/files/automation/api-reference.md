@@ -305,7 +305,7 @@ Input:
 }
 ```
 
-Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Workers run in the selected project path. `promptInjection` controls optional prompt context only; Synapse does not merge files or guarantee worker file writes.
+Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20 and means slot count. `maxRounds` is 1-500; in `batch` mode it means batch count, and in `continuous` mode it means per-slot round count. The planned worker count is `concurrency * maxRounds`; stop or cancel can make the actual started count lower. Workers run in the selected project path. `promptInjection` controls optional prompt context only; Synapse does not merge files or guarantee worker file writes.
 
 ### app_swarm_task_task_update
 
@@ -349,12 +349,12 @@ Input:
   "configOverride": {
     "runMode": "continuous",
     "concurrency": 2,
-    "maxRounds": 10
+    "maxRounds": 5
   }
 }
 ```
 
-`configOverride` is optional and applies only to this run. The run stores a full config snapshot.
+`configOverride` is optional and applies only to this run. The run stores a full config snapshot. With the example above, Synapse keeps 2 slots active and each slot can run up to 5 rounds, for at most 10 workers.
 
 ### app_swarm_task_run_stopRefill
 

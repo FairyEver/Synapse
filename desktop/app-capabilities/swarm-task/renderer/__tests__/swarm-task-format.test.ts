@@ -22,8 +22,8 @@ describe("swarm task format helpers", () => {
   })
 
   it("formats task config labels and timestamps", () => {
-    expect(formatRunMode("batch")).toBe("批量")
-    expect(formatRunMode("continuous")).toBe("持续")
+    expect(formatRunMode("batch")).toBe("分批运行")
+    expect(formatRunMode("continuous")).toBe("补位运行")
     expect(formatTimestamp("2026-07-07T00:10:00.000Z")).toBe("2026-07-07 00:10")
     expect(formatTimestamp(undefined)).toBe("-")
   })
