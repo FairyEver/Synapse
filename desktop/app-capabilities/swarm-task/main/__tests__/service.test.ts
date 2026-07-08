@@ -452,12 +452,12 @@ describe("createSwarmTaskService", () => {
     })
     const workerRuns = await service.listWorkerRuns(run.id)
 
-    expect(workerRuns).toHaveLength(2)
+    expect(workerRuns).toHaveLength(4)
     expect(workerRuns[0]?.sessionKey).toBe(`swarm:${task.id}:${run.id}`)
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
   })
 
-  it("injects previous batch handoffs instead of the last arbitrary handoff", async () => {
+  it("injects previous same-slot handoff for continuous runs", async () => {
     const workers = namespace<SwarmWorkerRun>()
     const prompts: string[] = []
     const { service } = serviceHarness({
@@ -492,7 +492,62 @@ describe("createSwarmTaskService", () => {
         },
         runMode: "continuous",
         concurrency: 2,
-        maxRounds: 3,
+        maxRounds: 2,
+      },
+    })
+
+    const run = await service.startRun({ taskId: task.id })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    expect(prompts[0]).not.toContain("## Previous Handoff")
+    expect(prompts[1]).not.toContain("## Previous Handoff")
+    expect(prompts[2]).toContain("## Previous Handoff")
+    expect(prompts[2]).toContain("handoff 1")
+    expect(prompts[2]).not.toContain("handoff 2")
+    expect(prompts[3]).toContain("## Previous Handoff")
+    expect(prompts[3]).not.toContain("handoff 1")
+    expect(prompts[3]).toContain("handoff 2")
+  })
+
+  it("injects previous batch handoffs for batch runs", async () => {
+    const workers = namespace<SwarmWorkerRun>()
+    const prompts: string[] = []
+    const { service } = serviceHarness({
+      workers,
+      agent: {
+        sendWorker: vi.fn(async (input) => {
+          prompts.push(input.prompt)
+          return {
+            conversationId: `conversation-${prompts.length}`,
+            resultText: [
+              "<SYNAPSE_SWARM_SUMMARY>",
+              `summary ${prompts.length}`,
+              "</SYNAPSE_SWARM_SUMMARY>",
+              "<SYNAPSE_SWARM_HANDOFF>",
+              `handoff ${prompts.length}`,
+              "</SYNAPSE_SWARM_HANDOFF>",
+            ].join("\n"),
+            status: "success",
+            events: [],
+          }
+        }),
+      },
+    })
+    const task = await service.createTask({
+      name: "任务",
+      config: {
+        ...config,
+        promptInjection: {
+          ...config.promptInjection,
+          previousHandoff: { enabled: true },
+          summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+        },
+        runMode: "batch",
+        concurrency: 2,
+        maxRounds: 2,
       },
     })
 
@@ -507,6 +562,9 @@ describe("createSwarmTaskService", () => {
     expect(prompts[2]).toContain("## Previous Handoff")
     expect(prompts[2]).toContain("handoff 1")
     expect(prompts[2]).toContain("handoff 2")
+    expect(prompts[3]).toContain("## Previous Handoff")
+    expect(prompts[3]).toContain("handoff 1")
+    expect(prompts[3]).toContain("handoff 2")
   })
 
   it("emits lightweight change events while runs and workers progress", async () => {

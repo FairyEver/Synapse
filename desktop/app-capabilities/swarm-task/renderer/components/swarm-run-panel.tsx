@@ -94,7 +94,7 @@ export function SwarmRunPanel({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="sticky top-0 z-10 w-20 bg-card text-right">Worker</TableHead>
+              <TableHead className="sticky top-0 z-10 w-20 bg-card text-right">槽位</TableHead>
               <TableHead className="sticky top-0 z-10 w-20 bg-card text-right">轮次</TableHead>
               <TableHead className="sticky top-0 z-10 w-28 bg-card">状态</TableHead>
               <TableHead className="sticky top-0 z-10 w-28 bg-card">阶段</TableHead>

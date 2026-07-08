@@ -38,8 +38,8 @@ export function formatWorkerPhase(phase: SwarmWorkerPhase | undefined): string {
 }
 
 export function formatRunMode(mode: SwarmRunMode): string {
-  if (mode === "continuous") return "持续"
-  return "批量"
+  if (mode === "continuous") return "补位运行"
+  return "分批运行"
 }
 
 export function formatTimestamp(value: string | undefined): string {

@@ -68,15 +68,15 @@ export function SwarmTaskNodePanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={DEFAULT_RUN_MODE_VALUE}>默认</SelectItem>
-                <SelectItem value="batch">批量</SelectItem>
-                <SelectItem value="continuous">持续</SelectItem>
+                <SelectItem value="batch">分批运行</SelectItem>
+                <SelectItem value="continuous">补位运行</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <NumberOverrideInput
               id="swarm-task-node-max-rounds"
-              label={typedConfig.runModeOverride === "continuous" ? "轮次上限" : "总轮次"}
+              label="批次/每槽轮次"
               value={typedConfig.maxRoundsOverride}
               onChange={(maxRoundsOverride) => commit({ maxRoundsOverride })}
             />

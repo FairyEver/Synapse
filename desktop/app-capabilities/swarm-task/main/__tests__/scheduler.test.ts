@@ -25,7 +25,7 @@ const config: SwarmTaskConfig = {
 }
 
 describe("createSwarmScheduler", () => {
-  it("runs fixed-total batch workers with concurrency-limited refill", async () => {
+  it("runs fixed batch workers in full concurrency-sized batches", async () => {
     const calls: Array<{
       workerIndex: number
       roundIndex: number
@@ -33,11 +33,7 @@ describe("createSwarmScheduler", () => {
       slotIndex: number
       batchIndex: number
     }> = []
-    let active = 0
-    let maxActive = 0
     const runner: SwarmWorkerRunner = vi.fn(async (input) => {
-      active++
-      maxActive = Math.max(maxActive, active)
       calls.push({
         workerIndex: input.workerIndex,
         roundIndex: input.roundIndex,
@@ -45,8 +41,6 @@ describe("createSwarmScheduler", () => {
         slotIndex: input.slotIndex,
         batchIndex: input.batchIndex,
       })
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      active--
       return { status: "success", resultText: `done ${input.workerIndex}` }
     })
     const scheduler = createSwarmScheduler({ runner })
@@ -54,31 +48,34 @@ describe("createSwarmScheduler", () => {
     const result = await scheduler.start({
       taskId: "task-1",
       runId: "run-1",
-      config: { ...config, concurrency: 2, maxRounds: 5 },
+      config: { ...config, runMode: "batch", concurrency: 4, maxRounds: 2 },
     })
 
     expect(result.status).toBe("success")
-    expect(result.totals.started).toBe(5)
-    expect(maxActive).toBe(2)
-    expect(calls.sort((a, b) => a.sequenceIndex - b.sequenceIndex)).toEqual([
+    expect(calls).toEqual([
       { workerIndex: 1, roundIndex: 1, sequenceIndex: 1, slotIndex: 1, batchIndex: 1 },
-      { workerIndex: 2, roundIndex: 2, sequenceIndex: 2, slotIndex: 2, batchIndex: 1 },
-      { workerIndex: 1, roundIndex: 3, sequenceIndex: 3, slotIndex: 1, batchIndex: 2 },
-      { workerIndex: 2, roundIndex: 4, sequenceIndex: 4, slotIndex: 2, batchIndex: 2 },
-      { workerIndex: 1, roundIndex: 5, sequenceIndex: 5, slotIndex: 1, batchIndex: 3 },
+      { workerIndex: 2, roundIndex: 1, sequenceIndex: 2, slotIndex: 2, batchIndex: 1 },
+      { workerIndex: 3, roundIndex: 1, sequenceIndex: 3, slotIndex: 3, batchIndex: 1 },
+      { workerIndex: 4, roundIndex: 1, sequenceIndex: 4, slotIndex: 4, batchIndex: 1 },
+      { workerIndex: 1, roundIndex: 2, sequenceIndex: 5, slotIndex: 1, batchIndex: 2 },
+      { workerIndex: 2, roundIndex: 2, sequenceIndex: 6, slotIndex: 2, batchIndex: 2 },
+      { workerIndex: 3, roundIndex: 2, sequenceIndex: 7, slotIndex: 3, batchIndex: 2 },
+      { workerIndex: 4, roundIndex: 2, sequenceIndex: 8, slotIndex: 4, batchIndex: 2 },
     ])
   })
 
-  it("refills continuous workers with stable batch metadata", async () => {
+  it("refills continuous workers until each slot reaches the round limit", async () => {
     const calls: Array<{
       sequenceIndex: number
       slotIndex: number
+      roundIndex: number
       batchIndex: number
     }> = []
     const runner: SwarmWorkerRunner = vi.fn(async (input) => {
       calls.push({
         sequenceIndex: input.sequenceIndex,
         slotIndex: input.slotIndex,
+        roundIndex: input.roundIndex,
         batchIndex: input.batchIndex,
       })
       return { status: "success", resultText: `round ${input.sequenceIndex}` }
@@ -88,17 +85,49 @@ describe("createSwarmScheduler", () => {
     const result = await scheduler.start({
       taskId: "task-1",
       runId: "run-1",
-      config: { ...config, runMode: "continuous", concurrency: 2, maxRounds: 5 },
+      config: { ...config, runMode: "continuous", concurrency: 4, maxRounds: 2 },
     })
 
     expect(result.status).toBe("success")
     expect(calls.sort((a, b) => a.sequenceIndex - b.sequenceIndex)).toEqual([
-      { sequenceIndex: 1, slotIndex: 1, batchIndex: 1 },
-      { sequenceIndex: 2, slotIndex: 2, batchIndex: 1 },
-      { sequenceIndex: 3, slotIndex: 1, batchIndex: 2 },
-      { sequenceIndex: 4, slotIndex: 2, batchIndex: 2 },
-      { sequenceIndex: 5, slotIndex: 1, batchIndex: 3 },
+      { sequenceIndex: 1, slotIndex: 1, roundIndex: 1, batchIndex: 1 },
+      { sequenceIndex: 2, slotIndex: 2, roundIndex: 1, batchIndex: 1 },
+      { sequenceIndex: 3, slotIndex: 3, roundIndex: 1, batchIndex: 1 },
+      { sequenceIndex: 4, slotIndex: 4, roundIndex: 1, batchIndex: 1 },
+      { sequenceIndex: 5, slotIndex: 1, roundIndex: 2, batchIndex: 2 },
+      { sequenceIndex: 6, slotIndex: 2, roundIndex: 2, batchIndex: 2 },
+      { sequenceIndex: 7, slotIndex: 3, roundIndex: 2, batchIndex: 2 },
+      { sequenceIndex: 8, slotIndex: 4, roundIndex: 2, batchIndex: 2 },
     ])
+  })
+
+  it("stopRefill prevents a later batch from starting after active batch workers finish", async () => {
+    let releaseFirstBatch: (() => void) | undefined
+    const firstBatch = new Promise<void>((resolve) => {
+      releaseFirstBatch = resolve
+    })
+    const started: number[] = []
+    const runner: SwarmWorkerRunner = vi.fn(async (input) => {
+      started.push(input.sequenceIndex)
+      if (input.roundIndex === 1) {
+        await firstBatch
+      }
+      return { status: "success", resultText: `round ${input.sequenceIndex}` }
+    })
+    const scheduler = createSwarmScheduler({ runner })
+    const promise = scheduler.start({
+      taskId: "task-1",
+      runId: "run-1",
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 3 },
+    })
+
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2))
+    scheduler.stopRefill("run-1")
+    releaseFirstBatch?.()
+    const result = await promise
+
+    expect(result.status).toBe("success")
+    expect(started).toEqual([1, 2])
   })
 
   it("stopRefill drains active continuous workers", async () => {
@@ -127,37 +156,11 @@ describe("createSwarmScheduler", () => {
     expect(runner).toHaveBeenCalledTimes(1)
   })
 
-  it("stopRefill drains active batch workers without launching new rounds", async () => {
-    let releaseFirst: (() => void) | undefined
-    const runner: SwarmWorkerRunner = vi.fn(async (input) => {
-      if (input.roundIndex === 1) {
-        await new Promise<void>((resolve) => {
-          releaseFirst = resolve
-        })
-      }
-      return { status: "success", resultText: `round ${input.roundIndex}` }
-    })
-    const scheduler = createSwarmScheduler({ runner })
-    const promise = scheduler.start({
-      taskId: "task-1",
-      runId: "run-1",
-      config: { ...config, runMode: "batch", concurrency: 1, maxRounds: 5 },
-    })
-
-    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1))
-    scheduler.stopRefill("run-1")
-    releaseFirst?.()
-    const result = await promise
-
-    expect(result.status).toBe("success")
-    expect(runner).toHaveBeenCalledTimes(1)
-  })
-
   it("cancel waits for active runners to drain and delivers abort signal", async () => {
     let releaseSecond: (() => void) | undefined
     let abortSeen = false
     const runner: SwarmWorkerRunner = vi.fn(async (input) => {
-      if (input.roundIndex === 1) {
+      if (input.slotIndex === 1) {
         return { status: "success", resultText: "round 1" }
       }
 
@@ -179,7 +182,7 @@ describe("createSwarmScheduler", () => {
     const promise = scheduler.start({
       taskId: "task-1",
       runId: "run-1",
-      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 2 },
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 1 },
     })
 
     let settled = false
@@ -204,7 +207,7 @@ describe("createSwarmScheduler", () => {
   it("mixed success and cancelled returns partial", async () => {
     let releaseSecond: (() => void) | undefined
     const runner: SwarmWorkerRunner = vi.fn(async (input) => {
-      if (input.roundIndex === 1) {
+      if (input.slotIndex === 1) {
         return { status: "success", resultText: "round 1" }
       }
 
@@ -218,7 +221,7 @@ describe("createSwarmScheduler", () => {
     const promise = scheduler.start({
       taskId: "task-1",
       runId: "run-1",
-      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 2 },
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 1 },
     })
 
     await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2))
@@ -241,7 +244,7 @@ describe("createSwarmScheduler", () => {
     let releaseFirst: (() => void) | undefined
     let releaseSecond: (() => void) | undefined
     const runner: SwarmWorkerRunner = vi.fn(async (input) => {
-      if (input.roundIndex === 1) {
+      if (input.slotIndex === 1) {
         await new Promise<void>((resolve) => {
           releaseFirst = resolve
         })
@@ -259,7 +262,7 @@ describe("createSwarmScheduler", () => {
     const promise = scheduler.start({
       taskId: "task-1",
       runId: "run-1",
-      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 2 },
+      config: { ...config, runMode: "batch", concurrency: 2, maxRounds: 1 },
     })
 
     await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2))

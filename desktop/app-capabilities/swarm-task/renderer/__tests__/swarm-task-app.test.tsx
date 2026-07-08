@@ -419,7 +419,8 @@ describe("SwarmTaskModule", () => {
     expect(document.body.textContent).toContain("最近运行")
     expect(document.body.textContent).toContain("项目一")
     expect(document.body.textContent).toContain("并发上限")
-    expect(document.body.textContent).toContain("总轮次")
+    expect(document.body.textContent).toContain("批次数")
+    expect(document.body.textContent).toContain("计划 worker")
     expect(document.body.textContent).not.toContain("project-id")
     expect(getTextarea()).toBeNull()
     expect(document.body.textContent).toContain("运行中")
@@ -515,15 +516,15 @@ describe("SwarmTaskModule", () => {
     await renderModule()
     await clickTab("配置")
 
-    const runModeTrigger = await waitForButton("运行模式：批量")
+    const runModeTrigger = await waitForButton("运行模式：分批运行")
     expect(runModeTrigger.className).toContain("h-8")
     expect(runModeTrigger.className).not.toContain("h-9")
 
-    await openButtonMenu("运行模式：批量")
+    await openButtonMenu("运行模式：分批运行")
 
     const item = getOptionItem("continuous")
-    expect(item.textContent).toContain("持续")
-    expect(item.textContent).toContain("持续补位")
+    expect(item.textContent).toContain("补位运行")
+    expect(item.textContent).toContain("完成后补位")
     expect(document.body.textContent).not.toContain("直到手动停止")
     expect(getDropdownContent()?.className).not.toContain("w-[340px]")
 
@@ -531,13 +532,14 @@ describe("SwarmTaskModule", () => {
 
     expect(document.body.textContent).toContain("continuous")
     expect(document.body.textContent).toContain("会发生什么")
-    expect(document.body.textContent).toContain("达到轮次上限或手动停止后收尾")
+    expect(document.body.textContent).toContain("每个槽位完成一轮后立即进入下一轮")
     expect(getHoverCardContent()?.className).toContain("w-72")
 
     await clickOptionItem("continuous")
 
-    expect(await waitForButton("运行模式：持续")).toBeTruthy()
-    expect(await waitForInput("轮次上限")).toBeTruthy()
+    expect(await waitForButton("运行模式：补位运行")).toBeTruthy()
+    expect(await waitForInput("每槽轮次")).toBeTruthy()
+    expect(document.body.textContent).toContain("计划启动 4 个 worker")
   })
 
   it("shows grouped config fields and prompt injection controls", async () => {
@@ -547,9 +549,12 @@ describe("SwarmTaskModule", () => {
     expect(document.body.textContent).toContain("任务")
     expect(document.body.textContent).toContain("运行")
     expect(document.body.textContent).toContain("并发上限")
-    expect(document.body.textContent).toContain("总轮次")
+    expect(document.body.textContent).toContain("批次数")
     expect(document.body.textContent).toContain("注入")
     expect(document.body.textContent).toContain("文件")
+    expect(await waitForInput("并发上限")).toBeTruthy()
+    expect(await waitForInput("批次数")).toBeTruthy()
+    expect(document.body.textContent).toContain("计划启动 4 个 worker")
     expect(document.body.textContent).toContain("序列和批次")
     expect(document.body.textContent).toContain("上一轮交接")
     expect(document.body.textContent).toContain("记录摘要")

@@ -36,19 +36,19 @@ type DescribedOption<T extends string> = {
 const runModeOptions: ReadonlyArray<DescribedOption<SwarmTaskConfig["runMode"]>> = [
   {
     value: "batch",
-    label: "批量",
-    summary: "按总轮次运行。",
-    description: "最多同时运行并发上限个 worker，完成总轮次后结束。",
+    label: "分批运行",
+    summary: "整批完成后启动下一批。",
+    description: "每批启动并发上限数量的 worker，整批结束后再进入下一批。",
     bestFor: "一次性拆解、评审或生成结果明确的任务。",
-    risk: "停止新轮次后只等待已启动 worker 收尾。",
+    risk: "慢 worker 会拖住下一批启动。",
   },
   {
     value: "continuous",
-    label: "持续",
-    summary: "持续补位运行。",
-    description: "worker 完成后按并发上限补位，达到轮次上限或手动停止后收尾。",
+    label: "补位运行",
+    summary: "完成后补位。",
+    description: "每个槽位完成一轮后立即进入下一轮，不等待其它槽位。",
     bestFor: "持续收集、巡检或长时间推进的任务。",
-    risk: "可能持续消耗模型额度，运行前确认轮次上限和停止条件。",
+    risk: "快槽位会先推进到下一轮。",
   },
 ]
 
@@ -63,7 +63,8 @@ export function SwarmTaskConfigForm({
   const fileWritePathInvalid = value.promptInjection.fileWrite.enabled
     && Boolean(fileWritePath)
     && !isSwarmFileWritePathAllowed(fileWritePath)
-  const maxRoundsLabel = value.runMode === "continuous" ? "轮次上限" : "总轮次"
+  const roundLabel = value.runMode === "batch" ? "批次数" : "每槽轮次"
+  const estimatedWorkerCount = value.concurrency * value.maxRounds
 
   return (
     <FieldGroup className="mx-auto grid w-full max-w-3xl gap-6 px-3 pb-3 sm:px-5 sm:pb-5">
@@ -128,31 +129,34 @@ export function SwarmTaskConfigForm({
             <FieldLabel>并发上限</FieldLabel>
             <FieldContent>
               <Input
-                aria-label="并发上限"
                 type="number"
                 min={1}
                 max={20}
                 className="tabular-nums"
+                aria-label="并发上限"
                 value={String(value.concurrency)}
                 onChange={(event) => onChange({ ...value, concurrency: clampNumber(event.target.value, value.concurrency, 1, 20) })}
               />
             </FieldContent>
           </Field>
           <Field className="grid gap-2">
-            <FieldLabel>{maxRoundsLabel}</FieldLabel>
+            <FieldLabel>{roundLabel}</FieldLabel>
             <FieldContent>
               <Input
-                aria-label={maxRoundsLabel}
                 type="number"
                 min={1}
                 max={500}
                 className="tabular-nums"
+                aria-label={roundLabel}
                 value={String(value.maxRounds)}
                 onChange={(event) => onChange({ ...value, maxRounds: clampNumber(event.target.value, value.maxRounds, 1, 500) })}
               />
             </FieldContent>
           </Field>
         </div>
+        <p className="text-xs text-muted-foreground">
+          计划启动 {estimatedWorkerCount} 个 worker
+        </p>
       </ConfigSection>
 
       <ConfigSection title="注入">

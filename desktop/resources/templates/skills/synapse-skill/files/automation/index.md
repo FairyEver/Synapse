@@ -92,9 +92,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 
 ## Swarm Task Rules
 
-Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency limit, run mode, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
-
-In `batch` mode, `maxRounds` is the total number of worker rounds and `concurrency` is only the simultaneous worker limit. In `continuous` mode, workers refill by concurrency slot until `maxRounds` is reached or new workers are stopped.
+Use Swarm Task when the user wants a reusable multi-Agent prompt run. A task stores the prompt, project, concurrency, run mode, per-slot round count, summary, handoff, output, and Agent options. Each run snapshots the task config, so later task edits do not change historical runs.
 
 Do not use Swarm Task for direct terminal control. Workers are Agent conversations created by Synapse; worker details live in linked Agent conversations with platform `"swarm"`.
 
@@ -105,11 +103,13 @@ Default flow:
 3. Use `app_swarm_task_task_update` for a focused config change.
 4. Use `app_swarm_task_run_start` to run a saved task. Pass `configOverride` only for this run's temporary changes.
 5. Use `app_swarm_task_run_list` and `app_swarm_task_run_get` for current state and history.
-6. Use `app_swarm_task_run_stopRefill` to stop launching new workers while allowing active workers to finish.
+6. Use `app_swarm_task_run_stopRefill` to stop launching later batches or slot refills while allowing active workers to finish.
 7. Use `app_swarm_task_run_cancel` to cancel a run.
 8. Use `app_swarm_task_task_delete` only when the task has no running or draining run; it removes the saved task and its run history.
 
-Summary is enabled by default. Handoff is disabled by default. If handoff is enabled, only the previous round's handoff is passed forward; summaries can include recent previous rounds according to the saved config.
+`concurrency` is the number of slots. `maxRounds` is the number of batches in `batch` mode and the per-slot round count in `continuous` mode, so the planned worker count is `concurrency * maxRounds`. Stop or cancel can make the actual started count lower.
+
+Summary is enabled by default. Handoff is disabled by default. If handoff is enabled, batch mode passes the previous batch's handoffs forward; continuous mode passes the same slot's previous round handoff forward. Summaries can include recent previous rounds according to the saved config.
 
 ## API Reference
 

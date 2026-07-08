@@ -352,7 +352,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
 
       const previousWorkers = await listWorkerRuns(run.id)
       const previousHandoffs = input.config.promptInjection.previousHandoff.enabled
-        ? previousBatchHandoffs(previousWorkers, input.batchIndex)
+        ? previousHandoffsForWorker(previousWorkers, input)
         : []
 
       const worker: SwarmWorkerRun = {
@@ -565,6 +565,27 @@ function mergeConfigSnapshot(
   })
 }
 
+function previousHandoffsForWorker(
+  workers: readonly SwarmWorkerRun[],
+  current: {
+    readonly config: SwarmTaskConfig
+    readonly batchIndex: number
+    readonly roundIndex: number
+    readonly slotIndex: number
+  },
+): Array<{
+  workerIndex: number
+  sequenceIndex: number
+  slotIndex: number
+  batchIndex: number
+  handoff: string
+}> {
+  if (current.config.runMode === "continuous") {
+    return previousSlotHandoff(workers, current.slotIndex, current.roundIndex)
+  }
+  return previousBatchHandoffs(workers, current.batchIndex)
+}
+
 function previousBatchHandoffs(
   workers: readonly SwarmWorkerRun[],
   currentBatchIndex: number,
@@ -580,6 +601,36 @@ function previousBatchHandoffs(
 
   return workers
     .filter((worker) => (worker.batchIndex ?? inferBatchIndex(worker)) === previousBatchIndex)
+    .filter((worker) => worker.handoff?.trim())
+    .sort((left, right) =>
+      (left.sequenceIndex ?? left.roundIndex) - (right.sequenceIndex ?? right.roundIndex)
+      || left.workerIndex - right.workerIndex)
+    .map((worker) => ({
+      workerIndex: worker.workerIndex,
+      sequenceIndex: worker.sequenceIndex ?? worker.roundIndex,
+      slotIndex: worker.slotIndex ?? worker.workerIndex,
+      batchIndex: worker.batchIndex ?? inferBatchIndex(worker),
+      handoff: worker.handoff?.trim() ?? "",
+    }))
+}
+
+function previousSlotHandoff(
+  workers: readonly SwarmWorkerRun[],
+  currentSlotIndex: number,
+  currentRoundIndex: number,
+): Array<{
+  workerIndex: number
+  sequenceIndex: number
+  slotIndex: number
+  batchIndex: number
+  handoff: string
+}> {
+  const previousRoundIndex = currentRoundIndex - 1
+  if (previousRoundIndex < 1) return []
+
+  return workers
+    .filter((worker) => (worker.slotIndex ?? worker.workerIndex) === currentSlotIndex)
+    .filter((worker) => worker.roundIndex === previousRoundIndex)
     .filter((worker) => worker.handoff?.trim())
     .sort((left, right) =>
       (left.sequenceIndex ?? left.roundIndex) - (right.sequenceIndex ?? right.roundIndex)

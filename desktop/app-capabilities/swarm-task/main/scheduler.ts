@@ -72,19 +72,20 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
       timeout: 0,
     }
 
-    let nextRound = 1
+    let nextSequence = 1
 
-    const runRound = async (slotIndex: number, sequenceIndex: number): Promise<void> => {
+    const runRound = async (slotIndex: number, roundIndex: number): Promise<void> => {
       totals.started++
-      const batchIndex = Math.floor((sequenceIndex - 1) / input.config.concurrency) + 1
+      const sequenceIndex = nextSequence
+      nextSequence++
       const outcome = await runWorker(deps.runner, {
         taskId: input.taskId,
         runId: input.runId,
         workerIndex: slotIndex,
-        roundIndex: sequenceIndex,
+        roundIndex,
         sequenceIndex,
         slotIndex,
-        batchIndex,
+        batchIndex: roundIndex,
         config: input.config,
         abortSignal: control.abort.signal,
       })
@@ -107,19 +108,32 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
       totals.timeout++
     }
 
-    const runSlot = async (slotIndex: number): Promise<void> => {
-      while (!control.stopRefill && !control.abort.signal.aborted) {
-        if (nextRound > input.config.maxRounds) return
-        const sequenceIndex = nextRound
-        nextRound++
-        await runRound(slotIndex, sequenceIndex)
+    const runBatchMode = async (): Promise<void> => {
+      for (let roundIndex = 1; roundIndex <= input.config.maxRounds; roundIndex++) {
+        if (control.stopRefill || control.abort.signal.aborted) return
+        await Promise.all(
+          Array.from({ length: input.config.concurrency }, (_, index) =>
+            runRound(index + 1, roundIndex)),
+        )
       }
     }
 
-    const slotCount = Math.min(input.config.concurrency, input.config.maxRounds)
+    const runContinuousSlot = async (slotIndex: number): Promise<void> => {
+      for (let roundIndex = 1; roundIndex <= input.config.maxRounds; roundIndex++) {
+        if (control.stopRefill || control.abort.signal.aborted) return
+        await runRound(slotIndex, roundIndex)
+      }
+    }
 
     try {
-      await Promise.all(Array.from({ length: slotCount }, (_, index) => runSlot(index + 1)))
+      if (input.config.runMode === "batch") {
+        await runBatchMode()
+      } else {
+        await Promise.all(
+          Array.from({ length: input.config.concurrency }, (_, index) =>
+            runContinuousSlot(index + 1)),
+        )
+      }
     } finally {
       controls.delete(input.runId)
     }
