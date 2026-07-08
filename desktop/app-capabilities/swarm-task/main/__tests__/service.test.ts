@@ -108,6 +108,7 @@ const config = {
 
 function serviceHarness(options?: {
   agent?: Partial<SwarmAgentGateway>
+  eventBus?: { emit: ReturnType<typeof vi.fn> }
   workers?: ReturnType<typeof namespace<SwarmWorkerRun>>
 }) {
   const tasks = namespace<SwarmTask>()
@@ -128,13 +129,14 @@ function serviceHarness(options?: {
     runs,
     workers,
     agent: gateway,
+    eventBus: options?.eventBus,
     now: () => new Date("2026-07-07T00:00:00.000Z"),
     idFactory: (() => {
       let index = 0
       return () => `id-${++index}`
     })(),
     outputRoot: "/repo/swarm-runs",
-  })
+  } as never)
   return { service, tasks, runs, workers, gateway }
 }
 
@@ -422,6 +424,48 @@ describe("createSwarmTaskService", () => {
     expect(workerRuns).toHaveLength(2)
     expect(workerRuns[0]?.sessionKey).toBe(`swarm:${task.id}:${run.id}`)
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
+  })
+
+  it("emits lightweight change events while runs and workers progress", async () => {
+    const eventBus = { emit: vi.fn() }
+    const { service } = serviceHarness({ eventBus })
+    const task = await service.createTask({ name: "任务", config })
+
+    eventBus.emit.mockClear()
+    const run = await service.startRun({
+      taskId: task.id,
+      configOverride: { concurrency: 1, maxRounds: 1 },
+    })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    const emitted = eventBus.emit.mock.calls.map((call) => call[0])
+    expect(emitted).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: "swarm-task",
+        type: "swarm-task.changed",
+        payload: expect.objectContaining({ taskId: task.id, runId: run.id, reason: "run-started" }),
+      }),
+      expect.objectContaining({
+        domain: "swarm-task",
+        type: "swarm-task.changed",
+        payload: expect.objectContaining({ taskId: task.id, runId: run.id, workerRunId: expect.any(String), reason: "worker-started" }),
+      }),
+      expect.objectContaining({
+        domain: "swarm-task",
+        type: "swarm-task.changed",
+        payload: expect.objectContaining({ taskId: task.id, runId: run.id, workerRunId: expect.any(String), reason: "worker-finished" }),
+      }),
+      expect.objectContaining({
+        domain: "swarm-task",
+        type: "swarm-task.changed",
+        payload: expect.objectContaining({ taskId: task.id, runId: run.id, reason: "run-finished" }),
+      }),
+    ]))
+    expect(JSON.stringify(emitted)).not.toContain("Run.")
+    expect(JSON.stringify(emitted)).not.toContain("done")
   })
 
   it("stores fallback summary when summary block is missing", async () => {

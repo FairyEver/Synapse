@@ -5,6 +5,19 @@ export const swarmOutputModeSchema = z.enum(["managed-directory", "target-file",
 export const swarmTargetFilePolicySchema = z.enum(["append-only", "section-update", "free-edit"])
 export const swarmRunStatusSchema = z.enum(["running", "draining", "success", "partial", "failed", "cancelled"])
 export const swarmWorkerRunStatusSchema = z.enum(["queued", "running", "success", "failed", "cancelled", "timeout"])
+export const swarmTaskChangedReasonSchema = z.enum([
+  "task-created",
+  "task-updated",
+  "task-deleted",
+  "run-started",
+  "run-draining",
+  "run-cancelled",
+  "run-finished",
+  "run-failed",
+  "worker-started",
+  "worker-conversation",
+  "worker-finished",
+])
 export const swarmWorkerPhaseSchema = z.enum([
   "queued",
   "thinking",
@@ -180,9 +193,25 @@ export const swarmTaskListResultSchema = z.array(swarmTaskSchema)
 export const swarmRunListResultSchema = z.array(swarmRunSchema)
 export const swarmWorkerRunListResultSchema = z.array(swarmWorkerRunSchema)
 
+export const swarmTaskChangedEventPayloadSchema = z.object({
+  taskId: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  workerRunId: z.string().min(1).optional(),
+  reason: swarmTaskChangedReasonSchema,
+}).strict()
+
+export const swarmTaskChangedDomainEventSchema = z.object({
+  domain: z.literal("swarm-task"),
+  type: z.literal("swarm-task.changed"),
+  payload: swarmTaskChangedEventPayloadSchema,
+  timestamp: z.string().min(1),
+}).strict()
+
 export type SwarmRunMode = z.infer<typeof swarmRunModeSchema>
 export type SwarmRunStatus = z.infer<typeof swarmRunStatusSchema>
 export type SwarmWorkerRunStatus = z.infer<typeof swarmWorkerRunStatusSchema>
+export type SwarmTaskChangedReason = z.infer<typeof swarmTaskChangedReasonSchema>
+export type SwarmTaskChangedEvent = z.infer<typeof swarmTaskChangedEventPayloadSchema>
 export type SwarmWorkerPhase = z.infer<typeof swarmWorkerPhaseSchema>
 export type SwarmTaskConfig = z.infer<typeof swarmTaskConfigSchema>
 export type SwarmTask = z.infer<typeof swarmTaskSchema>

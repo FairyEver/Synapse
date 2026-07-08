@@ -317,6 +317,7 @@ export const IPC_CHANNELS = {
     "listRuns": "synapse:swarm-task:runs:list",
     "getRun": "synapse:swarm-task:runs:get",
     "listWorkerRuns": "synapse:swarm-task:worker-runs:list",
+    "changed": "synapse:events:swarm-task",
   },
   "terminal": {
     "listGroups": "synapse:terminal:group:list",

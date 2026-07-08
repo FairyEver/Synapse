@@ -72,6 +72,7 @@ import {
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { useProviderModelLabel } from "../../../src/lib/provider-model"
+import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseAgentPersona,
@@ -279,10 +280,10 @@ export function AgentPersonasModule() {
       value={activeTab}
       onValueChange={setActiveTab}
       actions={activeTab === "user" && !requiresLogin && !offlineEmpty ? (
-        <Button type="button" onClick={openCreateForm} disabled={isReadOnly}>
+        <SystemAppTopBarActionButton type="button" onClick={openCreateForm} disabled={isReadOnly}>
           <Plus data-icon="inline-start" />
           新增
-        </Button>
+        </SystemAppTopBarActionButton>
       ) : null}
     >
       <ScrollArea className="h-full min-h-0">

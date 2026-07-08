@@ -31,6 +31,7 @@ import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
+import type { SwarmTaskChangedEvent } from "../app-capabilities/swarm-task/shared/schema"
 import type { SynapseGitUserFacingFailure } from "../src/types/git"
 import type {
   SynapseTerminalDataEvent,
@@ -444,6 +445,7 @@ const IPC_CHANNELS = {
     "listRuns": "synapse:swarm-task:runs:list",
     "getRun": "synapse:swarm-task:runs:get",
     "listWorkerRuns": "synapse:swarm-task:worker-runs:list",
+    "changed": "synapse:events:swarm-task",
   },
   "terminal": {
     "chooseDefaultCwd": "synapse:terminal:group:choose-default-cwd",
@@ -938,6 +940,11 @@ const synapseBridge: SynapseBridge = {
     listRuns: (input = {}) => invoke(IPC_CHANNELS.swarmTask.listRuns)(input),
     getRun: (runId) => invoke(IPC_CHANNELS.swarmTask.getRun)({ runId }),
     listWorkerRuns: (runId) => invoke(IPC_CHANNELS.swarmTask.listWorkerRuns)({ runId }),
+    onChanged: createDomainEventPayloadSubscription<SwarmTaskChangedEvent>(
+      subscribe,
+      "swarm-task",
+      "swarm-task.changed",
+    ),
   },
   terminal: {
     chooseDefaultCwd: () => invoke(IPC_CHANNELS.terminal.chooseDefaultCwd)(),

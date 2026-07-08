@@ -38,6 +38,7 @@ import {
 } from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseQuickInputItem } from "../../../src/types/quick-input"
 
@@ -152,10 +153,10 @@ export function QuickInputModule() {
   return (
     <SystemAppWindowShell
       actions={(
-        <Button type="button" onClick={openCreateForm}>
+        <SystemAppTopBarActionButton type="button" onClick={openCreateForm}>
           <Plus data-icon="inline-start" />
           新增
-        </Button>
+        </SystemAppTopBarActionButton>
       )}
     >
       <ScrollArea className="h-full min-h-0">

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { FolderGit2, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseGitEnvironmentState, SynapseGitProvider, SynapseGitRepository } from "@/types/git"
 import { GitAccessPanel } from "./components/git-access-panel"
@@ -238,25 +238,22 @@ export function GitModule() {
         onValueChange={setView}
         actions={view === "repositories" && !selectedRepository ? (
           <>
-            <Button
+            <SystemAppTopBarActionButton
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() => setAddLocalOpen(true)}
               disabled={operations.busy.global !== null}
             >
               <FolderGit2 data-icon="inline-start" />
               添加本地仓库
-            </Button>
-            <Button
+            </SystemAppTopBarActionButton>
+            <SystemAppTopBarActionButton
               type="button"
-              size="sm"
               onClick={() => setCloneOpen(true)}
               disabled={operations.busy.global !== null}
             >
               <Plus data-icon="inline-start" />
               克隆仓库
-            </Button>
+            </SystemAppTopBarActionButton>
           </>
         ) : undefined}
       >

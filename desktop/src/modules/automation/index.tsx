@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { errorLogMeta } from "@/lib/error-sanitize"
+import { SystemAppTopBar, SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
 import { AutomationRunsDialog } from "./components/automation-runs-dialog"
@@ -337,29 +338,31 @@ function AutomationModule() {
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
-          <h2 className="text-sm font-semibold">自动化</h2>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" disabled={loading} onClick={() => { void refresh() }}>
-                  <RefreshCw className="size-4" />
-                  <span className="sr-only">刷新</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>刷新</TooltipContent>
-            </Tooltip>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={openingEditor}
-              onClick={() => { void handleCreateEditorOpen() }}
-            >
-              <Plus />
-              新建
-            </Button>
-          </div>
-        </div>
+        <SystemAppTopBar
+          left={<h2 className="text-sm font-semibold">自动化</h2>}
+          actions={(
+            <>
+              <SystemAppTopBarActionButton
+                iconOnly
+                type="button"
+                disabled={loading}
+                aria-label="刷新"
+                tooltip="刷新"
+                onClick={() => { void refresh() }}
+              >
+                <RefreshCw className="size-4" />
+              </SystemAppTopBarActionButton>
+              <SystemAppTopBarActionButton
+                type="button"
+                disabled={openingEditor}
+                onClick={() => { void handleCreateEditorOpen() }}
+              >
+                <Plus />
+                新建
+              </SystemAppTopBarActionButton>
+            </>
+          )}
+        />
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="min-h-full px-3 py-3">{content}</div>

@@ -8,6 +8,7 @@ import {
   swarmRunListResultSchema,
   swarmRunSchema,
   swarmRunStartInputSchema,
+  swarmTaskChangedDomainEventSchema,
   swarmTaskCreateInputSchema,
   swarmTaskIdInputSchema,
   swarmTaskListResultSchema,
@@ -104,5 +105,11 @@ export const swarmTaskIpcModule: IpcModule = {
         resolveSwarmTaskService(ctx).listWorkerRuns(request.runId),
     },
   },
-  events: {},
+  events: {
+    changed: {
+      kind: "event",
+      channel: "synapse:events:swarm-task",
+      payload: swarmTaskChangedDomainEventSchema,
+    },
+  },
 }

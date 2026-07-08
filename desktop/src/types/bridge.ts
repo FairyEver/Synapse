@@ -48,6 +48,7 @@ import type {
   SwarmRun,
   SwarmRunStartInput,
   SwarmTask,
+  SwarmTaskChangedEvent,
   SwarmTaskCreateInput,
   SwarmTaskUpdateInput,
   SwarmWorkerRun,
@@ -976,6 +977,7 @@ export type SynapseBridge = {
     listRuns: (input?: { taskId?: string; limit?: number }) => Promise<SwarmRun[]>
     getRun: (runId: string) => Promise<SwarmRun | null>
     listWorkerRuns: (runId: string) => Promise<SwarmWorkerRun[]>
+    onChanged: (listener: (event: SwarmTaskChangedEvent) => void) => () => void
   }
   terminal: {
     chooseDefaultCwd: () => Promise<string | null>

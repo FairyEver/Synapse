@@ -116,6 +116,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户�
 - 带 tabs 的大弹窗必须用 `DialogFrameHeader center`：左侧放标题/描述，中间放 tabs，右侧放 actions 和关闭按钮；tabs 的视觉居中不得受右侧按钮数量影响。禁止业务文件继续用 `pr-8`、`pr-12` 给默认绝对定位关闭按钮让位，禁止同一类弹窗混用默认绝对 close 和 header 内 close。
 - 真正不可关闭的阻塞弹窗可以 `showCloseButton={false}` 且不显示 header close，例如知识库存储迁移未安全完成阶段或强制 onboarding；这类例外必须由流程状态支撑，不得用于普通信息查看或表单弹窗。
 - 系统 App 独立窗口如需顶栏 tab，必须使用居中顶栏模式：左侧保留等宽占位，中间放 tab，右侧放操作区；tab 的视觉居中不得受右侧按钮、筛选器或左侧是否有内容影响，不要在左侧添加冗余窗口标题。
+- 系统 App 顶栏必须优先复用 `desktop/src/modules/apps/components/system-app-top-bar.tsx` 的共享组件。右侧 actions 只能使用无边框的紧凑 ghost 样式：文字按钮用 `SystemAppTopBarActionButton` 默认形态，纯图标按钮用 `iconOnly`，危险操作用 `tone="destructive"`，不要把 `outline`、默认实心按钮或带底色的 destructive 胶囊按钮直接放进顶栏。系统自带的新窗口打开按钮也必须遵守这套样式。顶栏右侧 ghost actions 不额外增加横向 gap，让按钮依靠自身内边距相邻排列；需要扩大命中区时只能做不造成相邻 action 横向重叠的处理。
 - 系统 App 如果是单任务表单工具，例如“选择输入 -> 设置选项 -> 执行生成/导出”，默认参考 `desktop/app-capabilities/document-template/renderer/index.tsx` 的布局：内容区使用一个收窄的居中工作卡片，宽度跟任务复杂度匹配，不要铺满大屏；字段采用稳定 label 列 + 控件列对齐；文件选择使用 InputGroup + 右侧 outline 按钮；底部只保留必要选项、主操作和状态摘要。不要在卡片内部再放贴边段落标题、营销介绍、功能说明、卡片套卡片、重复边框或大段帮助文案。主按钮文案应是明确动作，例如“生成文档”，状态只展示是否就绪、缺什么、成功或失败。
 
 ### 工程边界

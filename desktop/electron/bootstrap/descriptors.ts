@@ -422,7 +422,7 @@ export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService
 export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
   id: SWARM_TASK_SERVICE_ID,
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.project-containers"],
+  dependsOn: ["core.data-repository", "core.event-bus", "core.project-containers"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createSwarmTaskService({
@@ -430,6 +430,7 @@ export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
       runs: dataRepository.namespace<SwarmRunEntryV1>(SWARM_TASK_RUNS_NAMESPACE),
       workers: dataRepository.namespace<SwarmWorkerRunEntryV1>(SWARM_TASK_WORKER_RUNS_NAMESPACE),
       outputRoot: path.join(app.getPath("userData"), "swarm-runs"),
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
       agent: createAgentRuntimeSwarmGateway({
         resolveAgent: async (projectId) => {
           const { agent } = await resolveProjectAgent(ctx.registry.get.bind(ctx.registry), projectId)

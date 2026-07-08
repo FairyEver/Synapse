@@ -9,6 +9,7 @@ import type {
 } from "@synapse/shared"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -903,10 +904,15 @@ export function DriveSyncStatusButton({
           : null
   const message = badge?.message ?? "暂无同步绑定"
   return (
-    <Button type="button" variant={conflictCount > 0 ? "destructive" : "outline"} size="sm" aria-label={`同步状态：${message}`} onClick={onOpen}>
+    <SystemAppTopBarActionButton
+      type="button"
+      tone={conflictCount > 0 ? "destructive" : "default"}
+      aria-label={`同步状态：${message}`}
+      onClick={onOpen}
+    >
       同步
       {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : null}
-    </Button>
+    </SystemAppTopBarActionButton>
   )
 }
 

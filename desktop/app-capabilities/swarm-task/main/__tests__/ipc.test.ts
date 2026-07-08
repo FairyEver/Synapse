@@ -15,6 +15,17 @@ describe("swarmTaskIpcModule", () => {
     expect(swarmTaskIpcModule.methods.listRuns.channel).toBe("synapse:swarm-task:runs:list")
     expect(swarmTaskIpcModule.methods.getRun.channel).toBe("synapse:swarm-task:runs:get")
     expect(swarmTaskIpcModule.methods.listWorkerRuns.channel).toBe("synapse:swarm-task:worker-runs:list")
+    expect(swarmTaskIpcModule.events.changed.channel).toBe("synapse:events:swarm-task")
+    expect(swarmTaskIpcModule.events.changed.payload.parse({
+      domain: "swarm-task",
+      type: "swarm-task.changed",
+      payload: { taskId: "task-1", runId: "run-1", workerRunId: "worker-1", reason: "worker-finished" },
+      timestamp: "2026-07-07T00:00:00.000Z",
+    })).toMatchObject({
+      domain: "swarm-task",
+      type: "swarm-task.changed",
+      payload: { taskId: "task-1", runId: "run-1", workerRunId: "worker-1", reason: "worker-finished" },
+    })
   })
 
   it("routes task and run calls to the service", async () => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CircleAlert, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { CircleAlert, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { useAppConfig } from "../../../src/app-shell/config"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
@@ -16,22 +17,36 @@ import {
 } from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../src/components/ui/dialog"
+import {
   Empty,
   EmptyHeader,
   EmptyTitle,
 } from "../../../src/components/ui/empty"
+import { Input } from "../../../src/components/ui/input"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
+import type { SynapseProjectConfig } from "../../../src/types/config"
 import type { SwarmRun, SwarmTask, SwarmTaskConfig, SwarmWorkerRun } from "../shared/schema"
 import { SwarmTaskDetail, type SwarmTaskTab } from "./components/swarm-task-detail"
 import { SwarmTaskSidebar } from "./components/swarm-task-sidebar"
 
 const logger = createRendererLogger("swarm-task.app")
+const RUN_REFRESH_INTERVAL_MS = 2_000
 
-const defaultTaskConfig: SwarmTaskConfig = {
-  projectId: "project-id",
-  workspacePath: "/path/to/workspace",
+type TaskNameDialogState =
+  | { readonly mode: "create" }
+  | { readonly mode: "rename"; readonly task: SwarmTask }
+
+const baseTaskConfig: Omit<SwarmTaskConfig, "projectId" | "workspacePath"> = {
   prompt: "填写任务目标",
   presetId: "general",
   injectOptions: {
@@ -53,9 +68,13 @@ const defaultTaskConfig: SwarmTaskConfig = {
 }
 
 export function SwarmTaskModule() {
+  const { config } = useAppConfig()
+  const projects = config.global.projects
   const swarmTaskBridge = useMemo(() => requireBridgeDomain("swarmTask"), [])
   const agentBridge = useMemo(() => requireBridgeDomain("agent"), [])
+  const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
   const runDataRequestIdRef = useRef(0)
+  const taskNameInputRef = useRef<HTMLInputElement>(null)
 
   const [tasks, setTasks] = useState<SwarmTask[]>([])
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
@@ -67,15 +86,19 @@ export function SwarmTaskModule() {
   const [loading, setLoading] = useState(true)
   const [loadingRun, setLoadingRun] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [taskNameDialog, setTaskNameDialog] = useState<TaskNameDialogState | null>(null)
+  const [taskName, setTaskName] = useState("")
+  const [taskNameSaving, setTaskNameSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<SwarmTask | null>(null)
   const [loadError, setLoadError] = useState("")
 
-  const reloadTasks = useCallback(async () => {
+  const reloadTasks = useCallback(async (options: { readonly showLoading?: boolean } = {}) => {
+    const showLoading = options.showLoading ?? true
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       setLoadError("")
       const nextTasks = await swarmTaskBridge.listTasks()
       setTasks(nextTasks)
@@ -83,13 +106,15 @@ export function SwarmTaskModule() {
         if (current && nextTasks.some((task) => task.id === current)) return current
         return nextTasks[0]?.id ?? null
       })
+      return nextTasks
     } catch (error) {
       const message = errorMessage(error, "加载失败")
       logger.error("Failed to load swarm tasks.", error)
       setLoadError(message)
       toast.error(message)
+      return null
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [swarmTaskBridge])
 
@@ -165,12 +190,30 @@ export function SwarmTaskModule() {
     void reloadRunData(selectedTask)
   }, [reloadRunData, selectedTask])
 
-  const createTask = useCallback(async () => {
+  const openCreateTaskDialog = useCallback(() => {
+    if (projects.length === 0) return
+    setTaskName(generateDefaultTaskName())
+    setTaskNameDialog({ mode: "create" })
+  }, [projects.length])
+
+  const openRenameTaskDialog = useCallback((task: SwarmTask) => {
+    setTaskName(task.name)
+    setTaskNameDialog({ mode: "rename", task })
+  }, [])
+
+  const closeTaskNameDialog = useCallback(() => {
+    setTaskNameDialog(null)
+    setTaskName("")
+  }, [])
+
+  const createTask = useCallback(async (name: string) => {
+    const project = projects[0]
+    if (!project) return
     try {
       setCreating(true)
       const created = await swarmTaskBridge.createTask({
-        name: "新建任务",
-        config: defaultTaskConfig,
+        name,
+        config: createDefaultTaskConfig(project),
       })
       setTasks((current) => [created, ...current.filter((task) => task.id !== created.id)])
       setSelectedTaskId(created.id)
@@ -181,10 +224,47 @@ export function SwarmTaskModule() {
       const message = errorMessage(error, "创建失败")
       logger.error("Failed to create swarm task.", error)
       toast.error(message)
+      throw error
     } finally {
       setCreating(false)
     }
-  }, [swarmTaskBridge])
+  }, [projects, swarmTaskBridge])
+
+  const renameTask = useCallback(async (task: SwarmTask, name: string) => {
+    try {
+      setTaskNameSaving(true)
+      const updated = await swarmTaskBridge.updateTask({
+        taskId: task.id,
+        patch: { name },
+      })
+      setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      toast.success("已重命名")
+      closeTaskNameDialog()
+    } catch (error) {
+      const message = errorMessage(error, "重命名失败")
+      logger.error("Failed to rename swarm task.", error)
+      toast.error(message)
+    } finally {
+      setTaskNameSaving(false)
+    }
+  }, [closeTaskNameDialog, swarmTaskBridge])
+
+  const saveTaskName = useCallback(async () => {
+    const name = taskName.trim()
+    if (!name || !taskNameDialog) return
+
+    if (taskNameDialog.mode === "create") {
+      try {
+        await createTask(name)
+        closeTaskNameDialog()
+      } catch {
+        // createTask reports the failure and keeps the dialog open for retry.
+      }
+      return
+    }
+
+    await renameTask(taskNameDialog.task, name)
+  }, [closeTaskNameDialog, createTask, renameTask, taskName, taskNameDialog])
 
   const selectedActiveRun = useMemo(() => {
     if (!selectedTask || activeRun?.taskId !== selectedTask.id) return null
@@ -203,15 +283,60 @@ export function SwarmTaskModule() {
     return runHistory.filter((run) => run.taskId === selectedTask.id)
   }, [runHistory, selectedTask])
 
-  const deleteDisabled = useMemo(() => (
-    !selectedTask
-    || deleting
-    || isActiveRunStatus(selectedTask.lastStatus)
-    || isActiveRunStatus(selectedActiveRun?.status)
-  ), [deleting, selectedActiveRun, selectedTask])
+  const refreshCurrentSnapshot = useCallback(async (options: { readonly showLoading?: boolean } = {}) => {
+    const nextTasks = await reloadTasks({ showLoading: options.showLoading ?? false })
+    if (!nextTasks) return
+
+    const nextTask = (
+      selectedTaskId ? nextTasks.find((task) => task.id === selectedTaskId) : null
+    ) ?? nextTasks[0] ?? null
+    await reloadRunData(nextTask)
+  }, [reloadRunData, reloadTasks, selectedTaskId])
+
+  useEffect(() => (
+    swarmTaskBridge.onChanged((event) => {
+      const matchesTask = !event.taskId || event.taskId === selectedTaskId
+      const matchesRun = Boolean(event.runId && event.runId === selectedActiveRun?.id)
+      if (!selectedTaskId || matchesTask || matchesRun) {
+        void refreshCurrentSnapshot()
+      }
+    })
+  ), [refreshCurrentSnapshot, selectedActiveRun?.id, selectedTaskId, swarmTaskBridge])
+
+  const shouldPollRun = useMemo(() => (
+    Boolean(selectedTask && (
+      isActiveRunStatus(selectedTask.lastStatus)
+      || isActiveRunStatus(selectedActiveRun?.status)
+    ))
+  ), [selectedActiveRun?.status, selectedTask])
+
+  useEffect(() => {
+    if (!shouldPollRun) return undefined
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "hidden") return
+      void refreshCurrentSnapshot()
+    }
+    const timer = window.setInterval(refreshWhenVisible, RUN_REFRESH_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [refreshCurrentSnapshot, shouldPollRun])
+
+  const draftConfigIsRunnable = useMemo(() => (
+    Boolean(draftConfig?.prompt.trim())
+    && Boolean(draftConfig?.workspacePath.trim())
+    && Boolean(draftConfig?.projectId)
+    && projects.some((project) => project.id === draftConfig?.projectId)
+  ), [draftConfig, projects])
+
+  const chooseWorkspacePath = useCallback(async () => (
+    await repositoryBridge.chooseDirectory()
+  ), [repositoryBridge])
 
   const saveConfig = useCallback(async () => {
-    if (!selectedTask || !draftConfig) return
+    if (!selectedTask || !draftConfig || !draftConfigIsRunnable) return
     try {
       setSaving(true)
       const updated = await swarmTaskBridge.updateTask({
@@ -227,15 +352,15 @@ export function SwarmTaskModule() {
     } finally {
       setSaving(false)
     }
-  }, [draftConfig, selectedTask, swarmTaskBridge])
+  }, [draftConfig, draftConfigIsRunnable, selectedTask, swarmTaskBridge])
 
   const startRun = useCallback(async () => {
-    if (!selectedTask) return
+    if (!selectedTask || !draftConfigIsRunnable) return
     try {
       setRunning(true)
       await swarmTaskBridge.startRun({ taskId: selectedTask.id })
       setActiveTab("active")
-      await reloadTasks()
+      await refreshCurrentSnapshot()
     } catch (error) {
       const message = errorMessage(error, "运行失败")
       logger.error("Failed to start swarm task run.", error)
@@ -243,7 +368,7 @@ export function SwarmTaskModule() {
     } finally {
       setRunning(false)
     }
-  }, [reloadTasks, selectedTask, swarmTaskBridge])
+  }, [draftConfigIsRunnable, refreshCurrentSnapshot, selectedTask, swarmTaskBridge])
 
   const openConversation = useCallback(async (worker: SwarmWorkerRun) => {
     if (!selectedTask?.currentConfig.projectId || !worker.conversationId || worker.taskId !== selectedTask.id) return
@@ -268,34 +393,34 @@ export function SwarmTaskModule() {
     if (!activeRun) return
     try {
       await swarmTaskBridge.stopRefill(activeRun.id)
-      await reloadRunData(selectedTask)
+      await refreshCurrentSnapshot()
     } catch (error) {
       const message = errorMessage(error, "停止补位失败")
       logger.error("Failed to stop swarm task refill.", error)
       toast.error(message)
     }
-  }, [activeRun, reloadRunData, selectedTask, swarmTaskBridge])
+  }, [activeRun, refreshCurrentSnapshot, swarmTaskBridge])
 
   const cancelRun = useCallback(async () => {
     if (!activeRun) return
     try {
       await swarmTaskBridge.cancelRun(activeRun.id)
-      await reloadRunData(selectedTask)
+      await refreshCurrentSnapshot()
     } catch (error) {
       const message = errorMessage(error, "取消运行失败")
       logger.error("Failed to cancel swarm task run.", error)
       toast.error(message)
     }
-  }, [activeRun, reloadRunData, selectedTask, swarmTaskBridge])
+  }, [activeRun, refreshCurrentSnapshot, swarmTaskBridge])
 
   const deleteTask = useCallback(async () => {
-    if (!selectedTask) return
+    if (!deleteTarget) return
     try {
       setDeleting(true)
-      await swarmTaskBridge.deleteTask(selectedTask.id)
-      setDeleteConfirmOpen(false)
+      await swarmTaskBridge.deleteTask(deleteTarget.id)
+      setDeleteTarget(null)
       toast.success("已删除")
-      await reloadTasks()
+      await refreshCurrentSnapshot({ showLoading: true })
     } catch (error) {
       const message = errorMessage(error, "删除失败")
       logger.error("Failed to delete swarm task.", error)
@@ -303,26 +428,22 @@ export function SwarmTaskModule() {
     } finally {
       setDeleting(false)
     }
-  }, [reloadTasks, selectedTask, swarmTaskBridge])
+  }, [deleteTarget, refreshCurrentSnapshot, swarmTaskBridge])
 
   return (
     <>
       <SystemAppWindowShell
         actions={(
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <Button type="button" variant="destructive" onClick={() => setDeleteConfirmOpen(true)} disabled={loading || deleteDisabled}>
-              <Trash2 data-icon="inline-start" />
-              删除任务
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void createTask()} disabled={loading || creating}>
+          <>
+            <SystemAppTopBarActionButton type="button" onClick={openCreateTaskDialog} disabled={loading || creating || projects.length === 0}>
               <Plus data-icon="inline-start" />
               新建任务
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void reloadTasks()} disabled={loading}>
+            </SystemAppTopBarActionButton>
+            <SystemAppTopBarActionButton type="button" onClick={() => void refreshCurrentSnapshot({ showLoading: true })} disabled={loading}>
               <RefreshCw data-icon="inline-start" />
               刷新
-            </Button>
-          </div>
+            </SystemAppTopBarActionButton>
+          </>
         )}
       >
         {loading ? (
@@ -338,7 +459,7 @@ export function SwarmTaskModule() {
         ) : tasks.length === 0 ? (
           <Empty className="min-h-full">
             <EmptyHeader>
-              <EmptyTitle>暂无任务</EmptyTitle>
+              <EmptyTitle>{projects.length === 0 ? "请先在设置中添加项目" : "暂无任务"}</EmptyTitle>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -348,6 +469,8 @@ export function SwarmTaskModule() {
                 tasks={tasks}
                 selectedTaskId={selectedTask?.id ?? null}
                 onSelectTask={setSelectedTaskId}
+                onRenameTask={openRenameTaskDialog}
+                onDeleteTask={setDeleteTarget}
               />
             )}
             contentScrollable={false}
@@ -368,10 +491,14 @@ export function SwarmTaskModule() {
                 loadingRun={loadingRun}
                 saving={saving}
                 running={running}
+                projects={projects}
+                canSaveConfig={draftConfigIsRunnable}
+                canStartRun={draftConfigIsRunnable}
                 onDraftConfigChange={setDraftConfig}
                 onSaveConfig={() => void saveConfig()}
                 onStartRun={() => void startRun()}
-                onRefreshRun={() => void reloadRunData(selectedTask)}
+                onChooseWorkspacePath={chooseWorkspacePath}
+                onRefreshRun={() => void refreshCurrentSnapshot()}
                 onStopRefill={() => void stopRefill()}
                 onCancelRun={() => void cancelRun()}
                 onOpenConversation={(worker) => void openConversation(worker)}
@@ -387,12 +514,14 @@ export function SwarmTaskModule() {
         )}
       </SystemAppWindowShell>
 
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
+        if (!open) setDeleteTarget(null)
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>删除任务？</AlertDialogTitle>
             <AlertDialogDescription>
-              会删除当前任务及运行历史。已创建的 Agent 会话不会被删除。
+              会删除该任务及运行历史。已创建的 Agent 会话不会被删除。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -410,8 +539,65 @@ export function SwarmTaskModule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={taskNameDialog !== null} onOpenChange={(open) => {
+        if (!open) closeTaskNameDialog()
+      }}>
+        <DialogContent
+          aria-describedby={undefined}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            taskNameInputRef.current?.focus()
+            taskNameInputRef.current?.select()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{taskNameDialog?.mode === "rename" ? "重命名任务" : "新建任务"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              设置任务名称。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            ref={taskNameInputRef}
+            aria-label="任务名称"
+            value={taskName}
+            onChange={(event) => setTaskName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void saveTaskName()
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={creating || taskNameSaving}
+              onClick={closeTaskNameDialog}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={creating || taskNameSaving || !taskName.trim()}
+              onClick={() => { void saveTaskName() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
+}
+
+function createDefaultTaskConfig(project: SynapseProjectConfig): SwarmTaskConfig {
+  return {
+    ...baseTaskConfig,
+    projectId: project.id,
+    workspacePath: project.path,
+  }
 }
 
 function SwarmTaskLoadingState() {
@@ -442,6 +628,15 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-function isActiveRunStatus(status: SwarmRun["status"] | undefined): boolean {
+function isActiveRunStatus(status: SwarmRun["status"] | SwarmTask["lastStatus"] | undefined): boolean {
   return status === "running" || status === "draining"
+}
+
+function generateDefaultTaskName(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  let suffix = ""
+  for (let index = 0; index < 4; index += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return `任务 ${suffix}`
 }

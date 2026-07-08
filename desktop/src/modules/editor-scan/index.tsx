@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseEditorId } from "@/types/editor"
 import { EDITOR_ORDER } from "@/lib/editor-registry"
@@ -185,20 +186,20 @@ function EditorScanModule() {
     [],
   )
   const headerActions = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-7"
+    <SystemAppTopBarActionButton
+      iconOnly
+      type="button"
       onClick={() => void handleRefresh()}
       disabled={loading}
-      title="刷新"
+      aria-label="刷新"
+      tooltip="刷新"
     >
       {loading ? (
         <LoaderCircle className="size-4 animate-spin" />
       ) : (
         <RotateCcw className="size-4" />
       )}
-    </Button>
+    </SystemAppTopBarActionButton>
   )
   const contentSidebarControls = (
     <>

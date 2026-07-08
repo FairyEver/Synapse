@@ -118,6 +118,14 @@ Tailwind 主要用于：
 - 禁止用 `DialogHeader className="pr-8"` / `pr-12` 给默认绝对定位 close 让位；同一类大弹窗不得混用默认绝对 close 和 header 内 close。
 - 真正阻塞且不可关闭的流程弹窗可以不渲染 close，但必须是迁移、强制 onboarding 等由流程状态明确支撑的例外。
 
+### 系统 App 顶栏补充
+
+- 系统 App 顶栏必须优先复用 `SystemAppTopBar`、`SystemAppTopBarActions` 和 `SystemAppTopBarActionButton`。
+- 顶栏 tabs 固定放中间列，右侧 actions 不得影响 tabs 视觉居中。
+- 顶栏右侧按钮必须是无边框紧凑 ghost 样式；文字按钮用 `SystemAppTopBarActionButton` 默认形态，纯图标按钮用 `iconOnly`，危险操作用 `tone="destructive"`。
+- 禁止在系统 App 顶栏右侧直接放 `outline`、默认实心按钮或带底色 destructive 按钮。系统“新窗口打开”按钮也必须遵守该规则。
+- 顶栏 action 的视觉尺寸可以紧凑；右侧 ghost actions 不额外增加横向 gap，让按钮依靠自身内边距相邻排列。扩大命中区时不得让相邻 action 的横向命中区重叠。
+
 ## 6. 页面结构顺序
 
 实现页面时优先顺序：

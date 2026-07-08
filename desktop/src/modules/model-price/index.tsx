@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
@@ -79,17 +79,15 @@ export function ModelPriceModule() {
               </Select>
             </>
           ) : null}
-          <Button
+          <SystemAppTopBarActionButton
             type="button"
-            variant="outline"
-            size="sm"
             disabled={activeLoading}
             aria-busy={activeLoading}
             onClick={refresh}
           >
             <RefreshCw data-icon="inline-start" className={activeLoading ? "animate-spin" : undefined} />
             {activeLoading ? "刷新中" : "刷新"}
-          </Button>
+          </SystemAppTopBarActionButton>
         </>
       )}
     >

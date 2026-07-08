@@ -5,6 +5,7 @@ import {
   type SystemAppHeaderSlotState,
   type SystemAppHeaderSlotTab,
 } from "./system-app-header-slot"
+import { SystemAppTopBar } from "./system-app-top-bar"
 
 type SystemAppWindowTab<T extends string = string> = SystemAppHeaderSlotTab & {
   readonly id: T
@@ -70,13 +71,14 @@ function SystemAppWindowShell<T extends string>({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div
+      <SystemAppTopBar
         data-system-app-window-toolbar
-        className="grid min-h-10 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 border-b bg-background px-3"
-      >
-        <div data-system-app-window-left-spacer className="min-w-0" aria-hidden="true" />
-        {hasTabs ? (
-          <div data-system-app-window-tabs className="min-w-0 justify-self-center">
+        leftSlotProps={{
+          "data-system-app-window-left-spacer": true,
+          "aria-hidden": true,
+        }}
+        center={hasTabs ? (
+          <>
             <Tabs value={value} onValueChange={(next) => onValueChange(next as T)}>
               <TabsList>
                 {tabs.map((tab) => (
@@ -84,14 +86,12 @@ function SystemAppWindowShell<T extends string>({
                 ))}
               </TabsList>
             </Tabs>
-          </div>
-        ) : (
-          <div className="min-w-0" aria-hidden="true" />
-        )}
-        <div data-system-app-window-actions className="min-w-0 justify-self-end">
-          {actions ? <div className="flex items-center justify-end gap-2 whitespace-nowrap">{actions}</div> : null}
-        </div>
-      </div>
+          </>
+        ) : undefined}
+        centerSlotProps={hasTabs ? { "data-system-app-window-tabs": true } : undefined}
+        actions={actions}
+        actionsSlotProps={{ "data-system-app-window-actions": true }}
+      />
       <div className="min-h-0 min-w-0 flex-1">
         {children}
       </div>

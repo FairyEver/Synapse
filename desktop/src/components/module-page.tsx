@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { SystemAppTopBar } from "@/modules/apps/components/system-app-top-bar"
 
 type ModulePageProps = {
   readonly title: string
@@ -14,13 +15,16 @@ type ModulePageProps = {
 function ModulePage({ title, titleAddon, actions, children, afterContent }: ModulePageProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <h2 className="shrink-0 text-sm font-semibold">{title}</h2>
-          {titleAddon}
-        </div>
-        {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
-      </div>
+      <SystemAppTopBar
+        left={(
+          <>
+            <h2 className="shrink-0 text-sm font-semibold">{title}</h2>
+            {titleAddon}
+          </>
+        )}
+        leftSlotProps={{ className: "gap-3" }}
+        actions={actions}
+      />
       <ScrollArea className="min-h-0 flex-1">
         <div className="min-h-full px-3 py-3">{children}</div>
       </ScrollArea>

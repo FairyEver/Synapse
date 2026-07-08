@@ -136,6 +136,31 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ automationId: "automation-1", reason: "run-finished" })
   })
 
+  it("subscribes swarm task change listeners to the EventBus domain channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+
+    bridge.swarmTask.onChanged(listener)
+
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:swarm-task")
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
+    wrapped?.({}, {
+      domain: "swarm-task",
+      type: "swarm-task.changed",
+      payload: { taskId: "task-1", runId: "run-1", workerRunId: "worker-1", reason: "worker-finished" },
+      timestamp: "2026-07-07T00:00:00.000Z",
+    })
+
+    expect(listener).toHaveBeenCalledWith({
+      taskId: "task-1",
+      runId: "run-1",
+      workerRunId: "worker-1",
+      reason: "worker-finished",
+    })
+  })
+
   it("maps automation bridge methods to automation IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

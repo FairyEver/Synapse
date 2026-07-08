@@ -1,6 +1,7 @@
 import { Button } from "../../../../src/components/ui/button"
 import { ScrollArea } from "../../../../src/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "../../../../src/components/ui/tabs"
+import type { SynapseProjectConfig } from "../../../../src/types/config"
 import type { SwarmRun, SwarmTask, SwarmTaskConfig, SwarmWorkerRun } from "../../shared/schema"
 import { formatOutputMode, formatRunMode, formatRunStatus, formatRunTotals, formatTimestamp } from "../swarm-task-format"
 import { SwarmRunHistory } from "./swarm-run-history"
@@ -20,9 +21,13 @@ type SwarmTaskDetailProps = {
   readonly loadingRun: boolean
   readonly saving: boolean
   readonly running: boolean
+  readonly projects: readonly SynapseProjectConfig[]
+  readonly canSaveConfig: boolean
+  readonly canStartRun: boolean
   readonly onDraftConfigChange: (next: SwarmTaskConfig) => void
   readonly onSaveConfig: () => void
   readonly onStartRun: () => void
+  readonly onChooseWorkspacePath: () => Promise<string | null>
   readonly onRefreshRun: () => void
   readonly onStopRefill: () => void
   readonly onCancelRun: () => void
@@ -40,9 +45,13 @@ export function SwarmTaskDetail({
   loadingRun,
   saving,
   running,
+  projects,
+  canSaveConfig,
+  canStartRun,
   onDraftConfigChange,
   onSaveConfig,
   onStartRun,
+  onChooseWorkspacePath,
   onRefreshRun,
   onStopRefill,
   onCancelRun,
@@ -50,13 +59,13 @@ export function SwarmTaskDetail({
 }: SwarmTaskDetailProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b bg-background px-3 py-3 sm:px-5">
+      <div className="bg-background px-3 py-3 sm:px-5">
         <Tabs
-          className="mx-auto w-full max-w-3xl"
+          className="w-full items-center"
           value={activeTab}
           onValueChange={(value) => onActiveTabChange(value as SwarmTaskTab)}
         >
-          <TabsList className="w-full sm:w-fit">
+          <TabsList>
             <TabsTrigger value="overview" onClick={() => onActiveTabChange("overview")}>概览</TabsTrigger>
             <TabsTrigger value="config" onClick={() => onActiveTabChange("config")}>配置</TabsTrigger>
             <TabsTrigger value="active" onClick={() => onActiveTabChange("active")}>运行</TabsTrigger>
@@ -68,20 +77,25 @@ export function SwarmTaskDetail({
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === "overview" ? (
           <ScrollArea className="h-full min-h-0 min-w-0">
-            <SwarmTaskOverview task={task} run={activeRun} />
+            <SwarmTaskOverview task={task} run={activeRun} projects={projects} />
           </ScrollArea>
         ) : null}
         {activeTab === "config" ? (
           <div className="flex h-full min-h-0 flex-col">
             <ScrollArea className="min-h-0 min-w-0 flex-1">
-              <SwarmTaskConfigForm value={draftConfig} onChange={onDraftConfigChange} />
+              <SwarmTaskConfigForm
+                value={draftConfig}
+                projects={projects}
+                onChange={onDraftConfigChange}
+                onChooseWorkspacePath={onChooseWorkspacePath}
+              />
             </ScrollArea>
             <div className="shrink-0 border-t bg-background px-3 py-3 sm:px-5">
               <div className="mx-auto flex w-full max-w-3xl flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <Button type="button" variant="outline" onClick={onSaveConfig} disabled={saving}>
+                <Button type="button" variant="outline" onClick={onSaveConfig} disabled={saving || !canSaveConfig}>
                   保存配置
                 </Button>
-                <Button type="button" onClick={onStartRun} disabled={running}>
+                <Button type="button" onClick={onStartRun} disabled={running || !canStartRun}>
                   运行任务
                 </Button>
               </div>
@@ -110,22 +124,26 @@ export function SwarmTaskDetail({
 function SwarmTaskOverview({
   task,
   run,
+  projects,
 }: {
   readonly task: SwarmTask
   readonly run: SwarmRun | null
+  readonly projects: readonly SynapseProjectConfig[]
 }) {
   const config = task.currentConfig
+  const project = projects.find((item) => item.id === config.projectId)
+  const projectName = project?.name ?? (config.projectId ? "项目不可用" : "未选择项目")
 
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 p-3 sm:p-5">
+    <div className="mx-auto grid w-full max-w-3xl gap-4 px-3 pb-3 sm:px-5 sm:pb-5">
       <section className="rounded-lg border bg-card p-4 text-sm">
         <h3 className="mb-3 text-sm font-medium">当前任务</h3>
         <InfoGrid
           items={[
             ["名称", task.name],
             ["状态", formatRunStatus(task.lastStatus)],
-            ["工作目录", config.workspacePath],
-            ["项目", config.projectId],
+            ["项目", projectName],
+            ["运行目录", config.workspacePath],
             ["运行模式", formatRunMode(config.runMode)],
             ["输出", formatOutputMode(config.output.mode)],
             ["并发", String(config.concurrency)],

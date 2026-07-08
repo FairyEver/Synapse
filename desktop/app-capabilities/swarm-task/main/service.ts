@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import path from "node:path"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
+import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
 import {
   swarmRunStartInputSchema,
@@ -11,6 +12,7 @@ import {
   type SwarmRun,
   type SwarmRunStartInput,
   type SwarmTask,
+  type SwarmTaskChangedEvent,
   type SwarmTaskConfig,
   type SwarmTaskCreateInput,
   type SwarmTaskUpdateInput,
@@ -51,6 +53,7 @@ export type SwarmTaskServiceDeps = {
   readonly workers: Pick<DataNamespace<SwarmWorkerRun>, "list" | "get" | "upsert" | "remove">
   readonly agent: SwarmAgentGateway
   readonly outputRoot: string
+  readonly eventBus?: Pick<EventBus, "emit">
   readonly now?: () => Date
   readonly idFactory?: () => string
 }
@@ -139,6 +142,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       updatedAt: now,
     }
     await deps.tasks.upsert(task)
+    emitChanged({ taskId: task.id, reason: "task-created" })
     return task
   }
 
@@ -155,6 +159,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       updatedAt: timestamp(),
     }
     await deps.tasks.upsert(updated)
+    emitChanged({ taskId: updated.id, reason: "task-updated" })
     return updated
   }
 
@@ -169,6 +174,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     await Promise.all(workers.map((worker) => deps.workers.remove(worker.id)))
     await Promise.all(runs.map((run) => deps.runs.remove(run.id)))
     await deps.tasks.remove(taskId)
+    emitChanged({ taskId, reason: "task-deleted" })
   }
 
   async function startRun(input: SwarmRunStartInput): Promise<SwarmRun> {
@@ -190,6 +196,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
 
     await deps.runs.upsert(run)
     await deps.tasks.upsert({ ...task, lastRunId: run.id, lastStatus: "running", updatedAt: timestamp() })
+    emitChanged({ taskId: task.id, runId: run.id, reason: "run-started" })
 
     const promise = finishRunInBackground(task.id, run)
     runningRuns.set(run.id, promise)
@@ -214,6 +221,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     }
     const updated: SwarmRun = { ...latestRun, status: "draining", stopRequested: true }
     await deps.runs.upsert(updated)
+    emitChanged({ taskId: updated.taskId, runId: updated.id, reason: "run-draining" })
     return updated
   }
 
@@ -254,6 +262,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       lastStatus: "cancelled",
       updatedAt: timestamp(),
     })
+    emitChanged({ taskId: latestRun.taskId, runId: latestRun.id, reason: "run-cancelled" })
     await runningRuns.get(runId)?.catch(() => undefined)
     return updated
   }
@@ -296,6 +305,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         lastStatus: finished.status,
         updatedAt: timestamp(),
       })
+      emitChanged({ taskId, runId: run.id, reason: "run-finished" })
     } catch {
       const latestRun = await deps.runs.get(run.id)
       if (!latestRun) return
@@ -312,6 +322,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         lastStatus: "failed",
         updatedAt: timestamp(),
       })
+      emitChanged({ taskId, runId: run.id, reason: "run-failed" })
     }
   }
 
@@ -350,6 +361,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         lastPhase: "queued",
       }
       await deps.workers.upsert(worker)
+      emitChanged({ taskId: input.taskId, runId: input.runId, workerRunId: worker.id, reason: "worker-started" })
 
       const prompt = buildSwarmWorkerPrompt({
         taskId: input.taskId,
@@ -439,6 +451,12 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       ...(outcome.error ? { error: outcome.error } : {}),
     }
     await deps.workers.upsert(updated)
+    emitChanged({
+      taskId: updated.taskId,
+      runId: updated.runId,
+      workerRunId: updated.id,
+      reason: "worker-finished",
+    })
 
     return {
       status: outcome.status,
@@ -456,6 +474,21 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       ...worker,
       conversationId,
     })
+    emitChanged({
+      taskId: worker.taskId,
+      runId: worker.runId,
+      workerRunId: worker.id,
+      reason: "worker-conversation",
+    })
+  }
+
+  function emitChanged(payload: SwarmTaskChangedEvent): void {
+    deps.eventBus?.emit({
+      domain: "swarm-task",
+      type: "swarm-task.changed",
+      payload,
+      timestamp: timestamp(),
+    }, { backpressure: "coalesce" })
   }
 
   return {

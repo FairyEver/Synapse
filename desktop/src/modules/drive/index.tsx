@@ -28,6 +28,7 @@ import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
 import { DriveSitesDialog } from "./drive-sites-dialog"
@@ -1636,9 +1637,9 @@ function DriveUploadActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
+        <SystemAppTopBarActionButton disabled={disabled}>
           上传
-        </Button>
+        </SystemAppTopBarActionButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onUploadFiles}>上传文件</DropdownMenuItem>
@@ -1682,34 +1683,34 @@ function DriveToolbarActions({
   readonly onUploadFolder: () => void
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2" data-testid="drive-toolbar-actions">
+    <div className="flex flex-wrap items-center justify-end gap-0" data-testid="drive-toolbar-actions">
       {children}
       {rendererActions.map((action) => (
-        <Button key={action.id} type="button" variant="outline" size="sm" disabled={action.disabled} onClick={action.onClick}>
+        <SystemAppTopBarActionButton key={action.id} type="button" disabled={action.disabled} onClick={action.onClick}>
           {action.badge ? `${action.label} ${action.badge}` : action.label}
-        </Button>
+        </SystemAppTopBarActionButton>
       ))}
       <DriveSyncStatusButton snapshot={syncSnapshot} onOpen={onOpenSyncStatus} />
-      <Button variant="outline" size="sm" disabled={uploadDisabled} onClick={onOpenLocalSync}>
+      <SystemAppTopBarActionButton disabled={uploadDisabled} onClick={onOpenLocalSync}>
         本地同步
-      </Button>
+      </SystemAppTopBarActionButton>
       <DriveUploadActions
         disabled={uploadDisabled}
         onUploadFiles={onUploadFiles}
         onUploadFolder={onUploadFolder}
       />
-      <Button variant="outline" size="sm" disabled={createDisabled} onClick={onCreateFolder}>
+      <SystemAppTopBarActionButton disabled={createDisabled} onClick={onCreateFolder}>
         新建文件夹
-      </Button>
-      <Button variant="outline" size="sm" disabled={publicLinksDisabled} onClick={onOpenPublicLinks}>
+      </SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={publicLinksDisabled} onClick={onOpenPublicLinks}>
         我的分享
-      </Button>
-      <Button variant="outline" size="sm" disabled={publicLinksDisabled} onClick={onOpenSites}>
+      </SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={publicLinksDisabled} onClick={onOpenSites}>
         站点
-      </Button>
-      <Button variant="outline" size="sm" disabled={refreshDisabled} onClick={onRefresh}>
+      </SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={refreshDisabled} onClick={onRefresh}>
         刷新
-      </Button>
+      </SystemAppTopBarActionButton>
     </div>
   )
 }
@@ -1726,13 +1727,13 @@ function DrivePublicAssetToolbarActions({
   readonly onRefresh: () => void
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button type="button" size="sm" variant="outline" disabled={uploadDisabled} onClick={onUpload}>
+    <div className="flex flex-wrap items-center justify-end gap-0">
+      <SystemAppTopBarActionButton type="button" disabled={uploadDisabled} onClick={onUpload}>
         上传公开素材
-      </Button>
-      <Button type="button" size="sm" variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
+      </SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton type="button" disabled={refreshDisabled} onClick={onRefresh}>
         刷新
-      </Button>
+      </SystemAppTopBarActionButton>
     </div>
   )
 }
@@ -1745,10 +1746,10 @@ function DriveTrashToolbarActions({
   readonly onRefresh: () => void
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button type="button" size="sm" variant="outline" disabled={refreshDisabled} onClick={onRefresh}>
+    <div className="flex flex-wrap items-center justify-end gap-0">
+      <SystemAppTopBarActionButton type="button" disabled={refreshDisabled} onClick={onRefresh}>
         刷新
-      </Button>
+      </SystemAppTopBarActionButton>
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ModulePage } from "@/components/module-page"
-import { Button } from "@/components/ui/button"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus, Upload } from "lucide-react"
@@ -110,14 +110,14 @@ export function WorkflowModule() {
       title="工作流"
       actions={(
         <>
-          <Button size="sm" variant="outline" disabled={importing} onClick={handleImportStart}>
+          <SystemAppTopBarActionButton type="button" disabled={importing} onClick={handleImportStart}>
             <Upload data-icon="inline-start" />
             导入
-          </Button>
-          <Button size="sm" variant="outline" disabled={creating} onClick={handleCreate}>
+          </SystemAppTopBarActionButton>
+          <SystemAppTopBarActionButton type="button" disabled={creating} onClick={handleCreate}>
             {creating ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
             新建
-          </Button>
+          </SystemAppTopBarActionButton>
         </>
       )}
       afterContent={(

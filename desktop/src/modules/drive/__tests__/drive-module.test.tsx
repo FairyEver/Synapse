@@ -530,7 +530,8 @@ describe("DriveModule", () => {
 
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     const button = getButtonByLabel("同步状态：2 个冲突")
-    expect(button.dataset.variant).toBe("destructive")
+    expect(button.dataset.variant).toBe("ghost")
+    expect(button.className).toContain("text-destructive")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("destructive")
     expect(button.textContent).toContain("同步")
     expect(button.textContent).toContain("2")
@@ -554,7 +555,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getButtonByLabel("同步状态：暂无同步绑定")
-    expect(button.dataset.variant).toBe("outline")
+    expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")).toBeNull()
     expect(queryButtonByLabel("同步状态：1 个冲突")).toBeNull()
   })
@@ -569,7 +570,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getButtonByLabel("同步状态：1 个暂停")
-    expect(button.dataset.variant).toBe("outline")
+    expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("secondary")
     expect(queryButtonByLabel("同步状态：暂无同步绑定")).toBeNull()
   })
@@ -584,7 +585,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getButtonByLabel("同步状态：11 个错误")
-    expect(button.dataset.variant).toBe("outline")
+    expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("outline")
     expect(button.querySelector("svg")).toBeNull()
     expect(button.textContent).toContain("同步")
@@ -614,7 +615,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getButtonByLabel("同步状态：1 个错误")
-    expect(button.dataset.variant).toBe("outline")
+    expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("outline")
     expect(button.textContent).toContain("1")
   })

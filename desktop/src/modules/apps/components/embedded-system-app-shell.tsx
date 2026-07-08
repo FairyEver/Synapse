@@ -3,15 +3,10 @@ import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import {
   SystemAppHeaderSlotProvider,
   useSystemAppHeaderSlot,
 } from "./system-app-header-slot"
+import { SystemAppTopBar, SystemAppTopBarActionButton } from "./system-app-top-bar"
 
 type EmbeddedSystemAppShellProps = {
   readonly appName: string
@@ -52,12 +47,10 @@ function EmbeddedSystemAppShellInner({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div
+      <SystemAppTopBar
         data-embedded-system-app-header
-        className="grid min-h-10 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 border-b bg-background px-3"
-      >
-        <div data-embedded-system-app-left className="flex min-w-0 items-center gap-2">
-          {launcherMode ? (
+        leftSlotProps={{ "data-embedded-system-app-left": true }}
+        left={launcherMode ? (
             <>
               <Button
                 type="button"
@@ -71,9 +64,8 @@ function EmbeddedSystemAppShellInner({
               <h2 className="truncate text-sm font-semibold">{appName}</h2>
             </>
           ) : null}
-        </div>
-        {hasTabs ? (
-          <div data-embedded-system-app-tabs className="min-w-0 justify-self-center">
+        center={hasTabs ? (
+          <>
             <Tabs value={slot?.value} onValueChange={(next) => slot?.onValueChange?.(next)}>
               <TabsList>
                 {slot?.tabs?.map((tab) => (
@@ -83,34 +75,27 @@ function EmbeddedSystemAppShellInner({
                 ))}
               </TabsList>
             </Tabs>
-          </div>
-        ) : (
-          <div className="min-w-0" aria-hidden="true" />
-        )}
-        <div data-embedded-system-app-actions className="min-w-0 justify-self-end">
-          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+          </>
+        ) : undefined}
+        centerSlotProps={hasTabs ? { "data-embedded-system-app-tabs": true } : undefined}
+        actions={(
+          <>
             {slot?.actions}
             {launcherMode ? (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label="新窗口打开"
-                      onClick={onOpenWindow}
-                    >
-                      <ExternalLink />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>新窗口打开</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <SystemAppTopBarActionButton
+                iconOnly
+                type="button"
+                aria-label="新窗口打开"
+                tooltip="新窗口打开"
+                onClick={onOpenWindow}
+              >
+                <ExternalLink />
+              </SystemAppTopBarActionButton>
             ) : null}
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+        actionsSlotProps={{ "data-embedded-system-app-actions": true }}
+      />
       <div className="min-h-0 flex-1">
         {children}
       </div>
