@@ -218,12 +218,13 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAutomationDescriptor.stop).toBeTypeOf("function")
   })
 
-  it("coreSwarmTaskDescriptor is degraded and depends on data repository plus project containers", async () => {
+  it("coreSwarmTaskDescriptor is degraded and depends on data repository, events, and project containers", async () => {
     const { coreSwarmTaskDescriptor } = await importBootstrap()
     expect(coreSwarmTaskDescriptor.id).toBe("core.swarm-task")
     expect(coreSwarmTaskDescriptor.criticality).toBe("degraded")
     expect(coreSwarmTaskDescriptor.dependsOn).toEqual([
       "core.data-repository",
+      "core.event-bus",
       "core.project-containers",
     ])
     expect(coreSwarmTaskDescriptor.create).toBeTypeOf("function")
