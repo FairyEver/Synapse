@@ -27,41 +27,36 @@ export const swarmWorkerPhaseSchema = z.enum([
   "failed",
 ])
 
-export const swarmInjectOptionsSchema = z.object({
-  workerIdentity: z.boolean().default(true),
-  roundContext: z.boolean().default(true),
-  runContext: z.boolean().default(true),
-  parallelContext: z.boolean().default(true),
-  customAppendix: z.string().max(16 * 1024).optional().default(""),
+export const swarmFileWriteModeSchema = z.enum(["append-only", "update"])
+
+export const swarmPromptInjectionSequenceBatchSchema = z.object({
+  enabled: z.boolean().default(false),
 }).strict()
 
-export const swarmSummaryConfigSchema = z.object({
-  enabled: z.boolean().default(true),
+export const swarmPromptInjectionPreviousHandoffSchema = z.object({
+  enabled: z.boolean().default(false),
+}).strict()
+
+export const swarmPromptInjectionSummarySchema = z.object({
+  enabled: z.boolean().default(false),
   injectRecent: z.boolean().default(false),
   recentLimit: z.number().int().min(1).max(20).default(3),
 }).strict()
 
-export const swarmHandoffConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-}).strict()
-
-export const swarmAgentConfigSchema = z.object({
-  providerId: z.string().min(1).optional(),
-  modelTier: z.string().min(1).optional(),
-  permissionMode: z.string().min(1).optional(),
-  mainThreadPersonaId: z.string().min(1).nullable().optional(),
-}).strict()
-
-export const swarmSummaryFileConfigSchema = z.object({
+export const swarmPromptInjectionFileWriteSchema = z.object({
   enabled: z.boolean().default(false),
   path: z.string().max(4096).optional().default(""),
+  mode: swarmFileWriteModeSchema.default("append-only"),
+  lock: z.object({
+    enabled: z.boolean().default(true),
+  }).strict().default({ enabled: true }),
 }).strict().superRefine((value, ctx) => {
   const normalizedPath = value.path.trim()
   if (value.enabled && !normalizedPath) {
     ctx.addIssue({
       code: "custom",
       path: ["path"],
-      message: "summary file path is required",
+      message: "file write path is required",
     })
     return
   }
@@ -73,45 +68,56 @@ export const swarmSummaryFileConfigSchema = z.object({
     ctx.addIssue({
       code: "custom",
       path: ["path"],
-      message: "summary file path must stay inside the project",
+      message: "file write path must stay inside the project",
     })
   }
 })
 
-const defaultSwarmInjectOptions = () => ({
-  workerIdentity: true,
-  roundContext: true,
-  runContext: true,
-  parallelContext: true,
+export const swarmPromptInjectionConfigSchema = z.object({
+  sequenceBatch: swarmPromptInjectionSequenceBatchSchema.default({ enabled: false }),
+  previousHandoff: swarmPromptInjectionPreviousHandoffSchema.default({ enabled: false }),
+  summary: swarmPromptInjectionSummarySchema.default({
+    enabled: false,
+    injectRecent: false,
+    recentLimit: 3,
+  }),
+  fileWrite: swarmPromptInjectionFileWriteSchema.default({
+    enabled: false,
+    path: "",
+    mode: "append-only",
+    lock: { enabled: true },
+  }),
+  customAppendix: z.string().max(16 * 1024).optional().default(""),
+}).strict()
+
+export const swarmAgentConfigSchema = z.object({
+  providerId: z.string().min(1).optional(),
+  modelTier: z.string().min(1).optional(),
+  permissionMode: z.string().min(1).optional(),
+  mainThreadPersonaId: z.string().min(1).nullable().optional(),
+}).strict()
+
+const defaultSwarmPromptInjectionConfig = () => ({
+  sequenceBatch: { enabled: false },
+  previousHandoff: { enabled: false },
+  summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+  fileWrite: {
+    enabled: false,
+    path: "",
+    mode: "append-only" as const,
+    lock: { enabled: true },
+  },
   customAppendix: "",
-})
-
-const defaultSwarmSummaryConfig = () => ({
-  enabled: true,
-  injectRecent: false,
-  recentLimit: 3,
-})
-
-const defaultSwarmHandoffConfig = () => ({
-  enabled: false,
-})
-
-const defaultSwarmSummaryFileConfig = () => ({
-  enabled: false,
-  path: "",
 })
 
 const swarmTaskConfigRawSchema = z.object({
   projectId: z.string().min(1),
   prompt: z.string().min(1).max(256 * 1024),
   presetId: z.string().min(1).default("general"),
-  injectOptions: swarmInjectOptionsSchema.default(defaultSwarmInjectOptions),
+  promptInjection: swarmPromptInjectionConfigSchema.default(defaultSwarmPromptInjectionConfig),
   runMode: swarmRunModeSchema.default("batch"),
   concurrency: z.number().int().min(1).max(20).default(3),
   maxRounds: z.number().int().min(1).max(500).default(3),
-  summary: swarmSummaryConfigSchema.default(defaultSwarmSummaryConfig),
-  handoff: swarmHandoffConfigSchema.default(defaultSwarmHandoffConfig),
-  summaryFile: swarmSummaryFileConfigSchema.default(defaultSwarmSummaryFileConfig),
   agent: swarmAgentConfigSchema.default({}),
 }).strict()
 
@@ -121,14 +127,14 @@ const legacySwarmTaskConfigSchema = z.object({
   prompt: z.string().min(1).max(256 * 1024),
   presetId: z.string().min(1).default("general"),
   injectOptions: z.object({
-    workerIdentity: z.boolean().default(true),
-    roundContext: z.boolean().default(true),
-    runContext: z.boolean().default(true),
+    workerIdentity: z.boolean().default(false),
+    roundContext: z.boolean().default(false),
+    runContext: z.boolean().default(false),
     outputProtocol: z.boolean().optional(),
-    parallelContext: z.boolean().default(true),
+    parallelContext: z.boolean().default(false),
     gitContext: z.boolean().optional(),
     customAppendix: z.string().max(16 * 1024).optional().default(""),
-  }).passthrough().default(defaultSwarmInjectOptions),
+  }).passthrough().optional(),
   runMode: swarmRunModeSchema.default("batch"),
   concurrency: z.number().int().min(1).max(20).default(3),
   maxRounds: z.number().int().min(1).max(500).default(3),
@@ -138,43 +144,78 @@ const legacySwarmTaskConfigSchema = z.object({
     targetFile: z.string().min(1).optional(),
     targetFilePolicy: z.enum(["append-only", "section-update", "free-edit"]).default("append-only"),
   }).optional(),
-  summary: swarmSummaryConfigSchema.default(defaultSwarmSummaryConfig),
-  handoff: swarmHandoffConfigSchema.default(defaultSwarmHandoffConfig),
-  summaryFile: swarmSummaryFileConfigSchema.optional(),
+  summary: z.object({
+    enabled: z.boolean().default(false),
+    injectRecent: z.boolean().default(false),
+    recentLimit: z.number().int().min(1).max(20).default(3),
+  }).strict().optional(),
+  handoff: z.object({
+    enabled: z.boolean().default(false),
+  }).strict().optional(),
+  summaryFile: z.object({
+    enabled: z.boolean().default(false),
+    path: z.string().max(4096).optional().default(""),
+  }).strict().optional(),
   agent: swarmAgentConfigSchema.default({}),
 }).passthrough()
 
 export function normalizeSwarmTaskConfig(input: unknown): SwarmTaskConfig {
   const direct = swarmTaskConfigRawSchema.safeParse(input)
   if (direct.success) return direct.data
+  if (hasOwnObjectKey(input, "promptInjection")) {
+    return swarmTaskConfigRawSchema.parse(input)
+  }
 
   const legacy = legacySwarmTaskConfigSchema.parse(input)
+  const injectOptions = legacy.injectOptions
   const legacyTargetFile = legacy.output?.targetFile?.trim()
-  const summaryFile = legacy.summaryFile ?? (
-    legacyTargetFile && (legacy.output?.mode === "target-file" || legacy.output?.mode === "both")
-      ? { enabled: true, path: legacyTargetFile }
-      : { enabled: false, path: "" }
+  const summaryFilePath = legacy.summaryFile?.path?.trim() || legacyTargetFile || ""
+  const fileWriteEnabled = Boolean(
+    legacy.summaryFile?.enabled
+    || (legacyTargetFile && (legacy.output?.mode === "target-file" || legacy.output?.mode === "both")),
   )
 
   return swarmTaskConfigRawSchema.parse({
     projectId: legacy.projectId,
     prompt: legacy.prompt,
     presetId: legacy.presetId,
-    injectOptions: {
-      workerIdentity: legacy.injectOptions.workerIdentity,
-      roundContext: legacy.injectOptions.roundContext,
-      runContext: legacy.injectOptions.runContext,
-      parallelContext: legacy.injectOptions.parallelContext,
-      customAppendix: legacy.injectOptions.customAppendix,
+    promptInjection: {
+      sequenceBatch: {
+        enabled: Boolean(
+          injectOptions?.workerIdentity
+          || injectOptions?.roundContext
+          || injectOptions?.runContext
+          || injectOptions?.parallelContext,
+        ),
+      },
+      previousHandoff: { enabled: Boolean(legacy.handoff?.enabled) },
+      summary: {
+        enabled: Boolean(legacy.summary?.enabled),
+        injectRecent: Boolean(legacy.summary?.injectRecent),
+        recentLimit: legacy.summary?.recentLimit ?? 3,
+      },
+      fileWrite: {
+        enabled: fileWriteEnabled,
+        path: summaryFilePath,
+        mode: mapLegacyFileWriteMode(legacy.output?.targetFilePolicy),
+        lock: { enabled: true },
+      },
+      customAppendix: injectOptions?.customAppendix ?? "",
     },
     runMode: legacy.runMode,
     concurrency: legacy.concurrency,
     maxRounds: legacy.maxRounds,
-    summary: legacy.summary,
-    handoff: legacy.handoff,
-    summaryFile,
     agent: legacy.agent,
   })
+}
+
+function hasOwnObjectKey(input: unknown, key: string): boolean {
+  return Boolean(input && typeof input === "object" && Object.hasOwn(input, key))
+}
+
+function mapLegacyFileWriteMode(value: "append-only" | "section-update" | "free-edit" | undefined): SwarmFileWriteMode {
+  if (value === "section-update" || value === "free-edit") return "update"
+  return "append-only"
 }
 
 function preprocessSwarmTaskConfig(input: unknown): unknown {
@@ -191,28 +232,31 @@ const swarmTaskConfigOverrideSchema = z.object({
   projectId: z.string().min(1).optional(),
   prompt: z.string().min(1).max(256 * 1024).optional(),
   presetId: z.string().min(1).optional(),
-  injectOptions: z.object({
-    workerIdentity: z.boolean().optional(),
-    roundContext: z.boolean().optional(),
-    runContext: z.boolean().optional(),
-    parallelContext: z.boolean().optional(),
+  promptInjection: z.object({
+    sequenceBatch: z.object({
+      enabled: z.boolean().optional(),
+    }).strict().optional(),
+    previousHandoff: z.object({
+      enabled: z.boolean().optional(),
+    }).strict().optional(),
+    summary: z.object({
+      enabled: z.boolean().optional(),
+      injectRecent: z.boolean().optional(),
+      recentLimit: z.number().int().min(1).max(20).optional(),
+    }).strict().optional(),
+    fileWrite: z.object({
+      enabled: z.boolean().optional(),
+      path: z.string().max(4096).optional(),
+      mode: swarmFileWriteModeSchema.optional(),
+      lock: z.object({
+        enabled: z.boolean().optional(),
+      }).strict().optional(),
+    }).strict().optional(),
     customAppendix: z.string().max(16 * 1024).optional(),
   }).strict().optional(),
   runMode: swarmRunModeSchema.optional(),
   concurrency: z.number().int().min(1).max(20).optional(),
   maxRounds: z.number().int().min(1).max(500).optional(),
-  summary: z.object({
-    enabled: z.boolean().optional(),
-    injectRecent: z.boolean().optional(),
-    recentLimit: z.number().int().min(1).max(20).optional(),
-  }).strict().optional(),
-  handoff: z.object({
-    enabled: z.boolean().optional(),
-  }).strict().optional(),
-  summaryFile: z.object({
-    enabled: z.boolean().optional(),
-    path: z.string().max(4096).optional(),
-  }).strict().optional(),
   agent: swarmAgentConfigSchema.partial().optional(),
 }).strict()
 
@@ -256,6 +300,9 @@ export const swarmWorkerRunSchema = z.object({
   runId: z.string().min(1),
   workerIndex: z.number().int().min(1),
   roundIndex: z.number().int().min(1),
+  sequenceIndex: z.number().int().min(1).optional(),
+  slotIndex: z.number().int().min(1).optional(),
+  batchIndex: z.number().int().min(1).optional(),
   status: swarmWorkerRunStatusSchema,
   conversationId: z.string().min(1).optional(),
   sessionKey: z.string().min(1),
@@ -326,7 +373,8 @@ export type SwarmWorkerRunStatus = z.infer<typeof swarmWorkerRunStatusSchema>
 export type SwarmTaskChangedReason = z.infer<typeof swarmTaskChangedReasonSchema>
 export type SwarmTaskChangedEvent = z.infer<typeof swarmTaskChangedEventPayloadSchema>
 export type SwarmWorkerPhase = z.infer<typeof swarmWorkerPhaseSchema>
-export type SwarmSummaryFileConfig = z.infer<typeof swarmSummaryFileConfigSchema>
+export type SwarmFileWriteMode = z.infer<typeof swarmFileWriteModeSchema>
+export type SwarmPromptInjectionConfig = z.infer<typeof swarmPromptInjectionConfigSchema>
 export type SwarmTaskConfig = z.infer<typeof swarmTaskConfigRawSchema>
 export type SwarmTask = z.infer<typeof swarmTaskSchema>
 export type SwarmRun = z.infer<typeof swarmRunSchema>

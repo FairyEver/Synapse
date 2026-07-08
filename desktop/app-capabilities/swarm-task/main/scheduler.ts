@@ -5,6 +5,9 @@ export type SwarmWorkerRunnerInput = {
   readonly runId: string
   readonly workerIndex: number
   readonly roundIndex: number
+  readonly sequenceIndex: number
+  readonly slotIndex: number
+  readonly batchIndex: number
   readonly config: SwarmTaskConfig
   readonly abortSignal?: AbortSignal
 }
@@ -71,13 +74,17 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
 
     let nextRound = 1
 
-    const runRound = async (workerIndex: number, roundIndex: number): Promise<void> => {
+    const runRound = async (slotIndex: number, sequenceIndex: number): Promise<void> => {
       totals.started++
+      const batchIndex = Math.floor((sequenceIndex - 1) / input.config.concurrency) + 1
       const outcome = await runWorker(deps.runner, {
         taskId: input.taskId,
         runId: input.runId,
-        workerIndex,
-        roundIndex,
+        workerIndex: slotIndex,
+        roundIndex: sequenceIndex,
+        sequenceIndex,
+        slotIndex,
+        batchIndex,
         config: input.config,
         abortSignal: control.abort.signal,
       })
@@ -100,12 +107,12 @@ export function createSwarmScheduler(deps: SwarmSchedulerDeps): SwarmScheduler {
       totals.timeout++
     }
 
-    const runSlot = async (workerIndex: number): Promise<void> => {
+    const runSlot = async (slotIndex: number): Promise<void> => {
       while (!control.stopRefill && !control.abort.signal.aborted) {
         if (nextRound > input.config.maxRounds) return
-        const roundIndex = nextRound
+        const sequenceIndex = nextRound
         nextRound++
-        await runRound(workerIndex, roundIndex)
+        await runRound(slotIndex, sequenceIndex)
         if (input.config.runMode === "batch") return
       }
     }

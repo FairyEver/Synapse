@@ -278,31 +278,34 @@ Input:
     "runMode": "batch",
     "concurrency": 3,
     "maxRounds": 3,
-    "injectOptions": {
-      "workerIdentity": true,
-      "roundContext": true,
-      "runContext": true,
-      "parallelContext": true,
+    "promptInjection": {
+      "sequenceBatch": {
+        "enabled": false
+      },
+      "previousHandoff": {
+        "enabled": false
+      },
+      "summary": {
+        "enabled": false,
+        "injectRecent": false,
+        "recentLimit": 3
+      },
+      "fileWrite": {
+        "enabled": false,
+        "path": "",
+        "mode": "append-only",
+        "lock": {
+          "enabled": true
+        }
+      },
       "customAppendix": ""
-    },
-    "summary": {
-      "enabled": true,
-      "injectRecent": false,
-      "recentLimit": 3
-    },
-    "handoff": {
-      "enabled": false
-    },
-    "summaryFile": {
-      "enabled": false,
-      "path": ""
     },
     "agent": {}
   }
 }
 ```
 
-Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Workers run in the selected project path. `summaryFile` only injects an append instruction into worker prompts; Synapse does not merge or guarantee file writes.
+Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Workers run in the selected project path. `promptInjection` controls optional prompt context only; Synapse does not merge files or guarantee worker file writes.
 
 ### app_swarm_task_task_update
 

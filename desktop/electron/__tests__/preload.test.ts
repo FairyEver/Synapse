@@ -1255,25 +1255,25 @@ describe("preload bridge", () => {
       projectId: "project-1",
       prompt: "Do work",
       presetId: "general",
-      injectOptions: {
-        workerIdentity: true,
-        roundContext: true,
-        runContext: true,
-        parallelContext: true,
+      promptInjection: {
+        sequenceBatch: { enabled: false },
+        previousHandoff: { enabled: false },
+        summary: {
+          enabled: false,
+          injectRecent: false,
+          recentLimit: 3,
+        },
+        fileWrite: {
+          enabled: false,
+          path: "",
+          mode: "append-only" as const,
+          lock: { enabled: true },
+        },
         customAppendix: "",
       },
       runMode: "batch" as const,
       concurrency: 3,
       maxRounds: 3,
-      summaryFile: { enabled: false, path: "" },
-      summary: {
-        enabled: true,
-        injectRecent: false,
-        recentLimit: 3,
-      },
-      handoff: {
-        enabled: false,
-      },
       agent: {},
     }
 

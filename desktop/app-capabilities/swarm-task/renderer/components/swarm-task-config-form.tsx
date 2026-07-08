@@ -148,64 +148,142 @@ export function SwarmTaskConfigForm({
         </div>
       </ConfigSection>
 
-      <ConfigSection title="上下文">
-        <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+      <ConfigSection title="注入">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
           <SwitchField
-            label="摘要"
-            checked={value.summary.enabled}
+            label="序列和批次"
+            checked={value.promptInjection.sequenceBatch.enabled}
             onCheckedChange={(checked) => onChange({
               ...value,
-              summary: { ...value.summary, enabled: checked },
+              promptInjection: {
+                ...value.promptInjection,
+                sequenceBatch: { enabled: checked },
+              },
+            })}
+          />
+          <SwitchField
+            label="上一轮交接"
+            checked={value.promptInjection.previousHandoff.enabled}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              promptInjection: {
+                ...value.promptInjection,
+                previousHandoff: { enabled: checked },
+              },
+            })}
+          />
+          <SwitchField
+            label="记录摘要"
+            checked={value.promptInjection.summary.enabled}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              promptInjection: {
+                ...value.promptInjection,
+                summary: {
+                  ...value.promptInjection.summary,
+                  enabled: checked,
+                  injectRecent: checked ? value.promptInjection.summary.injectRecent : false,
+                },
+              },
             })}
           />
           <SwitchField
             label="最近摘要"
-            checked={value.summary.injectRecent}
+            checked={value.promptInjection.summary.injectRecent}
+            disabled={!value.promptInjection.summary.enabled}
             onCheckedChange={(checked) => onChange({
               ...value,
-              summary: { ...value.summary, injectRecent: checked },
-            })}
-          />
-          <SwitchField
-            label="交接"
-            checked={value.handoff.enabled}
-            onCheckedChange={(checked) => onChange({
-              ...value,
-              handoff: { enabled: checked },
+              promptInjection: {
+                ...value.promptInjection,
+                summary: { ...value.promptInjection.summary, injectRecent: checked },
+              },
             })}
           />
         </div>
       </ConfigSection>
 
-      <ConfigSection title="汇总文件">
+      <ConfigSection title="文件">
         <div className="grid min-w-0 gap-3">
           <SwitchField
-            label="写入汇总文件"
-            checked={value.summaryFile.enabled}
+            label="文件写入"
+            checked={value.promptInjection.fileWrite.enabled}
             onCheckedChange={(checked) => onChange({
               ...value,
-              summaryFile: {
-                enabled: checked,
-                path: value.summaryFile.path,
+              promptInjection: {
+                ...value.promptInjection,
+                fileWrite: {
+                  ...value.promptInjection.fileWrite,
+                  enabled: checked,
+                },
               },
             })}
           />
-          {value.summaryFile.enabled ? (
-            <Field className="grid gap-2">
-              <FieldLabel htmlFor="swarm-task-summary-file">汇总文件路径</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="swarm-task-summary-file"
-                  aria-label="汇总文件路径"
-                  value={value.summaryFile.path}
-                  onChange={(event) => onChange({
+          {value.promptInjection.fileWrite.enabled ? (
+            <>
+              <Field className="grid gap-2">
+                <FieldLabel htmlFor="swarm-task-file-write-path">文件路径</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="swarm-task-file-write-path"
+                    aria-label="文件路径"
+                    value={value.promptInjection.fileWrite.path}
+                    onChange={(event) => onChange({
+                      ...value,
+                      promptInjection: {
+                        ...value.promptInjection,
+                        fileWrite: {
+                          ...value.promptInjection.fileWrite,
+                          path: event.target.value,
+                        },
+                      },
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">相对项目路径</p>
+                </FieldContent>
+              </Field>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <Field className="grid gap-2">
+                  <FieldLabel>写入方式</FieldLabel>
+                  <FieldContent>
+                    <Select
+                      value={value.promptInjection.fileWrite.mode}
+                      onValueChange={(mode) => onChange({
+                        ...value,
+                        promptInjection: {
+                          ...value.promptInjection,
+                          fileWrite: {
+                            ...value.promptInjection.fileWrite,
+                            mode: mode as SwarmTaskConfig["promptInjection"]["fileWrite"]["mode"],
+                          },
+                        },
+                      })}
+                    >
+                      <SelectTrigger className="w-full" aria-label="写入方式">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="append-only">只追加</SelectItem>
+                        <SelectItem value="update">允许更新</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+                <SwitchField
+                  label="文件锁"
+                  checked={value.promptInjection.fileWrite.lock.enabled}
+                  onCheckedChange={(checked) => onChange({
                     ...value,
-                    summaryFile: { ...value.summaryFile, path: event.target.value },
+                    promptInjection: {
+                      ...value.promptInjection,
+                      fileWrite: {
+                        ...value.promptInjection.fileWrite,
+                        lock: { enabled: checked },
+                      },
+                    },
                   })}
                 />
-                <p className="text-xs text-muted-foreground">需要写总结文件时追加到此文件。</p>
-              </FieldContent>
-            </Field>
+              </div>
+            </>
           ) : null}
         </div>
       </ConfigSection>
@@ -307,17 +385,19 @@ function OptionHelpLine({ label, text }: { readonly label: string; readonly text
 function SwitchField({
   label,
   checked,
+  disabled = false,
   onCheckedChange,
 }: {
   readonly label: string
   readonly checked: boolean
+  readonly disabled?: boolean
   readonly onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <div className="grid min-h-10 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border px-3">
+    <div className="grid min-h-10 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border px-3 data-[disabled=true]:opacity-60" data-disabled={disabled}>
       <span className="min-w-0 truncate text-sm font-medium leading-snug">{label}</span>
       <div className="flex h-10 items-center justify-center">
-        <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
+        <Switch disabled={disabled} checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
       </div>
     </div>
   )

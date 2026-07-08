@@ -49,19 +49,21 @@ type TaskNameDialogState =
 const baseTaskConfig: Omit<SwarmTaskConfig, "projectId"> = {
   prompt: "填写任务目标",
   presetId: "general",
-  injectOptions: {
-    workerIdentity: true,
-    roundContext: true,
-    runContext: true,
-    parallelContext: true,
+  promptInjection: {
+    sequenceBatch: { enabled: false },
+    previousHandoff: { enabled: false },
+    summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+    fileWrite: {
+      enabled: false,
+      path: "",
+      mode: "append-only",
+      lock: { enabled: true },
+    },
     customAppendix: "",
   },
   runMode: "batch",
   concurrency: 1,
   maxRounds: 1,
-  summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-  handoff: { enabled: false },
-  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -325,7 +327,7 @@ export function SwarmTaskModule() {
     Boolean(draftConfig?.prompt.trim())
     && Boolean(draftConfig?.projectId)
     && projects.some((project) => project.id === draftConfig?.projectId)
-    && (!draftConfig?.summaryFile.enabled || Boolean(draftConfig.summaryFile.path.trim()))
+    && (!draftConfig?.promptInjection.fileWrite.enabled || Boolean(draftConfig.promptInjection.fileWrite.path.trim()))
   ), [draftConfig, projects])
 
   const saveConfig = useCallback(async () => {

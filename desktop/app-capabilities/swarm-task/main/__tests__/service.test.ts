@@ -87,19 +87,21 @@ const config = {
   projectId: "project-1",
   prompt: "Run.",
   presetId: "general",
-  injectOptions: {
-    workerIdentity: true,
-    roundContext: true,
-    runContext: true,
-    parallelContext: true,
+  promptInjection: {
+    sequenceBatch: { enabled: false },
+    previousHandoff: { enabled: false },
+    summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+    fileWrite: {
+      enabled: false,
+      path: "",
+      mode: "append-only" as const,
+      lock: { enabled: true },
+    },
     customAppendix: "",
   },
   runMode: "batch" as const,
   concurrency: 2,
   maxRounds: 2,
-  summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-  handoff: { enabled: false },
-  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -210,6 +212,9 @@ describe("createSwarmTaskService", () => {
         runId: "run-1",
         workerIndex: 2,
         roundIndex: 3,
+        sequenceIndex: 3,
+        slotIndex: 2,
+        batchIndex: 2,
         status: "running",
         sessionKey: "swarm:task-1:run-1",
       },
@@ -241,6 +246,9 @@ describe("createSwarmTaskService", () => {
             swarmWorkerRunId: "worker-1",
             swarmRoundIndex: 3,
             swarmWorkerIndex: 2,
+            swarmSequenceIndex: 3,
+            swarmSlotIndex: 2,
+            swarmBatchIndex: 2,
           },
         } satisfies AgentMessage,
         "任务 #3",
@@ -398,15 +406,15 @@ describe("createSwarmTaskService", () => {
       name: "任务",
       config: {
         ...config,
-        injectOptions: {
-          ...config.injectOptions,
-          workerIdentity: false,
+        promptInjection: {
+          ...config.promptInjection,
+          sequenceBatch: { enabled: true },
+          summary: {
+            enabled: false,
+            injectRecent: false,
+            recentLimit: 7,
+          },
           customAppendix: "keep me",
-        },
-        summary: {
-          enabled: false,
-          injectRecent: false,
-          recentLimit: 7,
         },
       },
     })
@@ -414,25 +422,22 @@ describe("createSwarmTaskService", () => {
     const run = await service.startRun({
       taskId: task.id,
       configOverride: {
-        summary: { injectRecent: true },
-        handoff: { enabled: true },
-        injectOptions: { roundContext: false },
+        promptInjection: {
+          summary: { injectRecent: true },
+          previousHandoff: { enabled: true },
+          sequenceBatch: { enabled: false },
+        },
       },
     })
 
-    expect(run.configSnapshot.summary).toMatchObject({
+    expect(run.configSnapshot.promptInjection.summary).toMatchObject({
       enabled: false,
       injectRecent: true,
       recentLimit: 7,
     })
-    expect(run.configSnapshot.handoff).toMatchObject({ enabled: true })
-    expect(run.configSnapshot.injectOptions).toMatchObject({
-      workerIdentity: false,
-      roundContext: false,
-      runContext: true,
-      parallelContext: true,
-      customAppendix: "keep me",
-    })
+    expect(run.configSnapshot.promptInjection.previousHandoff).toMatchObject({ enabled: true })
+    expect(run.configSnapshot.promptInjection.sequenceBatch).toMatchObject({ enabled: false })
+    expect(run.configSnapshot.promptInjection.customAppendix).toBe("keep me")
   })
 
   it("starts in the background and stores worker summaries", async () => {
@@ -450,6 +455,58 @@ describe("createSwarmTaskService", () => {
     expect(workerRuns).toHaveLength(2)
     expect(workerRuns[0]?.sessionKey).toBe(`swarm:${task.id}:${run.id}`)
     expect(workerRuns.every((worker) => worker.summary === "done")).toBe(true)
+  })
+
+  it("injects previous batch handoffs instead of the last arbitrary handoff", async () => {
+    const workers = namespace<SwarmWorkerRun>()
+    const prompts: string[] = []
+    const { service } = serviceHarness({
+      workers,
+      agent: {
+        sendWorker: vi.fn(async (input) => {
+          prompts.push(input.prompt)
+          return {
+            conversationId: `conversation-${prompts.length}`,
+            resultText: [
+              "<SYNAPSE_SWARM_SUMMARY>",
+              `summary ${prompts.length}`,
+              "</SYNAPSE_SWARM_SUMMARY>",
+              "<SYNAPSE_SWARM_HANDOFF>",
+              `handoff ${prompts.length}`,
+              "</SYNAPSE_SWARM_HANDOFF>",
+            ].join("\n"),
+            status: "success",
+            events: [],
+          }
+        }),
+      },
+    })
+    const task = await service.createTask({
+      name: "任务",
+      config: {
+        ...config,
+        promptInjection: {
+          ...config.promptInjection,
+          previousHandoff: { enabled: true },
+          summary: { enabled: true, injectRecent: false, recentLimit: 3 },
+        },
+        runMode: "continuous",
+        concurrency: 2,
+        maxRounds: 3,
+      },
+    })
+
+    const run = await service.startRun({ taskId: task.id })
+
+    await vi.waitFor(async () => {
+      expect(await service.getRun(run.id)).toMatchObject({ status: "success" })
+    })
+
+    expect(prompts[0]).not.toContain("## Previous Handoff")
+    expect(prompts[1]).not.toContain("## Previous Handoff")
+    expect(prompts[2]).toContain("## Previous Handoff")
+    expect(prompts[2]).toContain("handoff 1")
+    expect(prompts[2]).toContain("handoff 2")
   })
 
   it("emits lightweight change events while runs and workers progress", async () => {

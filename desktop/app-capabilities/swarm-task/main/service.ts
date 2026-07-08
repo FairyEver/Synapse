@@ -88,6 +88,9 @@ export function createAgentRuntimeSwarmGateway(deps: {
             swarmWorkerRunId: input.worker.id,
             swarmRoundIndex: input.worker.roundIndex,
             swarmWorkerIndex: input.worker.workerIndex,
+            swarmSequenceIndex: input.worker.sequenceIndex ?? input.worker.roundIndex,
+            swarmSlotIndex: input.worker.slotIndex ?? input.worker.workerIndex,
+            swarmBatchIndex: input.worker.batchIndex,
           },
         } satisfies AgentMessage,
         `${input.task.name} #${input.worker.roundIndex}`,
@@ -348,9 +351,9 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       if (!run) throw new Error(`Swarm run not found: ${input.runId}`)
 
       const previousWorkers = await listWorkerRuns(run.id)
-      const previousHandoff = input.config.handoff.enabled
-        ? previousWorkers.filter((worker) => worker.handoff?.trim()).at(-1)?.handoff
-        : undefined
+      const previousHandoffs = input.config.promptInjection.previousHandoff.enabled
+        ? previousBatchHandoffs(previousWorkers, input.batchIndex)
+        : []
 
       const worker: SwarmWorkerRun = {
         id: createId(),
@@ -359,6 +362,9 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         runId: input.runId,
         workerIndex: input.workerIndex,
         roundIndex: input.roundIndex,
+        sequenceIndex: input.sequenceIndex,
+        slotIndex: input.slotIndex,
+        batchIndex: input.batchIndex,
         status: "running",
         sessionKey: `swarm:${input.taskId}:${input.runId}`,
         startedAt: timestamp(),
@@ -372,9 +378,12 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
         runId: input.runId,
         workerIndex: input.workerIndex,
         roundIndex: input.roundIndex,
+        sequenceIndex: input.sequenceIndex,
+        slotIndex: input.slotIndex,
+        batchIndex: input.batchIndex,
         config: input.config,
         recentSummaries: previousWorkers,
-        previousHandoff,
+        previousHandoffs,
       })
 
       try {
@@ -436,10 +445,12 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     const { worker, outcome } = input
     const latestWorker = (await deps.workers.get(worker.id)) ?? worker
     const extracted = extractSwarmStructuredOutput(outcome.resultText)
-    const summary = input.input.config.summary.enabled
+    const summaryEnabled = input.input.config.promptInjection.summary.enabled
+    const handoffEnabled = input.input.config.promptInjection.previousHandoff.enabled
+    const summary = summaryEnabled
       ? extracted.summary ?? fallbackSummary(outcome.resultText)
       : undefined
-    const summaryFallback = input.input.config.summary.enabled && !extracted.summary
+    const summaryFallback = summaryEnabled && !extracted.summary
     const finalMessage =
       outcome.error ??
       (outcome.resultText ? outcome.resultText.slice(0, 500) : outcome.status === "cancelled" ? "cancelled" : undefined)
@@ -453,7 +464,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       lastPhase: outcome.status === "success" ? "completed" : "failed",
       ...(finalMessage ? { lastMessage: finalMessage } : {}),
       ...(summary ? { summary, summaryFallback } : {}),
-      ...(input.input.config.handoff.enabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
+      ...(handoffEnabled && extracted.handoff ? { handoff: extracted.handoff } : {}),
       ...(outcome.error ? { error: outcome.error } : {}),
     }
     await deps.workers.upsert(updated)
@@ -523,27 +534,67 @@ function mergeConfigSnapshot(
   return swarmTaskConfigSchema.parse({
     ...normalizedBase,
     ...override,
-    injectOptions: {
-      ...normalizedBase.injectOptions,
-      ...override.injectOptions,
-    },
-    summary: {
-      ...normalizedBase.summary,
-      ...override.summary,
-    },
-    handoff: {
-      ...normalizedBase.handoff,
-      ...override.handoff,
-    },
-    summaryFile: {
-      ...normalizedBase.summaryFile,
-      ...override.summaryFile,
+    promptInjection: {
+      ...normalizedBase.promptInjection,
+      ...override.promptInjection,
+      sequenceBatch: {
+        ...normalizedBase.promptInjection.sequenceBatch,
+        ...override.promptInjection?.sequenceBatch,
+      },
+      previousHandoff: {
+        ...normalizedBase.promptInjection.previousHandoff,
+        ...override.promptInjection?.previousHandoff,
+      },
+      summary: {
+        ...normalizedBase.promptInjection.summary,
+        ...override.promptInjection?.summary,
+      },
+      fileWrite: {
+        ...normalizedBase.promptInjection.fileWrite,
+        ...override.promptInjection?.fileWrite,
+        lock: {
+          ...normalizedBase.promptInjection.fileWrite.lock,
+          ...override.promptInjection?.fileWrite?.lock,
+        },
+      },
     },
     agent: {
       ...normalizedBase.agent,
       ...override.agent,
     },
   })
+}
+
+function previousBatchHandoffs(
+  workers: readonly SwarmWorkerRun[],
+  currentBatchIndex: number,
+): Array<{
+  workerIndex: number
+  sequenceIndex: number
+  slotIndex: number
+  batchIndex: number
+  handoff: string
+}> {
+  const previousBatchIndex = currentBatchIndex - 1
+  if (previousBatchIndex < 1) return []
+
+  return workers
+    .filter((worker) => (worker.batchIndex ?? inferBatchIndex(worker)) === previousBatchIndex)
+    .filter((worker) => worker.handoff?.trim())
+    .sort((left, right) =>
+      (left.sequenceIndex ?? left.roundIndex) - (right.sequenceIndex ?? right.roundIndex)
+      || left.workerIndex - right.workerIndex)
+    .map((worker) => ({
+      workerIndex: worker.workerIndex,
+      sequenceIndex: worker.sequenceIndex ?? worker.roundIndex,
+      slotIndex: worker.slotIndex ?? worker.workerIndex,
+      batchIndex: worker.batchIndex ?? inferBatchIndex(worker),
+      handoff: worker.handoff?.trim() ?? "",
+    }))
+}
+
+function inferBatchIndex(worker: SwarmWorkerRun): number {
+  return worker.batchIndex ?? 1
 }
 
 function isAbortError(error: unknown): boolean {
