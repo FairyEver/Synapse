@@ -431,6 +431,14 @@ export const coreSwarmTaskDescriptor: ServiceDescriptor<SwarmTaskService> = {
       workers: dataRepository.namespace<SwarmWorkerRunEntryV1>(SWARM_TASK_WORKER_RUNS_NAMESPACE),
       outputRoot: path.join(app.getPath("userData"), "swarm-runs"),
       eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+      resolveProjectPath: async (projectId) => {
+        const config = await configStore.load()
+        const project = config.global.projects.find((item) => item.id === projectId)
+        if (!project) {
+          throw new Error("项目不可用")
+        }
+        return project.path
+      },
       agent: createAgentRuntimeSwarmGateway({
         resolveAgent: async (projectId) => {
           const { agent } = await resolveProjectAgent(ctx.registry.get.bind(ctx.registry), projectId)

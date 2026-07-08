@@ -187,7 +187,34 @@ function preprocessSwarmTaskConfig(input: unknown): unknown {
 
 export const swarmTaskConfigSchema = z.preprocess(preprocessSwarmTaskConfig, swarmTaskConfigRawSchema)
 
-const swarmTaskConfigOverrideSchema = swarmTaskConfigRawSchema.partial().strict()
+const swarmTaskConfigOverrideSchema = z.object({
+  projectId: z.string().min(1).optional(),
+  prompt: z.string().min(1).max(256 * 1024).optional(),
+  presetId: z.string().min(1).optional(),
+  injectOptions: z.object({
+    workerIdentity: z.boolean().optional(),
+    roundContext: z.boolean().optional(),
+    runContext: z.boolean().optional(),
+    parallelContext: z.boolean().optional(),
+    customAppendix: z.string().max(16 * 1024).optional(),
+  }).strict().optional(),
+  runMode: swarmRunModeSchema.optional(),
+  concurrency: z.number().int().min(1).max(20).optional(),
+  maxRounds: z.number().int().min(1).max(500).optional(),
+  summary: z.object({
+    enabled: z.boolean().optional(),
+    injectRecent: z.boolean().optional(),
+    recentLimit: z.number().int().min(1).max(20).optional(),
+  }).strict().optional(),
+  handoff: z.object({
+    enabled: z.boolean().optional(),
+  }).strict().optional(),
+  summaryFile: z.object({
+    enabled: z.boolean().optional(),
+    path: z.string().max(4096).optional(),
+  }).strict().optional(),
+  agent: swarmAgentConfigSchema.partial().optional(),
+}).strict()
 
 export const swarmRunTotalsSchema = z.object({
   started: z.number().int().min(0),
