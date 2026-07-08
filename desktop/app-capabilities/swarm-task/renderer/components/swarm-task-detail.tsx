@@ -143,8 +143,8 @@ function SwarmTaskOverview({
             ["运行模式", formatRunMode(config.runMode)],
             ["并发", String(config.concurrency)],
             ["轮次", String(config.maxRounds)],
-            ...(config.summaryFile.enabled
-              ? [["汇总文件", config.summaryFile.path]] as ReadonlyArray<readonly [string, string]>
+            ...(config.promptInjection.fileWrite.enabled
+              ? [["文件", config.promptInjection.fileWrite.path]] as ReadonlyArray<readonly [string, string]>
               : []),
           ]}
         />

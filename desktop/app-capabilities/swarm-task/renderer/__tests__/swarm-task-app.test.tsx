@@ -16,19 +16,21 @@ const swarmTaskFixtures = vi.hoisted(() => {
       projectId: "project-1",
       prompt: "Run.",
       presetId: "general",
-      injectOptions: {
-        workerIdentity: true,
-        roundContext: true,
-        runContext: true,
-        parallelContext: true,
+      promptInjection: {
+        sequenceBatch: { enabled: false },
+        previousHandoff: { enabled: false },
+        summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+        fileWrite: {
+          enabled: false,
+          path: "",
+          mode: "append-only",
+          lock: { enabled: true },
+        },
         customAppendix: "",
       },
       runMode: "batch",
       concurrency: 2,
       maxRounds: 2,
-      summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-      handoff: { enabled: false },
-      summaryFile: { enabled: false, path: "" },
       agent: {},
     },
     createdAt: "2026-07-07T00:00:00.000Z",
@@ -45,19 +47,21 @@ const swarmTaskFixtures = vi.hoisted(() => {
       projectId: "project-2",
       prompt: "Run B.",
       presetId: "general",
-      injectOptions: {
-        workerIdentity: true,
-        roundContext: true,
-        runContext: true,
-        parallelContext: true,
+      promptInjection: {
+        sequenceBatch: { enabled: false },
+        previousHandoff: { enabled: false },
+        summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+        fileWrite: {
+          enabled: false,
+          path: "",
+          mode: "append-only",
+          lock: { enabled: true },
+        },
         customAppendix: "",
       },
       runMode: "batch",
       concurrency: 2,
       maxRounds: 2,
-      summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-      handoff: { enabled: false },
-      summaryFile: { enabled: false, path: "" },
       agent: {},
     },
     createdAt: "2026-07-07T00:00:00.000Z",
@@ -315,19 +319,21 @@ describe("SwarmTaskModule", () => {
         projectId: "project-1",
         prompt: "填写任务目标",
         presetId: "general",
-        injectOptions: {
-          workerIdentity: true,
-          roundContext: true,
-          runContext: true,
-          parallelContext: true,
+        promptInjection: {
+          sequenceBatch: { enabled: false },
+          previousHandoff: { enabled: false },
+          summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+          fileWrite: {
+            enabled: false,
+            path: "",
+            mode: "append-only",
+            lock: { enabled: true },
+          },
           customAppendix: "",
         },
         runMode: "batch",
         concurrency: 1,
         maxRounds: 1,
-        summary: { enabled: true, injectRecent: false, recentLimit: 3 },
-        handoff: { enabled: false },
-        summaryFile: { enabled: false, path: "" },
         agent: {},
       },
     })
@@ -527,30 +533,33 @@ describe("SwarmTaskModule", () => {
     expect(await waitForButton("运行模式：持续")).toBeTruthy()
   })
 
-  it("shows grouped config fields and summary file controls", async () => {
+  it("shows grouped config fields and prompt injection controls", async () => {
     await renderModule()
     await clickTab("配置")
 
     expect(document.body.textContent).toContain("任务")
     expect(document.body.textContent).toContain("运行")
-    expect(document.body.textContent).toContain("上下文")
-    expect(document.body.textContent).toContain("汇总文件")
-    expect(document.body.textContent).toContain("写入汇总文件")
+    expect(document.body.textContent).toContain("注入")
+    expect(document.body.textContent).toContain("文件")
+    expect(document.body.textContent).toContain("序列和批次")
+    expect(document.body.textContent).toContain("上一轮交接")
+    expect(document.body.textContent).toContain("记录摘要")
+    expect(document.body.textContent).toContain("文件写入")
     expect(document.body.textContent).not.toContain("输出")
     expect(document.body.textContent).not.toContain("Git 上下文")
     expect(document.body.textContent).not.toContain("目录 + 文件")
   })
 
-  it("requires a summary file path when summary file injection is enabled", async () => {
+  it("requires a file path when file write injection is enabled", async () => {
     await renderModule()
     await clickTab("配置")
 
-    await clickSwitch("写入汇总文件")
+    await clickSwitch("文件写入")
 
     expect((await waitForButton("保存配置")).disabled).toBe(true)
     expect((await waitForButton("运行任务")).disabled).toBe(true)
 
-    await setInputValue(await waitForInput("汇总文件路径"), "reports/swarm.md")
+    await setInputValue(await waitForInput("文件路径"), "reports/swarm.md")
 
     expect((await waitForButton("保存配置")).disabled).toBe(false)
     expect((await waitForButton("运行任务")).disabled).toBe(false)
