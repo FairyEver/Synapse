@@ -22,25 +22,18 @@ const baseRun: SwarmRun = {
   status: "running",
   configSnapshot: {
     projectId: "project-1",
-    workspacePath: "/repo",
     prompt: "Run.",
     presetId: "general",
     injectOptions: {
       workerIdentity: true,
       roundContext: true,
       runContext: true,
-      outputProtocol: true,
       parallelContext: true,
-      gitContext: false,
       customAppendix: "",
     },
     runMode: "batch",
     concurrency: 3,
     maxRounds: 3,
-    output: {
-      mode: "managed-directory",
-      targetFilePolicy: "append-only",
-    },
     summary: {
       enabled: true,
       injectRecent: false,
@@ -48,6 +41,10 @@ const baseRun: SwarmRun = {
     },
     handoff: {
       enabled: false,
+    },
+    summaryFile: {
+      enabled: false,
+      path: "",
     },
     agent: {},
   },

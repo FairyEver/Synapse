@@ -17,24 +17,21 @@ import { createSwarmTaskCapabilityDispatcher } from "../dispatcher"
 
 const baseConfig = {
   projectId: "project-1",
-  workspacePath: "/repo",
   prompt: "Run.",
   presetId: "general",
   injectOptions: {
     workerIdentity: true,
     roundContext: true,
     runContext: true,
-    outputProtocol: true,
     parallelContext: true,
-    gitContext: false,
     customAppendix: "",
   },
   runMode: "batch" as const,
   concurrency: 2,
   maxRounds: 2,
-  output: { mode: "managed-directory" as const, targetFilePolicy: "append-only" as const },
   summary: { enabled: true, injectRecent: false, recentLimit: 3 },
   handoff: { enabled: false },
+  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -98,6 +95,9 @@ describe("createSwarmTaskCapabilityDispatcher", () => {
     expect(service.createTask).toHaveBeenCalledWith({ name: "Task", config: baseConfig })
     expect(service.updateTask).toHaveBeenCalledWith({ taskId: "task-1", patch: { name: "Updated" } })
     expect(service.deleteTask).toHaveBeenCalledWith("task-1")
+    expect(JSON.stringify(task)).not.toContain("workspacePath")
+    expect(JSON.stringify(task)).not.toContain("gitContext")
+    expect(JSON.stringify(task)).not.toContain("targetFilePolicy")
   })
 
   it("routes run actions through the swarm task service", async () => {
