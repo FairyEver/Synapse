@@ -3,7 +3,7 @@ import { ScrollArea } from "../../../../src/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "../../../../src/components/ui/tabs"
 import type { SynapseProjectConfig } from "../../../../src/types/config"
 import type { SwarmRun, SwarmTask, SwarmTaskConfig, SwarmWorkerRun } from "../../shared/schema"
-import { formatOutputMode, formatRunMode, formatRunStatus, formatRunTotals, formatTimestamp } from "../swarm-task-format"
+import { formatRunMode, formatRunStatus, formatRunTotals, formatTimestamp } from "../swarm-task-format"
 import { SwarmRunHistory } from "./swarm-run-history"
 import { SwarmRunPanel } from "./swarm-run-panel"
 import { SwarmTaskConfigForm } from "./swarm-task-config-form"
@@ -27,7 +27,6 @@ type SwarmTaskDetailProps = {
   readonly onDraftConfigChange: (next: SwarmTaskConfig) => void
   readonly onSaveConfig: () => void
   readonly onStartRun: () => void
-  readonly onChooseWorkspacePath: () => Promise<string | null>
   readonly onRefreshRun: () => void
   readonly onStopRefill: () => void
   readonly onCancelRun: () => void
@@ -51,7 +50,6 @@ export function SwarmTaskDetail({
   onDraftConfigChange,
   onSaveConfig,
   onStartRun,
-  onChooseWorkspacePath,
   onRefreshRun,
   onStopRefill,
   onCancelRun,
@@ -87,7 +85,6 @@ export function SwarmTaskDetail({
                 value={draftConfig}
                 projects={projects}
                 onChange={onDraftConfigChange}
-                onChooseWorkspacePath={onChooseWorkspacePath}
               />
             </ScrollArea>
             <div className="shrink-0 border-t bg-background px-3 py-3 sm:px-5">
@@ -143,11 +140,12 @@ function SwarmTaskOverview({
             ["名称", task.name],
             ["状态", formatRunStatus(task.lastStatus)],
             ["项目", projectName],
-            ["运行目录", config.workspacePath],
             ["运行模式", formatRunMode(config.runMode)],
-            ["输出", formatOutputMode(config.output.mode)],
             ["并发", String(config.concurrency)],
             ["轮次", String(config.maxRounds)],
+            ...(config.summaryFile.enabled
+              ? [["汇总文件", config.summaryFile.path]] as ReadonlyArray<readonly [string, string]>
+              : []),
           ]}
         />
       </section>

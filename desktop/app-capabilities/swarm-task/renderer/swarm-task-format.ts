@@ -2,7 +2,6 @@ import type {
   SwarmRun,
   SwarmRunMode,
   SwarmRunStatus,
-  SwarmTaskConfig,
   SwarmWorkerPhase,
   SwarmWorkerRunStatus,
 } from "../shared/schema"
@@ -41,12 +40,6 @@ export function formatWorkerPhase(phase: SwarmWorkerPhase | undefined): string {
 export function formatRunMode(mode: SwarmRunMode): string {
   if (mode === "continuous") return "持续"
   return "批量"
-}
-
-export function formatOutputMode(mode: SwarmTaskConfig["output"]["mode"]): string {
-  if (mode === "target-file") return "文件"
-  if (mode === "both") return "目录 + 文件"
-  return "目录"
 }
 
 export function formatTimestamp(value: string | undefined): string {

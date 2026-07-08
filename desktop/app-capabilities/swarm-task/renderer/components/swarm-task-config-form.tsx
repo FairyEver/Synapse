@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Check, ChevronDown, FolderOpen } from "lucide-react"
+import type { ReactNode } from "react"
+import { Check, ChevronDown } from "lucide-react"
 
 import { Button } from "../../../../src/components/ui/button"
 import {
@@ -11,7 +11,6 @@ import {
 import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../../src/components/ui/field"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "../../../../src/components/ui/hover-card"
 import { Input } from "../../../../src/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "../../../../src/components/ui/input-group"
 import { Separator } from "../../../../src/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../src/components/ui/select"
 import { Switch } from "../../../../src/components/ui/switch"
@@ -23,7 +22,6 @@ type SwarmTaskConfigFormProps = {
   readonly value: SwarmTaskConfig
   readonly projects: readonly SynapseProjectConfig[]
   readonly onChange: (next: SwarmTaskConfig) => void
-  readonly onChooseWorkspacePath: () => Promise<string | null>
 }
 
 type DescribedOption<T extends string> = {
@@ -54,70 +52,28 @@ const runModeOptions: ReadonlyArray<DescribedOption<SwarmTaskConfig["runMode"]>>
   },
 ]
 
-const outputModeOptions: ReadonlyArray<DescribedOption<SwarmTaskConfig["output"]["mode"]>> = [
-  {
-    value: "managed-directory",
-    label: "目录",
-    summary: "写入 Synapse 管理目录。",
-    description: "每次运行生成独立输出目录，便于保留历史结果。",
-    bestFor: "多 worker、多轮次、需要回看完整产物的任务。",
-    risk: "结果分散在目录中，交付给外部时可能需要整理。",
-  },
-  {
-    value: "target-file",
-    label: "文件",
-    summary: "写入指定目标文件。",
-    description: "worker 输出会按策略写入目标文件。",
-    bestFor: "持续维护同一份报告、清单或文档。",
-    risk: "需要正确设置目标文件和写入策略，避免覆盖预期内容。",
-  },
-  {
-    value: "both",
-    label: "目录 + 文件",
-    summary: "保留目录，同时写入目标文件。",
-    description: "保存完整输出目录，并同步写入目标文件。",
-    bestFor: "既要审计历史，又要维护汇总文件的任务。",
-    risk: "同一内容会出现在两个位置，后续整理成本更高。",
-  },
-]
-
 export function SwarmTaskConfigForm({
   value,
   projects,
   onChange,
-  onChooseWorkspacePath,
 }: SwarmTaskConfigFormProps) {
-  const [choosingWorkspacePath, setChoosingWorkspacePath] = useState(false)
   const selectedProject = projects.find((project) => project.id === value.projectId)
   const projectUnavailable = Boolean(value.projectId) && !selectedProject
 
-  const chooseWorkspacePath = async () => {
-    try {
-      setChoosingWorkspacePath(true)
-      const selectedPath = await onChooseWorkspacePath()
-      if (selectedPath) {
-        onChange({ ...value, workspacePath: selectedPath })
-      }
-    } finally {
-      setChoosingWorkspacePath(false)
-    }
-  }
-
   return (
-    <FieldGroup className="mx-auto grid w-full max-w-3xl gap-5 px-3 pb-3 sm:px-5 sm:pb-5">
-      <Field className="grid gap-2">
-        <FieldLabel>任务目标</FieldLabel>
-        <FieldContent>
-          <Textarea
-            rows={3}
-            className="min-h-[calc(3lh+1rem+2px)] resize-y"
-            value={value.prompt}
-            onChange={(event) => onChange({ ...value, prompt: event.target.value })}
-          />
-        </FieldContent>
-      </Field>
-
-      <div className="grid min-w-0 gap-4 md:grid-cols-2">
+    <FieldGroup className="mx-auto grid w-full max-w-3xl gap-6 px-3 pb-3 sm:px-5 sm:pb-5">
+      <ConfigSection title="任务">
+        <Field className="grid gap-2">
+          <FieldLabel>任务目标</FieldLabel>
+          <FieldContent>
+            <Textarea
+              rows={3}
+              className="min-h-[calc(3lh+1rem+2px)] resize-y"
+              value={value.prompt}
+              onChange={(event) => onChange({ ...value, prompt: event.target.value })}
+            />
+          </FieldContent>
+        </Field>
         <Field className="grid gap-2">
           <FieldLabel htmlFor="swarm-task-project">项目</FieldLabel>
           <FieldContent>
@@ -126,7 +82,7 @@ export function SwarmTaskConfigForm({
               onValueChange={(projectId) => {
                 const project = projects.find((item) => item.id === projectId)
                 if (!project) return
-                onChange({ ...value, projectId: project.id, workspacePath: project.path })
+                onChange({ ...value, projectId: project.id })
               }}
             >
               <SelectTrigger id="swarm-task-project" className="w-full" aria-label={selectedProject ? `项目：${selectedProject.name}` : "项目"}>
@@ -148,100 +104,66 @@ export function SwarmTaskConfigForm({
             ) : null}
           </FieldContent>
         </Field>
-        <Field className="grid gap-2">
-          <FieldLabel htmlFor="swarm-task-workspace-path">运行目录</FieldLabel>
-          <FieldContent>
-            <InputGroup>
-              <InputGroupInput
-                id="swarm-task-workspace-path"
-                aria-label="运行目录"
-                value={value.workspacePath}
-                onChange={(event) => onChange({ ...value, workspacePath: event.target.value })}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  type="button"
-                  variant="ghost"
-                  onClick={() => { void chooseWorkspacePath() }}
-                  disabled={choosingWorkspacePath}
-                >
-                  <FolderOpen />
-                  选择目录
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
-          <FieldLabel>运行模式</FieldLabel>
-          <FieldContent>
-            <DescribedOptionMenu
-              label="运行模式"
-              value={value.runMode}
-              options={runModeOptions}
-              onChange={(runMode) => onChange({ ...value, runMode })}
-            />
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
-          <FieldLabel>输出</FieldLabel>
-          <FieldContent>
-            <DescribedOptionMenu
-              label="输出"
-              value={value.output.mode}
-              options={outputModeOptions}
-              onChange={(mode) => onChange({
-                ...value,
-                output: { ...value.output, mode },
-              })}
-            />
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
-          <FieldLabel>并发</FieldLabel>
-          <FieldContent>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              className="tabular-nums"
-              value={String(value.concurrency)}
-              onChange={(event) => onChange({ ...value, concurrency: clampNumber(event.target.value, value.concurrency, 1, 20) })}
-            />
-          </FieldContent>
-        </Field>
-        <Field className="grid gap-2">
-          <FieldLabel>轮次</FieldLabel>
-          <FieldContent>
-            <Input
-              type="number"
-              min={1}
-              max={500}
-              className="tabular-nums"
-              value={String(value.maxRounds)}
-              onChange={(event) => onChange({ ...value, maxRounds: clampNumber(event.target.value, value.maxRounds, 1, 500) })}
-            />
-          </FieldContent>
-        </Field>
-      </div>
+      </ConfigSection>
 
-      <div className="grid min-w-0 gap-2">
-        <div className="text-sm font-medium text-foreground">上下文</div>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <SwitchField
-            label="最近摘要"
-            checked={value.summary.injectRecent}
-            onCheckedChange={(checked) => onChange({
-              ...value,
-              summary: { ...value.summary, injectRecent: checked },
-            })}
-          />
+      <ConfigSection title="运行">
+        <div className="grid min-w-0 gap-4 md:grid-cols-3">
+          <Field className="grid gap-2">
+            <FieldLabel>运行模式</FieldLabel>
+            <FieldContent>
+              <DescribedOptionMenu
+                label="运行模式"
+                value={value.runMode}
+                options={runModeOptions}
+                onChange={(runMode) => onChange({ ...value, runMode })}
+              />
+            </FieldContent>
+          </Field>
+          <Field className="grid gap-2">
+            <FieldLabel>并发</FieldLabel>
+            <FieldContent>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                className="tabular-nums"
+                value={String(value.concurrency)}
+                onChange={(event) => onChange({ ...value, concurrency: clampNumber(event.target.value, value.concurrency, 1, 20) })}
+              />
+            </FieldContent>
+          </Field>
+          <Field className="grid gap-2">
+            <FieldLabel>轮次</FieldLabel>
+            <FieldContent>
+              <Input
+                type="number"
+                min={1}
+                max={500}
+                className="tabular-nums"
+                value={String(value.maxRounds)}
+                onChange={(event) => onChange({ ...value, maxRounds: clampNumber(event.target.value, value.maxRounds, 1, 500) })}
+              />
+            </FieldContent>
+          </Field>
+        </div>
+      </ConfigSection>
+
+      <ConfigSection title="上下文">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3">
           <SwitchField
             label="摘要"
             checked={value.summary.enabled}
             onCheckedChange={(checked) => onChange({
               ...value,
               summary: { ...value.summary, enabled: checked },
+            })}
+          />
+          <SwitchField
+            label="最近摘要"
+            checked={value.summary.injectRecent}
+            onCheckedChange={(checked) => onChange({
+              ...value,
+              summary: { ...value.summary, injectRecent: checked },
             })}
           />
           <SwitchField
@@ -252,17 +174,57 @@ export function SwarmTaskConfigForm({
               handoff: { enabled: checked },
             })}
           />
+        </div>
+      </ConfigSection>
+
+      <ConfigSection title="汇总文件">
+        <div className="grid min-w-0 gap-3">
           <SwitchField
-            label="Git 上下文"
-            checked={value.injectOptions.gitContext}
+            label="写入汇总文件"
+            checked={value.summaryFile.enabled}
             onCheckedChange={(checked) => onChange({
               ...value,
-              injectOptions: { ...value.injectOptions, gitContext: checked },
+              summaryFile: {
+                enabled: checked,
+                path: value.summaryFile.path,
+              },
             })}
           />
+          {value.summaryFile.enabled ? (
+            <Field className="grid gap-2">
+              <FieldLabel htmlFor="swarm-task-summary-file">汇总文件路径</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="swarm-task-summary-file"
+                  aria-label="汇总文件路径"
+                  value={value.summaryFile.path}
+                  onChange={(event) => onChange({
+                    ...value,
+                    summaryFile: { ...value.summaryFile, path: event.target.value },
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">需要写总结文件时追加到此文件。</p>
+              </FieldContent>
+            </Field>
+          ) : null}
         </div>
-      </div>
+      </ConfigSection>
     </FieldGroup>
+  )
+}
+
+function ConfigSection({
+  title,
+  children,
+}: {
+  readonly title: string
+  readonly children: ReactNode
+}) {
+  return (
+    <section className="grid gap-3">
+      <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      <div className="grid min-w-0 gap-4">{children}</div>
+    </section>
   )
 }
 

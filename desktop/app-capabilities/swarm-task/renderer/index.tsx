@@ -46,24 +46,22 @@ type TaskNameDialogState =
   | { readonly mode: "create" }
   | { readonly mode: "rename"; readonly task: SwarmTask }
 
-const baseTaskConfig: Omit<SwarmTaskConfig, "projectId" | "workspacePath"> = {
+const baseTaskConfig: Omit<SwarmTaskConfig, "projectId"> = {
   prompt: "填写任务目标",
   presetId: "general",
   injectOptions: {
     workerIdentity: true,
     roundContext: true,
     runContext: true,
-    outputProtocol: true,
     parallelContext: true,
-    gitContext: false,
     customAppendix: "",
   },
   runMode: "batch",
   concurrency: 1,
   maxRounds: 1,
-  output: { mode: "managed-directory", targetFilePolicy: "append-only" },
   summary: { enabled: true, injectRecent: false, recentLimit: 3 },
   handoff: { enabled: false },
+  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -72,7 +70,6 @@ export function SwarmTaskModule() {
   const projects = config.global.projects
   const swarmTaskBridge = useMemo(() => requireBridgeDomain("swarmTask"), [])
   const agentBridge = useMemo(() => requireBridgeDomain("agent"), [])
-  const repositoryBridge = useMemo(() => requireBridgeDomain("repository"), [])
   const runDataRequestIdRef = useRef(0)
   const taskNameInputRef = useRef<HTMLInputElement>(null)
 
@@ -326,14 +323,10 @@ export function SwarmTaskModule() {
 
   const draftConfigIsRunnable = useMemo(() => (
     Boolean(draftConfig?.prompt.trim())
-    && Boolean(draftConfig?.workspacePath.trim())
     && Boolean(draftConfig?.projectId)
     && projects.some((project) => project.id === draftConfig?.projectId)
+    && (!draftConfig?.summaryFile.enabled || Boolean(draftConfig.summaryFile.path.trim()))
   ), [draftConfig, projects])
-
-  const chooseWorkspacePath = useCallback(async () => (
-    await repositoryBridge.chooseDirectory()
-  ), [repositoryBridge])
 
   const saveConfig = useCallback(async () => {
     if (!selectedTask || !draftConfig || !draftConfigIsRunnable) return
@@ -497,7 +490,6 @@ export function SwarmTaskModule() {
                 onDraftConfigChange={setDraftConfig}
                 onSaveConfig={() => void saveConfig()}
                 onStartRun={() => void startRun()}
-                onChooseWorkspacePath={chooseWorkspacePath}
                 onRefreshRun={() => void refreshCurrentSnapshot()}
                 onStopRefill={() => void stopRefill()}
                 onCancelRun={() => void cancelRun()}
@@ -596,7 +588,6 @@ function createDefaultTaskConfig(project: SynapseProjectConfig): SwarmTaskConfig
   return {
     ...baseTaskConfig,
     projectId: project.id,
-    workspacePath: project.path,
   }
 }
 
