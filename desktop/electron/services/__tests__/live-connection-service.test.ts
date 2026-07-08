@@ -670,4 +670,35 @@ describe("LiveConnectionService", () => {
       lastError: "网络不可用，正在重试",
     })
   })
+
+  it("stops reconnecting when token refresh clears an offline account", async () => {
+    let currentState: SynapseAccountState = {
+      ...authenticatedState,
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+    }
+    const accountService = createAccountService({
+      token: null,
+      refreshFromStorage: async () => {
+        currentState = { status: "unauthenticated" }
+        return currentState
+      },
+    })
+    accountService.getState.mockImplementation(() => currentState)
+    const createSocket = vi.fn()
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    await service.connect()
+
+    expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState()).toMatchObject({
+      status: "unauthenticated",
+      lastError: "账号未登录",
+    })
+  })
 })

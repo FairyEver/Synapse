@@ -3716,6 +3716,37 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("stops remote polling work when account authentication is unavailable", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveChanges: vi.fn(async () => {
+            throw new Error("账号未登录。")
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+        deferWatcher: true,
+      })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+
+      await expect(service.pollRemoteChanges(binding.id)).rejects.toThrow("账号未登录。")
+
+      expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(1)
+      expect(harness.deps.accountService.downloadDriveFile).not.toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("records conflicts from simultaneous local and remote changes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

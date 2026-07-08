@@ -16,19 +16,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>()
-    const { statusCode, error, message } = this.resolve(exception)
+    const { statusCode, error, message, code } = this.resolve(exception)
 
     if (statusCode >= 500) {
       this.logger.error(createExceptionLogMetadata(exception), "Unhandled server exception")
     }
 
-    response.status(statusCode).json({ error, message, statusCode })
+    response.status(statusCode).json({
+      error,
+      message,
+      statusCode,
+      ...(code ? { code } : {}),
+    })
   }
 
   private resolve(exception: unknown): {
     statusCode: number
     error: string
     message: string
+    code?: string
   } {
     if (exception instanceof HttpException) {
       const status = exception.getStatus()
@@ -37,6 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode: status,
         error: HttpStatus[status] ?? "Error",
         message: typeof body === "string" ? body : readMessage(body),
+        code: typeof body === "string" ? undefined : readCode(body),
       }
     }
 
@@ -97,6 +104,12 @@ function readMessage(body: unknown): string {
     if (Array.isArray(value)) return value.join("；")
   }
   return "请求失败。"
+}
+
+function readCode(body: unknown): string | undefined {
+  if (!body || typeof body !== "object" || !("code" in body)) return undefined
+  const value = (body as { code: unknown }).code
+  return typeof value === "string" ? value : undefined
 }
 
 function readHttpLikeError(exception: unknown): {

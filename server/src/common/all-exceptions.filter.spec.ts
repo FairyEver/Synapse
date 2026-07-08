@@ -1,4 +1,4 @@
-import { BadRequestException, HttpStatus } from "@nestjs/common"
+import { BadRequestException, HttpStatus, UnauthorizedException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { AllExceptionsFilter } from "./all-exceptions.filter"
@@ -36,6 +36,26 @@ describe("AllExceptionsFilter", () => {
         error: HttpStatus[400],
       }),
     )
+  })
+
+  it("preserves stable HttpException codes from object responses", () => {
+    const filter = new AllExceptionsFilter(mockLogger as never)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+
+    filter.catch(new UnauthorizedException({
+      message: "未登录或登录已过期。",
+      code: "refresh_invalid",
+    }), host)
+
+    expect(statusFn).toHaveBeenCalledWith(401)
+    expect(jsonFn).toHaveBeenCalledWith({
+      statusCode: 401,
+      error: HttpStatus[401],
+      message: "未登录或登录已过期。",
+      code: "refresh_invalid",
+    })
   })
 
   it("maps Prisma P2002 to 409 Conflict", () => {

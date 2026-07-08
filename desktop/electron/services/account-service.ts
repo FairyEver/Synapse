@@ -400,6 +400,9 @@ export class AccountService {
     const url = pathOrUrl.startsWith("/") ? `${apiBaseUrl()}${pathOrUrl}` : pathOrUrl
     let token = this.accessToken
     if (!token) {
+      if (this.state.status === "authenticated" && this.state.connectivity === "offline") {
+        throw new AccountAuthenticationRequiredError()
+      }
       await this.refreshFromStorage({ reason: "api-auth-failure" })
       token = this.accessToken
     }

@@ -2655,11 +2655,16 @@ describe("AccountService", () => {
     })
   })
 
-  it("clears stored credentials when refresh returns an explicit expired code", async () => {
+  it.each([
+    "refresh_invalid",
+    "refresh_expired",
+    "refresh_revoked",
+    "account_disabled",
+  ])("clears stored credentials when refresh returns terminal code %s", async (code) => {
     const { namespace, service } = await createTestAccountService({
       fetch: vi.fn(async (url) => {
         if (String(url).endsWith("/auth/refresh")) {
-          return jsonResponse({ code: "refresh_expired", message: "expired" }, 401)
+          return jsonResponse({ code, message: "expired" }, 401)
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2671,6 +2676,25 @@ describe("AccountService", () => {
     expect(state).toEqual({ status: "unauthenticated" })
     expect(await namespace.getSingleton()).not.toHaveProperty("refreshToken")
     expect(await namespace.getSingleton()).not.toHaveProperty("lastProfile")
+  })
+
+  it("does not start another API-triggered refresh while already offline", async () => {
+    let refreshCount = 0
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) {
+          refreshCount += 1
+          return jsonResponse({ error: "deploying" }, 503)
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    await service.refreshFromStorage()
+    await expect(service.listDriveItems(null)).rejects.toThrow("账号未登录。")
+
+    expect(refreshCount).toBe(1)
   })
 
   it("automatically retries offline refresh and returns online when the server recovers", async () => {
