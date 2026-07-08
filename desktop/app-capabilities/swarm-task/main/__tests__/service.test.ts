@@ -85,24 +85,21 @@ function deferred<T>() {
 
 const config = {
   projectId: "project-1",
-  workspacePath: "/repo",
   prompt: "Run.",
   presetId: "general",
   injectOptions: {
     workerIdentity: true,
     roundContext: true,
     runContext: true,
-    outputProtocol: true,
     parallelContext: true,
-    gitContext: false,
     customAppendix: "",
   },
   runMode: "batch" as const,
   concurrency: 2,
   maxRounds: 2,
-  output: { mode: "managed-directory" as const, targetFilePolicy: "append-only" as const },
   summary: { enabled: true, injectRecent: false, recentLimit: 3 },
   handoff: { enabled: false },
+  summaryFile: { enabled: false, path: "" },
   agent: {},
 }
 
@@ -110,10 +107,15 @@ function serviceHarness(options?: {
   agent?: Partial<SwarmAgentGateway>
   eventBus?: { emit: ReturnType<typeof vi.fn> }
   workers?: ReturnType<typeof namespace<SwarmWorkerRun>>
+  resolveProjectPath?: (projectId: string) => Promise<string>
 }) {
   const tasks = namespace<SwarmTask>()
   const runs = namespace<SwarmRun>()
   const workers = options?.workers ?? namespace<SwarmWorkerRun>()
+  const resolveProjectPath = vi.fn(options?.resolveProjectPath ?? (async (projectId: string) => {
+    if (projectId === "project-1") return "/repo"
+    throw new Error("项目不可用")
+  }))
   const gateway: SwarmAgentGateway = {
     sendWorker: vi.fn(async () => ({
       conversationId: "conversation-1",
@@ -136,8 +138,9 @@ function serviceHarness(options?: {
       return () => `id-${++index}`
     })(),
     outputRoot: "/repo/swarm-runs",
+    resolveProjectPath,
   } as never)
-  return { service, tasks, runs, workers, gateway }
+  return { service, tasks, runs, workers, gateway, resolveProjectPath }
 }
 
 describe("createSwarmTaskService", () => {
@@ -177,7 +180,6 @@ describe("createSwarmTaskService", () => {
             mainThreadPersonaId: "persona-current",
           },
           projectId: "project-current",
-          workspacePath: "/repo-current",
         },
         createdAt: "2026-07-07T00:00:00.000Z",
         updatedAt: "2026-07-07T00:00:00.000Z",
@@ -190,7 +192,6 @@ describe("createSwarmTaskService", () => {
         configSnapshot: {
           ...config,
           projectId: "project-snapshot",
-          workspacePath: "/repo-snapshot",
           agent: {
             providerId: "anthropic",
             modelTier: "sonnet",
@@ -212,6 +213,7 @@ describe("createSwarmTaskService", () => {
         status: "running",
         sessionKey: "swarm:task-1:run-1",
       },
+      workspacePath: "/repo-snapshot",
       prompt: "Do the work",
       abortSignal: abortController.signal,
       onConversationId: (conversationId) => {
@@ -364,6 +366,32 @@ describe("createSwarmTaskService", () => {
     expect(run.outputDirectory).toBe("/repo/swarm-runs/id-2")
   })
 
+  it("starts Agent workers in the selected project path", async () => {
+    const { service, gateway, resolveProjectPath } = serviceHarness()
+    const task = await service.createTask({ name: "任务", config })
+
+    await service.startRun({ taskId: task.id })
+
+    await vi.waitFor(() => {
+      expect(gateway.sendWorker).toHaveBeenCalled()
+    })
+    expect(resolveProjectPath).toHaveBeenCalledWith("project-1")
+    const firstCall = vi.mocked(gateway.sendWorker).mock.calls[0]?.[0]
+    expect(firstCall?.workspacePath).toBe("/repo")
+  })
+
+  it("rejects runs for missing projects before workers start", async () => {
+    const { service, gateway } = serviceHarness({
+      resolveProjectPath: async () => {
+        throw new Error("项目不可用")
+      },
+    })
+    const task = await service.createTask({ name: "任务", config })
+
+    await expect(service.startRun({ taskId: task.id })).rejects.toThrow("项目不可用")
+    expect(gateway.sendWorker).not.toHaveBeenCalled()
+  })
+
   it("merges nested partial config overrides into a full snapshot", async () => {
     const { service } = serviceHarness()
     const task = await service.createTask({
@@ -388,7 +416,7 @@ describe("createSwarmTaskService", () => {
       configOverride: {
         summary: { injectRecent: true },
         handoff: { enabled: true },
-        injectOptions: { gitContext: true },
+        injectOptions: { roundContext: false },
       },
     })
 
@@ -400,11 +428,9 @@ describe("createSwarmTaskService", () => {
     expect(run.configSnapshot.handoff).toMatchObject({ enabled: true })
     expect(run.configSnapshot.injectOptions).toMatchObject({
       workerIdentity: false,
-      roundContext: true,
+      roundContext: false,
       runContext: true,
-      outputProtocol: true,
       parallelContext: true,
-      gitContext: true,
       customAppendix: "keep me",
     })
   })

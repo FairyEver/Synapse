@@ -5,6 +5,7 @@ import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../../electron/services/agent-runtime"
 import {
+  normalizeSwarmTaskConfig,
   swarmRunStartInputSchema,
   swarmTaskConfigSchema,
   swarmTaskCreateInputSchema,
@@ -38,6 +39,7 @@ export type SwarmAgentGatewayInput = {
   readonly run: SwarmRun
   readonly worker: SwarmWorkerRun
   readonly prompt: string
+  readonly workspacePath: string
   readonly abortSignal?: AbortSignal
   readonly onConversationId?: (conversationId: string) => Promise<void> | void
 }
@@ -52,6 +54,7 @@ export type SwarmTaskServiceDeps = {
   readonly runs: Pick<DataNamespace<SwarmRun>, "list" | "get" | "upsert" | "remove">
   readonly workers: Pick<DataNamespace<SwarmWorkerRun>, "list" | "get" | "upsert" | "remove">
   readonly agent: SwarmAgentGateway
+  readonly resolveProjectPath: (projectId: string) => Promise<string>
   readonly outputRoot: string
   readonly eventBus?: Pick<EventBus, "emit">
   readonly now?: () => Date
@@ -73,7 +76,7 @@ export function createAgentRuntimeSwarmGateway(deps: {
           sessionKey: input.worker.sessionKey,
           platform: "swarm",
           content: input.prompt,
-          workspacePath: configSnapshot.workspacePath,
+          workspacePath: input.workspacePath,
           agentType: "claude-code",
           providerId: configSnapshot.agent.providerId,
           modelTier: configSnapshot.agent.modelTier,
@@ -137,7 +140,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       schemaVersion: 1,
       name: parsed.name.trim(),
       description: parsed.description,
-      currentConfig: parsed.config,
+      currentConfig: normalizeSwarmTaskConfig(parsed.config),
       createdAt: now,
       updatedAt: now,
     }
@@ -154,7 +157,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       ...("name" in parsed.patch && parsed.patch.name ? { name: parsed.patch.name.trim() } : {}),
       ...("description" in parsed.patch ? { description: parsed.patch.description } : {}),
       ...("currentConfig" in parsed.patch && parsed.patch.currentConfig
-        ? { currentConfig: parsed.patch.currentConfig }
+        ? { currentConfig: normalizeSwarmTaskConfig(parsed.patch.currentConfig) }
         : {}),
       updatedAt: timestamp(),
     }
@@ -181,7 +184,8 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
     const parsed = swarmRunStartInputSchema.parse(input)
     const task = await requireTask(parsed.taskId)
     const runId = createId()
-    const configSnapshot = mergeConfigSnapshot(task.currentConfig, input.configOverride)
+    const configSnapshot = mergeConfigSnapshot(task.currentConfig, parsed.configOverride)
+    await deps.resolveProjectPath(configSnapshot.projectId)
     const run: SwarmRun = {
       id: runId,
       schemaVersion: 1,
@@ -190,7 +194,7 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       configSnapshot,
       startedAt: timestamp(),
       totals: { started: 0, success: 0, failed: 0, cancelled: 0, timeout: 0 },
-      outputDirectory: configSnapshot.output.managedDirectory ?? path.join(deps.outputRoot, runId),
+      outputDirectory: path.join(deps.outputRoot, runId),
       stopRequested: false,
     }
 
@@ -374,11 +378,13 @@ export function createSwarmTaskService(deps: SwarmTaskServiceDeps) {
       })
 
       try {
+        const workspacePath = await deps.resolveProjectPath(run.configSnapshot.projectId)
         const result = await deps.agent.sendWorker({
           task,
           run,
           worker,
           prompt,
+          workspacePath,
           abortSignal: input.abortSignal,
           onConversationId: (conversationId) => persistWorkerConversationId(worker.id, conversationId),
         })
@@ -509,31 +515,32 @@ function mergeConfigSnapshot(
   base: SwarmTaskConfig,
   override?: SwarmRunStartInput["configOverride"],
 ): SwarmTaskConfig {
+  const normalizedBase = normalizeSwarmTaskConfig(base)
   if (!override) {
-    return base
+    return normalizedBase
   }
 
   return swarmTaskConfigSchema.parse({
-    ...base,
+    ...normalizedBase,
     ...override,
     injectOptions: {
-      ...base.injectOptions,
+      ...normalizedBase.injectOptions,
       ...override.injectOptions,
     },
-    output: {
-      ...base.output,
-      ...override.output,
-    },
     summary: {
-      ...base.summary,
+      ...normalizedBase.summary,
       ...override.summary,
     },
     handoff: {
-      ...base.handoff,
+      ...normalizedBase.handoff,
       ...override.handoff,
     },
+    summaryFile: {
+      ...normalizedBase.summaryFile,
+      ...override.summaryFile,
+    },
     agent: {
-      ...base.agent,
+      ...normalizedBase.agent,
       ...override.agent,
     },
   })

@@ -53,7 +53,6 @@ describe("swarmTaskIpcModule", () => {
       name: "Task",
       config: {
         projectId: "project-1",
-        workspacePath: "/tmp/project-1",
         prompt: "Do work",
       },
     })
@@ -74,7 +73,6 @@ describe("swarmTaskIpcModule", () => {
       name: "Task",
       config: {
         projectId: "project-1",
-        workspacePath: "/tmp/project-1",
         prompt: "Do work",
       },
     })

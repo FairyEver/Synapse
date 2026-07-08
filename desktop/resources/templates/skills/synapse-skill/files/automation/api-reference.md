@@ -273,7 +273,6 @@ Input:
   "description": "Optional description",
   "config": {
     "projectId": "project-id",
-    "workspacePath": "/Users/example/project",
     "prompt": "Find and summarize candidate approaches.",
     "presetId": "general",
     "runMode": "batch",
@@ -283,14 +282,8 @@ Input:
       "workerIdentity": true,
       "roundContext": true,
       "runContext": true,
-      "outputProtocol": true,
       "parallelContext": true,
-      "gitContext": false,
       "customAppendix": ""
-    },
-    "output": {
-      "mode": "managed-directory",
-      "targetFilePolicy": "append-only"
     },
     "summary": {
       "enabled": true,
@@ -300,12 +293,16 @@ Input:
     "handoff": {
       "enabled": false
     },
+    "summaryFile": {
+      "enabled": false,
+      "path": ""
+    },
     "agent": {}
   }
 }
 ```
 
-Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Output `mode` is `managed-directory`, `target-file`, or `both`. Target file policy is `append-only`, `section-update`, or `free-edit`.
+Returns the saved task. `runMode` is `batch` or `continuous`. `concurrency` is 1-20. `maxRounds` is 1-500. Workers run in the selected project path. `summaryFile` only injects an append instruction into worker prompts; Synapse does not merge or guarantee file writes.
 
 ### app_swarm_task_task_update
 

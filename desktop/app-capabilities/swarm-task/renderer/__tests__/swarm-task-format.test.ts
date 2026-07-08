@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { SwarmRun } from "../../shared/schema"
 import {
-  formatOutputMode,
   formatRunMode,
   formatRunStatus,
   formatRunTotals,
@@ -25,9 +24,6 @@ describe("swarm task format helpers", () => {
   it("formats task config labels and timestamps", () => {
     expect(formatRunMode("batch")).toBe("批量")
     expect(formatRunMode("continuous")).toBe("持续")
-    expect(formatOutputMode("managed-directory")).toBe("目录")
-    expect(formatOutputMode("target-file")).toBe("文件")
-    expect(formatOutputMode("both")).toBe("目录 + 文件")
     expect(formatTimestamp("2026-07-07T00:10:00.000Z")).toBe("2026-07-07 00:10")
     expect(formatTimestamp(undefined)).toBe("-")
   })
@@ -42,24 +38,21 @@ describe("swarm task format helpers", () => {
       stopRequested: false,
       configSnapshot: {
         projectId: "project-1",
-        workspacePath: "/repo",
         prompt: "Run.",
         presetId: "general",
         injectOptions: {
           workerIdentity: true,
           roundContext: true,
           runContext: true,
-          outputProtocol: true,
           parallelContext: true,
-          gitContext: false,
           customAppendix: "",
         },
         runMode: "batch",
         concurrency: 2,
         maxRounds: 2,
-        output: { mode: "managed-directory", targetFilePolicy: "append-only" },
         summary: { enabled: true, injectRecent: false, recentLimit: 3 },
         handoff: { enabled: false },
+        summaryFile: { enabled: false, path: "" },
         agent: {},
       },
       totals: { started: 4, success: 3, failed: 1, cancelled: 0, timeout: 0 },

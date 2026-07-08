@@ -149,7 +149,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
-    expect(byId.get("core.swarm-task")?.dependsOn).toEqual(["core.data-repository", "core.project-containers"])
+    expect(byId.get("core.swarm-task")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.event-bus",
+      "core.project-containers",
+    ])
     expect(byId.get("core.drive-sync")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",

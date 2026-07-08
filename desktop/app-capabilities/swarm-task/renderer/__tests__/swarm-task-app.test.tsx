@@ -14,24 +14,21 @@ const swarmTaskFixtures = vi.hoisted(() => {
     name: "任务 A",
     currentConfig: {
       projectId: "project-1",
-      workspacePath: "/repo",
       prompt: "Run.",
       presetId: "general",
       injectOptions: {
         workerIdentity: true,
         roundContext: true,
         runContext: true,
-        outputProtocol: true,
         parallelContext: true,
-        gitContext: false,
         customAppendix: "",
       },
       runMode: "batch",
       concurrency: 2,
       maxRounds: 2,
-      output: { mode: "managed-directory", targetFilePolicy: "append-only" },
       summary: { enabled: true, injectRecent: false, recentLimit: 3 },
       handoff: { enabled: false },
+      summaryFile: { enabled: false, path: "" },
       agent: {},
     },
     createdAt: "2026-07-07T00:00:00.000Z",
@@ -46,24 +43,21 @@ const swarmTaskFixtures = vi.hoisted(() => {
     name: "任务 B",
     currentConfig: {
       projectId: "project-2",
-      workspacePath: "/repo-b",
       prompt: "Run B.",
       presetId: "general",
       injectOptions: {
         workerIdentity: true,
         roundContext: true,
         runContext: true,
-        outputProtocol: true,
         parallelContext: true,
-        gitContext: false,
         customAppendix: "",
       },
       runMode: "batch",
       concurrency: 2,
       maxRounds: 2,
-      output: { mode: "managed-directory", targetFilePolicy: "append-only" },
       summary: { enabled: true, injectRecent: false, recentLimit: 3 },
       handoff: { enabled: false },
+      summaryFile: { enabled: false, path: "" },
       agent: {},
     },
     createdAt: "2026-07-07T00:00:00.000Z",
@@ -167,10 +161,6 @@ const agentBridge = vi.hoisted(() => ({
   openConversation: vi.fn(async () => ({ opened: true as const, conversationId: "conversation-1" })),
 }))
 
-const repositoryBridge = vi.hoisted(() => ({
-  chooseDirectory: vi.fn(async () => "/repo/custom"),
-}))
-
 const appConfig = vi.hoisted(() => ({
   value: {
     global: {
@@ -191,7 +181,6 @@ vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "swarmTask") return swarmTaskBridge
     if (domain === "agent") return agentBridge
-    if (domain === "repository") return repositoryBridge
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -272,8 +261,6 @@ beforeEach(() => {
   swarmTaskBridge.cancelRun.mockImplementation(async () => swarmTaskFixtures.run)
   swarmTaskBridge.deleteTask.mockClear()
   swarmTaskBridge.deleteTask.mockImplementation(async () => undefined)
-  repositoryBridge.chooseDirectory.mockClear()
-  repositoryBridge.chooseDirectory.mockImplementation(async () => "/repo/custom")
   appConfig.value.global.projects = [
     { id: "project-1", name: "项目一", path: "/repo" },
     { id: "project-2", name: "项目二", path: "/repo-b" },
@@ -326,24 +313,21 @@ describe("SwarmTaskModule", () => {
       name: defaultName,
       config: {
         projectId: "project-1",
-        workspacePath: "/repo",
         prompt: "填写任务目标",
         presetId: "general",
         injectOptions: {
           workerIdentity: true,
           roundContext: true,
           runContext: true,
-          outputProtocol: true,
           parallelContext: true,
-          gitContext: false,
           customAppendix: "",
         },
         runMode: "batch",
         concurrency: 1,
         maxRounds: 1,
-        output: { mode: "managed-directory", targetFilePolicy: "append-only" },
         summary: { enabled: true, injectRecent: false, recentLimit: 3 },
         handoff: { enabled: false },
+        summaryFile: { enabled: false, path: "" },
         agent: {},
       },
     })
@@ -461,23 +445,15 @@ describe("SwarmTaskModule", () => {
     expect(document.body.textContent).not.toContain("project-id")
   })
 
-  it("updates the run directory when selecting another project", async () => {
+  it("selects a project without exposing a run directory", async () => {
     await renderModule()
     await clickTab("配置")
 
     await selectOption("项目：项目一", "项目二")
 
-    expect((await waitForInput("运行目录")).value).toBe("/repo-b")
-  })
-
-  it("lets users choose a custom run directory", async () => {
-    await renderModule()
-    await clickTab("配置")
-
-    await clickButton("选择目录")
-
-    expect(repositoryBridge.chooseDirectory).toHaveBeenCalled()
-    expect((await waitForInput("运行目录")).value).toBe("/repo/custom")
+    expect(document.body.textContent).not.toContain("运行目录")
+    expect(document.querySelector("[aria-label='运行目录']")).toBeNull()
+    expect(swarmTaskBridge.updateTask).not.toHaveBeenCalled()
   })
 
   it("disables task creation when no projects are configured", async () => {
@@ -501,7 +477,6 @@ describe("SwarmTaskModule", () => {
       currentConfig: {
         ...swarmTaskFixtures.taskA.currentConfig,
         projectId: "missing-project",
-        workspacePath: "/missing",
       },
     }])
 
@@ -552,25 +527,33 @@ describe("SwarmTaskModule", () => {
     expect(await waitForButton("运行模式：持续")).toBeTruthy()
   })
 
-  it("shows detailed output options in a custom menu", async () => {
+  it("shows grouped config fields and summary file controls", async () => {
     await renderModule()
     await clickTab("配置")
 
-    await openButtonMenu("输出：目录")
+    expect(document.body.textContent).toContain("任务")
+    expect(document.body.textContent).toContain("运行")
+    expect(document.body.textContent).toContain("上下文")
+    expect(document.body.textContent).toContain("汇总文件")
+    expect(document.body.textContent).toContain("写入汇总文件")
+    expect(document.body.textContent).not.toContain("输出")
+    expect(document.body.textContent).not.toContain("Git 上下文")
+    expect(document.body.textContent).not.toContain("目录 + 文件")
+  })
 
-    const item = getOptionItem("both")
-    expect(item.textContent).toContain("目录 + 文件")
-    expect(item.textContent).toContain("同时写入目标文件")
+  it("requires a summary file path when summary file injection is enabled", async () => {
+    await renderModule()
+    await clickTab("配置")
 
-    await hoverElement(item)
+    await clickSwitch("写入汇总文件")
 
-    expect(document.body.textContent).toContain("both")
-    expect(document.body.textContent).toContain("保存完整输出目录")
-    expect(document.body.textContent).toContain("同一内容会出现在两个位置")
+    expect((await waitForButton("保存配置")).disabled).toBe(true)
+    expect((await waitForButton("运行任务")).disabled).toBe(true)
 
-    await clickOptionItem("both")
+    await setInputValue(await waitForInput("汇总文件路径"), "reports/swarm.md")
 
-    expect(await waitForButton("输出：目录 + 文件")).toBeTruthy()
+    expect((await waitForButton("保存配置")).disabled).toBe(false)
+    expect((await waitForButton("运行任务")).disabled).toBe(false)
   })
 
   it("opens worker conversations from the run tab", async () => {
@@ -961,6 +944,25 @@ async function clickOptionItem(value: string): Promise<void> {
   const item = getOptionItem(value)
   await act(async () => {
     item.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+}
+
+async function clickSwitch(label: string): Promise<void> {
+  let control: HTMLElement | null = null
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const element = document.querySelector(`[aria-label="${label}"]`)
+    if (element instanceof HTMLElement) {
+      control = element
+      break
+    }
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+  if (!control) throw new Error(`Missing switch: ${label}`)
+  await act(async () => {
+    control.click()
     await Promise.resolve()
   })
 }

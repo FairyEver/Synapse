@@ -8,27 +8,18 @@ import type { SwarmTaskConfig, SwarmWorkerRun } from "../../shared/schema"
 
 const config: SwarmTaskConfig = {
   projectId: "project-1",
-  workspacePath: "/repo",
   prompt: "检查当前模块并处理一个真实问题。",
   presetId: "general",
   injectOptions: {
     workerIdentity: true,
     roundContext: true,
     runContext: true,
-    outputProtocol: true,
     parallelContext: true,
-    gitContext: true,
     customAppendix: "额外规则：保持改动很小。",
   },
   runMode: "continuous",
   concurrency: 4,
   maxRounds: 8,
-  output: {
-    mode: "both",
-    managedDirectory: "/repo/swarm-runs/run-1",
-    targetFile: "/repo/report.md",
-    targetFilePolicy: "append-only",
-  },
   summary: {
     enabled: true,
     injectRecent: true,
@@ -36,6 +27,10 @@ const config: SwarmTaskConfig = {
   },
   handoff: {
     enabled: true,
+  },
+  summaryFile: {
+    enabled: true,
+    path: "reports/swarm.md",
   },
   agent: {},
 }
@@ -79,14 +74,17 @@ describe("buildSwarmWorkerPrompt", () => {
 
     expect(prompt.indexOf("## Swarm Runtime Context")).toBeLessThan(prompt.indexOf("## Recent Summaries"))
     expect(prompt.indexOf("## Recent Summaries")).toBeLessThan(prompt.indexOf("## Previous Handoff"))
-    expect(prompt.indexOf("## Previous Handoff")).toBeLessThan(prompt.indexOf("## Output Protocol"))
+    expect(prompt.indexOf("## Previous Handoff")).toBeLessThan(prompt.indexOf("## Summary File"))
+    expect(prompt.indexOf("## Summary File")).toBeLessThan(prompt.indexOf("## Parallel Coordination"))
     expect(prompt.indexOf("## User Prompt")).toBeLessThan(prompt.indexOf("## Structured Ending Protocol"))
     expect(prompt).toContain("Worker: 3/4")
     expect(prompt).toContain("Round: 3")
     expect(prompt).toContain("Run mode: continuous")
-    expect(prompt).toContain("/repo/swarm-runs/run-1")
-    expect(prompt).toContain("/repo/report.md")
-    expect(prompt).toContain("Write policy: append-only")
+    expect(prompt).toContain("reports/swarm.md")
+    expect(prompt).toContain("不要覆盖已有内容")
+    expect(prompt).not.toContain("## Output Protocol")
+    expect(prompt).not.toContain("Write policy")
+    expect(prompt).not.toContain("If you use git")
     expect(prompt).toContain("第一轮确认入口文件。")
     expect(prompt).toContain("第二轮补了测试。")
     expect(prompt).toContain("下一轮继续看 service.ts。")
@@ -114,6 +112,23 @@ describe("buildSwarmWorkerPrompt", () => {
     expect(prompt).not.toContain("## Previous Handoff")
     expect(prompt).not.toContain("<SYNAPSE_SWARM_SUMMARY>")
     expect(prompt).not.toContain("<SYNAPSE_SWARM_HANDOFF>")
+  })
+
+  it("omits summary file instructions when disabled", () => {
+    const prompt = buildSwarmWorkerPrompt({
+      taskId: "task-1",
+      runId: "run-1",
+      workerIndex: 1,
+      roundIndex: 1,
+      config: {
+        ...config,
+        summaryFile: { enabled: false, path: "" },
+      },
+      recentSummaries,
+    })
+
+    expect(prompt).not.toContain("## Summary File")
+    expect(prompt).not.toContain("reports/swarm.md")
   })
 })
 

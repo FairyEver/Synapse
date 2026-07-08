@@ -47,11 +47,10 @@ export function buildSwarmWorkerPrompt(input: BuildSwarmWorkerPromptInput): stri
     ].join("\n"))
   }
 
-  if (inject.outputProtocol) {
-    sections.push(outputProtocolSection(input.config))
-  }
+  const summaryFile = summaryFileSection(input.config)
+  if (summaryFile) sections.push(summaryFile)
 
-  if (inject.parallelContext || inject.gitContext || inject.customAppendix?.trim()) {
+  if (inject.parallelContext || inject.customAppendix?.trim()) {
     sections.push(parallelContextSection(input.config))
   }
 
@@ -75,7 +74,6 @@ function runtimeContextSection(input: BuildSwarmWorkerPromptInput): string {
       `Task: ${input.taskId}`,
       `Run: ${input.runId}`,
       `Run mode: ${input.config.runMode}`,
-      `Workspace: ${input.config.workspacePath}`,
     )
   }
   if (inject.workerIdentity) {
@@ -88,29 +86,22 @@ function runtimeContextSection(input: BuildSwarmWorkerPromptInput): string {
   return lines.length > 1 ? lines.join("\n") : ""
 }
 
-function outputProtocolSection(config: SwarmTaskConfig): string {
-  const lines = [
-    "## Output Protocol",
-    `Output mode: ${config.output.mode}`,
-    `Write policy: ${config.output.targetFilePolicy}`,
-  ]
-  if (config.output.managedDirectory) {
-    lines.push(`Managed output directory: ${config.output.managedDirectory}`)
-  }
-  if (config.output.targetFile) {
-    lines.push(`Target file: ${config.output.targetFile}`)
-  }
-  lines.push("If the user asks you to write output files, follow the output mode and write policy above.")
-  return lines.join("\n")
+function summaryFileSection(config: SwarmTaskConfig): string {
+  const path = config.summaryFile.path.trim()
+  if (!config.summaryFile.enabled || !path) return ""
+  return [
+    "## Summary File",
+    "如果本轮任务需要写入总结性结果，请追加到以下项目文件：",
+    path,
+    "",
+    "不要覆盖已有内容。追加前保留文件原有内容。",
+  ].join("\n")
 }
 
 function parallelContextSection(config: SwarmTaskConfig): string {
   const lines = ["## Parallel Coordination"]
   if (config.injectOptions.parallelContext) {
-    lines.push("- Multiple workers may run in the same workspace. Avoid overwriting unrelated user or worker changes.")
-  }
-  if (config.injectOptions.gitContext) {
-    lines.push("- If you use git, inspect git status and git diff before staging. Do not use git add .")
+    lines.push("- Multiple workers may run in the same project. Avoid overwriting unrelated user or worker changes.")
   }
   const custom = config.injectOptions.customAppendix?.trim()
   if (custom) lines.push(custom)
