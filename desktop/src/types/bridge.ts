@@ -53,7 +53,6 @@ import type {
   SwarmTaskUpdateInput,
   SwarmWorkerRun,
 } from "../../app-capabilities/swarm-task/shared/schema"
-import type { SynapseSkillInstallerSource } from "../../app-capabilities/synapse-skill/shared/schema"
 import type {
   ScreenshotArtifact,
   ScreenshotCaptureInput,

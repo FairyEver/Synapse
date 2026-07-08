@@ -1,7 +1,7 @@
 export type SynapseContentType = "rule" | "skill" | "prompt"
 export type SynapseContentMutationOperation = "create" | "update" | "delete" | "restore" | "purge"
 export type SynapseContentViewMode = "rendered" | "source"
-export type SynapseContentSource = "repository" | "builtin"
+export type SynapseContentSource = "repository"
 
 export type SynapseContentSchemaVersion = 1
 

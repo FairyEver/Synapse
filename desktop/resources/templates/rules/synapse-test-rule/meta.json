@@ -1,9 +1,0 @@
-{
-  "id": "test-rule",
-  "name": "synapse-test-rule",
-  "title": "规则安装验证",
-  "description": "测试规则，安装到编辑器后发送 \"synapse verify rule\"，若回复 ✅ SYNAPSE-VERIFY-RULE 则安装成功",
-  "category": "workflow",
-  "icon": "flask-conical",
-  "iconBg": "blue"
-}

@@ -122,7 +122,7 @@ describe("API and MCP capability surface", () => {
 
   it("uses primary app MCP tool names in the built-in Synapse skill docs", () => {
     const docs = readMarkdownFiles(
-      new URL("resources/templates/skills/synapse-skill/", repoRoot),
+      new URL("app-capabilities/synapse-skill/skill-package/", repoRoot),
     )
     const docsText = docs.map((file) => file.content).join("\n")
     const legacyToolNames = Object.keys(MCP_TOOL_ACTIONS)

@@ -15,7 +15,7 @@ import { SystemAppWindowShell } from "../../../src/modules/apps/components/syste
 import { useEditorAdaptersForContentType } from "../../../src/modules/content/hooks/use-editor-adapters-for-content-type"
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
 import type { SynapseEditorInstallStatusEntry } from "../../../src/types/editor-install-status"
-import type { SynapseSkillInstallerSource } from "../shared/schema"
+import type { SynapseSkillInstallerSource } from "../../../src/types/installers"
 
 const logger = createRendererLogger("synapse-skill.app")
 

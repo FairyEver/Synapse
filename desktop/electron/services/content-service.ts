@@ -17,7 +17,6 @@ import type {
   SynapseTextContentFile,
 } from "../../src/types/content"
 import { attachmentsPoolService } from "./attachments-pool-service"
-import { builtinContentService } from "./builtin-content-service"
 import { contentHistoryService, resolveContentDirectoryPath } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { configStore } from "./config-store"
@@ -79,22 +78,19 @@ async function readCurrentDetail(
 
 class ContentService {
   async listContent<T extends SynapseContentType>(contentType: T): Promise<SynapseContentMeta<T>[]> {
-    const builtinItems = await builtinContentService.listContent(contentType)
     const context = await getActiveRepositoryContext()
 
     if (!context) {
-      return builtinItems
+      return []
     }
 
-    let repositoryItems: SynapseContentMeta<T>[] = []
     try {
       await contentIndexService.syncIndex(context.repository)
-      repositoryItems = await contentIndexService.listContent(context.repository, contentType) as SynapseContentMeta<T>[]
+      return contentIndexService.listContent(context.repository, contentType) as Promise<SynapseContentMeta<T>[]>
     } catch (error) {
-      logger.warn("Failed to load repository content, returning builtin items only.", { contentType, error })
+      logger.warn("Failed to load repository content, returning empty list.", { contentType, error })
+      return []
     }
-
-    return [...builtinItems, ...repositoryItems]
   }
 
   async listDeletedContent<T extends SynapseContentType>(contentType: T): Promise<SynapseContentMeta<T>[]> {
@@ -114,20 +110,12 @@ class ContentService {
   }
 
   async getContent(contentType: SynapseContentType, contentId: string): Promise<SynapseTextContentFile> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return builtinContentService.getContent(contentType, contentId)
-    }
-
     const detail = await readCurrentDetail(contentType, contentId)
 
     return createTextFile("main.md", detail.content)
   }
 
   async getDetail(contentType: SynapseContentType, contentId: string): Promise<SynapseContentDetail> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return builtinContentService.getDetail(contentType, contentId)
-    }
-
     return readCurrentDetail(contentType, contentId)
   }
 
@@ -137,10 +125,6 @@ class ContentService {
     historyDirname: string,
     originalName: string,
   ): Promise<SynapseContentFile | null> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return builtinContentService.getAttachmentFile(contentType, contentId, originalName)
-    }
-
     const context = await getActiveRepositoryContext()
 
     if (!context) {
@@ -204,10 +188,6 @@ class ContentService {
     contentType: SynapseContentType,
     contentId: string,
   ): Promise<string | null> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return null
-    }
-
     const context = await getActiveRepositoryContext()
 
     if (!context) {

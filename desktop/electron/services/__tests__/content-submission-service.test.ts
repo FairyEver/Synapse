@@ -57,12 +57,6 @@ vi.mock("../content-write-service", () => ({
   contentWriteService: mocks.contentWriteService,
 }))
 
-vi.mock("../builtin-content-service", () => ({
-  builtinContentService: {
-    isBuiltinContentId: vi.fn(() => false),
-  },
-}))
-
 vi.mock("../config-store", () => ({
   configStore: mocks.configStore,
 }))

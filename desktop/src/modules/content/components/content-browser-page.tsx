@@ -27,7 +27,6 @@ import { getContentTypeDefinition } from "@/config/content-types"
 import {
   resolveCategoryViewId,
   SYNAPSE_ALL_CATEGORY_ID,
-  SYNAPSE_BUILTIN_CATEGORY_ID,
   SYNAPSE_DELETED_CATEGORY_ID,
   SYNAPSE_FAVORITES_CATEGORY_ID,
   SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID,
@@ -245,9 +244,6 @@ function ContentBrowserPage({
       return recentlyViewedIds
         .map((id) => itemMap.get(id))
         .filter((item): item is SynapseContentMeta => item !== undefined)
-    }
-    if (activeCategoryId === SYNAPSE_BUILTIN_CATEGORY_ID) {
-      return items.filter((item) => item.source === "builtin")
     }
     return items.filter((item) => (
       activeCategoryId === SYNAPSE_ALL_CATEGORY_ID

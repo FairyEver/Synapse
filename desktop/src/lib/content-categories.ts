@@ -7,7 +7,6 @@ import type {
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
 export const SYNAPSE_ALL_CATEGORY_ID = "__all__"
-export const SYNAPSE_BUILTIN_CATEGORY_ID = "builtin"
 export const SYNAPSE_FALLBACK_CATEGORY_ID = "__fallback__"
 export const SYNAPSE_FAVORITES_CATEGORY_ID = "__favorites__"
 export const SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID = "__recently_viewed__"
@@ -68,16 +67,6 @@ function createFallbackCategoryItem(
   }
 }
 
-function createBuiltinCategoryItem(count: number): SynapseCategoryViewItem {
-  return {
-    id: SYNAPSE_BUILTIN_CATEGORY_ID,
-    label: "内置资源",
-    description: "",
-    order: 0,
-    count,
-  }
-}
-
 function getCategoryDefinitions(contentType: SynapseContentType): SynapseCategoryDefinition[] {
   return getSortedCategoryDefinitions(contentType)
 }
@@ -102,10 +91,6 @@ function getCategoryLabel(
   contentType: SynapseContentType,
   categoryId: string,
 ): string {
-  if (categoryId === SYNAPSE_BUILTIN_CATEGORY_ID) {
-    return "内置资源"
-  }
-
   const definition = getCategoryDefinition(contentType, categoryId)
 
   return definition?.label ?? createFallbackCategoryItem(contentType, 0).label
@@ -119,7 +104,6 @@ function buildCategoryStats<T extends SynapseContentType>(
   const categoryDefinitionMap = getCategoryDefinitionMap(contentType)
   const counts = new Map<string, number>()
   const unknownCategoryIds = new Set<string>()
-  let builtinCount = 0
   let fallbackCount = 0
 
   for (const category of categoryDefinitions) {
@@ -127,11 +111,6 @@ function buildCategoryStats<T extends SynapseContentType>(
   }
 
   for (const item of items) {
-    if (item.source === "builtin") {
-      builtinCount += 1
-      continue
-    }
-
     if (categoryDefinitionMap.has(item.category)) {
       counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
       continue
@@ -151,7 +130,7 @@ function buildCategoryStats<T extends SynapseContentType>(
   }
 
   return {
-    items: [createAllCategoryItem(contentType, items.length), createBuiltinCategoryItem(builtinCount), ...viewItems],
+    items: [createAllCategoryItem(contentType, items.length), ...viewItems],
     totalCount: items.length,
     unknownCategoryIds: [...unknownCategoryIds].sort((left, right) => left.localeCompare(right, "zh-CN")),
   }

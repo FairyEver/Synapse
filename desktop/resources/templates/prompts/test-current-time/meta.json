@@ -1,8 +1,0 @@
-{
-  "id": "test-current-time",
-  "title": "当前时间测试",
-  "description": "让 AI 输出当前时间，用于快速验证 Agent 连接是否正常。",
-  "category": "productivity",
-  "icon": "flask-conical",
-  "iconBg": "blue"
-}

@@ -254,7 +254,8 @@ describe("packaged asar verification", () => {
   }
 
   async function writeExtraResourceFixtures(resourcesPath: string) {
-    await writeUnpackedFixture(resourcesPath, ["templates", "skills", "synapse-skill", "meta.json"], "{}")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "SKILL.md"], "# Synapse Skill\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
     await writeUnpackedFixture(resourcesPath, ["database", "mcp", "index.js"], "module.exports = {}\n")
   }
