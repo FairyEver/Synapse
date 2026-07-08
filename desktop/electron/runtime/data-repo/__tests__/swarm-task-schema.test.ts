@@ -9,6 +9,33 @@ import { normalizeSwarmTaskConfig } from "../../../../app-capabilities/swarm-tas
 
 const baseConfig = {
   projectId: "project-1",
+  prompt: "Run the task.",
+  presetId: "general",
+  promptInjection: {
+    sequenceBatch: { enabled: false },
+    previousHandoff: { enabled: false },
+    summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+    fileWrite: {
+      enabled: false,
+      path: "",
+      mode: "append-only",
+      lock: { enabled: true },
+    },
+    customAppendix: "",
+  },
+  runMode: "continuous",
+  concurrency: 3,
+  maxRounds: 9,
+  agent: {
+    providerId: "provider-1",
+    modelTier: "default",
+    permissionMode: "default",
+    mainThreadPersonaId: null,
+  },
+}
+
+const legacyConfig = {
+  projectId: "project-1",
   workspacePath: "/Users/liyang/Documents/code/github/Synapse",
   prompt: "Run the task.",
   presetId: "general",
@@ -19,29 +46,25 @@ const baseConfig = {
     outputProtocol: true,
     parallelContext: true,
     gitContext: false,
-    customAppendix: "",
+    customAppendix: "Legacy appendix.",
   },
   runMode: "continuous",
   concurrency: 3,
   maxRounds: 9,
   output: {
-    mode: "managed-directory",
-    targetFilePolicy: "append-only",
+    mode: "target-file",
+    targetFile: "reports/legacy.md",
+    targetFilePolicy: "section-update",
   },
   summary: {
     enabled: true,
     injectRecent: true,
-    recentLimit: 3,
+    recentLimit: 5,
   },
   handoff: {
-    enabled: false,
+    enabled: true,
   },
-  agent: {
-    providerId: "provider-1",
-    modelTier: "default",
-    permissionMode: "default",
-    mainThreadPersonaId: null,
-  },
+  agent: {},
 }
 
 describe("swarm task DataRepository schemas", () => {
@@ -51,7 +74,7 @@ describe("swarm task DataRepository schemas", () => {
     expect(allSchemas.map((schema) => schema.name)).toContain("app.swarm-task.worker-runs")
   })
 
-  it("validates a task entry", () => {
+  it("validates a new pure-executor task config", () => {
     const entry = {
       id: "task-1",
       schemaVersion: 1,
@@ -67,44 +90,54 @@ describe("swarm task DataRepository schemas", () => {
     expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(true)
   })
 
-  it("validates the simplified config without workspace or output fields", () => {
+  it("normalizes legacy injection fields to promptInjection", () => {
+    const config = normalizeSwarmTaskConfig(legacyConfig)
+
+    expect(config.promptInjection).toEqual({
+      sequenceBatch: { enabled: true },
+      previousHandoff: { enabled: true },
+      summary: { enabled: true, injectRecent: true, recentLimit: 5 },
+      fileWrite: {
+        enabled: true,
+        path: "reports/legacy.md",
+        mode: "update",
+        lock: { enabled: true },
+      },
+      customAppendix: "Legacy appendix.",
+    })
+    expect("workspacePath" in config).toBe(false)
+    expect("output" in config).toBe(false)
+    expect("injectOptions" in config).toBe(false)
+    expect("summaryFile" in config).toBe(false)
+    expect("handoff" in config).toBe(false)
+  })
+
+  it("keeps new task defaults as pure executor", () => {
+    const config = normalizeSwarmTaskConfig({
+      projectId: "project-1",
+      prompt: "Run the task.",
+    })
+
+    expect(config.promptInjection).toEqual({
+      sequenceBatch: { enabled: false },
+      previousHandoff: { enabled: false },
+      summary: { enabled: false, injectRecent: false, recentLimit: 3 },
+      fileWrite: {
+        enabled: false,
+        path: "",
+        mode: "append-only",
+        lock: { enabled: true },
+      },
+      customAppendix: "",
+    })
+  })
+
+  it("validates a legacy task entry through normalization", () => {
     const entry = {
       id: "task-1",
       schemaVersion: 1,
       name: "巡检",
-      currentConfig: {
-        projectId: "project-1",
-        prompt: "Run the task.",
-        presetId: "general",
-        injectOptions: {
-          workerIdentity: true,
-          roundContext: true,
-          runContext: true,
-          parallelContext: true,
-          customAppendix: "",
-        },
-        runMode: "continuous",
-        concurrency: 3,
-        maxRounds: 9,
-        summary: {
-          enabled: true,
-          injectRecent: true,
-          recentLimit: 3,
-        },
-        handoff: {
-          enabled: false,
-        },
-        summaryFile: {
-          enabled: true,
-          path: "reports/swarm.md",
-        },
-        agent: {
-          providerId: "provider-1",
-          modelTier: "default",
-          permissionMode: "default",
-          mainThreadPersonaId: null,
-        },
-      },
+      currentConfig: legacyConfig,
       createdAt: "2026-07-07T00:00:00.000Z",
       updatedAt: "2026-07-07T00:00:00.000Z",
     }
@@ -112,23 +145,22 @@ describe("swarm task DataRepository schemas", () => {
     expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(true)
   })
 
-  it("normalizes legacy output target files to summaryFile", () => {
+  it("normalizes legacy summary file config to fileWrite", () => {
     const config = normalizeSwarmTaskConfig({
-      ...baseConfig,
-      output: {
-        mode: "target-file",
-        targetFile: "reports/legacy.md",
-        targetFilePolicy: "append-only",
+      ...legacyConfig,
+      output: undefined,
+      summaryFile: {
+        enabled: true,
+        path: "reports/swarm.md",
       },
     })
 
-    expect(config.summaryFile).toEqual({
+    expect(config.promptInjection.fileWrite).toEqual({
       enabled: true,
-      path: "reports/legacy.md",
+      path: "reports/swarm.md",
+      mode: "append-only",
+      lock: { enabled: true },
     })
-    expect("workspacePath" in config).toBe(false)
-    expect("output" in config).toBe(false)
-    expect(config.injectOptions).not.toHaveProperty("gitContext")
   })
 
   it("validates a run snapshot", () => {
@@ -155,6 +187,9 @@ describe("swarm task DataRepository schemas", () => {
       runId: "run-1",
       workerIndex: 1,
       roundIndex: 1,
+      sequenceIndex: 1,
+      slotIndex: 1,
+      batchIndex: 1,
       status: "running",
       conversationId: "conversation-1",
       sessionKey: "swarm:task-1:run-1",
@@ -166,13 +201,13 @@ describe("swarm task DataRepository schemas", () => {
     expect(swarmTaskWorkerRunsSchemaDefinition.validate(entry)).toBe(true)
   })
 
-  it("rejects invalid output policies", () => {
+  it("rejects invalid legacy output policies", () => {
     const entry = {
       id: "task-1",
       schemaVersion: 1,
       name: "bad",
       currentConfig: {
-        ...baseConfig,
+        ...legacyConfig,
         output: { mode: "target-file", targetFilePolicy: "overwrite" },
       },
       createdAt: "2026-07-07T00:00:00.000Z",
@@ -182,14 +217,22 @@ describe("swarm task DataRepository schemas", () => {
     expect(swarmTaskTasksSchemaDefinition.validate(entry)).toBe(false)
   })
 
-  it("rejects summary file paths outside the project", () => {
+  it("rejects enabled file write paths outside the project", () => {
     const entry = {
       id: "task-1",
       schemaVersion: 1,
       name: "bad",
       currentConfig: {
-        ...normalizeSwarmTaskConfig(baseConfig),
-        summaryFile: { enabled: true, path: "../outside.md" },
+        ...baseConfig,
+        promptInjection: {
+          ...baseConfig.promptInjection,
+          fileWrite: {
+            enabled: true,
+            path: "../outside.md",
+            mode: "append-only",
+            lock: { enabled: true },
+          },
+        },
       },
       createdAt: "2026-07-07T00:00:00.000Z",
       updatedAt: "2026-07-07T00:00:00.000Z",
