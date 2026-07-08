@@ -6,14 +6,25 @@ import {
   SWARM_SUMMARY_OPEN,
 } from "../shared/prompt"
 
+export type SwarmPromptHandoff = {
+  readonly workerIndex: number
+  readonly sequenceIndex: number
+  readonly slotIndex: number
+  readonly batchIndex: number
+  readonly handoff: string
+}
+
 export type BuildSwarmWorkerPromptInput = {
   readonly taskId: string
   readonly runId: string
   readonly workerIndex: number
   readonly roundIndex: number
+  readonly sequenceIndex: number
+  readonly slotIndex: number
+  readonly batchIndex: number
   readonly config: SwarmTaskConfig
   readonly recentSummaries: readonly SwarmWorkerRun[]
-  readonly previousHandoff?: string
+  readonly previousHandoffs: readonly SwarmPromptHandoff[]
 }
 
 export type ExtractedSwarmOutput = {
@@ -23,35 +34,38 @@ export type ExtractedSwarmOutput = {
 
 export function buildSwarmWorkerPrompt(input: BuildSwarmWorkerPromptInput): string {
   const sections: string[] = []
-  const inject = input.config.injectOptions
+  const injection = input.config.promptInjection
 
-  const runtimeContext = runtimeContextSection(input)
-  if (runtimeContext) sections.push(runtimeContext)
+  if (injection.sequenceBatch.enabled) {
+    sections.push(sequenceBatchSection(input))
+  }
 
-  if (input.config.summary.enabled && input.config.summary.injectRecent) {
+  if (injection.summary.enabled && injection.summary.injectRecent) {
     const summaries = input.recentSummaries
       .filter((item) => item.summary?.trim())
-      .slice(-input.config.summary.recentLimit)
+      .slice(-injection.summary.recentLimit)
     if (summaries.length > 0) {
       sections.push([
         "## Recent Summaries",
-        ...summaries.map((item) => `- Worker ${item.workerIndex}, round ${item.roundIndex}: ${item.summary?.trim()}`),
+        ...summaries.map((item) => {
+          const sequenceIndex = item.sequenceIndex ?? item.roundIndex
+          const slotIndex = item.slotIndex ?? item.workerIndex
+          return `- sequence ${sequenceIndex}, slot ${slotIndex}: ${item.summary?.trim()}`
+        }),
       ].join("\n"))
     }
   }
 
-  if (input.config.handoff.enabled && input.previousHandoff?.trim()) {
-    sections.push([
-      "## Previous Handoff",
-      input.previousHandoff.trim(),
-    ].join("\n"))
+  if (injection.previousHandoff.enabled && input.previousHandoffs.length > 0) {
+    sections.push(previousHandoffSection(input.previousHandoffs))
   }
 
-  const summaryFile = summaryFileSection(input.config)
-  if (summaryFile) sections.push(summaryFile)
+  const fileWrite = fileWriteSection(input.config)
+  if (fileWrite) sections.push(fileWrite)
 
-  if (inject.parallelContext || inject.customAppendix?.trim()) {
-    sections.push(parallelContextSection(input.config))
+  const custom = injection.customAppendix.trim()
+  if (custom) {
+    sections.push(["## Prompt Appendix", custom].join("\n"))
   }
 
   sections.push([
@@ -65,52 +79,68 @@ export function buildSwarmWorkerPrompt(input: BuildSwarmWorkerPromptInput): stri
   return sections.filter(Boolean).join("\n\n")
 }
 
-function runtimeContextSection(input: BuildSwarmWorkerPromptInput): string {
-  const lines = ["## Swarm Runtime Context"]
-  const inject = input.config.injectOptions
-
-  if (inject.runContext) {
-    lines.push(
-      `Task: ${input.taskId}`,
-      `Run: ${input.runId}`,
-      `Run mode: ${input.config.runMode}`,
-    )
-  }
-  if (inject.workerIdentity) {
-    lines.push(`Worker: ${input.workerIndex}/${input.config.concurrency}`)
-  }
-  if (inject.roundContext) {
-    lines.push(`Round: ${input.roundIndex}`)
-  }
-
-  return lines.length > 1 ? lines.join("\n") : ""
-}
-
-function summaryFileSection(config: SwarmTaskConfig): string {
-  const path = config.summaryFile.path.trim()
-  if (!config.summaryFile.enabled || !path) return ""
+function sequenceBatchSection(input: BuildSwarmWorkerPromptInput): string {
   return [
-    "## Summary File",
-    "如果本轮任务需要写入总结性结果，请追加到以下项目文件：",
-    path,
-    "",
-    "不要覆盖已有内容。追加前保留文件原有内容。",
+    "## Swarm Sequence",
+    `taskId: ${input.taskId}`,
+    `runId: ${input.runId}`,
+    `runMode: ${input.config.runMode}`,
+    `concurrency: ${input.config.concurrency}`,
+    `maxRounds: ${input.config.maxRounds}`,
+    `sequenceIndex: ${input.sequenceIndex}`,
+    `sequenceIndexZeroBased: ${input.sequenceIndex - 1}`,
+    `slotIndex: ${input.slotIndex}`,
+    `slotIndexZeroBased: ${input.slotIndex - 1}`,
+    `batchIndex: ${input.batchIndex}`,
+    `batchIndexZeroBased: ${input.batchIndex - 1}`,
   ].join("\n")
 }
 
-function parallelContextSection(config: SwarmTaskConfig): string {
-  const lines = ["## Parallel Coordination"]
-  if (config.injectOptions.parallelContext) {
-    lines.push("- Multiple workers may run in the same project. Avoid overwriting unrelated user or worker changes.")
+function previousHandoffSection(handoffs: readonly SwarmPromptHandoff[]): string {
+  return [
+    "## Previous Handoff",
+    ...handoffs.map((item) => [
+      `### sequence ${item.sequenceIndex}, slot ${item.slotIndex}, batch ${item.batchIndex}`,
+      item.handoff.trim(),
+    ].join("\n")),
+  ].join("\n")
+}
+
+function fileWriteSection(config: SwarmTaskConfig): string {
+  const fileWrite = config.promptInjection.fileWrite
+  const path = fileWrite.path.trim()
+  if (!fileWrite.enabled || !path) return ""
+
+  const lines = [
+    "## File Write Rules",
+    `Write file: ${path}`,
+    `Mode: ${fileWrite.mode}`,
+    "",
+  ]
+
+  if (fileWrite.mode === "append-only") {
+    lines.push(
+      "Before writing, read the current file content. Do not overwrite, rewrite, delete, or modify existing content. Only append new content to the end of the file.",
+    )
+  } else {
+    lines.push(
+      "You may insert, modify, reorganize, or delete existing content when the task requires it. Preserve unrelated user content.",
+    )
   }
-  const custom = config.injectOptions.customAppendix?.trim()
-  if (custom) lines.push(custom)
+
+  if (fileWrite.lock.enabled) {
+    lines.push(
+      "",
+      `Before changing the file, acquire an atomic project-local lock directory named ${path}.lock. Release the lock after the write finishes. If the lock cannot be acquired, wait and retry instead of writing concurrently.`,
+    )
+  }
+
   return lines.join("\n")
 }
 
 function structuredEndingSection(config: SwarmTaskConfig): string {
   const lines = ["## Structured Ending Protocol"]
-  if (config.summary.enabled) {
+  if (config.promptInjection.summary.enabled) {
     lines.push(
       "End with a concise Summary block:",
       SWARM_SUMMARY_OPEN,
@@ -118,7 +148,7 @@ function structuredEndingSection(config: SwarmTaskConfig): string {
       SWARM_SUMMARY_CLOSE,
     )
   }
-  if (config.handoff.enabled) {
+  if (config.promptInjection.previousHandoff.enabled) {
     lines.push(
       "End with a Handoff block for the next worker round:",
       SWARM_HANDOFF_OPEN,
