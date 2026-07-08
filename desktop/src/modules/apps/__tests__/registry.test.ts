@@ -25,6 +25,7 @@ describe("system app registry", () => {
       "database",
       "document-template",
       "skill-installer",
+      "synapse-skill",
       "rule-installer",
       "quick-input",
       "sound-notifier",
@@ -76,6 +77,16 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 340 },
       capabilities: {
         primaryMcpPrefix: "app_swarm_task",
+      },
+    })
+    expect(getSystemAppManifest("synapse-skill")).toMatchObject({
+      id: "synapse-skill",
+      namespace: "synapse_skill",
+      name: "Synapse Skill",
+      windowTitle: "Synapse Skill",
+      dock: { pinnedByDefault: false, order: 290 },
+      capabilities: {
+        primaryMcpPrefix: "app_synapse_skill",
       },
     })
   })

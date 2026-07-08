@@ -11,6 +11,7 @@ export const SYSTEM_APP_IDS = [
   "database",
   "document-template",
   "skill-installer",
+  "synapse-skill",
   "rule-installer",
   "quick-input",
   "sound-notifier",
@@ -37,6 +38,7 @@ export type SynapseSystemAppNamespace =
   | "database"
   | "document_template"
   | "skill_installer"
+  | "synapse_skill"
   | "rule_installer"
   | "quick_input"
   | "sound_notifier"

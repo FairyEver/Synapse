@@ -22,6 +22,7 @@ import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { DocumentTemplateModule } from "../../../../app-capabilities/document-template/renderer"
 import { SkillInstallerModule } from "../../../../app-capabilities/skill-installer/renderer"
+import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
 import { RuleInstallerModule } from "../../../../app-capabilities/rule-installer/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { SoundNotifierModule } from "../../../../app-capabilities/sound-notifier/renderer"
@@ -97,6 +98,7 @@ function SystemAppContent({
   if (appId === "database") return <DatabaseModule />
   if (appId === "document-template") return <DocumentTemplateModule />
   if (appId === "skill-installer") return <SkillInstallerModule />
+  if (appId === "synapse-skill") return <SynapseSkillModule />
   if (appId === "rule-installer") return <RuleInstallerModule />
   if (appId === "quick-input") return <QuickInputModule />
   if (appId === "sound-notifier") return <SoundNotifierModule />
