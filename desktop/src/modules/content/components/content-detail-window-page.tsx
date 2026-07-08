@@ -141,7 +141,7 @@ function useContentWindowDeleteState(
 }
 
 function canEditContentDetail(detail: SynapseContentDetail | null): boolean {
-  return Boolean(detail && !detail.isReadonly && detail.source !== "builtin")
+  return Boolean(detail && !detail.isReadonly)
 }
 
 async function openEditFromDetailWindow(

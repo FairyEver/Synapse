@@ -100,7 +100,7 @@ function createSkillDetail(id: string): SynapseSkillDetail {
     modifiedBy: "user",
     modifiedByDisplayName: "User",
     name: "test-skill",
-    source: "builtin",
+    source: "repository",
     title: "Test Skill",
     type: "skill",
   }

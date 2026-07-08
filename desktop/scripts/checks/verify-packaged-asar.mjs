@@ -146,8 +146,12 @@ const usageAnalysisWorkerEntries = [
 ]
 const requiredExtraResourceFiles = [
   {
-    relativePath: "templates/skills/synapse-skill/meta.json",
-    label: "built-in content templates",
+    relativePath: "synapse-skill/SKILL.md",
+    label: "Synapse Skill package",
+  },
+  {
+    relativePath: "synapse-skill/database/index.md",
+    label: "Synapse Skill package",
   },
   {
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",

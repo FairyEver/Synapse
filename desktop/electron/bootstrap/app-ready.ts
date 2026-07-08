@@ -2,6 +2,7 @@ import { dialog } from "electron"
 
 import type { AutomationService } from "../services/automation"
 import { accountService } from "../services/account-service"
+import { editorInstallService } from "../services/editor-install-service"
 import { installStatusCacheService } from "../services/install-status-cache-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { LiveWebhookDeliveryHandler } from "../services/live-webhook-delivery-handler"
@@ -18,6 +19,7 @@ import { attachBeforeQuitHandler } from "./before-quit"
 import { createIpcRegistry } from "./ipc-registry"
 import { createMainWindow, type MainWindowState } from "./main-window"
 import { buildServiceRegistry } from "./registry"
+import { synapseSkillPreparedSourceProvider } from "../../app-capabilities/synapse-skill/main/prepared-source-provider"
 
 const logger = createMainLogger("bootstrap.app-ready")
 
@@ -55,6 +57,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     logger,
     resolve: (serviceId) => registry.get(serviceId),
   }
+  editorInstallService.addPreparedSourceProvider(synapseSkillPreparedSourceProvider)
   createIpcRegistry(ipcCtx)
 
   void installStatusCacheService.buildCache().catch((error) => {

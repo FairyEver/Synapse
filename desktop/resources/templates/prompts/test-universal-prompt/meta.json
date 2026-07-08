@@ -1,8 +1,0 @@
-{
-  "id": "test-universal-prompt",
-  "title": "结构化代码诊断",
-  "description": "将任意代码片段粘贴给 AI，按固定格式输出五维诊断报告（问题、性能、安全、改进、评分）",
-  "category": "coding",
-  "icon": "stethoscope",
-  "iconBg": "rose"
-}

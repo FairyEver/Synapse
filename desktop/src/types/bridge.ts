@@ -1190,6 +1190,9 @@ export type SynapseBridge = {
       payload: SynapsePrepareInlineRuleSourcePayload,
     ) => Promise<SynapseRuleInstallerSource>
   }
+  synapseSkill: {
+    prepareInstallSource: () => Promise<SynapseSkillInstallerSource>
+  }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>

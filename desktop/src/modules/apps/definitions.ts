@@ -5,6 +5,7 @@ import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
 import { documentTemplateAppDefinition } from "../../../app-capabilities/document-template/renderer/app-definition"
 import { skillInstallerAppDefinition } from "../../../app-capabilities/skill-installer/renderer/app-definition"
+import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
 import { ruleInstallerAppDefinition } from "../../../app-capabilities/rule-installer/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
 import { soundNotifierAppDefinition } from "../../../app-capabilities/sound-notifier/renderer/app-definition"
@@ -35,6 +36,7 @@ const systemAppDefinitions = [
   databaseAppDefinition,
   documentTemplateAppDefinition,
   skillInstallerAppDefinition,
+  synapseSkillAppDefinition,
   ruleInstallerAppDefinition,
   quickInputAppDefinition,
   soundNotifierAppDefinition,

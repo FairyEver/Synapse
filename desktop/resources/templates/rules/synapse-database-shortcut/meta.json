@@ -1,9 +1,0 @@
-{
-  "id": "database-shortcut",
-  "name": "synapse-mcp-shortcut",
-  "title": "Synapse MCP 快捷指令",
-  "description": "当消息包含 \"sss\" 时，按意图使用 synapse-mcp 的数据库或调度工具",
-  "category": "tooling",
-  "icon": "terminal",
-  "iconBg": "teal"
-}

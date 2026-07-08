@@ -13,7 +13,6 @@ import {
 import type { SynapseContentType } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
-import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { createMainLogger } from "./log-store"
@@ -150,7 +149,7 @@ class ContentDownloadService {
     archiveOptions?: ContentDownloadArchiveOptions,
   ): Promise<void> {
     const detail = await contentService.getDetail(contentType, id)
-    const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
+    const repositoryRootPath = await getActiveRepositoryRootPath()
 
     await withTemporaryOutput(".zip", async (tempPath) => {
       const stagingRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-export-"))
@@ -173,27 +172,14 @@ class ContentDownloadService {
           }
 
           const attachmentTargetPath = path.join(stagingDirectoryPath, originalName)
-          if (detail.source === "builtin") {
-            await builtinContentService.copyAttachmentToPath(
-              contentType,
-              id,
-              { ...attachment, originalName },
-              attachmentTargetPath,
-            )
-          } else {
-            if (!repositoryRootPath) {
-              throw new Error("当前还没有选中的本地目录。")
-            }
+          const copied = await attachmentsPoolService.copyAttachmentToPath(
+            repositoryRootPath,
+            { ...attachment, originalName },
+            attachmentTargetPath,
+          )
 
-            const copied = await attachmentsPoolService.copyAttachmentToPath(
-              repositoryRootPath,
-              { ...attachment, originalName },
-              attachmentTargetPath,
-            )
-
-            if (!copied) {
-              throw new Error(`Skill 附件复制失败：${originalName}`)
-            }
+          if (!copied) {
+            throw new Error(`Skill 附件复制失败：${originalName}`)
           }
         }
 

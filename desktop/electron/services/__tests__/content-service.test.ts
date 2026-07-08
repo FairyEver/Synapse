@@ -9,13 +9,6 @@ const mocks = vi.hoisted(() => ({
   attachmentsPoolService: {
     readAttachmentFile: vi.fn(),
   },
-  builtinContentService: {
-    getAttachmentFile: vi.fn(),
-    getContent: vi.fn(),
-    getDetail: vi.fn(),
-    isBuiltinContentId: vi.fn(),
-    listContent: vi.fn(),
-  },
   configStore: {
     load: vi.fn(),
   },
@@ -45,10 +38,6 @@ vi.mock("node:fs/promises", () => mocks.fsPromises)
 
 vi.mock("../attachments-pool-service", () => ({
   attachmentsPoolService: mocks.attachmentsPoolService,
-}))
-
-vi.mock("../builtin-content-service", () => ({
-  builtinContentService: mocks.builtinContentService,
 }))
 
 vi.mock("../config-store", () => ({
@@ -170,7 +159,6 @@ describe("contentService.listDeletedContent", () => {
 describe("contentService.getAttachmentFile", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.builtinContentService.isBuiltinContentId.mockReturnValue(false)
   })
 
   it("reads repository attachments from the git root when active path is a subdirectory", async () => {
@@ -218,7 +206,6 @@ describe("contentService.getAttachmentFile", () => {
 describe("contentService.readIconImage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.builtinContentService.isBuiltinContentId.mockReturnValue(false)
     mocks.configStore.load.mockResolvedValue(createConfig())
     mocks.resolveContentDirectoryPath.mockReturnValue("/repo/rules/rule-1")
     mocks.fsPromises.stat.mockResolvedValue({

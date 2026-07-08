@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
   rm: vi.fn(),
   resolveTarget: vi.fn(),
+  configStore: {
+    load: vi.fn(),
+  },
+  repositoryStore: {
+    getRepositoryState: vi.fn(),
+  },
 }))
 
 vi.mock("node:fs/promises", async () => {
@@ -49,10 +55,18 @@ vi.mock("../content-service", () => ({
   },
 }))
 
+vi.mock("../config-store", () => ({
+  configStore: mocks.configStore,
+}))
+
 vi.mock("../definitions/generated/main-registry", () => ({
   editorInstallStrategyById: new Map([
     ["test-editor", { prepareSkillDirectory: mocks.prepareSkillDirectory }],
   ]),
+}))
+
+vi.mock("../repository-store", () => ({
+  repositoryStore: mocks.repositoryStore,
 }))
 
 import { editorInstallService } from "../editor-install-service"
@@ -85,7 +99,7 @@ function createSkillDetail(contentId: string): SynapseSkillDetail {
     modifiedBy: "user",
     modifiedByDisplayName: "User",
     name: "test-skill",
-    source: "builtin",
+    source: "repository",
     title: "Test Skill",
     type: "skill",
   }
@@ -94,6 +108,20 @@ function createSkillDetail(contentId: string): SynapseSkillDetail {
 describe("EditorInstallService security", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.configStore.load.mockResolvedValue({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+    })
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: true,
+      gitRootPath: "/repo",
+    })
     mocks.rename.mockImplementation(async (
       oldPath: Parameters<typeof import("node:fs/promises")["rename"]>[0],
       newPath: Parameters<typeof import("node:fs/promises")["rename"]>[1],

@@ -19,7 +19,6 @@ import type {
   SynapseSkillInstallerSource,
 } from "../../src/types/installers"
 import { attachmentsPoolService } from "./attachments-pool-service"
-import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import {
@@ -316,7 +315,7 @@ export class EditorInstallCore {
             : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
             : await contentService.getSkillDetail(payload.contentId)
-          const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail || detail.source === "builtin"
+          const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail
             ? null
             : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
@@ -393,13 +392,6 @@ export class EditorInstallCore {
                       payload.preparedSourceId,
                       payload.contentId,
                       attachment.originalName,
-                      attachmentTargetPath,
-                    )
-                  } else if (detailWithSubstitutions.source === "builtin") {
-                    await builtinContentService.copyAttachmentToPath(
-                      payload.contentType,
-                      payload.contentId,
-                      attachment,
                       attachmentTargetPath,
                     )
                   } else {

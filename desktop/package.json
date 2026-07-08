@@ -158,8 +158,8 @@
     },
     "extraResources": [
       {
-        "from": "resources/templates",
-        "to": "templates"
+        "from": "app-capabilities/synapse-skill/skill-package",
+        "to": "synapse-skill"
       },
       {
         "from": "resources/knowledge-base",

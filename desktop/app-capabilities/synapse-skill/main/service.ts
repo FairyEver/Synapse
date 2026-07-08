@@ -1,0 +1,178 @@
+import { createHash, randomUUID } from "node:crypto"
+import { copyFile, mkdir } from "node:fs/promises"
+import path from "node:path"
+import { app } from "electron"
+import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
+import type { SynapseContentDetail } from "../../../src/types/content"
+import {
+  readSkillDraftFromDirectory,
+  type ContentSkillSourceDraft,
+} from "../../../electron/services/content-skill-source-service"
+import {
+  SYNAPSE_SKILL_NAME,
+  SYNAPSE_SKILL_PREPARED_SOURCE_PREFIX,
+  SYNAPSE_SKILL_SOURCE_IDENTITY,
+  SYNAPSE_SKILL_TITLE,
+} from "../shared/capability"
+import type { SynapseSkillInstallerSource } from "../shared/schema"
+
+type SynapseSkillServiceDeps = {
+  readonly createId?: () => string
+  readonly packageRoot?: string
+}
+
+type PreparedSynapseSkill = {
+  readonly packageRoot: string
+  readonly source: SynapseSkillInstallerSource
+}
+
+function defaultPackageRoot(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "synapse-skill")
+  }
+
+  return path.join(app.getAppPath(), "app-capabilities", "synapse-skill", "skill-package")
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex")
+}
+
+function stripSkillFrontmatter(content: string): string {
+  if (!content.startsWith("---")) {
+    return content.trim()
+  }
+
+  const endIndex = content.indexOf("\n---", 3)
+  if (endIndex === -1) {
+    return content.trim()
+  }
+
+  parseFrontmatterBlock(content.slice(4, endIndex))
+  return content.slice(endIndex + 4).trim()
+}
+
+class SynapseSkillService {
+  private readonly createId: () => string
+  private readonly packageRoot: string
+  private readonly preparedById = new Map<string, PreparedSynapseSkill>()
+
+  constructor(deps: SynapseSkillServiceDeps = {}) {
+    this.createId = deps.createId ?? randomUUID
+    this.packageRoot = deps.packageRoot ?? defaultPackageRoot()
+  }
+
+  async prepareInstallSource(): Promise<SynapseSkillInstallerSource> {
+    const draft = await this.readDraft()
+    const preparedSourceId = `${SYNAPSE_SKILL_PREPARED_SOURCE_PREFIX}${this.createId()}`
+    const source: SynapseSkillInstallerSource = {
+      kind: "skill",
+      origin: "prepared",
+      sourceIdentity: SYNAPSE_SKILL_SOURCE_IDENTITY,
+      name: SYNAPSE_SKILL_NAME,
+      title: SYNAPSE_SKILL_TITLE,
+      description: draft.metadata.description?.trim() ?? "",
+      preparedSourceId,
+      mainContent: draft.content,
+    }
+
+    this.preparedById.set(preparedSourceId, { packageRoot: this.packageRoot, source })
+    return source
+  }
+
+  hasPreparedSource(sourceId: string, contentId: string): boolean {
+    return contentId === SYNAPSE_SKILL_SOURCE_IDENTITY && this.preparedById.has(sourceId)
+  }
+
+  async readPreparedSkill(
+    sourceId: string,
+    contentId: string,
+  ): Promise<SynapseContentDetail<"skill">> {
+    this.requirePrepared(sourceId, contentId)
+    const draft = await this.readDraft()
+    const now = new Date(0).toISOString()
+
+    return {
+      attachmentCount: draft.files.length,
+      attachments: draft.files.map((file) => ({
+        originalName: file.originalName,
+        sha256: file.sha256 ?? sha256(file.bytes ?? new Uint8Array()),
+        size: file.size,
+      })),
+      category: "system",
+      content: stripSkillFrontmatter(draft.content),
+      createdAt: now,
+      createdBy: "synapse",
+      createdByDisplayName: "Synapse",
+      deleted: false,
+      description: draft.metadata.description?.trim() ?? "",
+      icon: "",
+      iconBg: "",
+      id: SYNAPSE_SKILL_SOURCE_IDENTITY,
+      latestHistoryDirname: "system",
+      modifiedAt: now,
+      modifiedBy: "synapse",
+      modifiedByDisplayName: "Synapse",
+      name: SYNAPSE_SKILL_NAME,
+      title: SYNAPSE_SKILL_TITLE,
+      type: "skill",
+    }
+  }
+
+  async copyPreparedSkillAttachment(
+    sourceId: string,
+    contentId: string,
+    relativePath: string,
+    targetPath: string,
+  ): Promise<void> {
+    this.requirePrepared(sourceId, contentId)
+    const draft = await this.readDraft()
+    const attachment = draft.files.find((file) => file.originalName === relativePath)
+    if (!attachment) {
+      throw new Error("Synapse Skill 附件不可用。")
+    }
+
+    await mkdir(path.dirname(targetPath), { recursive: true })
+    await copyFile(path.join(this.packageRoot, attachment.originalName), targetPath)
+  }
+
+  beginPreparedInstall(sourceId: string, contentId: string): Promise<void> {
+    this.requirePrepared(sourceId, contentId)
+    return Promise.resolve()
+  }
+
+  endPreparedInstall(sourceId: string, contentId: string): Promise<void> {
+    this.requirePrepared(sourceId, contentId)
+    return Promise.resolve()
+  }
+
+  markPreparedInstalled(sourceId: string, contentId: string): Promise<void> {
+    this.requirePrepared(sourceId, contentId)
+    return Promise.resolve()
+  }
+
+  private readDraft(): Promise<ContentSkillSourceDraft> {
+    return readSkillDraftFromDirectory(this.packageRoot)
+  }
+
+  private requirePrepared(sourceId: string, contentId: string): PreparedSynapseSkill {
+    const prepared = this.preparedById.get(sourceId)
+    if (!prepared || contentId !== SYNAPSE_SKILL_SOURCE_IDENTITY) {
+      throw new Error("Synapse Skill 安装源不可用。")
+    }
+    return prepared
+  }
+}
+
+const synapseSkillService = new SynapseSkillService()
+
+function createSynapseSkillService(deps?: SynapseSkillServiceDeps): SynapseSkillService {
+  return new SynapseSkillService(deps)
+}
+
+export {
+  SynapseSkillService,
+  createSynapseSkillService,
+  synapseSkillService,
+  type SynapseSkillServiceDeps,
+}
