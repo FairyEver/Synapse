@@ -61,6 +61,10 @@ function isMacReleaseAsset(fileName) {
   return /-mac-[^.]+\.(dmg|zip)$/.test(fileName) || /-mac-[^.]+\.(dmg|zip)\.blockmap$/.test(fileName)
 }
 
+function isVersionedReleaseAsset(fileName, version) {
+  return fileName.startsWith(`Synapse-${version}-`)
+}
+
 function basenameFromMetadataPath(value) {
   if (typeof value !== "string" || value.length === 0) {
     return null
@@ -144,7 +148,11 @@ export async function prepareReleaseArtifacts({ artifactsDir, outDir, version, c
   const versionPrefix = `v${normalizedVersion}`
   const files = await listFiles(artifactsDir)
   const metadataFiles = metadataFilesForConfig(platformConfig)
-  const artifactFiles = files.filter((fileName) => !metadataFiles.has(fileName) && platformConfig.assetFilter(fileName))
+  const artifactFiles = files.filter((fileName) => {
+    return !metadataFiles.has(fileName)
+      && isVersionedReleaseAsset(fileName, normalizedVersion)
+      && platformConfig.assetFilter(fileName)
+  })
   const artifactNames = new Set(artifactFiles)
   const rewrittenMetadata = []
 

@@ -147,6 +147,38 @@ describe("prepare-cdn-release-artifacts", () => {
     ])
   })
 
+  it("ignores stale artifacts from older versions", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-cdn-stale-"))
+    const artifactsDir = path.join(root, "release-artifacts")
+    const outDir = path.join(root, "cdn-release")
+    await writeFixtureArtifacts(artifactsDir)
+    await writeFile(path.join(artifactsDir, "Synapse-0.2.213-mac-arm64.dmg"), "stale-mac-dmg")
+    await writeFile(path.join(artifactsDir, "Synapse-0.2.213-mac-arm64.zip"), "stale-mac-zip")
+
+    await execFileAsync(process.execPath, [
+      scriptPath,
+      "--artifacts-dir",
+      artifactsDir,
+      "--out-dir",
+      outDir,
+      "--version",
+      "0.2.214",
+      "--cdn-base-url",
+      "https://desktop.release.synapse.d2.pub/",
+      "--platform",
+      "mac",
+    ], { cwd: desktopRoot })
+
+    const manifest = JSON.parse(await readFile(path.join(outDir, "manifest.json"), "utf8"))
+    expect(manifest.artifactFiles).toEqual([
+      "Synapse-0.2.214-mac-arm64.dmg",
+      "Synapse-0.2.214-mac-arm64.dmg.blockmap",
+      "Synapse-0.2.214-mac-arm64.zip",
+      "Synapse-0.2.214-mac-arm64.zip.blockmap",
+    ])
+    await expect(access(path.join(outDir, "v0.2.214/Synapse-0.2.213-mac-arm64.dmg"))).rejects.toThrow()
+  })
+
   it("fails when metadata references a missing artifact", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-cdn-missing-"))
     const artifactsDir = path.join(root, "release-artifacts")
