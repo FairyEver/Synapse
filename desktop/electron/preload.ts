@@ -407,6 +407,15 @@ const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "secrets": {
+    "list": "synapse:secrets:list",
+    "get": "synapse:secrets:get",
+    "create": "synapse:secrets:create",
+    "update": "synapse:secrets:update",
+    "upsert": "synapse:secrets:upsert",
+    "delete": "synapse:secrets:delete",
+    "changed": "synapse:secrets:changed",
+  },
   "agentPersonas": {
     "list": "synapse:agent-personas:list",
     "create": "synapse:agent-personas:create",
@@ -888,6 +897,18 @@ const synapseBridge: SynapseBridge = {
     onChanged: createRawPayloadSubscription(
       subscribe,
       IPC_CHANNELS.quickInput.changed,
+    ),
+  },
+  secrets: {
+    list: () => invoke(IPC_CHANNELS.secrets.list)(),
+    get: (input) => invoke(IPC_CHANNELS.secrets.get)(input),
+    create: (input) => invoke(IPC_CHANNELS.secrets.create)(input),
+    update: (input) => invoke(IPC_CHANNELS.secrets.update)(input),
+    upsert: (input) => invoke(IPC_CHANNELS.secrets.upsert)(input),
+    delete: (input) => invoke(IPC_CHANNELS.secrets.delete)(input),
+    onChanged: createRawPayloadSubscription(
+      subscribe,
+      IPC_CHANNELS.secrets.changed,
     ),
   },
   agentPersonas: {

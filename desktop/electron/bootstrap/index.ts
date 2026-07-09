@@ -21,6 +21,7 @@ export {
   coreHttpTestDescriptor,
   coreAgentPersonasDescriptor,
   coreQuickInputDescriptor,
+  coreSecretsDescriptor,
   coreUpdateDescriptor,
   coreWorkflowPackageDescriptor,
   createUiTrayDescriptor,

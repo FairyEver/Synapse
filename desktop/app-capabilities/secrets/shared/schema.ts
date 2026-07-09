@@ -33,6 +33,11 @@ export const secretListResultSchema = z.object({
   total: z.number().int().nonnegative(),
 })
 
+export const secretUpsertResultSchema = z.object({
+  secret: secretSafeViewSchema,
+  created: z.boolean(),
+})
+
 export const secretGetInputSchema = z.object({
   name: secretNameSchema,
   includeValue: z.boolean().optional(),
@@ -68,6 +73,7 @@ export const secretsChangedEventSchema = z.object({
 export type SecretSafeView = z.infer<typeof secretSafeViewSchema>
 export type SecretValueView = z.infer<typeof secretValueViewSchema>
 export type SecretListResult = z.infer<typeof secretListResultSchema>
+export type SecretUpsertResult = z.infer<typeof secretUpsertResultSchema>
 export type SecretGetInput = z.infer<typeof secretGetInputSchema>
 export type SecretCreateInput = z.infer<typeof secretCreateInputSchema>
 export type SecretUpdateInput = z.infer<typeof secretUpdateInputSchema>

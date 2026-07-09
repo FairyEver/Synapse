@@ -52,6 +52,11 @@ import {
   QUICK_INPUT_ITEMS_NAMESPACE,
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
+import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
+import {
+  SECRETS_ITEMS_NAMESPACE,
+  SECRETS_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/secrets/shared/capability"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
@@ -122,6 +127,8 @@ import type {
   DriveSyncStateEntryV1,
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
+  SecretItemEntryV1,
+  SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
   SwarmRunEntryV1,
   SwarmTaskEntryV1,
@@ -366,6 +373,25 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
       updateConfig: (patch) => configStore.update(patch),
       appVersion: SYNAPSE_APP_VERSION,
       logger: ctx.logger.child("quick-input"),
+    })
+  },
+  async start(instance) {
+    await instance.initialize()
+  },
+}
+
+export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
+  id: "core.secrets",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.config"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createSecretsService({
+      items: dataRepository.namespace<SecretItemEntryV1>(SECRETS_ITEMS_NAMESPACE),
+      settings: dataRepository.namespace<SecretSettingsEntryV1>(SECRETS_SETTINGS_NAMESPACE),
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      logger: ctx.logger.child("secrets"),
     })
   },
   async start(instance) {
