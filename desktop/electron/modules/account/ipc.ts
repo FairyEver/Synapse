@@ -1082,6 +1082,7 @@ export const accountIpcModule: IpcModule = {
             run: () => accountService.uploadDriveLocalItems(request),
           })
         }
+        const taskId = request.taskId
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const emitProgress = (payload: z.infer<typeof driveLocalUploadProgressEventSchema>) => {
           eventBus.emit({
@@ -1096,7 +1097,7 @@ export const accountIpcModule: IpcModule = {
           request,
           run: async () => {
             const result = await accountService.uploadDriveLocalItems(request, { onProgress: emitProgress })
-            emitProgress({ type: "task-finished", taskId: request.taskId, result })
+            emitProgress({ type: "task-finished", taskId, result })
             return result
           },
         })

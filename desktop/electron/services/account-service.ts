@@ -151,6 +151,10 @@ type DriveLocalUploadProgressReporter = {
   readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
 }
 
+type DriveLocalUploadItemProgressEvent = Exclude<DriveLocalUploadProgressEvent, { readonly type: "task-finished" }>
+type DriveLocalUploadProgressEventInput<TEvent extends DriveLocalUploadItemProgressEvent = DriveLocalUploadItemProgressEvent> =
+  TEvent extends DriveLocalUploadItemProgressEvent ? Omit<TEvent, "taskId"> : never
+
 export class AccountAuthenticationRequiredError extends Error {
   constructor() {
     super("账号未登录。")
@@ -2618,10 +2622,10 @@ function driveLocalFolderUploadItemKey(folderName: string, relativePath: string)
 
 function emitDriveLocalUploadProgress(
   reporter: DriveLocalUploadProgressReporter,
-  event: Omit<DriveLocalUploadProgressEvent, "taskId">,
+  event: DriveLocalUploadProgressEventInput,
 ): void {
   if (!reporter.taskId) return
-  reporter.onProgress?.({ ...event, taskId: reporter.taskId } as DriveLocalUploadProgressEvent)
+  reporter.onProgress?.({ ...event, taskId: reporter.taskId })
 }
 
 async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; readonly maxFileSizeLabel: string }> {
