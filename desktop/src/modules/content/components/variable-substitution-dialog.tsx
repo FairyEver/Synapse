@@ -5,50 +5,51 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { FormDialog } from "@/components/form-dialog"
-import type { SynapseVariable } from "@/types/config"
+import type { SecretSafeView } from "../../../../app-capabilities/secrets/shared/schema"
 
 type VariableSubstitutionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   placeholders: string[]
-  variables: SynapseVariable[]
+  secrets: SecretSafeView[]
+  initialValues: Record<string, string>
   onConfirm: (substitutions: Record<string, string>) => Promise<void> | void
 }
 
-function matchVariable(
+function matchSecret(
   name: string,
-  variables: SynapseVariable[],
-): SynapseVariable | undefined {
-  const exact = variables.find((v) => v.name === name)
+  secrets: SecretSafeView[],
+): SecretSafeView | undefined {
+  const exact = secrets.find((v) => v.name === name)
   if (exact) return exact
-  return variables.find((v) => v.name.toLowerCase() === name.toLowerCase())
+  return secrets.find((v) => v.name.toLowerCase() === name.toLowerCase())
 }
 
 function VariableSubstitutionDialog({
   open,
   onOpenChange,
   placeholders,
-  variables,
+  secrets,
+  initialValues,
   onConfirm,
 }: VariableSubstitutionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const initialValues = useMemo(() => {
+  const resolvedInitialValues = useMemo(() => {
     const result: Record<string, string> = {}
     for (const name of placeholders) {
-      const matched = matchVariable(name, variables)
-      result[name] = matched?.value ?? ""
+      result[name] = initialValues[name] ?? ""
     }
     return result
-  }, [placeholders, variables])
+  }, [initialValues, placeholders])
 
   useEffect(() => {
     if (open) {
-      setValues(initialValues)
+      setValues(resolvedInitialValues)
       setIsSubmitting(false)
     }
-  }, [open, initialValues])
+  }, [open, resolvedInitialValues])
 
   const handleValueChange = useCallback((name: string, value: string) => {
     setValues((prev) => ({ ...prev, [name]: value }))
@@ -96,7 +97,7 @@ function VariableSubstitutionDialog({
                   {"${{ "}{name}{" }}"}
                 </Label>
                 <Input
-                  placeholder="替换值"
+                  placeholder={matchSecret(name, secrets)?.hasValue ? "已保存" : "替换值"}
                   disabled={isSubmitting}
                   value={values[name] ?? ""}
                   onChange={(e) => handleValueChange(name, e.target.value)}

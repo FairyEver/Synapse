@@ -1,7 +1,6 @@
-import { useCallback, useRef, useState, type ReactNode } from "react"
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { readContent, resolveEditorInstallTarget } from "@/app-shell/content"
-import { useAppConfig } from "@/app-shell/config"
 import { installSourceToEditor } from "@/app-shell/installers"
 import { EditorIcon } from "@/components/editor-icon"
 import {
@@ -29,10 +28,9 @@ import {
   type ResolveEditorTargetInput,
 } from "@/modules/content/components/editor-write-target-selector"
 import {
-  buildUserVariableChangeSet,
-  buildUserVariablesPatch,
-  hasUserVariableChanges,
-  type UserVariableChangeSet,
+  buildUserSecretChangeSet,
+  hasUserSecretChanges,
+  type UserSecretChangeSet,
 } from "@/modules/content/lib/repository-variables"
 import type { SynapseProjectConfig } from "@/types/config"
 import type {
@@ -45,6 +43,8 @@ import type {
 } from "@/types/installers"
 import { detectPlaceholders } from "@/lib/variable-substitution"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
+import type { SecretSafeView } from "../../../../app-capabilities/secrets/shared/schema"
 
 import {
   type InstallerFlowMode,
@@ -116,9 +116,8 @@ export function SharedInstallerFlow({
   renderSourceInput,
   source: initialSource,
 }: SharedInstallerFlowProps) {
-  const { config, updateConfig } = useAppConfig()
   const { warning } = useAppNotifications()
-  const userVariables = config.global.variables
+  const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
   const flow = useInstallerFlow({ editors, initialEditor, kind, source: initialSource })
   const variableConfirmPassedRef = useRef(false)
   const pendingInstallOptionsRef = useRef<InstallFlowOptions>({})
@@ -127,8 +126,10 @@ export function SharedInstallerFlow({
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState("")
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
+  const [userSecrets, setUserSecrets] = useState<SecretSafeView[]>([])
+  const [secretInitialValues, setSecretInitialValues] = useState<Record<string, string>>({})
   const [isVariableConfirmOpen, setIsVariableConfirmOpen] = useState(false)
-  const [pendingVariableChanges, setPendingVariableChanges] = useState<UserVariableChangeSet | null>(null)
+  const [pendingSecretChanges, setPendingSecretChanges] = useState<UserSecretChangeSet | null>(null)
   const [isVariableSaveConfirmOpen, setIsVariableSaveConfirmOpen] = useState(false)
   const [isSavingVariables, setIsSavingVariables] = useState(false)
   const [isOverwriteConfirmOpen, setIsOverwriteConfirmOpen] = useState(false)
@@ -164,7 +165,7 @@ export function SharedInstallerFlow({
     pendingSubstitutionsRef.current = undefined
     variableConfirmPassedRef.current = false
     pendingInstallOptionsRef.current = {}
-    setPendingVariableChanges(null)
+    setPendingSecretChanges(null)
   }, [])
 
   const runInstall = async (
@@ -231,6 +232,15 @@ export function SharedInstallerFlow({
         const content = await readInstallerSourceContent(flow.source)
         const placeholders = detectPlaceholders(content, { includeCodeBlocks: true })
         if (placeholders.length > 0) {
+          const list = await secretsBridge.list()
+          setUserSecrets(list.secrets)
+          const initialValues = Object.fromEntries(await Promise.all(placeholders.map(async (name) => {
+            const existing = list.secrets.find((secret) => secret.name.toLowerCase() === name.toLowerCase())
+            if (!existing?.hasValue) return [name, ""] as const
+            const valueView = await secretsBridge.get({ name: existing.name, includeValue: true })
+            return [name, "value" in valueView ? valueView.value : ""] as const
+          })))
+          setSecretInitialValues(initialValues)
           pendingInstallOptionsRef.current = options
           setDetectedPlaceholders(placeholders)
           setIsVariableConfirmOpen(true)
@@ -289,9 +299,9 @@ export function SharedInstallerFlow({
     pendingSubstitutionsRef.current = Object.keys(filtered).length > 0 ? filtered : undefined
     variableConfirmPassedRef.current = true
 
-    const changes = buildUserVariableChangeSet(userVariables, substitutions)
-    if (hasUserVariableChanges(changes)) {
-      setPendingVariableChanges(changes)
+    const changes = buildUserSecretChangeSet(userSecrets, substitutions, secretInitialValues)
+    if (hasUserSecretChanges(changes)) {
+      setPendingSecretChanges(changes)
       setIsVariableConfirmOpen(false)
       setIsVariableSaveConfirmOpen(true)
       return
@@ -303,7 +313,7 @@ export function SharedInstallerFlow({
 
   const continueInstallAfterVariableSaveDecision = async () => {
     setIsVariableSaveConfirmOpen(false)
-    setPendingVariableChanges(null)
+    setPendingSecretChanges(null)
     await handleInstall(pendingInstallOptionsRef.current)
   }
 
@@ -311,14 +321,13 @@ export function SharedInstallerFlow({
     if (isSavingVariables) return
     setIsSavingVariables(true)
     try {
-      if (pendingVariableChanges) {
-        const patch = buildUserVariablesPatch(userVariables, pendingVariableChanges)
-        if (patch) {
-          await updateConfig(patch)
+      if (pendingSecretChanges) {
+        for (const secret of [...pendingSecretChanges.newSecrets, ...pendingSecretChanges.updatedSecrets]) {
+          await secretsBridge.upsert(secret)
         }
       }
     } catch {
-      warning("变量未保存，安装会继续。")
+      warning("密钥未保存，安装会继续。")
     } finally {
       setIsSavingVariables(false)
     }
@@ -343,15 +352,16 @@ export function SharedInstallerFlow({
           setIsVariableConfirmOpen(next)
         }}
         placeholders={detectedPlaceholders}
-        variables={userVariables}
+        secrets={userSecrets}
+        initialValues={secretInitialValues}
         onConfirm={handleVariableConfirm}
       />
       <VariableSaveConfirmationDialog
-        changes={pendingVariableChanges}
+        changes={pendingSecretChanges}
         isSubmitting={isSavingVariables || installing}
         onOpenChange={(next) => {
           if (!next) {
-            setPendingVariableChanges(null)
+            setPendingSecretChanges(null)
             variableConfirmPassedRef.current = false
           }
           setIsVariableSaveConfirmOpen(next)

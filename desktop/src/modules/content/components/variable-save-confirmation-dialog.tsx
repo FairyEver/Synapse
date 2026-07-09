@@ -3,11 +3,11 @@ import { Dialog } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { FormDialog } from "@/components/form-dialog"
-import type { UserVariableChangeSet } from "@/modules/content/lib/repository-variables"
-import type { SynapseVariable } from "@/types/config"
+import type { UserSecretChangeSet } from "@/modules/content/lib/repository-variables"
+import type { SecretUpsertInput } from "../../../../app-capabilities/secrets/shared/schema"
 
 type VariableSaveConfirmationDialogProps = {
-  changes: UserVariableChangeSet | null
+  changes: UserSecretChangeSet | null
   isSubmitting: boolean
   onOpenChange: (open: boolean) => void
   onSave: () => Promise<void> | void
@@ -15,13 +15,13 @@ type VariableSaveConfirmationDialogProps = {
   open: boolean
 }
 
-type VariableSectionProps = {
+type SecretSectionProps = {
   label: string
-  variables: SynapseVariable[]
+  secrets: SecretUpsertInput[]
 }
 
-function VariableSection({ label, variables }: VariableSectionProps) {
-  if (variables.length === 0) {
+function SecretSection({ label, secrets }: SecretSectionProps) {
+  if (secrets.length === 0) {
     return null
   }
 
@@ -29,9 +29,9 @@ function VariableSection({ label, variables }: VariableSectionProps) {
     <div className="flex flex-col gap-2">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <ul className="flex flex-col gap-1">
-        {variables.map((variable) => (
-          <li key={variable.name} className="font-mono text-sm">
-            {variable.name}
+        {secrets.map((secret) => (
+          <li key={secret.name} className="font-mono text-sm">
+            {secret.name}
           </li>
         ))}
       </ul>
@@ -47,9 +47,9 @@ function VariableSaveConfirmationDialog({
   onSkip,
   open,
 }: VariableSaveConfirmationDialogProps) {
-  const newVariables = changes?.newVariables ?? []
-  const updatedVariables = changes?.updatedVariables ?? []
-  const hasBothSections = newVariables.length > 0 && updatedVariables.length > 0
+  const newSecrets = changes?.newSecrets ?? []
+  const updatedSecrets = changes?.updatedSecrets ?? []
+  const hasBothSections = newSecrets.length > 0 && updatedSecrets.length > 0
 
   return (
     <Dialog
@@ -59,8 +59,8 @@ function VariableSaveConfirmationDialog({
       }}
     >
       <FormDialog
-        title="保存变量变更"
-        description="这些变量可在之后安装内容时复用。"
+        title="保存密钥"
+        description="这些密钥可在之后安装内容时复用。"
         footer={
           <>
             <Button
@@ -85,9 +85,9 @@ function VariableSaveConfirmationDialog({
         }}
       >
         <div className="flex flex-col gap-2">
-          <VariableSection label="新增变量" variables={newVariables} />
+          <SecretSection label="新增密钥" secrets={newSecrets} />
           {hasBothSections ? <Separator /> : null}
-          <VariableSection label="更新变量" variables={updatedVariables} />
+          <SecretSection label="更新密钥" secrets={updatedSecrets} />
         </div>
       </FormDialog>
     </Dialog>

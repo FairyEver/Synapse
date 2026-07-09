@@ -30,6 +30,16 @@ import {
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
 import {
+  SECRETS_CAPABILITY_IDS,
+  SECRETS_ITEM_CREATE_CAPABILITY_ID,
+  SECRETS_ITEM_DELETE_CAPABILITY_ID,
+  SECRETS_ITEM_GET_CAPABILITY_ID,
+  SECRETS_ITEM_LIST_CAPABILITY_ID,
+  SECRETS_ITEM_UPDATE_CAPABILITY_ID,
+  SECRETS_ITEM_UPSERT_CAPABILITY_ID,
+  SECRETS_MCP_TOOL_NAMES,
+} from "../../app-capabilities/secrets/shared/capability"
+import {
   SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
 } from "../../app-capabilities/sound-notifier/shared/capability"
@@ -192,6 +202,13 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     description: "Play a semantic Sound Notifier reminder on the local computer.",
     mutates: false,
   },
+  ...SECRETS_CAPABILITY_IDS.map((id): CapabilityDefinition => ({
+    id,
+    title: secretsCapabilityTitle(id),
+    description: secretsCapabilityDescription(id),
+    mutates: !id.endsWith(".list") && !id.endsWith(".get"),
+    risk: "high",
+  })),
   ...SWARM_TASK_CAPABILITY_IDS.map((id): CapabilityDefinition => ({
     id,
     title: swarmTaskCapabilityTitle(id),
@@ -228,6 +245,12 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [SCREENSHOT_CAPTURE_MCP_TOOL_NAME]: SCREENSHOT_CAPTURE_CAPABILITY_ID,
   [SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME]: SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
   [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.list]: SECRETS_ITEM_LIST_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.get]: SECRETS_ITEM_GET_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.create]: SECRETS_ITEM_CREATE_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.update]: SECRETS_ITEM_UPDATE_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.upsert]: SECRETS_ITEM_UPSERT_CAPABILITY_ID,
+  [SECRETS_MCP_TOOL_NAMES.delete]: SECRETS_ITEM_DELETE_CAPABILITY_ID,
   [SWARM_TASK_MCP_TOOL_NAMES.taskCreate]: SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
   [SWARM_TASK_MCP_TOOL_NAMES.taskList]: SWARM_TASK_TASK_LIST_CAPABILITY_ID,
   [SWARM_TASK_MCP_TOOL_NAMES.taskGet]: SWARM_TASK_TASK_GET_CAPABILITY_ID,
@@ -678,6 +701,79 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
     {
+      name: SECRETS_MCP_TOOL_NAMES.list,
+      description: "List user-scoped local secrets as safe metadata. Values are never returned.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: SECRETS_MCP_TOOL_NAMES.get,
+      description: "Get one user-scoped local secret. Set includeValue to true only when the stored value is explicitly needed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          includeValue: booleanField("When true, return the stored value after secret-read permission."),
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SECRETS_MCP_TOOL_NAMES.create,
+      description: "Create a user-scoped local secret. Fails if the name already exists.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          value: stringField("Secret value."),
+          description: stringField("Optional secret description."),
+        },
+        required: ["name", "value"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SECRETS_MCP_TOOL_NAMES.update,
+      description: "Update an existing user-scoped local secret, optionally renaming it.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Existing secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          newName: stringField("Optional new secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          value: stringField("Optional replacement secret value."),
+          description: stringField("Optional replacement description. Empty clears the description."),
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SECRETS_MCP_TOOL_NAMES.upsert,
+      description: "Create or update a user-scoped local secret by name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+          value: stringField("Secret value. Required when creating a new secret."),
+          description: stringField("Optional secret description. Empty clears the description on update."),
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: SECRETS_MCP_TOOL_NAMES.delete,
+      description: "Delete a user-scoped local secret by name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: stringField("Secret name. Letters, digits, and underscores only.", { minLength: 1 }),
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: SWARM_TASK_MCP_TOOL_NAMES.taskCreate,
       description: "Create a reusable Swarm Task configuration.",
       inputSchema: {
@@ -807,6 +903,44 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
   ]
+}
+
+function secretsCapabilityTitle(id: string): string {
+  switch (id) {
+    case SECRETS_ITEM_LIST_CAPABILITY_ID:
+      return "List secrets"
+    case SECRETS_ITEM_GET_CAPABILITY_ID:
+      return "Get secret"
+    case SECRETS_ITEM_CREATE_CAPABILITY_ID:
+      return "Create secret"
+    case SECRETS_ITEM_UPDATE_CAPABILITY_ID:
+      return "Update secret"
+    case SECRETS_ITEM_UPSERT_CAPABILITY_ID:
+      return "Upsert secret"
+    case SECRETS_ITEM_DELETE_CAPABILITY_ID:
+      return "Delete secret"
+    default:
+      return "Secrets action"
+  }
+}
+
+function secretsCapabilityDescription(id: string): string {
+  switch (id) {
+    case SECRETS_ITEM_LIST_CAPABILITY_ID:
+      return "List user-scoped local secrets without returning values."
+    case SECRETS_ITEM_GET_CAPABILITY_ID:
+      return "Get one user-scoped local secret, optionally including its value."
+    case SECRETS_ITEM_CREATE_CAPABILITY_ID:
+      return "Create a user-scoped local secret."
+    case SECRETS_ITEM_UPDATE_CAPABILITY_ID:
+      return "Update a user-scoped local secret."
+    case SECRETS_ITEM_UPSERT_CAPABILITY_ID:
+      return "Create or update a user-scoped local secret."
+    case SECRETS_ITEM_DELETE_CAPABILITY_ID:
+      return "Delete a user-scoped local secret."
+    default:
+      return "Operate on user-scoped local secrets."
+  }
 }
 
 function swarmTaskCapabilityTitle(id: string): string {

@@ -13,7 +13,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`
 - Rule, Skill, Prompt publishing and Resource Repository management -> `content/index.md`
 - Model price rules and used-model pricing -> `model-price/index.md`
-- Settings variables -> `variable/index.md`
+- Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
 - App-provided capabilities such as document generation -> `app/index.md`
 

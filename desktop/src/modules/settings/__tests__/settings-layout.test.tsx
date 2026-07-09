@@ -60,6 +60,10 @@ vi.mock("@/app-shell/notifications", () => ({
   }),
 }))
 
+vi.mock("@/lib/account-dashboard-url", () => ({
+  buildAccountDashboardHomeUrl: () => "https://example.com/account",
+}))
+
 vi.mock("@/app-shell/use-repository-manager", () => ({
   useActiveRepository: () => null,
   useRepositoryActions: () => ({

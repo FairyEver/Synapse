@@ -244,7 +244,7 @@ describe("Model Price MCP RPC", () => {
   })
 })
 
-describe("Repository and Variable MCP RPC", () => {
+describe("Repository and Secrets MCP RPC", () => {
   it("returns repository data without the internal dispatcher envelope", async () => {
     const payload = await callTool("repository_item_list", {
       ok: true,
@@ -261,16 +261,16 @@ describe("Repository and Variable MCP RPC", () => {
     })
   })
 
-  it("returns variable data without the internal dispatcher envelope", async () => {
-    const payload = await callTool("variable_item_get", {
+  it("returns secret data without the internal dispatcher envelope", async () => {
+    const payload = await callTool("app_secrets_item_get", {
       ok: true,
       data: {
-        variable: { name: "TOKEN", hasValue: true },
+        secret: { id: "secret-1", name: "TOKEN", hasValue: true },
       },
     })
 
     expect(payload).toEqual({
-      variable: { name: "TOKEN", hasValue: true },
+      secret: { id: "secret-1", name: "TOKEN", hasValue: true },
     })
   })
 })

@@ -46,6 +46,12 @@ export {
   type QuickInputSettingsEntryV1,
 } from "./quick-input"
 export {
+  secretsItemsSchema,
+  secretsSettingsSchema,
+  type SecretItemEntryV1,
+  type SecretSettingsEntryV1,
+} from "./secrets"
+export {
   agentPersonaItemsSchema,
   agentPersonaSettingsSchema,
   type AgentPersonaItemEntryV1,
@@ -152,6 +158,7 @@ import { driveSyncBaselineSchema, driveSyncBindingsSchema, driveSyncConflictsSch
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
+import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import {
@@ -201,6 +208,8 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   cheatCodeStatesSchema,
   quickInputItemsSchema,
   quickInputSettingsSchema,
+  secretsItemsSchema,
+  secretsSettingsSchema,
   agentPersonaItemsSchema,
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,

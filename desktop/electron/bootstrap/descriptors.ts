@@ -52,6 +52,12 @@ import {
   QUICK_INPUT_ITEMS_NAMESPACE,
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
+import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
+import { createSecretsCapabilityDispatcher } from "../../app-capabilities/secrets/main/dispatcher"
+import {
+  SECRETS_ITEMS_NAMESPACE,
+  SECRETS_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/secrets/shared/capability"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
@@ -62,7 +68,6 @@ import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatche
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
 import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
-import { createVariableCapabilityDispatcher } from "../capabilities/variable-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -122,6 +127,8 @@ import type {
   DriveSyncStateEntryV1,
   QuickInputItemEntryV1,
   QuickInputSettingsEntryV1,
+  SecretItemEntryV1,
+  SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
   SwarmRunEntryV1,
   SwarmTaskEntryV1,
@@ -366,6 +373,25 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
       updateConfig: (patch) => configStore.update(patch),
       appVersion: SYNAPSE_APP_VERSION,
       logger: ctx.logger.child("quick-input"),
+    })
+  },
+  async start(instance) {
+    await instance.initialize()
+  },
+}
+
+export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
+  id: "core.secrets",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.config"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createSecretsService({
+      items: dataRepository.namespace<SecretItemEntryV1>(SECRETS_ITEMS_NAMESPACE),
+      settings: dataRepository.namespace<SecretSettingsEntryV1>(SECRETS_SETTINGS_NAMESPACE),
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      logger: ctx.logger.child("secrets"),
     })
   },
   async start(instance) {
@@ -973,14 +999,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
-    const variableDispatcher = createVariableCapabilityDispatcher({
-      loadConfig: () => configStore.load(),
-      updateConfig: (patch) => configStore.update(patch),
-      eventBus,
-      permissionGuard,
-      auditSink,
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-    })
     const automationDispatcher = createAutomationCapabilityDispatcher({
       service: automation,
       accountService,
@@ -1016,9 +1034,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const swarmTaskDispatcher = createSwarmTaskCapabilityDispatcher({
       service: ctx.registry.get<SwarmTaskService>(SWARM_TASK_SERVICE_ID),
     })
+    const secretsDispatcher = createSecretsCapabilityDispatcher({
+      service: ctx.registry.get<SecretsService>("core.secrets"),
+      permissionGuard,
+      auditSink,
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+    })
     const appDispatcher = createAppCapabilityDispatcher({
       documentTemplate: documentTemplateDispatcher,
       screenshot: screenshotDispatcher,
+      secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
       swarmTask: swarmTaskDispatcher,
     })
@@ -1042,7 +1067,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         context,
         { permissionGuard, auditSink },
       ),
-      variableDispatch: (action, params, context) => variableDispatcher.dispatch(action, params, context),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })

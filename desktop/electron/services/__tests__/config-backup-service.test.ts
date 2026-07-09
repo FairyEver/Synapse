@@ -355,25 +355,45 @@ describe("ConfigBackupService quick inputs", () => {
     expect(backup.config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
   })
 
-  it("exports quick input DataRepository namespaces", async () => {
-    const exportAll = vi.fn(async () => ({
+  it("exports DataRepository namespaces without secret values", async () => {
+    const exportAll = vi.fn(async (options?: { includeSecrets?: boolean }) => ({
       format: "synapse-backup-v1" as const,
       exportedAt: "2026-06-25T00:00:00.000Z",
-      namespaces: [{
-        name: "app.quick-input.items",
-        schemaVersion: 1,
-        encrypted: false,
-        data: {
-          items: [{
-            id: "quick-1",
-            schemaVersion: 1,
-            content: "快捷输入",
-            sortOrder: 10,
-            createdAt: "2026-06-25T00:00:00.000Z",
-            updatedAt: "2026-06-25T00:00:00.000Z",
-          }],
+      namespaces: [
+        {
+          name: "app.quick-input.items",
+          schemaVersion: 1,
+          encrypted: false,
+          data: {
+            items: [{
+              id: "quick-1",
+              schemaVersion: 1,
+              content: "快捷输入",
+              sortOrder: 10,
+              createdAt: "2026-06-25T00:00:00.000Z",
+              updatedAt: "2026-06-25T00:00:00.000Z",
+            }],
+          },
         },
-      }],
+        {
+          name: "app.secrets.items",
+          schemaVersion: 1,
+          encrypted: true,
+          data: options?.includeSecrets === true
+            ? {
+                items: [{
+                  id: "secret-1",
+                  schemaVersion: 1,
+                  name: "API_TOKEN",
+                  value: "sk-secret-value",
+                  description: "api",
+                  createdAt: "2026-07-09T00:00:00.000Z",
+                  updatedAt: "2026-07-09T00:00:00.000Z",
+                }],
+              }
+            : null,
+        },
+      ],
     }))
     setConfigBackupDataRepository({
       exportAll,
@@ -385,6 +405,11 @@ describe("ConfigBackupService quick inputs", () => {
     expect(exportAll).toHaveBeenCalledWith({ includeSecrets: false })
     expect(backup.dataRepository?.namespaces.map((namespace) => namespace.name))
       .toContain("app.quick-input.items")
+    expect(backup.dataRepository?.namespaces.map((namespace) => namespace.name))
+      .toContain("app.secrets.items")
+    expect(backup.dataRepository?.namespaces.find((namespace) => namespace.name === "app.secrets.items"))
+      .toMatchObject({ encrypted: true, data: null })
+    expect(JSON.stringify(backup)).not.toContain("sk-secret-value")
   })
 
   it("imports DataRepository payloads from backups", async () => {

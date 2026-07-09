@@ -97,6 +97,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.project-containers",
         "core.quick-input",
         "core.relay",
+        "core.secrets",
         "core.side-channel",
         "core.sound-notifier",
         "core.swarm-task",
@@ -139,6 +140,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
     expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
+    expect(byId.get("core.secrets")?.dependsOn).toEqual(["core.data-repository", "core.config"])
     expect(byId.get("provider")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",

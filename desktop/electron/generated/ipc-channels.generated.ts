@@ -280,6 +280,15 @@ export const IPC_CHANNELS = {
     "delete": "synapse:quick-input:delete",
     "changed": "synapse:quick-input:changed",
   },
+  "secrets": {
+    "list": "synapse:secrets:list",
+    "get": "synapse:secrets:get",
+    "create": "synapse:secrets:create",
+    "update": "synapse:secrets:update",
+    "upsert": "synapse:secrets:upsert",
+    "delete": "synapse:secrets:delete",
+    "changed": "synapse:secrets:changed",
+  },
   "agentPersonas": {
     "list": "synapse:agent-personas:list",
     "create": "synapse:agent-personas:create",

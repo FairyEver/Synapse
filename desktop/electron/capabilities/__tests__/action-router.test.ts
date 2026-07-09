@@ -12,7 +12,6 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     modelPriceDispatch: vi.fn(),
     repositoryDispatch: vi.fn(),
     skillRepositoryDispatch: vi.fn(),
-    variableDispatch: vi.fn(),
     workflowDispatch: vi.fn(),
     ...overrides,
   }
@@ -47,7 +46,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -67,7 +65,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -86,7 +83,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -118,22 +114,19 @@ describe("createSynapseActionRouter", () => {
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
-  it("routes Variable actions to the Variable dispatcher", async () => {
-    const variableDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
-    const deps = createRouterDeps({
-      variableDispatch,
-    })
+  it("routes Secrets actions through the App dispatcher", async () => {
+    const appDispatch = vi.fn(async () => ({ ok: true as const, data: { secrets: [], total: 0 } }))
+    const deps = createRouterDeps({ appDispatch })
     const router = createSynapseActionRouter(deps)
 
-    await expect(router.dispatch("app.settings.variable.item.list", {}, { source: "api" })).resolves.toEqual({
+    await expect(router.dispatch("app.secrets.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
-      data: [],
+      data: { secrets: [], total: 0 },
     })
-    expect(variableDispatch).toHaveBeenCalledWith("variable.item.list", {}, { source: "api" })
+    expect(appDispatch).toHaveBeenCalledWith("app.secrets.item.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
@@ -157,7 +150,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
   })
 
   it("routes Content actions to the Content dispatcher", async () => {
@@ -175,7 +167,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -197,7 +188,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.modelPriceDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.skillRepositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -208,7 +198,6 @@ describe("createSynapseActionRouter", () => {
     const contentDispatch = vi.fn(async () => ({ ok: true as const }))
     const modelPriceDispatch = vi.fn(async () => ({ ok: true as const }))
     const repositoryDispatch = vi.fn(async () => ({ ok: true as const }))
-    const variableDispatch = vi.fn(async () => ({ ok: true as const }))
     const workflowDispatch = vi.fn(async () => ({ ok: true as const }))
     const deps = createRouterDeps({
       automationDispatch,
@@ -217,7 +206,6 @@ describe("createSynapseActionRouter", () => {
       driveDispatch,
       modelPriceDispatch,
       repositoryDispatch,
-      variableDispatch,
       workflowDispatch,
     })
     const router = createSynapseActionRouter(deps)
@@ -228,7 +216,6 @@ describe("createSynapseActionRouter", () => {
     await expect(router.dispatch("content.skill.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
     await expect(router.dispatch("model_price.rule.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
     await expect(router.dispatch("repository.item.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
-    await expect(router.dispatch("variable.item.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
     await expect(router.dispatch("workflow.definition.list", {}, { source: "api" })).resolves.toEqual({ ok: true })
 
     expect(automationDispatch).toHaveBeenCalledWith("automation.item.list", {}, { source: "api" })
@@ -237,8 +224,18 @@ describe("createSynapseActionRouter", () => {
     expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
     expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
     expect(repositoryDispatch).toHaveBeenCalledWith("repository.item.list", {}, { source: "api" })
-    expect(variableDispatch).toHaveBeenCalledWith("variable.item.list", {}, { source: "api" })
     expect(workflowDispatch).toHaveBeenCalledWith("workflow.definition.list", {}, { source: "api" })
+  })
+
+  it("rejects retired Variable actions", async () => {
+    const router = createSynapseActionRouter(createRouterDeps())
+    const retiredCanonicalAction = ["app", "settings", "variable", "item", "list"].join(".")
+    const retiredLegacyAction = ["variable", "item", "list"].join(".")
+
+    await expect(router.dispatch(retiredCanonicalAction, {}, { source: "api" })).rejects.toThrow(
+      /Unknown action/,
+    )
+    await expect(router.dispatch(retiredLegacyAction, {}, { source: "api" })).rejects.toThrow(/Unknown action/)
   })
 
   it("rejects unknown actions", async () => {

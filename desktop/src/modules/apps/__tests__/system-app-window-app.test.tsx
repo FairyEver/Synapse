@@ -7,8 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { requestOpenContentDetail } from "@/app-shell/content-navigation"
 import { SystemAppWindowApp } from "../system-app-window-app"
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const mocks = vi.hoisted(() => ({
   openSystemApp: vi.fn(),
+}))
+
+vi.mock("@/modules/agent", () => ({
+  AgentModule: () => <div>Agent 窗口</div>,
+}))
+
+vi.mock("@/modules/automation", () => ({
+  AutomationModule: () => <div>自动化窗口</div>,
 }))
 
 vi.mock("@/modules/resource-repository", () => ({
@@ -17,6 +27,10 @@ vi.mock("@/modules/resource-repository", () => ({
 
 vi.mock("@/modules/database", () => ({
   DatabaseModule: () => <div>数据库窗口</div>,
+}))
+
+vi.mock("@/modules/drive", () => ({
+  DriveModule: () => <div>云盘窗口</div>,
 }))
 
 vi.mock("@/modules/editor-scan", () => ({
@@ -35,6 +49,22 @@ vi.mock("@/modules/model-price", () => ({
   ModelPriceModule: () => <div>价格窗口</div>,
 }))
 
+vi.mock("@/modules/settings", () => ({
+  SettingsModule: () => <div>设置窗口</div>,
+}))
+
+vi.mock("@/modules/workflow", () => ({
+  WorkflowModule: () => <div>工作流窗口</div>,
+}))
+
+vi.mock("../../../../app-capabilities/agent-personas/renderer", () => ({
+  AgentPersonasModule: () => <div>智能体窗口</div>,
+}))
+
+vi.mock("../../../../app-capabilities/document-template/renderer", () => ({
+  DocumentTemplateModule: () => <div>文档模板窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
   TerminalModule: () => <div>终端窗口</div>,
 }))
@@ -47,12 +77,28 @@ vi.mock("../../../../app-capabilities/sound-notifier/renderer", () => ({
   SoundNotifierModule: () => <div>Sound Notifier 窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/secrets/renderer", () => ({
+  SecretsModule: () => <div>密钥库窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/skill-installer/renderer", () => ({
   SkillInstallerModule: () => <div>Skill 安装器窗口</div>,
 }))
 
+vi.mock("../../../../app-capabilities/synapse-skill/renderer", () => ({
+  SynapseSkillModule: () => <div>Synapse Skill 窗口</div>,
+}))
+
 vi.mock("../../../../app-capabilities/rule-installer/renderer", () => ({
   RuleInstallerModule: () => <div>Rule 安装器窗口</div>,
+}))
+
+vi.mock("../../../../app-capabilities/quick-input/renderer", () => ({
+  QuickInputModule: () => <div>快捷输入窗口</div>,
+}))
+
+vi.mock("../../../../app-capabilities/swarm-task/renderer", () => ({
+  SwarmTaskModule: () => <div>蜂群任务窗口</div>,
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -75,7 +121,9 @@ describe("SystemAppWindowApp", () => {
 
   afterEach(() => {
     for (const root of roots.splice(0)) {
-      root.unmount()
+      act(() => {
+        root.unmount()
+      })
     }
   })
 
@@ -89,6 +137,12 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=terminal")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("终端窗口")
+  })
+
+  it("renders the secrets system app", async () => {
+    window.history.replaceState({}, "", "/?window=system-app&appId=secrets")
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("密钥库窗口")
   })
 
   it("renders a short error for unknown app ids", async () => {

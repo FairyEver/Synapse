@@ -28,6 +28,18 @@ import type {
   SynapseQuickInputItem,
 } from "./quick-input"
 import type {
+  SecretCreateInput,
+  SecretDeleteInput,
+  SecretGetInput,
+  SecretListResult,
+  SecretSafeView,
+  SecretUpdateInput,
+  SecretUpsertInput,
+  SecretUpsertResult,
+  SecretValueView,
+  SecretsChangedEvent,
+} from "../../app-capabilities/secrets/shared/schema"
+import type {
   SynapseAgentPersona,
   SynapseAgentPersonaBuiltinModelUpdateInput,
   SynapseAgentPersonaChangedEvent,
@@ -927,6 +939,15 @@ export type SynapseBridge = {
     update: (input: { id: string; content: string }) => Promise<SynapseQuickInputItem>
     delete: (input: { id: string }) => Promise<void>
     onChanged: (listener: (event: SynapseQuickInputChangedEvent) => void) => () => void
+  }
+  secrets: {
+    list: () => Promise<SecretListResult>
+    get: (input: SecretGetInput) => Promise<SecretSafeView | SecretValueView>
+    create: (input: SecretCreateInput) => Promise<SecretSafeView>
+    update: (input: SecretUpdateInput) => Promise<SecretSafeView>
+    upsert: (input: SecretUpsertInput) => Promise<SecretUpsertResult>
+    delete: (input: SecretDeleteInput) => Promise<SecretSafeView>
+    onChanged: (listener: (event: SecretsChangedEvent) => void) => () => void
   }
   agentPersonas: {
     list: () => Promise<SynapseAgentPersonaListResult>
