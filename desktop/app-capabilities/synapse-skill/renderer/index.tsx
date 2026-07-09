@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, FolderOpen, MoreHorizontal, RefreshCw } from "lucide-react"
+import { Download, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
 import { resolveEditorInstallStatus } from "../../../src/app-shell/editor-install-status"
@@ -258,6 +258,7 @@ function SynapseSkillModule() {
                 ) : globalEditors.map((editor) => {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
                   const targetPath = entry?.targetPath ?? null
+                  const showStatusBadge = !entry || entry.status !== "not_installed"
                   return (
                     <div
                       key={editor.id}
@@ -268,12 +269,14 @@ function SynapseSkillModule() {
                         <p className="truncate text-sm font-medium leading-7">{editor.label}</p>
                       </div>
                       <div className="col-start-2 row-start-2 flex flex-wrap items-center gap-1.5 self-start sm:col-start-3 sm:row-start-1 sm:justify-end">
-                        <Badge
-                          variant={statusBadgeVariant(entry?.status)}
-                          className="h-7 min-w-16 px-2.5 text-[0.8rem]"
-                        >
-                          {entry ? statusLabels[entry.status] : "检测中"}
-                        </Badge>
+                        {showStatusBadge ? (
+                          <Badge
+                            variant={statusBadgeVariant(entry?.status)}
+                            className="h-7 min-w-16 px-2.5 text-xs"
+                          >
+                            {entry ? statusLabels[entry.status] : "检测中"}
+                          </Badge>
+                        ) : null}
                         {entry && canOpenSingleTargetFlow(entry.status) ? (
                           <Button
                             type="button"
@@ -313,11 +316,11 @@ function SynapseSkillModule() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="col-start-2 -ml-2 h-7 max-w-full min-w-0 justify-start gap-1.5 px-2 text-left text-sm text-muted-foreground hover:text-foreground sm:col-span-2"
+                          className="col-start-2 h-6 max-w-full min-w-0 justify-start px-0 text-left text-xs text-muted-foreground hover:text-foreground sm:col-span-2"
                           title={targetPath}
+                          aria-label={`打开 ${editor.label} Skill 目录`}
                           onClick={() => void openTargetPath(targetPath)}
                         >
-                          <FolderOpen className="size-4 shrink-0" />
                           <span className="truncate">{targetPath}</span>
                         </Button>
                       ) : entry?.message ? (

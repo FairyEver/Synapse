@@ -170,7 +170,7 @@ describe("SynapseSkillModule", () => {
     })
     expect(document.body.textContent).toContain("全局安装状态")
     expect(document.body.textContent).toContain("Codex")
-    expect(document.body.textContent).toContain("未安装")
+    expect(document.body.textContent).not.toContain("未安装")
     expect(document.body.textContent).toContain("/Users/test/.agents/skills/synapse-skill")
   })
 
