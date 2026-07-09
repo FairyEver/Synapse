@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createInMemoryHarness } from "../../../runtime/ipc"
+import type { SynapseInstallSourceToEditorTargetsResult } from "../../../../src/types/installers"
 
 const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
@@ -164,7 +165,7 @@ describe("installersIpcModule", () => {
         sourceFingerprint: "sha256:test",
       },
       targets: [{ editorId: "codex", scope: "global" }],
-    })
+    }) as SynapseInstallSourceToEditorTargetsResult
 
     expect(result.results).toHaveLength(1)
     expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith(

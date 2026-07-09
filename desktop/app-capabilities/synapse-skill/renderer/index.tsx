@@ -246,6 +246,7 @@ function SynapseSkillModule() {
                   <p className="py-3 text-sm text-muted-foreground">未检测到可安装的编辑器</p>
                 ) : globalEditors.map((editor) => {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
+                  const targetPath = entry?.targetPath ?? null
                   return (
                     <div key={editor.id} className="grid gap-2 py-3 first:pt-0 last:pb-0">
                       <div className="flex items-center justify-between gap-3">
@@ -290,14 +291,14 @@ function SynapseSkillModule() {
                           ) : null}
                         </div>
                       </div>
-                      {entry?.targetPath ? (
+                      {targetPath ? (
                         <Button
                           type="button"
                           variant="link"
                           className="h-auto min-w-0 justify-start p-0 text-left text-sm text-muted-foreground hover:text-foreground"
-                          onClick={() => void openTargetPath(entry.targetPath)}
+                          onClick={() => void openTargetPath(targetPath)}
                         >
-                          <span className="break-all">{entry.targetPath}</span>
+                          <span className="break-all">{targetPath}</span>
                         </Button>
                       ) : entry?.message ? (
                         <p className="break-all text-sm text-muted-foreground">{entry.message}</p>
