@@ -3,7 +3,7 @@
  */
 import { act, type ButtonHTMLAttributes, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { EditorWriteTargetSelection } from "@/modules/content/components/editor-write-target-selector"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
@@ -23,6 +23,11 @@ const mocks = vi.hoisted(() => ({
   readContent: vi.fn(),
   resolveEditorInstallTarget: vi.fn(),
   readyTargetOverrides: {} as Record<string, unknown>,
+  secrets: {
+    list: vi.fn(),
+    get: vi.fn(),
+    upsert: vi.fn(),
+  },
   updateConfig: vi.fn(),
   warning: vi.fn(),
 }))
@@ -55,6 +60,13 @@ vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
     warning: mocks.warning,
   }),
+}))
+
+vi.mock("@/lib/electron-bridge", () => ({
+  requireBridgeDomain: (domain: string) => {
+    if (domain === "secrets") return mocks.secrets
+    throw new Error(`Unexpected bridge domain: ${domain}`)
+  },
 }))
 
 vi.mock("@/components/editor-icon", () => ({
@@ -210,6 +222,32 @@ const repositorySkillSource: SynapseSkillInstallerSource = {
 
 let roots: Root[] = []
 
+function resetMockState() {
+  mocks.config.global.projects = []
+  mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
+  mocks.secrets.list.mockResolvedValue({
+    secrets: [{ id: "secret-1", name: "GITEE_TOKEN", description: "saved", hasValue: true }],
+    total: 1,
+  })
+  mocks.secrets.get.mockResolvedValue({
+    id: "secret-1",
+    name: "GITEE_TOKEN",
+    description: "saved",
+    hasValue: true,
+    value: "saved-token",
+  })
+  mocks.secrets.upsert.mockResolvedValue({
+    id: "secret-1",
+    name: "GITEE_TOKEN",
+    hasValue: true,
+  })
+  mocks.readyTargetOverrides = {}
+}
+
+beforeEach(() => {
+  resetMockState()
+})
+
 async function renderFlow(
   source: SynapseInstallerSource = ruleSource,
   projects: SynapseProjectConfig[] = mocks.config.global.projects,
@@ -278,9 +316,6 @@ afterEach(() => {
   roots = []
   document.body.innerHTML = ""
   vi.clearAllMocks()
-  mocks.config.global.projects = []
-  mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
-  mocks.readyTargetOverrides = {}
 })
 
 describe("SharedInstallerFlow", () => {
@@ -336,6 +371,8 @@ describe("SharedInstallerFlow", () => {
     expect(document.body.textContent).toContain("${{ GITEE_TOKEN }}")
     const input = document.querySelector<HTMLInputElement>("input")
     expect(input?.value).toBe("saved-token")
+    expect(mocks.secrets.list).toHaveBeenCalled()
+    expect(mocks.secrets.get).toHaveBeenCalledWith({ name: "GITEE_TOKEN", includeValue: true })
     expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -350,6 +387,7 @@ describe("SharedInstallerFlow", () => {
 
   it("keeps placeholders when submitted variable values are empty", async () => {
     mocks.config.global.variables = []
+    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
     await renderFlow(repositorySkillSource)
@@ -376,6 +414,7 @@ describe("SharedInstallerFlow", () => {
 
   it("saves new variables before continuing install", async () => {
     mocks.config.global.variables = []
+    mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
     mocks.updateConfig.mockResolvedValue(undefined)
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
@@ -400,18 +439,17 @@ describe("SharedInstallerFlow", () => {
       clickButton("继续安装")
     })
 
-    expect(document.body.textContent).toContain("保存变量变更")
+    expect(document.body.textContent).toContain("保存密钥")
 
     await act(async () => {
       clickButton("保存并继续")
       await Promise.resolve()
     })
 
-    expect(mocks.updateConfig).toHaveBeenCalledWith({
-      global: {
-        variables: [{ name: "GITEE_TOKEN", value: "new-token" }],
-      },
-    })
+    expect(mocks.secrets.upsert).toHaveBeenCalledWith({ name: "GITEE_TOKEN", value: "new-token" })
+    expect(mocks.updateConfig).not.toHaveBeenCalledWith(expect.objectContaining({
+      global: expect.objectContaining({ variables: expect.any(Array) }),
+    }))
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       variableSubstitutions: { GITEE_TOKEN: "new-token" },
     }))

@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  buildUserVariableChangeSet,
-  buildUserVariablesPatch,
-  hasUserVariableChanges,
+  buildUserSecretChangeSet,
+  hasUserSecretChanges,
 } from "../repository-variables"
-import type { SynapseVariable } from "@/types/config"
+import type { SecretSafeView } from "../../../../../app-capabilities/secrets/shared/schema"
 
-const variables: SynapseVariable[] = [
-  { name: "TOKEN", value: "old", description: "Existing token" },
-  { name: "UNCHANGED", value: "same" },
+const secrets: SecretSafeView[] = [
+  { id: "secret-1", name: "TOKEN", description: "Existing token", hasValue: true },
+  { id: "secret-2", name: "UNCHANGED", hasValue: true },
 ]
 
-describe("user variable change helpers", () => {
-  it("detects new and updated variables from submitted substitutions", () => {
-    const changeSet = buildUserVariableChangeSet(variables, {
+describe("user secret change helpers", () => {
+  it("detects new and updated secrets from submitted substitutions", () => {
+    const changeSet = buildUserSecretChangeSet(secrets, {
       token: "new",
       API_URL: "https://example.test",
       EMPTY: "",
@@ -22,52 +21,52 @@ describe("user variable change helpers", () => {
     })
 
     expect(changeSet).toEqual({
-      newVariables: [
+      newSecrets: [
         { name: "API_URL", value: "https://example.test" },
       ],
-      updatedVariables: [
-        { name: "TOKEN", value: "new", description: "Existing token" },
+      updatedSecrets: [
+        { name: "TOKEN", value: "new" },
+        { name: "UNCHANGED", value: "same" },
       ],
     })
-    expect(hasUserVariableChanges(changeSet)).toBe(true)
+    expect(hasUserSecretChanges(changeSet)).toBe(true)
   })
 
-  it("ignores empty values and unchanged existing values", () => {
-    const changeSet = buildUserVariableChangeSet(variables, {
+  it("ignores blank substitution values", () => {
+    const changeSet = buildUserSecretChangeSet(secrets, {
       EMPTY: "",
-      unchanged: "same",
     })
 
     expect(changeSet).toEqual({
-      newVariables: [],
-      updatedVariables: [],
+      newSecrets: [],
+      updatedSecrets: [],
     })
-    expect(hasUserVariableChanges(changeSet)).toBe(false)
+    expect(hasUserSecretChanges(changeSet)).toBe(false)
   })
 
-  it("builds a patch that appends new variables and updates existing variables", () => {
-    const changeSet = buildUserVariableChangeSet(variables, {
-      token: "new",
-      API_URL: "https://example.test",
+  it("detects no changes when a saved secret already has a value and the user leaves it blank", () => {
+    const changeSet = buildUserSecretChangeSet(secrets, {
+      TOKEN: "",
     })
 
-    expect(buildUserVariablesPatch(variables, changeSet)).toEqual({
-      global: {
-        variables: [
-          { name: "TOKEN", value: "new", description: "Existing token" },
-          { name: "UNCHANGED", value: "same" },
-          { name: "API_URL", value: "https://example.test" },
-        ],
-      },
+    expect(changeSet).toEqual({
+      newSecrets: [],
+      updatedSecrets: [],
     })
+    expect(hasUserSecretChanges(changeSet)).toBe(false)
   })
 
-  it("returns null when there are no changes to persist", () => {
-    const changeSet = buildUserVariableChangeSet(variables, {
-      TOKEN: "old",
-      UNCHANGED: "same",
-    })
+  it("detects no changes when a saved secret value is unchanged", () => {
+    const changeSet = buildUserSecretChangeSet(
+      secrets,
+      { TOKEN: "saved-token" },
+      { TOKEN: "saved-token" },
+    )
 
-    expect(buildUserVariablesPatch(variables, changeSet)).toBeNull()
+    expect(changeSet).toEqual({
+      newSecrets: [],
+      updatedSecrets: [],
+    })
+    expect(hasUserSecretChanges(changeSet)).toBe(false)
   })
 })

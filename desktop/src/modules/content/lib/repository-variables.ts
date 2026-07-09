@@ -1,78 +1,43 @@
-import type { SynapseConfigPatch, SynapseVariable } from "@/types/config"
+import type { SecretSafeView, SecretUpsertInput } from "../../../../app-capabilities/secrets/shared/schema"
 
-type UserVariableChangeSet = {
-  newVariables: SynapseVariable[]
-  updatedVariables: SynapseVariable[]
+type UserSecretChangeSet = {
+  newSecrets: SecretUpsertInput[]
+  updatedSecrets: SecretUpsertInput[]
 }
 
-function findVariable(
-  name: string,
-  variables: SynapseVariable[],
-): SynapseVariable | undefined {
-  const normalizedName = name.toLowerCase()
-
-  return variables.find((variable) => variable.name.toLowerCase() === normalizedName)
-}
-
-function buildUserVariableChangeSet(
-  variables: SynapseVariable[],
+function buildUserSecretChangeSet(
+  secrets: SecretSafeView[],
   substitutions: Record<string, string>,
-): UserVariableChangeSet {
-  const existingVariables = variables
-  const newVariables: SynapseVariable[] = []
-  const updatedVariables: SynapseVariable[] = []
+  initialValues: Record<string, string> = {},
+): UserSecretChangeSet {
+  const existingByName = new Map(secrets.map((secret) => [secret.name.toLowerCase(), secret]))
+  const initialValueByName = new Map(Object.entries(initialValues).map(([name, value]) => [name.toLowerCase(), value]))
+  const newSecrets: SecretUpsertInput[] = []
+  const updatedSecrets: SecretUpsertInput[] = []
 
   for (const [name, value] of Object.entries(substitutions)) {
-    if (!value) continue
+    if (value.length === 0) continue
 
-    const existing = findVariable(name, existingVariables)
+    const existing = existingByName.get(name.toLowerCase())
+    if (existing && initialValueByName.get(name.toLowerCase()) === value) continue
 
     if (!existing) {
-      newVariables.push({ name, value })
+      newSecrets.push({ name, value })
       continue
     }
 
-    if (existing.value !== value) {
-      updatedVariables.push({ ...existing, value })
-    }
+    updatedSecrets.push({ name: existing.name, value })
   }
 
-  return { newVariables, updatedVariables }
+  return { newSecrets, updatedSecrets }
 }
 
-function hasUserVariableChanges(changeSet: UserVariableChangeSet): boolean {
-  return changeSet.newVariables.length > 0 || changeSet.updatedVariables.length > 0
-}
-
-function buildUserVariablesPatch(
-  variables: SynapseVariable[],
-  changeSet: UserVariableChangeSet,
-): Pick<SynapseConfigPatch, "global"> | null {
-  if (!hasUserVariableChanges(changeSet)) {
-    return null
-  }
-
-  const updatedByName = new Map(
-    changeSet.updatedVariables.map((variable) => [
-      variable.name.toLowerCase(),
-      variable,
-    ]),
-  )
-  const existingVariables = variables
-  const nextExistingVariables = existingVariables.map((variable) =>
-    updatedByName.get(variable.name.toLowerCase()) ?? variable,
-  )
-
-  return {
-    global: {
-      variables: [...nextExistingVariables, ...changeSet.newVariables],
-    },
-  }
+function hasUserSecretChanges(changeSet: UserSecretChangeSet): boolean {
+  return changeSet.newSecrets.length > 0 || changeSet.updatedSecrets.length > 0
 }
 
 export {
-  buildUserVariableChangeSet,
-  buildUserVariablesPatch,
-  hasUserVariableChanges,
+  buildUserSecretChangeSet,
+  hasUserSecretChanges,
 }
-export type { UserVariableChangeSet }
+export type { UserSecretChangeSet }
