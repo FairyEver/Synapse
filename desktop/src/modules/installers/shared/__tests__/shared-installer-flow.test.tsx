@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   config: {
     global: {
       projects: [],
-      variables: [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }],
     },
   },
   installSourceToEditor: vi.fn(),
@@ -224,7 +223,6 @@ let roots: Root[] = []
 
 function resetMockState() {
   mocks.config.global.projects = []
-  mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
   mocks.secrets.list.mockResolvedValue({
     secrets: [{ id: "secret-1", name: "GITEE_TOKEN", description: "saved", hasValue: true }],
     total: 1,
@@ -386,7 +384,6 @@ describe("SharedInstallerFlow", () => {
   })
 
   it("keeps placeholders when submitted variable values are empty", async () => {
-    mocks.config.global.variables = []
     mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
     mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
@@ -413,7 +410,6 @@ describe("SharedInstallerFlow", () => {
   })
 
   it("saves new variables before continuing install", async () => {
-    mocks.config.global.variables = []
     mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
     mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
     mocks.updateConfig.mockResolvedValue(undefined)

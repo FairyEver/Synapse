@@ -994,7 +994,7 @@ describe("DiagnosticsService.exportBundle", () => {
             updatedAt: "2026-07-09T00:00:00.000Z",
           }]),
         })),
-      } as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
+      } as unknown as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
         writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
       }),
@@ -1261,7 +1261,7 @@ function createService(
       namespace: vi.fn(() => ({
         list: vi.fn(async () => []),
       })),
-    } as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
+    } as unknown as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
     serviceRegistry: {
       inspect: () => [],
       get: vi.fn((serviceId: string) => {
