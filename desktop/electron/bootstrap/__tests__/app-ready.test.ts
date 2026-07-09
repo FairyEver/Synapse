@@ -60,6 +60,10 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock("electron", () => ({
+  app: {
+    getAppPath: () => process.cwd(),
+    isPackaged: false,
+  },
   dialog: mocks.dialog,
 }))
 

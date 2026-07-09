@@ -1,4 +1,5 @@
 import { app } from "electron"
+import type { Dirent } from "node:fs"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { isFileNotFoundError, pathExists } from "./fs-utils"
@@ -92,7 +93,15 @@ function parseTemplateMeta(
 }
 
 async function listTemplateDirectories(rootPath: string): Promise<string[]> {
-  const entries = await readdir(rootPath, { withFileTypes: true })
+  let entries: Dirent[]
+  try {
+    entries = await readdir(rootPath, { withFileTypes: true })
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return []
+    }
+    throw error
+  }
 
   return entries
     .filter((entry) => entry.isDirectory())

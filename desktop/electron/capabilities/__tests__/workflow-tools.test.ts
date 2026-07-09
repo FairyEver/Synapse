@@ -36,11 +36,9 @@ describe("workflow MCP tool definitions", () => {
     const reference = await readFile(
       path.join(
         process.cwd(),
-        "resources",
-        "templates",
-        "skills",
+        "app-capabilities",
         "synapse-skill",
-        "files",
+        "skill-package",
         "workflow",
         "api-reference.md",
       ),

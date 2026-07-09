@@ -4,6 +4,7 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { SYNAPSE_SKILL_SOURCE_IDENTITY } from "../../shared/capability"
 import { createSynapseSkillService } from "../service"
+import { buildDriveTools } from "../../../../synapse-capabilities/shared/drive-domain"
 
 vi.mock("electron", () => ({
   app: {
@@ -14,6 +15,7 @@ vi.mock("electron", () => ({
 }))
 
 const roots: string[] = []
+const systemPackageRoot = path.join(process.cwd(), "app-capabilities", "synapse-skill", "skill-package")
 
 async function createPackageRoot() {
   const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-package-"))
@@ -82,5 +84,88 @@ describe("SynapseSkillService", () => {
     )
 
     await expect(readFile(targetPath, "utf8")).resolves.toBe("# Database\n")
+  })
+
+  it("ships the current system Synapse Skill package", async () => {
+    const service = createSynapseSkillService({ packageRoot: systemPackageRoot })
+    const source = await service.prepareInstallSource()
+    const detail = await service.readPreparedSkill(source.preparedSourceId, source.sourceIdentity)
+    const attachmentNames = detail.attachments
+      .map((attachment) => attachment.originalName)
+      .sort((left, right) => left.localeCompare(right))
+
+    expect(detail).toMatchObject({
+      id: "synapse-skill",
+      name: "synapse-skill",
+      title: "Synapse Skill",
+      category: "system",
+    })
+    expect(detail.content).toContain("database/index.md")
+    expect(detail.content).toContain("workflow/index.md")
+    expect(attachmentNames).toEqual([
+      "app/api-reference.md",
+      "app/index.md",
+      "automation/api-reference.md",
+      "automation/index.md",
+      "content/api-reference.md",
+      "content/index.md",
+      "database/api-reference.md",
+      "database/index.md",
+      "drive/api-reference.md",
+      "drive/index.md",
+      "model-price/api-reference.md",
+      "model-price/index.md",
+      "repository/api-reference.md",
+      "repository/index.md",
+      "secrets/api-reference.md",
+      "secrets/index.md",
+      "skill-repository/api-reference.md",
+      "skill-repository/index.md",
+      "workflow/api-reference.md",
+      "workflow/index.md",
+    ])
+  })
+
+  it("keeps system Synapse Skill domain guidance aligned with MCP tools", async () => {
+    const readPackageText = (name: string) => readFile(path.join(systemPackageRoot, name), "utf8")
+    const [
+      driveIndex,
+      driveApiText,
+      automationIndex,
+      automationApiText,
+      modelPriceIndex,
+      modelPriceApiText,
+    ] = await Promise.all([
+      readPackageText("drive/index.md"),
+      readPackageText("drive/api-reference.md"),
+      readPackageText("automation/index.md"),
+      readPackageText("automation/api-reference.md"),
+      readPackageText("model-price/index.md"),
+      readPackageText("model-price/api-reference.md"),
+    ])
+    const missingDriveTools = buildDriveTools()
+      .map((tool) => tool.name)
+      .filter((toolName) => toolName.startsWith("app_drive_"))
+      .filter((toolName) => !driveApiText.includes(`\`${toolName}\``))
+
+    expect(driveIndex).not.toContain("不处理密码分享")
+    expect(driveIndex).toContain("passwordEnabled")
+    expect(driveIndex).toContain("expiresIn")
+    expect(missingDriveTools).toEqual([])
+    expect(automationIndex).toContain("builtin.workflow")
+    expect(automationIndex).toContain("workflowId")
+    expect(automationIndex).toContain("paramTemplates")
+    expect(automationApiText).toContain("automation_executor_type_list")
+    expect(automationApiText).toContain("defaultConfig")
+    expect(automationApiText).toContain("paramTemplates")
+    expect(automationApiText).not.toContain("\"shell\": \"posix\"")
+    expect(modelPriceIndex).toContain("model_price_used_model_list")
+    expect(modelPriceIndex).toContain("ruleId")
+    expect(modelPriceIndex).toContain("RMB per 1M tokens")
+    expect(modelPriceIndex).toContain("Usage Analysis refresh")
+    expect(modelPriceIndex).toContain("price-rule hash changes")
+    expect(modelPriceApiText).toContain("model_price_rule_update")
+    expect(modelPriceApiText).toContain("ruleId")
+    expect(modelPriceApiText).toContain("already indexed usage totals")
   })
 })

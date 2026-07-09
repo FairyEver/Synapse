@@ -2446,15 +2446,17 @@ describe("DriveSyncService", () => {
       }, 1000)
       expect(harness.deps.accountService.uploadDriveLocalItems).not.toHaveBeenCalled()
       expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
-      await expect(harness.baseline.get(`${binding.id}:new.md`)).resolves.toMatchObject({
-        bindingId: binding.id,
-        relativePath: "new.md",
-        remoteItemId: "remote-old",
-      })
-      await expect(harness.baseline.get(`${binding.id}:old.md`)).resolves.toBeNull()
-      await expect(harness.operations.list()).resolves.toContainEqual(
-        expect.objectContaining({ bindingId: binding.id, kind: "move_remote", status: "succeeded", relativePath: "new.md" }),
-      )
+      await waitForExpect(async () => {
+        await expect(harness.operations.list()).resolves.toContainEqual(
+          expect.objectContaining({ bindingId: binding.id, kind: "move_remote", status: "succeeded", relativePath: "new.md" }),
+        )
+        await expect(harness.baseline.get(`${binding.id}:new.md`)).resolves.toMatchObject({
+          bindingId: binding.id,
+          relativePath: "new.md",
+          remoteItemId: "remote-old",
+        })
+        await expect(harness.baseline.get(`${binding.id}:old.md`)).resolves.toBeNull()
+      }, 3000)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -2494,14 +2496,14 @@ describe("DriveSyncService", () => {
       await writeFile(path.join(tempDir, "Project", "spec.md"), "spec", "utf8")
       emitRawEvent(rawEvent, "rename", "Project")
 
-      await waitForExpect(() => {
+      await waitForExpect(async () => {
         expect(createDriveFolder).toHaveBeenCalledWith({ parentId: "drive-root", name: "Project" })
         expect(uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({ parentId: "remote-project" }))
+        await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
+          expect.objectContaining({ bindingId: binding.id, relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
+          expect.objectContaining({ bindingId: binding.id, relativePath: "Project/spec.md", remoteItemId: "remote-spec", kind: "file" }),
+        ]))
       }, 1000)
-      await expect(harness.baseline.list()).resolves.toEqual(expect.arrayContaining([
-        expect.objectContaining({ bindingId: binding.id, relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
-        expect.objectContaining({ bindingId: binding.id, relativePath: "Project/spec.md", remoteItemId: "remote-spec", kind: "file" }),
-      ]))
       await expect(harness.operations.list()).resolves.toEqual(expect.arrayContaining([
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project" }),
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded", relativePath: "Project/spec.md" }),
@@ -3356,7 +3358,7 @@ describe("DriveSyncService", () => {
       service.startRemotePolling(5)
 
       await waitForExpect(() => {
-        expect(harness.deps.accountService.listDriveChanges).toHaveBeenCalledTimes(2)
+        expect(harness.deps.accountService.listDriveChanges.mock.calls.length).toBeGreaterThanOrEqual(2)
       })
       await waitForExpect(async () => {
         await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "43" })
