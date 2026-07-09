@@ -62,6 +62,7 @@ export const IPC_CHANNELS = {
     "restoreDriveTrashItem": "synapse:account:drive:trash:restore",
     "deleteDriveTrashItem": "synapse:account:drive:trash:delete",
     "stateChanged": "synapse:events:account",
+    "driveLocalUploadProgress": "synapse:events:account",
   },
   "live": {
     "getState": "synapse:live:get-state",

@@ -8,6 +8,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type {
   DriveDocumentImageImportBridgeRequest,
   DriveDocumentImageSourceContext,
+  DriveLocalUploadProgressEvent,
   DriveLocalUploadRequest,
   DrivePublicAssetBinaryUploadRequest,
   SynapseBridge,
@@ -387,6 +388,7 @@ const IPC_CHANNELS = {
     "restoreDriveTrashItem": "synapse:account:drive:trash:restore",
     "deleteDriveTrashItem": "synapse:account:drive:trash:delete",
     "stateChanged": "synapse:events:account",
+    "driveLocalUploadProgress": "synapse:events:account",
   },
   "live": {
     "getState": "synapse:live:get-state",
@@ -1159,6 +1161,11 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "account",
       "account.stateChanged",
+    ),
+    onDriveLocalUploadProgress: createDomainEventPayloadSubscription<DriveLocalUploadProgressEvent>(
+      subscribe,
+      "account",
+      "account.driveLocalUploadProgress",
     ),
   },
   live: {

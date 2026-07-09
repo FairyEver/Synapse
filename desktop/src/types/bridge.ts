@@ -182,6 +182,7 @@ export type DriveLocalUploadFolderItem = {
 export type DriveLocalUploadItem = DriveLocalUploadFileItem | DriveLocalUploadFolderItem
 
 export type DriveLocalUploadRequest = {
+  readonly taskId?: string
   readonly parentId?: string | null
   readonly items: DriveLocalUploadItem[]
 }
@@ -193,6 +194,13 @@ export type DriveLocalUploadResult = {
   readonly skipped: number
   readonly message?: string
 }
+
+export type DriveLocalUploadProgressEvent =
+  | { readonly type: "item-started"; readonly taskId: string; readonly itemKey: string }
+  | { readonly type: "item-completed"; readonly taskId: string; readonly itemKey: string }
+  | { readonly type: "item-skipped"; readonly taskId: string; readonly itemKey: string; readonly message?: string }
+  | { readonly type: "item-failed"; readonly taskId: string; readonly itemKey: string; readonly message?: string }
+  | { readonly type: "task-finished"; readonly taskId: string; readonly result: DriveLocalUploadResult }
 
 export type DriveFileVersionDeleteResult = {
   readonly ok: true
@@ -1139,6 +1147,7 @@ export type SynapseBridge = {
     restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
     deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
+    onDriveLocalUploadProgress: (listener: (event: DriveLocalUploadProgressEvent) => void) => () => void
   }
   live: {
     getState: () => Promise<SynapseLiveState>

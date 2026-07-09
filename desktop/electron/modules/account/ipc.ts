@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { accountService } from "../../services/account-service"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -526,6 +527,7 @@ const driveLocalUploadFolderItemSchema = z.object({
 })
 
 const driveLocalUploadRequestSchema = z.object({
+  taskId: z.string().min(1).optional(),
   parentId: z.string().nullable().optional(),
   items: z.array(z.discriminatedUnion("kind", [
     driveLocalUploadFileItemSchema,
@@ -546,10 +548,40 @@ const driveLocalUploadRequestSchema = z.object({
 
 const driveLocalUploadResultSchema = z.object({
   completed: z.number().int().nonnegative(),
+  completedDirectories: z.number().int().nonnegative().optional(),
   failed: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
   message: z.string().optional(),
 })
+const driveLocalUploadProgressEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("item-started"),
+    taskId: z.string().min(1),
+    itemKey: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("item-completed"),
+    taskId: z.string().min(1),
+    itemKey: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("item-skipped"),
+    taskId: z.string().min(1),
+    itemKey: z.string().min(1),
+    message: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("item-failed"),
+    taskId: z.string().min(1),
+    itemKey: z.string().min(1),
+    message: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("task-finished"),
+    taskId: z.string().min(1),
+    result: driveLocalUploadResultSchema,
+  }),
+])
 const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optional(), name: z.string() })
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
@@ -1043,10 +1075,31 @@ export const accountIpcModule: IpcModule = {
       response: driveLocalUploadResultSchema,
       handler: async (ctx, input) => {
         const request = driveLocalUploadRequestSchema.parse(input)
+        if (!request.taskId) {
+          return runGuardedDriveLocalUpload({
+            ctx,
+            request,
+            run: () => accountService.uploadDriveLocalItems(request),
+          })
+        }
+        const taskId = request.taskId
+        const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const emitProgress = (payload: z.infer<typeof driveLocalUploadProgressEventSchema>) => {
+          eventBus.emit({
+            domain: "account",
+            type: "account.driveLocalUploadProgress",
+            payload,
+            timestamp: new Date().toISOString(),
+          })
+        }
         return runGuardedDriveLocalUpload({
           ctx,
           request,
-          run: () => accountService.uploadDriveLocalItems(request),
+          run: async () => {
+            const result = await accountService.uploadDriveLocalItems(request, { onProgress: emitProgress })
+            emitProgress({ type: "task-finished", taskId, result })
+            return result
+          },
         })
       },
     },
@@ -1440,6 +1493,16 @@ export const accountIpcModule: IpcModule = {
       kind: "event",
       channel: "synapse:events:account",
       payload: accountStateChangedDomainEventSchema,
+    },
+    driveLocalUploadProgress: {
+      kind: "event",
+      channel: "synapse:events:account",
+      payload: z.object({
+        domain: z.literal("account"),
+        type: z.literal("account.driveLocalUploadProgress"),
+        payload: driveLocalUploadProgressEventSchema,
+        timestamp: z.string(),
+      }),
     },
   },
 }

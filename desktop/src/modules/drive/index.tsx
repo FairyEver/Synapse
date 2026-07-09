@@ -114,6 +114,15 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DriveItemIcon } from "./drive-item-icon"
+import { DriveUploadTaskPanel } from "./drive-upload-task-panel"
+import {
+  applyDriveUploadProgressEvent,
+  buildDriveUploadRetryRequest,
+  createDriveUploadTask,
+  finishDriveUploadTask,
+  getDriveUploadStatusBadge,
+  type DriveUploadTask,
+} from "./drive-upload-task"
 import {
   DriveRendererActionsProvider,
   useDriveRendererActions,
@@ -302,8 +311,9 @@ function DriveModuleContent() {
     setBusyId: setDisablingShareId,
   } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
+  const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
+  const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
+  const [uploadRetrying, setUploadRetrying] = useState(false)
   const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
   const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
@@ -312,6 +322,7 @@ function DriveModuleContent() {
   const folderInputRef = useRef<HTMLInputElement>(null)
   const publicAssetsViewRef = useRef<DrivePublicAssetsViewHandle>(null)
   const trashViewRef = useRef<DriveTrashViewHandle>(null)
+  const uploadTaskRef = useRef<DriveUploadTask | null>(null)
   const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
   const currentParentIdRef = useRef<string | null>(null)
   const driveItemsLoadRequestIdRef = useRef(0)
@@ -321,6 +332,10 @@ function DriveModuleContent() {
   useEffect(() => {
     currentParentIdRef.current = parentId
   }, [parentId])
+
+  useEffect(() => {
+    uploadTaskRef.current = uploadTask
+  }, [uploadTask])
 
   const loadItems = useCallback(async () => {
     if (!accountAuthenticated) return
@@ -399,6 +414,9 @@ function DriveModuleContent() {
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
+      setUploadTask(null)
+      setUploadPanelOpen(false)
+      setUploadRetrying(false)
       currentParentIdRef.current = null
       setPath([{ id: null, name: "根目录" }])
       setActiveView("files")
@@ -430,8 +448,16 @@ function DriveModuleContent() {
     }
   }, [])
 
+  useEffect(() => {
+    const unsubscribe = requireSynapseBridge().account.onDriveLocalUploadProgress((event) => {
+      setUploadTask((current) => current ? applyDriveUploadProgressEvent(current, event) : current)
+    })
+    return unsubscribe
+  }, [])
+
   const actionsDisabled = activeView !== "files" || !accountAuthenticated || loading || openingFolderId !== null || error !== null
-  const uploadActionsDisabled = actionsDisabled || uploading
+  const uploadRunning = uploadTask?.status === "running" || uploadRetrying
+  const uploadActionsDisabled = actionsDisabled || uploadRunning
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
@@ -504,26 +530,46 @@ function DriveModuleContent() {
     await loadDriveUsage()
   }, [accountAuthenticated, loadDriveUsage])
 
-  const runLocalUpload = useCallback(async (createRequest: () => Promise<DriveLocalUploadBuildResult>) => {
-    if (uploadActionsDisabled) return
-    setUploading(true)
+  const runLocalUpload = useCallback(async (
+    createRequest: () => Promise<DriveLocalUploadBuildResult>,
+    options: { readonly retry?: boolean } = {},
+  ) => {
+    if (uploadActionsDisabled && !options.retry) return
+    let taskId: string | null = null
+    if (options.retry) setUploadRetrying(true)
     try {
       const { request, skipped } = await createRequest()
       if (request.items.length === 0) {
         toast(skipped > 0 ? `已跳过 ${skipped} 个文件` : "没有可上传的文件")
         return
       }
-      setUploadItemCount(countDriveLocalUploadItems(request.items))
-      const result = await requireSynapseBridge().account.uploadDriveLocalItems(request)
-      toast(uploadResultMessage(withSkipped(result, skipped)))
+      taskId = createDriveUploadTaskId()
+      const requestWithTaskId: DriveLocalUploadRequest = { ...request, taskId }
+      const nextTask = createDriveUploadTask({
+        id: taskId,
+        parentId: request.parentId ?? null,
+        destinationPath: formatDriveBreadcrumbPath(path),
+        request: requestWithTaskId,
+      })
+      setUploadTask(nextTask)
+      setUploadPanelOpen(true)
+      const result = await requireSynapseBridge().account.uploadDriveLocalItems(requestWithTaskId)
+      const resultWithSkipped = withSkipped(result, skipped)
+      setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
+      toast(uploadResultMessage(resultWithSkipped))
       await refreshCurrentItemsAfterUpload()
     } catch (rawError) {
-      toast(errorMessage(rawError, "上传失败"))
+      const message = errorMessage(rawError, "上传失败")
+      if (taskId) {
+        setUploadTask((current) => current?.id === taskId
+          ? { ...current, status: "failed", finishedAt: Date.now(), message }
+          : current)
+      }
+      toast(message)
     } finally {
-      setUploading(false)
-      setUploadItemCount(null)
+      if (options.retry) setUploadRetrying(false)
     }
-  }, [refreshCurrentItemsAfterUpload, uploadActionsDisabled])
+  }, [path, refreshCurrentItemsAfterUpload, uploadActionsDisabled])
 
   const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
@@ -551,6 +597,18 @@ function DriveModuleContent() {
       parentId,
     }))
   }, [parentId, runLocalUpload])
+
+  const handleRetryFailedUpload = useCallback(() => {
+    const retryRequest = uploadTaskRef.current ? buildDriveUploadRetryRequest(uploadTaskRef.current) : null
+    if (!retryRequest) return
+    void runLocalUpload(async () => ({ request: retryRequest, skipped: 0 }), { retry: true })
+  }, [runLocalUpload])
+
+  const handleClearUploadTask = useCallback(() => {
+    if (uploadTaskRef.current?.status === "running") return
+    setUploadTask(null)
+    setUploadPanelOpen(false)
+  }, [])
 
   const handleCreateFolder = useCallback(() => {
     if (actionsDisabled) return
@@ -715,14 +773,12 @@ function DriveModuleContent() {
   })()
 
   const activeStatusBadge: DriveStatusBadge | null = (() => {
-    if (activeView === "files" && uploading) {
-      return { key: "uploading", label: uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`, variant: "outline" }
-    }
     if (activeView === "public-assets" && publicAssetActionState.uploading) {
       return { key: "public-asset-uploading", label: "上传中", variant: "outline" }
     }
     return null
   })()
+  const uploadStatusBadge = getDriveUploadStatusBadge(activeView === "files" ? uploadTask : null)
 
   const toolbarActions = (() => {
     if (activeView === "public-assets") {
@@ -887,6 +943,14 @@ function DriveModuleContent() {
         actions={toolbarActions}
         afterContent={(
           <>
+            <DriveUploadTaskPanel
+              task={uploadTask}
+              open={uploadPanelOpen}
+              retrying={uploadRetrying}
+              onOpenChange={setUploadPanelOpen}
+              onRetry={handleRetryFailedUpload}
+              onClear={handleClearUploadTask}
+            />
             <Dialog open={nameDialog !== null} onOpenChange={(open) => {
               if (!open) setNameDialog(null)
             }}>
@@ -1007,7 +1071,13 @@ function DriveModuleContent() {
       >
         {accountAuthenticated ? (
           <div className="flex min-h-full flex-col gap-2">
-            <DriveViewNavigation path={activePath} statusBadge={activeStatusBadge} onJumpToPath={jumpToPath} />
+            <DriveViewNavigation
+              path={activePath}
+              statusBadge={activeStatusBadge}
+              uploadStatusBadge={uploadStatusBadge}
+              onUploadStatusClick={() => setUploadPanelOpen(true)}
+              onJumpToPath={jumpToPath}
+            />
             {content}
           </div>
         ) : content}
@@ -1755,18 +1825,33 @@ function DriveTrashToolbarActions({
 }
 
 function DriveViewNavigation({
+  onUploadStatusClick,
   path,
   statusBadge,
+  uploadStatusBadge,
   onJumpToPath,
 }: {
   readonly path: readonly DrivePathEntry[]
   readonly statusBadge: DriveStatusBadge | null
+  readonly uploadStatusBadge: ReturnType<typeof getDriveUploadStatusBadge>
+  readonly onUploadStatusClick: () => void
   readonly onJumpToPath: (index: number) => void
 }) {
   return (
     <div className="flex min-h-8 items-center gap-2 px-1">
       <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
-      <div className="flex shrink-0 items-center justify-end">
+      <div className="flex shrink-0 items-center justify-end gap-1">
+        {uploadStatusBadge ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={uploadStatusBadge.tone === "destructive" ? "destructive" : "outline"}
+            aria-label={uploadStatusBadge.ariaLabel}
+            onClick={onUploadStatusClick}
+          >
+            {uploadStatusBadge.label}
+          </Button>
+        ) : null}
         {statusBadge ? <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge> : null}
       </div>
     </div>
@@ -3364,6 +3449,10 @@ function uploadResultMessage(result: DriveLocalUploadResult): string {
 function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLocalUploadResult {
   if (skipped === 0) return result
   return { ...result, skipped: result.skipped + skipped }
+}
+
+function createDriveUploadTaskId(): string {
+  return `drive-upload-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 function formatUploadCompleted(result: DriveLocalUploadResult): string {

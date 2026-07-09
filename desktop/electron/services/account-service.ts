@@ -22,6 +22,7 @@ import type {
   DrivePublicAssetUploadResult,
   DrivePublicAssetUploadResultItem,
   DriveLocalUploadRequest,
+  DriveLocalUploadProgressEvent,
   DriveLocalUploadResult,
 } from "../../src/types/bridge"
 import type {
@@ -146,6 +147,15 @@ type AccountServiceDeps = {
   openExternal?: AccountExternalUrlOpener
   isPackaged?: boolean
 }
+
+type DriveLocalUploadProgressReporter = {
+  readonly taskId?: string
+  readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
+}
+
+type DriveLocalUploadItemProgressEvent = Exclude<DriveLocalUploadProgressEvent, { readonly type: "task-finished" }>
+type DriveLocalUploadProgressEventInput<TEvent extends DriveLocalUploadItemProgressEvent = DriveLocalUploadItemProgressEvent> =
+  TEvent extends DriveLocalUploadItemProgressEvent ? Omit<TEvent, "taskId"> : never
 
 export class AccountAuthenticationRequiredError extends Error {
   constructor() {
@@ -923,17 +933,21 @@ export class AccountService {
     return { ok: true }
   }
 
-  async uploadDriveLocalItems(input: DriveLocalUploadRequest): Promise<DriveLocalUploadResult> {
+  async uploadDriveLocalItems(
+    input: DriveLocalUploadRequest,
+    options: { readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void } = {},
+  ): Promise<DriveLocalUploadResult> {
     let completed = 0
     let completedDirectories = 0
     let failed = 0
     let skipped = 0
     let firstError: string | undefined
+    const progress = { taskId: input.taskId, onProgress: options.onProgress }
 
     for (const item of input.items) {
       const result = item.kind === "file"
-        ? await this.uploadDriveLocalFile(input.parentId ?? null, item)
-        : await this.uploadDriveLocalFolder(input.parentId ?? null, item)
+        ? await this.uploadDriveLocalFile(input.parentId ?? null, item, progress)
+        : await this.uploadDriveLocalFolder(input.parentId ?? null, item, progress)
       completed += result.completed
       completedDirectories += result.completedDirectories ?? 0
       failed += result.failed
@@ -1045,15 +1059,20 @@ export class AccountService {
   private async uploadDriveLocalFile(
     parentId: string | null,
     item: DriveLocalUploadFileItem,
+    progress: DriveLocalUploadProgressReporter,
   ): Promise<DriveLocalUploadResult> {
+    const itemKey = driveLocalFileUploadItemKey(item)
     const fileStat = await safeLocalFileStat(item.path)
     if (!fileStat?.isFile()) {
       logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFile", reason: "not-file" })
+      emitDriveLocalUploadProgress(progress, { type: "item-skipped", itemKey, message: "本地文件不可读取。" })
       return { completed: 0, failed: 0, skipped: 1 }
     }
     const uploadLimits = await getDriveUploadLimits()
     if (fileStat.size > uploadLimits.maxFileBytes) {
-      return { completed: 0, failed: 1, skipped: 0, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
+      const message = driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel)
+      emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+      return { completed: 0, failed: 1, skipped: 0, message }
     }
 
     let prepared: DriveUploadPrepareResult
@@ -1066,22 +1085,29 @@ export class AccountService {
         expectedItemId: item.expectedItemId ?? null,
       })
     } catch (error) {
-      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage(error) }
+      const message = localUploadErrorMessage(error)
+      emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+      return { completed: 0, failed: 1, skipped: 0, message }
     }
 
     try {
+      emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
       await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size)
       await this.completeDriveUploadWithRetry(prepared.sessionId)
+      emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
       return { completed: 1, failed: 0, skipped: 0 }
     } catch (error) {
       await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveLocalFile")
-      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage(error) }
+      const message = localUploadErrorMessage(error)
+      emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+      return { completed: 0, failed: 1, skipped: 0, message }
     }
   }
 
   private async uploadDriveLocalFolder(
     parentId: string | null,
     item: DriveLocalUploadFolderItem,
+    progress: DriveLocalUploadProgressReporter,
   ): Promise<DriveLocalUploadResult> {
     const files: Array<{
       path: string
@@ -1117,8 +1143,10 @@ export class AccountService {
     }
 
     for (const file of item.files) {
+      const itemKey = driveLocalFolderUploadItemKey(item.folderName, file.relativePath)
       if (!isSafeDriveRelativePath(file.relativePath)) {
         skipped += 1
+        emitDriveLocalUploadProgress(progress, { type: "item-skipped", itemKey, message: "文件路径无效。" })
         logger.warn("Drive local upload skipped.", {
           operation: "uploadDriveLocalFolder",
           reason: "invalid-relative-path",
@@ -1128,6 +1156,7 @@ export class AccountService {
 
       if (seenRelativePaths.has(file.relativePath)) {
         skipped += 1
+        emitDriveLocalUploadProgress(progress, { type: "item-skipped", itemKey, message: "文件路径重复。" })
         logger.warn("Drive local upload skipped.", {
           operation: "uploadDriveLocalFolder",
           reason: "duplicate-relative-path",
@@ -1139,6 +1168,7 @@ export class AccountService {
       const fileStat = await safeLocalFileStat(file.path)
       if (!fileStat?.isFile()) {
         skipped += 1
+        emitDriveLocalUploadProgress(progress, { type: "item-skipped", itemKey, message: "本地文件不可读取。" })
         logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFolder", reason: "not-file" })
         continue
       }
@@ -1155,7 +1185,15 @@ export class AccountService {
     if (files.length === 0 && item.files.length > 0 && directories.length === 0) return { completed: 0, failed: 0, skipped }
     const uploadLimits = await getDriveUploadLimits()
     if (files.some((file) => file.sizeBytes > uploadLimits.maxFileBytes)) {
-      return { completed: 0, failed: files.length, skipped, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
+      const message = driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel)
+      for (const file of files) {
+        emitDriveLocalUploadProgress(progress, {
+          type: "item-failed",
+          itemKey: driveLocalFolderUploadItemKey(item.folderName, file.relativePath),
+          message,
+        })
+      }
+      return { completed: 0, failed: files.length, skipped, message }
     }
 
     let prepared: DriveFolderUploadPrepareResult
@@ -1171,7 +1209,15 @@ export class AccountService {
         })),
       })
     } catch (error) {
-      return { completed: 0, failed: files.length, skipped, message: localUploadErrorMessage(error) }
+      const message = localUploadErrorMessage(error)
+      for (const file of files) {
+        emitDriveLocalUploadProgress(progress, {
+          type: "item-failed",
+          itemKey: driveLocalFolderUploadItemKey(item.folderName, file.relativePath),
+          message,
+        })
+      }
+      return { completed: 0, failed: files.length, skipped, message }
     }
 
     const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
@@ -1180,20 +1226,27 @@ export class AccountService {
     let firstError: string | undefined
 
     for (const file of files) {
+      const itemKey = driveLocalFolderUploadItemKey(item.folderName, file.relativePath)
       const preparedEntry = preparedByPath.get(file.relativePath)
       if (!preparedEntry) {
         failed += 1
-        firstError ??= localUploadErrorMessage()
+        const message = localUploadErrorMessage()
+        firstError ??= message
+        emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
         continue
       }
 
       try {
+        emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
         await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes)
         await this.completeDriveUploadWithRetry(preparedEntry.sessionId)
+        emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
         completed += 1
       } catch (error) {
         failed += 1
-        firstError ??= localUploadErrorMessage(error)
+        const message = localUploadErrorMessage(error)
+        firstError ??= message
+        emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
         await this.cancelPreparedDriveUpload(preparedEntry.sessionId, "uploadDriveLocalFolder")
       }
     }
@@ -2562,6 +2615,22 @@ function createDownloadMaxBytesTransform(maxBytes: number): Transform {
 function localUploadErrorMessage(error?: unknown): string {
   if (isAccountHttpError(error) && error.message.trim()) return error.message
   return "上传失败。"
+}
+
+function driveLocalFileUploadItemKey(item: DriveLocalUploadFileItem): string {
+  return `file:${item.path}`
+}
+
+function driveLocalFolderUploadItemKey(folderName: string, relativePath: string): string {
+  return `folder:${folderName}/${relativePath}`
+}
+
+function emitDriveLocalUploadProgress(
+  reporter: DriveLocalUploadProgressReporter,
+  event: DriveLocalUploadProgressEventInput,
+): void {
+  if (!reporter.taskId) return
+  reporter.onProgress?.({ ...event, taskId: reporter.taskId })
 }
 
 async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; readonly maxFileSizeLabel: string }> {
