@@ -25,6 +25,7 @@ const preparedSource = {
   description: "Synapse MCP 使用指南",
   preparedSourceId: "synapse-skill:/tmp/source",
   mainContent: "# Synapse Skill",
+  sourceFingerprint: "sha256:current",
 } as const
 
 const synapseSkillBridge = vi.hoisted(() => ({
@@ -37,9 +38,16 @@ const synapseSkillBridge = vi.hoisted(() => ({
     description: "Synapse MCP 使用指南",
     preparedSourceId: "synapse-skill:/tmp/source",
     mainContent: "# Synapse Skill",
+    sourceFingerprint: "sha256:current",
   })),
 }))
 
+const installSourceToEditorTargets = vi.hoisted(() => vi.fn(async () => ({
+  results: [{
+    target: { editorId: "codex", scope: "global" },
+    status: "installed",
+  }],
+})))
 const loadEditors = vi.hoisted(() => vi.fn(async () => undefined))
 const resolveEditorInstallStatus = vi.hoisted(() => vi.fn(async () => ({
   entries: [
@@ -53,6 +61,7 @@ const resolveEditorInstallStatus = vi.hoisted(() => vi.fn(async () => ({
     },
   ],
 })))
+const showItemInFolder = vi.hoisted(() => vi.fn(async () => undefined))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
@@ -68,6 +77,10 @@ vi.mock("@/app-shell/editor-install-status", () => ({
   resolveEditorInstallStatus,
 }))
 
+vi.mock("@/app-shell/installers", () => ({
+  installSourceToEditorTargets,
+}))
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
 }))
@@ -79,6 +92,7 @@ vi.mock("@/components/editor-icon", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "synapseSkill") return synapseSkillBridge
+    if (domain === "shell") return { showItemInFolder }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -93,13 +107,23 @@ vi.mock("@/modules/content/hooks/use-editor-adapters-for-content-type", () => ({
 }))
 
 vi.mock("@/modules/installers/shared/shared-installer-flow", () => ({
-  SharedInstallerFlow: ({ source }: { source: typeof preparedSource }) => (
-    <div data-testid="installer-flow">{source.name}</div>
+  SharedInstallerFlow: ({
+    initialEditor,
+    initialSelection,
+    source,
+  }: {
+    initialEditor?: SynapseEditorAdapterSummary | null
+    initialSelection?: { scope: string } | null
+    source: typeof preparedSource
+  }) => (
+    <div data-testid="installer-flow">
+      {source.name}:{initialEditor?.id}:{initialSelection?.scope}
+    </div>
   ),
 }))
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }))
 
 import { SynapseSkillModule } from "../index"
@@ -115,8 +139,10 @@ let roots: Root[] = []
 
 beforeEach(() => {
   synapseSkillBridge.prepareInstallSource.mockClear()
+  installSourceToEditorTargets.mockClear()
   loadEditors.mockClear()
   resolveEditorInstallStatus.mockClear()
+  showItemInFolder.mockClear()
 })
 
 afterEach(() => {
@@ -139,6 +165,7 @@ describe("SynapseSkillModule", () => {
       contentName: "synapse-skill",
       contentType: "skill",
       projects: [],
+      sourceFingerprint: "sha256:current",
       title: "Synapse Skill",
     })
     expect(document.body.textContent).toContain("全局安装状态")
@@ -147,13 +174,32 @@ describe("SynapseSkillModule", () => {
     expect(document.body.textContent).toContain("/Users/test/.agents/skills/synapse-skill")
   })
 
-  it("prepares the bundled Synapse Skill source before installing", async () => {
+  it("opens the single editor installer flow for missing targets", async () => {
     await renderModule()
 
-    await clickButton("安装 Synapse Skill")
+    await clickButton("安装")
 
     expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalled()
-    expect(document.body.textContent).toContain("synapse-skill")
+    expect(document.body.textContent).toContain("synapse-skill:codex:global")
+  })
+
+  it("opens an editor Skill directory from the path row", async () => {
+    await renderModule()
+
+    await clickButtonContaining("/Users/test/.agents/skills/synapse-skill")
+
+    expect(showItemInFolder).toHaveBeenCalledWith("/Users/test/.agents/skills/synapse-skill")
+  })
+
+  it("installs missing global targets in one batch", async () => {
+    await renderModule()
+
+    await clickButton("安装缺失项")
+
+    expect(installSourceToEditorTargets).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "install",
+      targets: [{ editorId: "codex", scope: "global" }],
+    }))
   })
 })
 
@@ -169,6 +215,16 @@ async function renderModule(): Promise<void> {
 async function clickButton(text: string): Promise<void> {
   const button = Array.from(document.body.querySelectorAll("button"))
     .find((item) => item.textContent === text)
+  await act(async () => {
+    if (!button) throw new Error(`Button not found: ${text}`)
+    button.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickButtonContaining(text: string): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.textContent?.includes(text))
   await act(async () => {
     if (!button) throw new Error(`Button not found: ${text}`)
     button.click()
