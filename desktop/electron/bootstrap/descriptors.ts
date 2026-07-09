@@ -53,6 +53,7 @@ import {
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
+import { createSecretsCapabilityDispatcher } from "../../app-capabilities/secrets/main/dispatcher"
 import {
   SECRETS_ITEMS_NAMESPACE,
   SECRETS_SETTINGS_NAMESPACE,
@@ -67,7 +68,6 @@ import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatche
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
 import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
-import { createVariableCapabilityDispatcher } from "../capabilities/variable-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -999,14 +999,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
-    const variableDispatcher = createVariableCapabilityDispatcher({
-      loadConfig: () => configStore.load(),
-      updateConfig: (patch) => configStore.update(patch),
-      eventBus,
-      permissionGuard,
-      auditSink,
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-    })
     const automationDispatcher = createAutomationCapabilityDispatcher({
       service: automation,
       accountService,
@@ -1042,9 +1034,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const swarmTaskDispatcher = createSwarmTaskCapabilityDispatcher({
       service: ctx.registry.get<SwarmTaskService>(SWARM_TASK_SERVICE_ID),
     })
+    const secretsDispatcher = createSecretsCapabilityDispatcher({
+      service: ctx.registry.get<SecretsService>("core.secrets"),
+      permissionGuard,
+      auditSink,
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+    })
     const appDispatcher = createAppCapabilityDispatcher({
       documentTemplate: documentTemplateDispatcher,
       screenshot: screenshotDispatcher,
+      secrets: secretsDispatcher,
       soundNotifier: soundNotifierDispatcher,
       swarmTask: swarmTaskDispatcher,
     })
@@ -1068,7 +1067,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         context,
         { permissionGuard, auditSink },
       ),
-      variableDispatch: (action, params, context) => variableDispatcher.dispatch(action, params, context),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })

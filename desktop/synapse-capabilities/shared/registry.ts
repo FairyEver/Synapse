@@ -31,11 +31,6 @@ import {
   buildWorkflowTools,
 } from "./workflow-domain"
 import {
-  VARIABLE_DOMAIN,
-  VARIABLE_MCP_TOOL_ACTIONS,
-  buildVariableTools,
-} from "./variable-domain"
-import {
   CONTENT_DOMAIN,
   CONTENT_MCP_TOOL_ACTIONS,
   buildContentTools,
@@ -54,7 +49,6 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   REPOSITORY_DOMAIN,
   SKILL_REPOSITORY_DOMAIN,
   AUTOMATION_DOMAIN,
-  VARIABLE_DOMAIN,
   WORKFLOW_DOMAIN,
   CONTENT_DOMAIN,
   DRIVE_DOMAIN,
@@ -67,7 +61,6 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...REPOSITORY_MCP_TOOL_ACTIONS,
   ...SKILL_REPOSITORY_MCP_TOOL_ACTIONS,
   ...AUTOMATION_MCP_TOOL_ACTIONS,
-  ...VARIABLE_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
   ...CONTENT_MCP_TOOL_ACTIONS,
   ...DRIVE_MCP_TOOL_ACTIONS,
@@ -81,7 +74,6 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildRepositoryTools(),
     ...buildSkillRepositoryTools(),
     ...buildAutomationTools(),
-    ...buildVariableTools(),
     ...buildWorkflowTools(),
     ...buildContentTools(),
     ...buildDriveTools(),

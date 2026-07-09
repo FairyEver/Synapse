@@ -12,11 +12,6 @@ import {
   buildRepositoryTools,
 } from "../../synapse-capabilities/shared/repository-domain"
 import {
-  VARIABLE_DOMAIN,
-  VARIABLE_MCP_TOOL_ACTIONS,
-  buildVariableTools,
-} from "../../synapse-capabilities/shared/variable-domain"
-import {
   CONTENT_DOMAIN,
   CONTENT_MCP_TOOL_ACTIONS,
   buildContentTools,
@@ -31,6 +26,10 @@ import {
   SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
   SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
 } from "../../app-capabilities/screenshot/shared/capability"
+import {
+  SECRETS_CAPABILITY_IDS,
+  SECRETS_MCP_TOOL_NAMES,
+} from "../../app-capabilities/secrets/shared/capability"
 import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SWARM_TASK_MCP_TOOL_NAMES } from "../../app-capabilities/swarm-task/shared/capability"
 import {
@@ -65,12 +64,15 @@ describe("App capability domain", () => {
       SCREENSHOT_CAPTURE_MCP_TOOL_NAME,
       SCREENSHOT_FILE_SAVE_MCP_TOOL_NAME,
       SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
+      ...Object.values(SECRETS_MCP_TOOL_NAMES),
       ...Object.values(SWARM_TASK_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_updateSettings).toBe("app.terminal.group.updateSettings")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")
+    expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_list).toBe("app.secrets.item.list")
+    expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_upsert).toBe("app.secrets.item.upsert")
   })
 })
 
@@ -141,65 +143,63 @@ describe("Repository capability domain", () => {
   })
 })
 
-describe("Variable capability domain", () => {
-  it("registers user-scoped variable CRUD actions", () => {
-    expect(VARIABLE_DOMAIN.id).toBe("variable")
-    expect(VARIABLE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "app.settings.variable.item.list",
-      "app.settings.variable.item.get",
-      "app.settings.variable.item.create",
-      "app.settings.variable.item.update",
-      "app.settings.variable.item.upsert",
-      "app.settings.variable.item.delete",
+describe("Secrets app capability surface", () => {
+  it("registers user-scoped secret CRUD actions in the App domain", () => {
+    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toEqual(expect.arrayContaining([
+      ...SECRETS_CAPABILITY_IDS,
+    ]))
+    expect(SECRETS_CAPABILITY_IDS).toEqual([
+      "app.secrets.item.list",
+      "app.secrets.item.get",
+      "app.secrets.item.create",
+      "app.secrets.item.update",
+      "app.secrets.item.upsert",
+      "app.secrets.item.delete",
     ])
   })
 
-  it("maps variable MCP tools to canonical actions", () => {
-    expect(VARIABLE_MCP_TOOL_ACTIONS.app_settings_variable_item_list).toBe("app.settings.variable.item.list")
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_list).toBe("app.settings.variable.item.list")
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_get).toBe("app.settings.variable.item.get")
-    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_upsert).toBe("app.settings.variable.item.upsert")
-    expect(buildVariableTools().map((tool) => tool.name)).toEqual([
-      "app_settings_variable_item_list",
-      "app_settings_variable_item_get",
-      "app_settings_variable_item_create",
-      "app_settings_variable_item_update",
-      "app_settings_variable_item_upsert",
-      "app_settings_variable_item_delete",
-      "variable_item_list",
-      "variable_item_get",
-      "variable_item_create",
-      "variable_item_update",
-      "variable_item_upsert",
-      "variable_item_delete",
+  it("maps secret MCP tools to canonical app actions", () => {
+    expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_list).toBe("app.secrets.item.list")
+    expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_get).toBe("app.secrets.item.get")
+    expect(APP_MCP_TOOL_ACTIONS.app_secrets_item_upsert).toBe("app.secrets.item.upsert")
+    expect(Object.values(SECRETS_MCP_TOOL_NAMES)).toEqual([
+      "app_secrets_item_list",
+      "app_secrets_item_get",
+      "app_secrets_item_create",
+      "app_secrets_item_update",
+      "app_secrets_item_upsert",
+      "app_secrets_item_delete",
     ])
   })
 
-  it("keeps variable list from exposing a value field", () => {
-    const listTool = buildVariableTools().find((tool) => tool.name === "variable_item_list")
+  it("keeps secret list from exposing a value field", () => {
+    const listTool = buildAppTools().find((tool) => tool.name === "app_secrets_item_list")
     expect(listTool?.inputSchema.properties).not.toHaveProperty("includeValue")
     expect(listTool?.inputSchema.properties).not.toHaveProperty("value")
     expect(listTool?.inputSchema.properties).not.toHaveProperty("repositoryUuid")
     expect(listTool?.description).not.toContain("repository")
   })
 
-  it("does not expose repositoryUuid on variable tools", () => {
-    for (const tool of buildVariableTools()) {
+  it("does not expose repositoryUuid on secret tools", () => {
+    for (const tool of buildAppTools().filter((item) => item.name.startsWith("app_secrets_item_"))) {
       expect(tool.inputSchema.properties).not.toHaveProperty("repositoryUuid")
     }
   })
 })
 
-describe("Repository and Variable combined MCP tools", () => {
-  it("combines Repository and Variable tools with all MCP tools", () => {
+describe("Repository and Secrets combined MCP tools", () => {
+  it("combines Repository and Secrets tools with all MCP tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
     expect(toolNames).toContain("repository_item_list")
-    expect(toolNames).toContain("variable_item_list")
-    expect(toolNames).toContain("variable_item_upsert")
+    expect(toolNames).toContain("app_secrets_item_list")
+    expect(toolNames).toContain("app_secrets_item_upsert")
+    expect(toolNames).not.toContain("variable_item_list")
+    expect(toolNames).not.toContain("app_settings_variable_item_list")
     expect(MCP_TOOL_ACTIONS.repository_item_list).toBe("app.settings.repository.item.list")
-    expect(MCP_TOOL_ACTIONS.variable_item_delete).toBe("app.settings.variable.item.delete")
+    expect(MCP_TOOL_ACTIONS.app_secrets_item_delete).toBe("app.secrets.item.delete")
     expect(getActionDomainId("app.settings.repository.item.list")).toBe("repository")
-    expect(getActionDomainId("app.settings.variable.item.upsert")).toBe("variable")
+    expect(getActionDomainId("app.secrets.item.upsert")).toBe("app")
+    expect(getActionDomainId("app.settings.variable.item.upsert")).toBeNull()
   })
 })
 

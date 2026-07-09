@@ -83,7 +83,6 @@ describe("API and MCP capability surface", () => {
       model_price: vi.fn(async () => ({ ok: true as const })),
       repository: vi.fn(async () => ({ ok: true as const })),
       skill_repository: vi.fn(async () => ({ ok: true as const })),
-      variable: vi.fn(async () => ({ ok: true as const })),
       workflow: vi.fn(async () => ({ ok: true as const })),
     }
     const router = createSynapseActionRouter({
@@ -95,7 +94,6 @@ describe("API and MCP capability surface", () => {
       modelPriceDispatch: dispatchers.model_price,
       repositoryDispatch: dispatchers.repository,
       skillRepositoryDispatch: dispatchers.skill_repository,
-      variableDispatch: dispatchers.variable,
       workflowDispatch: dispatchers.workflow,
     })
 
@@ -168,8 +166,6 @@ function expectedDispatcherAction(action: string, domain: string | null): string
       return action.replace("app.model_price.", "model_price.")
     case "repository":
       return action.replace("app.settings.repository.", "repository.")
-    case "variable":
-      return action.replace("app.settings.variable.", "variable.")
     case "workflow":
       return action.replace("app.workflow.", "workflow.")
     default:

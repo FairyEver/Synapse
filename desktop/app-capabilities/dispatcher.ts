@@ -4,6 +4,7 @@ import {
   SCREENSHOT_CAPTURE_CAPABILITY_ID,
   SCREENSHOT_FILE_SAVE_CAPABILITY_ID,
 } from "./screenshot/shared/capability"
+import { SECRETS_CAPABILITY_IDS } from "./secrets/shared/capability"
 import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
 import { SWARM_TASK_CAPABILITY_IDS } from "./swarm-task/shared/capability"
 
@@ -12,12 +13,14 @@ type AppCapabilitySubDispatcher = {
 }
 
 const swarmTaskCapabilityIds = new Set<string>(SWARM_TASK_CAPABILITY_IDS)
+const secretsCapabilityIds = new Set<string>(SECRETS_CAPABILITY_IDS)
 
 export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly screenshot: AppCapabilitySubDispatcher
+  readonly secrets?: AppCapabilitySubDispatcher
   readonly soundNotifier: AppCapabilitySubDispatcher
   readonly swarmTask?: AppCapabilitySubDispatcher
 }): AppCapabilityDispatcher {
@@ -31,6 +34,9 @@ export function createAppCapabilityDispatcher(deps: {
       }
       if (action === SOUND_NOTIFIER_PLAY_CAPABILITY_ID) {
         return deps.soundNotifier.dispatch(action, params, context)
+      }
+      if (deps.secrets && secretsCapabilityIds.has(action)) {
+        return deps.secrets.dispatch(action, params, context)
       }
       if (deps.swarmTask && swarmTaskCapabilityIds.has(action)) {
         return deps.swarmTask.dispatch(action, params, context)
