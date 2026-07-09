@@ -9,6 +9,10 @@ import {
 import { toast, type ExternalToast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import {
+  DEFAULT_NOTIFICATION_DURATION_MS,
+  ERROR_NOTIFICATION_DURATION_MS,
+} from "@/app-shell/notification-durations"
 
 const notificationLogger = createRendererLogger("notifications")
 
@@ -62,7 +66,6 @@ type AppNotificationsContextValue = {
   warning: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
 }
 
-const DEFAULT_NOTIFICATION_DURATION_MS = 1000
 const AppNotificationsContext = createContext<AppNotificationsContextValue | null>(null)
 
 function isNotificationResultObject(
@@ -122,8 +125,14 @@ function buildToastOptions(
 
   return {
     ...rest,
-    duration: durationMs ?? (tone === "loading" ? undefined : DEFAULT_NOTIFICATION_DURATION_MS),
+    duration: durationMs ?? defaultDurationForTone(tone),
   }
+}
+
+function defaultDurationForTone(tone: AppNotificationTone): number | undefined {
+  if (tone === "loading") return undefined
+  if (tone === "destructive") return ERROR_NOTIFICATION_DURATION_MS
+  return DEFAULT_NOTIFICATION_DURATION_MS
 }
 
 function showToast(

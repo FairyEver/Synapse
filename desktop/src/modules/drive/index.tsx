@@ -24,6 +24,7 @@ import {
   type DriveUsageDto,
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
+import { ERROR_NOTIFICATION_DURATION_MS } from "@/app-shell/notification-durations"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -556,7 +557,12 @@ function DriveModuleContent() {
       const result = await requireSynapseBridge().account.uploadDriveLocalItems(requestWithTaskId)
       const resultWithSkipped = withSkipped(result, skipped)
       setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
-      toast(uploadResultMessage(resultWithSkipped))
+      const message = uploadResultMessage(resultWithSkipped)
+      if (resultWithSkipped.failed > 0) {
+        toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
+      } else {
+        toast(message)
+      }
       await refreshCurrentItemsAfterUpload()
     } catch (rawError) {
       const message = errorMessage(rawError, "上传失败")
@@ -565,7 +571,7 @@ function DriveModuleContent() {
           ? { ...current, status: "failed", finishedAt: Date.now(), message }
           : current)
       }
-      toast(message)
+      toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
     } finally {
       if (options.retry) setUploadRetrying(false)
     }

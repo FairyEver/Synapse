@@ -113,6 +113,32 @@ describe("AppNotificationsProvider", () => {
       tone: "destructive",
     }))
   })
+
+  it("keeps error notifications visible longer by default", async () => {
+    renderNotificationsHarness(<SensitiveNotificationAction />)
+
+    await act(async () => {
+      buttonByText(document.body, "Show").click()
+      await flush()
+    })
+
+    expect(toastFns.error).toHaveBeenCalledWith("token=sk-secret /private/repo prompt body", expect.objectContaining({
+      duration: 5000,
+    }))
+  })
+
+  it("lets callers override the default error notification duration", async () => {
+    renderNotificationsHarness(<CustomErrorDurationAction />)
+
+    await act(async () => {
+      buttonByText(document.body, "Show custom").click()
+      await flush()
+    })
+
+    expect(toastFns.error).toHaveBeenCalledWith("custom duration", expect.objectContaining({
+      duration: 7000,
+    }))
+  })
 })
 
 function renderNotificationsHarness(children: ReactNode = <FailingAction />): void {
@@ -156,6 +182,20 @@ function SensitiveNotificationAction() {
       }}
     >
       Show
+    </button>
+  )
+}
+
+function CustomErrorDurationAction() {
+  const { error } = useAppNotifications()
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        error("custom duration", { durationMs: 7000 })
+      }}
+    >
+      Show custom
     </button>
   )
 }

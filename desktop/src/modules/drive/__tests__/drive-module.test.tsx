@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => ({
   uploadDriveLocalItems: vi.fn(),
   onDriveLocalUploadProgress: vi.fn(),
   toast: vi.fn(),
+  toastError: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
   onDriveSyncChanged: vi.fn(),
   pauseDriveSyncBinding: vi.fn(),
@@ -101,7 +102,7 @@ const accountActions = vi.hoisted(() => ({
 let driveUploadProgressListener: ((event: DriveLocalUploadProgressEvent) => void) | null = null
 
 vi.mock("sonner", () => ({
-  toast: mocks.toast,
+  toast: Object.assign(mocks.toast, { error: mocks.toastError }),
 }))
 
 vi.mock("@/app-shell/account", () => ({
@@ -2119,7 +2120,60 @@ describe("DriveModule", () => {
     expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
     expect(mocks.completeDriveUpload).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("已上传 1 个文件")
+    expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows partial local upload failures as error toasts", async () => {
+    mocks.uploadDriveLocalItems.mockResolvedValueOnce({
+      completed: 60,
+      failed: 30,
+      skipped: 0,
+      message: "上传确认失败。",
+    })
+    await render(<DriveModule />)
+    await flushAct()
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    const message = "上传完成 60 个文件，失败 30 个：上传确认失败。"
+    expect(mocks.toastError).toHaveBeenCalledWith(message, expect.objectContaining({
+      duration: 5000,
+    }))
+    expect(mocks.toast).not.toHaveBeenCalledWith(message)
+  })
+
+  it("shows local upload exceptions as error toasts", async () => {
+    mocks.uploadDriveLocalItems.mockRejectedValueOnce(new Error("上传失败"))
+    await render(<DriveModule />)
+    await flushAct()
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith("上传失败", expect.objectContaining({
+      duration: 5000,
+    }))
+    expect(mocks.toast).not.toHaveBeenCalledWith("上传失败")
   })
 
   it("keeps non-upload list actions available while a local upload is running", async () => {
@@ -2540,7 +2594,10 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
-    expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`,
+      expect.objectContaining({ duration: 5000 }),
+    )
   })
 
   it("counts files across multiple dropped folders before uploading", async () => {
@@ -2563,7 +2620,10 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
-    expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      `一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`,
+      expect.objectContaining({ duration: 5000 }),
+    )
   })
 
   it("shows cancel share as the shared row action", async () => {
