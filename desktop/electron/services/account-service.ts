@@ -129,6 +129,8 @@ type AccountHttpError = Error & {
   code?: string
 }
 
+const DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS = 1000
+
 type PaginatedAccountResponse<T> = {
   readonly data: readonly T[]
   readonly total: number
@@ -1216,6 +1218,9 @@ export class AccountService {
     try {
       return await this.completeDriveUpload(sessionId)
     } catch (firstError) {
+      if (isAccountHttpError(firstError) && firstError.status === 429) {
+        await delay(DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS)
+      }
       try {
         return await this.completeDriveUpload(sessionId)
       } catch {
@@ -2586,6 +2591,10 @@ async function resolveDrivePublicAssetImageMimeType(name: string, mimeType?: str
 
 function driveMaxFileSizeMessage(label: string): string {
   return `文件超过 ${label} 限制。`
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function errorCode(error: unknown): string | undefined {
