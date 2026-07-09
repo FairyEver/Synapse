@@ -1197,15 +1197,13 @@ describe("AgentComposer", () => {
     })
   })
 
-  it("treats pasted absolute paths with trailing separators as directories", async () => {
-    const onSubmit = vi.fn((
-      event: FormEvent,
-      _attachments: readonly AgentDraftAttachment[],
-    ) => event.preventDefault())
+  it("keeps pasted absolute paths as textarea text instead of path attachments", async () => {
+    const onSubmit = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
     roots.push(root)
+    const onDraftChange = vi.fn()
 
     await act(async () => {
       root.render(
@@ -1215,7 +1213,7 @@ describe("AgentComposer", () => {
           canSend={false}
           sending={false}
           cancelPhase="idle"
-          onDraftChange={vi.fn()}
+          onDraftChange={onDraftChange}
           onInputKeyDown={vi.fn()}
           onSubmit={onSubmit}
           onCancelTurn={vi.fn()}
@@ -1226,48 +1224,28 @@ describe("AgentComposer", () => {
 
     const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
     expect(textarea).not.toBeNull()
-
-    await act(async () => {
-      textarea!.dispatchEvent(createPasteEvent({
-        items: [],
-        text: "/Users/liyang/Downloads/materials/\nC:\\Users\\liyang\\Pictures\\",
-      }))
+    const pasteEvent = createPasteEvent({
+      items: [],
+      text: "/Users/liyang/Documents/code/github/patent-stream-chat",
     })
 
-    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
-    expect(sendButton).toBeTruthy()
-
     await act(async () => {
-      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      textarea!.dispatchEvent(pasteEvent)
     })
 
-    expect(onSubmit).toHaveBeenCalledTimes(1)
-    const [, attachments] = onSubmit.mock.calls[0] ?? []
-    expect(attachments).toEqual([
-      expect.objectContaining({
-        kind: "path",
-        path: "/Users/liyang/Downloads/materials/",
-        entryType: "directory",
-        name: "materials",
-      }),
-      expect.objectContaining({
-        kind: "path",
-        path: "C:\\Users\\liyang\\Pictures\\",
-        entryType: "directory",
-        name: "Pictures",
-      }),
-    ])
+    expect(pasteEvent.defaultPrevented).toBe(false)
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it("treats pasted Windows UNC paths as path attachments", async () => {
-    const onSubmit = vi.fn((
-      event: FormEvent,
-      _attachments: readonly AgentDraftAttachment[],
-    ) => event.preventDefault())
+  it("keeps pasted Windows UNC paths as textarea text instead of path attachments", async () => {
+    const onSubmit = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
     roots.push(root)
+    const onDraftChange = vi.fn()
 
     await act(async () => {
       root.render(
@@ -1277,7 +1255,7 @@ describe("AgentComposer", () => {
           canSend={false}
           sending={false}
           cancelPhase="idle"
-          onDraftChange={vi.fn()}
+          onDraftChange={onDraftChange}
           onInputKeyDown={vi.fn()}
           onSubmit={onSubmit}
           onCancelTurn={vi.fn()}
@@ -1288,37 +1266,19 @@ describe("AgentComposer", () => {
 
     const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
     expect(textarea).not.toBeNull()
-
-    await act(async () => {
-      textarea!.dispatchEvent(createPasteEvent({
-        items: [],
-        text: "\\\\server\\share\\docs\\guide.md\n//server/share/docs/",
-      }))
+    const pasteEvent = createPasteEvent({
+      items: [],
+      text: "\\\\server\\share\\docs\\guide.md\n//server/share/docs/",
     })
 
-    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
-    expect(sendButton).toBeTruthy()
-
     await act(async () => {
-      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      textarea!.dispatchEvent(pasteEvent)
     })
 
-    expect(onSubmit).toHaveBeenCalledTimes(1)
-    const [, attachments] = onSubmit.mock.calls[0] ?? []
-    expect(attachments).toEqual([
-      expect.objectContaining({
-        kind: "path",
-        path: "\\\\server\\share\\docs\\guide.md",
-        entryType: "file",
-        name: "guide.md",
-      }),
-      expect.objectContaining({
-        kind: "path",
-        path: "//server/share/docs/",
-        entryType: "directory",
-        name: "docs",
-      }),
-    ])
+    expect(pasteEvent.defaultPrevented).toBe(false)
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it("renders queued and failed messages above the input", () => {
