@@ -381,16 +381,7 @@ function AgentComposer({
       return
     }
 
-    const text = event.clipboardData.getData("text/plain")
-    const pastedPaths = parseAbsolutePathLines(text)
-    if (pastedPaths.length === 0) return
-
-    event.preventDefault()
-    addAttachments(pastedPaths.map((entry) => createPathAttachment({
-      id: createDraftAttachmentId(),
-      path: entry.path,
-      entryType: entry.entryType,
-    })))
+    return
   }
 
   const handleDrop = (event: DragEvent<HTMLFormElement>) => {
@@ -814,25 +805,6 @@ function inferDroppedEntryType(file: File): "file" | "directory" {
   return file.size === 0 && !file.type ? "directory" : "file"
 }
 
-type PastedPathEntry = {
-  readonly path: string
-  readonly entryType: "file" | "directory"
-}
-
-function parseAbsolutePathLines(text: string): PastedPathEntry[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-  if (lines.length === 0) return []
-  return lines.every(isAbsolutePathLine)
-    ? lines.map((path) => ({
-        path,
-        entryType: hasTrailingPathSeparator(path) ? "directory" : "file",
-      }))
-    : []
-}
-
 function isAbsolutePathLine(value: string): boolean {
   return (
     value.startsWith("/")
@@ -843,10 +815,6 @@ function isAbsolutePathLine(value: string): boolean {
 
 function isWindowsUncAbsolutePath(value: string): boolean {
   return /^\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)
-}
-
-function hasTrailingPathSeparator(value: string): boolean {
-  return /[\\/]$/.test(value)
 }
 
 function attachmentLabel(

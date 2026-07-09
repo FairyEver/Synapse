@@ -527,6 +527,49 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it.skipIf(process.platform === "win32")("allows project directory attachments with dependency directory symlinks", async () => {
+    const realTmpDir = await fs.realpath(tmpdir())
+    const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-"))
+    const packageStore = path.join(root, ".pnpm", "vite")
+    const nodeModules = path.join(root, "node_modules")
+    await fs.mkdir(packageStore, { recursive: true })
+    await fs.mkdir(nodeModules)
+    await fs.writeFile(path.join(root, "package.json"), "{}")
+    await fs.symlink(packageStore, path.join(nodeModules, "vite"), "dir")
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    try {
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "read this project",
+        attachments: [{
+          kind: "path",
+          path: root,
+          entryType: "directory",
+        }],
+      })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [expect.objectContaining({
+        entryType: "directory",
+        kind: "path",
+        path: root,
+      })],
+    }))
+  })
+
   it("blocks oversized image attachments before sending to AgentRuntime", async () => {
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
