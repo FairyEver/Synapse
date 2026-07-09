@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
-import { EyeOff, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { Clipboard, Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
@@ -28,6 +28,7 @@ import {
 import { Input } from "../../../src/components/ui/input"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
+import { Textarea } from "../../../src/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -65,6 +66,18 @@ type SecretFormState = {
   readonly error: string
 }
 
+type SecretRevealState = {
+  readonly loading?: boolean
+  readonly error?: string
+}
+
+type SecretRevealStateById = Record<string, SecretRevealState>
+
+type SecretValueDialogState = {
+  readonly secret: SecretSafeView
+  readonly value: string
+}
+
 const emptyFormState: SecretFormState = {
   mode: "create",
   secret: null,
@@ -83,8 +96,17 @@ export function SecretsModule() {
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<SecretFormState>(emptyFormState)
   const [deleting, setDeleting] = useState<SecretSafeView | null>(null)
+  const [secretReveals, setSecretReveals] = useState<SecretRevealStateById>({})
+  const [secretValueDialog, setSecretValueDialog] = useState<SecretValueDialogState | null>(null)
+  const secretRevealGeneration = useRef(0)
 
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
+
+  const clearSecretReveals = useCallback(() => {
+    secretRevealGeneration.current += 1
+    setSecretReveals({})
+    setSecretValueDialog(null)
+  }, [])
 
   const reload = useCallback(async () => {
     try {
@@ -92,6 +114,7 @@ export function SecretsModule() {
       setLoadError("")
       const result = await secretsBridge.list()
       setSecrets(result.secrets)
+      clearSecretReveals()
     } catch (error) {
       const message = errorMessage(error, "加载失败")
       logger.error("Failed to load secrets.", error)
@@ -100,14 +123,15 @@ export function SecretsModule() {
     } finally {
       setLoading(false)
     }
-  }, [secretsBridge])
+  }, [clearSecretReveals, secretsBridge])
 
   useEffect(() => {
     void reload()
     return secretsBridge.onChanged((event) => {
       setSecrets(event.secrets)
+      clearSecretReveals()
     })
-  }, [reload, secretsBridge])
+  }, [clearSecretReveals, reload, secretsBridge])
 
   const openCreateForm = () => {
     setForm(emptyFormState)
@@ -159,6 +183,7 @@ export function SecretsModule() {
           })
 
       setSecrets((current) => mergeSecret(current, saved))
+      clearSecretReveals()
       toast.success("已保存")
       closeForm()
     } catch (error) {
@@ -176,12 +201,67 @@ export function SecretsModule() {
     try {
       await secretsBridge.delete({ name: deleting.name })
       setSecrets((current) => current.filter((secret) => secret.id !== deleting.id))
+      clearSecretReveals()
       setDeleting(null)
     } catch (error) {
       logger.error("Failed to delete secret.", error)
       toast.error("删除失败")
     }
   }
+
+  const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
+    if (!secret.hasValue) return
+
+    const current = secretReveals[secret.id]
+    if (current?.loading) return
+
+    setSecretReveals((reveals) => ({
+      ...reveals,
+      [secret.id]: { loading: true },
+    }))
+    const requestGeneration = secretRevealGeneration.current
+
+    try {
+      const valueView = await secretsBridge.get({ name: secret.name, includeValue: true })
+      if (!("value" in valueView)) {
+        throw new Error("Secret value was not returned.")
+      }
+      setSecretReveals((reveals) => {
+        if (requestGeneration !== secretRevealGeneration.current) return reveals
+        const next = { ...reveals }
+        delete next[secret.id]
+        return next
+      })
+      if (requestGeneration === secretRevealGeneration.current) {
+        setSecretValueDialog({ secret, value: valueView.value })
+      }
+    } catch (error) {
+      logger.error("Failed to reveal secret value.", { name: secret.name, ...errorDiagnostic(error) })
+      setSecretReveals((reveals) => {
+        if (requestGeneration !== secretRevealGeneration.current) return reveals
+        return {
+          ...reveals,
+          [secret.id]: { error: "读取失败" },
+        }
+      })
+      if (requestGeneration === secretRevealGeneration.current) {
+        toast.error("读取失败")
+      }
+    }
+  }, [secretReveals, secretsBridge])
+
+  const copySecretValue = useCallback(async (): Promise<boolean> => {
+    if (!secretValueDialog) return false
+    try {
+      await navigator.clipboard.writeText(secretValueDialog.value)
+      toast.success("已复制")
+      return true
+    } catch (error) {
+      logger.error("Failed to copy secret value.", { name: secretValueDialog.secret.name, ...errorDiagnostic(error) })
+      toast.error("复制失败")
+      return false
+    }
+  }, [secretValueDialog])
 
   return (
     <SystemAppWindowShell
@@ -228,8 +308,10 @@ export function SecretsModule() {
           ) : (
             <SecretsTable
               secrets={secrets}
+              reveals={secretReveals}
               onDelete={setDeleting}
               onEdit={openEditForm}
+              onRevealToggle={(secret) => void toggleSecretReveal(secret)}
             />
           )}
         </div>
@@ -258,6 +340,13 @@ export function SecretsModule() {
         }}
         onDelete={() => void deleteSecret()}
       />
+      <SecretValueDialog
+        dialog={secretValueDialog}
+        onCopy={copySecretValue}
+        onOpenChange={(open) => {
+          if (!open) setSecretValueDialog(null)
+        }}
+      />
     </SystemAppWindowShell>
   )
 }
@@ -268,7 +357,7 @@ function SecretsTableSkeleton() {
       <colgroup>
         <col data-column="name" className="w-56" />
         <col data-column="description" />
-        <col data-column="status" className="w-24" />
+        <col data-column="value" className="w-64" />
         <col data-column="actions" className="w-24" />
       </colgroup>
       <TableHeader>
@@ -300,26 +389,30 @@ function SecretsTableSkeleton() {
 
 function SecretsTable({
   secrets,
+  reveals,
   onDelete,
   onEdit,
+  onRevealToggle,
 }: {
   readonly secrets: SecretSafeView[]
+  readonly reveals: SecretRevealStateById
   readonly onDelete: (secret: SecretSafeView) => void
   readonly onEdit: (secret: SecretSafeView) => void
+  readonly onRevealToggle: (secret: SecretSafeView) => void
 }) {
   return (
     <Table containerClassName="rounded-md border bg-background" className="min-w-[42rem] table-fixed">
       <colgroup>
         <col data-column="name" className="w-56" />
         <col data-column="description" />
-        <col data-column="status" className="w-24" />
+        <col data-column="value" className="w-64" />
         <col data-column="actions" className="w-24" />
       </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead>名称</TableHead>
           <TableHead>描述</TableHead>
-          <TableHead>状态</TableHead>
+          <TableHead>值</TableHead>
           <TableHead className="text-right">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -332,11 +425,12 @@ function SecretsTable({
             <TableCell className="min-w-0 align-middle text-muted-foreground">
               <span className="block truncate">{secret.description || "-"}</span>
             </TableCell>
-            <TableCell className="align-middle">
-              <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                <EyeOff className="size-3.5" />
-                {secret.hasValue ? "有值" : "空值"}
-              </span>
+            <TableCell className="min-w-0 align-middle">
+              <SecretValueCell
+                reveal={reveals[secret.id]}
+                secret={secret}
+                onRevealToggle={onRevealToggle}
+              />
             </TableCell>
             <TableCell className="align-middle text-right">
               <div className="flex justify-end gap-1">
@@ -364,6 +458,107 @@ function SecretsTable({
         ))}
       </TableBody>
     </Table>
+  )
+}
+
+function SecretValueCell({
+  reveal,
+  secret,
+  onRevealToggle,
+}: {
+  readonly reveal: SecretRevealState | undefined
+  readonly secret: SecretSafeView
+  readonly onRevealToggle: (secret: SecretSafeView) => void
+}) {
+  if (!secret.hasValue) {
+    return <span className="text-sm text-muted-foreground">空值</span>
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`显示密钥值：${secret.name}`}
+        disabled={reveal?.loading === true}
+        onClick={() => onRevealToggle(secret)}
+      >
+        <Eye className="size-3.5" />
+      </Button>
+      {reveal?.loading ? (
+        <span className="truncate text-sm text-muted-foreground">读取中</span>
+      ) : reveal?.error ? (
+        <span className="truncate text-sm text-destructive">读取失败</span>
+      ) : (
+        <span className="truncate font-mono text-sm text-muted-foreground">••••••••</span>
+      )}
+    </div>
+  )
+}
+
+function SecretValueDialog({
+  dialog,
+  onCopy,
+  onOpenChange,
+}: {
+  readonly dialog: SecretValueDialogState | null
+  readonly onCopy: () => Promise<boolean>
+  readonly onOpenChange: (open: boolean) => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const copyButtonRef = useRef<HTMLButtonElement>(null)
+  const copiedResetTimer = useRef<number | null>(null)
+
+  const clearCopiedResetTimer = useCallback(() => {
+    if (copiedResetTimer.current === null) return
+    window.clearTimeout(copiedResetTimer.current)
+    copiedResetTimer.current = null
+  }, [])
+
+  useEffect(() => {
+    clearCopiedResetTimer()
+    setCopied(false)
+    if (dialog) copyButtonRef.current?.focus()
+    return clearCopiedResetTimer
+  }, [clearCopiedResetTimer, dialog])
+
+  const handleCopy = async () => {
+    const ok = await onCopy()
+    if (!ok) return
+    clearCopiedResetTimer()
+    setCopied(true)
+    copiedResetTimer.current = window.setTimeout(() => {
+      setCopied(false)
+      copiedResetTimer.current = null
+    }, 1600)
+  }
+
+  return (
+    <Dialog open={Boolean(dialog)} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{dialog?.secret.name ?? "密钥值"}</DialogTitle>
+          <DialogDescription>值已明文显示。</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          aria-label="密钥值"
+          className="min-h-28 font-mono text-sm"
+          value={dialog?.value ?? ""}
+          readOnly
+          data-allow-select="true"
+        />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            关闭
+          </Button>
+          <Button ref={copyButtonRef} type="button" onClick={() => void handleCopy()} disabled={!dialog} autoFocus>
+            <Clipboard data-icon="inline-start" />
+            {copied ? "已复制" : "复制"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -501,4 +696,16 @@ function mergeSecret(secrets: SecretSafeView[], secret: SecretSafeView): SecretS
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message
   return fallback
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName?: string, readonly errorMessageLength: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessageLength: error.message.length,
+    }
+  }
+  return {
+    errorMessageLength: String(error).length,
+  }
 }

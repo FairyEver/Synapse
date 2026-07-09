@@ -16,6 +16,7 @@ import { SecretsModule } from ".."
 const mocks = vi.hoisted(() => ({
   secrets: {
     list: vi.fn(),
+    get: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -24,6 +25,11 @@ const mocks = vi.hoisted(() => ({
   toast: {
     error: vi.fn(),
     success: vi.fn(),
+  },
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }))
 
@@ -35,11 +41,7 @@ vi.mock("../../../../src/lib/electron-bridge", () => ({
 }))
 
 vi.mock("../../../../src/app-shell/logging", () => ({
-  createRendererLogger: () => ({
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  }),
+  createRendererLogger: () => mocks.logger,
 }))
 
 vi.mock("sonner", () => ({
@@ -56,7 +58,12 @@ const savedSecret = {
 let roots: Root[] = []
 
 beforeEach(() => {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn(async () => undefined) },
+  })
   mocks.secrets.list.mockResolvedValue({ secrets: [], total: 0 })
+  mocks.secrets.get.mockResolvedValue({ ...savedSecret, value: "super-secret" })
   mocks.secrets.create.mockResolvedValue(savedSecret)
   mocks.secrets.update.mockResolvedValue(savedSecret)
   mocks.secrets.delete.mockResolvedValue(savedSecret)
@@ -98,8 +105,143 @@ describe("SecretsModule", () => {
 
     expect(document.body.textContent).toContain("TOKEN")
     expect(document.body.textContent).toContain("api token")
-    expect(document.body.textContent).toContain("有值")
+    expect(document.body.textContent).toContain("值")
+    expect(document.body.textContent).toContain("••••••••")
     expect(document.body.textContent).not.toContain("super-secret")
+  })
+
+  it("opens a dialog with the full secret value and copies it", async () => {
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [savedSecret],
+      total: 1,
+    })
+
+    await renderSecretsModule()
+
+    expect(document.body.textContent).toContain("TOKEN")
+    expect(document.body.textContent).not.toContain("super-secret")
+    expect(document.querySelector("table")?.textContent).toContain("••••••••")
+
+    await act(async () => {
+      clickButtonByLabel("显示密钥值：TOKEN")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.get).toHaveBeenCalledWith({ name: "TOKEN", includeValue: true })
+    expect(document.body.textContent).toContain("super-secret")
+    expect(document.querySelector("table")?.textContent).not.toContain("super-secret")
+    expect(document.body.textContent).toContain("TOKEN")
+    expect(document.body.textContent).toContain("值已明文显示。")
+
+    const textarea = textareaByLabel("密钥值")
+    expect(textarea.readOnly).toBe(true)
+
+    const copyButton = buttonByText("复制")
+    expect(document.activeElement).toBe(copyButton)
+
+    await act(async () => {
+      clickButton("复制")
+      await Promise.resolve()
+    })
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("super-secret")
+    expect(mocks.toast.success).toHaveBeenCalledWith("已复制")
+    expect(document.body.textContent).toContain("已复制")
+
+    await act(async () => {
+      clickButton("关闭")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("super-secret")
+  })
+
+  it("closes the value dialog when secrets change", async () => {
+    let changedListener: ((event: { secrets: typeof savedSecret[] }) => void) | null = null
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [savedSecret],
+      total: 1,
+    })
+    mocks.secrets.onChanged.mockImplementation((listener) => {
+      changedListener = listener
+      return () => undefined
+    })
+
+    await renderSecretsModule()
+
+    await act(async () => {
+      clickButtonByLabel("显示密钥值：TOKEN")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("super-secret")
+
+    await act(async () => {
+      changedListener?.({ secrets: [savedSecret] })
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("super-secret")
+  })
+
+  it("does not expose a secret value when reveal fails", async () => {
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [savedSecret],
+      total: 1,
+    })
+    mocks.secrets.get.mockRejectedValueOnce(new Error("read failed: super-secret"))
+
+    await renderSecretsModule()
+
+    await act(async () => {
+      clickButtonByLabel("显示密钥值：TOKEN")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).not.toContain("super-secret")
+    expect(mocks.toast.error).toHaveBeenCalledWith("读取失败")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to reveal secret value.",
+      expect.objectContaining({
+        name: "TOKEN",
+        errorName: "Error",
+        errorMessageLength: "read failed: super-secret".length,
+      }),
+    )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
+  })
+
+  it("does not log secret values when copy fails", async () => {
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [savedSecret],
+      total: 1,
+    })
+
+    await renderSecretsModule()
+
+    await act(async () => {
+      clickButtonByLabel("显示密钥值：TOKEN")
+      await Promise.resolve()
+    })
+
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("clipboard denied: super-secret"))
+
+    await act(async () => {
+      clickButton("复制")
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("复制失败")
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to copy secret value.",
+      expect.objectContaining({
+        name: "TOKEN",
+        errorName: "Error",
+        errorMessageLength: "clipboard denied: super-secret".length,
+      }),
+    )
+    expect(mocks.logger.error.mock.calls.at(-1)?.[1]).not.toHaveProperty("error")
   })
 
   it("creates a secret", async () => {
@@ -243,16 +385,26 @@ async function renderSecretsModule(): Promise<void> {
 }
 
 function clickButton(text: string) {
-  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
-    .find((candidate) => candidate.textContent?.includes(text))
-  if (!button) throw new Error(`Button not found: ${text}`)
-  button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  buttonByText(text).dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
 function clickButtonByLabel(label: string) {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
   button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.includes(text))
+  if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
+function textareaByLabel(label: string): HTMLTextAreaElement {
+  const textarea = document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)
+  if (!textarea) throw new Error(`Textarea not found: ${label}`)
+  return textarea
 }
 
 function clickCheckbox(id: string) {

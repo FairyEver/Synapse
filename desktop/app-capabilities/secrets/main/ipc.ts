@@ -43,7 +43,7 @@ export const secretsIpcModule: IpcModule = {
       channel: "synapse:secrets:get",
       kind: "invoke",
       request: secretGetInputSchema,
-      response: z.union([secretSafeViewSchema, secretValueViewSchema]),
+      response: z.union([secretValueViewSchema, secretSafeViewSchema]),
       handler: (ctx, request) => resolveSecretsService(ctx).get(secretGetInputSchema.parse(request)),
     },
     create: {

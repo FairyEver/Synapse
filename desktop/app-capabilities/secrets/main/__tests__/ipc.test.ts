@@ -13,6 +13,20 @@ describe("secretsIpcModule", () => {
     expect(secretsIpcModule.events.changed.channel).toBe("synapse:secrets:changed")
   })
 
+  it("preserves requested secret values when validating get responses", () => {
+    expect(secretsIpcModule.methods.get.response.parse({
+      id: "id-1",
+      name: "TOKEN",
+      hasValue: true,
+      value: "secret",
+    })).toEqual({
+      id: "id-1",
+      name: "TOKEN",
+      hasValue: true,
+      value: "secret",
+    })
+  })
+
   it("dispatches methods through the core service", async () => {
     const service = {
       events: { on: vi.fn() },
