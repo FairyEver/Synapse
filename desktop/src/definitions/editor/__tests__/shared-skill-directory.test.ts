@@ -63,6 +63,25 @@ describe("writeSynapseSkillDirectory", () => {
     )
   })
 
+  it("writes the source fingerprint into .synapse.json when available", async () => {
+    const { context, writeTextFile } = createContext()
+    context.detail = {
+      ...context.detail,
+      sourceFingerprint: "sha256:current",
+    } as typeof context.detail & { sourceFingerprint: string }
+
+    await writeSynapseSkillDirectory(context)
+
+    expect(writeTextFile).toHaveBeenCalledWith(
+      path.join("/tmp/staging", ".synapse.json"),
+      JSON.stringify({
+        id: "skill-1",
+        repositoryVersion: "20260521010101",
+        sourceFingerprint: "sha256:current",
+      }, null, 2),
+    )
+  })
+
   it("rejects attachments that would overwrite generated install files", async () => {
     const { context } = createContext()
     context.detail.attachments = [

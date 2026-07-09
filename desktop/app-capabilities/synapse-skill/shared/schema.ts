@@ -9,6 +9,7 @@ const synapseSkillInstallerSourceSchema = z.object({
   description: z.string(),
   preparedSourceId: z.string().min(1),
   mainContent: z.string(),
+  sourceFingerprint: z.string().min(1),
 })
 
 type SynapseSkillInstallerSource = z.infer<typeof synapseSkillInstallerSourceSchema>

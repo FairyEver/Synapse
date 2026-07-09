@@ -12,6 +12,7 @@ vi.mock("../service", () => ({
       description: "",
       preparedSourceId: "synapse-skill:test",
       mainContent: "# Synapse Skill",
+      sourceFingerprint: "sha256:test",
     })),
   },
 }))

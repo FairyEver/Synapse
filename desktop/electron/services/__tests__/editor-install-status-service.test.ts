@@ -202,6 +202,85 @@ describe("EditorInstallStatusService", () => {
     }))
   })
 
+  it("marks a Synapse Skill with a different fingerprint as needing update", async () => {
+    mocks.scanAll.mockResolvedValue({
+      global: [{
+        editorId: "codex",
+        editorLabel: "Codex",
+        status: "detected",
+        rules: [],
+        rulesSupported: true,
+        skills: [{
+          name: "synapse-skill",
+          path: "/global/skills/synapse-skill",
+          source: "synapse",
+          synapseContentId: "synapse-skill",
+          repositoryVersion: null,
+          sourceFingerprint: "sha256:old",
+          preview: "Use Synapse MCP tools.",
+          fileCount: 2,
+          trash: { mode: "path" },
+        }],
+        duplicateSkillNames: [],
+      }],
+      projects: [],
+    })
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:new",
+      projects: [],
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      editorId: "codex",
+      scope: "global",
+      status: "needs_update",
+    }))
+  })
+
+  it("marks an old Synapse Skill without fingerprint as needing update", async () => {
+    mocks.scanAll.mockResolvedValue({
+      global: [{
+        editorId: "codex",
+        editorLabel: "Codex",
+        status: "detected",
+        rules: [],
+        rulesSupported: true,
+        skills: [{
+          name: "synapse-skill",
+          path: "/global/skills/synapse-skill",
+          source: "synapse",
+          synapseContentId: "builtin__skill__synapse-skill",
+          repositoryVersion: null,
+          preview: "Use Synapse MCP tools.",
+          fileCount: 2,
+          trash: { mode: "path" },
+        }],
+        duplicateSkillNames: [],
+      }],
+      projects: [],
+    })
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      sourceFingerprint: "sha256:new",
+      projects: [],
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      editorId: "codex",
+      scope: "global",
+      status: "needs_update",
+    }))
+  })
+
   it("marks a Codex project skill with an older repository version as needing update", async () => {
     mocks.scanAll.mockResolvedValue(createScan({
       editorId: "codex",

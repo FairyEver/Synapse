@@ -54,12 +54,33 @@ function statusFromRule(
   return "installed"
 }
 
+function isSynapseSkillContentId(contentId: string | null | undefined): boolean {
+  return contentId === "synapse-skill" || contentId === "builtin__skill__synapse-skill"
+}
+
 function statusFromSkill(
   item: EditorScanSkillItem | null,
   payload: SynapseResolveEditorInstallStatusPayload,
 ): SynapseEditorInstallStatusValue | null {
   if (!item) return null
   if (!areSkillContentIdsEquivalent(item.synapseContentId, payload.contentId)) return "external_same_name"
+
+  if (
+    payload.sourceFingerprint
+    && item.sourceFingerprint
+    && item.sourceFingerprint !== payload.sourceFingerprint
+  ) {
+    return "needs_update"
+  }
+
+  if (
+    payload.sourceFingerprint
+    && !item.sourceFingerprint
+    && isSynapseSkillContentId(payload.contentId)
+    && isSynapseSkillContentId(item.synapseContentId)
+  ) {
+    return "needs_update"
+  }
 
   if (
     payload.repositoryVersion

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { copyFile, mkdir } from "node:fs/promises"
+import { copyFile, mkdir, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { app } from "electron"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
@@ -38,6 +38,39 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
 
+async function listPackageFiles(rootPath: string, currentPath = rootPath): Promise<string[]> {
+  const entries = await readdir(currentPath, { withFileTypes: true })
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentPath, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...await listPackageFiles(rootPath, fullPath))
+    } else if (entry.isFile()) {
+      files.push(path.relative(rootPath, fullPath).split(path.sep).join("/"))
+    }
+  }
+
+  return files.sort((left, right) => left.localeCompare(right))
+}
+
+async function computePackageFingerprint(rootPath: string): Promise<string> {
+  const files = await listPackageFiles(rootPath)
+  const hash = createHash("sha256")
+
+  for (const relativePath of files) {
+    const bytes = await readFile(path.join(rootPath, relativePath))
+    hash.update(relativePath)
+    hash.update("\0")
+    hash.update(String(bytes.byteLength))
+    hash.update("\0")
+    hash.update(bytes)
+    hash.update("\0")
+  }
+
+  return `sha256:${hash.digest("hex")}`
+}
+
 function stripSkillFrontmatter(content: string): string {
   if (!content.startsWith("---")) {
     return content.trim()
@@ -65,6 +98,7 @@ class SynapseSkillService {
   async prepareInstallSource(): Promise<SynapseSkillInstallerSource> {
     const draft = await this.readDraft()
     const preparedSourceId = `${SYNAPSE_SKILL_PREPARED_SOURCE_PREFIX}${this.createId()}`
+    const sourceFingerprint = await computePackageFingerprint(this.packageRoot)
     const source: SynapseSkillInstallerSource = {
       kind: "skill",
       origin: "prepared",
@@ -74,6 +108,7 @@ class SynapseSkillService {
       description: draft.metadata.description?.trim() ?? "",
       preparedSourceId,
       mainContent: draft.content,
+      sourceFingerprint,
     }
 
     this.preparedById.set(preparedSourceId, { packageRoot: this.packageRoot, source })
@@ -88,11 +123,11 @@ class SynapseSkillService {
     sourceId: string,
     contentId: string,
   ): Promise<SynapseContentDetail<"skill">> {
-    this.requirePrepared(sourceId, contentId)
+    const prepared = this.requirePrepared(sourceId, contentId)
     const draft = await this.readDraft()
     const now = new Date(0).toISOString()
 
-    return {
+    const detail: SynapseContentDetail<"skill"> & { sourceFingerprint: string } = {
       attachmentCount: draft.files.length,
       attachments: draft.files.map((file) => ({
         originalName: file.originalName,
@@ -116,7 +151,9 @@ class SynapseSkillService {
       name: SYNAPSE_SKILL_NAME,
       title: SYNAPSE_SKILL_TITLE,
       type: "skill",
+      sourceFingerprint: prepared.source.sourceFingerprint,
     }
+    return detail
   }
 
   async copyPreparedSkillAttachment(
@@ -172,6 +209,7 @@ function createSynapseSkillService(deps?: SynapseSkillServiceDeps): SynapseSkill
 
 export {
   SynapseSkillService,
+  computePackageFingerprint,
   createSynapseSkillService,
   synapseSkillService,
   type SynapseSkillServiceDeps,

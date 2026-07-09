@@ -27,6 +27,7 @@ async function writeSynapseSkillDirectory({
     description: detail.description,
     name: path.basename(targetPath),
   }) + detail.content
+  const detailWithFingerprint = detail as typeof detail & { sourceFingerprint?: string }
 
   await writeTextFile(
     path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
@@ -38,6 +39,7 @@ async function writeSynapseSkillDirectory({
     JSON.stringify({
       id: detail.id,
       repositoryVersion: detail.latestHistoryDirname,
+      ...(detailWithFingerprint.sourceFingerprint ? { sourceFingerprint: detailWithFingerprint.sourceFingerprint } : {}),
     }, null, 2),
   )
 

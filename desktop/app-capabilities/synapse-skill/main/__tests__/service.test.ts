@@ -48,6 +48,7 @@ describe("SynapseSkillService", () => {
     })
     expect(source.preparedSourceId).toMatch(/^synapse-skill:/)
     expect(source.mainContent).toContain("# Synapse Skill")
+    expect(source.sourceFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
   it("reads prepared skill detail with nested attachments", async () => {
@@ -60,6 +61,8 @@ describe("SynapseSkillService", () => {
     expect(detail.id).toBe("synapse-skill")
     expect(detail.name).toBe("synapse-skill")
     expect(detail.content).toBe("# Synapse Skill")
+    expect((detail as typeof detail & { sourceFingerprint?: string }).sourceFingerprint)
+      .toBe(source.sourceFingerprint)
     expect(detail.attachments.map((item) => item.originalName)).toContain("database/index.md")
   })
 

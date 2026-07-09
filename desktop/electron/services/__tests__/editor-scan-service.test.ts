@@ -233,6 +233,25 @@ describe("editor scan quick publish", () => {
     }))
   })
 
+  it("reads installed skill source fingerprint from .synapse.json", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "reviewer")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Reviewer\n")
+    await writeFile(path.join(skillDir, ".synapse.json"), JSON.stringify({
+      id: "skill-1",
+      sourceFingerprint: "sha256:current",
+    }))
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills).toContainEqual(expect.objectContaining({
+      name: "reviewer",
+      synapseContentId: "skill-1",
+      sourceFingerprint: "sha256:current",
+    }))
+  })
+
   it("bounds skill attachment listing by file count and depth", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "large-skill")

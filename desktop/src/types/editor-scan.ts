@@ -16,6 +16,7 @@ export type EditorScanSkillItem = {
   source: EditorScanItemSource
   synapseContentId: string | null
   repositoryVersion: string | null
+  sourceFingerprint?: string | null
   preview: string
   mainFileName?: string | null
   fileCount: number
