@@ -3,7 +3,6 @@ import { Download, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
 import { resolveEditorInstallStatus } from "../../../src/app-shell/editor-install-status"
-import { installSourceToEditorTargets } from "../../../src/app-shell/installers"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { EditorIcon } from "../../../src/components/editor-icon"
 import { Badge } from "../../../src/components/ui/badge"
@@ -44,10 +43,6 @@ function statusBadgeVariant(status: SynapseEditorInstallStatusEntry["status"] | 
   return "outline"
 }
 
-function canBatchInstall(status: SynapseEditorInstallStatusEntry["status"] | undefined): boolean {
-  return status === "not_installed" || status === "needs_update"
-}
-
 function canOpenSingleTargetFlow(status: SynapseEditorInstallStatusEntry["status"] | undefined): boolean {
   return status === "not_installed"
     || status === "needs_update"
@@ -55,16 +50,7 @@ function canOpenSingleTargetFlow(status: SynapseEditorInstallStatusEntry["status
     || status === "external_same_name"
 }
 
-function getPrimaryBatchLabel(entries: SynapseEditorInstallStatusEntry[]): string {
-  const hasMissing = entries.some((entry) => entry.status === "not_installed")
-  const hasUpdate = entries.some((entry) => entry.status === "needs_update")
-  if (hasMissing && hasUpdate) return "安装并更新"
-  if (hasUpdate) return "更新已安装项"
-  if (hasMissing) return "安装缺失项"
-  return "全部已安装"
-}
-
-function getBatchSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
+function getInstallSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
   const missingCount = entries.filter((entry) => entry.status === "not_installed").length
   const updateCount = entries.filter((entry) => entry.status === "needs_update").length
   const parts = [
@@ -72,10 +58,6 @@ function getBatchSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): strin
     updateCount > 0 ? `${updateCount} 个待更新` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(" · ") : "无需操作"
-}
-
-function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "update" {
-  return entries.some((entry) => entry.status === "needs_update") ? "update" : "install"
 }
 
 function getRowActionLabel(status: SynapseEditorInstallStatusEntry["status"]): string {
@@ -93,7 +75,6 @@ function SynapseSkillModule() {
   const [statusError, setStatusError] = useState("")
   const [statusLoading, setStatusLoading] = useState(false)
   const [preparing, setPreparing] = useState(false)
-  const [batchInstalling, setBatchInstalling] = useState(false)
   const adapters = useEditorAdaptersForContentType({
     contentType: "skill",
     enabled: true,
@@ -167,43 +148,24 @@ function SynapseSkillModule() {
   }
 
   const globalStatusEntries = statusEntries.filter((entry) => entry.scope === "global")
-  const batchableEntries = globalStatusEntries.filter((entry) => canBatchInstall(entry.status))
-  const batchLabel = getPrimaryBatchLabel(globalStatusEntries)
-  const batchSummaryLabel = getBatchSummaryLabel(globalStatusEntries)
+  const installSummaryLabel = getInstallSummaryLabel(globalStatusEntries)
 
-  const runBatchInstall = async () => {
-    if (batchInstalling || batchableEntries.length === 0) return
-
-    setBatchInstalling(true)
+  const openInstallFlow = async () => {
+    setPreparing(true)
     try {
       const installSource = await ensureSource()
-      const result = await installSourceToEditorTargets({
-        mode: getBatchMode(batchableEntries),
-        source: installSource,
-        targets: batchableEntries.map((entry) => ({
-          editorId: entry.editorId,
-          scope: "global",
-        })),
-      })
-      const failedCount = result.results.filter((entry) => entry.status === "failed").length
-      if (failedCount === 0) {
-        toast.success("安装完成")
-      } else if (failedCount === result.results.length) {
-        toast.error("安装失败")
-      } else {
-        toast.warning("部分安装失败")
-      }
-      await refreshStatus()
+      setInitialEditor(null)
+      setFlowSource(installSource)
     } catch (error) {
-      const message = error instanceof Error ? error.message : "安装失败"
-      logger.error("Failed to batch install Synapse Skill.", error)
+      const message = error instanceof Error ? error.message : "读取 Synapse Skill 失败"
+      logger.error("Failed to prepare Synapse Skill source.", error)
       toast.error(message)
     } finally {
-      setBatchInstalling(false)
+      setPreparing(false)
     }
   }
 
-  if (flowSource && initialEditor) {
+  if (flowSource) {
     return (
       <SystemAppWindowShell>
         <ScrollArea className="h-full min-h-0">
@@ -282,7 +244,7 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={batchInstalling || preparing}
+                            disabled={preparing}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
                             {entry.status === "not_installed" ? <Download data-icon="inline-start" /> : null}
@@ -298,7 +260,7 @@ function SynapseSkillModule() {
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label={`${editor.label} 更多操作`}
-                                disabled={batchInstalling || preparing}
+                                disabled={preparing}
                               >
                                 <MoreHorizontal />
                               </Button>
@@ -333,19 +295,19 @@ function SynapseSkillModule() {
                 })}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                <p className="text-sm text-muted-foreground tabular-nums">{batchSummaryLabel}</p>
+                <p className="text-sm text-muted-foreground tabular-nums">{installSummaryLabel}</p>
                 <Button
                   type="button"
-                  onClick={() => void runBatchInstall()}
+                  onClick={() => void openInstallFlow()}
                   disabled={
-                    batchInstalling
-                    || statusLoading
+                    statusLoading
                     || adapters.isLoading
-                    || batchableEntries.length === 0
+                    || preparing
+                    || globalEditors.length === 0
                   }
                 >
-                  {batchInstalling ? <Spinner data-icon="inline-start" /> : null}
-                  {batchLabel}
+                  {preparing ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                  安装
                 </Button>
               </div>
             </CardContent>

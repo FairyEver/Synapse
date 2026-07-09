@@ -42,12 +42,6 @@ const synapseSkillBridge = vi.hoisted(() => ({
   })),
 }))
 
-const installSourceToEditorTargets = vi.hoisted(() => vi.fn(async () => ({
-  results: [{
-    target: { editorId: "codex", scope: "global" },
-    status: "installed",
-  }],
-})))
 const loadEditors = vi.hoisted(() => vi.fn(async () => undefined))
 const resolveEditorInstallStatus = vi.hoisted(() => vi.fn(async () => ({
   entries: [
@@ -75,10 +69,6 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("@/app-shell/editor-install-status", () => ({
   resolveEditorInstallStatus,
-}))
-
-vi.mock("@/app-shell/installers", () => ({
-  installSourceToEditorTargets,
 }))
 
 vi.mock("@/app-shell/logging", () => ({
@@ -117,7 +107,7 @@ vi.mock("@/modules/installers/shared/shared-installer-flow", () => ({
     source: typeof preparedSource
   }) => (
     <div data-testid="installer-flow">
-      {source.name}:{initialEditor?.id}:{initialSelection?.scope}
+      {source.name}:{initialEditor?.id ?? "none"}:{initialSelection?.scope}
     </div>
   ),
 }))
@@ -139,7 +129,6 @@ let roots: Root[] = []
 
 beforeEach(() => {
   synapseSkillBridge.prepareInstallSource.mockClear()
-  installSourceToEditorTargets.mockClear()
   loadEditors.mockClear()
   resolveEditorInstallStatus.mockClear()
   showItemInFolder.mockClear()
@@ -191,15 +180,13 @@ describe("SynapseSkillModule", () => {
     expect(showItemInFolder).toHaveBeenCalledWith("/Users/test/.agents/skills/synapse-skill")
   })
 
-  it("installs missing global targets in one batch", async () => {
+  it("opens the standard installer flow from the footer install action", async () => {
     await renderModule()
 
-    await clickButton("安装缺失项")
+    await clickLastButton("安装")
 
-    expect(installSourceToEditorTargets).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "install",
-      targets: [{ editorId: "codex", scope: "global" }],
-    }))
+    expect(synapseSkillBridge.prepareInstallSource).toHaveBeenCalled()
+    expect(document.body.textContent).toContain("synapse-skill:none:global")
   })
 })
 
@@ -225,6 +212,17 @@ async function clickButton(text: string): Promise<void> {
 async function clickButtonContaining(text: string): Promise<void> {
   const button = Array.from(document.body.querySelectorAll("button"))
     .find((item) => item.textContent?.includes(text))
+  await act(async () => {
+    if (!button) throw new Error(`Button not found: ${text}`)
+    button.click()
+    await Promise.resolve()
+  })
+}
+
+async function clickLastButton(text: string): Promise<void> {
+  const buttons = Array.from(document.body.querySelectorAll("button"))
+    .filter((item) => item.textContent === text)
+  const button = buttons.at(-1)
   await act(async () => {
     if (!button) throw new Error(`Button not found: ${text}`)
     button.click()
