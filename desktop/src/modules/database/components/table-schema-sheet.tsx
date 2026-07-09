@@ -28,7 +28,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
   Dialog,
@@ -42,6 +41,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ColumnKind, DatabaseTableSchema } from "@/types/database"
 import { createRendererLogger } from "@/app-shell/logging"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { sanitizeTrackValue } from "@/lib/ui-tracking"
 import {
   COLUMN_KINDS,
@@ -83,6 +83,7 @@ function TableSchemaSheet({
   const [editingCol, setEditingCol] = useState<string | null>(null)
   const [editingDesc, setEditingDesc] = useState("")
   const [editingChoicesCol, setEditingChoicesCol] = useState<string | null>(null)
+  const [dropTableConfirmOpen, setDropTableConfirmOpen] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
   const skipTableDescriptionCommitRef = useRef(false)
 
@@ -342,10 +343,20 @@ function TableSchemaSheet({
           ) : null}
 
           <DialogFrameFooter className="sm:items-center sm:justify-between">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" data-track="database-drop-table-open">删除此表</Button>
-              </AlertDialogTrigger>
+            <AlertDialog open={dropTableConfirmOpen} onOpenChange={setDropTableConfirmOpen}>
+              <Button
+                variant="destructive"
+                data-track="database-drop-table-open"
+                onClick={(event) => {
+                  if (shouldBypassDeleteConfirm(event)) {
+                    onDropTable()
+                    return
+                  }
+                  setDropTableConfirmOpen(true)
+                }}
+              >
+                删除此表
+              </Button>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>确认删除</AlertDialogTitle>

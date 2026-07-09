@@ -459,6 +459,20 @@ describe("accountIpcModule", () => {
       type: "account.driveLocalUploadProgress",
       payload: { type: "task-finished", taskId: "upload-task-1", result: { completed: 1, failed: 0, skipped: 0 } },
     }))
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "account.driveLocalUploadProgress",
+        payload: expect.objectContaining({ type: "item-started" }),
+      }),
+      { backpressure: "block" },
+    )
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "account.driveLocalUploadProgress",
+        payload: expect.objectContaining({ type: "task-finished" }),
+      }),
+      { backpressure: "block" },
+    )
   })
 
   it("checks every nested file path before local folder drive uploads", async () => {

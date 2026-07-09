@@ -1,4 +1,5 @@
 import { LoaderCircle, RotateCcw, Trash2 } from "lucide-react"
+import type { MouseEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { getCategoryLabel } from "@/lib/content-categories"
@@ -22,7 +23,7 @@ type ContentGridProps = {
   onInstallDialogOpenChange?: (open: boolean) => void
   onOpenItem: (item: SynapseContentMeta) => void
   onRestoreItem: (item: SynapseContentMeta) => void
-  onPurgeItem: (item: SynapseContentMeta) => void
+  onPurgeItem: (item: SynapseContentMeta, event: MouseEvent<HTMLElement>) => void
 }
 
 function getRemainingDays(modifiedAt: string): number {
@@ -45,7 +46,7 @@ function DeletedContentCard({
   contentType: SynapseContentType
   item: SynapseContentMeta
   onRestore: () => void
-  onPurge: () => void
+  onPurge: (event: MouseEvent<HTMLElement>) => void
   disabled?: boolean
 }) {
   const repoProfileMap = useRepoProfileMap()
@@ -339,7 +340,7 @@ function ContentGrid({
             item={item}
             disabled={busyItemId === item.id}
             onRestore={() => onRestoreItem(item)}
-            onPurge={() => onPurgeItem(item)}
+            onPurge={(event) => onPurgeItem(item, event)}
           />
         ))}
       </div>

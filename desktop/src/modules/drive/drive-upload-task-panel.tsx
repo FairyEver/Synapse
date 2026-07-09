@@ -41,7 +41,9 @@ export function DriveUploadTaskPanel({
       <SheetContent side="right" className="w-full sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>上传任务</SheetTitle>
-          <SheetDescription>{task ? task.destinationPath : "无任务"}</SheetDescription>
+          <SheetDescription className="min-w-0">
+            <EndTruncatedText value={task ? task.destinationPath : "无任务"} />
+          </SheetDescription>
         </SheetHeader>
         {task ? (
           <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-2">
@@ -61,7 +63,13 @@ export function DriveUploadTaskPanel({
             {currentItem ? (
               <div className="space-y-1 border-y py-3">
                 <div className="text-xs text-muted-foreground">当前</div>
-                <div className="truncate text-sm font-medium text-foreground">{displayPath(currentItem)}</div>
+                <EndTruncatedText value={displayPath(currentItem)} className="text-sm font-medium text-foreground" />
+                {currentItem.status === "uploading" && currentItem.uploadedBytes !== null && currentItem.totalBytes !== null ? (
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span className="tabular-nums">{formatBytes(currentItem.uploadedBytes)} / {formatBytes(currentItem.totalBytes)}</span>
+                    <span className="tabular-nums">{formatUploadPercent(currentItem.uploadedBytes, currentItem.totalBytes)}</span>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -110,17 +118,23 @@ function UploadTaskItemRow({ item }: { readonly item: DriveUploadTaskItem }) {
   return (
     <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-foreground" title={displayPath(item)}>
-          {displayPath(item)}
-        </div>
+        <EndTruncatedText value={displayPath(item)} className="text-sm font-medium text-foreground" />
         <div className="truncate text-xs text-muted-foreground">
           {item.mimeType ?? "未知类型"}{item.message ? ` · ${item.message}` : ""}
         </div>
       </div>
-      <Badge variant={statusBadgeVariant(item.status)} className={cn(item.status === "uploading" && "animate-pulse")}>
+      <Badge variant={statusBadgeVariant(item.status)} className={cn("shrink-0", item.status === "uploading" && "animate-pulse")}>
         {statusLabel(item.status)}
       </Badge>
     </div>
+  )
+}
+
+function EndTruncatedText({ value, className }: { readonly value: string; readonly className?: string }) {
+  return (
+    <span dir="rtl" className={cn("block truncate text-left", className)} title={value}>
+      {value}
+    </span>
   )
 }
 
@@ -147,4 +161,17 @@ function statusLabel(status: DriveUploadTaskItemStatus): string {
   if (status === "completed") return "完成"
   if (status === "skipped") return "跳过"
   return "失败"
+}
+
+function formatUploadPercent(uploadedBytes: number, totalBytes: number): string {
+  if (totalBytes <= 0) return "0%"
+  const percent = Math.min(100, Math.max(0, Math.round((uploadedBytes / totalBytes) * 100)))
+  return `${percent}%`
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }

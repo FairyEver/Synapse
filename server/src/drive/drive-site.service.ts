@@ -172,6 +172,7 @@ export type DrivePublicSiteAssetListResult =
 const DRIVE_SITE_MAX_FOLDERS = DRIVE_SITE_MAX_FILES
 const DRIVE_SITE_MAX_DEPTH = 32
 const DRIVE_SITE_SNAPSHOT_PARENT_BATCH_SIZE = 100
+const DRIVE_SITE_DEPLOYMENT_COPY_CONCURRENCY = 10
 
 @Injectable()
 export class DriveSiteService {
@@ -580,12 +581,13 @@ export class DriveSiteService {
       },
     })
     try {
-      for (const file of snapshot.files) {
-        await this.storage.copyObject({
+      for (let index = 0; index < snapshot.files.length; index += DRIVE_SITE_DEPLOYMENT_COPY_CONCURRENCY) {
+        const batch = snapshot.files.slice(index, index + DRIVE_SITE_DEPLOYMENT_COPY_CONCURRENCY)
+        await Promise.all(batch.map((file) => this.storage.copyObject({
           fromKey: file.storageKey,
           toKey: driveSiteStorageKey(site.siteId, deployment.id, file.relativePath),
           contentType: file.contentType,
-        })
+        })))
       }
       await this.prisma.driveSiteAsset.createMany({
         data: snapshot.files.map((file) => ({

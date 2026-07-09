@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, Head, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import archiver from "archiver"
 import { Buffer } from "node:buffer"
@@ -13,6 +14,7 @@ import { AuditLogService } from "../common/audit-log.service"
 import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
+import { DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
@@ -92,6 +94,7 @@ const publicAssetPrepareUploadSchema = z.object({
   size: z.string().regex(/^\d+$/u),
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
+const driveUploadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE } } as const
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
 const driveFileTextUpdateSchema = z.object({
@@ -187,6 +190,7 @@ export class DriveUserController {
   }
 
   @Post("/public-assets/uploads/prepare")
+  @Throttle(driveUploadThrottle)
   preparePublicAssetUpload(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(publicAssetPrepareUploadSchema, body, "上传请求无效。")
     return requirePublicAssetService(this.publicAssets).prepareUpload(request.user!.id, {
@@ -198,6 +202,7 @@ export class DriveUserController {
   }
 
   @Post("/public-assets/uploads/:sessionId/complete")
+  @Throttle(driveUploadThrottle)
   completePublicAssetUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return requirePublicAssetService(this.publicAssets).completeUpload(request.user!.id, sessionId, {
       ...driveAuditContext(request),
@@ -206,11 +211,13 @@ export class DriveUserController {
   }
 
   @Post("/public-assets/uploads/:sessionId/cancel")
+  @Throttle(driveUploadThrottle)
   cancelPublicAssetUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return requirePublicAssetService(this.publicAssets).cancelUpload(request.user!.id, sessionId, driveAuditContext(request))
   }
 
   @Post("/public-assets/:assetId/replace/prepare")
+  @Throttle(driveUploadThrottle)
   preparePublicAssetReplace(@Param("assetId") assetId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(publicAssetPrepareUploadSchema, body, "上传请求无效。")
     return requirePublicAssetService(this.publicAssets).prepareReplace(request.user!.id, assetId, {
@@ -222,6 +229,7 @@ export class DriveUserController {
   }
 
   @Post("/public-assets/:assetId/replace/:sessionId/complete")
+  @Throttle(driveUploadThrottle)
   completePublicAssetReplace(@Param("assetId") assetId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return requirePublicAssetService(this.publicAssets).completeReplace(request.user!.id, assetId, sessionId, {
       ...driveAuditContext(request),
@@ -230,6 +238,7 @@ export class DriveUserController {
   }
 
   @Post("/public-assets/:assetId/replace/:sessionId/cancel")
+  @Throttle(driveUploadThrottle)
   cancelPublicAssetReplace(@Param("assetId") assetId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return requirePublicAssetService(this.publicAssets).cancelReplace(request.user!.id, assetId, sessionId, driveAuditContext(request))
   }
@@ -436,6 +445,7 @@ export class DriveUserController {
   }
 
   @Post("/uploads/prepare")
+  @Throttle(driveUploadThrottle)
   prepareUpload(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(prepareUploadSchema, body, "上传请求无效。")
     return this.drive.prepareUpload(request.user!.id, {
@@ -448,6 +458,7 @@ export class DriveUserController {
   }
 
   @Post("/uploads/folder/prepare")
+  @Throttle(driveUploadThrottle)
   prepareFolderUpload(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(prepareFolderUploadSchema, body, "文件夹上传请求无效。")
     return this.drive.prepareFolderUpload(request.user!.id, {
@@ -464,11 +475,13 @@ export class DriveUserController {
   }
 
   @Post("/uploads/:sessionId/complete")
+  @Throttle(driveUploadThrottle)
   completeUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.completeUpload(request.user!.id, sessionId, driveAuditContext(request))
   }
 
   @Post("/uploads/:sessionId/cancel")
+  @Throttle(driveUploadThrottle)
   cancelUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.cancelUpload(request.user!.id, sessionId, driveAuditContext(request))
   }
@@ -1774,6 +1787,7 @@ export class DriveLocalStorageController {
   constructor(private readonly storage: LocalDriveStorage) {}
 
   @Put("/local-upload/:token")
+  @Throttle(driveUploadThrottle)
   async upload(@Param("token") token: string, @Req() request: Request) {
     try {
       await this.storage.acceptUpload(token, request)

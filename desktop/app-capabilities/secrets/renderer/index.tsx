@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react"
 import { Clipboard, Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SecretSafeView } from "../shared/schema"
@@ -196,17 +197,24 @@ export function SecretsModule() {
     }
   }
 
-  const deleteSecret = async () => {
-    if (!deleting) return
+  const deleteSecret = async (secret: SecretSafeView) => {
     try {
-      await secretsBridge.delete({ name: deleting.name })
-      setSecrets((current) => current.filter((secret) => secret.id !== deleting.id))
+      await secretsBridge.delete({ name: secret.name })
+      setSecrets((current) => current.filter((entry) => entry.id !== secret.id))
       clearSecretReveals()
       setDeleting(null)
     } catch (error) {
       logger.error("Failed to delete secret.", error)
       toast.error("删除失败")
     }
+  }
+
+  const startDeleteSecret = (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteSecret(secret)
+      return
+    }
+    setDeleting(secret)
   }
 
   const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
@@ -309,7 +317,7 @@ export function SecretsModule() {
             <SecretsTable
               secrets={secrets}
               reveals={secretReveals}
-              onDelete={setDeleting}
+              onDelete={startDeleteSecret}
               onEdit={openEditForm}
               onRevealToggle={(secret) => void toggleSecretReveal(secret)}
             />
@@ -338,7 +346,9 @@ export function SecretsModule() {
         onOpenChange={(open) => {
           if (!open) setDeleting(null)
         }}
-        onDelete={() => void deleteSecret()}
+        onDelete={() => {
+          if (deleting) void deleteSecret(deleting)
+        }}
       />
       <SecretValueDialog
         dialog={secretValueDialog}
@@ -396,7 +406,7 @@ function SecretsTable({
 }: {
   readonly secrets: SecretSafeView[]
   readonly reveals: SecretRevealStateById
-  readonly onDelete: (secret: SecretSafeView) => void
+  readonly onDelete: (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (secret: SecretSafeView) => void
   readonly onRevealToggle: (secret: SecretSafeView) => void
 }) {
@@ -448,7 +458,7 @@ function SecretsTable({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={`删除密钥：${secret.name}`}
-                  onClick={() => onDelete(secret)}
+                  onClick={(event) => onDelete(secret, event)}
                 >
                   <Trash2 className="size-3.5" />
                 </Button>

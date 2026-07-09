@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState, type MouseEvent } from "react"
 import { LoaderCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { DriveItemIcon } from "./drive-item-icon"
 import { DRIVE_TRASH_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
@@ -141,10 +142,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
     }
   }, [loadTrash])
 
-  const confirmDelete = useCallback(async () => {
-    const target = deleteTarget
-    if (!target) return
-    setDeleteTarget(null)
+  const deleteTrashItem = useCallback(async (target: DriveTrashItemDto) => {
     await runTrashMutation(
       target,
       () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: target.id }),
@@ -152,7 +150,14 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       "删除失败",
       onUsageChange,
     )
-  }, [deleteTarget, onUsageChange, runTrashMutation])
+  }, [onUsageChange, runTrashMutation])
+
+  const confirmDelete = useCallback(async () => {
+    const target = deleteTarget
+    if (!target) return
+    setDeleteTarget(null)
+    await deleteTrashItem(target)
+  }, [deleteTarget, deleteTrashItem])
 
   const content = (() => {
     if (loading) return <DriveTrashTableSkeleton />
@@ -205,7 +210,11 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
                     onDriveItemsChanged,
                   )
                 }}
-                onDelete={() => {
+                onDelete={(event) => {
+                  if (shouldBypassDeleteConfirm(event)) {
+                    void deleteTrashItem(item)
+                    return
+                  }
                   setDeleteTarget(item)
                 }}
               />
@@ -313,7 +322,7 @@ function DriveTrashRow({
 }: {
   readonly busy: boolean
   readonly item: DriveTrashItemDto
-  readonly onDelete: () => void
+  readonly onDelete: (event: MouseEvent<HTMLButtonElement>) => void
   readonly onRestore: () => void
 }) {
   const isFolder = item.type === "folder"

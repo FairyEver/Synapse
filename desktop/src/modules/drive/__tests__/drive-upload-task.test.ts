@@ -85,6 +85,35 @@ describe("drive upload task model", () => {
     expect(failed.items[1]?.message).toBe("上传失败。")
   })
 
+  it("tracks byte progress for the active upload without completing the item", () => {
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{ kind: "file", path: "/tmp/a.txt", name: "a.txt", mimeType: "text/plain" }],
+      },
+      startedAt: 100,
+    })
+
+    const updated = applyDriveUploadProgressEvent(task, {
+      type: "item-progress",
+      taskId: "upload-task-1",
+      itemKey: "file:/tmp/a.txt",
+      uploadedBytes: 3,
+      totalBytes: 6,
+    })
+
+    expect(updated.completedItems).toBe(0)
+    expect(updated.items[0]).toMatchObject({
+      status: "uploading",
+      uploadedBytes: 3,
+      totalBytes: 6,
+    })
+  })
+
   it("retries only failed items against the original parent id", () => {
     const task = createDriveUploadTask({
       id: "upload-task-1",

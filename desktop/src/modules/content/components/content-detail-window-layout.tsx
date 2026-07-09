@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { MouseEvent, ReactNode } from "react"
 import {
   ResizableHandle,
   ResizablePanel,
@@ -30,7 +30,7 @@ type ContentDetailWindowSummaryProps = {
   canDelete?: boolean
   canEdit?: boolean
   detail: SynapseContentDetail | null
-  onDelete?: () => void
+  onDelete?: (event: MouseEvent<HTMLElement>) => void
   onEdit?: () => void
 }
 

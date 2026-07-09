@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { errorLogMeta } from "@/lib/error-sanitize"
 import { SystemAppTopBar, SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
@@ -122,9 +123,8 @@ function AutomationModule() {
     }
   }
 
-  async function handleDelete() {
-    if (!deleteTarget || deleteTarget.activeRun?.status === "running") return
-    const item = deleteTarget
+  async function deleteItem(item: AutomationItem): Promise<boolean> {
+    if (item.activeRun?.status === "running") return false
     const result = await runItemMutation(
       item.id,
       async () => {
@@ -134,7 +134,22 @@ function AutomationModule() {
       },
       { loading: "正在删除自动化...", success: "自动化已删除。", error: "删除自动化失败。" },
     )
-    if (result !== null) setDeleteTarget(null)
+    return result !== null
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    const deleted = await deleteItem(deleteTarget)
+    if (deleted) setDeleteTarget(null)
+  }
+
+  function handleDeleteStart(item: AutomationItem, event: MouseEvent<HTMLElement>) {
+    if (item.activeRun?.status === "running") return
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteItem(item)
+      return
+    }
+    setDeleteTarget(item)
   }
 
   async function handleToggleEnabled(item: AutomationItem, enabled: boolean) {
@@ -329,7 +344,7 @@ function AutomationModule() {
         onStop={(item) => { void handleStop(item) }}
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
         onHistory={setHistoryItem}
-        onDelete={setDeleteTarget}
+        onDelete={handleDeleteStart}
         onCreateNew={() => { void handleCreateEditorOpen() }}
       />
     )

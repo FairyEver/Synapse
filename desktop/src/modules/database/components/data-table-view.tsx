@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
 } from "react"
 import { FileOutput, Funnel, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -50,6 +51,7 @@ import { RowEditor } from "./row-editor"
 import type { RowEditorHandle } from "./row-editor"
 import { DataTableFilterDialog } from "./data-table-filter-dialog"
 import { createRendererLogger } from "@/app-shell/logging"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import {
   debounce,
   sanitizeTrackRecord,
@@ -224,20 +226,32 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [onInsert, tableName],
   )
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (deleteId != null) {
+  const deleteRow = useCallback(async (targetId: number) => {
       logger.info("Row delete confirmed.", {
         table: tableName,
-        rowId: deleteId,
+        rowId: targetId,
       })
       try {
-        await onDelete(deleteId)
+        await onDelete(targetId)
         setDeleteId(null)
       } catch {
         // Dialog stays open on failure for retry
       }
+  }, [onDelete, tableName])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (deleteId != null) {
+      await deleteRow(deleteId)
     }
-  }, [deleteId, onDelete, tableName])
+  }, [deleteId, deleteRow])
+
+  const handleDeleteStart = useCallback((rowId: number, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteRow(rowId)
+      return
+    }
+    setDeleteId(rowId)
+  }, [deleteRow])
 
   const commitPendingChanges = useCallback(async () => {
     if (editingId != null || isAdding) {
@@ -740,7 +754,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         className="rounded-sm"
                         aria-label="删除行"
                         data-track="database-row-delete-open"
-                        onClick={() => setDeleteId(rowId)}
+                        onClick={(event) => handleDeleteStart(rowId, event)}
                       >
                         <Trash2 className="size-3" />
                       </Button>

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   openCreateEditorWindow: vi.fn(),
   openEditorWindow: vi.fn(),
   notificationError: vi.fn(),
+  deleteAutomation: vi.fn(),
   runAutomation: vi.fn(),
   stopAutomationRun: vi.fn(),
   listAutomationRuns: vi.fn(),
@@ -103,6 +104,7 @@ vi.mock("../hooks/use-automation", async () => {
     return {
       ...actual,
       useAutomationItems: mocks.useAutomationItems,
+      deleteAutomation: mocks.deleteAutomation,
       listAutomationRuns: mocks.listAutomationRuns,
       runAutomation: mocks.runAutomation,
       stopAutomationRun: mocks.stopAutomationRun,
@@ -326,6 +328,44 @@ describe("AutomationModule", () => {
 
     expect(mocks.openEditorWindow).toHaveBeenCalledTimes(1)
     expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
+  })
+
+  it("opens delete confirmation normally and deletes immediately on Alt-click", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.deleteAutomation.mockResolvedValue({ deleted: true })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+
+    const deleteButton = () => document.querySelector<HTMLButtonElement>('button[aria-label="删除自动化"]')
+
+    await act(async () => {
+      deleteButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(document.body.textContent).toContain("删除自动化")
+    expect(mocks.deleteAutomation).not.toHaveBeenCalled()
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    })
+
+    await act(async () => {
+      deleteButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+    })
+
+    expect(mocks.deleteAutomation).toHaveBeenCalledWith("automation:1")
+    expect(refresh).toHaveBeenCalled()
   })
 
   it("allows stopping a running automation without opening the editor", async () => {

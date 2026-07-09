@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import Fuse from "fuse.js"
 import { toast } from "sonner"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
@@ -31,6 +31,7 @@ import {
   SYNAPSE_FAVORITES_CATEGORY_ID,
   SYNAPSE_RECENTLY_VIEWED_CATEGORY_ID,
 } from "@/lib/content-categories"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { ContentBulkActions } from "@/modules/content/components/content-bulk-actions"
 import {
   contentSearchOptions,
@@ -380,34 +381,48 @@ function ContentBrowserPage({
     }
   }
 
-  const handlePurgeConfirm = async () => {
-    if (!purgeTarget || purgeBusy) return
+  const purgeItem = async (item: SynapseContentMeta) => {
+    if (purgeBusy) return
     setPurgeBusy(true)
     const startedAt = performance.now()
-    logger.info("Content purge initiated.", { contentId: purgeTarget.id, contentType })
+    logger.info("Content purge initiated.", { contentId: item.id, contentType })
     try {
       const result = await purgeContent({
-        id: purgeTarget.id,
+        id: item.id,
         type: contentType,
-        baseHistoryDirname: purgeTarget.latestHistoryDirname,
+        baseHistoryDirname: item.latestHistoryDirname,
       })
       if (!isContentMutationSaved(result)) {
-        logger.warn("Content purge conflict detected.", { contentId: purgeTarget.id, contentType, latestHistoryDirname: result.latestHistoryDirname })
+        logger.warn("Content purge conflict detected.", { contentId: item.id, contentType, latestHistoryDirname: result.latestHistoryDirname })
         toast.warning("内容已变化，请刷新后重试。")
         setPurgeTarget(null)
         void Promise.all([deletedContent.refresh(), refresh()])
         return
       }
-      logger.info("Content purged.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
-      toast.success(`已永久删除「${purgeTarget.title}」`)
+      logger.info("Content purged.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
+      toast.success(`已永久删除「${item.title}」`)
       setPurgeTarget(null)
       void deletedContent.refresh()
     } catch (err) {
-      logger.error("Content purge failed.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
+      logger.error("Content purge failed.", { contentId: item.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
       toast.error("永久删除失败，请稍后重试。")
     } finally {
       setPurgeBusy(false)
     }
+  }
+
+  const handlePurgeConfirm = async () => {
+    if (!purgeTarget) return
+    await purgeItem(purgeTarget)
+  }
+
+  const handlePurgeStart = (item: SynapseContentMeta, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void purgeItem(item)
+      return
+    }
+    logger.info("Content purge confirm dialog opened.", { contentId: item.id, contentType })
+    setPurgeTarget(item)
   }
 
   const handleBatchConfirm = async () => {
@@ -571,10 +586,7 @@ function ContentBrowserPage({
                   void handleOpenItemInWindow(item)
                 }}
                 onRestoreItem={handleRestoreItem}
-                onPurgeItem={(item) => {
-                  logger.info("Content purge confirm dialog opened.", { contentId: item.id, contentType })
-                  setPurgeTarget(item)
-                }}
+                onPurgeItem={handlePurgeStart}
               />
             )}
           </div>

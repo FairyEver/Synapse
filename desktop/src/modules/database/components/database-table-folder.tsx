@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import { Folder, FolderOpen, X } from "lucide-react"
 import {
   Collapsible,
@@ -18,7 +18,7 @@ type DatabaseTableFolderProps = {
   folder: DatabaseFolder
   children: React.ReactNode
   onRename: (id: number) => void
-  onDelete: (id: number) => void
+  onDelete: (id: number, event: MouseEvent<HTMLElement>) => void
   onDrop: (tableName: string, folderId: number) => void
 }
 
@@ -77,7 +77,7 @@ function DatabaseTableFolder({
               <button
                 type="button"
                 className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/folder:opacity-100"
-                onClick={() => onDelete(folder.id)}
+                onClick={(event) => onDelete(folder.id, event)}
                 title="删除文件夹"
               >
                 <X className="size-3" />
@@ -98,7 +98,7 @@ function DatabaseTableFolder({
         </ContextMenuItem>
         <ContextMenuItem
           variant="destructive"
-          onClick={() => onDelete(folder.id)}
+          onClick={(event) => onDelete(folder.id, event)}
         >
           删除文件夹
         </ContextMenuItem>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react"
 import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
@@ -7,6 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import "@xterm/xterm/css/xterm.css"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -275,9 +276,9 @@ export function TerminalModule() {
     }
   }, [terminalBridge])
 
-  const deleteGroup = useCallback(async () => {
-    if (!deleteGroupTarget) return
-    const groupId = deleteGroupTarget.id
+  const deleteGroup = useCallback(async (target = deleteGroupTarget) => {
+    if (!target) return
+    const groupId = target.id
     const removedSessionIds = new Set(sessions
       .filter((session) => session.groupId === groupId)
       .map((session) => session.id))
@@ -301,6 +302,14 @@ export function TerminalModule() {
       setDeleteGroupSaving(false)
     }
   }, [deleteGroupTarget, sessions, terminalBridge])
+
+  const startDeleteGroup = useCallback((group: SynapseTerminalGroup, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteGroup(group)
+      return
+    }
+    setDeleteGroupTarget(group)
+  }, [deleteGroup])
 
   const resetGroupSettingsDialog = useCallback(() => {
     setGroupSettingsTarget(null)
@@ -758,7 +767,7 @@ export function TerminalModule() {
                         <Pencil />
                         重命名
                       </DropdownMenuItem>
-                      <DropdownMenuItem variant="destructive" onClick={() => setDeleteGroupTarget(group)}>
+                      <DropdownMenuItem variant="destructive" onClick={(event) => startDeleteGroup(group, event)}>
                         <Trash2 />
                         删除
                       </DropdownMenuItem>

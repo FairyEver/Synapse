@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react"
 import { Copy, ExternalLink, LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveAccessExpiresIn, DriveSiteDto } from "@synapse/shared"
@@ -39,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { DRIVE_SITE_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
 
@@ -140,16 +141,31 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
     }
   }, [reloadSites])
 
+  const deleteSite = useCallback(async (site: DriveSiteDto) => {
+    setBusySiteId(site.siteId)
+    try {
+      await requireSynapseBridge().account.deleteDriveSite({ siteId: site.siteId })
+      toast("站点已删除")
+      setConfirmState(null)
+      await reloadSites()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "删除失败"))
+    } finally {
+      setBusySiteId(null)
+    }
+  }, [reloadSites])
+
   const confirmMutation = async () => {
     if (!confirmState) return
+    if (confirmState.action === "delete") {
+      await deleteSite(confirmState.site)
+      return
+    }
     setBusySiteId(confirmState.site.siteId)
     try {
       if (confirmState.action === "disable") {
         await requireSynapseBridge().account.disableDriveSite({ siteId: confirmState.site.siteId })
         toast("站点已停用")
-      } else {
-        await requireSynapseBridge().account.deleteDriveSite({ siteId: confirmState.site.siteId })
-        toast("站点已删除")
       }
       setConfirmState(null)
       await reloadSites()
@@ -159,6 +175,14 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
       setBusySiteId(null)
     }
   }
+
+  const handleConfirmStart = useCallback((state: DriveSiteConfirmState, event?: Pick<MouseEvent<HTMLElement>, "altKey">) => {
+    if (state.action === "delete" && event && shouldBypassDeleteConfirm(event)) {
+      void deleteSite(state.site)
+      return
+    }
+    setConfirmState(state)
+  }, [deleteSite])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,7 +200,7 @@ function DriveSitesDialog({ open, onOpenChange }: DriveSitesDialogProps) {
                   page={state.page}
                   sites={state.items}
                   onAccess={setAccessState}
-                  onConfirm={setConfirmState}
+                  onConfirm={handleConfirmStart}
                   onEnable={(site) => { void mutateSite(site, "enable") }}
                   onLoadMore={() => {
                     if (!state.page?.hasMore || state.page.nextOffset === null) return
@@ -252,7 +276,7 @@ function DriveSiteTableContent({
   readonly page: DriveSitesState["page"]
   readonly sites: readonly DriveSiteDto[]
   readonly onAccess: (state: DriveSiteAccessState) => void
-  readonly onConfirm: (state: DriveSiteConfirmState) => void
+  readonly onConfirm: (state: DriveSiteConfirmState, event?: MouseEvent<HTMLElement>) => void
   readonly onEnable: (site: DriveSiteDto) => void
   readonly onLoadMore: () => void
   readonly onReload: () => Promise<void>
@@ -342,7 +366,7 @@ function DriveSiteRow({
   readonly busy: boolean
   readonly site: DriveSiteDto
   readonly onAccess: (state: DriveSiteAccessState) => void
-  readonly onConfirm: (state: DriveSiteConfirmState) => void
+  readonly onConfirm: (state: DriveSiteConfirmState, event?: MouseEvent<HTMLElement>) => void
   readonly onEnable: (site: DriveSiteDto) => void
   readonly onRepublish: (site: DriveSiteDto) => void
 }) {
@@ -392,7 +416,7 @@ function DriveSiteRow({
               ) : (
                 <DropdownMenuItem onClick={() => onConfirm({ action: "disable", site })}>停用</DropdownMenuItem>
               )}
-              <DropdownMenuItem variant="destructive" onClick={() => onConfirm({ action: "delete", site })}>删除</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={(event) => onConfirm({ action: "delete", site }, event)}>删除</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

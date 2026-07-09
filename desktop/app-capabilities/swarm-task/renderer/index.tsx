@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { CircleAlert, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
@@ -32,6 +32,7 @@ import {
 import { Input } from "../../../src/components/ui/input"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseProjectConfig } from "../../../src/types/config"
@@ -412,11 +413,10 @@ export function SwarmTaskModule() {
     }
   }, [activeRun, refreshCurrentSnapshot, swarmTaskBridge])
 
-  const deleteTask = useCallback(async () => {
-    if (!deleteTarget) return
+  const deleteTask = useCallback(async (task: SwarmTask) => {
     try {
       setDeleting(true)
-      await swarmTaskBridge.deleteTask(deleteTarget.id)
+      await swarmTaskBridge.deleteTask(task.id)
       setDeleteTarget(null)
       toast.success("已删除")
       await refreshCurrentSnapshot({ showLoading: true })
@@ -427,7 +427,15 @@ export function SwarmTaskModule() {
     } finally {
       setDeleting(false)
     }
-  }, [deleteTarget, refreshCurrentSnapshot, swarmTaskBridge])
+  }, [refreshCurrentSnapshot, swarmTaskBridge])
+
+  const startDeleteTask = useCallback((task: SwarmTask, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteTask(task)
+      return
+    }
+    setDeleteTarget(task)
+  }, [deleteTask])
 
   return (
     <>
@@ -469,7 +477,7 @@ export function SwarmTaskModule() {
                 selectedTaskId={selectedTask?.id ?? null}
                 onSelectTask={setSelectedTaskId}
                 onRenameTask={openRenameTaskDialog}
-                onDeleteTask={setDeleteTarget}
+                onDeleteTask={startDeleteTask}
               />
             )}
             contentScrollable={false}
@@ -529,7 +537,7 @@ export function SwarmTaskModule() {
               disabled={deleting}
               onClick={(event) => {
                 event.preventDefault()
-                void deleteTask()
+                if (deleteTarget) void deleteTask(deleteTarget)
               }}
             >
               删除

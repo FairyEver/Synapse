@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -8,7 +10,16 @@ import { formatExactDateTime } from "@/components/relative-time"
 
 import { SessionTrailing } from "../session-trailing"
 
+let roots: Root[] = []
+
 afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
   vi.restoreAllMocks()
 })
 
@@ -119,5 +130,40 @@ describe("SessionTrailing", () => {
     expect(actionCell?.className).toContain("place-items-center")
     expect(button?.getAttribute("data-variant")).toBe("ghost")
     expect(button?.getAttribute("data-size")).toBe("icon-xs")
+  })
+
+  it("arms normal delete clicks and deletes immediately on Alt-click", async () => {
+    const onDelete = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <SessionTrailing
+          updatedAt="2026-06-04T05:58:00.000Z"
+          unread={0}
+          running={false}
+          canDelete
+          onDelete={onDelete}
+        />,
+      )
+    })
+
+    const button = () => container.querySelector<HTMLButtonElement>("button")
+
+    await act(async () => {
+      button()?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onDelete).not.toHaveBeenCalled()
+    expect(button()?.title).toBe("确认删除")
+
+    await act(async () => {
+      button()?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+    })
+
+    expect(onDelete).toHaveBeenCalledTimes(1)
   })
 })

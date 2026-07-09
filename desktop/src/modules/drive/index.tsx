@@ -53,6 +53,7 @@ import {
   createDriveLocalUploadTooManyFilesError,
 } from "@/lib/drive-local-upload-limits"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -672,27 +673,40 @@ function DriveModuleContent() {
     }
   }, [loadItems, moveParentId, moveTarget])
 
-  const handleDelete = useCallback(async (item: DriveItemDto) => {
-    setDeleteTarget(item)
-  }, [])
-
-  const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) return
+  const deleteDriveItem = useCallback(async (item: DriveItemDto): Promise<boolean> => {
     setSubmitting(true)
     try {
       await requireSynapseBridge().account.deleteDriveItem({
-        itemId: deleteTarget.id,
+        itemId: item.id,
       })
       toast("已删除")
-      setDeleteTarget(null)
       await loadItems()
       await loadDriveUsage()
+      return true
     } catch (rawError) {
       toast(errorMessage(rawError, "删除失败"))
+      return false
     } finally {
       setSubmitting(false)
     }
-  }, [deleteTarget, loadDriveUsage, loadItems])
+  }, [loadDriveUsage, loadItems])
+
+  const handleDelete = useCallback((item: DriveItemDto, event?: Pick<MouseEvent<HTMLElement>, "altKey">) => {
+    if (event && shouldBypassDeleteConfirm(event)) {
+      void deleteDriveItem(item)
+      return
+    }
+    setDeleteTarget(item)
+  }, [deleteDriveItem])
+
+  const confirmDelete = useCallback(async () => {
+    const target = deleteTarget
+    if (!target) return
+    const deleted = await deleteDriveItem(target)
+    if (deleted) {
+      setDeleteTarget(null)
+    }
+  }, [deleteDriveItem, deleteTarget])
 
   const handleShare = useCallback((item: DriveItemDto) => {
     setAccessSettingsTarget({ kind: "share", item })
@@ -1530,7 +1544,7 @@ function DriveFileList({
   readonly onLoadMoreItems: () => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
-  readonly onDelete: (item: DriveItemDto) => void
+  readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
@@ -2003,7 +2017,7 @@ function DriveFileListRow({
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
-  readonly onDelete: (item: DriveItemDto) => void
+  readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
@@ -2129,7 +2143,7 @@ function DriveFileListRow({
           <Button type="button" variant="ghost" size="xs" disabled={!canOpen} onClick={() => onOpenItem(item)}>
             预览
           </Button>
-          <Button type="button" variant="ghost" size="xs" onClick={() => onDelete(item)}>
+          <Button type="button" variant="ghost" size="xs" onClick={(event) => onDelete(item, event)}>
             删除
           </Button>
           <DriveItemMenu

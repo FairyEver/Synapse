@@ -128,9 +128,10 @@ type AccountHttpError = Error & {
   url?: string
   method?: string
   code?: string
+  retryAfterMs?: number
 }
 
-const DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS = 1000
+const DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS = 5000
 
 type PaginatedAccountResponse<T> = {
   readonly data: readonly T[]
@@ -1092,7 +1093,11 @@ export class AccountService {
 
     try {
       emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
-      await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size)
+      await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size, {
+        onProgress: (uploadedBytes, totalBytes) => {
+          emitDriveLocalUploadProgress(progress, { type: "item-progress", itemKey, uploadedBytes, totalBytes })
+        },
+      })
       await this.completeDriveUploadWithRetry(prepared.sessionId)
       emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
       return { completed: 1, failed: 0, skipped: 0 }
@@ -1238,7 +1243,11 @@ export class AccountService {
 
       try {
         emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
-        await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes)
+        await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes, {
+          onProgress: (uploadedBytes, totalBytes) => {
+            emitDriveLocalUploadProgress(progress, { type: "item-progress", itemKey, uploadedBytes, totalBytes })
+          },
+        })
         await this.completeDriveUploadWithRetry(preparedEntry.sessionId)
         emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
         completed += 1
@@ -1272,7 +1281,7 @@ export class AccountService {
       return await this.completeDriveUpload(sessionId)
     } catch (firstError) {
       if (isAccountHttpError(firstError) && firstError.status === 429) {
-        await delay(DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS)
+        await delay(firstError.retryAfterMs ?? DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS)
       }
       try {
         return await this.completeDriveUpload(sessionId)
@@ -1303,12 +1312,16 @@ export class AccountService {
     upload: DriveUploadPrepareResult["upload"],
     filePath: string,
     sizeBytes: number,
+    options: { readonly onProgress?: (uploadedBytes: number, totalBytes: number) => void } = {},
   ): Promise<void> {
     const stream = createReadStream(filePath)
+    const body = options.onProgress
+      ? stream.pipe(createUploadProgressTransform(sizeBytes, options.onProgress))
+      : stream
     const init: RequestInit & { duplex: "half" } = {
       method: upload.method,
       headers: withContentLengthHeader(upload.headers, sizeBytes),
-      body: stream as unknown as RequestInit["body"],
+      body: body as unknown as RequestInit["body"],
       duplex: "half",
     }
 
@@ -2354,7 +2367,18 @@ async function createHttpError(
   error.url = url
   error.method = method
   error.code = failure.code
+  error.retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"))
   return error
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  const normalized = value?.trim()
+  if (!normalized) return undefined
+  const seconds = Number(normalized)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000)
+  const timestamp = Date.parse(normalized)
+  if (Number.isNaN(timestamp)) return undefined
+  return Math.max(0, timestamp - Date.now())
 }
 
 async function readHttpFailureBody(response: Response): Promise<{ readonly detail: string; readonly code?: string }> {
@@ -2631,6 +2655,20 @@ function emitDriveLocalUploadProgress(
 ): void {
   if (!reporter.taskId) return
   reporter.onProgress?.({ ...event, taskId: reporter.taskId })
+}
+
+function createUploadProgressTransform(
+  totalBytes: number,
+  onProgress: (uploadedBytes: number, totalBytes: number) => void,
+): Transform {
+  let uploadedBytes = 0
+  return new Transform({
+    transform(chunk: Buffer | string, encoding, callback) {
+      uploadedBytes += typeof chunk === "string" ? Buffer.byteLength(chunk, encoding as BufferEncoding) : chunk.byteLength
+      onProgress(uploadedBytes, totalBytes)
+      callback(null, chunk)
+    },
+  })
 }
 
 async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; readonly maxFileSizeLabel: string }> {

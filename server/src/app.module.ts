@@ -20,6 +20,7 @@ import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
+import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "./common/rate-limits"
 
 type RequestLogObject = {
   readonly url?: unknown
@@ -27,7 +28,7 @@ type RequestLogObject = {
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ name: "default", ttl: 60000, limit: 60 }]),
+    ThrottlerModule.forRoot([{ name: "default", ttl: RATE_LIMIT_TTL_MS, limit: DEFAULT_API_RATE_LIMIT_PER_MINUTE }]),
     ScheduleModule.forRoot(),
     LoggerModule.forRoot({
       pinoHttp: {

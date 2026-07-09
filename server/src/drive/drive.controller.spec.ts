@@ -9,6 +9,7 @@ import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
+import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentImageService } from "./drive-document-image.service"
@@ -108,6 +109,19 @@ describe("DriveController", () => {
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
   }
+
+  it("uses relaxed default API throttling", () => {
+    expect(DEFAULT_API_RATE_LIMIT_PER_MINUTE).toBe(600)
+    expect(RATE_LIMIT_TTL_MS).toBe(60_000)
+  })
+
+  it("uses a dedicated high limit for Drive upload endpoints", () => {
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.prepareFolderUpload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleTtl(DriveUserController.prototype.prepareFolderUpload)).toBe(RATE_LIMIT_TTL_MS)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.completeUpload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleLimit(DriveUserController.prototype.completePublicAssetUpload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
+    expect(getDefaultThrottleLimit(DriveLocalStorageController.prototype.upload)).toBe(DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE)
+  })
 
   beforeEach(async () => {
     drive.listItems.mockReset()
@@ -241,7 +255,12 @@ describe("DriveController", () => {
         hasMore: false,
         resyncRequired: false,
       })
-      expect(changes.list).toHaveBeenCalledWith("user-1", { cursor: "41", limit: 50 })
+      expect(changes.list).toHaveBeenCalledWith("user-1", {
+        cursor: "41",
+        limit: 50,
+        rootItemId: null,
+        rootPathHint: null,
+      })
     } finally {
       await userApp.close()
     }
@@ -1157,8 +1176,6 @@ describe("DriveController", () => {
       expect(drive.createShare).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: false,
         expiresIn: "3d",
-        accessMode: "link_read",
-        editorEmails: [],
       }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
@@ -2338,4 +2355,12 @@ function restoreEnv(name: string, value: string | undefined): void {
     return
   }
   process.env[name] = value
+}
+
+function getDefaultThrottleLimit(handler: Function): unknown {
+  return Reflect.getMetadata("THROTTLER:LIMITdefault", handler)
+}
+
+function getDefaultThrottleTtl(handler: Function): unknown {
+  return Reflect.getMetadata("THROTTLER:TTLdefault", handler)
 }

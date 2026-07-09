@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react"
 import { AlertTriangle, FileCode2, LoaderCircle } from "lucide-react"
 import { openContentEditWindow, readAttachmentFile } from "@/app-shell/content"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -32,6 +32,7 @@ import {
   SkillFileSidebar,
 } from "@/modules/content/components/content-detail-window-layout"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
 import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
@@ -142,6 +143,18 @@ function useContentWindowDeleteState(
 
 function canEditContentDetail(detail: SynapseContentDetail | null): boolean {
   return Boolean(detail && !detail.isReadonly)
+}
+
+function requestContentDelete(
+  event: MouseEvent<HTMLElement>,
+  detail: SynapseContentDetail | null,
+  state: ContentWindowDeleteState,
+) {
+  if (detail && shouldBypassDeleteConfirm(event)) {
+    void state.deleteContent(detail)
+    return
+  }
+  state.setIsDeleteConfirmOpen(true)
 }
 
 async function openEditFromDetailWindow(
@@ -382,7 +395,7 @@ function RuleDetailWindowPage({
             canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
-            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
+            onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}
           />
         )}
@@ -474,7 +487,7 @@ function PromptDetailWindowPage({
             canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
-            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
+            onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}
           />
         )}
@@ -666,7 +679,7 @@ function SkillDetailWindowPage({
             canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
-            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
+            onDelete={(event) => requestContentDelete(event, detailState.detail, deleteState)}
             onEdit={handleEdit}
           />
         )}

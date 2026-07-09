@@ -33,6 +33,32 @@ describe("DriveSiteService", () => {
     ])
   })
 
+  it("copies site deployment files with a concurrency limit of 10", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma({
+      items: Array.from({ length: 17 }, (_, index) => createItem({
+        id: `extra-${index}`,
+        name: `extra-${index}.js`,
+        parentId: "folder-1",
+        storageKey: `drive/extra-${index}`,
+        mimeType: "text/javascript",
+        size: 1n,
+      })),
+    })
+    const service = new DriveSiteService(prisma as never, storage as never)
+
+    await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+
+    expect(storage.copiedKeys()).toHaveLength(20)
+    expect(storage.maxActiveCopies()).toBe(10)
+  })
+
   it("preserves published site folders for Drive link materialization", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma({
@@ -602,6 +628,8 @@ describe("DriveSiteService", () => {
 
 function createMemoryStorage() {
   const copies: Array<[string, string]> = []
+  let activeCopies = 0
+  let maxActiveCopies = 0
   let nextFailure: string | null = null
   return {
     failNextCopy(message: string) {
@@ -610,13 +638,21 @@ function createMemoryStorage() {
     copiedKeys() {
       return copies
     },
+    maxActiveCopies() {
+      return maxActiveCopies
+    },
     async copyObject(input: { readonly fromKey: string; readonly toKey: string }) {
+      activeCopies += 1
+      maxActiveCopies = Math.max(maxActiveCopies, activeCopies)
       if (nextFailure) {
         const message = nextFailure
         nextFailure = null
+        activeCopies -= 1
         throw new Error(message)
       }
+      await Promise.resolve()
       copies.push([input.fromKey, input.toKey])
+      activeCopies -= 1
     },
   }
 }

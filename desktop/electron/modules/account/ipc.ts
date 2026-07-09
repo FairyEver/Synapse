@@ -560,6 +560,13 @@ const driveLocalUploadProgressEventSchema = z.discriminatedUnion("type", [
     itemKey: z.string().min(1),
   }),
   z.object({
+    type: z.literal("item-progress"),
+    taskId: z.string().min(1),
+    itemKey: z.string().min(1),
+    uploadedBytes: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative(),
+  }),
+  z.object({
     type: z.literal("item-completed"),
     taskId: z.string().min(1),
     itemKey: z.string().min(1),
@@ -1090,7 +1097,7 @@ export const accountIpcModule: IpcModule = {
             type: "account.driveLocalUploadProgress",
             payload,
             timestamp: new Date().toISOString(),
-          })
+          }, { backpressure: "block" })
         }
         return runGuardedDriveLocalUpload({
           ctx,

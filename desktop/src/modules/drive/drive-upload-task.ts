@@ -17,6 +17,8 @@ export type DriveUploadTaskItem = {
   readonly localPath: string
   readonly mimeType: string | null
   readonly status: DriveUploadTaskItemStatus
+  readonly uploadedBytes: number | null
+  readonly totalBytes: number | null
   readonly message: string | null
   readonly sourceItem: DriveLocalUploadItem
 }
@@ -76,6 +78,8 @@ export function applyDriveUploadProgressEvent(
         ? {
           ...item,
           status: itemStatusFromEvent(event),
+          uploadedBytes: event.type === "item-progress" ? event.uploadedBytes : item.uploadedBytes,
+          totalBytes: event.type === "item-progress" ? event.totalBytes : item.totalBytes,
           message: "message" in event ? event.message ?? null : null,
         }
         : item
@@ -142,6 +146,8 @@ function taskItemFromFile(item: DriveLocalUploadFileItem): DriveUploadTaskItem {
     localPath: item.path,
     mimeType: item.mimeType ?? null,
     status: "queued",
+    uploadedBytes: null,
+    totalBytes: null,
     message: null,
     sourceItem: item,
   }
@@ -159,6 +165,8 @@ function taskItemFromFolderFile(
     localPath: file.path,
     mimeType: file.mimeType ?? null,
     status: "queued",
+    uploadedBytes: null,
+    totalBytes: null,
     message: null,
     sourceItem: {
       kind: "file",
@@ -171,6 +179,7 @@ function taskItemFromFolderFile(
 
 function itemStatusFromEvent(event: Exclude<DriveLocalUploadProgressEvent, { readonly type: "task-finished" }>): DriveUploadTaskItemStatus {
   if (event.type === "item-started") return "uploading"
+  if (event.type === "item-progress") return "uploading"
   if (event.type === "item-completed") return "completed"
   if (event.type === "item-skipped") return "skipped"
   return "failed"

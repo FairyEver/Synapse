@@ -1,15 +1,16 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { TableCell, TableRow } from "@/components/ui/table"
 import type { WorkflowMeta, WorkflowRunStatus } from "@/types/workflow"
 import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 import { RUN_STATE_BADGE } from "../lib/status-display"
 import { CopyIdButton } from "./copy-id-button"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 
 export type WorkflowCardRunState = {
   status: WorkflowRunStatus["status"]
@@ -22,6 +23,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
   const badge = runState ? RUN_STATE_BADGE[runState.status] : null
   const hasLoadError = Boolean(meta.loadError)
   const suppressClickRef = useRef(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   return (
     <TableRow
@@ -98,19 +100,27 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
           >
             <Download />
           </Button>
-          <AlertDialog onOpenChange={(open) => { suppressClickRef.current = open }}>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="删除工作流"
-                data-track="workflow-card-delete-open"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Trash2 />
-              </Button>
-            </AlertDialogTrigger>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+            suppressClickRef.current = open
+            setDeleteDialogOpen(open)
+          }}>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="删除工作流"
+              data-track="workflow-card-delete-open"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (shouldBypassDeleteConfirm(e)) {
+                  onDelete()
+                  return
+                }
+                setDeleteDialogOpen(true)
+              }}
+            >
+              <Trash2 />
+            </Button>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>删除工作流</AlertDialogTitle>

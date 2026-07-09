@@ -197,6 +197,7 @@ export type DriveLocalUploadResult = {
 
 export type DriveLocalUploadProgressEvent =
   | { readonly type: "item-started"; readonly taskId: string; readonly itemKey: string }
+  | { readonly type: "item-progress"; readonly taskId: string; readonly itemKey: string; readonly uploadedBytes: number; readonly totalBytes: number }
   | { readonly type: "item-completed"; readonly taskId: string; readonly itemKey: string }
   | { readonly type: "item-skipped"; readonly taskId: string; readonly itemKey: string; readonly message?: string }
   | { readonly type: "item-failed"; readonly taskId: string; readonly itemKey: string; readonly message?: string }

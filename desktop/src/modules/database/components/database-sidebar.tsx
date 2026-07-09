@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type MouseEvent } from "react"
 import { Input } from "@/components/ui/input"
 import {
   ContextMenu,
@@ -29,6 +29,7 @@ import type { DatabaseTableInfo } from "@/types/database"
 import type { DatabaseFolder } from "@/types/database"
 import { DatabaseSidebarToolbar, type DisplayMode } from "./database-sidebar-toolbar"
 import { DatabaseTableFolder } from "./database-table-folder"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 
 type DatabaseSidebarProps = {
   tables: DatabaseTableInfo[]
@@ -172,10 +173,10 @@ function DatabaseSidebar({
     }
   }
 
-  function handleDeleteFolderStart(id: number) {
+  function handleDeleteFolderStart(id: number, event?: Pick<MouseEvent<HTMLElement>, "altKey">) {
     const folder = folders.find((f) => f.id === id)
     if (!folder) return
-    if (folder.members.length === 0) {
+    if (folder.members.length === 0 || (event && shouldBypassDeleteConfirm(event))) {
       void handleDeleteFolder(id)
     } else {
       setDeletingFolder({ id, name: folder.name, memberCount: folder.members.length })

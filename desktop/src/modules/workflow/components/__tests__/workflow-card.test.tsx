@@ -111,6 +111,21 @@ describe("WorkflowCard", () => {
       name: "workflow-card-delete-open",
       action: "click",
     })
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it("deletes immediately when Alt-clicking the delete action", async () => {
+    const onDelete = vi.fn()
+    const container = await renderWorkflowCard({ onDelete })
+
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
+    })
+
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).not.toContain("确定删除")
   })
 
   it("opens the active run from the progress action", async () => {

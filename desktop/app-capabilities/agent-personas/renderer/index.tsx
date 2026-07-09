@@ -5,12 +5,14 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
+  type MouseEvent,
   type SetStateAction,
 } from "react"
 import { ChevronDown, CircleAlert, Pencil, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { requestOpenSettingsAccount } from "../../../src/app-shell/navigation"
+import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
 import {
   AlertDialog,
@@ -255,23 +257,31 @@ export function AgentPersonasModule() {
     }
   }
 
-  const deleteItem = async () => {
-    if (!deleteTarget || deleteTarget.source !== "user") return
+  const deleteItem = async (item: SynapseAgentPersona) => {
+    if (item.source !== "user") return
     if (isReadOnly) {
       toast.error("离线时不能删除智能体")
       return
     }
     try {
-      await agentPersonasBridge.delete({ id: deleteTarget.id })
+      await agentPersonasBridge.delete({ id: item.id })
       setListResult((current) => ({
         ...current,
-        items: current.items.filter((entry) => entry.id !== deleteTarget.id),
+        items: current.items.filter((entry) => entry.id !== item.id),
       }))
       setDeleteTarget(null)
     } catch (error) {
       logger.error("Failed to delete agent persona.", error)
       toast.error(errorMessage(error, "删除失败"))
     }
+  }
+
+  const startDelete = (item: SynapseAgentPersona, event: MouseEvent<HTMLElement>) => {
+    if (shouldBypassDeleteConfirm(event)) {
+      void deleteItem(item)
+      return
+    }
+    setDeleteTarget(item)
   }
 
   return (
@@ -336,7 +346,7 @@ export function AgentPersonasModule() {
                 readOnly={isReadOnly}
                 onConfigureModel={(item) => openItem(item, "configureBuiltinModel")}
                 onEdit={(item) => openItem(item, "edit")}
-                onDelete={setDeleteTarget}
+                onDelete={startDelete}
               />
             </>
           )}
@@ -367,7 +377,14 @@ export function AgentPersonasModule() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void deleteItem()}>删除</AlertDialogAction>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) void deleteItem(deleteTarget)
+              }}
+            >
+              删除
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -394,7 +411,7 @@ function AgentPersonaTable({
 }: {
   readonly items: SynapseAgentPersona[]
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
-  readonly onDelete: (item: SynapseAgentPersona) => void
+  readonly onDelete: (item: SynapseAgentPersona, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
   readonly readOnly: boolean
   readonly tab: AgentPersonaTab
@@ -444,7 +461,7 @@ function AgentPersonaRow({
 }: {
   readonly item: SynapseAgentPersona
   readonly onConfigureModel: (item: SynapseAgentPersona) => void
-  readonly onDelete: (item: SynapseAgentPersona) => void
+  readonly onDelete: (item: SynapseAgentPersona, event: MouseEvent<HTMLElement>) => void
   readonly onEdit: (item: SynapseAgentPersona) => void
   readonly readOnly: boolean
   readonly tab: AgentPersonaTab
@@ -478,7 +495,7 @@ function AgentPersonaRow({
               <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑智能体：${item.name}`} disabled={readOnly} onClick={() => onEdit(item)}>
                 <Pencil />
               </Button>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除智能体：${item.name}`} disabled={readOnly} onClick={() => onDelete(item)}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除智能体：${item.name}`} disabled={readOnly} onClick={(event) => onDelete(item, event)}>
                 <Trash2 />
               </Button>
             </>

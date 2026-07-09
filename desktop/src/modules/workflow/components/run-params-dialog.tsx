@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { track } from "@/lib/ui-tracking"
 import { CheckIcon, ChevronsUpDown, FolderOpen, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -342,7 +343,13 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
                     variant="outline"
                     size="icon"
                     disabled={!selectedPreset || deletingPreset || submitting || savingPreset}
-                    onClick={() => setDeleteConfirmOpen(true)}
+                    onClick={(event) => {
+                      if (shouldBypassDeleteConfirm(event)) {
+                        void handleDeletePreset()
+                        return
+                      }
+                      setDeleteConfirmOpen(true)
+                    }}
                     aria-label="删除预设"
                   >
                     <Trash2 className="size-4" />

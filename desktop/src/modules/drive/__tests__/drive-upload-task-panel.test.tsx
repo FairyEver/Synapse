@@ -102,6 +102,50 @@ describe("DriveUploadTaskPanel", () => {
 
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
+
+  it("keeps upload status visible when paths are long", async () => {
+    const longRelativePath = [
+      "very-long-project-name-with-many-segments",
+      "nested-output",
+      "generated-assets",
+      "diagrams",
+      "architecture-TIHT7OUA-7b9aecc2.js",
+    ].join("/")
+    const displayPath = `build/${longRelativePath}`
+    const task = createDriveUploadTask({
+      id: "upload-task-1",
+      destinationPath: "/团队资料/非常长的项目目录/构建产物/代码块/根目录",
+      parentId: null,
+      request: {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [
+          {
+            kind: "folder",
+            folderName: "build",
+            files: [{ path: `/tmp/build/${longRelativePath}`, relativePath: longRelativePath, mimeType: "text/javascript" }],
+          },
+        ],
+      },
+      startedAt: 100,
+    })
+
+    await render(
+      <DriveUploadTaskPanel
+        task={task}
+        open
+        onOpenChange={() => undefined}
+      />,
+    )
+
+    const pathLabel = document.querySelector(`[title="${displayPath}"]`)
+    const waitingBadge = Array.from(document.querySelectorAll("[data-slot='badge']")).find((element) => element.textContent === "等待")
+
+    expect(pathLabel?.getAttribute("dir")).toBe("rtl")
+    expect(pathLabel?.classList.contains("truncate")).toBe(true)
+    expect(pathLabel?.classList.contains("text-left")).toBe(true)
+    expect(waitingBadge?.classList.contains("shrink-0")).toBe(true)
+  })
 })
 
 async function render(element: React.ReactNode): Promise<void> {

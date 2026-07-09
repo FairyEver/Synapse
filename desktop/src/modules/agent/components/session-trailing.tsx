@@ -3,6 +3,7 @@ import { Check, LoaderCircle, Trash2 } from "lucide-react"
 
 import { RelativeTime } from "@/components/relative-time"
 import { Button } from "@/components/ui/button"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { cn } from "@/lib/utils"
 
 function SessionTrailing({
@@ -86,6 +87,11 @@ function SessionTrailing({
             )}
             onClick={(event) => {
               event.stopPropagation()
+              if (shouldBypassDeleteConfirm(event)) {
+                setArmed(false)
+                onDelete()
+                return
+              }
               if (armed) {
                 setArmed(false)
                 onDelete()

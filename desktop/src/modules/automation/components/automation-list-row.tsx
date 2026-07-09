@@ -1,4 +1,5 @@
 import { History, Loader2, Pencil, Play, Square, Trash2 } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,7 @@ type AutomationListRowProps = {
   readonly onStop: () => void
   readonly onToggleEnabled: (enabled: boolean) => void
   readonly onHistory: () => void
-  readonly onDelete: () => void
+  readonly onDelete: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
 function getStatusBadge(item: AutomationItem): {
@@ -193,8 +194,8 @@ function AutomationListRow({
                 variant="ghost"
                 disabled={pending || activeRunning}
                 aria-label={activeRunning ? "运行中不能删除" : "删除自动化"}
-                onClick={() => {
-                  onDelete()
+                onClick={(event) => {
+                  onDelete(event)
                 }}
               >
                 <Trash2 />

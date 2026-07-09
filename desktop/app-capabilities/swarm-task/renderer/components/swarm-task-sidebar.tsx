@@ -1,4 +1,5 @@
 import { Circle, CircleAlert, LoaderCircle, MoreHorizontal, Trash2, type LucideIcon } from "lucide-react"
+import type { MouseEvent } from "react"
 import { Button } from "../../../../src/components/ui/button"
 import {
   DropdownMenu,
@@ -16,7 +17,7 @@ type SwarmTaskSidebarProps = {
   readonly selectedTaskId: string | null
   readonly onSelectTask: (taskId: string) => void
   readonly onRenameTask: (task: SwarmTask) => void
-  readonly onDeleteTask: (task: SwarmTask) => void
+  readonly onDeleteTask: (task: SwarmTask, event: MouseEvent<HTMLElement>) => void
 }
 
 type TaskStatusIcon = {
@@ -81,7 +82,7 @@ export function SwarmTaskSidebar({
                     <DropdownMenuItem
                       variant="destructive"
                       disabled={isActiveRunStatus(task.lastStatus)}
-                      onClick={() => onDeleteTask(task)}
+                      onClick={(event) => onDeleteTask(task, event)}
                     >
                       <Trash2 className="size-3.5" />
                       删除

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type Dispatch, type FormEvent, type MouseEvent, type SetStateAction } from "react"
 import { LoaderCircle, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION, type DrivePublicAssetDto, type DrivePublicAssetListPageDto } from "@synapse/shared"
@@ -47,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
+import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from "@/types/bridge"
 import { DriveItemIcon } from "./drive-item-icon"
@@ -281,6 +282,16 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     )
   }, [confirmState, runAssetMutation])
 
+  const deletePublicAsset = useCallback(async (asset: DrivePublicAssetDto) => {
+    await runAssetMutation(
+      asset,
+      () => requireSynapseBridge().account.deleteDriveTrashItem({ itemId: asset.itemId }),
+      "已删除",
+      "删除失败",
+      { refreshUsage: true },
+    )
+  }, [runAssetMutation])
+
   const content = (() => {
     if (loading) return <DrivePublicAssetTableSkeleton />
     if (error) {
@@ -336,7 +347,11 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
                     "恢复失败",
                   )
                 }}
-                onDelete={() => {
+                onDelete={(event) => {
+                  if (shouldBypassDeleteConfirm(event)) {
+                    void deletePublicAsset(asset)
+                    return
+                  }
                   setConfirmState({ action: "delete", asset })
                 }}
               />
@@ -529,7 +544,7 @@ function DrivePublicAssetRow({
   readonly asset: DrivePublicAssetDto
   readonly busy: boolean
   readonly onCopy: () => void
-  readonly onDelete: () => void
+  readonly onDelete: (event: MouseEvent<HTMLElement>) => void
   readonly onRename: () => void
   readonly onReplace: () => void
   readonly onRestore: () => void
@@ -594,7 +609,7 @@ function DrivePublicAssetMenu({
 }: {
   readonly asset: DrivePublicAssetDto
   readonly disabled: boolean
-  readonly onDelete?: () => void
+  readonly onDelete?: (event: MouseEvent<HTMLElement>) => void
   readonly onRename?: () => void
   readonly onReplace?: () => void
   readonly onTrash?: () => void

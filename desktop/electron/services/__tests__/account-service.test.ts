@@ -249,7 +249,15 @@ describe("AccountService", () => {
     const filePath = path.join(dir, "report.txt")
     await writeFile(filePath, "report")
 
-    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const fetch = vi.fn(async (_url, init) => {
+      const body = init?.body as AsyncIterable<unknown> | undefined
+      if (body) {
+        for await (const _chunk of body) {
+          // Drain the upload body so stream progress can be emitted.
+        }
+      }
+      return new Response(null, { status: 200 })
+    }) as unknown as typeof globalThis.fetch
     const { service } = await createTestAccountService({ fetch })
     vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
       item: driveItem({ id: "file-1", name: "report.txt", size: "6" }),
@@ -277,6 +285,7 @@ describe("AccountService", () => {
 
     expect(events).toEqual([
       { type: "item-started", taskId: "upload-task-1", itemKey: `file:${filePath}` },
+      { type: "item-progress", taskId: "upload-task-1", itemKey: `file:${filePath}`, uploadedBytes: 6, totalBytes: 6 },
       { type: "item-completed", taskId: "upload-task-1", itemKey: `file:${filePath}` },
     ])
   })
@@ -314,7 +323,43 @@ describe("AccountService", () => {
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
   })
 
-  it("waits before retrying rate-limited drive upload completion", async () => {
+  it("captures Retry-After from rate-limited drive upload completion responses", async () => {
+    const fetch = vi.fn(async () => new Response(
+      JSON.stringify({ error: "TOO_MANY_REQUESTS", message: "Too Many Requests" }),
+      { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "3" } },
+    )) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    ;(service as unknown as { accessToken: string | null }).accessToken = "access-1"
+
+    await expect(service.completeDriveUpload("session-file-1")).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 3000,
+    })
+  })
+
+  it("uses Retry-After before retrying rate-limited drive upload completion", async () => {
+    vi.useFakeTimers()
+    const { service } = await createTestAccountService()
+    const rateLimitError = Object.assign(new Error("rate limited"), { status: 429, retryAfterMs: 3000 })
+    vi.spyOn(service, "completeDriveUpload")
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce(driveItem({ id: "file-1", name: "report.txt", size: "5" }))
+
+    const result = (service as unknown as {
+      completeDriveUploadWithRetry: (sessionId: string) => Promise<DriveItemDto>
+    }).completeDriveUploadWithRetry("session-file-1")
+    await Promise.resolve()
+
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(result).resolves.toMatchObject({ id: "file-1" })
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses the default backoff before retrying rate-limited drive upload completion", async () => {
     vi.useFakeTimers()
     const { service } = await createTestAccountService()
     vi.spyOn(service, "completeDriveUpload")
@@ -327,7 +372,7 @@ describe("AccountService", () => {
     await Promise.resolve()
 
     expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(999)
+    await vi.advanceTimersByTimeAsync(4999)
     expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1)
 

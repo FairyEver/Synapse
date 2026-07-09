@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,7 +37,7 @@ type ContentDetailMenubarProps = {
   isFavorite: boolean
   isRepositoryInitializing: boolean
   item: SynapseContentMeta
-  onDelete: () => void
+  onDelete: (event: MouseEvent<HTMLElement>) => void
   onEdit: () => void
   onInstalled?: () => Promise<void> | void
   onInstallTargetRequestConsumed?: () => void

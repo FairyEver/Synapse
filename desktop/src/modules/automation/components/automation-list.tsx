@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -24,7 +25,7 @@ type AutomationListProps = {
   readonly onStop: (item: AutomationItem) => void
   readonly onToggleEnabled: (item: AutomationItem, enabled: boolean) => void
   readonly onHistory: (item: AutomationItem) => void
-  readonly onDelete: (item: AutomationItem) => void
+  readonly onDelete: (item: AutomationItem, event: MouseEvent<HTMLElement>) => void
   readonly onCreateNew: () => void
 }
 
@@ -92,7 +93,7 @@ function AutomationList({
               onStop={() => onStop(item)}
               onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}
               onHistory={() => onHistory(item)}
-              onDelete={() => onDelete(item)}
+              onDelete={(event) => onDelete(item, event)}
             />
           ))}
         </TableBody>

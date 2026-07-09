@@ -442,6 +442,94 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("SitePw1")
   })
 
+  it("shows publish progress copy while a site is being created", async () => {
+    const createSite = createDeferred<DriveSiteDto>()
+    mocks.preflightDriveSite.mockResolvedValueOnce({
+      sourceFolderItemId: "folder-1",
+      sourceFolderName: "dist",
+      htmlFiles: ["index.html"],
+      defaultEntryPath: "index.html",
+      fileCount: 90,
+      totalBytes: "4928307",
+      includesJavaScript: true,
+    })
+    mocks.createDriveSite.mockReturnValueOnce(createSite.promise)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", type: "folder", name: "dist" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("dist")
+    await clickText("发布站点")
+    await clickButtonText("发布")
+
+    const submitButton = getButton("发布中")
+    expect(submitButton.disabled).toBe(true)
+
+    await hoverElement(submitButton.parentElement ?? submitButton)
+
+    expect(document.body.textContent).toContain("正在复制 90 个文件")
+
+    await act(async () => {
+      createSite.resolve(createDriveSite())
+      await flushPromises()
+    })
+  })
+
+  it("shows bundled site guidance for JavaScript site folders", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", type: "folder", name: "dist" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("dist")
+    await clickText("发布站点")
+
+    expect(document.body.textContent).toContain("打包站点需要相对路径")
+    expect(getButton("查看设置")).not.toBeNull()
+
+    await clickButtonText("查看设置")
+
+    expect(document.body.textContent).toContain("Vite")
+    expect(document.body.textContent).toContain("base: './'")
+    expect(document.body.textContent).toContain("hash 路由")
+    expect(document.body.textContent).toContain("上传 dist 里的内容")
+
+    await clickButtonText("复制")
+
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith(expect.stringContaining("base: './'"))
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith(expect.stringContaining("dist/index.html"))
+    expect(mocks.toast).toHaveBeenLastCalledWith("已复制")
+  })
+
+  it("does not show bundled site guidance for plain HTML site folders", async () => {
+    mocks.preflightDriveSite.mockResolvedValueOnce({
+      sourceFolderItemId: "folder-1",
+      sourceFolderName: "原型",
+      htmlFiles: ["index.html"],
+      defaultEntryPath: "index.html",
+      fileCount: 1,
+      totalBytes: "64",
+      includesJavaScript: false,
+    })
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", type: "folder", name: "原型" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("原型")
+    await clickText("发布站点")
+
+    expect(document.body.textContent).not.toContain("打包站点需要相对路径")
+    expect(queryButton("查看设置")).toBeNull()
+  })
+
   it("opens the site management dialog from the Drive top bar", async () => {
     mocks.listDriveSites.mockResolvedValue(createDriveSitePage([
       createDriveSite({
@@ -3019,6 +3107,20 @@ describe("DriveModule", () => {
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(2)
   })
 
+  it("deletes an item immediately when Alt-clicking delete", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickRowButtonText("report.txt", "删除", { altKey: true })
+
+    expect(document.body.textContent).not.toContain("确认删除")
+    expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已删除")
+  })
+
   it("defaults public link management to the share list without publication tabs", async () => {
     mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
@@ -3657,6 +3759,16 @@ async function clickButtonText(text: string): Promise<void> {
   })
 }
 
+async function hoverElement(element: HTMLElement): Promise<void> {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+    element.dispatchEvent(new MouseEvent("pointerenter", { bubbles: false }))
+    element.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))
+    element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }))
+    await flushPromises()
+  })
+}
+
 async function textAreaInput(id: string, value: string): Promise<void> {
   const element = document.getElementById(id)
   if (!(element instanceof HTMLTextAreaElement)) throw new Error(`Textarea not found: ${id}`)
@@ -3676,11 +3788,11 @@ async function clickDriveRow(rowText: string): Promise<void> {
   })
 }
 
-async function clickRowButtonText(rowText: string, buttonText: string): Promise<void> {
+async function clickRowButtonText(rowText: string, buttonText: string, eventInit: MouseEventInit = {}): Promise<void> {
   const element = rowButton(rowText, buttonText)
   if (!element) throw new Error(`Button not found in row ${rowText}: ${buttonText}`)
   await act(async () => {
-    element.click()
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...eventInit }))
     await flushPromises()
   })
 }

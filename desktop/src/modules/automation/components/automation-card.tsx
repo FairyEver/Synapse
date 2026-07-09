@@ -1,4 +1,5 @@
 import { History, Pencil, Play, Square, Trash2 } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,7 +24,7 @@ type AutomationCardProps = {
   onToggleEnabled: (enabled: boolean) => void
   onEdit: () => void
   onHistory: () => void
-  onDelete: () => void
+  onDelete: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
 function getStatusBadge(item: AutomationItem): {

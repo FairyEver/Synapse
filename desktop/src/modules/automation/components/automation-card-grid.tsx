@@ -1,4 +1,5 @@
 import { Workflow, Plus } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -24,7 +25,7 @@ type AutomationCardGridProps = {
   onToggleEnabled: (item: AutomationItem, enabled: boolean) => void
   onEdit: (item: AutomationItem) => void
   onHistory: (item: AutomationItem) => void
-  onDelete: (item: AutomationItem) => void
+  onDelete: (item: AutomationItem, event: MouseEvent<HTMLElement>) => void
   onCreateNew: () => void
 }
 
@@ -76,7 +77,7 @@ function AutomationCardGrid({
           onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}
           onEdit={() => onEdit(item)}
           onHistory={() => onHistory(item)}
-          onDelete={() => onDelete(item)}
+          onDelete={(event) => onDelete(item, event)}
         />
       ))}
     </div>
