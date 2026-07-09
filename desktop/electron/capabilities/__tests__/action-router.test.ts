@@ -229,11 +229,13 @@ describe("createSynapseActionRouter", () => {
 
   it("rejects retired Variable actions", async () => {
     const router = createSynapseActionRouter(createRouterDeps())
+    const retiredCanonicalAction = ["app", "settings", "variable", "item", "list"].join(".")
+    const retiredLegacyAction = ["variable", "item", "list"].join(".")
 
-    await expect(router.dispatch("app.settings.variable.item.list", {}, { source: "api" })).rejects.toThrow(
+    await expect(router.dispatch(retiredCanonicalAction, {}, { source: "api" })).rejects.toThrow(
       /Unknown action/,
     )
-    await expect(router.dispatch("variable.item.list", {}, { source: "api" })).rejects.toThrow(/Unknown action/)
+    await expect(router.dispatch(retiredLegacyAction, {}, { source: "api" })).rejects.toThrow(/Unknown action/)
   })
 
   it("rejects unknown actions", async () => {

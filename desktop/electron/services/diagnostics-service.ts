@@ -26,6 +26,8 @@ import type {
 } from "../../src/types/database"
 import type { SynapseOpsDiagnostics } from "../../src/types/bridge"
 import type { DataRepository } from "../runtime/data-repo"
+import type { SecretItemEntryV1 } from "../runtime/data-repo/schemas/secrets"
+import { SECRETS_ITEMS_NAMESPACE } from "../../app-capabilities/secrets/shared/capability"
 import type { StructuredLogger } from "../runtime/logging"
 import {
   collectShellEnvironmentSnapshot,
@@ -155,7 +157,7 @@ type CodexRuntimeDiagnostics = {
 type DiagnosticsServiceDeps = {
   appInfo: AppInfo
   configStore: ConfigStoreLike
-  dataRepository: Pick<DataRepository, "inspect">
+  dataRepository: Pick<DataRepository, "inspect" | "namespace">
   serviceRegistry: Pick<ServiceRegistry, "get" | "inspect">
   logStore: LogStoreLike
   database: DatabaseLike
@@ -1405,6 +1407,7 @@ class DiagnosticsService {
     const config = await this.deps.configStore.load()
     const favoriteCount = Object.values(config.global.favorites).reduce((sum, values) => sum + values.length, 0)
     const recentlyViewedCount = Object.values(config.global.recentlyViewed).reduce((sum, values) => sum + values.length, 0)
+    const secrets = await this.collectSecretInventorySummary()
     return {
       schemaVersion: 1,
       generatedAt,
@@ -1420,10 +1423,7 @@ class DiagnosticsService {
         count: config.global.projects.length,
         managedKnowledgeBaseCount: config.global.projects.filter(isManagedKnowledgeBaseProject).length,
       },
-      variables: {
-        count: config.global.variables.length,
-        names: config.global.variables.map((variable) => variable.name),
-      },
+      secrets,
       knowledgeBaseStorage: {
         mode: config.global.knowledgeBaseStorage.mode,
         customRootConfigured: config.global.knowledgeBaseStorage.mode === "custom",
@@ -1439,6 +1439,23 @@ class DiagnosticsService {
         recentlyViewedCount,
         contentSortOrder: config.global.contentSortOrder,
       },
+    }
+  }
+
+  private async collectSecretInventorySummary(): Promise<{ count: number; names: string[] }> {
+    try {
+      const items = await this.deps.dataRepository
+        .namespace<SecretItemEntryV1>(SECRETS_ITEMS_NAMESPACE)
+        .list()
+      return {
+        count: items.length,
+        names: items.map((item) => item.name),
+      }
+    } catch {
+      return {
+        count: 0,
+        names: [],
+      }
     }
   }
 

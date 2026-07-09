@@ -4,6 +4,19 @@ import path from "node:path"
 
 import { describe, expect, it, vi } from "vitest"
 
+vi.mock("electron", () => ({
+  app: {
+    getPath: vi.fn((name: string) => `/app/${name}`),
+    getAppPath: vi.fn(() => "/app"),
+    getLocale: vi.fn(() => "zh-CN"),
+    getName: vi.fn(() => "Synapse"),
+    getVersion: vi.fn(() => "0.2.49"),
+    hasSingleInstanceLock: vi.fn(() => true),
+    isPackaged: false,
+  },
+  dialog: {},
+}))
+
 import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../src/constants/defaults"
 import { DEFAULT_DOCK_APP_IDS } from "../../../src/modules/apps/dock"
 import type { SynapseConfig } from "../../../src/types/config"
@@ -961,15 +974,27 @@ describe("DiagnosticsService.exportBundle", () => {
           const config = createConfig({
             knowledgeBaseStorage: { mode: "custom", rootPath: "/secret/kb-root" },
           })
-          return {
-            ...config,
-            global: {
-              ...config.global,
-              variables: [{ name: "API_KEY", value: "sk-secret-value", description: "token" }],
-            },
-          }
+          return config
         }),
       },
+      dataRepository: {
+        inspect: () => [{
+          namespace: "app.secrets.items",
+          backend: "encrypted-json",
+          schemaVersion: 1,
+        }],
+        namespace: vi.fn(() => ({
+          list: vi.fn(async () => [{
+            id: "secret-1",
+            schemaVersion: 1 as const,
+            name: "API_TOKEN",
+            value: "sk-secret-value",
+            description: "api",
+            createdAt: "2026-07-09T00:00:00.000Z",
+            updatedAt: "2026-07-09T00:00:00.000Z",
+          }]),
+        })),
+      } as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
         writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
       }),
@@ -998,8 +1023,9 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-backup.json`)).toBeUndefined()
     const configSummary = writtenFiles.get(configSummaryPath ?? "") ?? ""
     expect(configSummary).toContain('"repositories"')
-    expect(configSummary).toContain('"variables"')
-    expect(configSummary).toContain("API_KEY")
+    expect(configSummary).toContain('"secrets"')
+    expect(configSummary).toContain("API_TOKEN")
+    expect(configSummary).not.toContain('"variables"')
     expect(configSummary).not.toContain("/repo")
     expect(configSummary).not.toContain("/missing-project")
     expect(configSummary).not.toContain("/secret/kb-root")
@@ -1232,7 +1258,10 @@ function createService(
     },
     dataRepository: {
       inspect: () => [],
-    },
+      namespace: vi.fn(() => ({
+        list: vi.fn(async () => []),
+      })),
+    } as ConstructorParameters<typeof DiagnosticsService>[0]["dataRepository"],
     serviceRegistry: {
       inspect: () => [],
       get: vi.fn((serviceId: string) => {

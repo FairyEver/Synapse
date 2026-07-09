@@ -109,7 +109,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(coreConfigSchema.backend).toBe("json")
     expect(coreIdentitySchema.backend).toBe("json")
     expect(secretsSchema.backend).toBe("encrypted-json")
-    expect(secretsItemsSchema.backend).toBe("sqlite")
+    expect(secretsItemsSchema.backend).toBe("encrypted-json")
     expect(secretsSettingsSchema.backend).toBe("json")
     expect(providersSchema.backend).toBe("json")
     expect(projectsSchema.backend).toBe("json")
@@ -147,6 +147,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
   it("encrypted flag is set only on secret-bearing namespaces", () => {
     for (const schema of allSchemas) {
       const expected = schema.name === "secrets"
+        || schema.name === "app.secrets.items"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }

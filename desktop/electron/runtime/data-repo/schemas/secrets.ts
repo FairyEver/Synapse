@@ -19,11 +19,11 @@ const noMigrations: readonly Migration[] = []
 
 export const secretsItemsSchema: NamespaceSchema<SecretItemEntryV1> = {
   name: "app.secrets.items",
-  backend: "sqlite",
+  backend: "encrypted-json",
   currentVersion: 1,
   migrations: noMigrations,
   validate: isSecretItemEntryV1,
-  encrypted: false,
+  encrypted: true,
 }
 
 export const secretsSettingsSchema: NamespaceSchema<SecretSettingsEntryV1> = {
