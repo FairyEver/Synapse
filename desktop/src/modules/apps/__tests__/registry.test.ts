@@ -26,6 +26,7 @@ describe("system app registry", () => {
       "document-template",
       "skill-installer",
       "synapse-skill",
+      "secrets",
       "rule-installer",
       "quick-input",
       "sound-notifier",
@@ -87,6 +88,16 @@ describe("system app registry", () => {
       dock: { pinnedByDefault: false, order: 290 },
       capabilities: {
         primaryMcpPrefix: "app_synapse_skill",
+      },
+    })
+    expect(getSystemAppManifest("secrets")).toMatchObject({
+      id: "secrets",
+      namespace: "secrets",
+      name: "密钥库",
+      windowTitle: "密钥库",
+      dock: { pinnedByDefault: false, order: 260 },
+      capabilities: {
+        primaryMcpPrefix: "app_secrets",
       },
     })
   })

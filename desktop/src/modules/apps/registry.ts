@@ -6,6 +6,7 @@ import { driveAppManifest } from "@/modules/drive/app-manifest"
 import { documentTemplateAppManifest } from "../../../app-capabilities/document-template/renderer/app-manifest"
 import { skillInstallerAppManifest } from "../../../app-capabilities/skill-installer/renderer/app-manifest"
 import { synapseSkillAppManifest } from "../../../app-capabilities/synapse-skill/renderer/app-manifest"
+import { secretsAppManifest } from "../../../app-capabilities/secrets/renderer/app-manifest"
 import { ruleInstallerAppManifest } from "../../../app-capabilities/rule-installer/renderer/app-manifest"
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
 import { soundNotifierAppManifest } from "../../../app-capabilities/sound-notifier/renderer/app-manifest"
@@ -37,6 +38,7 @@ const systemApps = [
   documentTemplateAppManifest,
   skillInstallerAppManifest,
   synapseSkillAppManifest,
+  secretsAppManifest,
   ruleInstallerAppManifest,
   quickInputAppManifest,
   soundNotifierAppManifest,
