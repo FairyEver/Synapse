@@ -1,7 +1,6 @@
 import {
   Activity,
   Bot,
-  Braces,
   FolderGit2,
   FolderOpen,
   Info,
@@ -52,12 +51,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: Bot,
     label: "模型与供应商",
     description: "模型供应商和默认模型。",
-  },
-  {
-    id: "variables",
-    icon: Braces,
-    label: "私人令牌",
-    description: "管理内容安装占位符。",
   },
   {
     id: "troubleshooting",

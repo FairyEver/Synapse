@@ -13,7 +13,6 @@ describe("settingsCategories", () => {
       "repositories",
       "projects",
       "claude-code",
-      "variables",
       "troubleshooting",
       "about",
       "admin",
@@ -28,6 +27,7 @@ describe("settingsCategories", () => {
     expect(ids).not.toContain("mcp")
     expect(ids).not.toContain("tools")
     expect(ids).not.toContain("quick-inputs")
+    expect(ids).not.toContain("variables")
   })
 
   it("has separate repositories and projects categories", () => {
@@ -47,7 +47,7 @@ describe("settingsCategories", () => {
     expect(labels.get("projects")).toBe("项目和知识库")
     expect(labels.get("tools")).toBeUndefined()
     expect(labels.get("claude-code")).toBe("模型与供应商")
-    expect(labels.get("variables")).toBe("私人令牌")
+    expect(labels.get("variables")).toBeUndefined()
     expect(labels.get("troubleshooting")).toBe("诊断日志")
     expect(labels.get("about")).toBe("关于 Synapse")
     expect(labels.get("admin")).toBe("仓库维护")

@@ -34,7 +34,6 @@ import { RepositoryListEditor } from "@/modules/settings/components/repository-l
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
-import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import { DockPanel } from "@/modules/settings/components/dock-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
@@ -315,7 +314,6 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         ) : null}
 
         {isReady && activeCategory === "claude-code" ? <ClaudeCodePanel /> : null}
-        {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "troubleshooting" ? <TroubleshootingPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (
