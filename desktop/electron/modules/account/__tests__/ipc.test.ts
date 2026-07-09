@@ -409,6 +409,58 @@ describe("accountIpcModule", () => {
     }))
   })
 
+  it("forwards local drive upload task ids and emits progress events", async () => {
+    const uploadDriveLocalItems = vi.fn(async (_request, options?: {
+      readonly onProgress?: (event: {
+        readonly type: "item-started"
+        readonly taskId: string
+        readonly itemKey: string
+      }) => void
+    }) => {
+      options?.onProgress?.({ type: "item-started", taskId: "upload-task-1", itemKey: "file:/tmp/report.txt" })
+      return { completed: 1, failed: 0, skipped: 0 }
+    })
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const emitted: unknown[] = []
+    const eventBus = { emit: vi.fn((event: unknown) => { emitted.push(event) }) }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        if (id === "core.event-bus") return eventBus
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    vi.mocked(accountService.uploadDriveLocalItems).mockImplementation(uploadDriveLocalItems)
+
+    await expect(accountIpcModule.methods.uploadDriveLocalItems.handler(ctx, {
+      taskId: "upload-task-1",
+      parentId: null,
+      items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: null }],
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(uploadDriveLocalItems).toHaveBeenCalledWith(
+      {
+        taskId: "upload-task-1",
+        parentId: null,
+        items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: null }],
+      },
+      { onProgress: expect.any(Function) },
+    )
+    expect(emitted).toContainEqual(expect.objectContaining({
+      domain: "account",
+      type: "account.driveLocalUploadProgress",
+      payload: { type: "item-started", taskId: "upload-task-1", itemKey: "file:/tmp/report.txt" },
+    }))
+    expect(emitted).toContainEqual(expect.objectContaining({
+      domain: "account",
+      type: "account.driveLocalUploadProgress",
+      payload: { type: "task-finished", taskId: "upload-task-1", result: { completed: 1, failed: 0, skipped: 0 } },
+    }))
+  })
+
   it("checks every nested file path before local folder drive uploads", async () => {
     const uploadDriveLocalItems = vi.fn().mockResolvedValue({
       completed: 2,

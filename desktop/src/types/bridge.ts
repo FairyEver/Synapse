@@ -1147,6 +1147,7 @@ export type SynapseBridge = {
     restoreDriveTrashItem: (input: { itemId: string; kind?: DriveTrashItemDto["kind"]; assetId?: string }) => Promise<DriveItemDto | DrivePublicAssetDto>
     deleteDriveTrashItem: (input: { itemId: string }) => Promise<{ ok: true }>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
+    onDriveLocalUploadProgress: (listener: (event: DriveLocalUploadProgressEvent) => void) => () => void
   }
   live: {
     getState: () => Promise<SynapseLiveState>

@@ -8,6 +8,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type {
   DriveDocumentImageImportBridgeRequest,
   DriveDocumentImageSourceContext,
+  DriveLocalUploadProgressEvent,
   DriveLocalUploadRequest,
   DrivePublicAssetBinaryUploadRequest,
   SynapseBridge,
@@ -1159,6 +1160,11 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "account",
       "account.stateChanged",
+    ),
+    onDriveLocalUploadProgress: createDomainEventPayloadSubscription<DriveLocalUploadProgressEvent>(
+      subscribe,
+      "account",
+      "account.driveLocalUploadProgress",
     ),
   },
   live: {
