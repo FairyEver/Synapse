@@ -7,7 +7,11 @@ import type {
   SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
-import type { SynapseInstallSourceToEditorPayload } from "../../src/types/installers"
+import type {
+  SynapseInstallSourceToEditorPayload,
+  SynapseInstallSourceToEditorTargetsPayload,
+  SynapseInstallSourceToEditorTargetsResult,
+} from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { editorAdapterService } from "./editor-adapter-service"
@@ -213,6 +217,38 @@ export class EditorInstallService {
       resolveEditorInstallTarget: (nextPayload) => this.resolveEditorInstallTarget(nextPayload),
     })
     return core.installSourceToEditor(payload, security)
+  }
+
+  async installSourceToEditorTargets(
+    payload: SynapseInstallSourceToEditorTargetsPayload,
+    security?: EditorWriteSecurityDeps,
+  ): Promise<SynapseInstallSourceToEditorTargetsResult> {
+    const results: SynapseInstallSourceToEditorTargetsResult["results"] = []
+
+    for (const target of payload.targets) {
+      const singlePayload: SynapseInstallSourceToEditorPayload = {
+        editorId: target.editorId,
+        overwriteConfirmed: payload.overwriteConfirmed,
+        projectPath: target.projectPath,
+        replaceConfirmed: payload.replaceConfirmed,
+        scope: target.scope,
+        source: payload.source,
+        variableSubstitutions: payload.variableSubstitutions,
+      }
+
+      try {
+        const result = await this.installSourceToEditor(singlePayload, security)
+        results.push({ target, status: "installed", result })
+      } catch (error) {
+        results.push({
+          target,
+          status: "failed",
+          error: error instanceof Error ? error.message : "安装失败",
+        })
+      }
+    }
+
+    return { results }
   }
 
   async readEditorInstallFormValues(

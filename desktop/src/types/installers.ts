@@ -1,5 +1,6 @@
 import type { SynapseContentType } from "./content"
 import type {
+  SynapseContentInstallResult,
   SynapseEditorId,
   SynapseEditorInstallFormValues,
   SynapseEditorInstallScope,
@@ -20,6 +21,7 @@ export type SynapseInstallerSourceBase = {
   name: string
   title?: string
   description?: string
+  sourceFingerprint?: string
 }
 
 export type SynapseSkillInstallerSource = SynapseInstallerSourceBase & {
@@ -61,4 +63,30 @@ export type SynapseInstallSourceToEditorPayload = {
   scope: SynapseEditorInstallScope
   source: SynapseInstallerSource
   variableSubstitutions?: Record<string, string>
+}
+
+export type SynapseInstallSourceTarget = {
+  editorId: SynapseEditorId
+  scope: SynapseEditorInstallScope
+  projectPath?: string
+}
+
+export type SynapseInstallSourceToEditorTargetsPayload = {
+  source: SynapseInstallerSource
+  targets: SynapseInstallSourceTarget[]
+  mode: "install" | "reinstall" | "update"
+  overwriteConfirmed?: boolean
+  replaceConfirmed?: boolean
+  variableSubstitutions?: Record<string, string>
+}
+
+export type SynapseInstallSourceTargetResult = {
+  target: SynapseInstallSourceTarget
+  status: "installed" | "failed"
+  result?: SynapseContentInstallResult
+  error?: string
+}
+
+export type SynapseInstallSourceToEditorTargetsResult = {
+  results: SynapseInstallSourceTargetResult[]
 }

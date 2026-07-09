@@ -3,6 +3,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 
 const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
+  installSourceToEditorTargets: vi.fn(),
   prepareInlineRuleSource: vi.fn(),
   prepareLocalSkillSource: vi.fn(),
 }))
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../services/editor-install-service", () => ({
   editorInstallService: {
     installSourceToEditor: mocks.installSourceToEditor,
+    installSourceToEditorTargets: mocks.installSourceToEditorTargets,
   },
 }))
 
@@ -55,6 +57,21 @@ beforeEach(() => {
     contentId: "inline-rule:abc",
     targetKind: "file",
     targetPath: "/tmp/rules/team.rule.md",
+  })
+  mocks.installSourceToEditorTargets.mockResolvedValue({
+    results: [{
+      target: { editorId: "codex", scope: "global" },
+      status: "installed",
+      result: {
+        editorId: "codex",
+        label: "Codex",
+        scope: "global",
+        contentType: "skill",
+        contentId: "synapse-skill",
+        targetKind: "directory",
+        targetPath: "/Users/test/.agents/skills/synapse-skill",
+      },
+    }],
   })
 })
 
@@ -123,6 +140,37 @@ describe("installersIpcModule", () => {
       expect.objectContaining({
         editorId: "codex",
         source: expect.objectContaining({ sourceIdentity: "inline-rule:abc" }),
+      }),
+      expect.objectContaining({
+        actor: { kind: "user" },
+      }),
+    )
+  })
+
+  it("routes batch source installs to the editor install service", async () => {
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:installers:install-source-to-editor-targets", {
+      mode: "install",
+      source: {
+        kind: "skill",
+        origin: "prepared",
+        sourceIdentity: "synapse-skill",
+        name: "synapse-skill",
+        title: "Synapse Skill",
+        description: "Synapse MCP 使用指南",
+        preparedSourceId: "synapse-skill:test",
+        mainContent: "# Synapse Skill",
+        sourceFingerprint: "sha256:test",
+      },
+      targets: [{ editorId: "codex", scope: "global" }],
+    })
+
+    expect(result.results).toHaveLength(1)
+    expect(mocks.installSourceToEditorTargets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "install",
+        targets: [{ editorId: "codex", scope: "global" }],
       }),
       expect.objectContaining({
         actor: { kind: "user" },

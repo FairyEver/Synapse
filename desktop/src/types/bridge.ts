@@ -93,6 +93,8 @@ import type {
 } from "./skill-repository-install"
 import type {
   SynapseInstallSourceToEditorPayload,
+  SynapseInstallSourceToEditorTargetsPayload,
+  SynapseInstallSourceToEditorTargetsResult,
   SynapsePrepareInlineRuleSourcePayload,
   SynapsePrepareLocalSkillSourcePayload,
   SynapseRuleInstallerSource,
@@ -1183,6 +1185,9 @@ export type SynapseBridge = {
     installSourceToEditor: (
       payload: SynapseInstallSourceToEditorPayload,
     ) => Promise<SynapseContentInstallResult>
+    installSourceToEditorTargets: (
+      payload: SynapseInstallSourceToEditorTargetsPayload,
+    ) => Promise<SynapseInstallSourceToEditorTargetsResult>
     prepareLocalSkillSource: (
       payload: SynapsePrepareLocalSkillSourcePayload,
     ) => Promise<SynapseSkillInstallerSource>

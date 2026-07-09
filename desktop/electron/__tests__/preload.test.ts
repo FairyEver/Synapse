@@ -514,6 +514,21 @@ describe("preload bridge", () => {
         body: "# Rule",
       },
     })
+    await bridge.installers.installSourceToEditorTargets({
+      mode: "install",
+      source: {
+        kind: "skill",
+        origin: "prepared",
+        sourceIdentity: "synapse-skill",
+        name: "synapse-skill",
+        title: "Synapse Skill",
+        description: "Synapse MCP 使用指南",
+        preparedSourceId: "synapse-skill:test",
+        mainContent: "# Synapse Skill",
+        sourceFingerprint: "sha256:test",
+      },
+      targets: [{ editorId: "codex" as never, scope: "global" }],
+    })
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:installers:prepare-local-skill-source",
@@ -536,6 +551,24 @@ describe("preload bridge", () => {
           name: "team.rule",
           body: "# Rule",
         },
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:installers:install-source-to-editor-targets",
+      {
+        mode: "install",
+        source: {
+          kind: "skill",
+          origin: "prepared",
+          sourceIdentity: "synapse-skill",
+          name: "synapse-skill",
+          title: "Synapse Skill",
+          description: "Synapse MCP 使用指南",
+          preparedSourceId: "synapse-skill:test",
+          mainContent: "# Synapse Skill",
+          sourceFingerprint: "sha256:test",
+        },
+        targets: [{ editorId: "codex", scope: "global" }],
       },
     )
   })

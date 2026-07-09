@@ -82,6 +82,7 @@ const IPC_CHANNELS = {
   },
   "installers": {
     "installSourceToEditor": "synapse:installers:install-source-to-editor",
+    "installSourceToEditorTargets": "synapse:installers:install-source-to-editor-targets",
     "prepareLocalSkillSource": "synapse:installers:prepare-local-skill-source",
     "prepareInlineRuleSource": "synapse:installers:prepare-inline-rule-source",
   },
@@ -1183,6 +1184,7 @@ const synapseBridge: SynapseBridge = {
   },
   installers: {
     installSourceToEditor: invoke(IPC_CHANNELS.installers.installSourceToEditor),
+    installSourceToEditorTargets: invoke(IPC_CHANNELS.installers.installSourceToEditorTargets),
     prepareLocalSkillSource: invoke(IPC_CHANNELS.installers.prepareLocalSkillSource),
     prepareInlineRuleSource: invoke(IPC_CHANNELS.installers.prepareInlineRuleSource),
   },
