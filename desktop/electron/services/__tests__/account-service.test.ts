@@ -277,6 +277,27 @@ describe("AccountService", () => {
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
   })
 
+  it("waits before retrying rate-limited drive upload completion", async () => {
+    vi.useFakeTimers()
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "completeDriveUpload")
+      .mockRejectedValueOnce(httpError("rate limited", 429))
+      .mockResolvedValueOnce(driveItem({ id: "file-1", name: "report.txt", size: "5" }))
+
+    const result = (service as unknown as {
+      completeDriveUploadWithRetry: (sessionId: string) => Promise<DriveItemDto>
+    }).completeDriveUploadWithRetry("session-file-1")
+    await Promise.resolve()
+
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(result).resolves.toMatchObject({ id: "file-1" })
+    expect(service.completeDriveUpload).toHaveBeenCalledTimes(2)
+  })
+
   it("keeps existing Drive download output when the response stream fails", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-download-"))
     const outputPath = path.join(dir, "report.txt")
