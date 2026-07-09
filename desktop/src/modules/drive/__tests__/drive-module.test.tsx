@@ -2228,6 +2228,81 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("已上传 1 项")
   })
 
+  it("retries failed upload items in the original destination", async () => {
+    const upload = createDeferred<{ completed: number; failed: number; skipped: number; message?: string }>()
+    mocks.uploadDriveLocalItems
+      .mockReturnValueOnce(upload.promise)
+      .mockResolvedValueOnce({ completed: 1, failed: 0, skipped: 0 })
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValue([])
+    await render(<DriveModule />)
+    await flushAct()
+    await clickDriveRow("作业范文")
+    await flushAct()
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    const firstTaskId = lastUploadTaskId()
+    await act(async () => {
+      emitDriveLocalUploadProgress({
+        type: "item-failed",
+        taskId: firstTaskId,
+        itemKey: "file:/tmp/report.txt",
+        message: "上传失败。",
+      })
+      upload.resolve({ completed: 0, failed: 1, skipped: 0, message: "上传失败。" })
+      await flushPromises()
+    })
+    await clickButtonText("根目录")
+
+    await clickButtonText("重试失败项")
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenLastCalledWith({
+      taskId: expect.any(String),
+      parentId: "folder-1",
+      items: [{
+        kind: "file",
+        path: "/tmp/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      }],
+    })
+  })
+
+  it("clears a finished upload task from the breadcrumb row", async () => {
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("已上传 1 项")
+    await clickButtonText("清除")
+
+    expect(document.body.textContent).not.toContain("已上传 1 项")
+  })
+
   it("uploads selected files into the current folder", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
