@@ -316,7 +316,7 @@ function SynapseSkillModule() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="col-start-2 h-6 max-w-full min-w-0 justify-start px-0 text-left text-xs text-muted-foreground hover:text-foreground sm:col-span-2"
+                          className="col-start-2 h-6 max-w-full min-w-0 justify-start bg-transparent px-0 text-left text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent sm:col-span-2"
                           title={targetPath}
                           aria-label={`打开 ${editor.label} Skill 目录`}
                           onClick={() => void openTargetPath(targetPath)}
