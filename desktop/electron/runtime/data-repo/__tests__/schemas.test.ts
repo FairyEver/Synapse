@@ -33,7 +33,9 @@ import {
   repoRepositoriesSchema,
   runAsConfigSchema,
   runAsPreflightSchema,
+  secretsItemsSchema,
   secretsSchema,
+  secretsSettingsSchema,
   soundNotifierSettingsSchemaDefinition,
   runMigrations,
   webhookConfigSchema,
@@ -57,6 +59,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.agent-personas.settings",
         "app.quick-input.items",
         "app.quick-input.settings",
+        "app.secrets.items",
+        "app.secrets.settings",
         "app.sound-notifier.settings",
         "app.swarm-task.runs",
         "app.swarm-task.tasks",
@@ -105,6 +109,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(coreConfigSchema.backend).toBe("json")
     expect(coreIdentitySchema.backend).toBe("json")
     expect(secretsSchema.backend).toBe("encrypted-json")
+    expect(secretsItemsSchema.backend).toBe("sqlite")
+    expect(secretsSettingsSchema.backend).toBe("json")
     expect(providersSchema.backend).toBe("json")
     expect(projectsSchema.backend).toBe("json")
     expect(conversationsSchema.backend).toBe("sqlite")
