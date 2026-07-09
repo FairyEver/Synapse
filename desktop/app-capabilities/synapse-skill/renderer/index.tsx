@@ -261,14 +261,17 @@ function SynapseSkillModule() {
                   return (
                     <div
                       key={editor.id}
-                      className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+                      className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1.75rem_minmax(0,1fr)_auto]"
                     >
-                      <EditorIcon editorId={editor.id} className="row-start-1 mt-1 size-7" />
-                      <div className="row-start-1 min-w-0 self-center">
-                        <p className="truncate font-medium">{editor.label}</p>
+                      <EditorIcon editorId={editor.id} className="row-start-1 size-7" />
+                      <div className="row-start-1 min-w-0">
+                        <p className="truncate text-sm font-medium leading-7">{editor.label}</p>
                       </div>
-                      <div className="col-start-2 row-start-2 flex flex-wrap items-center gap-2 self-start sm:col-start-3 sm:row-start-1 sm:justify-end">
-                        <Badge variant={statusBadgeVariant(entry?.status)}>
+                      <div className="col-start-2 row-start-2 flex flex-wrap items-center gap-1.5 self-start sm:col-start-3 sm:row-start-1 sm:justify-end">
+                        <Badge
+                          variant={statusBadgeVariant(entry?.status)}
+                          className="h-7 min-w-16 px-2.5 text-[0.8rem]"
+                        >
                           {entry ? statusLabels[entry.status] : "检测中"}
                         </Badge>
                         {entry && canOpenSingleTargetFlow(entry.status) ? (
@@ -276,7 +279,6 @@ function SynapseSkillModule() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="min-h-10"
                             disabled={batchInstalling || preparing}
                             onClick={() => void openInstallFlowForEditor(editor.id)}
                           >
@@ -291,8 +293,7 @@ function SynapseSkillModule() {
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="icon"
-                                className="size-10"
+                                size="icon-sm"
                                 aria-label={`${editor.label} 更多操作`}
                                 disabled={batchInstalling || preparing}
                               >
@@ -311,11 +312,13 @@ function SynapseSkillModule() {
                         <Button
                           type="button"
                           variant="ghost"
-                          className="col-start-2 h-auto min-h-10 min-w-0 justify-start gap-2 px-2 py-1.5 text-left text-sm text-muted-foreground hover:text-foreground sm:col-span-2"
+                          size="sm"
+                          className="col-start-2 -ml-2 h-7 max-w-full min-w-0 justify-start gap-1.5 px-2 text-left text-sm text-muted-foreground hover:text-foreground sm:col-span-2"
+                          title={targetPath}
                           onClick={() => void openTargetPath(targetPath)}
                         >
                           <FolderOpen className="size-4 shrink-0" />
-                          <span className="break-all leading-snug">{targetPath}</span>
+                          <span className="truncate">{targetPath}</span>
                         </Button>
                       ) : entry?.message ? (
                         <p className="col-start-2 break-all text-sm text-muted-foreground sm:col-span-2">
