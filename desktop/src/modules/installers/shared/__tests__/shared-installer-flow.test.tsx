@@ -256,6 +256,28 @@ async function renderFlowWithInitialTarget() {
   })
 }
 
+async function renderFlowWithInitialGlobalTarget() {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(
+      <SharedInstallerFlow
+        mode="modal"
+        source={repositorySkillSource}
+        editors={[editor]}
+        initialEditor={editor}
+        initialSelection={{ scope: "global" }}
+        projects={[]}
+        onCancel={vi.fn()}
+        onInstalled={vi.fn()}
+      />,
+    )
+  })
+}
+
 function clickButton(text: string) {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.includes(text))
@@ -314,6 +336,14 @@ describe("SharedInstallerFlow", () => {
     expect(document.body.textContent).toContain("目标位置")
     expect(document.body.textContent).not.toContain("选择编辑器")
     expect(document.querySelector("[data-testid='initial-selection']")?.textContent).toBe("project:/tmp/project")
+  })
+
+  it("starts at global target when an initial global selection is provided", async () => {
+    await renderFlowWithInitialGlobalTarget()
+
+    expect(document.body.textContent).toContain("目标位置")
+    expect(document.body.textContent).not.toContain("选择编辑器")
+    expect(document.querySelector("[data-testid='initial-selection']")?.textContent).toBe("global:")
   })
 
   it("asks for repository Skill variables before install and passes substitutions", async () => {
