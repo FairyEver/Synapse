@@ -86,6 +86,7 @@ const antigravityAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }
@@ -149,6 +150,7 @@ const antigravityAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

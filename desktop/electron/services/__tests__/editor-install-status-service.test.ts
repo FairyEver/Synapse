@@ -170,6 +170,38 @@ describe("EditorInstallStatusService", () => {
     }))
   })
 
+  it("marks a legacy built-in Synapse Skill id as the current Synapse Skill installation", async () => {
+    mocks.scanAll.mockResolvedValue(createScan({
+      editorId: "codex",
+      editorLabel: "Codex",
+      rules: [],
+      skills: [{
+        name: "synapse-skill",
+        path: "/project/.agents/skills/synapse-skill",
+        source: "synapse",
+        synapseContentId: "builtin__skill__synapse-skill",
+        repositoryVersion: "builtin-current",
+        preview: "Use Synapse MCP tools.",
+        fileCount: 2,
+        trash: { mode: "path" },
+      }],
+    }))
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "synapse-skill",
+      contentName: "synapse-skill",
+      title: "Synapse Skill",
+      projects: [{ id: "project-1", name: "Project", path: "/project" }],
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      scope: "project",
+      projectId: "project-1",
+      status: "installed",
+    }))
+  })
+
   it("marks a Codex project skill with an older repository version as needing update", async () => {
     mocks.scanAll.mockResolvedValue(createScan({
       editorId: "codex",

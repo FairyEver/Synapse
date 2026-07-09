@@ -539,7 +539,9 @@ describe("SwarmTaskModule", () => {
 
     expect(await waitForButton("运行模式：补位运行")).toBeTruthy()
     expect(await waitForInput("每槽轮次")).toBeTruthy()
-    expect(document.body.textContent).toContain("计划启动 4 个 worker")
+    expect(document.body.textContent).toContain("补位运行会保持 2 个 worker 槽位并发")
+    expect(document.body.textContent).toContain("每槽最多执行 2 轮")
+    expect(document.body.textContent).toContain("最多启动 4 个 worker")
   })
 
   it("shows grouped config fields and prompt injection controls", async () => {
@@ -554,7 +556,9 @@ describe("SwarmTaskModule", () => {
     expect(document.body.textContent).toContain("文件")
     expect(await waitForInput("并发上限")).toBeTruthy()
     expect(await waitForInput("批次数")).toBeTruthy()
-    expect(document.body.textContent).toContain("计划启动 4 个 worker")
+    expect(document.body.textContent).toContain("分批运行会每批同时启动 2 个 worker")
+    expect(document.body.textContent).toContain("共执行 2 批")
+    expect(document.body.textContent).toContain("最多启动 4 个 worker")
     expect(document.body.textContent).toContain("序列和批次")
     expect(document.body.textContent).toContain("上一轮交接")
     expect(document.body.textContent).toContain("记录摘要")

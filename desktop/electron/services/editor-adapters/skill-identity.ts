@@ -4,6 +4,8 @@ import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { isFileNotFoundError, pathExists } from "../fs-utils"
 
 const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
+const CURRENT_SYNAPSE_SKILL_CONTENT_ID = "synapse-skill"
+const LEGACY_BUILTIN_SYNAPSE_SKILL_CONTENT_ID = "builtin__skill__synapse-skill"
 
 interface SynapseSkillMeta {
   id?: unknown
@@ -24,6 +26,17 @@ function parseSkillIdFile(raw: string): string | null {
   } catch {
     return null
   }
+}
+
+function normalizeSkillContentIdForCompare(contentId: string): string {
+  return contentId === LEGACY_BUILTIN_SYNAPSE_SKILL_CONTENT_ID
+    ? CURRENT_SYNAPSE_SKILL_CONTENT_ID
+    : contentId
+}
+
+function areSkillContentIdsEquivalent(left: string | null, right: string): boolean {
+  if (!left) return false
+  return normalizeSkillContentIdForCompare(left) === normalizeSkillContentIdForCompare(right)
 }
 
 async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
@@ -62,7 +75,7 @@ async function findSkillDirectoryByContentId(
     const candidatePath = path.join(parentDirectoryPath, entry.name)
     const storedId = await readSkillIdFile(candidatePath)
 
-    if (storedId === contentId) {
+    if (areSkillContentIdsEquivalent(storedId, contentId)) {
       return candidatePath
     }
   }
@@ -90,7 +103,7 @@ async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<strin
 }
 
 type SkillConflictCheckResult =
-  | { hasConflict: false; targetExists: boolean }
+  | { hasConflict: false; ownedTargetExists?: boolean; targetExists: boolean }
   | { hasConflict: true; existingContentId: string; existingPath: string }
 
 async function checkSkillNameConflict(
@@ -108,9 +121,9 @@ async function checkSkillNameConflict(
   // Path exists, check if it's the same skill
   const existingContentId = await readSkillIdFile(targetPath)
 
-  if (existingContentId === contentId) {
+  if (areSkillContentIdsEquivalent(existingContentId, contentId)) {
     // Same skill, no conflict
-    return { hasConflict: false, targetExists: true }
+    return { hasConflict: false, ownedTargetExists: true, targetExists: true }
   }
 
   // Different skill with same name - conflict
@@ -150,6 +163,7 @@ async function resolveSkillTargetPath({
 
 export {
   SYNAPSE_SKILL_ID_FILE_NAME,
+  areSkillContentIdsEquivalent,
   checkSkillNameConflict,
   findSkillDirectoryByContentId,
   resolveSkillTargetPath,

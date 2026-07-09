@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
   readContent: vi.fn(),
   resolveEditorInstallTarget: vi.fn(),
+  readyTargetOverrides: {} as Record<string, unknown>,
   updateConfig: vi.fn(),
   warning: vi.fn(),
 }))
@@ -160,6 +161,7 @@ vi.mock("@/modules/content/components/editor-write-target-selector", () => ({
             targetExists: false,
             targetKind,
             targetPath: targetKind === "directory" ? "/tmp/skills/demo" : "/tmp/rules/demo.md",
+            ...mocks.readyTargetOverrides,
           }
           onSelectionChange({
             activeTarget,
@@ -278,6 +280,7 @@ afterEach(() => {
   vi.clearAllMocks()
   mocks.config.global.projects = []
   mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
+  mocks.readyTargetOverrides = {}
 })
 
 describe("SharedInstallerFlow", () => {
@@ -443,6 +446,33 @@ describe("SharedInstallerFlow", () => {
 
     expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
       installFormValues: { description: "from form" },
+    }))
+  })
+
+  it("reinstalls into an owned Skill directory without asking for overwrite confirmation", async () => {
+    mocks.readyTargetOverrides = {
+      ownedTargetExists: true,
+      targetExists: true,
+    }
+    mocks.readContent.mockResolvedValue({ content: "# Demo" })
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath: "/tmp/skills/demo" })
+    await renderFlow(repositorySkillSource)
+
+    await act(async () => {
+      clickButton("Codex")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("选择目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("确认覆盖目标目录？")
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      overwriteConfirmed: false,
     }))
   })
 

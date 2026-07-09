@@ -86,6 +86,7 @@ const windsurfAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath: path.join(parentDirectoryPath, slug),
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }
@@ -147,6 +148,7 @@ const windsurfAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath: path.join(parentDirectoryPath, slug),
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

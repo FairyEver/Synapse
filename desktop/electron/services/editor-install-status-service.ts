@@ -18,6 +18,7 @@ import type {
 } from "../../src/types/editor-scan"
 import { editorAdapterService } from "./editor-adapter-service"
 import { editorAdapters } from "./editor-adapters"
+import { areSkillContentIdsEquivalent } from "./editor-adapters/skill-identity"
 import { scanAll } from "./editor-scan-service"
 
 function normalizeRuleContent(content: string): string {
@@ -58,7 +59,7 @@ function statusFromSkill(
   payload: SynapseResolveEditorInstallStatusPayload,
 ): SynapseEditorInstallStatusValue | null {
   if (!item) return null
-  if (item.synapseContentId !== payload.contentId) return "external_same_name"
+  if (!areSkillContentIdsEquivalent(item.synapseContentId, payload.contentId)) return "external_same_name"
 
   if (
     payload.repositoryVersion

@@ -110,6 +110,7 @@ const codexAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }
@@ -173,6 +174,7 @@ const codexAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

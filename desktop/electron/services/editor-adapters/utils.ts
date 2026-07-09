@@ -19,6 +19,7 @@ type CreateTargetBaseOptions = {
 
 type CreateReadyTargetOptions = CreateTargetBaseOptions & {
   message?: string | null
+  ownedTargetExists?: boolean
   targetKind: SynapseEditorInstallTargetKind
   targetPath: string
   targetExists?: boolean
@@ -45,6 +46,7 @@ function createReadyTarget({
   adapter,
   contentType,
   message = null,
+  ownedTargetExists,
   scope,
   targetKind,
   targetPath,
@@ -61,6 +63,7 @@ function createReadyTarget({
     targetKind,
     targetPath,
     targetExists,
+    ...(ownedTargetExists ? { ownedTargetExists } : {}),
   }
 }
 

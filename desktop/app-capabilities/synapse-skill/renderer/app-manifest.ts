@@ -1,6 +1,6 @@
 import type { SynapseSystemAppManifest } from "../../../src/modules/apps/types"
-import icon from "../../../src/modules/installers/assets/icon.png"
 import { synapseSkillAppDefinition } from "./app-definition"
+import icon from "./assets/icon.png"
 
 const synapseSkillAppManifest = {
   ...synapseSkillAppDefinition,

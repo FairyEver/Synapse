@@ -87,6 +87,7 @@ const claudeCodeAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }
@@ -153,6 +154,7 @@ const claudeCodeAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

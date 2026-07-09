@@ -99,6 +99,7 @@ const hermesAdapter: EditorAdapter = {
           scope: "global",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }
@@ -162,6 +163,7 @@ const hermesAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

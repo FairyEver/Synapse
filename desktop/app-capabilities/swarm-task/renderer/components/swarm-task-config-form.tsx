@@ -64,7 +64,7 @@ export function SwarmTaskConfigForm({
     && Boolean(fileWritePath)
     && !isSwarmFileWritePathAllowed(fileWritePath)
   const roundLabel = value.runMode === "batch" ? "批次数" : "每槽轮次"
-  const estimatedWorkerCount = value.concurrency * value.maxRounds
+  const runPlanDescription = formatRunPlanDescription(value)
 
   return (
     <FieldGroup className="mx-auto grid w-full max-w-3xl gap-6 px-3 pb-3 sm:px-5 sm:pb-5">
@@ -155,7 +155,7 @@ export function SwarmTaskConfigForm({
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">
-          计划启动 {estimatedWorkerCount} 个 worker
+          {runPlanDescription}
         </p>
       </ConfigSection>
 
@@ -410,6 +410,14 @@ function OptionHelpLine({ label, text }: { readonly label: string; readonly text
       <div className="min-w-0 flex-1 text-xs leading-relaxed">{text}</div>
     </div>
   )
+}
+
+function formatRunPlanDescription(config: SwarmTaskConfig): string {
+  const plannedWorkerCount = config.concurrency * config.maxRounds
+  if (config.runMode === "continuous") {
+    return `补位运行会保持 ${config.concurrency} 个 worker 槽位并发；某个槽位完成后立即补下一轮，每槽最多执行 ${config.maxRounds} 轮，最多启动 ${plannedWorkerCount} 个 worker。`
+  }
+  return `分批运行会每批同时启动 ${config.concurrency} 个 worker，等待本批全部结束后进入下一批，共执行 ${config.maxRounds} 批，最多启动 ${plannedWorkerCount} 个 worker。`
 }
 
 function SwitchField({

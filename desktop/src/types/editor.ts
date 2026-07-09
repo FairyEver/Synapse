@@ -89,6 +89,7 @@ export type SynapseEditorResolvedTarget =
       targetKind: SynapseEditorInstallTargetKind
       targetPath: string
       targetExists: boolean
+      ownedTargetExists?: boolean
     })
   | (SynapseEditorResolvedTargetBase & {
       status: "unsupported" | "unavailable"

@@ -89,6 +89,7 @@ const cursorAdapter: EditorAdapter = {
       scope: "global",
       targetKind: "directory",
       targetPath,
+      ownedTargetExists: conflict.ownedTargetExists,
       targetExists: conflict.targetExists,
     })
   },
@@ -153,6 +154,7 @@ const cursorAdapter: EditorAdapter = {
           scope: "project",
           targetKind: "directory",
           targetPath,
+          ownedTargetExists: conflict.ownedTargetExists,
           targetExists: conflict.targetExists,
         })
       }

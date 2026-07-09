@@ -251,6 +251,7 @@ export function SharedInstallerFlow({
       activeTarget.status === "ready"
       && activeTarget.targetKind === "directory"
       && activeTarget.targetExists
+      && !activeTarget.ownedTargetExists
       && flow.source.kind === "skill"
       && !overwriteConfirmed
     ) {
