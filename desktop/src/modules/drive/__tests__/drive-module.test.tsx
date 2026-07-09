@@ -19,6 +19,7 @@ import {
   type DriveTrashListPageDto,
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
+import type { DriveLocalUploadProgressEvent } from "@/types/bridge"
 import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
 
 import { DriveModule } from "../index"
@@ -59,6 +60,7 @@ const mocks = vi.hoisted(() => ({
   updateDriveSiteAccess: vi.fn(),
   shareDriveItem: vi.fn(),
   uploadDriveLocalItems: vi.fn(),
+  onDriveLocalUploadProgress: vi.fn(),
   toast: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
   onDriveSyncChanged: vi.fn(),
@@ -95,6 +97,8 @@ const accountActions = vi.hoisted(() => ({
   refresh: vi.fn(),
   startLogin: vi.fn(),
 }))
+
+let driveUploadProgressListener: ((event: DriveLocalUploadProgressEvent) => void) | null = null
 
 vi.mock("sonner", () => ({
   toast: mocks.toast,
@@ -136,6 +140,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       updateDriveSiteAccess: mocks.updateDriveSiteAccess,
       shareDriveItem: mocks.shareDriveItem,
       uploadDriveLocalItems: mocks.uploadDriveLocalItems,
+      onDriveLocalUploadProgress: mocks.onDriveLocalUploadProgress,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
     driveSync: {
@@ -161,6 +166,7 @@ vi.mock("@/lib/electron-bridge", () => ({
 let roots: Root[] = []
 
 beforeEach(() => {
+  driveUploadProgressListener = null
   accountState.current = createAuthenticatedState()
   accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
   accountActions.refresh.mockResolvedValue(accountState.current)
@@ -228,6 +234,12 @@ beforeEach(() => {
     createdAt: "2026-06-07T00:00:00.000Z",
   })
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
+  mocks.onDriveLocalUploadProgress.mockImplementation((listener: (event: DriveLocalUploadProgressEvent) => void) => {
+    driveUploadProgressListener = listener
+    return () => {
+      if (driveUploadProgressListener === listener) driveUploadProgressListener = null
+    }
+  })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
   mocks.onDriveSyncChanged.mockReturnValue(() => undefined)
   mocks.pauseDriveSyncBinding.mockResolvedValue(undefined)
@@ -2093,6 +2105,7 @@ describe("DriveModule", () => {
     })
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      taskId: expect.any(String),
       parentId: null,
       items: [{
         kind: "file",
@@ -2142,6 +2155,77 @@ describe("DriveModule", () => {
       upload.resolve({ completed: 1, failed: 0, skipped: 0 })
       await flushPromises()
     })
+  })
+
+  it("opens an upload task panel with selected file details", async () => {
+    const upload = createDeferred<{ completed: number; failed: number; skipped: number }>()
+    mocks.uploadDriveLocalItems.mockReturnValueOnce(upload.promise)
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("正在上传 1 项")
+    await clickButtonText("正在上传 1 项")
+
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("report.txt")
+    expect(dialog?.textContent).toContain("根目录")
+    expect(dialog?.textContent).not.toContain("/tmp/report.txt")
+
+    await act(async () => {
+      upload.resolve({ completed: 1, failed: 0, skipped: 0 })
+      await flushPromises()
+    })
+  })
+
+  it("updates upload task rows from progress events", async () => {
+    const upload = createDeferred<{ completed: number; failed: number; skipped: number }>()
+    mocks.uploadDriveLocalItems.mockReturnValueOnce(upload.promise)
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File(["report"], "report.txt", { type: "text/plain" })],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    await clickButtonText("正在上传 1 项")
+
+    await act(async () => {
+      emitDriveLocalUploadProgress({
+        type: "item-started",
+        taskId: lastUploadTaskId(),
+        itemKey: "file:/tmp/report.txt",
+      })
+      await flushPromises()
+    })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("上传中")
+
+    await act(async () => {
+      emitDriveLocalUploadProgress({
+        type: "item-completed",
+        taskId: lastUploadTaskId(),
+        itemKey: "file:/tmp/report.txt",
+      })
+      upload.resolve({ completed: 1, failed: 0, skipped: 0 })
+      await flushPromises()
+    })
+    expect(document.body.textContent).toContain("已上传 1 项")
   })
 
   it("uploads selected files into the current folder", async () => {
@@ -2240,6 +2324,7 @@ describe("DriveModule", () => {
     })
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      taskId: expect.any(String),
       parentId: null,
       items: [{
         kind: "folder",
@@ -2277,6 +2362,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      taskId: expect.any(String),
       parentId: "folder-1",
       items: [{
         kind: "file",
@@ -2310,6 +2396,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      taskId: expect.any(String),
       parentId: null,
       items: [
         { kind: "file", path: "/tmp/loose.txt", name: "loose.txt", mimeType: "text/plain" },
@@ -2345,6 +2432,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      taskId: expect.any(String),
       parentId: null,
       items: [{
         kind: "folder",
@@ -3200,6 +3288,17 @@ function createDeferred<T>(): { readonly promise: Promise<T>; readonly resolve: 
     rejectDeferred = reject
   })
   return { promise, resolve: resolveDeferred, reject: rejectDeferred }
+}
+
+function emitDriveLocalUploadProgress(event: DriveLocalUploadProgressEvent) {
+  if (!driveUploadProgressListener) throw new Error("Upload progress listener not registered")
+  driveUploadProgressListener(event)
+}
+
+function lastUploadTaskId(): string {
+  const input = mocks.uploadDriveLocalItems.mock.calls.at(-1)?.[0] as { readonly taskId?: string } | undefined
+  if (!input?.taskId) throw new Error("No upload task id recorded")
+  return input.taskId
 }
 
 async function flushAct(): Promise<void> {
