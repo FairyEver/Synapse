@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { MoreHorizontal, RefreshCw } from "lucide-react"
+import { Download, FolderOpen, MoreHorizontal, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
 import { resolveEditorInstallStatus } from "../../../src/app-shell/editor-install-status"
@@ -62,6 +62,16 @@ function getPrimaryBatchLabel(entries: SynapseEditorInstallStatusEntry[]): strin
   if (hasUpdate) return "更新已安装项"
   if (hasMissing) return "安装缺失项"
   return "全部已安装"
+}
+
+function getBatchSummaryLabel(entries: SynapseEditorInstallStatusEntry[]): string {
+  const missingCount = entries.filter((entry) => entry.status === "not_installed").length
+  const updateCount = entries.filter((entry) => entry.status === "needs_update").length
+  const parts = [
+    missingCount > 0 ? `${missingCount} 个待安装` : null,
+    updateCount > 0 ? `${updateCount} 个待更新` : null,
+  ].filter(Boolean)
+  return parts.length > 0 ? parts.join(" · ") : "无需操作"
 }
 
 function getBatchMode(entries: SynapseEditorInstallStatusEntry[]): "install" | "update" {
@@ -159,6 +169,7 @@ function SynapseSkillModule() {
   const globalStatusEntries = statusEntries.filter((entry) => entry.scope === "global")
   const batchableEntries = globalStatusEntries.filter((entry) => canBatchInstall(entry.status))
   const batchLabel = getPrimaryBatchLabel(globalStatusEntries)
+  const batchSummaryLabel = getBatchSummaryLabel(globalStatusEntries)
 
   const runBatchInstall = async () => {
     if (batchInstalling || batchableEntries.length === 0) return
@@ -248,66 +259,75 @@ function SynapseSkillModule() {
                   const entry = statusEntries.find((item) => item.editorId === editor.id)
                   const targetPath = entry?.targetPath ?? null
                   return (
-                    <div key={editor.id} className="grid gap-2 py-3 first:pt-0 last:pb-0">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <EditorIcon editorId={editor.id} className="size-7" />
-                          <p className="truncate font-medium">{editor.label}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Badge variant={statusBadgeVariant(entry?.status)}>
-                            {entry ? statusLabels[entry.status] : "检测中"}
-                          </Badge>
-                          {entry && canOpenSingleTargetFlow(entry.status) ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={batchInstalling || preparing}
-                              onClick={() => void openInstallFlowForEditor(editor.id)}
-                            >
-                              {getRowActionLabel(entry.status)}
-                            </Button>
-                          ) : null}
-                          {entry?.status === "installed" ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`${editor.label} 更多操作`}
-                                  disabled={batchInstalling || preparing}
-                                >
-                                  <MoreHorizontal />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => void openInstallFlowForEditor(editor.id)}>
-                                  重新安装
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </div>
+                    <div
+                      key={editor.id}
+                      className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+                    >
+                      <EditorIcon editorId={editor.id} className="row-start-1 mt-1 size-7" />
+                      <div className="row-start-1 min-w-0 self-center">
+                        <p className="truncate font-medium">{editor.label}</p>
+                      </div>
+                      <div className="col-start-2 row-start-2 flex flex-wrap items-center gap-2 self-start sm:col-start-3 sm:row-start-1 sm:justify-end">
+                        <Badge variant={statusBadgeVariant(entry?.status)}>
+                          {entry ? statusLabels[entry.status] : "检测中"}
+                        </Badge>
+                        {entry && canOpenSingleTargetFlow(entry.status) ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-10"
+                            disabled={batchInstalling || preparing}
+                            onClick={() => void openInstallFlowForEditor(editor.id)}
+                          >
+                            {entry.status === "not_installed" ? <Download data-icon="inline-start" /> : null}
+                            {entry.status === "needs_update" ? <RefreshCw data-icon="inline-start" /> : null}
+                            {getRowActionLabel(entry.status)}
+                          </Button>
+                        ) : null}
+                        {entry?.status === "installed" ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-10"
+                                aria-label={`${editor.label} 更多操作`}
+                                disabled={batchInstalling || preparing}
+                              >
+                                <MoreHorizontal />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => void openInstallFlowForEditor(editor.id)}>
+                                重新安装
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
                       </div>
                       {targetPath ? (
                         <Button
                           type="button"
-                          variant="link"
-                          className="h-auto min-w-0 justify-start p-0 text-left text-sm text-muted-foreground hover:text-foreground"
+                          variant="ghost"
+                          className="col-start-2 h-auto min-h-10 min-w-0 justify-start gap-2 px-2 py-1.5 text-left text-sm text-muted-foreground hover:text-foreground sm:col-span-2"
                           onClick={() => void openTargetPath(targetPath)}
                         >
-                          <span className="break-all">{targetPath}</span>
+                          <FolderOpen className="size-4 shrink-0" />
+                          <span className="break-all leading-snug">{targetPath}</span>
                         </Button>
                       ) : entry?.message ? (
-                        <p className="break-all text-sm text-muted-foreground">{entry.message}</p>
+                        <p className="col-start-2 break-all text-sm text-muted-foreground sm:col-span-2">
+                          {entry.message}
+                        </p>
                       ) : null}
                     </div>
                   )
                 })}
               </div>
-              <div className="flex justify-center border-t pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                <p className="text-sm text-muted-foreground tabular-nums">{batchSummaryLabel}</p>
                 <Button
                   type="button"
                   onClick={() => void runBatchInstall()}
