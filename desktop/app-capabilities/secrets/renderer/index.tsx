@@ -27,6 +27,7 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
+import { Skeleton } from "../../../src/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -199,7 +200,7 @@ export function SecretsModule() {
       <ScrollArea className="h-full min-h-0">
         <div className="mx-auto grid w-full max-w-4xl gap-3 p-3 sm:p-5">
           {loading ? (
-            <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">加载中</div>
+            <SecretsTableSkeleton />
           ) : loadError ? (
             <Empty className="min-h-48 border">
               <EmptyHeader>
@@ -218,7 +219,10 @@ export function SecretsModule() {
                 <EmptyTitle>暂无密钥</EmptyTitle>
               </EmptyHeader>
               <EmptyContent>
-                <Button type="button" variant="outline" onClick={openCreateForm}>新增密钥</Button>
+                <Button type="button" variant="outline" onClick={openCreateForm}>
+                  <Plus data-icon="inline-start" />
+                  新增密钥
+                </Button>
               </EmptyContent>
             </Empty>
           ) : (
@@ -258,6 +262,42 @@ export function SecretsModule() {
   )
 }
 
+function SecretsTableSkeleton() {
+  return (
+    <Table containerClassName="rounded-md border bg-background" className="min-w-[42rem] table-fixed">
+      <colgroup>
+        <col data-column="name" className="w-56" />
+        <col data-column="description" />
+        <col data-column="status" className="w-24" />
+        <col data-column="actions" className="w-24" />
+      </colgroup>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+          <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+          <TableHead><Skeleton className="h-4 w-12" /></TableHead>
+          <TableHead><Skeleton className="ml-auto h-4 w-12" /></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <TableRow key={index}>
+            <TableCell><Skeleton className="h-4 w-full max-w-48" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-full max-w-80" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-14" /></TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-1">
+                <Skeleton className="size-7" />
+                <Skeleton className="size-7" />
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
 function SecretsTable({
   secrets,
   onDelete,
@@ -268,56 +308,62 @@ function SecretsTable({
   readonly onEdit: (secret: SecretSafeView) => void
 }) {
   return (
-    <div className="rounded-md border bg-background">
-      <Table className="table-fixed">
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-56">名称</TableHead>
-            <TableHead>描述</TableHead>
-            <TableHead className="w-24">状态</TableHead>
-            <TableHead className="w-24 text-right">操作</TableHead>
+    <Table containerClassName="rounded-md border bg-background" className="min-w-[42rem] table-fixed">
+      <colgroup>
+        <col data-column="name" className="w-56" />
+        <col data-column="description" />
+        <col data-column="status" className="w-24" />
+        <col data-column="actions" className="w-24" />
+      </colgroup>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead>名称</TableHead>
+          <TableHead>描述</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead className="text-right">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {secrets.map((secret) => (
+          <TableRow key={secret.id}>
+            <TableCell className="min-w-0 align-middle font-mono text-sm">
+              <span className="block truncate">{secret.name}</span>
+            </TableCell>
+            <TableCell className="min-w-0 align-middle text-muted-foreground">
+              <span className="block truncate">{secret.description || "-"}</span>
+            </TableCell>
+            <TableCell className="align-middle">
+              <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                <EyeOff className="size-3.5" />
+                {secret.hasValue ? "有值" : "空值"}
+              </span>
+            </TableCell>
+            <TableCell className="align-middle text-right">
+              <div className="flex justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`编辑密钥：${secret.name}`}
+                  onClick={() => onEdit(secret)}
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`删除密钥：${secret.name}`}
+                  onClick={() => onDelete(secret)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {secrets.map((secret) => (
-            <TableRow key={secret.id}>
-              <TableCell className="min-w-0 font-mono text-sm break-all">{secret.name}</TableCell>
-              <TableCell className="min-w-0 whitespace-normal break-words text-muted-foreground">
-                {secret.description || "-"}
-              </TableCell>
-              <TableCell>
-                <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                  <EyeOff className="size-3.5" />
-                  {secret.hasValue ? "有值" : "空值"}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`编辑密钥：${secret.name}`}
-                    onClick={() => onEdit(secret)}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`删除密钥：${secret.name}`}
-                    onClick={() => onDelete(secret)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
@@ -362,7 +408,9 @@ function SecretDialog({
                   onChange={(event) => onNameChange(event.target.value)}
                   disabled={saving}
                   autoFocus
+                  aria-invalid={Boolean(form.error)}
                 />
+                {form.error ? <FieldError>{form.error}</FieldError> : null}
               </FieldContent>
             </Field>
             {isEdit ? (
@@ -401,14 +449,13 @@ function SecretDialog({
                 />
               </FieldContent>
             </Field>
-            {form.error ? <FieldError>{form.error}</FieldError> : null}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               取消
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "保存中" : "保存"}
+              {saving ? "保存中" : "保存密钥"}
             </Button>
           </DialogFooter>
         </form>
@@ -432,7 +479,7 @@ function DeleteSecretDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>删除密钥</AlertDialogTitle>
           <AlertDialogDescription>
-            {secret?.name}
+            {secret ? `删除“${secret.name}”后不可恢复。` : "删除后不可恢复。"}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
