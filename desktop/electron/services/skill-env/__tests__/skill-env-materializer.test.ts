@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises"
 import { constants } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -7,20 +7,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const fsMocks = vi.hoisted(() => ({
   actualLstat: null as typeof import("node:fs/promises").lstat | null,
   actualOpen: null as typeof import("node:fs/promises").open | null,
+  actualRealpath: null as typeof import("node:fs/promises").realpath | null,
   lstat: vi.fn<typeof import("node:fs/promises").lstat>(),
   open: vi.fn<typeof import("node:fs/promises").open>(),
+  realpath: vi.fn<typeof import("node:fs/promises").realpath>(),
 }))
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>()
   fsMocks.actualLstat = actual.lstat
   fsMocks.actualOpen = actual.open
+  fsMocks.actualRealpath = actual.realpath
   fsMocks.lstat.mockImplementation(actual.lstat)
   fsMocks.open.mockImplementation(actual.open)
+  fsMocks.realpath.mockImplementation(actual.realpath)
   return {
     ...actual,
     lstat: fsMocks.lstat,
     open: fsMocks.open,
+    realpath: fsMocks.realpath,
   }
 })
 
@@ -50,8 +55,10 @@ afterEach(async () => {
 beforeEach(() => {
   fsMocks.lstat.mockReset()
   fsMocks.open.mockReset()
+  fsMocks.realpath.mockReset()
   fsMocks.lstat.mockImplementation(fsMocks.actualLstat!)
   fsMocks.open.mockImplementation(fsMocks.actualOpen!)
+  fsMocks.realpath.mockImplementation(fsMocks.actualRealpath!)
 })
 
 describe("materializeSkillEnv", () => {
@@ -80,7 +87,7 @@ describe("materializeSkillEnv", () => {
     })).resolves.toBe("merged")
 
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
-      .resolves.toBe("TOKEN=\"updated\"\nCUSTOM=user-only\nNEW_KEY=default\n")
+      .resolves.toBe("TOKEN=old\nCUSTOM=user-only\nNEW_KEY=default\n")
     await expect(readFile(path.join(paths.existingTargetDirectoryPath, ".env"), "utf8"))
       .resolves.toBe(existing)
   })
@@ -104,7 +111,42 @@ describe("materializeSkillEnv", () => {
     })).resolves.toBe("merged")
 
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
-      .resolves.toBe("TOKEN=\"updated\"\r\nCUSTOM=user-only\r\nNEW_KEY=default\r\n")
+      .resolves.toBe("TOKEN=old\r\nCUSTOM=user-only\r\nNEW_KEY=default\r\n")
+  })
+
+  it("preserves exact existing .env bytes when the staged example is missing", async () => {
+    const paths = await createDirectories()
+    const existing = Buffer.from([0x54, 0x4f, 0x4b, 0x45, 0x4e, 0x3d, 0xff, 0x0d, 0x0a])
+    await writeFile(path.join(paths.existingTargetDirectoryPath, ".env"), existing)
+
+    await expect(materializeSkillEnv({ ...paths, values: { TOKEN: "replacement" } }))
+      .resolves.toBe("merged")
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+      .resolves.toEqual(existing)
+  })
+
+  it("preserves existing declared values and uses submitted values only for new declarations", async () => {
+    const paths = await createDirectories()
+    await writeFile(
+      path.join(paths.existingTargetDirectoryPath, ".env"),
+      "TOKEN=existing\nCUSTOM=user-only\n",
+      "utf8",
+    )
+    await writeFile(
+      path.join(paths.stagingDirectoryPath, ".env.example"),
+      "TOKEN=default\nNEW_KEY=default\nEMPTY=\n",
+      "utf8",
+    )
+
+    await materializeSkillEnv({
+      ...paths,
+      values: { TOKEN: "submitted", NEW_KEY: "confirmed", EMPTY: "filled" },
+    })
+
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
+      .resolves.toBe(
+        "TOKEN=existing\nCUSTOM=user-only\nNEW_KEY=\"confirmed\"\nEMPTY=\"filled\"\n",
+      )
   })
 
   it("returns absent without creating .env when the example is missing", async () => {
@@ -114,6 +156,55 @@ describe("materializeSkillEnv", () => {
       .resolves.toBe("absent")
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
       .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects a source-supplied runtime .env already present in staging", async () => {
+    const paths = await createDirectories()
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env"), "TOKEN=source-secret\n", "utf8")
+
+    await expect(materializeSkillEnv({ ...paths, values: { TOKEN: "confirmed" } }))
+      .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+  })
+
+  it("rejects an existing target directory symlink without importing its .env", async () => {
+    const paths = await createDirectories()
+    const outsideDirectoryPath = path.join(path.dirname(paths.existingTargetDirectoryPath), "outside")
+    await mkdir(outsideDirectoryPath)
+    await writeFile(path.join(outsideDirectoryPath, ".env"), "TOKEN=outside\n", "utf8")
+    await rm(paths.existingTargetDirectoryPath, { recursive: true })
+    await symlink(outsideDirectoryPath, paths.existingTargetDirectoryPath, "dir")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow("Skill 目标目录不能是符号链接。")
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("fails closed when the existing target directory is replaced during validation", async () => {
+    const paths = await createDirectories()
+    const originalDirectoryPath = `${paths.existingTargetDirectoryPath}-original`
+    const outsideDirectoryPath = path.join(path.dirname(paths.existingTargetDirectoryPath), "race-outside")
+    await mkdir(outsideDirectoryPath)
+    await writeFile(path.join(paths.existingTargetDirectoryPath, ".env"), "TOKEN=inside\n", "utf8")
+    await writeFile(path.join(outsideDirectoryPath, ".env"), "TOKEN=outside\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    fsMocks.realpath.mockImplementationOnce(async (targetPath) => {
+      const resolved = await fsMocks.actualRealpath!(targetPath)
+      await rename(paths.existingTargetDirectoryPath, originalDirectoryPath)
+      await symlink(outsideDirectoryPath, paths.existingTargetDirectoryPath, "dir")
+      return resolved
+    })
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow(/目标目录.*变化|目标目录不能是符号链接/)
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(outsideDirectoryPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=outside\n")
+    await expect(realpath(paths.existingTargetDirectoryPath))
+      .resolves.toBe(await realpath(outsideDirectoryPath))
   })
 
   it("rejects an existing .env symlink without reading through or writing it", async () => {

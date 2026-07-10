@@ -1,6 +1,10 @@
 import path from "node:path"
 import type { EditorInstallStrategy } from "../../main-types"
-import { normalizeContentAttachmentPath } from "../../../lib/content-attachments"
+import {
+  SKILL_ENV_EXAMPLE_PATH,
+  normalizeContentAttachmentPath,
+} from "../../../lib/content-attachments"
+import { normalizePathForCompare } from "../../../lib/path-compare"
 import { SYNAPSE_SKILL_ID_FILE_NAME } from "../../../../electron/services/editor-adapters/skill-identity"
 import { applyRuleSection } from "../shared-rule-section"
 import { serializeHermesSkillFrontmatter } from "./frontmatter"
@@ -42,7 +46,10 @@ export const installStrategy: EditorInstallStrategy = {
       }
       await copyAttachment(
         { ...attachment, originalName },
-        path.join(stagingDirectoryPath, "references", originalName),
+        normalizePathForCompare(originalName, { platform: "win32" })
+          === normalizePathForCompare(SKILL_ENV_EXAMPLE_PATH, { platform: "win32" })
+          ? path.join(stagingDirectoryPath, SKILL_ENV_EXAMPLE_PATH)
+          : path.join(stagingDirectoryPath, "references", originalName),
       )
     }
   },

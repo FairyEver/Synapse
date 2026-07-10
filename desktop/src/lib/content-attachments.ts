@@ -52,7 +52,11 @@ function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): v
 }
 
 function assertNoRuntimeSkillEnvPath(originalNames: readonly string[]): void {
-  if (originalNames.some((name) => normalizeContentAttachmentPath(name) === SKILL_RUNTIME_ENV_PATH)) {
+  const runtimeEnvPathKey = normalizePathForCompare(SKILL_RUNTIME_ENV_PATH, { platform: "win32" })
+  if (originalNames.some((name) => (
+    normalizePathForCompare(normalizeContentAttachmentPath(name), { platform: "win32" })
+      === runtimeEnvPathKey
+  ))) {
     throw new Error("Skill 源目录不能包含 .env，请只提交 .env.example。")
   }
 }

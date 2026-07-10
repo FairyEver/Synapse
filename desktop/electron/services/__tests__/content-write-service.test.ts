@@ -468,7 +468,7 @@ describe("contentWriteService", () => {
       iconImage: "",
       content: "# Skill",
       files: [
-        { originalName: ".env", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
+        { originalName: ".ENV", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
       ],
     }
 
@@ -522,7 +522,7 @@ describe("contentWriteService", () => {
       iconImage: "",
       content: "# Skill",
       files: [
-        { originalName: ".env", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
+        { originalName: ".EnV", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
       ],
     }, {
       displayName: "User",

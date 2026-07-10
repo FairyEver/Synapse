@@ -79,12 +79,11 @@ describe("parseSkillAuthoringGuide", () => {
 })
 
 describe("Skill authoring guide content", () => {
-  it("describes reinstall value replacement without claiming declared values are preserved", () => {
+  it("describes reinstall preservation and new declaration values", () => {
     expect(skillAuthoringGuideMarkdown).toContain("安装 Skill 时，Synapse 根据根目录的 `.env.example` 创建本地 `.env`")
     expect(skillAuthoringGuideMarkdown).toContain("保留未声明的用户自有键")
-    expect(skillAuthoringGuideMarkdown).toContain("使用安装确认弹窗中的值写入已声明键")
-    expect(skillAuthoringGuideMarkdown).toContain("继续前应核对确认弹窗中的值")
-    expect(skillAuthoringGuideMarkdown).not.toContain("更新 Skill 时会保留已有键值")
+    expect(skillAuthoringGuideMarkdown).toContain("已有声明键的现有值")
+    expect(skillAuthoringGuideMarkdown).toContain("新声明或缺失的键使用安装确认弹窗中的值")
   })
 })
 

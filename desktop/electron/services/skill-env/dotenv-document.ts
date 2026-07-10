@@ -141,7 +141,7 @@ export function parseDotenvDocument(content: string): DotenvDocument {
     }
 
     const valueStart = index
-    let valueEnd = index
+    let valueEnd: number
     const quote = content[index]
     if (quote === "'" || quote === '"' || quote === "`") {
       index += 1
@@ -241,12 +241,14 @@ export function mergeDotenvExample(
   example: string,
   values: Readonly<Record<string, string>>,
 ): string {
-  const patchedExisting = patchDotenvValues(existing, values)
-  const existingDocument = parseDotenvDocument(patchedExisting)
+  const existingDocument = parseDotenvDocument(existing)
   const existingNames = new Set(
     existingDocument.entries.map((entry) => normalizedName(entry.name)),
   )
-  const patchedExample = patchDotenvValues(example, values)
+  const missingValues = Object.fromEntries(
+    Object.entries(values).filter(([name]) => !existingNames.has(normalizedName(name))),
+  )
+  const patchedExample = patchDotenvValues(example, missingValues)
   const exampleDocument = parseDotenvDocument(patchedExample)
   const declarations = exampleDocument.entries
     .filter((entry) => !existingNames.has(normalizedName(entry.name)))
@@ -256,12 +258,12 @@ export function mergeDotenvExample(
     })
 
   if (declarations.length === 0) {
-    return patchedExisting
+    return existing
   }
 
-  const separator = patchedExisting.length > 0 && !patchedExisting.endsWith("\n")
-    && !patchedExisting.endsWith("\r")
+  const separator = existing.length > 0 && !existing.endsWith("\n")
+    && !existing.endsWith("\r")
     ? existingDocument.newline
     : ""
-  return `${patchedExisting}${separator}${declarations.join(existingDocument.newline)}${existingDocument.newline}`
+  return `${existing}${separator}${declarations.join(existingDocument.newline)}${existingDocument.newline}`
 }

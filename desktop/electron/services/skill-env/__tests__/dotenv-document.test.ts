@@ -59,7 +59,7 @@ describe("dotenv document", () => {
       .toThrow("配置值不能包含 NUL 字节：TOKEN")
     expect(() => createDotenvFromExample("TOKEN=\n", invalid))
       .toThrow("配置值不能包含 NUL 字节：TOKEN")
-    expect(() => mergeDotenvExample("TOKEN=old\n", "TOKEN=\n", invalid))
+    expect(() => mergeDotenvExample("EXISTING=old\n", "TOKEN=\n", invalid))
       .toThrow("配置值不能包含 NUL 字节：TOKEN")
   })
 
@@ -68,5 +68,13 @@ describe("dotenv document", () => {
       .toBe("TOKEN=\"secret\"\nURL=https://example.com\n")
     expect(mergeDotenvExample("TOKEN=old\nCUSTOM=yes\n", "TOKEN=\nNEW_KEY=default\n", {}))
       .toBe("TOKEN=old\nCUSTOM=yes\nNEW_KEY=default\n")
+  })
+
+  it("keeps existing declarations while applying confirmed values to new declarations", () => {
+    expect(mergeDotenvExample(
+      "TOKEN=existing\nCUSTOM=user-only\n",
+      "TOKEN=default\nNEW_KEY=default\nEMPTY=\n",
+      { TOKEN: "submitted", NEW_KEY: "confirmed", EMPTY: "filled" },
+    )).toBe("TOKEN=existing\nCUSTOM=user-only\nNEW_KEY=\"confirmed\"\nEMPTY=\"filled\"\n")
   })
 })

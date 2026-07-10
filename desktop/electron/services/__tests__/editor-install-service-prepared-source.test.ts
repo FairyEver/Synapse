@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   getContent: vi.fn(),
   getSkillDetail: vi.fn(),
   getGlobalRulesPath: vi.fn(),
+  getRepositoryState: vi.fn(),
+  loadConfig: vi.fn(),
   prepareRuleFileContent: vi.fn(),
   prepareSkillDirectory: vi.fn(),
   resolveTarget: vi.fn(),
@@ -69,13 +71,23 @@ vi.mock("../definitions/generated/main-registry", () => ({
 
 vi.mock("../config-store", () => ({
   configStore: {
-    load: vi.fn(async () => ({
+    load: mocks.loadConfig,
+  },
+}))
+
+vi.mock("../repository-store", () => ({
+  repositoryStore: {
+    getRepositoryState: mocks.getRepositoryState,
+  },
+}))
+
+function defaultConfig() {
+  return {
       activeRepoUuid: null,
       repositories: [],
       global: { projects: [] },
-    })),
-  },
-}))
+    }
+}
 
 import { EditorInstallService } from "../editor-install-service"
 
@@ -90,6 +102,7 @@ async function createTempRoot(): Promise<string> {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getGlobalRulesPath.mockReturnValue(null)
+  mocks.loadConfig.mockResolvedValue(defaultConfig())
 })
 
 afterEach(async () => {
@@ -225,6 +238,125 @@ describe("EditorInstallService prepared source", () => {
     expect(provider.markPreparedInstalled).toHaveBeenCalledWith("prepared-1", "content-1")
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("prepared\n# Store Skill\n")
     await expect(readFile(path.join(targetPath, "references", "icon.bin"), "utf8")).resolves.toBe("icon")
+  })
+
+  it("rejects a prepared Skill containing a root runtime .ENV before adapter preparation", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "unsafe-prepared")
+    const provider = {
+      readPreparedRule: vi.fn(),
+      readPreparedSkill: vi.fn().mockResolvedValue({
+        id: "content-unsafe",
+        type: "skill",
+        title: "Unsafe Skill",
+        description: "",
+        category: "skill-repository",
+        icon: "",
+        iconBg: "",
+        createdBy: "skill-repository",
+        createdByDisplayName: "Skill Repository",
+        createdAt: "1970-01-01T00:00:00.000Z",
+        modifiedBy: "skill-repository",
+        modifiedByDisplayName: "Skill Repository",
+        modifiedAt: "1970-01-01T00:00:00.000Z",
+        deleted: false,
+        latestHistoryDirname: "version-1",
+        attachmentCount: 1,
+        content: "# Unsafe Skill\n",
+        attachments: [{ originalName: ".ENV", sha256: "a".repeat(64), size: 4 }],
+      }),
+      beginPreparedInstall: vi.fn(),
+      endPreparedInstall: vi.fn(),
+      copyPreparedSkillAttachment: vi.fn(),
+      readPreparedSkillAttachmentText: vi.fn(),
+      markPreparedInstalled: vi.fn(),
+    }
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor",
+      label: "Test Editor",
+      scope: "global",
+      contentType: "skill",
+      message: null,
+      status: "ready",
+      targetKind: "directory",
+      targetPath,
+      targetExists: false,
+    })
+    const service = new EditorInstallService({ preparedSourceProvider: provider })
+
+    await expect(service.installToEditor({
+      editorId: "test-editor",
+      scope: "global",
+      contentType: "skill",
+      contentId: "content-unsafe",
+      preparedSourceId: "prepared-unsafe",
+    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+
+    expect(mocks.prepareSkillDirectory).not.toHaveBeenCalled()
+    expect(provider.copyPreparedSkillAttachment).not.toHaveBeenCalled()
+  })
+
+  it("rejects a repository Skill containing a root runtime .env before adapter preparation", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "unsafe-repository")
+    mocks.loadConfig.mockResolvedValue({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo",
+        localPath: root,
+        contentDirs: { skill: "skills" },
+      }],
+      global: { projects: [] },
+    })
+    mocks.getRepositoryState.mockResolvedValue({
+      repositoryUuid: "repo-1",
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    mocks.getSkillDetail.mockResolvedValue({
+      id: "repository-unsafe",
+      type: "skill",
+      title: "Unsafe Skill",
+      description: "",
+      category: "test",
+      icon: "",
+      iconBg: "",
+      createdBy: "user",
+      createdByDisplayName: "User",
+      createdAt: "1970-01-01T00:00:00.000Z",
+      modifiedBy: "user",
+      modifiedByDisplayName: "User",
+      modifiedAt: "1970-01-01T00:00:00.000Z",
+      deleted: false,
+      latestHistoryDirname: "version-1",
+      attachmentCount: 1,
+      content: "# Unsafe Skill\n",
+      attachments: [{ originalName: ".env", sha256: "b".repeat(64), size: 4 }],
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor",
+      label: "Test Editor",
+      scope: "global",
+      contentType: "skill",
+      message: null,
+      status: "ready",
+      targetKind: "directory",
+      targetPath,
+      targetExists: false,
+    })
+    const service = new EditorInstallService()
+
+    await expect(service.installToEditor({
+      editorId: "test-editor",
+      scope: "global",
+      contentType: "skill",
+      contentId: "repository-unsafe",
+    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+
+    expect(mocks.prepareSkillDirectory).not.toHaveBeenCalled()
   })
 
   it("inspects a prepared Skill through the selected provider", async () => {

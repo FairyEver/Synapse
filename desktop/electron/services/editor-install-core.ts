@@ -4,6 +4,7 @@ import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
+import { assertNoRuntimeSkillEnvPath } from "../../src/lib/content-attachments"
 import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
@@ -317,6 +318,9 @@ export class EditorInstallCore {
             : payload.preparedSourceId
             ? await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
             : await contentService.getSkillDetail(payload.contentId)
+          assertNoRuntimeSkillEnvPath(
+            detail?.attachments.map((attachment) => attachment.originalName) ?? [],
+          )
           const repositoryRootPath = sourceOverride?.readSkillDetail || payload.preparedSourceId || !detail
             ? null
             : await getActiveRepositoryRootPath()
