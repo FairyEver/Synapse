@@ -94,6 +94,7 @@ type SkillEnvUpdateDialogState = {
 type DeleteSecretDialogState = {
   readonly secret: SecretSafeView
   readonly bindingCount: number
+  readonly scanGeneration: number
 }
 
 const emptyFormState: SecretFormState = {
@@ -117,10 +118,34 @@ export function SecretsModule() {
   const [skillEnvUpdateDialog, setSkillEnvUpdateDialog] = useState<SkillEnvUpdateDialogState | null>(null)
   const [secretReveals, setSecretReveals] = useState<SecretRevealStateById>({})
   const [secretValueDialog, setSecretValueDialog] = useState<SecretValueDialogState | null>(null)
+  const secretsRef = useRef<SecretSafeView[]>([])
   const secretRevealGeneration = useRef(0)
   const skillEnvScanGeneration = useRef(0)
+  const deleteScanGeneration = useRef(0)
+  const deleteTargetIdRef = useRef<string | null>(null)
 
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
+
+  const invalidateDeleteScan = useCallback(() => {
+    deleteScanGeneration.current += 1
+    deleteTargetIdRef.current = null
+  }, [])
+
+  const replaceSecrets = useCallback((nextSecrets: SecretSafeView[]) => {
+    secretsRef.current = nextSecrets
+    const deleteTargetId = deleteTargetIdRef.current
+    if (deleteTargetId && !nextSecrets.some((secret) => secret.id === deleteTargetId)) {
+      invalidateDeleteScan()
+      setDeleting(null)
+    }
+    setSecrets(nextSecrets)
+  }, [invalidateDeleteScan])
+
+  const isCurrentDeleteTarget = useCallback((scanGeneration: number, secretId: string) => (
+    deleteScanGeneration.current === scanGeneration
+    && deleteTargetIdRef.current === secretId
+    && secretsRef.current.some((secret) => secret.id === secretId)
+  ), [])
 
   const clearSecretReveals = useCallback(() => {
     secretRevealGeneration.current += 1
@@ -133,7 +158,7 @@ export function SecretsModule() {
       setLoading(true)
       setLoadError("")
       const result = await secretsBridge.list()
-      setSecrets(result.secrets)
+      replaceSecrets(result.secrets)
       clearSecretReveals()
     } catch (error) {
       const message = errorMessage(error, "加载失败")
@@ -143,15 +168,19 @@ export function SecretsModule() {
     } finally {
       setLoading(false)
     }
-  }, [clearSecretReveals, secretsBridge])
+  }, [clearSecretReveals, replaceSecrets, secretsBridge])
 
   useEffect(() => {
     void reload()
-    return secretsBridge.onChanged((event) => {
-      setSecrets(event.secrets)
+    const unsubscribe = secretsBridge.onChanged((event) => {
+      replaceSecrets(event.secrets)
       clearSecretReveals()
     })
-  }, [clearSecretReveals, reload, secretsBridge])
+    return () => {
+      invalidateDeleteScan()
+      unsubscribe()
+    }
+  }, [clearSecretReveals, invalidateDeleteScan, reload, replaceSecrets, secretsBridge])
 
   const openCreateForm = () => {
     setForm(emptyFormState)
@@ -221,7 +250,11 @@ export function SecretsModule() {
             description: form.description,
           })
 
-      setSecrets((current) => mergeSecret(current, saved))
+      setSecrets((current) => {
+        const next = mergeSecret(current, saved)
+        secretsRef.current = next
+        return next
+      })
       clearSecretReveals()
       toast.success("已保存")
       setFormOpen(false)
@@ -239,13 +272,20 @@ export function SecretsModule() {
     }
   }
 
-  const deleteSecret = async (secret: SecretSafeView) => {
+  const deleteSecret = async (secret: SecretSafeView, scanGeneration: number) => {
+    if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
     try {
       await secretsBridge.delete({ name: secret.name })
-      setSecrets((current) => current.filter((entry) => entry.id !== secret.id))
+      setSecrets((current) => {
+        const next = current.filter((entry) => entry.id !== secret.id)
+        secretsRef.current = next
+        return next
+      })
       clearSecretReveals()
+      invalidateDeleteScan()
       setDeleting(null)
     } catch (error) {
+      if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
       logger.error("Failed to delete secret.", error)
       toast.error("删除失败")
     }
@@ -253,13 +293,26 @@ export function SecretsModule() {
 
   const startDeleteSecret = async (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => {
     const bypassConfirmation = shouldBypassDeleteConfirm(event)
-    const scanResult = await scanSkillEnvBindings(secret.name)
-    if (!scanResult) return
-    if (bypassConfirmation) {
-      void deleteSecret(secret)
+    const scanGeneration = ++deleteScanGeneration.current
+    deleteTargetIdRef.current = secret.id
+    setDeleting(null)
+
+    let scanResult: SecretSkillEnvScanResult
+    try {
+      scanResult = await secretsBridge.scanSkillEnvBindings({ name: secret.name })
+    } catch (error) {
+      if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+      logger.error("Failed to scan Skill env bindings.", { name: secret.name, ...errorDiagnostic(error) })
+      toast.error("扫描失败，请重试。")
       return
     }
-    setDeleting({ secret, bindingCount: scanResult.items.length })
+
+    if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
+    if (bypassConfirmation) {
+      void deleteSecret(secret, scanGeneration)
+      return
+    }
+    setDeleting({ secret, bindingCount: scanResult.items.length, scanGeneration })
   }
 
   const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
@@ -390,10 +443,13 @@ export function SecretsModule() {
       <DeleteSecretDialog
         state={deleting}
         onOpenChange={(open) => {
-          if (!open) setDeleting(null)
+          if (!open) {
+            invalidateDeleteScan()
+            setDeleting(null)
+          }
         }}
         onDelete={() => {
-          if (deleting) void deleteSecret(deleting.secret)
+          if (deleting) void deleteSecret(deleting.secret, deleting.scanGeneration)
         }}
       />
       <SkillEnvUpdateDialog

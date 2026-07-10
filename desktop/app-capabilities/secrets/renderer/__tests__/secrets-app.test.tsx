@@ -603,6 +603,73 @@ describe("SecretsModule", () => {
     expect(document.body.textContent).not.toContain("删除密钥")
   })
 
+  it("keeps the latest delete target when scans resolve out of order", async () => {
+    const otherSecret = { ...savedSecret, id: "secret-2", name: "OTHER" }
+    let resolveTokenScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    let resolveOtherScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret, otherSecret], total: 2 })
+    mocks.secrets.scanSkillEnvBindings.mockImplementation(({ name }: { name: string }) => new Promise((resolve) => {
+      if (name === "TOKEN") resolveTokenScan = resolve
+      if (name === "OTHER") resolveOtherScan = resolve
+    }))
+
+    await renderSecretsModule()
+    act(() => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      clickButtonByLabel("删除密钥：OTHER")
+    })
+    await act(async () => {
+      resolveOtherScan?.({ scanSessionId: "scan-other", items: [] })
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("删除“OTHER”后不可恢复。")
+
+    await act(async () => {
+      resolveTokenScan?.({ scanSessionId: "scan-token", items: [] })
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("删除“OTHER”后不可恢复。")
+    expect(document.body.textContent).not.toContain("删除“TOKEN”后不可恢复。")
+
+    await act(async () => {
+      clickButton("删除")
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).toHaveBeenCalledTimes(1)
+    expect(mocks.secrets.delete).toHaveBeenCalledWith({ name: "OTHER" })
+  })
+
+  it("never executes a stale bypass delete after a newer target is selected", async () => {
+    const otherSecret = { ...savedSecret, id: "secret-2", name: "OTHER" }
+    let resolveTokenScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    let resolveOtherScan: ((result: typeof skillEnvScanResult) => void) | undefined
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret, otherSecret], total: 2 })
+    mocks.secrets.scanSkillEnvBindings.mockImplementation(({ name }: { name: string }) => new Promise((resolve) => {
+      if (name === "TOKEN") resolveTokenScan = resolve
+      if (name === "OTHER") resolveOtherScan = resolve
+    }))
+
+    await renderSecretsModule()
+    act(() => {
+      clickButtonByLabel("删除密钥：TOKEN", { altKey: true })
+      clickButtonByLabel("删除密钥：OTHER")
+    })
+    await act(async () => {
+      resolveOtherScan?.({ scanSessionId: "scan-other", items: [] })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      resolveTokenScan?.({ scanSessionId: "scan-token", items: [] })
+      await Promise.resolve()
+    })
+
+    expect(mocks.secrets.delete).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("删除“OTHER”后不可恢复。")
+  })
+
   it("shows retry when loading fails", async () => {
     mocks.secrets.list.mockRejectedValueOnce(new Error("load failed"))
 
@@ -636,10 +703,10 @@ function clickButton(text: string) {
   buttonByText(text).dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
-function clickButtonByLabel(label: string) {
+function clickButtonByLabel(label: string, init: MouseEventInit = {}) {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
-  button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }))
 }
 
 function buttonByText(text: string): HTMLButtonElement {
