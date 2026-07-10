@@ -1,7 +1,28 @@
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const fsMocks = vi.hoisted(() => ({
+  actualLstat: null as typeof import("node:fs/promises").lstat | null,
+  actualOpen: null as typeof import("node:fs/promises").open | null,
+  lstat: vi.fn<typeof import("node:fs/promises").lstat>(),
+  open: vi.fn<typeof import("node:fs/promises").open>(),
+}))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  fsMocks.actualLstat = actual.lstat
+  fsMocks.actualOpen = actual.open
+  fsMocks.lstat.mockImplementation(actual.lstat)
+  fsMocks.open.mockImplementation(actual.open)
+  return {
+    ...actual,
+    lstat: fsMocks.lstat,
+    open: fsMocks.open,
+  }
+})
 
 import { materializeSkillEnv } from "../skill-env-materializer"
 
@@ -24,6 +45,13 @@ async function createDirectories(): Promise<{
 
 afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })))
+})
+
+beforeEach(() => {
+  fsMocks.lstat.mockReset()
+  fsMocks.open.mockReset()
+  fsMocks.lstat.mockImplementation(fsMocks.actualLstat!)
+  fsMocks.open.mockImplementation(fsMocks.actualOpen!)
 })
 
 describe("materializeSkillEnv", () => {
@@ -102,5 +130,78 @@ describe("materializeSkillEnv", () => {
     await expect(readFile(linkedFilePath, "utf8")).resolves.toBe("TOKEN=do-not-read\n")
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env"), "utf8"))
       .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects an existing non-regular .env entry", async () => {
+    const paths = await createDirectories()
+    await mkdir(path.join(paths.existingTargetDirectoryPath, ".env"))
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      values: { TOKEN: "updated" },
+    })).rejects.toThrow("Skill .env 必须是普通文件。")
+  })
+
+  it("opens the checked path without following links or blocking on special files when supported", async () => {
+    const paths = await createDirectories()
+    await writeFile(path.join(paths.existingTargetDirectoryPath, ".env"), "TOKEN=old\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+
+    await materializeSkillEnv({ ...paths, values: {} })
+
+    const flags = fsMocks.open.mock.calls[0]?.[1]
+    expect(typeof flags).toBe("number")
+    if (constants.O_NOFOLLOW !== 0) {
+      expect((flags as number) & constants.O_NOFOLLOW).toBe(constants.O_NOFOLLOW)
+    }
+    if (constants.O_NONBLOCK !== 0) {
+      expect((flags as number) & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
+    }
+  })
+
+  it("does not follow a symlink installed after the initial path check", async () => {
+    const paths = await createDirectories()
+    const existingEnvPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    const linkedFilePath = path.join(path.dirname(paths.existingTargetDirectoryPath), "race-linked.env")
+    await writeFile(existingEnvPath, "TOKEN=old\n", "utf8")
+    await writeFile(linkedFilePath, "TOKEN=do-not-read\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    fsMocks.lstat.mockImplementationOnce(async (targetPath, options) => {
+      const entry = await fsMocks.actualLstat!(targetPath, options as never)
+      await rm(existingEnvPath)
+      await symlink(linkedFilePath, existingEnvPath)
+      return entry as never
+    })
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      values: { TOKEN: "updated" },
+    })).rejects.toThrow("Skill .env 不能是符号链接。")
+    await expect(readFile(linkedFilePath, "utf8")).resolves.toBe("TOKEN=do-not-read\n")
+  })
+
+  it("closes the opened file when the path becomes a symlink before reading", async () => {
+    const paths = await createDirectories()
+    const existingEnvPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    const linkedFilePath = path.join(path.dirname(paths.existingTargetDirectoryPath), "post-open-linked.env")
+    await writeFile(existingEnvPath, "TOKEN=old\n", "utf8")
+    await writeFile(linkedFilePath, "TOKEN=do-not-read\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    let closeSpy: ReturnType<typeof vi.spyOn> | null = null
+    fsMocks.open.mockImplementationOnce(async (...args) => {
+      const handle = await fsMocks.actualOpen!(...args)
+      closeSpy = vi.spyOn(handle, "close")
+      await rm(existingEnvPath)
+      await symlink(linkedFilePath, existingEnvPath)
+      return handle
+    })
+
+    await expect(materializeSkillEnv({
+      ...paths,
+      values: { TOKEN: "updated" },
+    })).rejects.toThrow("Skill .env 不能是符号链接。")
+    expect(closeSpy).toHaveBeenCalledOnce()
+    await expect(readFile(linkedFilePath, "utf8")).resolves.toBe("TOKEN=do-not-read\n")
   })
 })
