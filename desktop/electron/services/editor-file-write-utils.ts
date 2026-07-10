@@ -29,7 +29,15 @@ function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
   return error instanceof Error && error.message.includes(targetPath)
 }
 
-async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
+type AtomicSwapOptions = {
+  readonly beforeSwap?: () => Promise<void>
+}
+
+async function swapPathAtomically(
+  replacementPath: string,
+  targetPath: string,
+  options: AtomicSwapOptions = {},
+): Promise<void> {
   const parentDirectoryPath = path.dirname(targetPath)
   const targetName = path.basename(targetPath)
 
@@ -44,6 +52,8 @@ async function swapPathAtomically(replacementPath: string, targetPath: string): 
   let movedReplacement = false
 
   try {
+    await options.beforeSwap?.()
+
     if (hadExistingTarget) {
       await rename(targetPath, backupPath)
       movedExistingTarget = true
@@ -99,6 +109,7 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
 async function replaceDirectoryAtomically(
   targetPath: string,
   populate: (stagingDirectoryPath: string) => Promise<void>,
+  options: AtomicSwapOptions = {},
 ): Promise<void> {
   const parentDirectoryPath = path.dirname(targetPath)
 
@@ -108,7 +119,7 @@ async function replaceDirectoryAtomically(
 
   try {
     await populate(stagingDirectoryPath)
-    await swapPathAtomically(stagingDirectoryPath, targetPath)
+    await swapPathAtomically(stagingDirectoryPath, targetPath, options)
   } catch (error) {
     await rm(stagingDirectoryPath, { recursive: true, force: true })
       .catch((err) => logger.warn("Failed to clean up staging directory", createEditorWriteErrorLogMeta(err)))

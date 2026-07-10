@@ -14,6 +14,11 @@ export type MaterializeSkillEnvInput = {
   readonly stagingDirectoryPath: string
   readonly existingTargetDirectoryPath: string
   readonly values: Readonly<Record<string, string>>
+  readonly registerPrecondition?: (guard: SkillEnvMaterializationGuard) => void
+}
+
+export type SkillEnvMaterializationGuard = {
+  readonly validate: () => Promise<void>
 }
 
 function isMissingPathError(error: unknown): boolean {
@@ -69,6 +74,11 @@ type FileSnapshot = EntryIdentity & {
   readonly ctimeNs: bigint
   readonly mtimeNs: bigint
   readonly size: bigint
+}
+
+type ExistingEnvSnapshot = {
+  readonly content: Buffer
+  readonly file: FileSnapshot
 }
 
 function hasSameIdentity(left: EntryIdentity, right: EntryIdentity): boolean {
@@ -179,7 +189,7 @@ async function assertEnvPathMatchesOpenedFile(
 async function readExistingEnv(
   targetPath: string,
   targetDirectory: TargetDirectoryIdentity,
-): Promise<Buffer | null> {
+): Promise<ExistingEnvSnapshot | null> {
   const existingEnvPath = path.join(targetPath, SKILL_RUNTIME_ENV_PATH)
   await assertSameTargetDirectory(targetPath, targetDirectory)
   try {
@@ -228,7 +238,16 @@ async function readExistingEnv(
     }
     await assertEnvPathMatchesOpenedFile(existingEnvPath, openedEntry, targetDirectory)
     await assertSameTargetDirectory(targetPath, targetDirectory)
-    return content
+    return {
+      content,
+      file: {
+        ctimeNs: openedEntry.ctimeNs,
+        dev: openedEntry.dev,
+        ino: openedEntry.ino,
+        mtimeNs: openedEntry.mtimeNs,
+        size: openedEntry.size,
+      },
+    }
   } finally {
     await handle.close()
   }
@@ -237,6 +256,45 @@ async function readExistingEnv(
 async function assertStagingHasNoRuntimeEnv(stagingDirectoryPath: string): Promise<void> {
   const entries = await readdir(stagingDirectoryPath, { withFileTypes: true })
   assertNoRuntimeSkillEnvPath(entries.map((entry) => entry.name))
+}
+
+async function assertTargetStillMissing(targetPath: string): Promise<void> {
+  try {
+    await lstat(targetPath, { bigint: true })
+  } catch (error) {
+    if (isMissingPathError(error)) return
+    throw error
+  }
+  throw createChangedTargetDirectoryError()
+}
+
+function createMaterializationGuard(
+  targetPath: string,
+  targetDirectory: TargetDirectoryIdentity | null,
+  existingEnv: ExistingEnvSnapshot | null,
+): SkillEnvMaterializationGuard {
+  return {
+    async validate() {
+      if (targetDirectory === null) {
+        await assertTargetStillMissing(targetPath)
+        return
+      }
+
+      await assertSameTargetDirectory(targetPath, targetDirectory)
+      const currentEnv = await readExistingEnv(targetPath, targetDirectory)
+      if (existingEnv === null) {
+        if (currentEnv !== null) throw createChangedEnvError()
+        return
+      }
+      if (
+        currentEnv === null
+        || !hasSameFileSnapshot(currentEnv.file, existingEnv.file)
+        || !currentEnv.content.equals(existingEnv.content)
+      ) {
+        throw createChangedEnvError()
+      }
+    },
+  }
 }
 
 export async function materializeSkillEnv(
@@ -250,6 +308,11 @@ export async function materializeSkillEnv(
   const existing = targetDirectory === null
     ? null
     : await readExistingEnv(input.existingTargetDirectoryPath, targetDirectory)
+  input.registerPrecondition?.(createMaterializationGuard(
+    input.existingTargetDirectoryPath,
+    targetDirectory,
+    existing,
+  ))
 
   let example: string
   try {
@@ -257,7 +320,7 @@ export async function materializeSkillEnv(
   } catch (error) {
     if (isMissingPathError(error)) {
       if (existing === null) return "absent"
-      await writeFile(stagedEnvPath, existing)
+      await writeFile(stagedEnvPath, existing.content)
       return "merged"
     }
     throw error
@@ -265,7 +328,7 @@ export async function materializeSkillEnv(
 
   const content = existing === null
     ? createDotenvFromExample(example, input.values)
-    : mergeDotenvExample(existing.toString("utf8"), example, input.values)
+    : mergeDotenvExample(existing.content.toString("utf8"), example, input.values)
   await writeFile(stagedEnvPath, content, "utf8")
   return existing === null ? "created" : "merged"
 }

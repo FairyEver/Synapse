@@ -30,6 +30,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 })
 
 import { materializeSkillEnv } from "../skill-env-materializer"
+import { replaceDirectoryAtomically } from "../../editor-file-write-utils"
 
 const tempRoots: string[] = []
 
@@ -46,6 +47,35 @@ async function createDirectories(): Promise<{
     mkdir(stagingDirectoryPath, { recursive: true }),
   ])
   return { existingTargetDirectoryPath, stagingDirectoryPath }
+}
+
+async function replaceWithMaterializedEnv(
+  targetPath: string,
+  mutateAfterMaterialize: () => Promise<void>,
+): Promise<void> {
+  let guard: { validate(): Promise<void> } | null = null
+
+  await replaceDirectoryAtomically(
+    targetPath,
+    async (stagingDirectoryPath) => {
+      await writeFile(path.join(stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+      await materializeSkillEnv({
+        stagingDirectoryPath,
+        existingTargetDirectoryPath: targetPath,
+        values: { TOKEN: "confirmed" },
+        registerPrecondition(nextGuard) {
+          guard = nextGuard
+        },
+      })
+      await mutateAfterMaterialize()
+    },
+    {
+      beforeSwap: async () => {
+        if (!guard) throw new Error("Skill .env 更新前置校验未注册。")
+        await guard.validate()
+      },
+    },
+  )
 }
 
 afterEach(async () => {
@@ -205,6 +235,81 @@ describe("materializeSkillEnv", () => {
       .resolves.toBe("TOKEN=outside\n")
     await expect(realpath(paths.existingTargetDirectoryPath))
       .resolves.toBe(await realpath(outsideDirectoryPath))
+  })
+
+  it("rejects a target that appears after materialization but before the directory swap", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-swap-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => {
+      await mkdir(targetPath)
+      await writeFile(path.join(targetPath, "marker.txt"), "outside", "utf8")
+    })).rejects.toThrow("Skill 目标目录在读取 .env 期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, "marker.txt"), "utf8")).resolves.toBe("outside")
+  })
+
+  it("rejects an .env that appears after an existing target was materialized without one", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-swap-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    await mkdir(targetPath)
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => {
+      await writeFile(path.join(targetPath, ".env"), "TOKEN=outside\n", "utf8")
+    })).rejects.toThrow("Skill .env 在读取期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, ".env"), "utf8")).resolves.toBe("TOKEN=outside\n")
+  })
+
+  it("rejects an existing .env that is replaced after materialization", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-swap-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    const envPath = path.join(targetPath, ".env")
+    await mkdir(targetPath)
+    await writeFile(envPath, "TOKEN=original\n", "utf8")
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => {
+      await rename(envPath, path.join(targetPath, ".env-original"))
+      await writeFile(envPath, "TOKEN=replacement\n", "utf8")
+    })).rejects.toThrow("Skill .env 在读取期间发生变化。")
+
+    await expect(readFile(envPath, "utf8")).resolves.toBe("TOKEN=replacement\n")
+  })
+
+  it("rejects existing .env content changed in place after materialization", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-swap-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    const envPath = path.join(targetPath, ".env")
+    await mkdir(targetPath)
+    await writeFile(envPath, "TOKEN=original\n", "utf8")
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => {
+      await writeFile(envPath, "TOKEN=changed-in-place\n", "utf8")
+    })).rejects.toThrow("Skill .env 在读取期间发生变化。")
+
+    await expect(readFile(envPath, "utf8")).resolves.toBe("TOKEN=changed-in-place\n")
+  })
+
+  it("rejects an existing target directory replaced after materialization", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-swap-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    const originalTargetPath = path.join(root, "skill-original")
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => {
+      await rename(targetPath, originalTargetPath)
+      await mkdir(targetPath)
+      await writeFile(path.join(targetPath, ".env"), "TOKEN=replacement\n", "utf8")
+    })).rejects.toThrow("Skill 目标目录在读取 .env 期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=replacement\n")
   })
 
   it("rejects an existing .env symlink without reading through or writing it", async () => {

@@ -4,7 +4,7 @@ import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
   SKILL_ENV_EXAMPLE_PATH,
-  SKILL_RUNTIME_ENV_PATH,
+  assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
@@ -205,10 +205,15 @@ async function collectSkillFiles(
     throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 
-  for (const name of children) {
-    if (currentDir === baseDir && name === SKILL_RUNTIME_ENV_PATH) {
-      throwInvalid("files", "Skill 源目录不能包含 .env，请只提交 .env.example。")
+  if (currentDir === baseDir) {
+    try {
+      assertNoRuntimeSkillEnvPath(children)
+    } catch (error) {
+      throwInvalid("files", getErrorMessage(error))
     }
+  }
+
+  for (const name of children) {
     if (name.startsWith(".") && !(currentDir === baseDir && name === SKILL_ENV_EXAMPLE_PATH)) continue
     if (skip.has(name) && currentDir === baseDir) continue
 

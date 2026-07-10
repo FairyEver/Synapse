@@ -36,7 +36,10 @@ import { editorInstallStrategyById } from "./definitions/generated/main-registry
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
-import { materializeSkillEnv } from "./skill-env/skill-env-materializer"
+import {
+  materializeSkillEnv,
+  type SkillEnvMaterializationGuard,
+} from "./skill-env/skill-env-materializer"
 import {
   checkEditorWritePermission,
   recordEditorWriteAudit,
@@ -376,6 +379,7 @@ export class EditorInstallCore {
             : detail
 
           try {
+            let skillEnvGuard: SkillEnvMaterializationGuard | null = null
             await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
               if (!detailWithSubstitutions) {
                 throw new Error("Skill 安装源不可用。")
@@ -421,7 +425,17 @@ export class EditorInstallCore {
                 stagingDirectoryPath,
                 existingTargetDirectoryPath: target.targetPath,
                 values: payload.skillEnvValues ?? {},
+                registerPrecondition(guard) {
+                  skillEnvGuard = guard
+                },
               })
+            }, {
+              beforeSwap: async () => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validate()
+              },
             })
           } catch (error) {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {

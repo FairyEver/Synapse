@@ -120,6 +120,18 @@ describe("content skill source service", () => {
     expect(Buffer.from(draft.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
   })
 
+  it.each([".ENV", ".EnV"])(
+    "rejects a root runtime %s before hidden-file filtering",
+    async (runtimeEnvName) => {
+      const root = await createTempRoot()
+      await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+      await writeText(path.join(root, runtimeEnvName), "TOKEN=secret\n")
+
+      await expect(readSkillDraftFromDirectory(root))
+        .rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+    },
+  )
+
   it("rejects sensitive attachment names", async () => {
     const root = await createTempRoot()
     await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
