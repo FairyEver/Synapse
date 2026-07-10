@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
+import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
 import { constants } from "node:fs"
 import type { FileHandle } from "node:fs/promises"
 import os from "node:os"
@@ -86,6 +86,10 @@ async function replaceWithMaterializedEnv(
       afterMoveExistingTarget: async (movedTargetPath) => {
         if (!guard) throw new Error("Skill .env 更新前置校验未注册。")
         await guard.validateMovedTarget(movedTargetPath)
+      },
+      beforeRestoreMovedTarget: async (movedTargetPath) => {
+        if (!guard) throw new Error("Skill .env 更新前置校验未注册。")
+        await guard.validateMovedTargetForRestore(movedTargetPath)
       },
     },
   )
@@ -402,15 +406,17 @@ describe("materializeSkillEnv", () => {
       .rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("revalidates a directory replacement after target-to-backup rename and restores concurrent content", async () => {
+  it("preserves a replacement backup directory instead of restoring it as the target", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-post-move-"))
     tempRoots.push(root)
     const targetPath = path.join(root, "skill")
     let displacedOriginalPath = ""
+    let replacementBackupPath = ""
     await mkdir(targetPath)
     await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
     fsMocks.rename.mockImplementationOnce(async (sourcePath, destinationPath) => {
       await fsMocks.actualRename!(sourcePath, destinationPath)
+      replacementBackupPath = String(destinationPath)
       displacedOriginalPath = `${String(destinationPath)}-displaced`
       await fsMocks.actualRename!(destinationPath, displacedOriginalPath)
       await mkdir(destinationPath)
@@ -418,14 +424,42 @@ describe("materializeSkillEnv", () => {
     })
 
     await expect(replaceWithMaterializedEnv(targetPath, async () => undefined))
-      .rejects.toThrow("Skill 目标目录在读取 .env 期间发生变化。")
+      .rejects.toThrow("原目标自动恢复失败")
 
     await expect(readFile(path.join(targetPath, "concurrent-marker.txt"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(replacementBackupPath, "concurrent-marker.txt"), "utf8"))
       .resolves.toBe("concurrent")
     await expect(readFile(path.join(displacedOriginalPath, ".env"), "utf8"))
       .resolves.toBe("TOKEN=original\n")
     await expect(readFile(path.join(targetPath, ".env.example")))
       .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("does not restore a symlink that replaces the moved target backup", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-post-move-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    let displacedOriginalPath = ""
+    let replacementBackupPath = ""
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+    fsMocks.rename.mockImplementationOnce(async (sourcePath, destinationPath) => {
+      await fsMocks.actualRename!(sourcePath, destinationPath)
+      replacementBackupPath = String(destinationPath)
+      displacedOriginalPath = `${replacementBackupPath}-displaced`
+      await fsMocks.actualRename!(destinationPath, displacedOriginalPath)
+      await symlink(displacedOriginalPath, destinationPath, "dir")
+    })
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => undefined))
+      .rejects.toThrow("原目标自动恢复失败")
+
+    await expect(lstat(targetPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(lstat(replacementBackupPath)).resolves.toMatchObject({})
+    expect((await lstat(replacementBackupPath)).isSymbolicLink()).toBe(true)
+    await expect(readFile(path.join(displacedOriginalPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=original\n")
   })
 
   it("rejects an existing .env symlink without reading through or writing it", async () => {

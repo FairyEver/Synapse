@@ -32,6 +32,7 @@ function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
 type AtomicSwapOptions = {
   readonly beforeSwap?: () => Promise<void>
   readonly afterMoveExistingTarget?: (movedTargetPath: string) => Promise<void>
+  readonly beforeRestoreMovedTarget?: (movedTargetPath: string) => Promise<void>
 }
 
 class AtomicSwapRestoreError extends Error {
@@ -85,6 +86,7 @@ async function swapPathAtomically(
         if (await pathEntryExists(targetPath)) {
           throw new Error("atomic swap target reappeared before restore", { cause: error })
         }
+        await options.beforeRestoreMovedTarget?.(backupPath)
         await rename(backupPath, targetPath)
       } catch (restoreError) {
         logger.warn("Failed to safely restore atomic swap backup", {

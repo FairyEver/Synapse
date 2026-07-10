@@ -21,6 +21,7 @@ export type MaterializeSkillEnvInput = {
 export type SkillEnvMaterializationGuard = {
   readonly validate: () => Promise<void>
   readonly validateMovedTarget: (movedTargetPath: string) => Promise<void>
+  readonly validateMovedTargetForRestore: (movedTargetPath: string) => Promise<void>
 }
 
 function isMissingPathError(error: unknown): boolean {
@@ -339,6 +340,10 @@ function createMaterializationGuard(
         targetDirectory,
       )
       await assertExpectedEnv(movedTargetPath, movedDirectory)
+    },
+    async validateMovedTargetForRestore(movedTargetPath) {
+      if (targetDirectory === null) throw createChangedTargetDirectoryError()
+      await readMovedTargetDirectoryIdentity(movedTargetPath, targetDirectory)
     },
   }
 }

@@ -442,6 +442,12 @@ export class EditorInstallCore {
                 }
                 await skillEnvGuard.validateMovedTarget(movedTargetPath)
               },
+              beforeRestoreMovedTarget: async (movedTargetPath) => {
+                if (!skillEnvGuard) {
+                  throw new Error("Skill .env 更新前置校验未注册。")
+                }
+                await skillEnvGuard.validateMovedTargetForRestore(movedTargetPath)
+              },
             })
           } catch (error) {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
