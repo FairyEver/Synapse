@@ -171,6 +171,7 @@ const installToEditorPayloadSchema = resolveEditorTargetPayloadSchema.extend({
   overwriteConfirmed: z.boolean().optional(),
   replaceConfirmed: z.boolean().optional(),
   replacedContentId: z.string().optional(),
+  skillEnvValues: z.record(z.string(), z.string()).optional(),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 })
 const readEditorInstallFormValuesPayloadSchema = z.object({

@@ -374,6 +374,15 @@ describe("contentIpcModule sync ownership", () => {
       overwriteConfirmed: true,
       scope: "project",
     }).success).toBe(true)
+    expect(contentIpcModule.methods.installToEditor.request.parse({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      scope: "project",
+      skillEnvValues: { TOKEN: "saved-token" },
+    })).toEqual(expect.objectContaining({
+      skillEnvValues: { TOKEN: "saved-token" },
+    }))
     expect(contentIpcModule.methods.readEditorInstallFormValues.request.safeParse({
       editorId: "codex",
     }).success).toBe(false)

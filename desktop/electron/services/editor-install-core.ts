@@ -35,6 +35,7 @@ import { editorInstallStrategyById } from "./definitions/generated/main-registry
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
+import { materializeSkillEnv } from "./skill-env/skill-env-materializer"
 import {
   checkEditorWritePermission,
   recordEditorWriteAudit,
@@ -174,6 +175,7 @@ function toInstallToEditorPayload(payload: SynapseInstallSourceToEditorPayload):
     overwriteConfirmed: payload.overwriteConfirmed,
     replaceConfirmed: payload.replaceConfirmed,
     replacedContentId: payload.replacedSourceIdentity,
+    skillEnvValues: payload.skillEnvValues,
     variableSubstitutions: payload.variableSubstitutions,
     preparedSourceId: payload.source.preparedSourceId,
   }
@@ -410,6 +412,11 @@ export class EditorInstallCore {
                     originalName: attachment.originalName,
                   })
                 },
+              })
+              await materializeSkillEnv({
+                stagingDirectoryPath,
+                existingTargetDirectoryPath: target.targetPath,
+                values: payload.skillEnvValues ?? {},
               })
             })
           } catch (error) {

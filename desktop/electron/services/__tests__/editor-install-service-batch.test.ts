@@ -82,4 +82,29 @@ describe("EditorInstallService batch source install", () => {
       }),
     ])
   })
+
+  it("propagates Skill env values to every target", async () => {
+    const service = new EditorInstallService()
+    const payloads: SynapseInstallSourceToEditorPayload[] = []
+    vi.spyOn(service, "installSourceToEditor").mockImplementation(async (payload) => {
+      payloads.push(payload)
+      return createInstallResult(payload.editorId)
+    })
+
+    await service.installSourceToEditorTargets({
+      mode: "install",
+      skillEnvValues: { TOKEN: "saved-token" },
+      source,
+      targets: [
+        { editorId: "codex" as never, scope: "global" },
+        { editorId: "cursor" as never, scope: "global" },
+      ],
+    })
+
+    expect(payloads).toHaveLength(2)
+    expect(payloads).toEqual([
+      expect.objectContaining({ skillEnvValues: { TOKEN: "saved-token" } }),
+      expect.objectContaining({ skillEnvValues: { TOKEN: "saved-token" } }),
+    ])
+  })
 })
