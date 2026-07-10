@@ -20,9 +20,18 @@ function normalizedName(name: string): string {
   return name.toLowerCase()
 }
 
-function serializeDotenvValue(value: string): string {
+function serializeDotenvValue(name: string, value: string): string {
   const normalized = value.replace(/\r\n?/g, "\n")
-  return `"${normalized.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+  for (const delimiter of ['"', "'", "`"] as const) {
+    if (normalized.includes(delimiter)) {
+      continue
+    }
+    const candidate = `${delimiter}${normalized}${delimiter}`
+    if (parseEnv(`${name}=${candidate}\n`)[name] === normalized) {
+      return candidate
+    }
+  }
+  throw new Error(`配置值无法无损写入：${name}`)
 }
 
 function isHorizontalWhitespace(character: string | undefined): boolean {
@@ -53,6 +62,9 @@ function normalizedValues(values: Readonly<Record<string, string>>): ReadonlyMap
   for (const [name, value] of Object.entries(values)) {
     if (!DOTENV_NAME.test(name)) {
       throw new Error(`配置键无效：${name}`)
+    }
+    if (value.includes("\0")) {
+      throw new Error(`配置值不能包含 NUL 字节：${name}`)
     }
     const key = normalizedName(name)
     if (normalized.has(key)) {
@@ -208,7 +220,7 @@ export function patchDotenvValues(
     if (value === undefined) {
       continue
     }
-    result = `${result.slice(0, entry.valueStart)}${serializeDotenvValue(value)}${result.slice(entry.valueEnd)}`
+    result = `${result.slice(0, entry.valueStart)}${serializeDotenvValue(entry.name, value)}${result.slice(entry.valueEnd)}`
   }
   return result
 }
