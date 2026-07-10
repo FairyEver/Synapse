@@ -11,6 +11,11 @@ import {
 
 const mocks = vi.hoisted(() => ({
   getSkillDetail: vi.fn(),
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
   prepareSkillDirectory: vi.fn(),
   rename: vi.fn(),
   rm: vi.fn(),
@@ -46,6 +51,10 @@ vi.mock("../editor-adapter-service", () => ({
   editorAdapterService: {
     resolveTarget: mocks.resolveTarget,
   },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => mocks.logger,
 }))
 
 vi.mock("../content-service", () => ({
@@ -557,6 +566,74 @@ describe("EditorInstallService security", () => {
         resource: targetPath,
       }),
     ]))
+  })
+
+  it("preserves a concurrent target and desktop backup when replacement fails after backup", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    const markerPath = path.join(targetPath, "concurrent-marker.txt")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async () => {
+      await mkdir(targetPath, { recursive: true })
+      await writeFile(markerPath, "concurrent", "utf8")
+      throw new Error("prepare failed")
+    })
+
+    const auditSink = new InMemoryAuditSink()
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      overwriteConfirmed: true,
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(editorInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("旧 Skill 备份恢复失败")
+
+    await expect(readFile(markerPath, "utf8")).resolves.toBe("concurrent")
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8"))
+      .resolves.toBe("# Existing Skill\n")
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "failed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup-restore" }),
+      }),
+      expect.objectContaining({
+        action: "fs.write",
+        outcome: "failed",
+        resource: targetPath,
+      }),
+    ]))
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Failed to restore backed up skill directory",
+      expect.objectContaining({
+        backupPath: path.basename(backupPath),
+        targetPath: path.basename(targetPath),
+        errorName: "Error",
+      }),
+    )
   })
 
   it("reports restore failure when replacement fails after backup", async () => {

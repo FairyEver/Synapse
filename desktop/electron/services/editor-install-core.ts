@@ -445,7 +445,9 @@ export class EditorInstallCore {
                 targetName: path.basename(target.targetPath),
               }
               try {
-                await rm(target.targetPath, { recursive: true, force: true })
+                if (await pathEntryExists(target.targetPath)) {
+                  throw new Error("Skill 目标目录已重新出现，不能自动恢复旧备份。", { cause: error })
+                }
                 await moveDirectoryAllowingCrossDevice(backupPathForRestore, target.targetPath)
                 recordEditorWriteAudit(security, backupPathForRestore, "allowed", restoreAuditMetadata)
               } catch (restoreError) {
