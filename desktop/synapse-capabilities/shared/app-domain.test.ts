@@ -22,6 +22,7 @@ import {
   SWARM_TASK_TASK_CREATE_CAPABILITY_ID,
   SWARM_TASK_TASK_LIST_CAPABILITY_ID,
 } from "../../app-capabilities/swarm-task/shared/capability"
+import { SECRETS_MCP_TOOL_NAMES } from "../../app-capabilities/secrets/shared/capability"
 import { APP_DOMAIN, APP_MCP_TOOL_ACTIONS, buildAppTools } from "./app-domain"
 import { assertCanonicalCapabilityId, capabilityIdToMcpTool } from "./naming"
 import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
@@ -83,6 +84,19 @@ describe("App capability domain", () => {
     expect(tools.get(TERMINAL_MCP_TOOL_NAMES.sessionList)?.inputSchema).toMatchObject({
       type: "object",
       properties: {},
+      additionalProperties: false,
+    })
+  })
+
+  it("keeps secret names immutable in the update MCP schema", () => {
+    const updateTool = buildAppTools().find((tool) => tool.name === SECRETS_MCP_TOOL_NAMES.update)
+
+    expect(updateTool?.description).not.toContain("renam")
+    expect(updateTool?.inputSchema).toMatchObject({
+      type: "object",
+      properties: expect.not.objectContaining({
+        newName: expect.anything(),
+      }),
       additionalProperties: false,
     })
   })

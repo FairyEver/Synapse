@@ -132,7 +132,6 @@ describe("createSecretsCapabilityDispatcher", () => {
     })
     await expect(dispatcher.dispatch(SECRETS_ITEM_UPDATE_CAPABILITY_ID, {
       name: "BARK_TOKEN",
-      newName: "BARK_ID",
       value: "changed-secret",
     }, { source: "mcp-http" })).resolves.toMatchObject({ ok: true, affected: 1 })
     await expect(dispatcher.dispatch(SECRETS_ITEM_UPSERT_CAPABILITY_ID, {
@@ -157,6 +156,17 @@ describe("createSecretsCapabilityDispatcher", () => {
     expect(auditJson).not.toContain("changed-secret")
     expect(auditJson).not.toContain("upsert-secret")
     expect(auditJson).not.toContain("phone push")
+  })
+
+  it("rejects secret rename parameters before service access", async () => {
+    const { dispatcher, service } = createHarness()
+
+    await expect(dispatcher.dispatch(SECRETS_ITEM_UPDATE_CAPABILITY_ID, {
+      name: "TOKEN",
+      newName: "RENAMED_TOKEN",
+    }, { source: "mcp-http" })).rejects.toThrow()
+
+    expect(service.update).not.toHaveBeenCalled()
   })
 
   it("audits failures without raw error messages", async () => {

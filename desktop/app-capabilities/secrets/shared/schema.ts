@@ -51,10 +51,9 @@ export const secretCreateInputSchema = z.object({
 
 export const secretUpdateInputSchema = z.object({
   name: secretNameSchema,
-  newName: secretNameSchema.optional(),
   value: z.string().optional(),
   description: z.string().optional(),
-})
+}).strict()
 
 export const secretUpsertInputSchema = z.object({
   name: secretNameSchema,

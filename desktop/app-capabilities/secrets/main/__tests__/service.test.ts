@@ -7,6 +7,7 @@ import type {
 } from "../../../../electron/runtime/data-repo/schemas/secrets"
 import { createDefaultConfig } from "../../../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/config"
+import { secretUpdateInputSchema } from "../../shared/schema"
 import { createSecretsService } from "../service"
 
 describe("SecretsService", () => {
@@ -74,22 +75,29 @@ describe("SecretsService", () => {
       .rejects.toThrow("密钥已存在")
   })
 
-  it("updates name value and description", async () => {
+  it("rejects attempts to rename an existing secret", () => {
+    expect(secretUpdateInputSchema.safeParse({
+      name: "TOKEN",
+      newName: "RENAMED_TOKEN",
+      description: "new description",
+    }).success).toBe(false)
+  })
+
+  it("updates value and description while preserving the original name", async () => {
     const service = createSecretsService(createHarness().deps)
     await service.create({ name: "TOKEN", value: "old", description: "old description" })
 
     await expect(service.update({
       name: "token",
-      newName: "RENAMED_TOKEN",
       value: "new",
       description: "new description",
     })).resolves.toEqual({
       id: "id-1",
-      name: "RENAMED_TOKEN",
+      name: "TOKEN",
       description: "new description",
       hasValue: true,
     })
-    await expect(service.get({ name: "RENAMED_TOKEN", includeValue: true }))
+    await expect(service.get({ name: "TOKEN", includeValue: true }))
       .resolves.toMatchObject({ value: "new" })
   })
 

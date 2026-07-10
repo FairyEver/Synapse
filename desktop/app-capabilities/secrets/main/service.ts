@@ -6,7 +6,7 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
 } from "../../../electron/runtime/data-repo/schemas/secrets"
-import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
+import type { SynapseConfig, SynapseConfigPatch } from "../../../src/types/config"
 import type { SkillEnvBindingSecurity, SkillEnvBindingService } from "./skill-env-binding-service"
 import {
   SECRET_NAME_REGEX,
@@ -110,14 +110,11 @@ export function createSecretsService(deps: SecretsServiceDeps) {
 
   async function update(input: SecretUpdateInput): Promise<SecretSafeView> {
     const existing = await requireByName(input.name)
-    const nextName = input.newName !== undefined ? normalizeName(input.newName) : existing.name
-    await assertNameAvailable(nextName, existing.name)
     const description = Object.prototype.hasOwnProperty.call(input, "description")
       ? normalizeDescription(input.description)
       : existing.description
     const item: SecretItemEntryV1 = {
       ...existing,
-      name: nextName,
       value: input.value !== undefined ? input.value : existing.value,
       ...(description ? { description } : { description: undefined }),
       updatedAt: timestamp(),
