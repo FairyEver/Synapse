@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,11 @@ import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { DriveRendererContent, DriveRendererShell } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
@@ -170,14 +175,59 @@ describe('DriveRendererShell', () => {
     expect(html).toContain('overflow-hidden')
     expect(html).not.toContain('overflow-auto"><div class="min-h-full bg-background"')
   })
+
+  it('keeps editable share markdown toolbar registration stable', () => {
+    const snapshot = baseSnapshot({
+      context: 'share',
+      current: {
+        ...baseSnapshot().current,
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+        browserUrl: '/share/share-1',
+        downloadUrl: '/share/share-1/download',
+      },
+      breadcrumbs: [{ id: 'file', name: 'notes.md', browserUrl: '/share/share-1' }],
+      preview: {
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        outline: [],
+        truncated: false,
+        imageUrl: null,
+        visitUrl: null,
+      },
+      annotation: { canComment: true, reason: null },
+    })
+
+    renderShell({
+      snapshot,
+      rendererId: 'markdown',
+      editContext: {
+        reload: vi.fn(async () => snapshot),
+        reloading: false,
+        saveText: vi.fn(),
+        savingText: false,
+      },
+      annotationContext: {
+        context: 'share',
+        shareId: 'share-1',
+        itemId: 'file',
+        canComment: true,
+      },
+    })
+
+    expect(document.body.textContent).toContain('Notes')
+    expect(Array.from(document.querySelectorAll('button')).filter((button) => button.textContent?.trim() === '图片来源')).toHaveLength(1)
+  })
 })
 
-function renderShell({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+function renderShell(props: ComponentProps<typeof DriveRendererShell>) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
   act(() => {
-    root?.render(<DriveRendererShell snapshot={snapshot} rendererId='code' />)
+    root?.render(<DriveRendererShell {...props} />)
   })
 }
 
