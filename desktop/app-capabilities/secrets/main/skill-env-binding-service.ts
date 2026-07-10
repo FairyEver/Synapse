@@ -509,11 +509,28 @@ function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex")
 }
 
-function sameIdentity(left: { dev: number; ino: number; size?: number; mtimeMs?: number }, right: { dev: number; ino: number; size?: number; mtimeMs?: number }): boolean {
+function sameIdentity(left: {
+  dev: number
+  ino: number
+  size?: number
+  mtimeMs?: number
+  ctimeMs?: number
+  birthtimeMs?: number
+}, right: {
+  dev: number
+  ino: number
+  size?: number
+  mtimeMs?: number
+  ctimeMs?: number
+  birthtimeMs?: number
+}): boolean {
   if (left.dev !== 0 && right.dev !== 0 && left.ino !== 0 && right.ino !== 0) {
     return left.dev === right.dev && left.ino === right.ino
   }
-  return left.size === right.size && left.mtimeMs === right.mtimeMs
+  return left.size === right.size
+    && left.mtimeMs === right.mtimeMs
+    && left.ctimeMs === right.ctimeMs
+    && left.birthtimeMs === right.birthtimeMs
 }
 
 function isPermissionLikeError(error: unknown): boolean {
