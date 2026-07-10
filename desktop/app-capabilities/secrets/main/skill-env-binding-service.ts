@@ -50,6 +50,7 @@ export type SkillEnvBindingServiceDeps = {
     rename(sourcePath: string, targetPath: string): Promise<void>
     remove(filePath: string): Promise<void>
   }
+  readonly platform?: NodeJS.Platform
 }
 
 type StoredBinding = {
@@ -107,6 +108,27 @@ class BindingContentChangedError extends Error {
   readonly code = "conflict"
 }
 
+type PreparedAtomicEnvReplacement = {
+  readonly path: string
+  readonly handle: FileHandle
+}
+
+type TempCleanupReport = {
+  readonly truncated: boolean
+  readonly synced: boolean
+  readonly closed: boolean
+  readonly removed: boolean
+}
+
+class AtomicStageError extends Error {
+  readonly cleanup?: TempCleanupReport
+
+  constructor(cause: unknown, cleanup?: TempCleanupReport) {
+    super("atomic Skill env staging failed", { cause })
+    this.cleanup = cleanup
+  }
+}
+
 class BindingIoError extends Error {
   readonly code = "failed"
   readonly causeCode?: string
@@ -122,6 +144,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
   let queueTail: Promise<void> = Promise.resolve()
   const now = () => deps.now?.() ?? Date.now()
   const createId = () => deps.createId?.() ?? randomUUID()
+  const platform = deps.platform ?? process.platform
   const atomicFileOps = deps.atomicFileOps ?? {
     open: (filePath: string, flags: number, mode: number) => open(filePath, flags, mode),
     rename,
@@ -373,7 +396,29 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         "write",
         deps.openFile,
       )
-      let stagedPath: string | undefined
+      let staged: PreparedAtomicEnvReplacement | undefined
+      const finishStagedResult = async (
+        status: SkillEnvBindingQueueItem["status"],
+        message: string | undefined,
+        auditOutcome?: "allowed" | "denied" | "failed",
+      ): Promise<SkillEnvBindingQueueItem> => {
+        if (!staged) return recordQueueResult(base, status, message, security, auditMetadata, auditOutcome)
+        const pending = staged
+        staged = undefined
+        const cleanup = await cleanupAtomicEnvReplacement(pending, atomicFileOps)
+        const metadata = { ...auditMetadata, ...cleanupReportMetadata(cleanup) }
+        if (hasCleanupFailures(cleanup)) {
+          deps.logger.warn("Failed to fully clean staged Skill env content.", {
+            scope: stored.publicItem.scope,
+            skillName: stored.publicItem.skillName,
+            tempSecretSanitized: isSecretSanitized(cleanup),
+          })
+        }
+        if (isUnsafeCleanup(cleanup)) {
+          return recordQueueResult(base, "failed", "临时配置清理失败。", security, metadata, "failed")
+        }
+        return recordQueueResult(base, status, message, security, metadata, auditOutcome)
+      }
       try {
         if (!sameIdentity(stored.rootIdentity, validated.rootIdentity)
           || !sameIdentity(stored.skillIdentity, validated.skillIdentity)
@@ -396,6 +441,16 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
           return recordQueueResult(base, "conflict", "配置键已发生变化。", security, auditMetadata)
         }
         const nextContent = patchDotenvValues(validated.content, { [matches[0].name]: value })
+        if (platform === "win32") {
+          return recordQueueResult(
+            base,
+            "failed",
+            "当前 Windows 环境不支持安全原子更新。",
+            security,
+            auditMetadata,
+            "failed",
+          )
+        }
         const permission = await security.permissionGuard.check({
           action: "fs.write",
           actor: security.actor,
@@ -408,7 +463,7 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
             policyId: permission.policyId,
           }, "denied")
         }
-        stagedPath = await prepareAtomicEnvReplacement(
+        staged = await prepareAtomicEnvReplacement(
           validated.envPath,
           nextContent,
           Number(validated.mode & 0o7777n),
@@ -417,34 +472,72 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
         const currentStat = await validated.handle.stat({ bigint: true })
         const pathStat = await lstat(stored.publicItem.envPath)
         const currentEnvRealPath = await realpath(stored.publicItem.envPath)
-        if (!sameIdentity(currentStat, pathStat) || currentEnvRealPath !== validated.envPath) {
-          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+        if (!sameIdentity(currentStat, pathStat)
+          || !samePermissionMode(currentStat.mode, validated.mode)
+          || currentEnvRealPath !== validated.envPath) {
+          return await finishStagedResult("conflict", "配置文件已发生变化。")
         }
         if (!(await bindingStillMatches(stored))) {
-          return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+          return await finishStagedResult("conflict", "扫描结果已失效。")
         }
         const currentContent = await readFileHandleSnapshot(validated.handle, currentStat.size)
         if (hashContent(currentContent) !== stored.fileHash) {
-          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+          return await finishStagedResult("conflict", "配置文件已发生变化。")
         }
         const postReadStat = await validated.handle.stat({ bigint: true })
         const postReadPathStat = await lstat(stored.publicItem.envPath)
         const postReadEnvRealPath = await realpath(stored.publicItem.envPath)
         if (!sameIdentity(postReadStat, postReadPathStat)
+          || !samePermissionMode(postReadStat.mode, validated.mode)
           || postReadEnvRealPath !== validated.envPath
           || !(await bindingStillMatches(stored))) {
-          return recordQueueResult(base, "conflict", "扫描结果已失效。", security, auditMetadata)
+          return await finishStagedResult("conflict", "扫描结果已失效。")
         }
-        const finalContent = await readFileHandleSnapshot(validated.handle, postReadStat.size)
+        const finalStat = await validated.handle.stat({ bigint: true })
+        if (!finalStat.isFile()
+          || !sameIdentity(finalStat, validated.envIdentity)
+          || !samePermissionMode(finalStat.mode, validated.mode)) {
+          return await finishStagedResult("conflict", "配置文件已发生变化。")
+        }
+        const finalContent = await readFileHandleSnapshot(validated.handle, finalStat.size)
         if (hashContent(finalContent) !== stored.fileHash) {
-          return recordQueueResult(base, "conflict", "配置文件已发生变化。", security, auditMetadata)
+          return await finishStagedResult("conflict", "配置文件已发生变化。")
         }
-        await atomicFileOps.rename(stagedPath, validated.envPath)
-        stagedPath = undefined
-        return recordQueueResult(base, "updated", undefined, security, auditMetadata)
+        try {
+          // The replacement immediately follows the final optimistic validation; it is not a strict cross-process CAS.
+          await atomicFileOps.rename(staged.path, validated.envPath)
+        } catch {
+          return await finishStagedResult("failed", "配置文件写入失败。", "failed")
+        }
+        const committed = staged
+        staged = undefined
+        let committedHandleCloseFailed = false
+        try {
+          await committed.handle.close()
+        } catch {
+          committedHandleCloseFailed = true
+          deps.logger.warn("Failed to close committed Skill env handle.", {
+            scope: stored.publicItem.scope,
+            skillName: stored.publicItem.skillName,
+          })
+        }
+        return recordQueueResult(base, "updated", undefined, security, {
+          ...auditMetadata,
+          ...(committedHandleCloseFailed ? { committedHandleCloseFailed: true } : undefined),
+        })
+      } catch (error) {
+        if (staged && error instanceof BindingContentChangedError) {
+          return await finishStagedResult("conflict", "配置文件已发生变化。")
+        }
+        if (staged) {
+          const pending = staged
+          staged = undefined
+          const cleanup = await cleanupAtomicEnvReplacement(pending, atomicFileOps)
+          throw new AtomicStageError(error, cleanup)
+        }
+        throw error
       } finally {
         await validated.handle.close().catch(() => undefined)
-        if (stagedPath) await atomicFileOps.remove(stagedPath).catch(() => undefined)
       }
     } catch (error) {
       if (error instanceof BindingContentChangedError) {
@@ -456,6 +549,12 @@ export function createSkillEnvBindingService(deps: SkillEnvBindingServiceDeps) {
       })
       if (error instanceof UnsafeBindingError) {
         return recordQueueResult(base, "failed", "配置文件路径不安全。", security, auditMetadata)
+      }
+      if (error instanceof AtomicStageError) {
+        const metadata = error.cleanup
+          ? { ...auditMetadata, ...cleanupReportMetadata(error.cleanup) }
+          : auditMetadata
+        return recordQueueResult(base, "failed", "配置文件写入失败。", security, metadata, "failed")
       }
       return recordQueueResult(base, "failed", "配置文件写入失败。", security, auditMetadata, "failed")
     }
@@ -728,7 +827,7 @@ async function prepareAtomicEnvReplacement(
   content: string,
   mode: number,
   atomicFileOps: NonNullable<SkillEnvBindingServiceDeps["atomicFileOps"]>,
-): Promise<string> {
+): Promise<PreparedAtomicEnvReplacement> {
   const temporaryPath = path.join(path.dirname(envPath), `.synapse-env-${randomUUID()}.tmp`)
   const noFollowFlag = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0
   const nonBlockingFlag = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0
@@ -737,20 +836,76 @@ async function prepareAtomicEnvReplacement(
     | constants.O_EXCL
     | noFollowFlag
     | nonBlockingFlag
-  let handle: FileHandle | undefined
+  let prepared: PreparedAtomicEnvReplacement | undefined
   try {
-    handle = await atomicFileOps.open(temporaryPath, flags, 0o600)
+    const handle = await atomicFileOps.open(temporaryPath, flags, 0o600)
+    prepared = { path: temporaryPath, handle }
     await writeFileHandleFully(handle, content)
     await handle.chmod(mode)
     await handle.sync()
-    await handle.close()
-    handle = undefined
-    return temporaryPath
+    return prepared
   } catch (error) {
-    await handle?.close().catch(() => undefined)
-    await atomicFileOps.remove(temporaryPath).catch(() => undefined)
-    throw error
+    if (!prepared) throw error
+    const cleanup = await cleanupAtomicEnvReplacement(prepared, atomicFileOps)
+    throw new AtomicStageError(error, cleanup)
   }
+}
+
+async function cleanupAtomicEnvReplacement(
+  prepared: PreparedAtomicEnvReplacement,
+  atomicFileOps: NonNullable<SkillEnvBindingServiceDeps["atomicFileOps"]>,
+): Promise<TempCleanupReport> {
+  let truncated = false
+  let synced = false
+  let closed = false
+  let removed = false
+  try {
+    await prepared.handle.truncate(0)
+    truncated = true
+  } catch {
+    // Continue: sync, close, and path cleanup are independent safety attempts.
+  }
+  try {
+    await prepared.handle.sync()
+    synced = true
+  } catch {
+    // Continue: closing and removing can still make the staged secret inaccessible.
+  }
+  try {
+    await prepared.handle.close()
+    closed = true
+  } catch {
+    // Continue: unlinking an open zero-length file is safe where the platform permits it.
+  }
+  try {
+    await atomicFileOps.remove(prepared.path)
+    removed = true
+  } catch {
+    // The caller records sanitized cleanup state without exposing the path or content.
+  }
+  return { truncated, synced, closed, removed }
+}
+
+function cleanupReportMetadata(report: TempCleanupReport): Record<string, boolean> {
+  return {
+    tempTruncateFailed: !report.truncated,
+    tempSyncFailed: !report.synced,
+    tempCloseFailed: !report.closed,
+    tempRemoveFailed: !report.removed,
+    tempSecretSanitized: isSecretSanitized(report),
+  }
+}
+
+function hasCleanupFailures(report: TempCleanupReport): boolean {
+  return !report.truncated || !report.synced || !report.closed || !report.removed
+}
+
+function isUnsafeCleanup(report: TempCleanupReport): boolean {
+  return !isSecretSanitized(report)
+}
+
+function isSecretSanitized(report: TempCleanupReport): boolean {
+  return report.removed || (report.truncated && report.synced)
 }
 
 async function writeFileHandleFully(handle: FileHandle, content: string): Promise<void> {
@@ -771,6 +926,10 @@ function toFileIdentity(stats: {
     dev: stats.dev,
     ino: stats.ino,
   }
+}
+
+function samePermissionMode(left: bigint, right: bigint): boolean {
+  return (left & 0o7777n) === (right & 0o7777n)
 }
 
 export function sameIdentity(left: {

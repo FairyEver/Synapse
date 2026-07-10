@@ -944,6 +944,347 @@ describe("SkillEnvBindingService", () => {
     expect(await listSkillEnvTemps(skill)).toEqual([])
   })
 
+  it("conflicts when env permission bits change during permission wait", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    await chmod(envPath, 0o640)
+    const harness = createHarness([trustedRoot(root)])
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    let releasePermission!: () => void
+    const permissionGate = new Promise<void>((resolve) => { releasePermission = resolve })
+    harness.security.permissionGuard.check = vi.fn(async (request) => {
+      harness.permissionRequests.push(request)
+      if (request.action === "fs.write") await permissionGate
+      return { allowed: true as const }
+    })
+
+    const queued = harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+    while (!harness.permissionRequests.some(({ action }) => action === "fs.write")) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    await chmod(envPath, 0o600)
+    releasePermission()
+
+    const result = await queued
+    expect(result.items).toEqual([expect.objectContaining({ status: "conflict" })])
+    expect(await readFile(envPath, "utf8")).toBe("TOKEN=old\n")
+    expect((await stat(envPath)).mode & 0o7777).toBe(0o600)
+    expect(await listSkillEnvTemps(skill)).toEqual([])
+  })
+
+  it("conflicts when env permission bits change during post-read validation", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const envPath = path.join(skill, ".env")
+    await chmod(envPath, 0o640)
+    let attackQueue = false
+    let queueStatCalls = 0
+    const harness = createHarness([trustedRoot(root)], () => 100, async (filePath, flags) => {
+      const handle = await open(filePath, flags)
+      if (!attackQueue) return handle
+      const originalStat = handle.stat.bind(handle)
+      return new Proxy(handle, {
+        get(target, property, receiver) {
+          if (property === "stat") {
+            return async (options?: { bigint?: boolean }) => {
+              queueStatCalls += 1
+              if (queueStatCalls === 3) await chmod(envPath, 0o600)
+              return originalStat(options as never)
+            }
+          }
+          return Reflect.get(target, property, receiver)
+        },
+      }) as FileHandle
+    })
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    attackQueue = true
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(queueStatCalls).toBeGreaterThanOrEqual(3)
+    expect(result.items).toEqual([expect.objectContaining({ status: "conflict" })])
+    expect(await readFile(envPath, "utf8")).toBe("TOKEN=old\n")
+    expect((await stat(envPath)).mode & 0o7777).toBe(0o600)
+    expect(await listSkillEnvTemps(skill)).toEqual([])
+  })
+
+  it("fails closed on Windows without staging or modifying selected env files", async () => {
+    const root = await createRoot()
+    const first = await createSkill(root, "first", "TOKEN=old-first\n")
+    const second = await createSkill(root, "second", "TOKEN=old-second\n")
+    let stagedOpenCalls = 0
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      createAtomicFileOps({
+        open: async (filePath, flags, mode) => {
+          stagedOpenCalls += 1
+          return open(filePath, flags, mode)
+        },
+      }),
+      "win32",
+    )
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: scan.items.map(({ id }) => id),
+    }, "new", harness.security)
+
+    expect(stagedOpenCalls).toBe(0)
+    expect(result.items).toEqual([
+      expect.objectContaining({ skillName: "first", status: "failed", message: "当前 Windows 环境不支持安全原子更新。" }),
+      expect.objectContaining({ skillName: "second", status: "failed", message: "当前 Windows 环境不支持安全原子更新。" }),
+    ])
+    expect(await readFile(path.join(first, ".env"), "utf8")).toBe("TOKEN=old-first\n")
+    expect(await readFile(path.join(second, ".env"), "utf8")).toBe("TOKEN=old-second\n")
+    expect(await listSkillEnvTemps(first)).toEqual([])
+    expect(await listSkillEnvTemps(second)).toEqual([])
+  })
+
+  it("zeroes a staged secret through its handle when the Skill parent moves before rename fails", async () => {
+    const root = await createRoot()
+    const skill = await createSkill(root, "demo", "TOKEN=old\n")
+    const movedSkill = path.join(root, "demo-old")
+    const envPath = path.join(skill, ".env")
+    let stagedHandle: FileHandle | undefined
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      createAtomicFileOps({
+        open: async (filePath, flags, mode) => {
+          stagedHandle = await open(filePath, flags, mode)
+          return stagedHandle
+        },
+        rename: async () => {
+          await rename(skill, movedSkill)
+          await mkdir(skill)
+          await writeFile(path.join(skill, "SKILL.md"), "# replacement\n")
+          await writeFile(envPath, "TOKEN=external\n")
+          throw new Error("simulated rename failure after parent move")
+        },
+      }),
+    )
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [scan.items[0].id],
+    }, "new", harness.security)
+
+    expect(result.items).toEqual([expect.objectContaining({ status: "failed" })])
+    const leftovers = await listSkillEnvTemps(movedSkill)
+    expect(leftovers).toHaveLength(1)
+    expect((await stat(path.join(movedSkill, leftovers[0]))).size).toBe(0)
+    expect(await readFile(envPath, "utf8")).toBe("TOKEN=external\n")
+    expect(stagedHandle).toBeDefined()
+  })
+
+  it.each(["chmod", "sync", "close", "remove"] as const)(
+    "sanitizes a failed staged file when temp %s fails and continues the queue",
+    async (failurePoint) => {
+      const root = await createRoot()
+      const first = await createSkill(root, "first", "TOKEN=old-first\n")
+      const second = await createSkill(root, "second", "TOKEN=old-second\n")
+      const firstEnvPath = path.join(first, ".env")
+      const firstRealPath = await realpath(first)
+      const firstEnvRealPath = await realpath(firstEnvPath)
+      let firstTempPath: string | undefined
+      let firstHandle: FileHandle | undefined
+      let closeOriginalHandle: (() => Promise<void>) | undefined
+      let cleanupPhase = false
+      let stageSyncCalls = 0
+      let truncateCalls = 0
+      const atomicFileOps = createAtomicFileOps({
+        open: async (filePath, flags, mode) => {
+          const handle = await open(filePath, flags, mode)
+          if (path.dirname(filePath) !== firstRealPath) return handle
+          firstTempPath = filePath
+          firstHandle = handle
+          const originalTruncate = handle.truncate.bind(handle)
+          const originalChmod = handle.chmod.bind(handle)
+          const originalSync = handle.sync.bind(handle)
+          const originalClose = handle.close.bind(handle)
+          closeOriginalHandle = originalClose
+          return new Proxy(handle, {
+            get(target, property, receiver) {
+              if (property === "truncate") {
+                return async (length?: number) => {
+                  truncateCalls += 1
+                  return originalTruncate(length)
+                }
+              }
+              if (property === "chmod") {
+                return async (modeValue: number) => {
+                  if (failurePoint === "chmod") {
+                    cleanupPhase = true
+                    throw new Error("simulated temp chmod failure")
+                  }
+                  return originalChmod(modeValue)
+                }
+              }
+              if (property === "sync") {
+                return async () => {
+                  stageSyncCalls += 1
+                  if (failurePoint === "sync" && stageSyncCalls === 1) {
+                    cleanupPhase = true
+                    throw new Error("simulated temp sync failure")
+                  }
+                  return originalSync()
+                }
+              }
+              if (property === "close") {
+                return async () => {
+                  if (failurePoint === "close" && cleanupPhase) {
+                    throw new Error("simulated temp close failure")
+                  }
+                  return originalClose()
+                }
+              }
+              return Reflect.get(target, property, receiver)
+            },
+          }) as FileHandle
+        },
+        rename: async (sourcePath, targetPath) => {
+          if (targetPath === firstEnvRealPath && (failurePoint === "close" || failurePoint === "remove")) {
+            cleanupPhase = true
+            throw new Error("simulated rename failure for cleanup")
+          }
+          await rename(sourcePath, targetPath)
+        },
+        remove: async (filePath) => {
+          if (filePath === firstTempPath && failurePoint === "remove") {
+            throw new Error("simulated temp remove failure")
+          }
+          await rm(filePath, { force: true })
+        },
+      })
+      const harness = createHarness(
+        [trustedRoot(root)],
+        () => 100,
+        undefined,
+        undefined,
+        atomicFileOps,
+      )
+      const scan = await harness.service.scan("TOKEN", "new", harness.security)
+      const byName = new Map(scan.items.map((item) => [item.skillName, item.id]))
+
+      const result = await harness.service.enqueue({
+        name: "TOKEN",
+        scanSessionId: scan.scanSessionId,
+        itemIds: [byName.get("first")!, byName.get("second")!],
+      }, "new", harness.security)
+
+      expect(result.items).toEqual([
+        expect.objectContaining({ skillName: "first", status: "failed" }),
+        expect.objectContaining({ skillName: "second", status: "updated" }),
+      ])
+      expect(truncateCalls).toBeGreaterThan(0)
+      expect(await readFile(firstEnvPath, "utf8")).toBe("TOKEN=old-first\n")
+      expect(await readFile(path.join(second, ".env"), "utf8")).toBe('TOKEN="new"\n')
+      if (failurePoint === "close") {
+        expect(firstHandle).toBeDefined()
+        expect((await firstHandle!.stat()).size).toBe(0)
+        await closeOriginalHandle?.()
+      }
+      if (failurePoint === "remove") {
+        expect(firstTempPath).toBeDefined()
+        expect((await stat(firstTempPath!)).size).toBe(0)
+        await rm(firstTempPath!, { force: true })
+      }
+    },
+  )
+
+  it.each([
+    ["truncate and sync", true],
+    ["sync and remove", false],
+  ] as const)("records a failed safety cleanup when temp %s fail", async (_case, truncateFails) => {
+    const root = await createRoot()
+    const first = await createSkill(root, "first", "TOKEN=old-first\n")
+    const second = await createSkill(root, "second", "TOKEN=old-second\n")
+    const firstEnvPath = path.join(first, ".env")
+    const firstRealPath = await realpath(first)
+    const firstEnvRealPath = await realpath(firstEnvPath)
+    let firstTempPath: string | undefined
+    let syncCalls = 0
+    const atomicFileOps = createAtomicFileOps({
+      open: async (filePath, flags, mode) => {
+        const handle = await open(filePath, flags, mode)
+        if (path.dirname(filePath) !== firstRealPath) return handle
+        firstTempPath = filePath
+        const originalTruncate = handle.truncate.bind(handle)
+        const originalSync = handle.sync.bind(handle)
+        return new Proxy(handle, {
+          get(target, property, receiver) {
+            if (property === "truncate") {
+              return async () => {
+                if (truncateFails) throw new Error("simulated truncate failure")
+                return originalTruncate(0)
+              }
+            }
+            if (property === "sync") {
+              return async () => {
+                syncCalls += 1
+                if (syncCalls > 1) throw new Error("simulated cleanup sync failure")
+                return originalSync()
+              }
+            }
+            return Reflect.get(target, property, receiver)
+          },
+        }) as FileHandle
+      },
+      rename: async (_sourcePath, targetPath) => {
+        if (targetPath === firstEnvRealPath) throw new Error("simulated rename failure")
+        throw new Error("unexpected second rename")
+      },
+      remove: async (filePath) => {
+        if (filePath === firstTempPath) throw new Error("simulated remove failure")
+        await rm(filePath, { force: true })
+      },
+    })
+    const harness = createHarness(
+      [trustedRoot(root)],
+      () => 100,
+      undefined,
+      undefined,
+      atomicFileOps,
+    )
+    const scan = await harness.service.scan("TOKEN", "new", harness.security)
+    const firstItem = scan.items.find(({ skillName }) => skillName === "first")!
+
+    const result = await harness.service.enqueue({
+      name: "TOKEN",
+      scanSessionId: scan.scanSessionId,
+      itemIds: [firstItem.id],
+    }, "new", harness.security)
+
+    expect(result.items).toEqual([expect.objectContaining({ status: "failed" })])
+    const audit = harness.auditEvents.find((event) => event.resource === firstEnvPath && event.action === "fs.write")
+    expect(audit?.metadata).toMatchObject({
+      tempTruncateFailed: truncateFails,
+      tempSyncFailed: true,
+      tempSecretSanitized: false,
+    })
+    expect(firstTempPath).toBeDefined()
+    await rm(firstTempPath!, { force: true })
+    expect(await readFile(path.join(second, ".env"), "utf8")).toBe("TOKEN=old-second\n")
+  })
+
   it("opens source env handles with O_NONBLOCK for scan and queue", async () => {
     const root = await createRoot()
     await createSkill(root, "demo", "TOKEN=old\n")
@@ -1051,6 +1392,7 @@ function createHarness(
   openFile?: (filePath: string, flags: number) => Promise<FileHandle>,
   beforeBindingOpen?: (phase: "scan" | "queue") => Promise<void>,
   atomicFileOps?: AtomicFileOps,
+  platform?: NodeJS.Platform,
 ) {
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
   const permissionRequests: Parameters<PermissionGuard["check"]>[0][] = []
@@ -1067,6 +1409,7 @@ function createHarness(
     clearForTests: vi.fn(),
   }
   let nextId = 1
+  const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }
   const deps = {
     listRoots: async () => roots,
     createId: () => `id-${nextId++}`,
@@ -1074,13 +1417,15 @@ function createHarness(
     openFile,
     beforeBindingOpen,
     atomicFileOps,
-    logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    platform,
+    logger,
   }
   const service = createSkillEnvBindingService(deps)
   return {
     service,
     permissionRequests,
     auditEvents,
+    logger,
     permissionGuard,
     security: { actor: { kind: "user" as const }, permissionGuard, auditSink },
   }
