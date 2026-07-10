@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { errorLogCode, errorLogName } from "./error-sanitize"
 import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
@@ -31,6 +31,23 @@ function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
 
 type AtomicSwapOptions = {
   readonly beforeSwap?: () => Promise<void>
+  readonly afterMoveExistingTarget?: (movedTargetPath: string) => Promise<void>
+}
+
+class AtomicSwapRestoreError extends Error {
+  constructor(cause: unknown) {
+    super("原目标自动恢复失败，请手动处理保留的目标和备份。", { cause })
+  }
+}
+
+async function pathEntryExists(targetPath: string): Promise<boolean> {
+  try {
+    await lstat(targetPath)
+    return true
+  } catch (error) {
+    if (isFileNotFoundError(error)) return false
+    throw error
+  }
 }
 
 async function swapPathAtomically(
@@ -57,14 +74,25 @@ async function swapPathAtomically(
     if (hadExistingTarget) {
       await rename(targetPath, backupPath)
       movedExistingTarget = true
+      await options.afterMoveExistingTarget?.(backupPath)
     }
 
     await rename(replacementPath, targetPath)
     movedReplacement = true
   } catch (error) {
     if (movedExistingTarget && !movedReplacement) {
-      await rename(backupPath, targetPath)
-        .catch((err) => logger.warn("Failed to restore backup", createEditorWriteErrorLogMeta(err)))
+      try {
+        if (await pathEntryExists(targetPath)) {
+          throw new Error("atomic swap target reappeared before restore", { cause: error })
+        }
+        await rename(backupPath, targetPath)
+      } catch (restoreError) {
+        logger.warn("Failed to safely restore atomic swap backup", {
+          targetName,
+          ...createEditorWriteErrorLogMeta(restoreError),
+        })
+        throw new AtomicSwapRestoreError(restoreError)
+      }
     }
 
     throw error

@@ -9,6 +9,7 @@ import {
 } from "../../../src/lib/content-attachments"
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
 import { createDotenvFromExample, mergeDotenvExample } from "./dotenv-document"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "./file-policy"
 
 export type MaterializeSkillEnvInput = {
   readonly stagingDirectoryPath: string
@@ -19,6 +20,7 @@ export type MaterializeSkillEnvInput = {
 
 export type SkillEnvMaterializationGuard = {
   readonly validate: () => Promise<void>
+  readonly validateMovedTarget: (movedTargetPath: string) => Promise<void>
 }
 
 function isMissingPathError(error: unknown): boolean {
@@ -39,6 +41,10 @@ function createChangedEnvError(): Error {
 
 function createChangedTargetDirectoryError(): Error {
   return new Error("Skill 目标目录在读取 .env 期间发生变化。")
+}
+
+function createOversizedEnvError(): Error {
+  return new Error("Skill .env 超过 1 MiB 限制。")
 }
 
 function assertRegularEnvEntry(entry: { isFile(): boolean; isSymbolicLink(): boolean }): void {
@@ -231,7 +237,7 @@ async function readExistingEnv(
     await assertEnvPathMatchesOpenedFile(existingEnvPath, openedEntry, targetDirectory)
     await assertSameTargetDirectory(targetPath, targetDirectory)
 
-    const content = await handle.readFile()
+    const content = await readBoundedEnvSnapshot(handle, openedEntry.size)
     const finalOpenedEntry = await handle.stat({ bigint: true })
     if (!hasSameFileSnapshot(openedEntry, finalOpenedEntry)) {
       throw createChangedEnvError()
@@ -251,6 +257,34 @@ async function readExistingEnv(
   } finally {
     await handle.close()
   }
+}
+
+async function readBoundedEnvSnapshot(
+  handle: Awaited<ReturnType<typeof open>>,
+  expectedSize: bigint,
+): Promise<Buffer> {
+  if (expectedSize < 0n || expectedSize > SKILL_RUNTIME_ENV_MAX_BYTES) {
+    throw createOversizedEnvError()
+  }
+
+  const byteLength = Number(expectedSize)
+  const content = Buffer.allocUnsafe(byteLength)
+  let offset = 0
+  while (offset < byteLength) {
+    const { bytesRead } = await handle.read(content, offset, byteLength - offset, offset)
+    if (bytesRead <= 0) throw createChangedEnvError()
+    offset += bytesRead
+  }
+
+  const trailingByte = Buffer.allocUnsafe(1)
+  const { bytesRead: trailingBytesRead } = await handle.read(
+    trailingByte,
+    0,
+    1,
+    byteLength,
+  )
+  if (trailingBytesRead !== 0) throw createChangedEnvError()
+  return content
 }
 
 async function assertStagingHasNoRuntimeEnv(stagingDirectoryPath: string): Promise<void> {
@@ -273,6 +307,21 @@ function createMaterializationGuard(
   targetDirectory: TargetDirectoryIdentity | null,
   existingEnv: ExistingEnvSnapshot | null,
 ): SkillEnvMaterializationGuard {
+  async function assertExpectedEnv(targetDirectoryPath: string, directory: TargetDirectoryIdentity): Promise<void> {
+    const currentEnv = await readExistingEnv(targetDirectoryPath, directory)
+    if (existingEnv === null) {
+      if (currentEnv !== null) throw createChangedEnvError()
+      return
+    }
+    if (
+      currentEnv === null
+      || !hasSameFileSnapshot(currentEnv.file, existingEnv.file)
+      || !currentEnv.content.equals(existingEnv.content)
+    ) {
+      throw createChangedEnvError()
+    }
+  }
+
   return {
     async validate() {
       if (targetDirectory === null) {
@@ -281,20 +330,52 @@ function createMaterializationGuard(
       }
 
       await assertSameTargetDirectory(targetPath, targetDirectory)
-      const currentEnv = await readExistingEnv(targetPath, targetDirectory)
-      if (existingEnv === null) {
-        if (currentEnv !== null) throw createChangedEnvError()
-        return
-      }
-      if (
-        currentEnv === null
-        || !hasSameFileSnapshot(currentEnv.file, existingEnv.file)
-        || !currentEnv.content.equals(existingEnv.content)
-      ) {
-        throw createChangedEnvError()
-      }
+      await assertExpectedEnv(targetPath, targetDirectory)
+    },
+    async validateMovedTarget(movedTargetPath) {
+      if (targetDirectory === null) throw createChangedTargetDirectoryError()
+      const movedDirectory = await readMovedTargetDirectoryIdentity(
+        movedTargetPath,
+        targetDirectory,
+      )
+      await assertExpectedEnv(movedTargetPath, movedDirectory)
     },
   }
+}
+
+async function readMovedTargetDirectoryIdentity(
+  movedTargetPath: string,
+  expected: TargetDirectoryIdentity,
+): Promise<TargetDirectoryIdentity> {
+  let movedEntry
+  try {
+    movedEntry = await lstat(movedTargetPath, { bigint: true })
+  } catch (error) {
+    if (isMissingPathError(error)) throw createChangedTargetDirectoryError()
+    throw error
+  }
+  assertTargetDirectoryEntry(movedEntry)
+  assertUsableIdentity(movedEntry, "Skill 目标目录")
+  if (!hasSameIdentity(movedEntry, expected)) throw createChangedTargetDirectoryError()
+
+  const [movedRealPath, movedParentRealPath] = await Promise.all([
+    realpath(movedTargetPath),
+    realpath(path.dirname(movedTargetPath)),
+  ])
+  if (
+    !isSameFilesystemPath(path.dirname(movedRealPath), movedParentRealPath)
+    || !isSameFilesystemPath(movedParentRealPath, path.dirname(expected.realPath))
+  ) {
+    throw createChangedTargetDirectoryError()
+  }
+
+  const movedIdentity = {
+    dev: movedEntry.dev,
+    ino: movedEntry.ino,
+    realPath: movedRealPath,
+  }
+  await assertSameTargetDirectory(movedTargetPath, movedIdentity)
+  return movedIdentity
 }
 
 export async function materializeSkillEnv(

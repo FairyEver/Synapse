@@ -5,6 +5,7 @@ import path from "node:path"
 
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { TrustedSkillRoot } from "../../../electron/services/editor-scan-roots"
+import { SKILL_RUNTIME_ENV_MAX_BYTES } from "../../../electron/services/skill-env/file-policy"
 import {
   canonicalizeDotenvValue,
   parseDotenvDocument,
@@ -19,8 +20,6 @@ import type {
 } from "../shared/schema"
 
 const SCAN_SESSION_TTL_MS = 300_000
-const MAX_ENV_FILE_BYTES = 1024n * 1024n
-
 function lstat(filePath: string) {
   return fsLstat(filePath, { bigint: true })
 }
@@ -801,7 +800,7 @@ function hashContent(content: string): string {
 }
 
 async function readFileHandleSnapshot(handle: FileHandle, expectedSize: bigint): Promise<string> {
-  if (expectedSize < 0n || expectedSize > MAX_ENV_FILE_BYTES) {
+  if (expectedSize < 0n || expectedSize > SKILL_RUNTIME_ENV_MAX_BYTES) {
     throw new BindingIoError("configuration file exceeds the size limit")
   }
   const byteLength = Number(expectedSize)

@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createEditorWriteErrorLogMeta,
   formatEditorWriteFailure,
+  replaceDirectoryAtomically,
   replaceFileAtomically,
 } from "../editor-file-write-utils"
 
@@ -74,5 +75,40 @@ describe("editor file write utils", () => {
     const serializedLogs = JSON.stringify(logStoreMock.logger.info.mock.calls)
     expect(serializedLogs).not.toContain(tempDir)
     expect(serializedLogs).not.toContain(targetPath)
+  })
+
+  it("preserves a concurrent target and moved backup when the post-move hook fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+    let movedTargetPath = ""
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, "old-marker.txt"), "old", "utf8")
+
+    await expect(replaceDirectoryAtomically(
+      targetPath,
+      async (stagingDirectoryPath) => {
+        await writeFile(path.join(stagingDirectoryPath, "new-marker.txt"), "new", "utf8")
+      },
+      {
+        afterMoveExistingTarget: async (backupPath) => {
+          movedTargetPath = backupPath
+          await mkdir(targetPath)
+          await writeFile(path.join(targetPath, "concurrent-marker.txt"), "concurrent", "utf8")
+          throw new Error("post-move validation failed")
+        },
+      },
+    )).rejects.toThrow("原目标自动恢复失败")
+
+    await expect(readFile(path.join(targetPath, "concurrent-marker.txt"), "utf8"))
+      .resolves.toBe("concurrent")
+    await expect(readFile(path.join(movedTargetPath, "old-marker.txt"), "utf8"))
+      .resolves.toBe("old")
+    await expect(readFile(path.join(targetPath, "new-marker.txt")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Failed to safely restore atomic swap backup",
+      expect.objectContaining({ errorName: "Error", targetName: "skill" }),
+    )
   })
 })

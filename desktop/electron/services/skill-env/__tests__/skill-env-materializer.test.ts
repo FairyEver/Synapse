@@ -1,5 +1,6 @@
-import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink, truncate, writeFile } from "node:fs/promises"
 import { constants } from "node:fs"
+import type { FileHandle } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,9 +9,11 @@ const fsMocks = vi.hoisted(() => ({
   actualLstat: null as typeof import("node:fs/promises").lstat | null,
   actualOpen: null as typeof import("node:fs/promises").open | null,
   actualRealpath: null as typeof import("node:fs/promises").realpath | null,
+  actualRename: null as typeof import("node:fs/promises").rename | null,
   lstat: vi.fn<typeof import("node:fs/promises").lstat>(),
   open: vi.fn<typeof import("node:fs/promises").open>(),
   realpath: vi.fn<typeof import("node:fs/promises").realpath>(),
+  rename: vi.fn<typeof import("node:fs/promises").rename>(),
 }))
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -18,18 +21,24 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   fsMocks.actualLstat = actual.lstat
   fsMocks.actualOpen = actual.open
   fsMocks.actualRealpath = actual.realpath
+  fsMocks.actualRename = actual.rename
   fsMocks.lstat.mockImplementation(actual.lstat)
   fsMocks.open.mockImplementation(actual.open)
   fsMocks.realpath.mockImplementation(actual.realpath)
+  fsMocks.rename.mockImplementation(actual.rename)
   return {
     ...actual,
     lstat: fsMocks.lstat,
     open: fsMocks.open,
     realpath: fsMocks.realpath,
+    rename: fsMocks.rename,
   }
 })
 
-import { materializeSkillEnv } from "../skill-env-materializer"
+import {
+  materializeSkillEnv,
+  type SkillEnvMaterializationGuard,
+} from "../skill-env-materializer"
 import { replaceDirectoryAtomically } from "../../editor-file-write-utils"
 
 const tempRoots: string[] = []
@@ -53,7 +62,7 @@ async function replaceWithMaterializedEnv(
   targetPath: string,
   mutateAfterMaterialize: () => Promise<void>,
 ): Promise<void> {
-  let guard: { validate(): Promise<void> } | null = null
+  let guard: SkillEnvMaterializationGuard | null = null
 
   await replaceDirectoryAtomically(
     targetPath,
@@ -74,6 +83,10 @@ async function replaceWithMaterializedEnv(
         if (!guard) throw new Error("Skill .env 更新前置校验未注册。")
         await guard.validate()
       },
+      afterMoveExistingTarget: async (movedTargetPath) => {
+        if (!guard) throw new Error("Skill .env 更新前置校验未注册。")
+        await guard.validateMovedTarget(movedTargetPath)
+      },
     },
   )
 }
@@ -86,9 +99,11 @@ beforeEach(() => {
   fsMocks.lstat.mockReset()
   fsMocks.open.mockReset()
   fsMocks.realpath.mockReset()
+  fsMocks.rename.mockReset()
   fsMocks.lstat.mockImplementation(fsMocks.actualLstat!)
   fsMocks.open.mockImplementation(fsMocks.actualOpen!)
   fsMocks.realpath.mockImplementation(fsMocks.actualRealpath!)
+  fsMocks.rename.mockImplementation(fsMocks.actualRename!)
 })
 
 describe("materializeSkillEnv", () => {
@@ -153,6 +168,61 @@ describe("materializeSkillEnv", () => {
       .resolves.toBe("merged")
     await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
       .resolves.toEqual(existing)
+  })
+
+  it.each([true, false])(
+    "rejects an oversized sparse existing .env before reading or staging it (example: %s)",
+    async (withExample) => {
+      const paths = await createDirectories()
+      const envPath = path.join(paths.existingTargetDirectoryPath, ".env")
+      await writeFile(envPath, "TOKEN=old\n", "utf8")
+      await truncate(envPath, 1024 * 1024 + 1)
+      if (withExample) {
+        await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+      }
+
+      await expect(materializeSkillEnv({ ...paths, values: {} }))
+        .rejects.toThrow("Skill .env 超过 1 MiB 限制。")
+      await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+        .rejects.toMatchObject({ code: "ENOENT" })
+      expect((await stat(envPath)).size).toBe(1024 * 1024 + 1)
+    },
+  )
+
+  it.each([
+    ["grows", "TOKEN=old\nEXTRA=added\n"],
+    ["shrinks", "T=1\n"],
+  ])("rejects an existing .env that %s while its bounded snapshot is read", async (_caseName, replacement) => {
+    const paths = await createDirectories()
+    const envPath = path.join(paths.existingTargetDirectoryPath, ".env")
+    await writeFile(envPath, "TOKEN=original\n", "utf8")
+    await writeFile(path.join(paths.stagingDirectoryPath, ".env.example"), "TOKEN=\n", "utf8")
+    fsMocks.open.mockImplementationOnce(async (...args) => {
+      const handle = await fsMocks.actualOpen!(...args)
+      const originalRead = handle.read.bind(handle)
+      let changed = false
+      return new Proxy(handle, {
+        get(target, property) {
+          if (property === "read") {
+            return async (buffer: Buffer, offset: number, length: number, position: number) => {
+              if (!changed) {
+                changed = true
+                await writeFile(envPath, replacement, "utf8")
+              }
+              return originalRead(buffer, offset, length, position)
+            }
+          }
+          const value = Reflect.get(target, property, target)
+          return typeof value === "function" ? value.bind(target) : value
+        },
+      }) as FileHandle
+    })
+
+    await expect(materializeSkillEnv({ ...paths, values: {} }))
+      .rejects.toThrow("Skill .env 在读取期间发生变化。")
+    await expect(readFile(path.join(paths.stagingDirectoryPath, ".env")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(envPath, "utf8")).resolves.toBe(replacement)
   })
 
   it("preserves existing declared values and uses submitted values only for new declarations", async () => {
@@ -310,6 +380,52 @@ describe("materializeSkillEnv", () => {
 
     await expect(readFile(path.join(targetPath, ".env"), "utf8"))
       .resolves.toBe("TOKEN=replacement\n")
+  })
+
+  it("revalidates an in-place .env mutation after target-to-backup rename and restores it safely", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-post-move-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+    fsMocks.rename.mockImplementationOnce(async (sourcePath, destinationPath) => {
+      await fsMocks.actualRename!(sourcePath, destinationPath)
+      await writeFile(path.join(String(destinationPath), ".env"), "TOKEN=changed-after-move\n", "utf8")
+    })
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => undefined))
+      .rejects.toThrow("Skill .env 在读取期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=changed-after-move\n")
+    await expect(readFile(path.join(targetPath, ".env.example")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("revalidates a directory replacement after target-to-backup rename and restores concurrent content", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-skill-env-post-move-"))
+    tempRoots.push(root)
+    const targetPath = path.join(root, "skill")
+    let displacedOriginalPath = ""
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, ".env"), "TOKEN=original\n", "utf8")
+    fsMocks.rename.mockImplementationOnce(async (sourcePath, destinationPath) => {
+      await fsMocks.actualRename!(sourcePath, destinationPath)
+      displacedOriginalPath = `${String(destinationPath)}-displaced`
+      await fsMocks.actualRename!(destinationPath, displacedOriginalPath)
+      await mkdir(destinationPath)
+      await writeFile(path.join(String(destinationPath), "concurrent-marker.txt"), "concurrent", "utf8")
+    })
+
+    await expect(replaceWithMaterializedEnv(targetPath, async () => undefined))
+      .rejects.toThrow("Skill 目标目录在读取 .env 期间发生变化。")
+
+    await expect(readFile(path.join(targetPath, "concurrent-marker.txt"), "utf8"))
+      .resolves.toBe("concurrent")
+    await expect(readFile(path.join(displacedOriginalPath, ".env"), "utf8"))
+      .resolves.toBe("TOKEN=original\n")
+    await expect(readFile(path.join(targetPath, ".env.example")))
+      .rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("rejects an existing .env symlink without reading through or writing it", async () => {
