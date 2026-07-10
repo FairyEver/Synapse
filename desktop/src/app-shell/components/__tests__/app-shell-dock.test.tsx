@@ -27,7 +27,7 @@ describe("AppShellDock", () => {
     document.body.innerHTML = ""
   })
 
-  it("renders pinned app icon buttons and switches active app", async () => {
+  it("renders pinned app icon buttons without extra space between their square slots", async () => {
     const onValueChange = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -40,6 +40,8 @@ describe("AppShellDock", () => {
     })
 
     const activeButton = findButtonByLabel("对话")
+    const dockItems = activeButton.parentElement
+    expect(dockItems?.className).toContain("gap-0")
     expect(activeButton.getAttribute("aria-current")).toBe("page")
     expect(activeButton.className).toContain("size-12")
     const activeIndicator = activeButton.querySelector("[data-slot='app-shell-dock-active-indicator']")
