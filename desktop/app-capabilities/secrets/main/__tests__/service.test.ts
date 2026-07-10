@@ -10,6 +10,27 @@ import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/co
 import { createSecretsService } from "../service"
 
 describe("SecretsService", () => {
+  it("keeps Skill env values inside the service during scan and apply", async () => {
+    const harness = createHarness()
+    const service = createSecretsService(harness.deps)
+    await service.create({ name: "TOKEN", value: "private-value" })
+    const security = { actor: { kind: "user" as const }, permissionGuard: {} as never, auditSink: {} as never }
+
+    await service.scanSkillEnvBindings({ name: "token" }, security)
+    await service.applySkillEnvBindings({
+      name: "token",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, security)
+
+    expect(harness.skillEnvBindings.scan).toHaveBeenCalledWith("TOKEN", "private-value", security)
+    expect(harness.skillEnvBindings.apply).toHaveBeenCalledWith({
+      name: "TOKEN",
+      scanSessionId: "scan-1",
+      itemIds: ["item-1"],
+    }, "private-value", security)
+  })
+
   it("creates and lists safe secret views without values", async () => {
     const service = createSecretsService(createHarness().deps)
 
@@ -210,17 +231,23 @@ function createHarness(options: HarnessOptions = {}) {
     if (patch.global?.variables) config.global.variables = patch.global.variables
     return config
   })
+  const skillEnvBindings = {
+    scan: vi.fn(async () => ({ scanSessionId: "scan-1", items: [] })),
+    apply: vi.fn(async () => ({ items: [] })),
+  }
 
   return {
     items,
     settings,
     config,
     updateConfig,
+    skillEnvBindings,
     deps: {
       items,
       settings,
       loadConfig: async () => config,
       updateConfig,
+      skillEnvBindings,
       now: () => new Date("2026-07-09T00:00:00.000Z"),
       createId: () => `id-${items.records.size + 1}`,
       logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },

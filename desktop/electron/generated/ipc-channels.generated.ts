@@ -289,6 +289,8 @@ export const IPC_CHANNELS = {
     "update": "synapse:secrets:update",
     "upsert": "synapse:secrets:upsert",
     "delete": "synapse:secrets:delete",
+    "scanSkillEnvBindings": "synapse:secrets:scan-skill-env-bindings",
+    "applySkillEnvBindings": "synapse:secrets:apply-skill-env-bindings",
     "changed": "synapse:secrets:changed",
   },
   "agentPersonas": {

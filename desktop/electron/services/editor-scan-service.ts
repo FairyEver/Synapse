@@ -21,6 +21,7 @@ import { editorAdapters } from "./editor-adapters"
 import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
+import { listTrustedSkillRoots } from "./editor-scan-roots"
 import { createMainLogger } from "./log-store"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
@@ -117,20 +118,12 @@ function uniqueTrustedRoots(roots: EditorScanTrustedRoot[]): EditorScanTrustedRo
   return unique
 }
 
-function getGlobalSkillPaths(scanConfig: ReturnType<(typeof editorAdapters)[number]["getScanPathConfig"]>): string[] {
-  return scanConfig.globalSkillPaths
-    ? [...scanConfig.globalSkillPaths]
-    : (scanConfig.globalSkillsPath ? [scanConfig.globalSkillsPath] : [])
-}
-
 async function getTrustedEditorReadRoots(): Promise<EditorScanTrustedRoot[]> {
-  const roots: EditorScanTrustedRoot[] = []
+  const roots: EditorScanTrustedRoot[] = (await listTrustedSkillRoots())
+    .map((root) => ({ kind: "skill", path: root.path }))
 
   for (const adapter of editorAdapters) {
     const scanConfig = adapter.getScanPathConfig()
-    for (const skillsPath of getGlobalSkillPaths(scanConfig)) {
-      roots.push({ kind: "skill", path: skillsPath })
-    }
     if (scanConfig.globalRulesPath) {
       roots.push({ kind: "rule", path: scanConfig.globalRulesPath })
     }
@@ -140,7 +133,6 @@ async function getTrustedEditorReadRoots(): Promise<EditorScanTrustedRoot[]> {
   for (const project of config.global.projects) {
     for (const adapter of editorAdapters) {
       const paths = adapter.getScanPathConfig().projectPaths(project.path)
-      roots.push({ kind: "skill", path: paths.skillsPath })
       roots.push({ kind: "rule", path: paths.rulesPath })
     }
   }

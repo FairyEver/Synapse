@@ -53,6 +53,7 @@ import {
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
+import { createSkillEnvBindingService } from "../../app-capabilities/secrets/main/skill-env-binding-service"
 import { createSecretsCapabilityDispatcher } from "../../app-capabilities/secrets/main/dispatcher"
 import {
   SECRETS_ITEMS_NAMESPACE,
@@ -70,6 +71,7 @@ import { createRepositoryCapabilityDispatcher } from "../capabilities/repository
 import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
+import { listTrustedSkillRoots } from "../services/editor-scan-roots"
 import { logStore, createMainLogger } from "../services/log-store"
 import {
   assertKnowledgeBaseStorageMigrationInactive,
@@ -391,6 +393,10 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
       settings: dataRepository.namespace<SecretSettingsEntryV1>(SECRETS_SETTINGS_NAMESPACE),
       loadConfig: () => configStore.load(),
       updateConfig: (patch) => configStore.update(patch),
+      skillEnvBindings: createSkillEnvBindingService({
+        listRoots: listTrustedSkillRoots,
+        logger: ctx.logger.child("skill-env-bindings"),
+      }),
       logger: ctx.logger.child("secrets"),
     })
   },

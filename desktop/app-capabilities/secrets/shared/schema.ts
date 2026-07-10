@@ -70,6 +70,54 @@ export const secretsChangedEventSchema = z.object({
   secrets: z.array(secretSafeViewSchema),
 })
 
+export const skillEnvBindingStatusSchema = z.enum([
+  "needs_update",
+  "up_to_date",
+  "invalid",
+  "unwritable",
+  "unsafe_link",
+])
+
+const skillEnvBindingEditorSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+}).strict()
+
+export const skillEnvBindingItemSchema = z.object({
+  id: z.string().min(1),
+  skillName: z.string().min(1),
+  editors: z.array(skillEnvBindingEditorSchema),
+  scope: z.enum(["global", "project"]),
+  projectId: z.string().min(1).optional(),
+  projectName: z.string().min(1).optional(),
+  envPath: z.string().min(1),
+  status: skillEnvBindingStatusSchema,
+  message: z.string().max(200).optional(),
+}).strict()
+
+export const secretSkillEnvScanInputSchema = z.object({
+  name: secretNameSchema,
+}).strict()
+
+export const secretSkillEnvScanResultSchema = z.object({
+  scanSessionId: z.string().min(1),
+  items: z.array(skillEnvBindingItemSchema),
+}).strict()
+
+export const secretSkillEnvApplyInputSchema = z.object({
+  name: secretNameSchema,
+  scanSessionId: z.string().min(1),
+  itemIds: z.array(z.string().min(1)),
+}).strict()
+
+export const skillEnvBindingApplyItemSchema = skillEnvBindingItemSchema.omit({ status: true }).extend({
+  status: z.enum(["updated", "failed", "conflict"]),
+}).strict()
+
+export const secretSkillEnvApplyResultSchema = z.object({
+  items: z.array(skillEnvBindingApplyItemSchema),
+}).strict()
+
 export type SecretSafeView = z.infer<typeof secretSafeViewSchema>
 export type SecretValueView = z.infer<typeof secretValueViewSchema>
 export type SecretListResult = z.infer<typeof secretListResultSchema>
@@ -80,3 +128,9 @@ export type SecretUpdateInput = z.infer<typeof secretUpdateInputSchema>
 export type SecretUpsertInput = z.infer<typeof secretUpsertInputSchema>
 export type SecretDeleteInput = z.infer<typeof secretDeleteInputSchema>
 export type SecretsChangedEvent = z.infer<typeof secretsChangedEventSchema>
+export type SkillEnvBindingItem = z.infer<typeof skillEnvBindingItemSchema>
+export type SecretSkillEnvScanInput = z.infer<typeof secretSkillEnvScanInputSchema>
+export type SecretSkillEnvScanResult = z.infer<typeof secretSkillEnvScanResultSchema>
+export type SecretSkillEnvApplyInput = z.infer<typeof secretSkillEnvApplyInputSchema>
+export type SkillEnvBindingApplyItem = z.infer<typeof skillEnvBindingApplyItemSchema>
+export type SecretSkillEnvApplyResult = z.infer<typeof secretSkillEnvApplyResultSchema>

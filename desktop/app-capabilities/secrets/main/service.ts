@@ -7,12 +7,17 @@ import type {
   SecretSettingsEntryV1,
 } from "../../../electron/runtime/data-repo/schemas/secrets"
 import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../../src/types/config"
+import type { SkillEnvBindingSecurity, SkillEnvBindingService } from "./skill-env-binding-service"
 import {
   SECRET_NAME_REGEX,
   type SecretCreateInput,
   type SecretDeleteInput,
   type SecretGetInput,
   type SecretListResult,
+  type SecretSkillEnvApplyInput,
+  type SecretSkillEnvApplyResult,
+  type SecretSkillEnvScanInput,
+  type SecretSkillEnvScanResult,
   type SecretSafeView,
   type SecretUpdateInput,
   type SecretUpsertInput,
@@ -31,6 +36,7 @@ export type SecretsServiceDeps = {
   readonly settings: DataNamespace<SecretSettingsEntryV1>
   readonly loadConfig: () => Promise<SynapseConfig>
   readonly updateConfig: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
+  readonly skillEnvBindings: SkillEnvBindingService
   readonly now?: () => Date
   readonly createId?: () => string
   readonly logger: SecretsLogger
@@ -152,6 +158,22 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     return safe
   }
 
+  async function scanSkillEnvBindings(
+    input: SecretSkillEnvScanInput,
+    security: SkillEnvBindingSecurity,
+  ): Promise<SecretSkillEnvScanResult> {
+    const secret = await requireByName(input.name)
+    return await deps.skillEnvBindings.scan(secret.name, secret.value, security)
+  }
+
+  async function applySkillEnvBindings(
+    input: SecretSkillEnvApplyInput,
+    security: SkillEnvBindingSecurity,
+  ): Promise<SecretSkillEnvApplyResult> {
+    const secret = await requireByName(input.name)
+    return await deps.skillEnvBindings.apply({ ...input, name: secret.name }, secret.value, security)
+  }
+
   async function migrateLegacyConfig(): Promise<void> {
     const settings = await loadSettings()
     if (settings.legacyConfigMigratedAt) return
@@ -225,6 +247,8 @@ export function createSecretsService(deps: SecretsServiceDeps) {
     update,
     upsert,
     delete: deleteItem,
+    scanSkillEnvBindings,
+    applySkillEnvBindings,
   }
 }
 

@@ -32,6 +32,10 @@ import type {
   SecretDeleteInput,
   SecretGetInput,
   SecretListResult,
+  SecretSkillEnvApplyInput,
+  SecretSkillEnvApplyResult,
+  SecretSkillEnvScanInput,
+  SecretSkillEnvScanResult,
   SecretSafeView,
   SecretUpdateInput,
   SecretUpsertInput,
@@ -957,6 +961,8 @@ export type SynapseBridge = {
     update: (input: SecretUpdateInput) => Promise<SecretSafeView>
     upsert: (input: SecretUpsertInput) => Promise<SecretUpsertResult>
     delete: (input: SecretDeleteInput) => Promise<SecretSafeView>
+    scanSkillEnvBindings: (input: SecretSkillEnvScanInput) => Promise<SecretSkillEnvScanResult>
+    applySkillEnvBindings: (input: SecretSkillEnvApplyInput) => Promise<SecretSkillEnvApplyResult>
     onChanged: (listener: (event: SecretsChangedEvent) => void) => () => void
   }
   agentPersonas: {
