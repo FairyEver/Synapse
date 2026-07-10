@@ -186,4 +186,19 @@ describe("SynapseSkillService", () => {
     expect(modelPriceApiText).toContain("ruleId")
     expect(modelPriceApiText).toContain("already indexed usage totals")
   })
+
+  it("documents the immutable secret name and desktop-only Skill ENV update boundary", async () => {
+    const [secretsIndex, secretsApiReference] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "secrets/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "secrets/api-reference.md"), "utf8"),
+    ])
+
+    expect(secretsIndex).toContain("Names are immutable after creation.")
+    expect(secretsIndex).toContain("never scan or write installed Skill files")
+    expect(secretsIndex).toContain("in-memory serial queue")
+    expect(secretsApiReference).toContain("Names are immutable after creation.")
+    expect(secretsApiReference).toContain("not MCP actions or tools")
+    expect(secretsApiReference).toContain("never scan or write installed Skill files")
+    expect(`${secretsIndex}\n${secretsApiReference}`).not.toContain("newName")
+  })
 })

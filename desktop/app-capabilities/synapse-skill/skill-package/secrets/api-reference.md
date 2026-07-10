@@ -13,6 +13,12 @@ Tools return this safe view unless `app_secrets_item_get` is called with `includ
 }
 ```
 
+## Skill ENV Boundary
+
+Names are immutable after creation. A case-insensitive secret name can associate with the same key in an installed Skill root `.env` file, without an installation database.
+
+MCP create, update, and upsert modify encrypted secret storage only and never scan or write installed Skill files. Explicit scanning and the user-confirmed in-memory serial update queue are desktop app IPC/UI capabilities, not MCP actions or tools.
+
 ## Tools
 
 ### app_secrets_item_list
@@ -63,13 +69,12 @@ Input:
 ```json
 {
   "name": "API_TOKEN",
-  "newName": "API_TOKEN_2",
   "value": "new secret value",
   "description": "optional"
 }
 ```
 
-Updates an existing secret. Omit `value` when only changing metadata. The response never includes `value`.
+Updates an existing secret value or description. The name identifies the existing secret and cannot be changed. Omit `value` when only changing metadata. The response never includes `value`.
 
 ### app_secrets_item_upsert
 
