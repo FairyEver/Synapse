@@ -4,6 +4,7 @@ import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import {
+  assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
@@ -269,6 +270,7 @@ async function resolveAttachmentRecords(
   }
 
   const skillPayload = payload as SynapseCreateSkillPayload | SynapseUpdateSkillPayload
+  assertNoRuntimeSkillEnvPath(skillPayload.files.map((file) => file.originalName))
   const existingAttachmentsBySha = new Map(
     (baseline?.attachments ?? []).map((attachment) => [attachment.sha256, attachment] as const),
   )

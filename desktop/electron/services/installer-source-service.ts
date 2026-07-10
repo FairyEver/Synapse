@@ -190,6 +190,18 @@ class InstallerSourceService {
     await mkdir(path.dirname(targetPath), { recursive: true })
     await writeFile(targetPath, file.bytes)
   }
+
+  async readLocalSkillAttachmentText(
+    source: SynapseSkillInstallerSource,
+    relativePath: string,
+  ): Promise<string | null> {
+    if (!source.localSourceId) {
+      throw new Error("本地 Skill 安装源不可用。")
+    }
+    const stored = this.getLocalSkill(source.localSourceId)
+    const file = stored.draft.files.find((candidate) => candidate.originalName === relativePath)
+    return file?.bytes ? Buffer.from(file.bytes).toString("utf8") : null
+  }
 }
 
 const installerSourceService = new InstallerSourceService()

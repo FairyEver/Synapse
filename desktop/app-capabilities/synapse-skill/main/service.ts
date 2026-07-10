@@ -173,6 +173,18 @@ class SynapseSkillService {
     await copyFile(path.join(this.packageRoot, attachment.originalName), targetPath)
   }
 
+  async readPreparedSkillAttachmentText(
+    sourceId: string,
+    contentId: string,
+    relativePath: string,
+  ): Promise<string | null> {
+    this.requirePrepared(sourceId, contentId)
+    const draft = await this.readDraft()
+    const attachment = draft.files.find((file) => file.originalName === relativePath)
+    if (!attachment) return null
+    return readFile(path.join(this.packageRoot, attachment.originalName), "utf8")
+  }
+
   beginPreparedInstall(sourceId: string, contentId: string): Promise<void> {
     this.requirePrepared(sourceId, contentId)
     return Promise.resolve()

@@ -27,6 +27,7 @@ async function createPackageRoot() {
     "utf8",
   )
   await writeFile(path.join(root, "database", "index.md"), "# Database\n", "utf8")
+  await writeFile(path.join(root, ".env.example"), "TOKEN=default\n", "utf8")
   return root
 }
 
@@ -84,6 +85,23 @@ describe("SynapseSkillService", () => {
     )
 
     await expect(readFile(targetPath, "utf8")).resolves.toBe("# Database\n")
+  })
+
+  it("reads prepared text attachments with null semantics", async () => {
+    const packageRoot = await createPackageRoot()
+    const service = createSynapseSkillService({ packageRoot })
+    const source = await service.prepareInstallSource()
+
+    await expect(service.readPreparedSkillAttachmentText(
+      source.preparedSourceId,
+      source.sourceIdentity,
+      ".env.example",
+    )).resolves.toBe("TOKEN=default\n")
+    await expect(service.readPreparedSkillAttachmentText(
+      source.preparedSourceId,
+      source.sourceIdentity,
+      "../.env.example",
+    )).resolves.toBeNull()
   })
 
   it("ships the current system Synapse Skill package", async () => {

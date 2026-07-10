@@ -3,6 +3,8 @@ import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
+  SKILL_ENV_EXAMPLE_PATH,
+  SKILL_RUNTIME_ENV_PATH,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
 } from "../../src/lib/content-attachments"
@@ -204,7 +206,10 @@ async function collectSkillFiles(
   }
 
   for (const name of children) {
-    if (name.startsWith(".")) continue
+    if (currentDir === baseDir && name === SKILL_RUNTIME_ENV_PATH) {
+      throwInvalid("files", "Skill 源目录不能包含 .env，请只提交 .env.example。")
+    }
+    if (name.startsWith(".") && !(currentDir === baseDir && name === SKILL_ENV_EXAMPLE_PATH)) continue
     if (skip.has(name) && currentDir === baseDir) continue
 
     const fullPath = path.join(currentDir, name)

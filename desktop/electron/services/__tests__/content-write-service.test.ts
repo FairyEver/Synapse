@@ -66,6 +66,7 @@ import type {
   SynapseCreateSkillPayload,
 } from "../../../src/types/content"
 import { configStore } from "../config-store"
+import { attachmentsPoolService } from "../attachments-pool-service"
 import {
   CONTENT_ATTACHMENTS_FILE_NAME,
   CONTENT_MAIN_FILE_NAME,
@@ -433,5 +434,100 @@ describe("contentWriteService", () => {
       displayName: "User",
       userId: "user",
     })).rejects.toThrow("附件文件名重复：assets/readme.md")
+  })
+
+  it("rejects a runtime .env attachment before writing attachments", async () => {
+    const root = await createTempRoot()
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    const writeAttachments = vi.spyOn(attachmentsPoolService, "writeAttachments")
+    const payload: SynapseCreateSkillPayload = {
+      title: "Skill",
+      name: "skill",
+      description: "Description",
+      category: "test",
+      icon: "wrench",
+      iconBg: "default",
+      iconType: "icon",
+      iconImage: "",
+      content: "# Skill",
+      files: [
+        { originalName: ".env", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
+      ],
+    }
+
+    await expect(contentWriteService.createSkill(payload, {
+      displayName: "User",
+      userId: "user",
+    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+    expect(writeAttachments).not.toHaveBeenCalled()
+  })
+
+  it("rejects a runtime .env attachment before updating attachments", async () => {
+    const root = await createTempRoot()
+    const baseHistoryDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeContentFixture(root, {
+      contentDir: "skills",
+      contentId: "skill-1",
+      contentType: "skill",
+      historyDirname: baseHistoryDirname,
+      snapshot: { title: "Skill", name: "skill" },
+    })
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    const writeAttachments = vi.spyOn(attachmentsPoolService, "writeAttachments")
+
+    await expect(contentWriteService.updateSkill({
+      id: "skill-1",
+      baseHistoryDirname,
+      title: "Skill",
+      name: "skill",
+      description: "Description",
+      category: "test",
+      icon: "wrench",
+      iconBg: "default",
+      iconType: "icon",
+      iconImage: "",
+      content: "# Skill",
+      files: [
+        { originalName: ".env", size: 12, bytes: new TextEncoder().encode("TOKEN=secret") },
+      ],
+    }, {
+      displayName: "User",
+      userId: "user",
+    })).rejects.toThrow("Skill 源目录不能包含 .env，请只提交 .env.example。")
+    expect(writeAttachments).not.toHaveBeenCalled()
   })
 })

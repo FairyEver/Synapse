@@ -4,6 +4,7 @@ import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  getAttachmentFile: vi.fn(),
   getContent: vi.fn(),
   getSkillDetail: vi.fn(),
   getGlobalRulesPath: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("../log-store", () => ({
 
 vi.mock("../content-service", () => ({
   contentService: {
+    getAttachmentFile: mocks.getAttachmentFile,
     getContent: mocks.getContent,
     getSkillDetail: mocks.getSkillDetail,
   },
@@ -105,6 +107,7 @@ describe("EditorInstallService prepared source", () => {
       beginPreparedInstall: vi.fn(),
       endPreparedInstall: vi.fn(),
       copyPreparedSkillAttachment: vi.fn(),
+      readPreparedSkillAttachmentText: vi.fn(),
       markPreparedInstalled: vi.fn(),
     }
     mocks.resolveTarget.mockResolvedValue({
@@ -177,6 +180,7 @@ describe("EditorInstallService prepared source", () => {
         await mkdir(path.dirname(attachmentTargetPath), { recursive: true })
         await writeFile(attachmentTargetPath, "icon")
       }),
+      readPreparedSkillAttachmentText: vi.fn(),
       markPreparedInstalled: vi.fn(),
     }
     mocks.prepareSkillDirectory.mockImplementation(async ({
@@ -221,5 +225,63 @@ describe("EditorInstallService prepared source", () => {
     expect(provider.markPreparedInstalled).toHaveBeenCalledWith("prepared-1", "content-1")
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("prepared\n# Store Skill\n")
     await expect(readFile(path.join(targetPath, "references", "icon.bin"), "utf8")).resolves.toBe("icon")
+  })
+
+  it("inspects a prepared Skill through the selected provider", async () => {
+    const provider = {
+      hasPreparedSource: vi.fn().mockReturnValue(true),
+      readPreparedRule: vi.fn(),
+      readPreparedSkill: vi.fn().mockResolvedValue({
+        content: "Token: ${{ LEGACY_TOKEN }}",
+      }),
+      readPreparedSkillAttachmentText: vi.fn().mockResolvedValue("TOKEN=default\n"),
+      beginPreparedInstall: vi.fn(),
+      endPreparedInstall: vi.fn(),
+      copyPreparedSkillAttachment: vi.fn(),
+      markPreparedInstalled: vi.fn(),
+    }
+    const service = new EditorInstallService()
+    service.addPreparedSourceProvider(provider)
+    const source = {
+      kind: "skill" as const,
+      origin: "prepared" as const,
+      sourceIdentity: "content-1",
+      name: "store-skill",
+      preparedSourceId: "prepared-1",
+    }
+
+    await expect(service.inspectSkillEnvSource(source)).resolves.toEqual({
+      declarations: [{ name: "TOKEN", defaultValue: "default" }],
+      legacyPlaceholders: ["LEGACY_TOKEN"],
+    })
+    expect(provider.readPreparedSkill).toHaveBeenCalledWith("prepared-1", "content-1")
+    expect(provider.readPreparedSkillAttachmentText)
+      .toHaveBeenCalledWith("prepared-1", "content-1", ".env.example")
+  })
+
+  it("inspects a repository Skill at its latest history version", async () => {
+    mocks.getSkillDetail.mockResolvedValue({
+      content: "# Skill\n",
+      latestHistoryDirname: "history-1",
+    })
+    mocks.getAttachmentFile.mockResolvedValue({
+      kind: "text",
+      content: "TOKEN=repository-default\n",
+    })
+    const service = new EditorInstallService()
+    const source = {
+      kind: "skill" as const,
+      origin: "repository" as const,
+      sourceIdentity: "skill-1",
+      repositoryContentId: "skill-1",
+      name: "repository-skill",
+    }
+
+    await expect(service.inspectSkillEnvSource(source)).resolves.toEqual({
+      declarations: [{ name: "TOKEN", defaultValue: "repository-default" }],
+      legacyPlaceholders: [],
+    })
+    expect(mocks.getAttachmentFile)
+      .toHaveBeenCalledWith("skill", "skill-1", "history-1", ".env.example")
   })
 })

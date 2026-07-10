@@ -11,6 +11,9 @@ const synapseSkillPreparedSourceProvider: PreparedContentInstallSourceProvider =
   readPreparedSkill(sourceId, contentId) {
     return synapseSkillService.readPreparedSkill(sourceId, contentId)
   },
+  readPreparedSkillAttachmentText(sourceId, contentId, relativePath) {
+    return synapseSkillService.readPreparedSkillAttachmentText(sourceId, contentId, relativePath)
+  },
   beginPreparedInstall(sourceId, contentId) {
     return synapseSkillService.beginPreparedInstall(sourceId, contentId)
   },

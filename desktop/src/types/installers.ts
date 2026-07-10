@@ -32,6 +32,16 @@ export type SynapseSkillInstallerSource = SynapseInstallerSourceBase & {
   repositoryContentId?: string
 }
 
+export type SynapseSkillEnvDeclaration = {
+  name: string
+  defaultValue: string
+}
+
+export type SynapseSkillEnvInspectionResult = {
+  declarations: SynapseSkillEnvDeclaration[]
+  legacyPlaceholders: string[]
+}
+
 export type SynapseRuleInstallerSource = SynapseInstallerSourceBase & {
   kind: "rule"
   body?: string

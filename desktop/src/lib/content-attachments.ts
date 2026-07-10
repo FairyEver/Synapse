@@ -2,6 +2,8 @@ import { normalizePathForCompare } from "./path-compare"
 
 const WINDOWS_RESERVED_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
 const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*", "/", "\\"])
+const SKILL_ENV_EXAMPLE_PATH = ".env.example"
+const SKILL_RUNTIME_ENV_PATH = ".env"
 const SKILL_ATTACHMENT_RESERVED_INSTALL_PATHS = new Set(
   ["SKILL.md", ".synapse.json"].map((value) => normalizePathForCompare(value, { platform: "win32" })),
 )
@@ -49,6 +51,12 @@ function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): v
   }
 }
 
+function assertNoRuntimeSkillEnvPath(originalNames: readonly string[]): void {
+  if (originalNames.some((name) => normalizeContentAttachmentPath(name) === SKILL_RUNTIME_ENV_PATH)) {
+    throw new Error("Skill 源目录不能包含 .env，请只提交 .env.example。")
+  }
+}
+
 function toWindowsSafeSegment(segment: string): string {
   const cleaned = segment
     .split("")
@@ -70,8 +78,11 @@ function isWindowsUnsafeChar(char: string): boolean {
 }
 
 export {
+  assertNoRuntimeSkillEnvPath,
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
   normalizeContentFileNameSegment,
+  SKILL_ENV_EXAMPLE_PATH,
+  SKILL_RUNTIME_ENV_PATH,
 }

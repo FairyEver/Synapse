@@ -8,12 +8,15 @@ import type {
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import type {
+  SynapseSkillEnvInspectionResult,
+  SynapseSkillInstallerSource,
   SynapseInstallSourceToEditorPayload,
   SynapseInstallSourceToEditorTargetsPayload,
   SynapseInstallSourceToEditorTargetsResult,
 } from "../../src/types/installers"
 import type { SynapseContentDetail } from "../../src/types/content"
 import { configStore } from "./config-store"
+import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { readExistingTextFile } from "./editor-file-write-utils"
@@ -24,6 +27,7 @@ import {
 } from "./editor-install-target-security"
 import type { EditorWriteSecurityDeps } from "./editor-write-security"
 import { installerSourceService } from "./installer-source-service"
+import { SkillEnvSourceService } from "./skill-env/skill-env-source-service"
 
 type EditorReadSecurityDeps = {
   actor: ActorIdentity
@@ -35,6 +39,11 @@ export type PreparedContentInstallSourceProvider = {
   hasPreparedSource?(sourceId: string, contentId: string): boolean
   readPreparedRule(sourceId: string, contentId: string): Promise<string>
   readPreparedSkill(sourceId: string, contentId: string): Promise<SynapseContentDetail<"skill">>
+  readPreparedSkillAttachmentText(
+    sourceId: string,
+    contentId: string,
+    relativePath: string,
+  ): Promise<string | null>
   beginPreparedInstall(sourceId: string, contentId: string): Promise<void>
   endPreparedInstall(sourceId: string, contentId: string): Promise<void>
   copyPreparedSkillAttachment(
@@ -58,6 +67,9 @@ const unavailablePreparedSourceProvider: PreparedContentInstallSourceProvider = 
     throw new Error("安装源尚未初始化。")
   },
   async readPreparedSkill() {
+    throw new Error("安装源尚未初始化。")
+  },
+  async readPreparedSkillAttachmentText() {
     throw new Error("安装源尚未初始化。")
   },
   async beginPreparedInstall() {
@@ -153,6 +165,10 @@ function createCompositePreparedSourceProvider(
     readPreparedSkill(sourceId, contentId) {
       return resolve(sourceId, contentId).readPreparedSkill(sourceId, contentId)
     },
+    readPreparedSkillAttachmentText(sourceId, contentId, relativePath) {
+      return resolve(sourceId, contentId)
+        .readPreparedSkillAttachmentText(sourceId, contentId, relativePath)
+    },
     beginPreparedInstall(sourceId, contentId) {
       return resolve(sourceId, contentId).beginPreparedInstall(sourceId, contentId)
     },
@@ -171,9 +187,15 @@ function createCompositePreparedSourceProvider(
 export class EditorInstallService {
   private preparedSourceProvider: PreparedContentInstallSourceProvider
   private readonly preparedSourceProviders: PreparedContentInstallSourceProvider[] = []
+  private readonly skillEnvSourceService: SkillEnvSourceService
 
   constructor(deps: EditorInstallServiceDeps = {}) {
     this.preparedSourceProvider = deps.preparedSourceProvider ?? unavailablePreparedSourceProvider
+    this.skillEnvSourceService = new SkillEnvSourceService({
+      readMainContent: (source) => this.readSkillSourceMainContent(source),
+      readTextAttachment: (source, relativePath) =>
+        this.readSkillSourceAttachmentText(source, relativePath),
+    })
   }
 
   setPreparedSourceProvider(provider: PreparedContentInstallSourceProvider): void {
@@ -249,6 +271,59 @@ export class EditorInstallService {
     }
 
     return { results }
+  }
+
+  inspectSkillEnvSource(
+    source: SynapseSkillInstallerSource,
+  ): Promise<SynapseSkillEnvInspectionResult> {
+    return this.skillEnvSourceService.inspect(source)
+  }
+
+  private async readSkillSourceMainContent(source: SynapseSkillInstallerSource): Promise<string> {
+    if (source.origin === "local-directory") {
+      return (await installerSourceService.readLocalSkill(source)).content
+    }
+    if (source.origin === "prepared") {
+      if (!source.preparedSourceId) throw new Error("Skill 安装源不可用。")
+      return (await this.preparedSourceProvider.readPreparedSkill(
+        source.preparedSourceId,
+        source.sourceIdentity,
+      )).content
+    }
+    if (source.origin === "repository") {
+      if (!source.repositoryContentId) throw new Error("Skill 安装源不可用。")
+      return (await contentService.getSkillDetail(source.repositoryContentId)).content
+    }
+    throw new Error("Skill 安装源不可用。")
+  }
+
+  private async readSkillSourceAttachmentText(
+    source: SynapseSkillInstallerSource,
+    relativePath: string,
+  ): Promise<string | null> {
+    if (source.origin === "local-directory") {
+      return installerSourceService.readLocalSkillAttachmentText(source, relativePath)
+    }
+    if (source.origin === "prepared") {
+      if (!source.preparedSourceId) throw new Error("Skill 安装源不可用。")
+      return this.preparedSourceProvider.readPreparedSkillAttachmentText(
+        source.preparedSourceId,
+        source.sourceIdentity,
+        relativePath,
+      )
+    }
+    if (source.origin === "repository") {
+      if (!source.repositoryContentId) throw new Error("Skill 安装源不可用。")
+      const detail = await contentService.getSkillDetail(source.repositoryContentId)
+      const file = await contentService.getAttachmentFile(
+        "skill",
+        source.repositoryContentId,
+        detail.latestHistoryDirname,
+        relativePath,
+      )
+      return file?.kind === "text" ? file.content : null
+    }
+    throw new Error("Skill 安装源不可用。")
   }
 
   async readEditorInstallFormValues(
